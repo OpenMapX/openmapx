@@ -104,6 +104,11 @@ const builtInServices = input.serviceIds.map((id) => ({
 const loadAuthority = createTrustedConfigurationAuthorityLoader({
   rootDir: input.root,
   builtInServices,
+  // The protected helper uses the production release-inventory authority.
+  // Read the actual bounded checkout inventory; never accept a supplied digest.
+  ...(input.captureReleaseAuthority
+    ? { builtInAuthorityDigest: (await services.captureReleaseServiceAuthority(input.root)).digest }
+    : {}),
 });
 const repositories = new CommunityRepositoryStore({ rootDir: input.root });
 await repositories.recover();

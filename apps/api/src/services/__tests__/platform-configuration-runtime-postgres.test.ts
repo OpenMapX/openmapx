@@ -223,6 +223,104 @@ async function nativeHelper(
   }
 }
 
+/** Existing native production-agent driver; only external Docker I/O is bridged. */
+async function nativeReleaseAgent(
+  host: Awaited<ReturnType<typeof ownedServiceHost>>,
+  ids: string[],
+  port: number,
+) {
+  const bridge = Fastify();
+  bridge.post("/docker", async (request, reply) => {
+    const { args } = request.body as { args: string[] };
+    try {
+      return await host.execFile("docker", args, {
+        signal: AbortSignal.timeout(30000),
+        timeout: 30000,
+        maxBuffer: 1024 * 1024,
+      });
+    } catch {
+      return reply.code(502).send({ error: "Named Docker IO failed" });
+    }
+  });
+  const dockerBridge = await bridge.listen({ host: "127.0.0.1", port: 0 });
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      createRequire(import.meta.url).resolve("tsx/esm"),
+      fileURLToPath(
+        new URL(
+          "../../../../ops-agent/src/test-fixtures/staged-coordinator-request-process.mjs",
+          import.meta.url,
+        ),
+      ),
+    ],
+    { stdio: ["pipe", "pipe", "pipe"], env: process.env },
+  );
+  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    },
+  );
+  const ready = Promise.withResolvers<void>();
+  let pending = "";
+  child.stdout.on("data", (data) => {
+    pending += String(data);
+    while (pending.includes("\n")) {
+      const end = pending.indexOf("\n"),
+        line = pending.slice(0, end);
+      pending = pending.slice(end + 1);
+      try {
+        if (JSON.parse(line).event === "ready") ready.resolve();
+      } catch {
+        /* Only the fixed ready event is consumed. */
+      }
+    }
+  });
+  child.stderr.resume();
+  void closed.then(
+    ({ code }) => ready.reject(Error(`Native agent exited before readiness (${code})`)),
+    (error) => ready.reject(error),
+  );
+  child.stdin.end(
+    JSON.stringify({
+      root: host.root,
+      infraDir: host.infraDir,
+      stack: host.stack,
+      serviceIds: ids,
+      queue: host.queue,
+      token: host.token,
+      dockerBridge: `${dockerBridge}/docker`,
+      listenPort: port,
+      captureReleaseAuthority: true,
+    }),
+  );
+  const timer = setTimeout(() => {
+    child.kill("SIGKILL");
+    ready.reject(Error("Native agent readiness timed out"));
+  }, 30000);
+  try {
+    await ready.promise;
+  } catch (error) {
+    await bridge.close();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+  const kill = async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    return await closed;
+  };
+  return {
+    kill,
+    close: async () => {
+      await kill();
+      await bridge.close();
+    },
+  };
+}
+
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "owned platform preparation",
   () => {
@@ -252,9 +350,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-release-wrong-config",
       "launch-native-system-release",
       "launch-native-system-release-ack-loss",
+      "launch-native-system-release-killed",
+      "launch-native-system-release-agent-restart",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
+        const nativeAgents: Array<Awaited<ReturnType<typeof nativeReleaseAgent>>> = [];
+        let nativeAgentExited = false;
         const helperEffectEntered = Promise.withResolvers<void>(),
           continueHelperEffect = Promise.withResolvers<void>();
         let writersWereReleased = false;
@@ -307,6 +409,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-release-wrong-config",
             "launch-native-system-release",
             "launch-native-system-release-ack-loss",
+            "launch-native-system-release-killed",
+            "launch-native-system-release-agent-restart",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -388,7 +492,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).includes(id)
             )
               throw Error("Unexpected protected target");
-            if (version === "launch-native-killed") {
+            if (
+              version === "launch-native-killed" ||
+              version === "launch-native-system-release-killed"
+            ) {
               await services.withConfigurationGenerationWriter(host.infraDir, async () => {
                 const lock = await services.acquireReleaseStoreLock(
                   join(host.infraDir, ".ops-agent-releases"),
@@ -401,6 +508,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               helperEffectEntered.resolve();
               await continueHelperEffect.promise;
               return;
+            }
+            if (version === "launch-native-system-release-agent-restart" && id === "ops-agent") {
+              expect(await nativeAgents[0]!.kill()).toEqual({ code: null, signal: "SIGKILL" });
+              nativeAgentExited = true;
             }
             const prefix = args.slice(0, args.indexOf("up")),
               options = {
@@ -511,6 +622,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           return payload;
         });
         const url = await app.listen({ host: "127.0.0.1", port: 0 });
+        if (version === "launch-native-system-release-agent-restart") await app.close();
         const tokenFile = join(host.root, "platform-api-token");
         writeFileSync(tokenFile, host.token, { mode: 0o600 });
         for (const [key, value] of Object.entries({
@@ -526,6 +638,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           OPENMAPX_DISABLE_LOCALHOST_AUTH: "1",
         }))
           vi.stubEnv(key, value);
+        if (version === "launch-native-system-release-agent-restart")
+          nativeAgents.push(
+            await nativeReleaseAgent(
+              host,
+              host.loaded.map((service) => service.manifest.id),
+              Number(new URL(url).port),
+            ),
+          );
         let publicApi: FastifyInstance | undefined;
         try {
           const actorId = randomUUID(),
@@ -552,6 +672,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-release-wrong-config",
               "launch-native-system-release",
               "launch-native-system-release-ack-loss",
+              "launch-native-system-release-killed",
+              "launch-native-system-release-agent-restart",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -578,6 +700,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           "launch-native-release-wrong-config",
                           "launch-native-system-release",
                           "launch-native-system-release-ack-loss",
+                          "launch-native-system-release-killed",
+                          "launch-native-system-release-agent-restart",
                         ].includes(version)
                           ? { version: 1 as const }
                           : {
@@ -670,8 +794,62 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
               version === "launch-native-release-wrong-config"
                 ? { failureStage: "application" }
-                : {},
+                : version === "launch-native-system-release-killed"
+                  ? {
+                      kill: {
+                        when: helperEffectEntered.promise,
+                        release: () => continueHelperEffect.resolve(),
+                      },
+                    }
+                  : {},
             );
+            if (version === "launch-native-system-release-agent-restart") {
+              expect(nativeAgentExited).toBe(true);
+              nativeAgents.push(
+                await nativeReleaseAgent(
+                  host,
+                  host.loaded.map((service) => service.manifest.id),
+                  Number(new URL(url).port),
+                ),
+              );
+            }
+            if (version === "launch-native-system-release-killed") {
+              const file = join(
+                  host.infraDir,
+                  "control-private/ops-agent/observations",
+                  `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
+                ),
+                original = readFileSync(file),
+                environment = {
+                  OPENMAPX_ROOT_DIR: host.root,
+                  OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+                  OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+                  OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+                };
+              expect(writersWereReleased).toBe(true);
+              expect(JSON.parse(String(original)).payload).toMatchObject({
+                phase: "applying",
+                completedAt: null,
+              });
+              await nativeHelper(host, environment, { failureStage: "adoption" });
+              expect(readFileSync(file)).toEqual(original);
+              await jobRunner.reconcile();
+              expect((await readJob()).status).toBe("running");
+              expect(dm.settlePosts).toBe(0);
+              await expect(dm.assertDataAdmission()).rejects.toThrow();
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(services.RELEASE_IMAGE_NAMES.length);
+              expect(
+                host.calls
+                  .filter((args) => args[0] === "compose" && args.includes("up"))
+                  .map((args) => args.at(-1)),
+              ).toEqual(["data-manager"]);
+              expect(existsSync(join(host.infraDir, ".ops-agent-releases/current.json"))).toBe(
+                false,
+              );
+              return;
+            }
             if (version === "launch-native-release-wrong-config") {
               await jobRunner.reconcile();
               expect((await readJob()).status).toBe("running");
@@ -1497,6 +1675,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
         } finally {
           await publicApi?.close();
+          for (const agent of nativeAgents) await agent.close();
           await dm.close();
           await app.close();
           closeControlInstallation(installation);

@@ -100,7 +100,10 @@ import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
-import { assertPreparedConfigurationHandoff } from "./configuration-handoff-store";
+import {
+  assertPreparedConfigurationHandoff,
+  assertRetainedConfigurationHandoffPreparation,
+} from "./configuration-handoff-store";
 import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
 import {
   configurationMaintenanceAdmissionState,
@@ -437,7 +440,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const streaming =
       (request.routeOptions.config as { artifactTransferBytes?: boolean }).artifactTransferBytes ===
       true;
-    request.raw.socket.setTimeout(streaming ? 5 * 60_000 : DEFAULT_ADMISSION_TIMEOUT_MS);
+    // Fastify's injected transport has a minimal socket. Real connections keep
+    // their idle timeout; admission also retains its independent destroy timer.
+    request.raw.socket.setTimeout?.(streaming ? 5 * 60_000 : DEFAULT_ADMISSION_TIMEOUT_MS);
     if (streaming) return;
     const timer = setTimeout(() => request.raw.destroy(), DEFAULT_ADMISSION_TIMEOUT_MS);
     timer.unref?.();
@@ -1790,7 +1795,17 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         try {
           if (!options.controlInstallation) throw Error("Control trust unavailable");
           const execution = executionFor(job);
-          if (job.state === "succeeded") {
+          if (job.state === "succeeded" && job.operation.kind === "configurationHandoff.prepare") {
+            retainedControlAdoptionAssertion(
+              options.controlInstallation,
+              job.controlAdoption,
+              execution,
+            );
+            assertRetainedConfigurationHandoffPreparation(
+              restoreAdmittedControlExecution(options.controlInstallation, execution),
+              job.result,
+            );
+          } else if (job.state === "succeeded") {
             verifyRetainedArtifactTargetSettlement(
               options.controlInstallation,
               job.controlAdoption,

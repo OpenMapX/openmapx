@@ -50,6 +50,7 @@ import {
 import {
   childSettlementState,
   installationState,
+  verifyControlPreparedTerminal,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
   CONFIGURATION_HANDOFF_LABEL,
@@ -318,6 +319,18 @@ export function assertPreparedConfigurationHandoff(
     progress = readProgress(authority, intent);
   if (progress.phase !== "launched" || progress.launch.state !== "confirmed")
     throw Error("Original confirmed helper launch required");
+}
+
+/** Restart observes a terminal preparation, not an already settled target.
+ * The original signed capsule, indexed intent and confirmed launch remain
+ * mandatory. This returns no lease, dispatch ticket or replacement authority. */
+export function assertRetainedConfigurationHandoffPreparation(
+  authority: VerifiedExecutionAuthority,
+  result: unknown,
+): void {
+  assertPreparedConfigurationHandoff(authority, result);
+  const local = executionAuthorityState(authority);
+  verifyControlPreparedTerminal(local.installation, local.execution);
 }
 
 function readProgress(
