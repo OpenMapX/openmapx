@@ -11,6 +11,7 @@ import {
   maintenanceDockerContainerSchema as container,
 } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
+import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import { verifyConfigurationRuntimeResources } from "./configuration-resource-inspection";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OwnedServiceSnapshot } from "./owned-services";
@@ -83,9 +84,27 @@ export async function inspectMaintenanceDockerRuntime(options: {
           id === "data-manager" && owner.receipt.generation === "committed"
             ? owner.plan.coordinatorImage
             : undefined,
-        expectedImageId = frozenImage?.imageId ?? original[0]!.provenance.imageId;
-      if (frozenImage && spec.image !== frozenImage.imageReference)
-        throw Error("Frozen coordinator image reference changed");
+        release = owner.receipt.generation === "committed" ? owner.plan.release : undefined,
+        releaseReference = release?.serviceImages[id as keyof typeof release.serviceImages],
+        download = release?.downloads.images.find((value) => value.reference === releaseReference),
+        releaseImage =
+          release && download
+            ? (
+                await inspectConfigurationReleaseImages({
+                  downloads: release.downloads,
+                  image: download.image,
+                  execFile: options.execFile,
+                  signal,
+                })
+              )[0]
+            : undefined,
+        expectedImageId =
+          releaseImage?.imageId ?? frozenImage?.imageId ?? original[0]!.provenance.imageId;
+      if (
+        (frozenImage && spec.image !== frozenImage.imageReference) ||
+        (release && (!download || !releaseImage || spec.image !== releaseReference))
+      )
+        throw Error("Frozen release/coordinator image reference changed");
       const owned = current[0]!,
         observed = container.parse(
           JSON.parse(
@@ -154,6 +173,12 @@ export async function inspectMaintenanceDockerRuntime(options: {
         containerId: owned.containerId,
         imageId: observed.Image,
         expectedImageId,
+        ...(releaseImage && download
+          ? {
+              releaseReference: releaseImage.reference,
+              releasePlatformManifestDigest: download.platformManifestDigest,
+            }
+          : {}),
       });
       const mounts = [];
       for (const volume of spec.volumes) {
@@ -184,10 +209,20 @@ export async function inspectMaintenanceDockerRuntime(options: {
           readOnly: !actual.RW,
         });
       }
-      for (const secret of spec.secrets) {
-        const path = expected.secrets[secret.source]?.file,
-          target = `/run/secrets/${secret.target ?? secret.source}`,
-          matches = observed.Mounts.filter((value) => value.Destination === target),
+      const mountedFiles = [
+        ...spec.secrets.map((secret) => ({
+          path: expected.secrets[secret.source]?.file,
+          target: `/run/secrets/${secret.target ?? secret.source}`,
+        })),
+        ...spec.configs.map((config) => ({
+          path: expected.configs[config.source]?.file,
+          target: config.target?.startsWith("/")
+            ? config.target
+            : `/${config.target ?? config.source}`,
+        })),
+      ];
+      for (const { path, target } of mountedFiles) {
+        const matches = observed.Mounts.filter((value) => value.Destination === target),
           actual = matches[0];
         if (
           !path ||
@@ -198,7 +233,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
           !actual.Source ||
           (await realpath(path)) !== (await realpath(actual.Source))
         )
-          throw Error("Original applied secret mount differs");
+          throw Error("Original applied configuration/secret mount differs");
         const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
         try {
           const before = await file.stat(),
@@ -210,7 +245,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
             before.dev !== named.dev ||
             before.ino !== named.ino
           )
-            throw Error("Original secret source unavailable");
+            throw Error("Original configuration/secret source unavailable");
           const expectedBytes = await file.readFile(),
             encoded = (await run(["container", "exec", observed.Id, "base64", target])).replace(
               /[\r\n]/g,
@@ -230,7 +265,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
             encoded !== actualBytes.toString("base64") ||
             !timingSafeEqual(Buffer.from(expectedDigest, "hex"), Buffer.from(actualDigest, "hex"))
           )
-            throw Error("Original runtime secret content differs");
+            throw Error("Original runtime configuration/secret content differs");
           mounts.push({
             targetDigest: keyed(target),
             type: actual.Type,

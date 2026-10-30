@@ -1,6 +1,7 @@
 /** Private fixed final producer records. Parsing is never final authority. */
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
+import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
 import {
   configurationFinalEvidenceProjectionSchema,
   configurationFinalEvidenceSchema,
@@ -283,6 +284,40 @@ function assertExecutedConfigurationMaintenanceFinalState(
         ...(owner.plan.handoff?.serviceIds ?? []),
       ]),
     ].sort(),
+    releaseImage = (serviceId: string) => {
+      const release = owner.plan.release;
+      if (contained || !release) return undefined;
+      const index = 3 + owner.plan.steps.length + ids.indexOf(serviceId) * 4 + 1,
+        observation = inspection.observations[index];
+      if (!observation || observation.checkIndex !== index)
+        throw Error("Original release image observation required");
+      const image = z
+          .strictObject({
+            containerId: z.string().regex(/^[a-f0-9]{64}$/),
+            imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+            expectedImageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+            releaseReference: z.string(),
+            releasePlatformManifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+          })
+          .parse(JSON.parse(observation.detail)),
+        reference = release.serviceImages[serviceId as keyof typeof release.serviceImages],
+        download = release.downloads.images.find((value) => value.reference === reference),
+        containers = z
+          .strictObject({ containers: z.array(ownedServiceSnapshotSchema).max(256) })
+          .parse(JSON.parse(inspection.observations[1]!.detail))
+          .containers.filter((value) => value.serviceId === serviceId);
+      if (
+        containers.length !== 1 ||
+        containers[0]!.containerId !== image.containerId ||
+        containers[0]!.provenance.imageId !== image.imageId ||
+        !download ||
+        image.releaseReference !== reference ||
+        image.releasePlatformManifestDigest !== download.platformManifestDigest ||
+        image.imageId !== image.expectedImageId
+      )
+        throw Error("Original checked release image observation changed");
+      return image.expectedImageId;
+    },
     requiredChecks = configurationMaintenanceRequiredChecksSchema.parse([
       ...["generation", "owner-containers", "dm-guard"].map((check) => ({
         serviceId: null,
@@ -305,10 +340,11 @@ function assertExecutedConfigurationMaintenanceFinalState(
           check,
           expectedRevisionId: inspectedRevision,
           expectedImageId:
-            !contained && serviceId === "data-manager" && owner.plan.coordinatorImage
+            releaseImage(serviceId) ??
+            (!contained && serviceId === "data-manager" && owner.plan.coordinatorImage
               ? owner.plan.coordinatorImage.imageId
               : owner.originalContainers.find((value) => value.serviceId === serviceId)?.provenance
-                  .imageId,
+                  .imageId),
         })),
       ),
     ]),
@@ -379,7 +415,19 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(inspection.requiredChecks, requiredChecks) ||
     inspection.observations.length !== requiredChecks.length ||
     !inspection.observations.every((value, index) => value.checkIndex === index && value.passed) ||
-    !same(details[0], { currentRevisionId: inspectedRevision }) ||
+    !same(details[0], {
+      currentRevisionId: inspectedRevision,
+      ...(!contained && owner.plan.release
+        ? {
+            currentRelease: {
+              releaseId: owner.plan.release.releaseId,
+              digest: owner.plan.release.manifestDigest,
+              updateJobId:
+                owner.plan.apiParent.issuer === "api" ? owner.plan.apiParent.apiJobId : null,
+            },
+          }
+        : {}),
+    }) ||
     !same(details[2], { guard: owner.guardSource.preparedReceipt }) ||
     !owner.plan.steps.every((step, index) =>
       same(details[index + 3], {

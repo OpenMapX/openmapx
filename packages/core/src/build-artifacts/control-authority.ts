@@ -5163,6 +5163,17 @@ export function readCompletedConfigurationHandoff(
     completion.intentDigest !== controlDigest(intent) ||
     completion.preparationDigest !== controlDigest(progress) ||
     completion.phase !== "applied" ||
+    !!intent.release !== !!completion.release ||
+    (intent.release &&
+      completion.release &&
+      (completion.release.images.length !== intent.release.downloads.images.length ||
+        completion.release.images.some(
+          (image, index) =>
+            image.image !== intent.release!.downloads.images[index]?.image ||
+            image.reference !== intent.release!.downloads.images[index]?.reference ||
+            image.phase !== "verified" ||
+            !image.imageId,
+        ))) ||
     completion.launch.containerId !== progress.launch.containerId ||
     canonicalJson(completion.execution) !== canonicalJson(intent.helper) ||
     canonicalJson(effect.identity) !== canonicalJson(intent.helper) ||

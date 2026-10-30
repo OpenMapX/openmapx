@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -135,6 +135,7 @@ export async function ownedServiceHost(options: { configurationHelperReleaseInve
   const imageIdentities = new Map<string,string>();
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
   const helperContainers = new Map<string, unknown>();
+  const releaseMetadata = options.configurationReleaseMetadata;
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
     let stdout = "";
@@ -185,8 +186,11 @@ export async function ownedServiceHost(options: { configurationHelperReleaseInve
           ]),
         ),
       });
+    else if (releaseMetadata && args[0] === "info") stdout="linux/amd64";
+    else if (releaseMetadata && args[0] === "manifest" && args[1] === "inspect") stdout=JSON.stringify({schemaVersion:2,config:{digest:`sha256:${"c".repeat(64)}`,size:128},layers:[{digest:`sha256:${"d".repeat(64)}`,size:512}]});
+    else if (releaseMetadata && args[0] === "image" && args[1] === "inspect" && args[3] === "{{json .}}") stdout=JSON.stringify({Id:imageIdentities.get(args.at(-1)!)??imageId,RepoDigests:[args.at(-1)],Os:"linux",Architecture:"amd64"});
     else if (args[0] === "image" && args[1] === "inspect") stdout = imageIdentities.get(args.at(-1)!) ?? imageId;
-    else if (args[0] === "image" && args[1] === "pull") await imagePullProcess?.(args[2]!,options.signal);
+    else if (args[0] === "image" && args[1] === "pull") await imagePullProcess?.(args.at(-1)!,options.signal);
     else if (args[0] === "compose" && args.includes("up"))
       await creatingProcess?.(args, options.signal);
     else if (args[0] === "stop") {

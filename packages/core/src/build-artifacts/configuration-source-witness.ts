@@ -15,7 +15,13 @@ import {
   readAppliedPlatformConfiguration,
 } from "../services/configuration-generation";
 import { SERVICE_SELECTION_FILE } from "../services/deployment";
+import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
 import type { LoadedService } from "../services/types";
+import {
+  configurationHandoffRecordDomains,
+  configurationHandoffRecordName,
+  configurationHandoffWorkerRecordSchema,
+} from "./configuration-handoff-records";
 import { configurationMaintenanceOwnerRecordSchema } from "./configuration-maintenance-owner-records";
 import {
   assertControlExecutionForward,
@@ -43,11 +49,15 @@ const witnessSchema = z.strictObject({
 });
 const name = (id: string) => `configuration-source-${z.uuid().parse(id)}.json`;
 
-function handoffSourceBytes(infraDir: string, environmentNames: readonly string[]) {
+function handoffSourceBytes(
+  infraDir: string,
+  environmentNames: readonly string[],
+  files = currentSources(infraDir, {}),
+) {
   // File values stay private/keyed, including credentials. Process-only helper
   // transport variables are absent from the original inherited-name projection.
   return canonicalJson({
-    files: currentSources(infraDir, {}),
+    files,
     runtimeEnvironment: Object.fromEntries(
       environmentNames.map((name) => [name, process.env[name] ?? null]),
     ),
@@ -158,16 +168,50 @@ export function assertConfigurationHandoffHostSources(authority: VerifiedExecuti
       state.execution,
       raw.payload.operation.handoffId,
     ),
-    observed = createHmac("sha256", local.privateKey.export({ type: "pkcs8", format: "der" }))
-      .update(helperSourceDomain)
-      .update(handoffSourceBytes(dirname(local.dataRoot), intent.environmentNames))
-      .digest("hex");
-  if (
-    currentConfigurationGeneration(dirname(local.dataRoot)) !==
-      intent.operation.expectedCurrentRevisionId ||
-    !timingSafeEqual(Buffer.from(observed, "hex"), Buffer.from(intent.sourceDigest, "hex"))
-  )
+    infraDir = dirname(local.dataRoot),
+    keyed = (files?: ReturnType<typeof currentSources>) =>
+      createHmac("sha256", local.privateKey.export({ type: "pkcs8", format: "der" }))
+        .update(helperSourceDomain)
+        .update(handoffSourceBytes(infraDir, intent.environmentNames, files))
+        .digest("hex"),
+    matches = (value: string) =>
+      timingSafeEqual(Buffer.from(value, "hex"), Buffer.from(intent.sourceDigest, "hex"));
+  if (currentConfigurationGeneration(infraDir) !== intent.operation.expectedCurrentRevisionId)
+    throw Error("Helper host generation changed");
+  if (matches(keyed())) return;
+  if (!intent.release || intent.previousReleaseOverlay === undefined)
     throw Error("Helper host sources changed");
+  // The only allowed source transition is this original helper's indexed,
+  // signed publication of its exact frozen renderer output. All other files,
+  // environment values and the original generation remain under the old HMAC.
+  const file = configurationHandoffRecordName(intent.operation.handoffId, "completion"),
+    publication = readPrivateRecord(local, "observations", file),
+    worker = verifyControl(
+      intent.helperPublicKey,
+      configurationHandoffRecordDomains.completion,
+      publication,
+      configurationHandoffWorkerRecordSchema,
+    ),
+    files = currentSources(infraDir, {});
+  verifyFamilyOwnedRecord(
+    local,
+    intent.origin,
+    { scope: "private", namespace: "observations", container: "", name: file },
+    canonicalJson(publication),
+  );
+  if (
+    worker.intentDigest !== controlDigest(intent) ||
+    canonicalJson(worker.execution) !== canonicalJson(intent.helper) ||
+    worker.release?.publication !== "published" ||
+    canonicalJson(worker.release.overlay) !== canonicalJson(files.release) ||
+    !files.release ||
+    Buffer.from(files.release.bytes, "base64").toString("utf8") !==
+      renderReleaseCompose(
+        parseReleaseManifest(intent.release.canonicalManifest, intent.release.imagePrefix),
+      ) ||
+    !matches(keyed({ ...files, release: intent.previousReleaseOverlay }))
+  )
+    throw Error("Original helper release publication changed");
 }
 function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   const path = join(infraDir, ".env");
@@ -241,14 +285,13 @@ function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   return { env: { ...file, ...env }, identity, selection };
 }
 
-/** Private, bounded source capture. Raw overlay bytes never enter the public inspection. */
-function releaseSource(infraDir: string) {
-  const path = join(infraDir, "docker-compose.release.yml");
+/** Bounded private data only. Callers own their existing writer/target checks. */
+function readHandoffSourceFile(path: string, maximumBytes: number) {
   let fd: number | undefined;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const before = fstatSync(fd);
-    if (!before.isFile() || before.nlink !== 1 || before.size > 128 * 1024)
+    if (!before.isFile() || before.nlink !== 1 || before.size > maximumBytes)
       throw Error("Host sources unavailable");
     const bytes = readFileSync(fd),
       after = fstatSync(fd),
@@ -281,11 +324,18 @@ function releaseSource(infraDir: string) {
     if (fd !== undefined) closeSync(fd);
   }
 }
+/** Raw values stay exclusively in role-private helper records. */
+export function readConfigurationHandoffReleaseOverlay(infraDir: string) {
+  return readHandoffSourceFile(join(infraDir, "docker-compose.release.yml"), 128 * 1024);
+}
+export function readConfigurationHandoffReleaseState(infraDir: string) {
+  return readHandoffSourceFile(join(infraDir, ".ops-agent-releases", "current.json"), 4096);
+}
 function currentSources(infraDir: string, env: NodeJS.ProcessEnv) {
   const platform = readAppliedPlatformConfiguration(infraDir);
   return {
     ...hostEnv(infraDir, env),
-    release: releaseSource(infraDir),
+    release: readConfigurationHandoffReleaseOverlay(infraDir),
     ...(platform ? { platform } : {}),
   };
 }

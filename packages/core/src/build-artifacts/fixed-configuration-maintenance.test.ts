@@ -309,6 +309,8 @@ it("freezes a checked release snapshot in the original helper graph without a pr
     helperContainerName: `openmapx-configuration-handoff-${handoff.handoffId}`,
     preparedAt: Date.now(),
     release,
+    previousReleaseOverlay: null,
+    previousReleaseState: null,
   };
   expect(configurationHandoffIntentRecordSchema.parse(intent).release).toEqual(release);
   expect(

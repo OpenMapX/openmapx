@@ -78,10 +78,15 @@ const service = z.object({
     .array(z.object({ source: string, target: string.optional() }))
     .max(128)
     .default([]),
+  configs: z
+    .array(z.object({ source: string, target: string.optional() }))
+    .max(128)
+    .default([]),
   healthcheck: z.object({ disable: z.boolean().optional() }).optional(),
 });
 export const maintenanceDockerComposeSchema = z.object({
   services: z.record(z.string(), service),
   secrets: z.record(z.string(), z.object({ file: string.optional() })).default({}),
+  configs: z.record(z.string(), z.object({ file: string.optional() })).default({}),
   volumes: z.record(z.string(), z.object({ name: string.optional() })).default({}),
 });

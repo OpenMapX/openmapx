@@ -19,6 +19,10 @@ import {
 import { services as coreServices } from "@openmapx/core/server";
 import { assertProspectiveConfigurationMaintenancePreludeBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
 import {
+  readConfigurationHandoffReleaseOverlay,
+  readConfigurationHandoffReleaseState,
+} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
+import {
   executionAuthorityState,
   retainConfigurationGenerationNonCommit,
 } from "../../../packages/core/src/build-artifacts/control-authority";
@@ -424,7 +428,17 @@ export function installTrustedConfigurationRuntime(
           })
         : undefined;
       assertProspectiveConfigurationMaintenancePreludeBudget({
-        ...(release ? { release } : {}),
+        ...(release
+          ? {
+              release,
+              releaseSourceBytes: Buffer.byteLength(
+                canonicalJson({
+                  overlay: readConfigurationHandoffReleaseOverlay(options.infraDir),
+                  state: readConfigurationHandoffReleaseState(options.infraDir),
+                }),
+              ),
+            }
+          : {}),
         installationId: installation.installationId,
         record: candidate.record,
         sourceAuthorityRevision: authority?.revisionId ?? "registry-v1",

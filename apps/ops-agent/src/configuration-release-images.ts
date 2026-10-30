@@ -18,11 +18,17 @@ export async function inspectConfigurationReleaseImages(input: {
   downloads: ConfigurationReleaseDownloads;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   signal: AbortSignal;
+  image?: ConfigurationReleaseDownloads["images"][number]["image"];
 }) {
   const downloads = configurationReleaseDownloadsSchema.parse(input.downloads),
     [os, architecture] = downloads.platform.split("/"),
     observations = [];
-  for (const image of downloads.images) {
+  const selected =
+    input.image === undefined
+      ? downloads.images
+      : downloads.images.filter((image) => image.image === input.image);
+  if (selected.length === 0) throw Error("Fixed checked release image required");
+  for (const image of selected) {
     input.signal.throwIfAborted();
     const response = await input.execFile(
       "docker",
@@ -49,6 +55,8 @@ export async function inspectConfigurationReleaseImages(input: {
       throw Error("Checked release local image does not match its pinned platform");
     // Docker's local image ID is observed independently. An OCI index digest
     // or repository reference must never be substituted for that runtime ID.
+    // OCI no longer specifies runtime ImageID construction:
+    // https://github.com/opencontainers/image-spec/blob/main/config.md#imageid
     observations.push(
       Object.freeze({ image: image.image, reference: image.reference, imageId: observed.Id }),
     );

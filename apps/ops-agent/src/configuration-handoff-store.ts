@@ -44,6 +44,10 @@ import {
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
 import {
+  readConfigurationHandoffReleaseOverlay,
+  readConfigurationHandoffReleaseState,
+} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
+import {
   childSettlementState,
   installationState,
 } from "../../../packages/core/src/build-artifacts/control-authority";
@@ -246,7 +250,15 @@ export async function prepareConfigurationHandoffLaunch(
     delegationId: observed.delegationId,
     assertion: attempt.assertion,
     helperContainerName: `openmapx-configuration-handoff-${operation.handoffId}`,
-    ...(owned.owner.plan.release ? { release: owned.owner.plan.release } : {}),
+    ...(owned.owner.plan.release
+      ? {
+          release: owned.owner.plan.release,
+          previousReleaseOverlay: readConfigurationHandoffReleaseOverlay(
+            owned.source.stack.infraDir,
+          ),
+          previousReleaseState: readConfigurationHandoffReleaseState(owned.source.stack.infraDir),
+        }
+      : {}),
     preparedAt: Date.now(),
   });
   writePrivateRecord(

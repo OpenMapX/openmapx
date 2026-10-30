@@ -16,6 +16,7 @@ import {
   GENERATED_COMPOSE_FILE,
   STACK_PROJECT,
 } from "../services/deployment";
+import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
 import { assertProspectiveConfigurationSettlementPacketBudget } from "./configuration-fence-settlement-budget";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-owner-records";
 import {
@@ -32,6 +33,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
   plan: FixedConfigurationMaintenancePlan;
   originalContainers: ConfigurationMaintenanceOwnerRecord["originalContainers"];
   rendered: ReturnType<typeof renderConfiguration>;
+  releaseSourceBytes?: number;
 }) {
   const { plan, originalContainers, rendered } = input,
     { kind: _kind, ...binding } = plan.operation,
@@ -147,7 +149,18 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       expectedImageId: null as string | null,
     })),
     details: unknown[] = [
-      { currentRevisionId: plan.operation.revisionId },
+      {
+        currentRevisionId: plan.operation.revisionId,
+        ...(plan.release
+          ? {
+              currentRelease: {
+                releaseId: plan.release.releaseId,
+                digest: plan.release.manifestDigest,
+                updateJobId: uuid,
+              },
+            }
+          : {}),
+      },
       { containers: futureContainers },
       { guard },
       ...plan.steps.map((step) => ({
@@ -158,7 +171,11 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
     const service = rendered.resolved.enabled.find((value) => value.manifest.id === id);
     if (!service) throw Error("Prospective maintenance runtime target unavailable");
     const snippet = renderServiceSnippet(service, rendered.context),
-      mountCount = (snippet.volumes?.length ?? 0) + (snippet.secrets?.length ?? 0);
+      // The fixed release renderer mounts its privacy validation config in API.
+      mountCount =
+        (snippet.volumes?.length ?? 0) +
+        (snippet.secrets?.length ?? 0) +
+        (plan.release && id === "app-api" ? 1 : 0);
     for (const check of ["configuration", "image", "mount", "readiness"])
       checks.push({
         serviceId: id,
@@ -176,7 +193,18 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
         expectedEnvironmentDigest: hash,
         actualEnvironmentDigest: hash,
       },
-      { containerId: hash, imageId: `sha256:${hash}`, expectedImageId: `sha256:${hash}` },
+      {
+        containerId: hash,
+        imageId: `sha256:${hash}`,
+        expectedImageId: `sha256:${hash}`,
+        ...(plan.release
+          ? {
+              releaseReference:
+                plan.release.serviceImages[id as keyof typeof plan.release.serviceImages],
+              releasePlatformManifestDigest: `sha256:${hash}`,
+            }
+          : {}),
+      },
       {
         containerId: hash,
         mounts: Array.from({ length: mountCount }, () => ({
@@ -292,11 +320,39 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
     phaseBytes =
       (plan.reservations.length + (plan.nestedHardlinks ? 1 : 0) + (plan.nestedHandoff ? 1 : 0)) *
       8192;
+  const releaseWorkerBytes = plan.release
+    ? bytes({
+        images: plan.release.downloads.images.map((image) => ({
+          image: image.image,
+          reference: image.reference,
+          phase: "verified",
+          imageId: `sha256:${hash}`,
+        })),
+        overlay: Buffer.from(
+          renderReleaseCompose(
+            parseReleaseManifest(plan.release.canonicalManifest, plan.release.imagePrefix),
+          ),
+        ).toString("base64"),
+        state: Buffer.from(
+          JSON.stringify({
+            releaseId: plan.release.releaseId,
+            digest: plan.release.manifestDigest,
+            updateJobId: uuid,
+          }),
+        ).toString("base64"),
+      }) + 24576
+    : 0;
   if (
     inspectionBytes > 65536 ||
+    releaseWorkerBytes > 65536 ||
     Math.max(ownerBytes, noGuardOwnerBytes) > 131072 ||
     receiptBytes > 65536 ||
-    phaseBytes > 131072
+    phaseBytes > 131072 ||
+    (plan.release &&
+      (input.releaseSourceBytes === undefined ||
+        !Number.isSafeInteger(input.releaseSourceBytes) ||
+        input.releaseSourceBytes < 4 ||
+        bytes(plan.release) + input.releaseSourceBytes + 24576 > 65536))
   )
     throw Error("Prospective maintenance owner/inspection/receipt/phase capacity exceeded");
   return Object.freeze({
@@ -319,6 +375,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
   originalContainers: ConfigurationMaintenanceOwnerRecord["originalContainers"];
   rendered: ReturnType<typeof renderConfiguration>;
   release?: FixedConfigurationMaintenancePlan["release"];
+  releaseSourceBytes?: number;
   coordinatorImage?: Omit<
     NonNullable<FixedConfigurationMaintenancePlan["coordinatorImage"]>,
     "imageId"
@@ -472,6 +529,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     };
   });
   assertProspectiveConfigurationMaintenanceBudget({
+    ...(input.release ? { releaseSourceBytes: input.releaseSourceBytes } : {}),
     installationId: input.installationId,
     plan,
     originalContainers: containers,

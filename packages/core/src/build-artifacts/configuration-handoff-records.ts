@@ -2,6 +2,10 @@
  * authority; producers and observers join these to the original signed grant. */
 import { z } from "zod";
 import { configurationHandoffPrepareOperationSchema } from "../ops/configuration-handoff-records";
+import {
+  CONFIGURATION_RELEASE_IMAGE_NAMES,
+  configurationReleaseDownloadSchema,
+} from "../ops/configuration-release-downloads";
 import { executionRefSchema } from "../ops/execution-ref";
 import { configurationReleaseSnapshotSchema } from "./configuration-release-snapshot";
 import { controlOriginSchema } from "./control-records";
@@ -9,6 +13,57 @@ import { controlOriginSchema } from "./control-records";
 const digest = z.string().regex(/^[a-f0-9]{64}$/),
   containerId = z.string().regex(/^[a-f0-9]{64}$/),
   time = z.number().int().nonnegative().safe();
+/** Private original overlay bytes; never part of the cross-role public graph. */
+export const configurationHandoffOverlaySourceSchema = z
+  .strictObject({
+    identity: z.strictObject({
+      dev: z.number().int().nonnegative().safe(),
+      ino: z.number().int().nonnegative().safe(),
+      mtime: z.number().finite(),
+      ctime: z.number().finite(),
+      size: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(128 * 1024),
+    }),
+    bytes: z.string().max(174764),
+  })
+  .refine(
+    (value) =>
+      Buffer.from(value.bytes, "base64").toString("base64") === value.bytes &&
+      Buffer.from(value.bytes, "base64").length === value.identity.size,
+  );
+export const configurationHandoffReleaseProgressSchema = z
+  .strictObject({
+    images: z
+      .array(
+        z.strictObject({
+          image: z.enum(CONFIGURATION_RELEASE_IMAGE_NAMES),
+          reference: configurationReleaseDownloadSchema.shape.reference,
+          phase: z.enum(["pending", "attempted", "verified"]),
+          imageId: z
+            .string()
+            .regex(/^sha256:[a-f0-9]{64}$/)
+            .nullable(),
+        }),
+      )
+      .max(CONFIGURATION_RELEASE_IMAGE_NAMES.length),
+    publication: z.enum(["not_attempted", "attempted", "published"]),
+    overlay: configurationHandoffOverlaySourceSchema.nullable(),
+    statePublication: z.enum(["not_attempted", "attempted", "published"]),
+    state: configurationHandoffOverlaySourceSchema.nullable(),
+  })
+  .superRefine((value, context) => {
+    if (
+      new Set(value.images.map((image) => image.image)).size !== value.images.length ||
+      value.images.some((image) => (image.phase === "verified") !== (image.imageId !== null)) ||
+      (value.publication === "published") !== (value.overlay !== null) ||
+      (value.statePublication === "published") !== (value.state !== null) ||
+      (value.statePublication !== "not_attempted" && value.publication !== "published")
+    )
+      context.addIssue({ code: "custom", message: "Original verified release progress required" });
+  });
 export const configurationHandoffHelperBodySchema = z.strictObject({
   kind: z.literal("configuration-helper"),
   handoffId: z.uuid(),
@@ -50,12 +105,16 @@ export const configurationHandoffIntentRecordSchema = z
     helperContainerName: z.string().regex(/^openmapx-configuration-handoff-[a-f0-9-]{36}$/),
     preparedAt: time,
     release: configurationReleaseSnapshotSchema.optional(),
+    previousReleaseOverlay: configurationHandoffOverlaySourceSchema.nullable().optional(),
+    previousReleaseState: configurationHandoffOverlaySourceSchema.nullable().optional(),
   })
   .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536)
   .superRefine((value, context) => {
     const { mode } = value.operation;
     if (
       (mode.kind === "release") !== (value.release !== undefined) ||
+      (mode.kind === "release") !== (value.previousReleaseOverlay !== undefined) ||
+      (mode.kind === "release") !== (value.previousReleaseState !== undefined) ||
       (mode.kind === "release" &&
         value.release &&
         (mode.releaseId !== value.release.releaseId ||
@@ -139,6 +198,7 @@ export const configurationHandoffWorkerRecordSchema = configurationHandoffProgre
   .safeExtend({
     execution: executionRefSchema,
     preparationDigest: digest,
+    release: configurationHandoffReleaseProgressSchema.optional(),
     observations: z
       .array(
         z.strictObject({
@@ -150,6 +210,15 @@ export const configurationHandoffWorkerRecordSchema = configurationHandoffProgre
       .max(64),
   })
   .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536)
+  .refine(
+    (value) =>
+      !value.release ||
+      value.phase !== "applied" ||
+      (value.release.publication === "published" &&
+        value.release.statePublication === "published" &&
+        value.release.images.length === CONFIGURATION_RELEASE_IMAGE_NAMES.length &&
+        value.release.images.every((image) => image.phase === "verified")),
+  )
   .refine(
     (value) =>
       new Set(value.observations.map((item) => item.serviceId)).size === value.observations.length,

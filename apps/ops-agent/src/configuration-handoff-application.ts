@@ -1,5 +1,6 @@
 /** Fixed same-image helper effects. Only Docker process I/O is replaceable in
  * tests; ownership, source checks, ordering and verification are installed. */
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
   assertArtifactTargetLeaseForward,
@@ -16,6 +17,7 @@ import {
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson } from "@openmapx/core/ops";
+import { atomicWrite } from "@openmapx/core/release-files";
 import { repoPaths, services } from "@openmapx/core/server";
 import {
   type ConfigurationHandoffWorkerRecord,
@@ -24,7 +26,12 @@ import {
   configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as name,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
+import { maintenanceDockerContainerSchema } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
 import { configurationMaintenanceOwnerRecordSchema } from "../../../packages/core/src/build-artifacts/configuration-maintenance-owner-records";
+import {
+  readConfigurationHandoffReleaseOverlay,
+  readConfigurationHandoffReleaseState,
+} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
 import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 import { configurationHandoffServiceOrder } from "./configuration-handoff";
 import {
@@ -34,6 +41,8 @@ import {
   waitForConfigurationHandoffPreparation,
 } from "./configuration-handoff-control";
 import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
+import { readCheckedConfigurationRelease } from "./configuration-release";
+import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
 import { createOwnedServiceResolver } from "./owned-services";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
@@ -81,7 +90,7 @@ function ownerFor(child: ConfigurationHandoffChild) {
     !owner.apiControls.decide?.receiptDelivery ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== intent.operation.expectedCurrentRevisionId ||
-    intent.operation.mode.kind !== "configuration"
+    (intent.operation.mode.kind === "release" && !intent.release)
   )
     throw Error("Original active configuration handoff owner required");
   return owner;
@@ -167,27 +176,204 @@ export async function runConfigurationHandoffApplication(input: {
         execution: intent.helper,
         preparationDigest: controlDigest(parent),
         observations: [],
+        ...(intent.release
+          ? {
+              release: {
+                images: intent.release.downloads.images.map((image) => ({
+                  image: image.image,
+                  reference: image.reference,
+                  phase: "pending" as const,
+                  imageId: null,
+                })),
+                publication: "not_attempted" as const,
+                overlay: null,
+                statePublication: "not_attempted" as const,
+                state: null,
+              },
+            }
+          : {}),
         sequence: 0,
         phase: "draining",
         updatedAt: Date.now(),
       },
       true,
     );
+    if (intent.release) {
+      const release = intent.release;
+      for (const image of release.downloads.images) {
+        await services.withConfigurationGenerationWriter(
+          stack.infraDir,
+          async () => {
+            const lock = await services.acquireReleaseStoreLock(
+              join(stack.infraDir, ".ops-agent-releases"),
+            );
+            try {
+              assertArtifactTargetLeaseForward(state.lease);
+              assertConfigurationHandoffHostSources(child);
+              ownerFor(child);
+              readCheckedConfigurationRelease(stack.infraDir, {
+                releaseId: release.releaseId,
+                manifestDigest: release.manifestDigest,
+              });
+              const current = worker!;
+              if (
+                current.release!.images.find((value) => value.image === image.image)?.phase !==
+                "pending"
+              )
+                throw Error("Original attempted release pull requires observation");
+              save({
+                ...current,
+                sequence: current.sequence + 1,
+                release: {
+                  ...current.release!,
+                  images: current.release!.images.map((value) =>
+                    value.image === image.image ? { ...value, phase: "attempted" } : value,
+                  ),
+                },
+                updatedAt: Date.now(),
+              });
+            } finally {
+              lock.release();
+            }
+          },
+          signal,
+        );
+        // No writer lock spans external pull/recreation. The original target
+        // closure and deadline survive this fixed awaited process.
+        assertArtifactTargetLeaseForward(state.lease);
+        assertConfigurationHandoffHostSources(child);
+        await execFile(
+          "docker",
+          ["image", "pull", "--platform", release.downloads.platform, image.reference],
+          {
+            signal,
+            timeout: Math.max(1, intent.helper.deadlineAt - Date.now()),
+            maxBuffer: 1024 * 1024,
+          },
+        );
+        const [observed] = await inspectConfigurationReleaseImages({
+          downloads: release.downloads,
+          image: image.image,
+          execFile,
+          signal,
+        });
+        if (!observed) throw Error("Original completed release pull unavailable");
+        const current = worker!;
+        save({
+          ...current,
+          sequence: current.sequence + 1,
+          release: {
+            ...current.release!,
+            images: current.release!.images.map((value) =>
+              value.image === image.image
+                ? { ...value, phase: "verified", imageId: observed.imageId }
+                : value,
+            ),
+          },
+          updatedAt: Date.now(),
+        });
+      }
+      await services.withConfigurationGenerationWriter(
+        stack.infraDir,
+        async () => {
+          const lock = await services.acquireReleaseStoreLock(
+            join(stack.infraDir, ".ops-agent-releases"),
+          );
+          try {
+            assertArtifactTargetLeaseForward(state.lease);
+            assertConfigurationHandoffHostSources(child);
+            ownerFor(child);
+            const checked = readCheckedConfigurationRelease(stack.infraDir, {
+                releaseId: release.releaseId,
+                manifestDigest: release.manifestDigest,
+              }),
+              current = worker!;
+            if (
+              current.release!.images.some((image) => image.phase !== "verified") ||
+              canonicalJson(readConfigurationHandoffReleaseOverlay(stack.infraDir)) !==
+                canonicalJson(intent.previousReleaseOverlay)
+            )
+              throw Error("Original release publication source changed");
+            save({
+              ...current,
+              sequence: current.sequence + 1,
+              phase: "applying",
+              release: { ...current.release!, publication: "attempted" },
+              updatedAt: Date.now(),
+            });
+            services.writeReleaseComposeArtifacts(checked.manifest, stack.composeReleasePath);
+            const published = readConfigurationHandoffReleaseOverlay(stack.infraDir);
+            if (
+              !published ||
+              Buffer.from(published.bytes, "base64").toString("utf8") !==
+                services.renderReleaseCompose(checked.manifest)
+            )
+              throw Error("Original release overlay publication incomplete");
+            save({
+              ...worker!,
+              sequence: worker!.sequence + 1,
+              release: { ...worker!.release!, publication: "published", overlay: published },
+              updatedAt: Date.now(),
+            });
+          } finally {
+            lock.release();
+          }
+        },
+        signal,
+      );
+      assertConfigurationHandoffHostSources(child);
+    }
+    const inspectTarget = async (id: string, owner: ReturnType<typeof ownerFor>) => {
+      if (!intent.release)
+        return (await owned.inspectOwnedServices(signal)).find((value) => value.serviceId === id);
+      // A changed overlay must not weaken the general owned-service resolver.
+      // Only this original owner may retain its exact old immutable container.
+      const original = owner.originalContainers.find((value) => value.serviceId === id);
+      if (!original) throw Error("Original release container required");
+      const result = await execFile(
+        "docker",
+        ["container", "inspect", "--format", "{{json .}}", original.containerId],
+        { signal, timeout: 15000, maxBuffer: 1024 * 1024 },
+      );
+      if (Buffer.byteLength(result.stdout) > 1024 * 1024)
+        throw Error("Original container observation capacity");
+      const observed = maintenanceDockerContainerSchema.parse(JSON.parse(result.stdout)),
+        labels = observed.Config.Labels;
+      if (
+        observed.Id !== original.containerId ||
+        observed.Image !== original.provenance.imageId ||
+        labels["com.docker.compose.project"] !== original.provenance.project ||
+        labels["com.docker.compose.service"] !== id ||
+        realpathSync(labels["com.docker.compose.project.working_dir"]!) !==
+          original.provenance.composeWorkingDirectory ||
+        canonicalJson(
+          labels["com.docker.compose.project.config_files"]
+            ?.split(",")
+            .map((path) => realpathSync(path.trim())),
+        ) !== canonicalJson(original.provenance.composeConfigFiles) ||
+        (original.state === "running"
+          ? !observed.State.Running || observed.State.Status !== "running"
+          : observed.State.Running ||
+            (original.state === "created"
+              ? observed.State.Status !== "created"
+              : !["exited", "dead"].includes(observed.State.Status)))
+      )
+        throw Error("Original release container changed");
+      return original;
+    };
     for (const id of configurationHandoffServiceOrder(intent.operation.serviceIds)) {
       signal.throwIfAborted();
       const owner = ownerFor(child),
         authority = await loadAuthority();
       if (authority.revisionId !== owner.plan.sourceAuthorityRevision)
         throw Error("Original helper authority changed");
-      const target = (await owned.inspectOwnedServices(signal)).find(
-          (value) => value.serviceId === id,
-        ),
+      const target = await inspectTarget(id, owner),
         original = owner.originalContainers.find((value) => value.serviceId === id);
       if (
         !target ||
         !original ||
         target.containerId !== original.containerId ||
-        target.state !== "running" ||
+        (!intent.release && target.state !== "running") ||
         target.provenance.imageId !== intent.operation.expectedImageIdentities[id]
       )
         throw Error("Original helper target changed");
@@ -207,11 +393,24 @@ export async function runConfigurationHandoffApplication(input: {
                 intent.operation.expectedCurrentRevisionId
             )
               throw Error("Original helper generation changed");
-            const fresh = (await owned.inspectOwnedServices(signal)).find(
-              (value) => value.serviceId === id,
-            );
+            const fresh = await inspectTarget(id, ownerFor(child));
             if (!fresh || canonicalJson(fresh) !== canonicalJson(target))
               throw Error("Original helper target raced");
+            if (intent.release) {
+              const reference =
+                  intent.release.serviceImages[id as keyof typeof intent.release.serviceImages],
+                pulled = worker!.release!.images.find((value) => value.reference === reference);
+              if (!pulled || pulled.phase !== "verified")
+                throw Error("Original verified release image required");
+              const [observed] = await inspectConfigurationReleaseImages({
+                downloads: intent.release.downloads,
+                image: pulled.image,
+                execFile,
+                signal,
+              });
+              if (observed?.imageId !== pulled.imageId)
+                throw Error("Original pulled release image changed");
+            }
             const current = worker!;
             save({
               ...current,
@@ -287,6 +486,56 @@ export async function runConfigurationHandoffApplication(input: {
       privateKey: local.privateKey,
       signal,
     });
+    if (intent.release) {
+      await services.withConfigurationGenerationWriter(
+        stack.infraDir,
+        async () => {
+          const lock = await services.acquireReleaseStoreLock(
+            join(stack.infraDir, ".ops-agent-releases"),
+          );
+          try {
+            assertArtifactTargetLeaseForward(state.lease);
+            assertConfigurationHandoffHostSources(child);
+            const owner = ownerFor(child);
+            readCheckedConfigurationRelease(stack.infraDir, {
+              releaseId: intent.release!.releaseId,
+              manifestDigest: intent.release!.manifestDigest,
+            });
+            if (
+              owner.plan.apiParent.issuer !== "api" ||
+              canonicalJson(readConfigurationHandoffReleaseState(stack.infraDir)) !==
+                canonicalJson(intent.previousReleaseState)
+            )
+              throw Error("Original release state publication source changed");
+            const current = worker!,
+              bytes = JSON.stringify({
+                releaseId: intent.release!.releaseId,
+                digest: intent.release!.manifestDigest,
+                updateJobId: owner.plan.apiParent.apiJobId,
+              });
+            save({
+              ...current,
+              sequence: current.sequence + 1,
+              release: { ...current.release!, statePublication: "attempted" },
+              updatedAt: Date.now(),
+            });
+            atomicWrite(join(stack.infraDir, ".ops-agent-releases", "current.json"), bytes);
+            const published = readConfigurationHandoffReleaseState(stack.infraDir);
+            if (!published || Buffer.from(published.bytes, "base64").toString("utf8") !== bytes)
+              throw Error("Original release state publication incomplete");
+            save({
+              ...worker!,
+              sequence: worker!.sequence + 1,
+              release: { ...worker!.release!, statePublication: "published", state: published },
+              updatedAt: Date.now(),
+            });
+          } finally {
+            lock.release();
+          }
+        },
+        signal,
+      );
+    }
     const completedAt = Date.now(),
       current = worker!;
     save({

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   configurationHandoffHelperBodySchema,
   configurationHandoffProgressSchema,
+  configurationHandoffReleaseProgressSchema,
 } from "./configuration-handoff-records";
 
 const image = `sha256:${"a".repeat(64)}`;
@@ -62,5 +63,42 @@ it("retains a reference-only helper body and truthful bounded launch/target prog
       ...progress(),
       targets: [...progress().targets, ...progress().targets],
     }).success,
+  ).toBe(false);
+});
+
+it("does not confuse an attempted release pull/publication with verified local images and overlay", () => {
+  const image = {
+    image: "api",
+    reference: `ghcr.io/openmapx/api@sha256:${"a".repeat(64)}`,
+    phase: "pending",
+    imageId: null,
+  };
+  const initial = {
+    images: [image],
+    publication: "not_attempted",
+    overlay: null,
+    statePublication: "not_attempted",
+    state: null,
+  };
+  expect(configurationHandoffReleaseProgressSchema.parse(initial)).toEqual(initial);
+  expect(
+    configurationHandoffReleaseProgressSchema.safeParse({
+      ...initial,
+      images: [{ ...image, phase: "verified" }],
+    }).success,
+  ).toBe(false);
+  expect(
+    configurationHandoffReleaseProgressSchema.safeParse({
+      ...initial,
+      images: [{ ...image, imageId: `sha256:${"b".repeat(64)}` }],
+    }).success,
+  ).toBe(false);
+  expect(
+    configurationHandoffReleaseProgressSchema.safeParse({ ...initial, publication: "published" })
+      .success,
+  ).toBe(false);
+  expect(
+    configurationHandoffReleaseProgressSchema.safeParse({ ...initial, images: [image, image] })
+      .success,
   ).toBe(false);
 });

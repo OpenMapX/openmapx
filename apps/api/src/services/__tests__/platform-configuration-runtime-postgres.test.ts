@@ -2,8 +2,16 @@
  * separate native helper. Only the session provider and Docker executable I/O
  * are substituted; image/container replacement acceptance remains separate. */
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,7 +85,7 @@ async function nativeHelper(
   options: {
     bundled?: boolean;
     fault?: "before-effect" | "after-effect";
-    failureStage?: "adoption";
+    failureStage?: "adoption" | "application";
     kill?: { when: Promise<void>; release(): void };
   } = {},
 ) {
@@ -240,6 +248,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-recovery",
       "launch-native-job",
       "launch-native-resource",
+      "launch-native-release",
+      "launch-native-release-wrong-config",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
@@ -267,6 +277,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           configurationHelperVersion: version === "old" ? "old" : "1",
           configurationHelperLaunchResponseLoss: version === "launch-lost",
           configurationHelperReleaseInventory: application,
+          configurationReleaseMetadata: version.startsWith("launch-native-release"),
           ...(application
             ? {
                 schemas: {
@@ -288,6 +299,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-recovery",
             "launch-native-job",
             "launch-native-resource",
+            "launch-native-release",
+            "launch-native-release-wrong-config",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -304,12 +317,70 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           Labels: { ...host.row.Labels, "com.docker.compose.service": id },
         }));
         host.setRows(rows);
+        let checkedRelease: { releaseId: string; manifestDigest: string } | undefined;
+        if (version.startsWith("launch-native-release")) {
+          vi.stubEnv("OPENMAPX_RELEASE", "main");
+          vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
+          const manifest = services.parseReleaseManifest(
+            JSON.stringify({
+              schemaVersion: 1,
+              release: "checked-runtime-release-01",
+              images: Object.fromEntries(
+                services.RELEASE_IMAGE_NAMES.map((image) => [
+                  image,
+                  `ghcr.io/openmapx/${image}@sha256:${"9".repeat(64)}`,
+                ]),
+              ),
+              privacyReleaseValidation: {
+                version: 1,
+                sourceBuildFingerprint: "f".repeat(64),
+                validatedAt: "2026-10-30T00:00:00.000Z",
+                checks: {
+                  translationsConsistent: true,
+                  openApiConsistent: true,
+                  policyConsistent: true,
+                },
+              },
+            }),
+          );
+          const raw = services.canonicalReleaseManifest(manifest);
+          checkedRelease = {
+            releaseId: manifest.release,
+            manifestDigest: createHash("sha256").update(raw).digest("hex"),
+          };
+          mkdirSync(join(host.infraDir, ".ops-agent-releases"), { recursive: true, mode: 0o700 });
+          writeFileSync(
+            join(host.infraDir, ".ops-agent-releases", `${manifest.release}.json`),
+            raw,
+            { mode: 0o600 },
+          );
+          host.setImagePullProcess(async (reference) => {
+            host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
+          });
+        }
         if (application) {
           const inspections: Parameters<typeof host.setRuntimeInspections>[0] = {};
+          if (checkedRelease) {
+            for (const old of rows)
+              inspections[old.Id] = {
+                Id: old.Id,
+                Image: old.Image,
+                State: { Status: "running", Running: true, Health: { Status: "healthy" } },
+                Config: { Image: old.ConfigImage, Labels: old.Labels, Env: [] },
+                HostConfig: { Memory: 0, NanoCpus: 0 },
+                Mounts: [],
+              };
+            host.setRuntimeInspections(inspections);
+          }
           host.setCreatingProcess(async (args) => {
             const id = args.at(-1)!,
               old = rows.find((row) => row.Labels["com.docker.compose.service"] === id);
-            if (!old || !["app-api", "ops-agent"].includes(id))
+            if (
+              !old ||
+              !(
+                checkedRelease ? ["data-manager", "app-api", "ops-agent"] : ["app-api", "ops-agent"]
+              ).includes(id)
+            )
               throw Error("Unexpected protected target");
             if (version === "launch-native-killed") {
               await services.withConfigurationGenerationWriter(host.infraDir, async () => {
@@ -347,11 +418,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
               row = {
                 ...old,
-                Id: (id === "app-api" ? "a" : "b").repeat(64),
+                Id: (id === "app-api" ? "a" : id === "data-manager" ? "c" : "b").repeat(64),
+                ...(checkedRelease
+                  ? { Image: `sha256:${"e".repeat(64)}`, ConfigImage: config.services[id].image }
+                  : {}),
                 Labels: {
                   ...old.Labels,
                   "com.docker.compose.project.working_dir": join(compose, ".."),
-                  "com.docker.compose.project.config_files": compose,
+                  "com.docker.compose.project.config_files": checkedRelease
+                    ? `${compose},${host.stack.composeReleasePath}`
+                    : compose,
                   "com.docker.compose.config-hash": hash,
                 },
               },
@@ -374,7 +450,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 Memory: Number(limits?.memory ?? 0),
                 NanoCpus: Math.round(Number(limits?.cpus ?? 0) * 1e9),
               },
-              Mounts: [],
+              Mounts:
+                checkedRelease && version !== "launch-native-release-wrong-config"
+                  ? (spec.configs ?? []).map((mount: { source: string; target?: string }) => ({
+                      Type: "bind",
+                      Source: config.configs[mount.source].file,
+                      Destination: mount.target ?? `/${mount.source}`,
+                      RW: false,
+                    }))
+                  : [],
             };
             host.setRuntimeInspections(inspections);
           });
@@ -431,7 +515,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               serviceId: "ops-agent",
               config: { OPENMAPX_MEMORY_MIB: 256, OPENMAPX_CPU_LIMIT: 0.5 },
             });
-          if (["launch-native-job", "launch-native-resource"].includes(version)) {
+          if (
+            [
+              "launch-native-job",
+              "launch-native-resource",
+              "launch-native-release",
+              "launch-native-release-wrong-config",
+            ].includes(version)
+          ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
               { jobRunner } = await import("../job-runner"),
               { createDirectAdminOpsKey } = await import("../direct-ops-idempotency");
@@ -448,16 +539,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 await previewAdminPlatformConfiguration(
                   {
                     expectedCurrentRevisionId: host.initial.revisionId,
-                    changes:
-                      version === "launch-native-resource"
-                        ? { version: 1 as const }
-                        : {
-                            version: 1 as const,
-                            backupRetentionDays: { source: "database", value: 14 },
-                          },
+                    changes: [
+                      "launch-native-resource",
+                      "launch-native-release",
+                      "launch-native-release-wrong-config",
+                    ].includes(version)
+                      ? { version: 1 as const }
+                      : {
+                          version: 1 as const,
+                          backupRetentionDays: { source: "database", value: 14 },
+                        },
                     ...(version === "launch-native-resource"
                       ? { reconcileServiceIds: ["ops-agent" as const] }
                       : {}),
+                    ...(checkedRelease ? { release: checkedRelease } : {}),
                   },
                   headers,
                   { client },
@@ -488,19 +583,53 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               )[0]!;
             const launchDeadline = Date.now() + 60000;
             while (!host.calls.some((args) => args[0] === "run") && Date.now() < launchDeadline) {
-              expect((await readJob()).status).not.toBe("failed");
+              const current = await readJob();
+              expect(
+                current.status,
+                JSON.stringify({
+                  error: current.error?.split("\n")[0].slice(0, 200),
+                  preflight: (current.result as Record<string, unknown> | null)
+                    ?.configurationPreflight,
+                  configuration: (current.result as Record<string, unknown> | null)?.configuration,
+                  states: journal.records().map((record) => ({
+                    kind: record.operation.kind,
+                    state: record.state,
+                    errorClass: record.errorClass,
+                  })),
+                }),
+              ).not.toBe("failed");
               await new Promise((resolve) => setTimeout(resolve, 100));
             }
             const args = host.calls.find((args) => args[0] === "run");
             expect(args).toBeDefined();
             const env = (name: string) =>
               args!.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
-            await nativeHelper(host, {
-              OPENMAPX_ROOT_DIR: host.root,
-              OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
-              OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
-              OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
-            });
+            await nativeHelper(
+              host,
+              {
+                OPENMAPX_ROOT_DIR: host.root,
+                OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+                OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+                OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+              },
+              version === "launch-native-release-wrong-config"
+                ? { failureStage: "application" }
+                : {},
+            );
+            if (version === "launch-native-release-wrong-config") {
+              await jobRunner.reconcile();
+              expect((await readJob()).status).toBe("running");
+              expect(dm.settlePosts).toBe(0);
+              expect(existsSync(join(host.infraDir, ".ops-agent-releases", "current.json"))).toBe(
+                false,
+              );
+              expect(
+                host.calls
+                  .filter((args) => args[0] === "compose" && args.includes("up"))
+                  .map((args) => args.at(-1)),
+              ).toEqual(["data-manager", "app-api"]);
+              return;
+            }
             const settleDeadline = Date.now() + 90000;
             let job = await readJob();
             while (job.status === "running" && Date.now() < settleDeadline) {
@@ -527,6 +656,32 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               configuration: { outcome: "committed", followUp: "complete" },
             });
             expect(await apply()).toEqual(accepted);
+            if (checkedRelease) {
+              const pulls = host.calls.filter((args) => args[0] === "image" && args[1] === "pull");
+              expect(pulls).toHaveLength(services.RELEASE_IMAGE_NAMES.length);
+              expect(pulls.map((args) => args.at(-1))).toEqual(
+                services.RELEASE_IMAGE_NAMES.map(
+                  (image) => `ghcr.io/openmapx/${image}@sha256:${"9".repeat(64)}`,
+                ),
+              );
+              expect(
+                rows
+                  .filter((row) =>
+                    ["data-manager", "app-api", "ops-agent"].includes(
+                      row.Labels["com.docker.compose.service"],
+                    ),
+                  )
+                  .every((row) => row.Image === `sha256:${"e".repeat(64)}`),
+              ).toBe(true);
+              expect(
+                JSON.parse(
+                  readFileSync(join(host.infraDir, ".ops-agent-releases", "current.json"), "utf8"),
+                ),
+              ).toMatchObject({
+                releaseId: checkedRelease.releaseId,
+                digest: checkedRelease.manifestDigest,
+              });
+            }
             expect(dm.settlePosts).toBe(1);
             expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
             expect(
@@ -534,7 +689,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .filter((args) => args[0] === "compose" && args.includes("up"))
                 .map((args) => args.at(-1)),
             ).toEqual(
-              version === "launch-native-resource" ? ["ops-agent"] : ["app-api", "ops-agent"],
+              version === "launch-native-resource"
+                ? ["ops-agent"]
+                : checkedRelease
+                  ? ["data-manager", "app-api", "ops-agent"]
+                  : ["app-api", "ops-agent"],
             );
             return;
           }

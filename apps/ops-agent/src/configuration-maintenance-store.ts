@@ -14,6 +14,10 @@ import { services } from "@openmapx/core/server";
 import { assertProspectiveConfigurationSettlementPacketBudget } from "../../../packages/core/src/build-artifacts/configuration-fence-settlement-budget";
 import { assertProspectiveConfigurationMaintenanceBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
 import {
+  readConfigurationHandoffReleaseOverlay,
+  readConfigurationHandoffReleaseState,
+} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
+import {
   type CoordinatorPullWitness,
   coordinatorPullObservationDomain,
   coordinatorPullWitnessPayloadSchema,
@@ -206,6 +210,7 @@ import {
   configurationMaintenanceChildState,
   installationState,
   publishConfigurationMaintenanceForwardWitness,
+  readCompletedConfigurationHandoff,
   verifyConfigurationMaintenanceChildTerminal,
   verifyControlPreparedTerminal,
   withPrivateEffectWriter,
@@ -4354,6 +4359,44 @@ export async function inspectFrozenMaintenanceRuntime(
       throw Error("Unchanged original owned runtime differs");
     if (contained && canonicalJson(containers) !== canonicalJson(owner.originalContainers))
       throw Error("Original noncommitted runtime changed");
+    let currentRelease: { releaseId: string; digest: string; updateJobId: string } | undefined;
+    if (!contained && owner.plan.release) {
+      if (!owner.plan.handoff || owner.plan.apiParent.issuer !== "api")
+        throw Error("Original release helper/current-state owner required");
+      const original = readCompletedConfigurationHandoff(
+          state.installation.installation,
+          owner.plan.handoff.handoffId,
+        ),
+        published = original.completion.release,
+        overlay = readConfigurationHandoffReleaseOverlay(source.infraDir),
+        pointer = readConfigurationHandoffReleaseState(source.infraDir);
+      currentRelease = {
+        releaseId: owner.plan.release.releaseId,
+        digest: owner.plan.release.manifestDigest,
+        updateJobId: owner.plan.apiParent.apiJobId,
+      };
+      if (
+        canonicalJson(original.intent.ownerPrepare) !== canonicalJson(owner.plan.prepare) ||
+        original.intent.ownerCertificateDigest !== owner.rootCertificateDigest ||
+        original.intent.operation.planDigest !== owner.plan.planDigest ||
+        canonicalJson(original.intent.release) !== canonicalJson(owner.plan.release) ||
+        published?.publication !== "published" ||
+        published.statePublication !== "published" ||
+        canonicalJson(overlay) !== canonicalJson(published.overlay) ||
+        canonicalJson(pointer) !== canonicalJson(published.state) ||
+        !overlay ||
+        !pointer ||
+        Buffer.from(pointer.bytes, "base64").toString("utf8") !== JSON.stringify(currentRelease) ||
+        Buffer.from(overlay.bytes, "base64").toString("utf8") !==
+          services.renderReleaseCompose(
+            services.parseReleaseManifest(
+              owner.plan.release.canonicalManifest,
+              owner.plan.release.imagePrefix,
+            ),
+          )
+      )
+        throw Error("Original helper release publication changed before final inspection");
+    }
     const docker = await inspectMaintenanceDockerRuntime({
       stack: source.stack,
       execFile: source.execFile,
@@ -4426,7 +4469,10 @@ export async function inspectFrozenMaintenanceRuntime(
         ...docker.checks,
       ]),
       details = [
-        { currentRevisionId: services.currentConfigurationGeneration(source.infraDir) },
+        {
+          currentRevisionId: services.currentConfigurationGeneration(source.infraDir),
+          ...(currentRelease ? { currentRelease } : {}),
+        },
         { containers },
         { guard },
         ...owner.plan.steps.map((step) => ({
@@ -5394,8 +5440,13 @@ export async function prepareConfigurationMaintenanceAdmission(
           expectedImageIdentities: Object.fromEntries(
             protectedIds.map((id) => {
               const old = originalContainers.find((value) => value.serviceId === id);
-              if (!old || old.state !== "running")
-                throw Error("Original protected target unavailable");
+              if (
+                !old ||
+                (release && !["running", "stopped", "created"].includes(old.state)) ||
+                (!release && old.state !== "running") ||
+                (release && ["data-manager", "ops-agent"].includes(id) && old.state !== "running")
+              )
+                throw Error("Original handoff target unavailable");
               return [id, old.provenance.imageId];
             }),
           ),
@@ -5427,6 +5478,16 @@ export async function prepareConfigurationMaintenanceAdmission(
     ...(coordinatorImage ? { coordinatorImage } : {}),
   });
   assertProspectiveConfigurationMaintenanceBudget({
+    ...(release
+      ? {
+          releaseSourceBytes: Buffer.byteLength(
+            canonicalJson({
+              overlay: readConfigurationHandoffReleaseOverlay(source.infraDir),
+              state: readConfigurationHandoffReleaseState(source.infraDir),
+            }),
+          ),
+        }
+      : {}),
     installationId: input.installation.installationId,
     plan: frozen,
     originalContainers: structuredClone(originalContainers),

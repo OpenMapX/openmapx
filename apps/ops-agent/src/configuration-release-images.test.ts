@@ -133,3 +133,22 @@ it("checks cancellation before and after external IO and bounds stdout", async (
     }),
   ).rejects.toThrow();
 });
+
+it("checks the exact completed pull independently before moving to another image", async () => {
+  const execFile = io();
+  const input = {
+    downloads: downloads(),
+    execFile,
+    signal: new AbortController().signal,
+    image: "ops-agent" as const,
+  };
+  const result = await inspectConfigurationReleaseImages(input);
+  expect(result).toEqual([
+    {
+      image: "ops-agent",
+      reference: input.downloads.images[3]!.reference,
+      imageId: `sha256:${"d".repeat(64)}`,
+    },
+  ]);
+  expect(execFile).toHaveBeenCalledTimes(1);
+});
