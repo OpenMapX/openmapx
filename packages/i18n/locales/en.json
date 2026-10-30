@@ -594,7 +594,9 @@
     },
     "panel": {
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}",
-      "updated": "Updated {time}"
+      "updated": "Updated {time}",
+      "showMore": "Show more",
+      "showLess": "Show less"
     },
     "binding": {
       "exact": "Exact",

@@ -357,15 +357,15 @@ main {
 
   /* Road incident card: what it is and where, when, what it does to
    * traffic, the source's own words, and a quiet credit line. */
+  /* The card is the popup's only scroll area, reached only when an opened
+   * text or a stack of conditions outgrows the screen. */
   .omx-incident {
     width: 268px;
     max-width: 100%;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  .omx-incident--stack {
     max-height: 60vh;
     overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.4;
   }
   .omx-incident__count {
     padding-right: 26px;
@@ -472,10 +472,35 @@ main {
   }
   .omx-incident__text {
     margin-top: 10px;
-    max-height: 132px;
-    overflow-y: auto;
     white-space: pre-line;
+  }
+  .omx-incident__body {
     opacity: 0.85;
+  }
+  /* A long text shows its first four lines, fading out, until opened. */
+  .omx-incident__text--long:not(:has(.omx-incident__more[open])) .omx-incident__body {
+    max-height: calc(4 * 1.4em);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  }
+  .omx-incident__more summary {
+    display: inline-block;
+    margin-top: 2px;
+    font-weight: 600;
+    color: var(--omx-brand);
+    cursor: pointer;
+    list-style: none;
+  }
+  .omx-incident__more summary::-webkit-details-marker {
+    display: none;
+  }
+  .omx-incident__more summary:hover,
+  .omx-incident__more summary:focus-visible {
+    text-decoration: underline;
+  }
+  .omx-incident__more[open] .omx-incident__show,
+  .omx-incident__more:not([open]) .omx-incident__hide {
+    display: none;
   }
   .omx-incident__text p {
     margin: 0;
