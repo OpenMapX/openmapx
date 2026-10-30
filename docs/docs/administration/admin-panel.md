@@ -95,7 +95,8 @@ The backend control plane, with sub-pages for the day-to-day work:
 - **Catalog** — every installed service (built-in or extension-installed), its
   capabilities and container state, with start/stop/restart.
 - **Compose preview** — the generated `docker-compose` file, so you can see what
-  the renderer will do before bringing the stack up.
+  the renderer will do before bringing the stack up. Generate configuration only,
+  start the selected stack, or copy host shutdown guidance from this page.
 - **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
   feeds, glyph fonts), GTFS import controls, and Overture Places release and
   durable OSM↔GERS link operations. The operation cards are rendered from a

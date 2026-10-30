@@ -65,7 +65,7 @@ GitHub authorization errors remain errors. They are never treated as a missing d
 | `OPENMAPX_RELEASE=sha256:<64hex>` | Exact metadata image digest, including an authorized staged candidate.                     |
 | `OPENMAPX_RELEASE=local`          | Explicit local workflow; existing overlays still apply until cleared.                      |
 
-The optional trusted repository setting is `OPENMAPX_RELEASE_MANIFEST_REPOSITORY`, default `ghcr.io/openmapx/release-manifest`. No stable/latest channel or main fallback exists. After the first real publication, explicitly choose preview for named prereleases; installation never guesses whether it exists. See [configuration migration](../install/configuration.md#migrating-release-selection).
+The optional trusted repository setting is `OPENMAPX_RELEASE_MANIFEST_REPOSITORY`, default `ghcr.io/openmapx/release-manifest`. No stable/latest channel or main fallback exists. After the first real publication, explicitly choose preview for named prereleases; installation never guesses whether it exists. See [configuration migration](../install/configuration.md#changing-release-selection).
 
 Use `pnpm openmapx compose release --status` to inspect deliberate pins and `pnpm openmapx compose release` to reselect. Normal service commands preserve an existing coherent overlay. Admin check stores the candidate ID/digest; apply uses exactly that stored candidate even if a pointer later advances. A configuration change requires a new check. The agent refuses to replace its own running image/helper; update these from the host first using [Upgrading](../install/upgrading.md).
 

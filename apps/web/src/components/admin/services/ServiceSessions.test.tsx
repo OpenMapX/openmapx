@@ -1,7 +1,9 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cloneElement, isValidElement, type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { job } from "../activity/__tests__/fixtures";
 import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
@@ -21,10 +23,14 @@ function mount(child: ReactNode, strict = false) {
   const view = (next: ReactNode) =>
     strict ? (
       <StrictMode>
-        <QueryClientProvider client={qc}>{next}</QueryClientProvider>
+        <QueryClientProvider client={qc}>
+          <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+        </QueryClientProvider>
       </StrictMode>
     ) : (
-      <QueryClientProvider client={qc}>{next}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      </QueryClientProvider>
     );
   const rendered = render(view(child));
   return {
@@ -75,7 +81,11 @@ function composeFetch(write: (url: string, init: RequestInit) => Promise<Respons
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) =>
     init.method === "POST"
       ? write(url, init)
-      : new Response("services:\n  synthetic: {}\n", { headers: { "content-type": "text/yaml" } }),
+      : String(url).includes("/jobs/")
+        ? Response.json(job({ id: "render-job", status: "running" }))
+        : new Response("services:\n  synthetic: {}\n", {
+            headers: { "content-type": "text/yaml", "x-openmapx-current-configuration": "none" },
+          }),
   );
 }
 function logs(id = "service /one", open = true) {
@@ -93,6 +103,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Compose generated consumers", () => {
+  it("confirms render-only and retains its revision/key after a lost response without starting containers", async () => {
+    const writes: { path: string; init: RequestInit }[] = [];
+    composeFetch((url, init) => {
+      writes.push({ path: new URL(url).pathname, init });
+      return writes.length === 1
+        ? Response.json({ error: "Connection interrupted" }, { status: 503 })
+        : Response.json({ ok: true, jobId: "render-job" }, { status: 202 });
+    });
+    mount(<ComposePreview />);
+    await screen.findByText(/synthetic: \{\}/);
+    fireEvent.click(screen.getByRole("button", { name: "Generate configuration" }));
+    expect(await screen.findByText(/does not start or restart containers/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Generate only" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Generate only" })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate only" }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.map((write) => write.path)).toEqual([
+      "/api/admin/compose/render",
+      "/api/admin/compose/render",
+    ]);
+    expect(writes.map((write) => JSON.parse(String(write.init.body)))).toEqual(
+      [1, 2].map(() => ({ expectedCurrentRevisionId: null, confirmed: true })),
+    );
+    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBeTruthy();
+    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBe(
+      new Headers(writes[1].init.headers).get("idempotency-key"),
+    );
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringContaining("render-job")));
+  });
   it("shows finite YAML, rejects 200 domain failure and retains same unresolved key", async () => {
     const writes: RequestInit[] = [];
     composeFetch(async (_url, init) => {
@@ -105,7 +147,11 @@ describe("Compose generated consumers", () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Compose up failed", "error"));
     expect(writes).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Compose Up" }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith("Compose up completed"));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        "Stack started. Use guarded Apply/Update for Data Manager or agent changes.",
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Compose Up" }));
     await waitFor(() => expect(writes).toHaveLength(3));
     const keys = writes.map((init) => new Headers(init.headers).get("idempotency-key"));
@@ -113,7 +159,7 @@ describe("Compose generated consumers", () => {
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
   });
-  it("shows bounded down guidance once with no success or fallback", async () => {
+  it("shows copyable host shutdown guidance without sending a doomed mutation", async () => {
     const paths: string[] = [];
     composeFetch(async (url) => {
       paths.push(new URL(url).pathname);
@@ -121,9 +167,10 @@ describe("Compose generated consumers", () => {
     });
     mount(<ComposePreview />);
     await screen.findByText(/synthetic: \{\}/);
-    fireEvent.click(screen.getByRole("button", { name: "Compose Down" }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith("Use typed service controls", "error"));
-    expect(paths).toEqual(["/api/admin/compose/down"]);
+    expect(screen.queryByRole("button", { name: "Compose Down" })).toBeNull();
+    expect(screen.getByText("pnpm openmapx compose down")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Shutdown and recovery guidance" })).toBeVisible();
+    expect(paths).toEqual([]);
   });
   it.each([true, false])(
     "fences old origin completion/error (%s) and never reuses its intent",

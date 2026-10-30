@@ -3,6 +3,7 @@ import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import type { JobContext } from "../job-runner";
 
 const mocks = vi.hoisted(() => ({ run: vi.fn(), inspect: vi.fn() }));
+vi.mock("../retained-maintenance-authorization", () => ({ assertRetainedMaintenanceJob: vi.fn() }));
 vi.mock("../admin-job-ops", () => ({ executeAdminJobOperation: mocks.run }));
 vi.mock("../admin-operation-input", () => ({ assertKnownServiceIds: vi.fn() }));
 vi.mock("../administrative-configuration-writer", () => ({

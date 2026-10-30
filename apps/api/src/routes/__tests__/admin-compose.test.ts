@@ -1,14 +1,23 @@
 import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const f = vi.hoisted(() => ({ start: vi.fn(), inspect: vi.fn(), build: vi.fn(), render: vi.fn() }));
+const f = vi.hoisted(() => ({
+  start: vi.fn(),
+  enqueue: vi.fn(),
+  inspect: vi.fn(),
+  build: vi.fn(),
+  render: vi.fn(),
+}));
 const adminA = { user: { id: "admin-a" } };
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({ infraDir: "/trusted/infra" }),
   services: { renderConfiguration: (...args: unknown[]) => f.render(...args) },
 }));
 vi.mock("../../services/job-runner", () => ({
-  jobRunner: { startImmediateCompose: (...args: unknown[]) => f.start(...args) },
+  jobRunner: {
+    startImmediateCompose: (...args: unknown[]) => f.start(...args),
+    enqueueMaintenance: f.enqueue,
+  },
 }));
 vi.mock("../../services/ops-client", () => ({
   createApiOpsClient: () => ({}),
@@ -34,6 +43,7 @@ vi.mock("../../utils/require-admin", () => ({
   getAdminSession: () => adminA,
 }));
 vi.mock("../../utils/route-auth", () => ({ declareRouteAuth: vi.fn() }));
+vi.mock("../../utils/audit-log", () => ({ writeAuditLog: vi.fn() }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -50,6 +60,40 @@ async function app() {
   return a;
 }
 describe("admin Compose routes", () => {
+  it("queues render-only with an explicit original revision and require-running mode", async () => {
+    const a = await app(),
+      body = { expectedCurrentRevisionId: null, confirmed: true },
+      headers = { "idempotency-key": "render-only-retained-request-001" };
+    f.enqueue.mockResolvedValueOnce("render-job");
+    try {
+      const response = await a.inject({
+        method: "POST",
+        url: "/api/admin/compose/render",
+        headers,
+        payload: body,
+      });
+      expect(response.statusCode).toBe(202);
+      expect(f.enqueue).toHaveBeenCalledWith(
+        "compose.render",
+        { ...body, coordinatorMode: "require-running" },
+        adminA.user.id,
+        headers["idempotency-key"],
+      );
+      expect(f.start).not.toHaveBeenCalled();
+      expect(
+        (
+          await a.inject({
+            method: "POST",
+            url: "/api/admin/compose/render",
+            headers,
+            payload: { ...body, confirmed: false },
+          })
+        ).statusCode,
+      ).toBe(400);
+    } finally {
+      await a.close();
+    }
+  });
   it("requires caller-retained idempotency and retains the original job intent across an ambiguous retry", async () => {
     const a = await app();
     try {
@@ -105,6 +149,7 @@ describe("admin Compose routes", () => {
       const response = await a.inject("/api/admin/compose/preview");
       expect(response.statusCode).toBe(200);
       expect(response.body).toBe("services: {}\n");
+      expect(response.headers["x-openmapx-current-configuration"]).toBe("none");
       expect(f.inspect.mock.calls[0]?.[1]).toEqual({ kind: "configuration.inspect" });
       expect(f.build).toHaveBeenCalledWith(undefined, platform);
       expect(f.start).not.toHaveBeenCalled();

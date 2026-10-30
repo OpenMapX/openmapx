@@ -203,6 +203,21 @@ pnpm openmapx compose render --domain maps.example.com
 
 `--domain` defaults to `DOMAIN` from `infra/docker/.env`, so you rarely need it.
 
+The admin panel's Compose page also offers revision-checked **Generate
+configuration** without container lifecycle effects. Nonempty hardlink plans need
+an already-running Data Manager. **Compose Up** preserves Data Manager and the
+executing agent; use their guarded Apply/Update or Settings/Maintenance workflows
+to replace them. Full shutdown uses the host command below because it removes the
+web control plane:
+
+```bash
+pnpm openmapx compose down
+```
+
+This retains volumes. Only add `--volumes` when intentionally destroying the
+stack's volumes after reviewing backups. If the agent cannot start, repair the
+host deployment before attempting further UI operations.
+
 ## Starting, stopping, and restarting
 
 `services start` is the everyday command: it renders the full enabled stack,

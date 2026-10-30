@@ -5,7 +5,12 @@ import { and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-export type RetainedMaintenanceJobType = "release.clear" | "service.images.pull" | "backup.prune";
+import { maintenanceJobAuthorization } from "./retained-maintenance-authorization";
+export type RetainedMaintenanceJobType =
+  | "release.clear"
+  | "service.images.pull"
+  | "backup.prune"
+  | "compose.render";
 export class MaintenanceRequestConflict extends Error {}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,
@@ -48,7 +53,21 @@ export async function retainMaintenanceJob(
       type,
       status: "queued",
       createdBy: dbActorId(actorId),
-      payload: { ...payload, _maintenanceRequest: { actorId, key, digest } },
+      payload: {
+        ...payload,
+        _maintenanceRequest: {
+          actorId,
+          key,
+          digest,
+          authorization: maintenanceJobAuthorization(token, {
+            jobId: id,
+            type,
+            payload,
+            actorId,
+            key,
+          }),
+        },
+      },
     });
     return id;
   });

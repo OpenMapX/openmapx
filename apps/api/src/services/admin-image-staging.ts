@@ -19,8 +19,10 @@ import {
   executeAndWait,
   OpsObservationPending,
 } from "./ops-client";
+import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 import { checkpointServiceBatch, finishServiceBatch } from "./service-batch-result";
 export async function handleImageStageJob(ctx: JobContext): Promise<Record<string, unknown>> {
+  await assertRetainedMaintenanceJob(ctx);
   const ids = ctx.payload.serviceIds;
   if (
     !Array.isArray(ids) ||

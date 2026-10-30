@@ -26,12 +26,12 @@ const preparedRoots: string[] = [];
 afterEach(() => {
   for (const root of preparedRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-async function preparedStack() {
+async function preparedStack(ids = ["motis", "postgis", "redis"]) {
   const root = mkdtempSync(join(tmpdir(), "omx-docker-prepared-")),
     infraDir = join(root, "infra/docker");
   preparedRoots.push(root);
   mkdirSync(infraDir, { recursive: true });
-  const loaded: services.LoadedService[] = ["motis", "postgis", "redis"].map((id) => ({
+  const loaded: services.LoadedService[] = ids.map((id) => ({
     manifest: {
       id,
       name: id,
@@ -861,6 +861,48 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     240_000,
   );
 
+  it("starts a coordinator stack explicitly while preserving Data Manager and the executing agent", async () => {
+    const prepared = await preparedStack(["motis", "postgis", "data-manager", "ops-agent"]),
+      calls: string[][] = [];
+    const runtime = createDockerRuntime({
+      stack: prepared.stack,
+      fileExists: existsSync,
+      ownedServices,
+      execFile: async (_file, args) => {
+        calls.push([...args]);
+        return {
+          stdout: JSON.stringify({
+            services: {
+              motis: { depends_on: { "data-manager": {} } },
+              "data-manager": {},
+              postgis: {},
+              "ops-agent": {},
+            },
+          }),
+          stderr: "",
+        };
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
+      context(),
+    );
+    const starts = calls
+      .filter((args) => args.includes("up"))
+      .map((args) => args.slice(args.indexOf("up")));
+    expect(starts).toEqual([
+      ["up", "-d", "--no-recreate", "--no-deps", "motis", "postgis", "data-manager", "ops-agent"],
+      ["up", "-d", "--no-deps", "motis", "postgis"],
+    ]);
+    expect(starts.filter((args) => !args.includes("--no-recreate")).flat()).not.toContain(
+      "data-manager",
+    );
+    expect(starts.filter((args) => !args.includes("--no-recreate")).flat()).not.toContain(
+      "ops-agent",
+    );
+  });
+
   it("names only the frozen generated closure when a release overlay declares disabled services", async () => {
     const prepared = await preparedStack(),
       calls: string[][] = [];
@@ -884,9 +926,10 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
       context(),
     );
-    expect(calls.find((args) => args.includes("up"))?.slice(-5)).toEqual([
+    expect(calls.find((args) => args.includes("up"))?.slice(-6)).toEqual([
       "up",
       "-d",
+      "--no-deps",
       "motis",
       "postgis",
       "redis",
@@ -1271,7 +1314,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
   });
 
-  it("owns the container and path for data-manager capacity and feed-proxy effects", async () => {
+  it("owns the capacity path and refuses feed-proxy effects without an original transit claim", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
       stack: {
@@ -1301,15 +1344,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         { kind: "feedProxy.validateAndReload", candidateId: "feedproxy-1" },
         context(),
       ),
-    ).resolves.toEqual({ candidateId: "feedproxy-1", reloaded: true });
+    ).rejects.toThrow("Original owned transit resource claim required");
 
-    // The caller supplied neither a container nor a path, and the proxy is
-    // validated before it is reloaded.
-    expect(calls).toEqual([
-      ["exec", "postgis", "df", "-Pk", "/var/lib/postgresql"],
-      ["exec", "motis-feed-proxy", "nginx", "-t"],
-      ["exec", "motis-feed-proxy", "nginx", "-s", "reload"],
-    ]);
+    // Capacity owns its fixed path. A bare candidate ID cannot authorize proxy effects;
+    // actual owned-candidate positives live in data-transit-resource-source.test.ts.
+    expect(calls).toEqual([["exec", "postgis", "df", "-Pk", "/var/lib/postgresql"]]);
   });
 
   describe("Valhalla traffic effects", () => {

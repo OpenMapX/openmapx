@@ -80,6 +80,9 @@ describe("job runner restart initialization", () => {
       "integration.binding.apply",
       "system.diagnostics",
       "system.update",
+      "release.clear",
+      "service.images.pull",
+      "backup.prune",
     ]);
     await jobRunner.initialize({ completeRestartedUpdates: true });
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "queued" }));

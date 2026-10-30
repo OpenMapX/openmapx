@@ -1,3 +1,4 @@
+import { ADMIN_COMPOSE_REVISION_HEADER } from "@openmapx/core/api-contracts";
 import { repoPaths, services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { readDesiredSelection } from "../services/desired-selection";
@@ -8,8 +9,10 @@ import {
 } from "../services/direct-ops-idempotency";
 import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
+import { MaintenanceRequestConflict } from "../services/retained-maintenance-job";
 import { getServiceRegistry } from "../services/service-registry";
 import { buildConfigurationInput, integrationSchemas } from "../services/trusted-config-operations";
+import { writeAuditLog } from "../utils/audit-log";
 import { STACK_STOP_GUIDANCE } from "../utils/docker-compose";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -50,7 +53,34 @@ export async function registerAdminComposeRoutes(
       allowMissingSelected: desired.source === "default",
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");
+    reply.header(ADMIN_COMPOSE_REVISION_HEADER, source.revisionId ?? "none");
     return rendered.composeYaml;
+  });
+  registerServiceAdminRoute(app, "renderAdminComposeConfiguration", async (request, reply) => {
+    try {
+      const jobId = await jobRunner.enqueueMaintenance(
+        "compose.render",
+        { ...request.body, coordinatorMode: "require-running" },
+        getAdminSession(request).user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      );
+      await writeAuditLog({
+        actorId: getAdminSession(request).user.id,
+        action: "compose.render",
+        targetType: "configuration",
+        targetId: request.body.expectedCurrentRevisionId,
+        details: { jobId, coordinatorMode: "require-running" },
+        request,
+      });
+      return reply.code(202).send({ ok: true, jobId });
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict)
+        return reply.code(409).send({ error: "Mutation key belongs to another request" });
+      return reply.code(503).send({
+        error:
+          "Configuration generation is unavailable; inspect Activity before retrying the same request",
+      });
+    }
   });
 
   // POST /api/admin/compose/up — bring the whole stack up

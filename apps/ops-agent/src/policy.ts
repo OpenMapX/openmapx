@@ -299,11 +299,6 @@ export function createRegistryResourceClaimer(options: {
     claim: async (operation, fingerprint, signal, owner) => {
       if (signal.aborted) throw signal.reason;
       if (!requiresTrustedSource(operation)) {
-        if (
-          operation.kind === "stack.start" &&
-          (options.enabledServiceIds?.() ?? registeredServiceIds).has("data-manager")
-        )
-          return null;
         const action = serviceActionForOperation(operation.kind);
         if ("serviceId" in operation && action && options.ownedServices) {
           const snapshots =

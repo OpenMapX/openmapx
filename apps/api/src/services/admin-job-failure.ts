@@ -49,8 +49,12 @@ export function publicAdminJobPayload(type: string, payload: unknown): unknown {
     !["standalone.preview", "standalone.install", "standalone.adopt", "standalone.remove"].includes(
       type,
     )
-  )
-    return payload;
+  ) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+    return Object.fromEntries(
+      Object.entries(payload).filter(([key]) => key !== "_maintenanceRequest"),
+    );
+  }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const fields =
     type === "standalone.preview"

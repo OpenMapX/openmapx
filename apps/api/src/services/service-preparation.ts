@@ -175,7 +175,7 @@ export async function updatePreparedService(
 export async function publishServiceGeneration(
   ctx: JobContext,
   scope: string,
-  options: { coordinatorMode: CoordinatorMode; expectedCurrentRevisionId?: string },
+  options: { coordinatorMode: CoordinatorMode; expectedCurrentRevisionId?: string | null },
 ): Promise<{ revisionId: string }> {
   return applyTrustedConfiguration({
     ctx,

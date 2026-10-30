@@ -853,6 +853,13 @@ export async function removeAdminStandaloneIntegrationRequest<T>(
 ): Promise<T> {
   return removeAdminStandaloneIntegrationBound<T>(url, options);
 }
+const renderAdminComposeConfigurationBound = bindAdminOperation("renderAdminComposeConfiguration");
+export async function renderAdminComposeConfigurationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return renderAdminComposeConfigurationBound<T>(url, options);
+}
 const restoreAdminServiceBackupBound = bindAdminOperation("restoreAdminServiceBackup");
 export async function restoreAdminServiceBackupRequest<T>(
   url: string,

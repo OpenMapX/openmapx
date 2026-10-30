@@ -515,3 +515,11 @@ polling.
 - **[Configuration](../install/configuration.md)** — `OPENCONDITIONS_URL`,
   `TRAFFIC_LIVE_CRON`, `TRAFFIC_CONDITIONS_STALE_MS` and `TRAFFIC_VALHALLA_URL`,
   the knobs behind the live road-conditions cycle.
+
+### Configuration-only jobs
+
+Compose generation, image staging, release-pin clearing and backup pruning use
+retained Activity jobs. A lost response should be retried with the same request
+key. Pending observation means the original outcome is still being checked; it
+does not authorize a replacement operation. A generated revision can be committed
+while hardlink application fails, and generation alone does not restart containers.

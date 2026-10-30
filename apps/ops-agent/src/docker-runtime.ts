@@ -548,6 +548,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     operation: { expectedConfigurationRevisionId: string; serviceId?: string },
     context: OpsExecutionContext,
     args: () => string[],
+    continuation?: () => string[] | undefined,
   ) => {
     if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
     if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
@@ -602,7 +603,14 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
               )
                 throw Error("Coordinator maintenance required before service creation");
             }
-            return await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+            const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+            const next = continuation?.();
+            if (next) {
+              if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+              if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+              return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
+            }
+            return result;
           } finally {
             release.release();
           }
@@ -625,15 +633,40 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       throw error;
     }
   };
-  runtime["stack.start"] = (operation, context) =>
-    preparedCreation(operation, context, () => {
-      const ids = services.readAppliedComposeServiceIds(
+  runtime["stack.start"] = (operation, context) => {
+    const selected = () =>
+      services.readAppliedComposeServiceIds(
         options.stack.infraDir,
         operation.expectedConfigurationRevisionId,
       );
-      if (ids.length === 0) throw Error("No enabled services to start");
-      return [...composePrefix(), "up", "-d", ...ids];
-    });
+    const protectedIds = new Set(["data-manager", "ops-agent"]);
+    return preparedCreation(
+      operation,
+      context,
+      () => {
+        const ids = selected();
+        if (ids.length === 0) throw Error("No enabled services to start");
+        // Start the entire frozen closure without replacing the coordinator or
+        // executing agent. Their replacements use the dedicated guarded paths.
+        return [
+          ...composePrefix(),
+          "up",
+          "-d",
+          ...(ids.some((id) => protectedIds.has(id)) ? ["--no-recreate"] : []),
+          "--no-deps",
+          ...ids,
+        ];
+      },
+      () => {
+        const ids = selected();
+        if (!ids.some((id) => protectedIds.has(id))) return undefined;
+        const ordinary = ids.filter((id) => !protectedIds.has(id));
+        return ordinary.length
+          ? [...composePrefix(), "up", "-d", "--no-deps", ...ordinary]
+          : undefined;
+      },
+    );
+  };
   runtime["service.start"] = (operation, context) =>
     preparedCreation(operation, context, () => [
       ...composePrefix(),

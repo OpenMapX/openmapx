@@ -216,6 +216,37 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       return ctx;
     }
+    async function renderJob(expectedCurrentRevisionId: string | null = host.initial.revisionId) {
+      const ctx = await job(),
+        { maintenanceJobAuthorization } = await import("../retained-maintenance-authorization");
+      const payload = {
+          expectedCurrentRevisionId,
+          confirmed: true,
+          coordinatorMode: "require-running",
+        },
+        actorId = "loopback-admin",
+        key = "actual-render-nonempty-request-001";
+      ctx.jobType = "compose.render";
+      ctx.payload = {
+        ...payload,
+        _maintenanceRequest: {
+          actorId,
+          key,
+          authorization: maintenanceJobAuthorization(host.token, {
+            jobId: ctx.jobId,
+            type: ctx.jobType,
+            payload,
+            actorId,
+            key,
+          }),
+        },
+      };
+      await fixture.db
+        .update(schema.adminJob)
+        .set({ type: ctx.jobType, payload: ctx.payload })
+        .where(eq(schema.adminJob.id, ctx.jobId));
+      return ctx;
+    }
     function owned<T>(ctx: JobContext, run: () => Promise<T>) {
       return writer.withAdministrativeConfigurationJob(ctx, () =>
         writer.withAdministrativeConfigurationWriter(
@@ -7830,6 +7861,61 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       60000,
     );
     it.each([false, true])(
+      "starts the actual durable nonempty whole stack with an initially running coordinator=%s without replacing protected services",
+      async (running) => {
+        dm = await ownedDataManager({
+          sql: fixture.sql,
+          infraDir: host.infraDir,
+          serviceIds: host.loaded.map((service) => service.manifest.id),
+        });
+        vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        const coordinator = {
+          ...host.row,
+          Id: "c".repeat(64),
+          State: running ? "running" : "exited",
+          ConfigImage: "example/data-manager:1",
+          Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
+        };
+        host.setRows([host.row, coordinator]);
+        host.setCreatingProcess(async (args) => {
+          if (args.includes("up") && args.includes("data-manager")) {
+            expect(args).toContain("--no-recreate");
+            coordinator.State = "running";
+            host.setRows([host.row, coordinator]);
+          }
+        });
+        mkdirSync(join(host.infraDir, "data/source-osm"), { recursive: true });
+        writeFileSync(join(host.infraDir, "data/source-osm/fixture.pbf"), "public-whole-stack");
+        const { jobRunner } = await import("../job-runner"),
+          { createDurableOpsKey } = await import("../ops-client"),
+          options = {
+            actorId: "loopback-admin",
+            operationKey: createDurableOpsKey("task096.whole-stack", randomUUID()),
+          };
+        const result = await jobRunner.startImmediateCompose(options);
+        expect(result).toMatchObject({
+          ok: true,
+          hardlinks: { applied: true, entries: 1, linked: 1 },
+        });
+        expect(await jobRunner.startImmediateCompose(options)).toEqual(result);
+        const starts = host.calls.filter((args) => args.includes("up"));
+        expect(starts.length).toBe(3); // Preparation always uses the original safe --no-recreate DM Start.
+        for (const args of starts.filter(
+          (args) => args.includes("data-manager") || args.includes("ops-agent"),
+        ))
+          expect(args).toContain("--no-recreate");
+        expect(starts.at(-1)).toContain("--no-deps");
+        expect(starts.at(-1)).not.toContain("data-manager");
+        expect(starts.at(-1)).not.toContain("ops-agent");
+        expect(actualPosts.get("stack.start")).toBe(1);
+        const [retained] = await fixture.db.select().from(schema.adminJob);
+        expect(retained?.status).toBe("success");
+      },
+      90000,
+    );
+
+    it.each([false, true])(
       "prepares durable nonempty render-only hardlinks with a running coordinator=%s and zero lifecycle",
       async (running) => {
         dm = await ownedDataManager({
@@ -7852,20 +7938,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const source = join(host.infraDir, "data/source-osm");
         mkdirSync(source, { recursive: true });
         writeFileSync(join(source, "fixture.pbf"), "public-osm-fixture");
-        const ctx = await job(),
-          { prepareServiceGeneration } = await import("../service-preparation");
+        const ctx = await renderJob(),
+          { handleComposeRenderJob } = await import("../admin-compose-render");
         if (running) {
-          const result = await prepareServiceGeneration(ctx, "render-only", {
-            coordinatorMode: "require-running",
-          });
+          const result = await handleComposeRenderJob(ctx);
           expect(result).toMatchObject({
-            coordinatorMode: "require-running",
+            configuration: { outcome: "committed", followUp: "complete", restartRequired: true },
             hardlinks: { applied: true, entries: 1, linked: 1 },
           });
         } else {
-          await expect(
-            prepareServiceGeneration(ctx, "render-only", { coordinatorMode: "require-running" }),
-          ).rejects.toThrow();
+          await expect(handleComposeRenderJob(ctx)).rejects.toThrow();
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             host.initial.revisionId,
           );
@@ -7879,6 +7961,63 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ).toBe(false);
       },
     );
+    it.each(["stale", "coordinator-stops"] as const)(
+      "keeps durable nonempty render-only publication truthful when %s",
+      async (mode) => {
+        dm = await ownedDataManager({
+          sql: fixture.sql,
+          infraDir: host.infraDir,
+          serviceIds: host.loaded.map((service) => service.manifest.id),
+        });
+        vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        const coordinator = {
+          ...host.row,
+          Id: "c".repeat(64),
+          State: "running",
+          ConfigImage: "example/data-manager:1",
+          Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
+        };
+        host.setRows([host.row, coordinator]);
+        mkdirSync(join(host.infraDir, "data/source-osm"), { recursive: true });
+        writeFileSync(join(host.infraDir, "data/source-osm/fixture.pbf"), "public-render-race");
+        const ctx = await renderJob(
+            mode === "stale" ? `cfg1_${"x".repeat(43)}` : host.initial.revisionId,
+          ),
+          { handleComposeRenderJob } = await import("../admin-compose-render");
+        if (mode === "coordinator-stops") {
+          const checkpoint = ctx.checkpoint;
+          ctx.checkpoint = async (...args) => {
+            await checkpoint(...args);
+            if (
+              (args[0].configuration as { outcome?: string } | undefined)?.outcome === "committed"
+            ) {
+              coordinator.State = "exited";
+              host.setRows([host.row, coordinator]);
+              await dm!.stopForRestart();
+            }
+          };
+        }
+        await expect(handleComposeRenderJob(ctx)).rejects.toThrow();
+        if (mode === "stale")
+          expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+            host.initial.revisionId,
+          );
+        else {
+          expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(
+            host.initial.revisionId,
+          );
+          expect(ctx.checkpointResult).toMatchObject({ configuration: { outcome: "committed" } });
+        }
+        expect(
+          host.calls.some(
+            (args) => args.includes("up") || args.includes("restart") || args.includes("pull"),
+          ),
+        ).toBe(false);
+      },
+      60000,
+    );
+
     it.each([false, true])(
       "applies a durable nonempty generation leaf through API, actual agent and DM, with lost response=%s",
       async (loseResponse) => {

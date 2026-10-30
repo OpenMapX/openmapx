@@ -43,6 +43,7 @@ import {
   provisionAdminDawarichRequest,
   pruneAdminServiceBackupsRequest,
   pullAdminServiceImagesRequest,
+  renderAdminComposeConfigurationRequest,
   restoreAdminServiceBackupRequest,
   rollbackAdminSharedMobilityRequest,
   rotateAdminDawarichOidcSecretRequest,
@@ -401,6 +402,18 @@ import type {
   PullAdminServiceImages503,
   PullAdminServiceImagesBody,
   PullAdminServiceImagesHeaders,
+  RenderAdminComposeConfiguration202,
+  RenderAdminComposeConfiguration400,
+  RenderAdminComposeConfiguration401,
+  RenderAdminComposeConfiguration403,
+  RenderAdminComposeConfiguration409,
+  RenderAdminComposeConfiguration413,
+  RenderAdminComposeConfiguration415,
+  RenderAdminComposeConfiguration429,
+  RenderAdminComposeConfiguration500,
+  RenderAdminComposeConfiguration503,
+  RenderAdminComposeConfigurationBody,
+  RenderAdminComposeConfigurationHeaders,
   RestoreAdminServiceBackup200,
   RestoreAdminServiceBackup400,
   RestoreAdminServiceBackup401,
@@ -1648,6 +1661,117 @@ export const getAdminComposePreview = async (
     {
       ...options,
       method: "GET",
+    },
+  );
+};
+
+export type renderAdminComposeConfigurationResponse202 = {
+  data: RenderAdminComposeConfiguration202;
+  status: 202;
+};
+
+export type renderAdminComposeConfigurationResponse400 = {
+  data: RenderAdminComposeConfiguration400;
+  status: 400;
+};
+
+export type renderAdminComposeConfigurationResponse401 = {
+  data: RenderAdminComposeConfiguration401;
+  status: 401;
+};
+
+export type renderAdminComposeConfigurationResponse403 = {
+  data: RenderAdminComposeConfiguration403;
+  status: 403;
+};
+
+export type renderAdminComposeConfigurationResponse409 = {
+  data: RenderAdminComposeConfiguration409;
+  status: 409;
+};
+
+export type renderAdminComposeConfigurationResponse413 = {
+  data: RenderAdminComposeConfiguration413;
+  status: 413;
+};
+
+export type renderAdminComposeConfigurationResponse415 = {
+  data: RenderAdminComposeConfiguration415;
+  status: 415;
+};
+
+export type renderAdminComposeConfigurationResponse429 = {
+  data: RenderAdminComposeConfiguration429;
+  status: 429;
+};
+
+export type renderAdminComposeConfigurationResponse500 = {
+  data: RenderAdminComposeConfiguration500;
+  status: 500;
+};
+
+export type renderAdminComposeConfigurationResponse503 = {
+  data: RenderAdminComposeConfiguration503;
+  status: 503;
+};
+
+export type renderAdminComposeConfigurationResponseSuccess =
+  renderAdminComposeConfigurationResponse202 & {
+    headers: Headers;
+  };
+export type renderAdminComposeConfigurationResponseError = (
+  | renderAdminComposeConfigurationResponse400
+  | renderAdminComposeConfigurationResponse401
+  | renderAdminComposeConfigurationResponse403
+  | renderAdminComposeConfigurationResponse409
+  | renderAdminComposeConfigurationResponse413
+  | renderAdminComposeConfigurationResponse415
+  | renderAdminComposeConfigurationResponse429
+  | renderAdminComposeConfigurationResponse500
+  | renderAdminComposeConfigurationResponse503
+) & {
+  headers: Headers;
+};
+
+export type renderAdminComposeConfigurationResponse =
+  | renderAdminComposeConfigurationResponseSuccess
+  | renderAdminComposeConfigurationResponseError;
+
+export const getRenderAdminComposeConfigurationUrl = () => {
+  return `/api/admin/compose/render`;
+};
+
+export const renderAdminComposeConfiguration = async (
+  renderAdminComposeConfigurationBody: RenderAdminComposeConfigurationBody,
+  headers: RenderAdminComposeConfigurationHeaders,
+  options?: Parameters<typeof renderAdminComposeConfigurationRequest>[1],
+): Promise<renderAdminComposeConfigurationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return renderAdminComposeConfigurationRequest<renderAdminComposeConfigurationResponse>(
+    getRenderAdminComposeConfigurationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(renderAdminComposeConfigurationBody),
     },
   );
 };

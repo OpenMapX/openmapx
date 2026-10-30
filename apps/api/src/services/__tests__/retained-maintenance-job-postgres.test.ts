@@ -9,6 +9,7 @@ import {
   previewAdminBackupPrune,
   pruneAdminServiceBackups,
   pullAdminServiceImages,
+  renderAdminComposeConfiguration,
 } from "@openmapx/core/api-admin-sdk";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
@@ -46,6 +47,9 @@ vi.mock("../service-registry", () => ({
   getServiceRegistry: () => ({
     list: () => state.services,
     get: (id: string) => state.services.find((service) => service.manifest.id === id),
+    applyEnabledIds: (ids: Set<string>) => {
+      for (const service of state.services) service.enabled = ids.has(service.manifest.id);
+    },
   }),
 }));
 const adminMocks = installAdminRouteMocks();
@@ -77,6 +81,94 @@ dbDescribe("retained finite maintenance requests", () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
   const body = { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" };
+  it("generates configuration only through the actual retained API job and production agent", async () => {
+    const host = await ownedServiceHost();
+    state.services = host.loaded;
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      }),
+      journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+      agent = buildOpsAgentServer({
+        runtime: host.runtime,
+        resourceClaimer: host.claimer,
+        journal,
+        controlInstallation: installation,
+        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      });
+    const tokenFile = join(host.root, "render-api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+    vi.stubEnv("OPS_TRUSTED_CONFIG_UID", String(statSync(host.queue).uid));
+    vi.stubEnv("OPS_TRUSTED_CONFIG_GID", String(statSync(host.queue).gid));
+    const { jobRunner } = await import("../job-runner"),
+      { handleComposeRenderJob } = await import("../admin-compose-render"),
+      { registerAdminComposeRoutes } = await import("../../routes/admin-compose");
+    jobRunner.register("compose.render", handleComposeRenderJob);
+    const api = await createAdminTestApp(registerAdminComposeRoutes, { prefix: "/api" }),
+      url = await api.listen({ host: "127.0.0.1", port: 0 }),
+      options = { client: createApiClient({ baseUrl: url }) };
+    const request = {
+        expectedCurrentRevisionId: host.initial.revisionId,
+        confirmed: true as const,
+      },
+      key = { "idempotency-key": "actual-compose-render-retained-001" };
+    try {
+      const accepted = await renderAdminComposeConfiguration(request, key, options);
+      expect(accepted.status).toBe(202);
+      if (accepted.status !== 202) throw Error("Render unavailable");
+      await vi.waitFor(
+        async () => {
+          const [row] = await state.fixture.db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.id, accepted.data.jobId));
+          expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+            "success",
+          );
+          expect(row?.result).toMatchObject({
+            configuration: { outcome: "committed", followUp: "complete", restartRequired: true },
+          });
+        },
+        { timeout: 20000, interval: 100 },
+      );
+      const rendered = services.currentConfigurationGeneration(host.infraDir);
+      expect(rendered).not.toBe(host.initial.revisionId);
+      expect(
+        host.calls.some(
+          (args) =>
+            args.includes("up") ||
+            args.includes("stop") ||
+            args.includes("restart") ||
+            args.includes("pull"),
+        ),
+      ).toBe(false);
+      expect((await renderAdminComposeConfiguration(request, key, options)).data).toEqual(
+        accepted.data,
+      );
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(rendered);
+      expect(journal.records().filter((job) => job.operation.kind === "stack.render")).toHaveLength(
+        1,
+      );
+    } finally {
+      await api.close();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(worker.active.size).toBe(0);
+        expect(worker.pumping).toBe(false);
+      });
+      await agent.close();
+      closeControlInstallation(installation);
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+    }
+  }, 60000);
   it("retains the actual preview-bound backup prune across lost admission and terminal replay", async () => {
     vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
     const host = await ownedServiceHost(),

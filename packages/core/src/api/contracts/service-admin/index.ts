@@ -69,6 +69,8 @@ import {
   adminServicesSchema,
 } from "./services";
 import {
+  adminComposePreviewHeadersSchema,
+  adminComposeRenderInputSchema,
   adminDawarichBundleConflictSchema,
   adminDawarichConfirmationErrorSchema,
   adminDawarichConflictSchema,
@@ -331,7 +333,7 @@ export const serviceAdminOperations = {
     auth: "admin",
     responses: {
       ...adminCommonResponses,
-      200: adminText(z.string(), "text/yaml"),
+      200: { ...adminText(z.string(), "text/yaml"), headers: adminComposePreviewHeadersSchema },
       503: adminJson(httpErrorSchema),
     },
   },
@@ -348,6 +350,18 @@ export const serviceAdminOperations = {
       200: adminJson(adminServiceComposeStartedSchema),
       409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       400: adminJson(z.union([httpErrorSchema, adminServiceFailureSchema])),
+    },
+  },
+  renderAdminComposeConfiguration: {
+    method: "POST",
+    path: "/api/admin/compose/render",
+    auth: "admin",
+    request: { headers: adminServiceIdempotencyHeadersSchema, body: adminComposeRenderInputSchema },
+    responses: {
+      ...adminCommonResponses,
+      202: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
+      503: adminJson(httpErrorSchema),
     },
   },
   stopAdminCompose: {

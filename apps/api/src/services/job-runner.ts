@@ -43,6 +43,7 @@ import { IntegrationBindingConflict as RetainedBindingConflict } from "./integra
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
 import { guardedSystemReleasePayloadSchema } from "./platform-configuration-job";
+import { retainedMaintenanceJob } from "./retained-maintenance-authorization";
 import { type RetainedMaintenanceJobType, retainMaintenanceJob } from "./retained-maintenance-job";
 import { appApiRestartCheckpoint } from "./system-update-state";
 import {
@@ -1063,6 +1064,7 @@ class AdminJobRunner {
         observe &&
         (hasRetainedImmediateConfiguration(job) ||
           hasRetainedQueuedCoordinator(job) ||
+          retainedMaintenanceJob(job) ||
           hasRetainedStandalone(job));
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
@@ -1138,10 +1140,12 @@ class AdminJobRunner {
         observe &&
         hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
       retainedStandalone = observe && hasRetainedStandalone({ type, result: checkpointResult }),
-      retainedConfiguration = retainedImmediate || retainedQueuedCoordinator || retainedStandalone,
+      retainedMaintenance = observe && retainedMaintenanceJob({ type, payload }),
+      retainedConfiguration =
+        retainedImmediate || retainedQueuedCoordinator || retainedStandalone || retainedMaintenance,
       handler = retainedImmediate
         ? (ctx: JobContext) => this.resumeImmediateConfiguration(ctx)
-        : retainedQueuedCoordinator || retainedStandalone
+        : retainedQueuedCoordinator || retainedStandalone || retainedMaintenance
           ? this.handlers.get(type)
           : observe
             ? resumeAdminJobObservation

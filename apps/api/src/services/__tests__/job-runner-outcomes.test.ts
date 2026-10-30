@@ -194,3 +194,25 @@ it("CAS binds a fresh child attempt to an absent key and the retained parent bef
   expect(query.params).toContain(key);
   expect(query.params).toContain(JSON.stringify(execution));
 });
+
+it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render"])(
+  "resumes %s through its registered checked handler instead of finalizing one retained leaf",
+  async (type) => {
+    const handler = vi.fn(async (ctx) => {
+      expect(ctx.observationOnly).toBe(false);
+      return { operation: type, completed: true };
+    });
+    jobRunner.register(type, handler);
+    store.rows = [{ id: jobId, status: "running", result: { _execution: execution } }];
+    await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
+      jobId,
+      type,
+      { _maintenanceRequest: { authorization: "a".repeat(64) } },
+      { _execution: execution },
+      new AbortController().signal,
+      true,
+    );
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(store.writes.at(-1)?.values).toMatchObject({ status: "success" });
+  },
+);

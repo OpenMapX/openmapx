@@ -9,12 +9,14 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
 import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
+import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminToast } from "../shared/AdminToast";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
 
 export function ComposePreview() {
   const { client, apiUrl } = useActivityClient();
@@ -27,6 +29,41 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
   const { data, isLoading, error } = useComposePreview();
   const owner = useAdminMutationOwner(client, apiUrl);
   const composeUpIntent = useRef<string | null>(null);
+  const register = useServiceJobRegistration();
+  const [renderIntent, setRenderIntent] = useState<{
+    revisionId: string | null;
+    key: string;
+  } | null>(null);
+  const renderOnly = useMutation({
+    retry: false,
+    mutationFn: async () => {
+      if (!renderIntent) throw Error("Refresh and confirm the configuration preview");
+      const execution = owner;
+      try {
+        const result = await serviceOrThrow(
+          sdk.renderAdminComposeConfiguration(
+            { expectedCurrentRevisionId: renderIntent.revisionId, confirmed: true },
+            { "idempotency-key": renderIntent.key },
+            { client },
+          ),
+        );
+        register({ client, apiUrl, jobId: result.jobId, effect: { kind: "compose" } });
+        if (execution.active) {
+          setRenderIntent(null);
+          showToast(
+            `Configuration generation queued (${result.jobId}); container application remains pending.`,
+          );
+        }
+      } catch (error) {
+        if (execution.active)
+          showToast(
+            error instanceof Error ? error.message : "Configuration generation failed",
+            "error",
+          );
+        throw error;
+      }
+    },
+  });
 
   const composeUp = useMutation({
     retry: false,
@@ -42,7 +79,8 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         if (!result.ok) throw new Error("Compose up failed");
         composeUpIntent.current = null;
         void invalidateServiceAdministration(queryClient, apiUrl, effect);
-        if (execution.active) showToast("Compose up completed");
+        if (execution.active)
+          showToast("Stack started. Use guarded Apply/Update for Data Manager or agent changes.");
         return result;
       } catch (error) {
         if (execution.active)
@@ -51,21 +89,6 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
       }
     },
   });
-  const composeDown = useMutation({
-    retry: false,
-    mutationFn: async () => {
-      const execution = owner;
-      try {
-        // This operation has no success variant: only validated host guidance/errors.
-        return await serviceOrThrow(sdk.stopAdminCompose(undefined, { client }));
-      } catch (error) {
-        if (execution.active)
-          showToast(error instanceof Error ? error.message : "Compose down failed", "error");
-        throw error;
-      }
-    },
-  });
-
   if (isLoading) {
     return (
       <Box
@@ -86,6 +109,15 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
 
   return (
     <Box>
+      <ConfirmDialog
+        open={renderIntent !== null}
+        title="Generate configuration only"
+        message="This commits configuration and prepared hardlinks. It does not start or restart containers. A nonempty hardlink plan requires Data Manager to already be running; otherwise generation is refused."
+        confirmLabel="Generate only"
+        loading={renderOnly.isPending}
+        onConfirm={() => renderOnly.mutate()}
+        onCancel={() => setRenderIntent(null)}
+      />
       <Typography
         variant="h5"
         sx={{
@@ -114,21 +146,72 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         }}
       >
         <Button
+          variant="outlined"
+          disabled={
+            renderOnly.isPending ||
+            composeUp.isPending ||
+            data?.expectedCurrentRevisionId === undefined
+          }
+          onClick={() => {
+            if (data?.expectedCurrentRevisionId !== undefined)
+              setRenderIntent({
+                revisionId: data.expectedCurrentRevisionId,
+                key: crypto.randomUUID(),
+              });
+          }}
+        >
+          Generate configuration
+        </Button>
+        <Button
           variant="contained"
           onClick={() => composeUp.mutate()}
-          disabled={composeUp.isPending || composeDown.isPending}
+          disabled={composeUp.isPending || renderOnly.isPending}
         >
           {composeUp.isPending ? "Starting..." : "Compose Up"}
         </Button>
-        <Button
-          variant="outlined"
-          color="warning"
-          onClick={() => composeDown.mutate()}
-          disabled={composeUp.isPending || composeDown.isPending}
-        >
-          {composeDown.isPending ? "Stopping..." : "Compose Down"}
-        </Button>
       </Stack>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Compose Up starts the selected stack and applies ordinary services. It preserves existing
+        Data Manager and operations-agent containers. Apply or update Data Manager from its service
+        page; apply agent changes through Settings or System Maintenance.
+      </Alert>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Full shutdown stops this panel and its operations agent. From the instance checkout on the
+        host, run{" "}
+        <Typography component="code" sx={{ userSelect: "all" }}>
+          pnpm openmapx compose down
+        </Typography>
+        . Volumes are retained. Use individual service controls and Activity logs for routine
+        administration.
+        <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: "wrap" }}>
+          <Button
+            size="small"
+            onClick={async () => {
+              try {
+                if (!navigator.clipboard) throw Error("Clipboard unavailable");
+                await navigator.clipboard.writeText("pnpm openmapx compose down");
+                if (owner.active) showToast("Copied host shutdown command");
+              } catch {
+                if (owner.active) showToast("Select and copy the displayed command", "error");
+              }
+            }}
+          >
+            Copy shutdown command
+          </Button>
+          <Button
+            component="a"
+            href="https://docs.openmapx.org/install/managing-services"
+            target="_blank"
+            rel="noopener noreferrer"
+            size="small"
+          >
+            Shutdown and recovery guidance
+          </Button>
+          <Button component="a" href="/admin/activity" size="small">
+            Open Activity
+          </Button>
+        </Stack>
+      </Alert>
       <Paper
         variant="outlined"
         sx={(theme) => ({
@@ -157,7 +240,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
             wordBreak: "break-word",
           }}
         >
-          {data}
+          {data?.yaml}
         </pre>
       </Paper>
     </Box>

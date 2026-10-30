@@ -1,6 +1,10 @@
 import { type ApiClient, ApiClientError } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import {
+  ADMIN_COMPOSE_REVISION_HEADER,
+  adminComposePreviewHeadersSchema,
+} from "@openmapx/core/api-contracts";
+import {
   matchQuery,
   type QueryClient,
   type QueryFilters,
@@ -92,6 +96,25 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
       queryOptions({
         queryKey: [...key, "compose"],
         queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminComposePreview(options(signal))),
+      }),
+    composeDocument: () =>
+      queryOptions({
+        queryKey: [...key, "compose", "document"],
+        queryFn: async ({ signal }) => {
+          try {
+            const response = await sdk.getAdminComposePreview(options(signal));
+            const yaml = await serviceOrThrow(Promise.resolve(response));
+            const metadata = adminComposePreviewHeadersSchema.safeParse({
+              [ADMIN_COMPOSE_REVISION_HEADER]: response.headers.get(ADMIN_COMPOSE_REVISION_HEADER),
+            });
+            const revision = metadata.success
+              ? metadata.data[ADMIN_COMPOSE_REVISION_HEADER]
+              : undefined;
+            return { yaml, expectedCurrentRevisionId: revision === "none" ? null : revision };
+          } catch (error) {
+            throw new Error(serviceErrorMessage(error), { cause: error });
+          }
+        },
       }),
     deployment: () =>
       queryOptions({

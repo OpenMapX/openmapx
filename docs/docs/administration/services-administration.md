@@ -202,10 +202,31 @@ follows the same selection and config resolution as the CLI render, so it's a
 faithful preview — a good last look before you bring the stack up, especially
 after changing the selection or a service's config.
 
-The page also offers **Compose Up** and **Compose Down** buttons that render,
-apply the data hardlink plan, and start or stop the whole enabled stack. There's
-no compose file to hand-edit anywhere — it's generated, every time. To re-render
-from the CLI, run `pnpm openmapx compose render`.
+**Generate configuration** commits the preview's checked revision and applies its
+prepared hardlinks without starting or restarting containers. An empty plan needs
+no Data Manager; a nonempty plan requires an already-running Data Manager. If it
+stops after generation commits, Activity retains the committed revision and
+reports the failed or unresolved link work. Container application remains pending.
+A stale preview is refused; refresh before confirming another generation.
+
+**Compose Up** prepares the full selected generation and starts only that explicit
+closure. It preserves existing Data Manager and operations-agent containers with
+`--no-recreate`, then applies ordinary services with `--no-deps`. Apply or update
+Data Manager from its service page. Use Settings or System Maintenance to replace
+the agent through the guarded helper. Up does not silently replace either
+protected container or start services mentioned only by a release overlay.
+
+Full shutdown stops the panel and its agent, so the page shows a copyable host
+command instead of a nonfunctional stop button:
+
+```bash
+pnpm openmapx compose down
+```
+
+Volumes remain intact. Destructive volume removal and recovery while the agent is
+unavailable are host procedures; see [Managing services](../install/managing-services.md).
+There is no generated Compose file to hand-edit. The host render command remains
+`pnpm openmapx compose render`.
 
 ## Platform ownership
 
