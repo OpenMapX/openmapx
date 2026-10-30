@@ -50,3 +50,18 @@ it("reports configured deployment intent independently of live agent acquisition
   expect(hostControlConfigured()).toBe(true);
   expect(isSelfHostedDeployment()).toBe(true);
 });
+
+it("separates known vocabulary from every custom capability's owning service", async () => {
+  const a = serviceFixture("motis"),
+    b = serviceFixture("valhalla");
+  a.manifest.provides = ["routing-engine", "vendor/custom"];
+  b.manifest.provides = ["vendor/custom", "misspelled"];
+  list.mockReturnValue([a, b]);
+  inspect.mockResolvedValue({ services: [] });
+  const inventory = (await readServiceInventory()).capabilityInventory;
+  expect(inventory.recognized).toContain("routing-engine");
+  expect(inventory.unrecognized).toEqual([
+    { capability: "misspelled", serviceIds: ["valhalla"] },
+    { capability: "vendor/custom", serviceIds: ["motis", "valhalla"] },
+  ]);
+});

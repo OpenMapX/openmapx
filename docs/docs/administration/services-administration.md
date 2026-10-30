@@ -46,7 +46,7 @@ you've installed — in one table:
 
 A summary across the top counts the total, running, and stopped services, and
 you can narrow the list with the search box (by name, id, or capability) and the
-quality-tier filter. Click a service name to open its detail page.
+quality-tier, enabled-state and exact-capability filters. The capability vocabulary panel lists custom or unrecognized entries and their owning services; namespaced vendor capabilities are allowed. Click a service name to open its detail page.
 
 ### Service selection
 
@@ -64,12 +64,29 @@ and the UI keeps that unambiguous rather than letting you save a file that won't
 be read. Saving the selection changes what _will_ be rendered and started; it
 doesn't touch running containers until you start or update them.
 
+### Action presets and root controls
+
+Choose an **action preset** to select the same root group as the CLI `--preset`
+option. Presets show missing installed members and never save selection by themselves.
+The server expands and validates preset roots; normal action restrictions still apply.
+
+Each row identifies an enabled root, a required dependency, or a disabled service.
+**Enable** adds only that service to the existing roots; **Remove root** removes only
+its explicit root entry. It may remain enabled when another root requires it. Required
+dependencies cannot be removed independently, and host-controlled selections stay
+locked. Selection writes use the same reviewed generation producer as the root editor.
+
 ### Bulk actions
 
 Tick the checkboxes beside one or more services and the bulk-action bar lets you
 **Start**, **Stop**, **Restart**, **Update**, or **Build** the selection in one
 go, plus **Build All** and a **Run Service Check** that refreshes container
-states. Builds take an optional region and a "continue on errors" toggle. Each
+states. Updates offer **without dependency recreation**, corresponding to `--no-deps`.
+Builds take an optional region, a "continue on errors" toggle, and MOTIS-only import
+(`--import`) for a selected MOTIS build or Build All with enabled, buildable MOTIS.
+Other actions cannot carry these options. Whole-stack starts explicitly name the
+frozen generated service closure so release-overlay entries cannot create disabled
+services. Each
 action is queued as a background job — the toast names the job id, and the
 **View Jobs** link opens the activity view where the job's log streams.
 

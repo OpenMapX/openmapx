@@ -757,3 +757,20 @@ it("keeps adopted platform slots across CLI renders and an invocation domain ove
     "PUBLIC_ORIGIN: https://adopted.example.test",
   );
 });
+
+it("allows an explicit domain override when the unrelated host domain is malformed", async () => {
+  const previous = process.env.DOMAIN;
+  process.env.DOMAIN = "https://old-invalid.example.test";
+  try {
+    writeManifest("demo", { ...baseManifest, id: "demo" });
+    const result = await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "maps.example.test",
+      services: ["demo"],
+    });
+    expect(result.enabledServiceIds).toContain("demo");
+  } finally {
+    if (previous === undefined) delete process.env.DOMAIN;
+    else process.env.DOMAIN = previous;
+  }
+});

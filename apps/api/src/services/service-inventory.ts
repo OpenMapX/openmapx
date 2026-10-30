@@ -55,6 +55,19 @@ export async function readServiceInventory(): Promise<AdminServices> {
       ? { state: "available", reason: null }
       : { state: "unavailable", reason: "ops_unavailable" },
     services,
+    capabilityInventory: {
+      recognized: [...coreServices.WELL_KNOWN_CAPABILITIES].sort(),
+      unrecognized: [...new Set(services.flatMap((service) => service.provides))]
+        .filter((capability) => !coreServices.WELL_KNOWN_CAPABILITIES.has(capability))
+        .sort()
+        .map((capability) => ({
+          capability,
+          serviceIds: services
+            .filter((service) => service.provides.includes(capability))
+            .map((service) => service.id)
+            .sort(),
+        })),
+    },
     summary: {
       running: services.filter((s) => s.status === "running").length,
       stopped: services.filter((s) => s.status !== "running" && s.status !== "unknown").length,

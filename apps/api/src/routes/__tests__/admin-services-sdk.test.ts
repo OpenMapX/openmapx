@@ -1,5 +1,9 @@
 import { createApiClient } from "@openmapx/core";
-import { serviceAdminOperations } from "@openmapx/core/api-contracts";
+import {
+  artifactTransferAdminOperations,
+  platformAdminOperations,
+  serviceAdminOperations,
+} from "@openmapx/core/api-contracts";
 import {
   type OpsOperation,
   type OpsOperationKind,
@@ -120,6 +124,16 @@ vi.mock("../../services/service-config-resolver", () => ({
   resolveServiceConfigWithSources: async () => ({
     count: { value: 2, source: "default" },
     API_KEY: { value: "synthetic-secret", source: "env" },
+  }),
+}));
+vi.mock("../../services/configuration-ownership-view", async (original) => ({
+  ...(await original<typeof import("../../services/configuration-ownership-view")>()),
+  inspectServiceConfiguration: async () => ({
+    resolved: {
+      count: { value: 2, source: "default" },
+      API_KEY: { value: "synthetic-secret", source: "env" },
+    },
+    ownership: {},
   }),
 }));
 const setSecret = vi.fn();
@@ -249,6 +263,12 @@ const execute = vi.fn(
         kind: operation.kind,
         value: { services: [{ serviceId: "motis", state: "running" }] },
       };
+    if (operation.kind === "configuration.inspect")
+      return {
+        execution: "sync",
+        kind: operation.kind,
+        value: { revisionId: null, integrationConfigDigests: [] },
+      };
     if (operation.kind === "data.inspect")
       return { execution: "sync", kind: operation.kind, value: serviceDataFixture };
     if (operation.kind === "backup.list")
@@ -331,6 +351,7 @@ afterEach(() => {
 });
 async function wire(max = 1000) {
   const app = Fastify({ bodyLimit: 8192 });
+
   const limiter = new RateLimiter({ max, windowMs: 60000 });
   const unexpected = async () => {
     throw Error("Wrong tier");
@@ -536,13 +557,21 @@ describe("actual service producers through final exported SDK", () => {
     }
   });
 
-  it("exports all 30 actual registered methods", async () => {
+  it("exports every registered service-family method", async () => {
     const { registered, close } = await wire();
     try {
-      expect([...registered.keys()].sort()).toEqual(Object.keys(serviceAdminOperations).sort());
+      const dedicated = new Set([
+        ...Object.keys(platformAdminOperations),
+        ...Object.keys(artifactTransferAdminOperations),
+      ]);
+      expect([...registered.keys()].sort()).toEqual(
+        Object.keys(serviceAdminOperations)
+          .filter((id) => !dedicated.has(id))
+          .sort(),
+      );
       for (const [id, contract] of Object.entries(serviceAdminOperations)) {
         expect(sdk).toHaveProperty(id, expect.any(Function));
-        expect(registered.get(id)).toBe(contract.path);
+        if (!dedicated.has(id)) expect(registered.get(id)).toBe(contract.path);
       }
     } finally {
       await close();
@@ -586,7 +615,7 @@ describe("actual service producers through final exported SDK", () => {
           credentials: [
             {
               key: "API_KEY",
-              source: "vault",
+              source: "env",
               updatedAt: "2026-10-21T00:00:00.000Z",
               updatedBy: null,
               setup: { url: "https://example.test/setup" },
@@ -678,7 +707,8 @@ describe("actual service producers through final exported SDK", () => {
         () => sdk.rollbackAdminSharedMobility("bike", { enabled: false }, options),
         () => sdk.getAdminDawarich(options),
       ];
-      for (const call of calls) expect((await call()).status).toBe(200);
+      for (const [index, call] of calls.entries())
+        expect((await call()).status, `call ${index}`).toBe(200);
       serviceActionLimit.reset();
       expect((await sdk.provisionAdminDawarich(undefined, options)).status).toBe(200);
       serviceActionLimit.reset();

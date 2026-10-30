@@ -69,6 +69,17 @@ function setup(
     const response = handler?.(url, init);
     if (response) return response;
     const path = url.pathname;
+    if (path === "/api/admin/services/presets")
+      return Response.json({
+        presets: [
+          {
+            id: "routing",
+            rootIds: ["demo"],
+            effectiveIds: ["demo", "dependency"],
+            missingIds: [],
+          },
+        ],
+      });
     if (path.startsWith("/api/admin/jobs/"))
       return Response.json(job({ id: path.split("/").at(-1), status: "running" }));
     if (path.endsWith("/selection")) return Response.json(selection);
@@ -96,6 +107,7 @@ function setup(
     if (path === "/api/admin/services")
       return Response.json({
         acquisition,
+        capabilityInventory: { recognized: ["routing"], unrecognized: [] },
         services: [
           {
             id: "demo",
@@ -490,13 +502,30 @@ describe("service administration visible behavior with the generated SDK", () =>
       if (url.pathname === "/api/admin/integrations/demo/bindings")
         return Response.json({
           bindings: bound ? [{ capability: "routing", serviceId: "demo" }] : [],
+          revision: "a".repeat(64),
+          desiredRevision: "a".repeat(64),
+          runtime: bound
+            ? {
+                generationId: "11111111-1111-4111-8111-111111111111",
+                bindings: { routing: "demo" },
+                configRevision: "a".repeat(64),
+              }
+            : null,
+          lastApplication: null,
         });
       if (
         url.pathname === "/api/admin/integrations/demo/bindings/routing" &&
         init.method === "POST"
       ) {
         bound = true;
-        return Response.json({ ok: true });
+        return Response.json({
+          operationId: "binding-test",
+          integrationId: "demo",
+          desiredRevision: "a".repeat(64),
+          database: "retained",
+          runtime: "applied",
+          runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+        });
       }
       return undefined;
     });
@@ -509,9 +538,11 @@ describe("service administration visible behavior with the generated SDK", () =>
     fireEvent.mouseDown(screen.getByRole("combobox"));
     fireEvent.click(await screen.findByRole("option", { name: "Demo (demo)" }));
     await waitFor(() => expect(bound).toBe(true));
-    expect(requests.find((r) => r.init.method === "POST")?.init.body).toBe(
-      JSON.stringify({ serviceId: "demo" }),
-    );
+    expect(JSON.parse(String(requests.find((r) => r.init.method === "POST")?.init.body))).toEqual({
+      serviceId: "demo",
+      expectedServiceId: null,
+      expectedRevision: "a".repeat(64),
+    });
     expect(await screen.findByText("Demo (demo)")).toBeInTheDocument();
   });
   it("queues selected lifecycle and explicit all-build jobs, then refreshes catalog state independently", async () => {
@@ -537,6 +568,7 @@ describe("service administration visible behavior with the generated SDK", () =>
       if (url.pathname === "/api/admin/services" && init.method === "GET")
         return Response.json({
           acquisition,
+          capabilityInventory: { recognized: ["routing"], unrecognized: [] },
           services: [
             {
               id: "demo",
@@ -562,7 +594,7 @@ describe("service administration visible behavior with the generated SDK", () =>
     });
     const { qc } = mount(<ServiceCatalog />);
     await screen.findByText("Demo");
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
     fireEvent.click(screen.getByRole("button", { name: "Start Selected" }));
     await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Build All" }));
@@ -678,6 +710,7 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
     url.pathname === "/api/admin/services"
       ? Response.json({
           acquisition,
+          capabilityInventory: { recognized: ["routing"], unrecognized: [] },
           services: [
             {
               id: "demo",
@@ -710,8 +743,231 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
   );
   mount(<ServiceCatalog />);
   await screen.findByRole("link", { name: "Demo" });
-  fireEvent.click(screen.getAllByRole("checkbox")[0]);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
   const button = screen.getByRole("button", { name: "Restart Selected" });
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute("title", expect.stringContaining("app-api"));
 });
+
+it("selects server-defined preset roots for actions without persisting selection", async () => {
+  const requests = setup();
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Preset (actions only)" }));
+  fireEvent.click(await screen.findByRole("option", { name: /routing \(demo\)/ }));
+  expect(screen.getByRole("checkbox", { name: "Select demo" })).toBeChecked();
+  expect(
+    requests.some(
+      (request) => request.url.pathname.endsWith("/selection") && request.init.method === "POST",
+    ),
+  ).toBe(false);
+});
+it("filters enabled state and exact capabilities while exposing custom vocabulary", async () => {
+  setup((url) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          capabilityInventory: {
+            recognized: ["routing", "routing-engine"],
+            unrecognized: [{ capability: "vendor/custom", serviceIds: ["other"] }],
+          },
+          services: [
+            {
+              id: "demo",
+              name: "Demo",
+              version: "1",
+              quality: "built-in",
+              provides: ["routing-engine"],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "running",
+            },
+            {
+              id: "other",
+              name: "Other",
+              version: "1",
+              quality: "built-in",
+              provides: ["routing", "vendor/custom"],
+              consumes: [],
+              enabled: false,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "not-running",
+            },
+          ],
+          summary: { running: 1, stopped: 1, unknown: 0, total: 2 },
+        })
+      : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Exact capability" }));
+  fireEvent.click(await screen.findByRole("option", { name: "routing" }));
+  expect(screen.queryByRole("link", { name: "Demo" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Other" })).toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Enabled state" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Enabled" }));
+  expect(screen.queryByRole("link", { name: "Other" })).toBeNull();
+  expect(screen.getByText("Unrecognized capability vocabulary (1)")).toBeInTheDocument();
+});
+it("removes only an explicit root through the existing selection producer", async () => {
+  const requests = setup((url, init) =>
+    url.pathname.endsWith("/selection") && init.method === "PUT"
+      ? Response.json({
+          ok: true,
+          revisionId: "synthetic-revision",
+          summary: { ...selection, selectedRoots: [], requestedIds: [], effectiveIds: [] },
+        })
+      : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.click(screen.getByRole("button", { name: "Remove demo root" }));
+  await waitFor(() =>
+    expect(
+      requests.some(
+        (request) => request.url.pathname.endsWith("/selection") && request.init.method === "PUT",
+      ),
+    ).toBe(true),
+  );
+  expect(
+    JSON.parse(
+      String(
+        requests.find(
+          (request) => request.url.pathname.endsWith("/selection") && request.init.method === "PUT",
+        )?.init.body,
+      ),
+    ),
+  ).toEqual({ selectedRoots: [] });
+  await waitFor(() => expect(toast).toHaveBeenCalledWith("Service selection saved"));
+});
+
+it("sends update dependency options and MOTIS import only on their corresponding action", async () => {
+  const requests = setup((url, init) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          services: [
+            {
+              id: "motis",
+              name: "MOTIS",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "not-running",
+            },
+          ],
+          summary: { running: 0, stopped: 1, unknown: 0, total: 1 },
+        })
+      : url.pathname.endsWith("/bulk-action") && init.method === "POST"
+        ? Response.json({ ok: true, jobId: "job-1" })
+        : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "MOTIS" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select motis" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Update without dependency recreation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Update selected" }));
+  await waitFor(() =>
+    expect(
+      requests.filter((request) => request.url.pathname.endsWith("/bulk-action")),
+    ).toHaveLength(1),
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "Import MOTIS after build" }));
+  fireEvent.click(screen.getByRole("button", { name: "Build Selected" }));
+  await waitFor(() =>
+    expect(
+      requests.filter((request) => request.url.pathname.endsWith("/bulk-action")),
+    ).toHaveLength(2),
+  );
+  expect(
+    requests
+      .filter((request) => request.url.pathname.endsWith("/bulk-action"))
+      .map((request) => JSON.parse(String(request.init.body))),
+  ).toEqual([
+    { action: "update", serviceIds: ["motis"], noDeps: true },
+    { action: "build", serviceIds: ["motis"], continueOnError: true, motisImport: true },
+  ]);
+});
+
+it.each(["file", "env"])(
+  "preserves required dependencies and %s-owned root selection",
+  async (source) => {
+    const requests = setup((url, init) => {
+      if (url.pathname.endsWith("/selection"))
+        return Response.json(
+          init.method === "PUT"
+            ? { ok: true, revisionId: "synthetic", summary: selection }
+            : { ...selection, source },
+        );
+      if (url.pathname === "/api/admin/services")
+        return Response.json({
+          acquisition,
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          services: [
+            {
+              id: "demo",
+              name: "Demo",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "running",
+            },
+            {
+              id: "dependency",
+              name: "Dependency",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: true,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "running",
+            },
+            {
+              id: "valhalla",
+              name: "Valhalla",
+              version: "1",
+              quality: "built-in",
+              provides: [],
+              consumes: [],
+              enabled: false,
+              isBuiltIn: true,
+              actions: availableActions,
+              status: "not-running",
+            },
+          ],
+          summary: { running: 2, stopped: 1, unknown: 0, total: 3 },
+        });
+      return undefined;
+    });
+    mount(<ServiceCatalog />);
+    await screen.findByRole("link", { name: "Dependency" });
+    expect(screen.getByRole("button", { name: "Required dependency" })).toBeDisabled();
+    const enable = screen.getByRole("button", { name: "Enable valhalla" });
+    if (source === "env") {
+      expect(enable).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Remove demo root" })).toBeDisabled();
+    } else {
+      fireEvent.click(enable);
+      await waitFor(() =>
+        expect(requests.some((request) => request.init.method === "PUT")).toBe(true),
+      );
+      expect(
+        JSON.parse(String(requests.find((request) => request.init.method === "PUT")?.init.body)),
+      ).toEqual({ selectedRoots: ["demo", "valhalla"] });
+    }
+  },
+);

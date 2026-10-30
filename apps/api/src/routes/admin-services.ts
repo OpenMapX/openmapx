@@ -128,6 +128,25 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     return readServiceInventory();
   });
 
+  registerServiceAdminRoute(app, "listAdminServicePresets", async (_req, reply) => {
+    try {
+      const loaded = getServiceRegistry().list();
+      return {
+        presets: Object.entries(coreServices.PRESETS).map(([id, rootIds]) => {
+          const selection = coreServices.expandServiceSelection(loaded, rootIds);
+          return {
+            id,
+            rootIds: [...rootIds],
+            effectiveIds: [...selection.enabledIds],
+            missingIds: selection.missingIds,
+          };
+        }),
+      };
+    } catch {
+      return reply.code(503).send({ error: "Service registry not available" });
+    }
+  });
+
   // GET /admin/services/:id — single service detail
   registerServiceAdminRoute(app, "getAdminService", async (req, reply) => {
     let svc: ReturnType<ReturnType<typeof getServiceRegistry>["get"]>;
@@ -297,16 +316,53 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
     const allowedKeys =
       action === "build"
-        ? new Set(["action", "serviceIds", "all", "region", "continueOnError"])
+        ? new Set([
+            "action",
+            "serviceIds",
+            "all",
+            "region",
+            "continueOnError",
+            "presetIds",
+            "motisImport",
+          ])
         : action === "update"
-          ? new Set(["action", "serviceIds", "continueOnError", "noDeps"])
-          : new Set(["action", "serviceIds", "continueOnError"]);
+          ? new Set(["action", "serviceIds", "continueOnError", "noDeps", "presetIds"])
+          : new Set(["action", "serviceIds", "continueOnError", "presetIds"]);
     if (!hasOnlyBodyKeys(req.body, allowedKeys)) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };
     }
 
-    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
+    let serviceIds: string[];
+    try {
+      serviceIds = [
+        ...new Set([
+          ...(req.body.serviceIds ?? []),
+          ...coreServices.expandPresets(req.body.presetIds ?? []),
+        ]),
+      ];
+      const registry = getServiceRegistry();
+      if (serviceIds.some((id) => !registry.get(id)))
+        return reply
+          .code(400)
+          .send({ error: "Selected preset or service contains an uninstalled service" });
+      if (action === "build" && "motisImport" in req.body && req.body.motisImport) {
+        const motis = registry.get("motis");
+        if (
+          !motis?.enabled ||
+          !motis.isBuiltIn ||
+          !motis.manifest.buildCommand ||
+          !(serviceIds.includes("motis") || ("all" in req.body && req.body.all === true))
+        )
+          return reply
+            .code(400)
+            .send({ error: "MOTIS import requires a build including enabled built-in MOTIS" });
+      }
+    } catch (error) {
+      if (error instanceof coreServices.UnknownPresetError)
+        return reply.code(400).send({ error: "Unknown service preset" });
+      return reply.code(503).send({ error: "Service registry not available" });
+    }
     if (action !== "build" && serviceIds.length === 0) {
       reply.status(400);
       return { error: `Action "${action}" requires one or more serviceIds` };
@@ -331,6 +387,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         region,
         continueOnError: req.body?.continueOnError,
         ...("noDeps" in req.body ? { noDeps: req.body.noDeps } : {}),
+        ...("motisImport" in req.body ? { motisImport: req.body.motisImport } : {}),
       },
       adminSession.user.id,
     );

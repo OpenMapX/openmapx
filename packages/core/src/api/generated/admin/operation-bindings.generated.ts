@@ -575,6 +575,13 @@ export async function listAdminServiceBackupsRequest<T>(
 ): Promise<T> {
   return listAdminServiceBackupsBound<T>(url, options);
 }
+const listAdminServicePresetsBound = bindAdminOperation("listAdminServicePresets");
+export async function listAdminServicePresetsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminServicePresetsBound<T>(url, options);
+}
 const listAdminServicesBound = bindAdminOperation("listAdminServices");
 export async function listAdminServicesRequest<T>(
   url: string,

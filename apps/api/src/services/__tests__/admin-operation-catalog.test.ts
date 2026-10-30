@@ -241,3 +241,10 @@ describe("guarded Overture recovery catalogue", () => {
 it("keeps remote credential-template generation retired", () => {
   expect(getAdminOperation("generate-api-keys")).toBeUndefined();
 });
+
+it("serializes every installed operation through the actual public catalogue schema", async () => {
+  const { adminOperationsSchema } = await import("@openmapx/core/api-contracts");
+  expect(() =>
+    adminOperationsSchema.parse({ operations: describeAdminOperationCatalog() }),
+  ).not.toThrow();
+});

@@ -528,6 +528,35 @@ describe("administrative build runtime", () => {
     expect(calls).toEqual([["services", "build", "valhalla", "--region", "europe/germany"]]);
   });
 
+  it("passes MOTIS import only to the actual MOTIS build and refuses unsupported selections before effects", async () => {
+    const calls: string[][] = [],
+      runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir: temporaryRoot(),
+      loadBuildAuthority: async () => [
+        ...buildAuthority,
+        { serviceId: "motis", enabled: true, isBuiltIn: true, buildCommand: "motis" },
+      ],
+      runFixedCli: async (args) => {
+        calls.push([...args]);
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "service.build", serviceId: "motis", motisImport: true },
+      context("service.build"),
+    );
+    expect(calls).toEqual([["services", "build", "motis", "--import"]]);
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        { kind: "service.build", serviceId: "valhalla", motisImport: true },
+        context("service.build"),
+      ),
+    ).rejects.toThrow(/MOTIS/);
+    expect(calls).toHaveLength(1);
+  });
+
   it("derives build-all IDs inside the agent and preserves continue semantics", async () => {
     const calls: string[][] = [];
     const runtime = createUnavailableRuntime();

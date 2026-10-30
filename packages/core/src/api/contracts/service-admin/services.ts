@@ -74,9 +74,33 @@ export const adminServiceSummarySchema = z.strictObject({
   status: adminServiceStatusSchema,
   actions: serviceActionsSchema,
 });
+export const adminServiceCapabilityInventorySchema = z.strictObject({
+  recognized: z.array(z.string().max(256)).max(256),
+  unrecognized: z
+    .array(
+      z.strictObject({
+        capability: z.string().max(256),
+        serviceIds: z.array(z.string().max(64)).max(256),
+      }),
+    )
+    .max(4096),
+});
+export const adminServicePresetsSchema = z.strictObject({
+  presets: z
+    .array(
+      z.strictObject({
+        id: z.string().max(64),
+        rootIds: z.array(z.string().max(64)).max(256),
+        effectiveIds: z.array(z.string().max(64)).max(256),
+        missingIds: z.array(z.string().max(64)).max(256),
+      }),
+    )
+    .max(64),
+});
 export const adminServicesSchema = z.strictObject({
   acquisition: adminServiceAcquisitionSchema,
   services: z.array(adminServiceSummarySchema),
+  capabilityInventory: adminServiceCapabilityInventorySchema,
   summary: z.strictObject({
     running: adminCountSchema,
     stopped: adminCountSchema,
@@ -140,29 +164,41 @@ export const adminServiceCredentialManagedSchema = z.strictObject({
 export const adminServiceActionSchema = z.strictObject({
   action: z.enum(["start", "stop", "restart", "apply"]),
 });
-const build = z.strictObject({
-  action: z.literal("build"),
+const selection = {
   serviceIds: adminServiceIdListSchema.optional(),
-  all: z.boolean().optional(),
-  region: z.string().trim().optional(),
-  continueOnError: z.boolean().optional(),
-});
+  presetIds: z.array(z.string().min(1).max(64)).max(64).optional(),
+};
+const hasSelection = (value: { serviceIds?: string[]; presetIds?: string[] }) =>
+  Boolean(value.serviceIds?.length || value.presetIds?.length);
 export const adminServicesBulkActionSchema = z.union([
-  z.strictObject({
-    action: z.enum(["start", "stop", "restart"]),
-    serviceIds: adminServiceIdListSchema.min(1),
-    continueOnError: z.boolean().optional(),
-  }),
-  z.strictObject({
-    action: z.literal("update"),
-    serviceIds: adminServiceIdListSchema.min(1),
-    noDeps: z.boolean().optional(),
-    continueOnError: z.boolean().optional(),
-  }),
-  build.refine(
-    (value) => value.all === true || Boolean(value.serviceIds?.length),
-    "Build requires serviceIds or all: true",
-  ),
+  z
+    .strictObject({
+      action: z.enum(["start", "stop", "restart"]),
+      ...selection,
+      continueOnError: z.boolean().optional(),
+    })
+    .refine(hasSelection, "A service or preset selection is required"),
+  z
+    .strictObject({
+      action: z.literal("update"),
+      ...selection,
+      noDeps: z.boolean().optional(),
+      continueOnError: z.boolean().optional(),
+    })
+    .refine(hasSelection, "A service or preset selection is required"),
+  z
+    .strictObject({
+      action: z.literal("build"),
+      ...selection,
+      all: z.boolean().optional(),
+      region: z.string().trim().optional(),
+      continueOnError: z.boolean().optional(),
+      motisImport: z.boolean().optional(),
+    })
+    .refine(
+      (value) => value.all === true || hasSelection(value),
+      "Build requires a selection or all: true",
+    ),
 ]);
 export const adminServicesCheckedSchema = z.strictObject({
   acquisition: adminServiceAcquisitionSchema,

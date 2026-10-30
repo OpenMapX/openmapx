@@ -126,8 +126,10 @@ vi.mock("../../services/trusted-config-operations.js", () => ({
 }));
 
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
-vi.mock("@openmapx/core/server", () => ({
+vi.mock("@openmapx/core/server", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/server")>()),
   services: {
+    ...(await original<typeof import("@openmapx/core/server")>()).services,
     getProvidedCapabilityNames: vi.fn().mockReturnValue([]),
     serviceConfigEnvPrefix: vi.fn().mockReturnValue("SERVICE_ID"),
   },
@@ -1116,5 +1118,68 @@ describe("resource reset transport", () => {
         }),
       }),
     );
+  });
+});
+
+describe("service presets and option boundaries", () => {
+  it("reports exact roots, effective dependencies and missing preset members", async () => {
+    mockRegistryList.mockReturnValueOnce([
+      {
+        ...MOCK_SERVICE_RUNNING,
+        manifest: {
+          ...MOCK_SERVICE_RUNNING.manifest,
+          container: {
+            ...MOCK_SERVICE_RUNNING.manifest.container,
+            dependsOn: [{ service: "postgis", condition: "service_started" }],
+          },
+        },
+      },
+      { ...MOCK_SERVICE_STOPPED, manifest: { ...MOCK_SERVICE_STOPPED.manifest, id: "postgis" } },
+    ]);
+    const result = await app.inject({ url: "/admin/services/presets" });
+    expect(result.statusCode).toBe(200);
+    expect(result.json().presets.find((preset: { id: string }) => preset.id === "transit")).toEqual(
+      {
+        id: "transit",
+        rootIds: ["motis", "motis-feed-proxy", "otp"],
+        effectiveIds: ["motis", "postgis"],
+        missingIds: ["motis-feed-proxy", "otp"],
+      },
+    );
+  });
+  it("expands and deduplicates preset roots server-side while preserving update options", async () => {
+    mockRegistryGet.mockImplementation((id: string) =>
+      ["osrm", "valhalla"].includes(id) ? MOCK_SERVICE_STOPPED : null,
+    );
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "update", serviceIds: ["osrm"], presetIds: ["routing"], noDeps: true },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.bulk",
+      expect.objectContaining({ action: "update", serviceIds: ["osrm", "valhalla"], noDeps: true }),
+      expect.any(String),
+    );
+  });
+  it.each(["unknown", "__proto__"])("rejects unknown preset %s before enqueue", async (id) => {
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "start", presetIds: [id] },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+  it("rejects MOTIS import without a MOTIS build before enqueue", async () => {
+    mockRegistryGet.mockReturnValue(MOCK_SERVICE_STOPPED);
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "build", serviceIds: ["valhalla"], motisImport: true },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
 });

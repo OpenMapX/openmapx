@@ -403,9 +403,11 @@ export function registerComposeCommands(program: Command): void {
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
     .action(async (options: { domain?: string; services?: string; preset?: string }) => {
+      let enabledServiceIds: string[] = [];
       try {
         const services = combineServiceSelection(options.services, options.preset);
         const r = await renderComposeForRepo({ domain: options.domain, services });
+        enabledServiceIds = r.enabledServiceIds;
         log.ok(`Rendered ${r.servicesRendered} services → ${r.revisionId}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
         for (const warning of r.renderWarnings) log.warn(warning);
@@ -428,7 +430,11 @@ export function registerComposeCommands(program: Command): void {
       } else if (overlay.status === "disabled") {
         log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
       }
-      const code = await dockerComposeStream(["up", "-d"]);
+      if (enabledServiceIds.length === 0) {
+        log.dim("No enabled services to start");
+        process.exit(0);
+      }
+      const code = await dockerComposeStream(["up", "-d", ...enabledServiceIds]);
       process.exit(code);
     });
 

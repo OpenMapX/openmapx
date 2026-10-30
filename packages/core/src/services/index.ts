@@ -40,6 +40,7 @@ export {
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
   type RenderConfigurationOptions,
+  readAppliedComposeServiceIds,
   readAppliedConfiguration,
   readAppliedPlatformConfiguration,
   readAppliedPlatformValues,
@@ -120,6 +121,7 @@ export {
   buildPlatformConfigurationPreview,
   type PlatformConfigurationPreview,
 } from "./platform-preview";
+export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   captureReleaseServiceAuthority,

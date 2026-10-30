@@ -29,9 +29,16 @@ const {
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
 
-function appliedReleaseChannel() {
-  const selector = coreServices.readAppliedPlatformValues(repoPaths().infraDir).releaseSelector;
-  return coreServices.releaseChannel(selector, process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY);
+function appliedReleaseChannel(): ReturnType<typeof coreServices.releaseChannel> {
+  const selection = coreServices.readAppliedReleaseSelection(repoPaths().infraDir);
+  return selection.kind === "local"
+    ? { kind: "disabled" }
+    : {
+        kind: "enabled",
+        selection,
+        manifestImage: selection.manifestImage,
+        imagePrefix: selection.imagePrefix,
+      };
 }
 
 export type ReleaseDockerRunner = (
@@ -165,7 +172,8 @@ function readSelection(path: string): coreServices.ReleaseComposeSelection | nul
 /** Read-only local status; an existing overlay still applies when resolution is disabled. */
 export function releaseStatusLines(path = repoPaths().composeReleasePath): string[] {
   const selected = readSelection(path);
-  const disabled = appliedReleaseChannel().kind === "disabled";
+  const channel = appliedReleaseChannel();
+  const disabled = channel.kind === "disabled";
   if (!selected)
     return [
       disabled
@@ -173,7 +181,7 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
         : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
     ];
   return [
-    `Configured selection: ${coreServices.readAppliedPlatformValues(repoPaths().infraDir).releaseSelector}; existing pins remain selected until explicit reselection.`,
+    `Configured selection: ${channel.kind === "disabled" ? "local" : channel.selection.selector}; existing pins remain selected until explicit reselection.`,
     ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
     `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
     ...coreServices.RELEASE_IMAGE_NAMES.map(

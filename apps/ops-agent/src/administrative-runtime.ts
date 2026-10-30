@@ -1011,6 +1011,7 @@ export function createDefaultReleaseEffects(
     );
   };
   const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
+    const configured = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
     const state = readState();
     const latest = readReleasePointer(paths.latest, true);
     const candidates = manifestNames();
@@ -1020,8 +1021,7 @@ export function createDefaultReleaseEffects(
     const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
     const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
     return {
-      configuredSelector: coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
-        .releaseSelector,
+      configuredSelector: configured.kind === "local" ? "local" : configured.selector,
       ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
       ...(current?.product ? { currentVersion: current.product.version } : {}),
       ...(availableReleaseId ? { availableReleaseId } : {}),
@@ -1744,11 +1744,12 @@ export function createAdministrativeRuntime(
   const releaseEffects =
     options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir, runFixedCli);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
-  const buildArgs = (serviceId: string, regionId?: string): string[] => [
+  const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
     "services",
     "build",
     serviceId,
     ...(regionId ? ["--region", regionId] : []),
+    ...(motisImport && serviceId === "motis" ? ["--import"] : []),
   ];
   const loadBuildable = async (): Promise<BuildAuthorityService[]> => {
     const authority = [...(await loadBuildAuthority())];
@@ -1771,18 +1772,26 @@ export function createAdministrativeRuntime(
       .sort((left, right) => compareServiceBuildOrder(left.serviceId, right.serviceId));
   };
   runtime["service.build"] = async (operation, context) => {
+    if (operation.motisImport && operation.serviceId !== "motis")
+      throw Error("MOTIS import requires a MOTIS build");
     const buildable = await loadBuildable();
     if (!buildable.some((service) => service.serviceId === operation.serviceId)) {
       throw new Error("Build authority rejected");
     }
     await runFixedCli(
-      buildArgs(operation.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
+      buildArgs(
+        operation.serviceId,
+        operation.regionId ?? resolveDataDefaultRegion(runtime),
+        operation.motisImport,
+      ),
       context,
     );
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
     const plan = await loadBuildable();
+    if (operation.motisImport && !plan.some((service) => service.serviceId === "motis"))
+      throw Error("MOTIS import requires enabled MOTIS");
     const serviceIds = plan.map((service) => service.serviceId);
     const completedServiceIds: string[] = [];
     const failedServiceIds: string[] = [];
@@ -1796,7 +1805,11 @@ export function createAdministrativeRuntime(
         context.signal.throwIfAborted();
         attempted = true;
         await runFixedCli(
-          buildArgs(service.serviceId, operation.regionId ?? resolveDataDefaultRegion(runtime)),
+          buildArgs(
+            service.serviceId,
+            operation.regionId ?? resolveDataDefaultRegion(runtime),
+            operation.motisImport,
+          ),
           context,
         );
         completedServiceIds.push(service.serviceId);

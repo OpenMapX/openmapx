@@ -861,6 +861,38 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     240_000,
   );
 
+  it("names only the frozen generated closure when a release overlay declares disabled services", async () => {
+    const prepared = await preparedStack(),
+      calls: string[][] = [];
+    writeFileSync(
+      prepared.stack.composeReleasePath,
+      "services:\n  app-api:\n    image: example/api:1\n  data-manager:\n    image: example/data:1\n",
+      { mode: 0o600 },
+    );
+    const runtime = createDockerRuntime({
+      stack: prepared.stack,
+      fileExists: existsSync,
+      ownedServices,
+      execFile: async (file, args, options) => {
+        calls.push([...args]);
+        if (args.includes("config")) return runContainedProcess(file, args, options);
+        return { stdout: "", stderr: "" };
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
+      context(),
+    );
+    expect(calls.find((args) => args.includes("up"))?.slice(-5)).toEqual([
+      "up",
+      "-d",
+      "motis",
+      "postgis",
+      "redis",
+    ]);
+  });
+
   it.each([
     { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
     {

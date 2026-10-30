@@ -423,3 +423,21 @@ it("applied selector and retention follow the current generation and explicit re
       .backupRetentionDays,
   ).toBe(45);
 });
+
+it("reads only frozen generated service IDs even when a release overlay declares disabled services", async () => {
+  const { infraDir } = checkout(),
+    generation = await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input({ selectedRoots: ["alpha"] }),
+    });
+  const { readAppliedComposeServiceIds } = await import("../configuration-generation");
+  writeFileSync(
+    join(infraDir, "docker-compose.release.yml"),
+    "services:\n  app-api:\n    image: example/api\n  data-manager:\n    image: example/dm\n",
+  );
+  expect(readAppliedComposeServiceIds(infraDir, generation.revisionId)).toEqual(["alpha"]);
+  expect(() => readAppliedComposeServiceIds(infraDir, `cfg1_${"x".repeat(43)}`)).toThrow(
+    /revision/,
+  );
+});

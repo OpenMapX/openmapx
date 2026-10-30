@@ -52,6 +52,7 @@ import {
   adminServiceCredentialsSchema,
   adminServiceDetailSchema,
   adminServiceLogsQuerySchema,
+  adminServicePresetsSchema,
   adminServicesBulkActionSchema,
   adminServicesCheckedSchema,
   adminServicesSchema,
@@ -82,6 +83,16 @@ export * from "./workflows";
 export const serviceAdminOperations = {
   ...artifactTransferAdminOperations,
   ...platformAdminOperations,
+  listAdminServicePresets: {
+    method: "GET",
+    path: "/api/admin/services/presets",
+    auth: "admin",
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminServicePresetsSchema),
+      503: adminJson(httpErrorSchema),
+    },
+  },
   listAdminServices: {
     method: "GET",
     path: "/api/admin/services",

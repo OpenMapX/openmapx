@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
 import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
 import {
@@ -688,6 +689,28 @@ export function readAppliedServiceIds(
   return new Set(expanded.enabledIds);
 }
 
+/** Exact service closure of the frozen generated base, excluding release-overlay stubs. */
+export function readAppliedComposeServiceIds(
+  infraDir: string,
+  expectedRevisionId: string,
+): string[] {
+  if (currentConfigurationGeneration(infraDir) !== expectedRevisionId)
+    throw Error("Configuration revision changed");
+  const file = configurationGenerationComposeFile(infraDir, expectedRevisionId),
+    metadata = lstatSync(file, { bigint: true });
+  const { contents } = readGenerationFile(file, metadata, MAX_GENERATION_BYTES, [0o400n, 0o600n]);
+  const parsed = loadYaml(new TextDecoder("utf-8", { fatal: true }).decode(contents), {
+    schema: JSON_SCHEMA,
+  }) as { services?: unknown } | undefined;
+  const value = parsed?.services;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw Error("Generated service closure unavailable");
+  const ids = Object.keys(value);
+  if (ids.length > 256 || ids.some((id) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)))
+    throw Error("Invalid generated service closure");
+  return ids;
+}
+
 /**
  * The config, integration config and secrets of the applied generation — what
  * the admin panel last applied — for a render that cannot read the database.
@@ -770,8 +793,9 @@ export function readAppliedReleaseSelection(
   infraDir: string,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
+  const field = readAppliedPlatformConfiguration(infraDir)?.releaseSelector;
   return normalizeReleaseSelection(
-    readAppliedPlatformValues(infraDir, env).releaseSelector,
+    field?.source === "database" ? field.value : env.OPENMAPX_RELEASE,
     env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY,
   );
 }

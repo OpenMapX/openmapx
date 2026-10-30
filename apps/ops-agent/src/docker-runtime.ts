@@ -591,7 +591,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
                 ),
                 targets = operation.serviceId
                   ? [operation.serviceId]
-                  : Object.keys(configuration.services ?? {});
+                  : services.readAppliedComposeServiceIds(
+                      options.stack.infraDir,
+                      operation.expectedConfigurationRevisionId,
+                    );
               if (
                 services
                   .composeCreationDependencyIds(configuration, targets)
@@ -623,7 +626,14 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     }
   };
   runtime["stack.start"] = (operation, context) =>
-    preparedCreation(operation, context, () => [...composePrefix(), "up", "-d"]);
+    preparedCreation(operation, context, () => {
+      const ids = services.readAppliedComposeServiceIds(
+        options.stack.infraDir,
+        operation.expectedConfigurationRevisionId,
+      );
+      if (ids.length === 0) throw Error("No enabled services to start");
+      return [...composePrefix(), "up", "-d", ...ids];
+    });
   runtime["service.start"] = (operation, context) =>
     preparedCreation(operation, context, () => [
       ...composePrefix(),

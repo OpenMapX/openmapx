@@ -32,6 +32,7 @@ import {
   listAdminArtifactTransfersRequest,
   listAdminOperationsRequest,
   listAdminServiceBackupsRequest,
+  listAdminServicePresetsRequest,
   listAdminServicesRequest,
   previewAdminOperationRequest,
   previewAdminPlatformConfigurationRequest,
@@ -281,6 +282,15 @@ import type {
   ListAdminServiceBackups415,
   ListAdminServiceBackups429,
   ListAdminServiceBackups500,
+  ListAdminServicePresets200,
+  ListAdminServicePresets400,
+  ListAdminServicePresets401,
+  ListAdminServicePresets403,
+  ListAdminServicePresets413,
+  ListAdminServicePresets415,
+  ListAdminServicePresets429,
+  ListAdminServicePresets500,
+  ListAdminServicePresets503,
   ListAdminServices200,
   ListAdminServices400,
   ListAdminServices401,
@@ -3212,6 +3222,87 @@ export const getAdminServiceData = async (
 ): Promise<getAdminServiceDataResponse> => {
   return getAdminServiceDataRequest<getAdminServiceDataResponse>(
     getGetAdminServiceDataUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type listAdminServicePresetsResponse200 = {
+  data: ListAdminServicePresets200;
+  status: 200;
+};
+
+export type listAdminServicePresetsResponse400 = {
+  data: ListAdminServicePresets400;
+  status: 400;
+};
+
+export type listAdminServicePresetsResponse401 = {
+  data: ListAdminServicePresets401;
+  status: 401;
+};
+
+export type listAdminServicePresetsResponse403 = {
+  data: ListAdminServicePresets403;
+  status: 403;
+};
+
+export type listAdminServicePresetsResponse413 = {
+  data: ListAdminServicePresets413;
+  status: 413;
+};
+
+export type listAdminServicePresetsResponse415 = {
+  data: ListAdminServicePresets415;
+  status: 415;
+};
+
+export type listAdminServicePresetsResponse429 = {
+  data: ListAdminServicePresets429;
+  status: 429;
+};
+
+export type listAdminServicePresetsResponse500 = {
+  data: ListAdminServicePresets500;
+  status: 500;
+};
+
+export type listAdminServicePresetsResponse503 = {
+  data: ListAdminServicePresets503;
+  status: 503;
+};
+
+export type listAdminServicePresetsResponseSuccess = listAdminServicePresetsResponse200 & {
+  headers: Headers;
+};
+export type listAdminServicePresetsResponseError = (
+  | listAdminServicePresetsResponse400
+  | listAdminServicePresetsResponse401
+  | listAdminServicePresetsResponse403
+  | listAdminServicePresetsResponse413
+  | listAdminServicePresetsResponse415
+  | listAdminServicePresetsResponse429
+  | listAdminServicePresetsResponse500
+  | listAdminServicePresetsResponse503
+) & {
+  headers: Headers;
+};
+
+export type listAdminServicePresetsResponse =
+  | listAdminServicePresetsResponseSuccess
+  | listAdminServicePresetsResponseError;
+
+export const getListAdminServicePresetsUrl = () => {
+  return `/api/admin/services/presets`;
+};
+
+export const listAdminServicePresets = async (
+  options?: Parameters<typeof listAdminServicePresetsRequest>[1],
+): Promise<listAdminServicePresetsResponse> => {
+  return listAdminServicePresetsRequest<listAdminServicePresetsResponse>(
+    getListAdminServicePresetsUrl(),
     {
       ...options,
       method: "GET",
