@@ -434,6 +434,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-system-release-agent-restart",
       "launch-native-system-release-api-before-save",
       "launch-native-system-release-api-after-save",
+      "launch-native-system-release-late-cancel",
+      "launch-native-system-release-pull-failure",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
@@ -497,6 +499,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-system-release-agent-restart",
             "launch-native-system-release-api-before-save",
             "launch-native-system-release-api-after-save",
+            "launch-native-system-release-late-cancel",
+            "launch-native-system-release-pull-failure",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -551,6 +555,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             { mode: 0o600 },
           );
           host.setImagePullProcess(async (reference) => {
+            if (version === "launch-native-system-release-pull-failure")
+              throw Error("Named release pull process failure");
             host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
           });
         }
@@ -763,6 +769,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-system-release-agent-restart",
               "launch-native-system-release-api-before-save",
               "launch-native-system-release-api-after-save",
+              "launch-native-system-release-late-cancel",
+              "launch-native-system-release-pull-failure",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -794,6 +802,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           "launch-native-system-release-agent-restart",
                           "launch-native-system-release-api-before-save",
                           "launch-native-system-release-api-after-save",
+                          "launch-native-system-release-late-cancel",
+                          "launch-native-system-release-pull-failure",
                         ].includes(version)
                           ? { version: 1 as const }
                           : {
@@ -954,6 +964,36 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const args = host.calls.find((args) => args[0] === "run");
             expect(args).toBeDefined();
+            if (version === "launch-native-system-release-late-cancel") {
+              const until = Date.now() + 15000;
+              for (;;) {
+                const row = await readJob(),
+                  projection = (
+                    row.result as {
+                      opsProjection?: {
+                        operations?: Record<
+                          string,
+                          { kind: string; receiptDelivery?: { state: string } }
+                        >;
+                      };
+                    } | null
+                  )?.opsProjection;
+                if (
+                  Object.values(projection?.operations ?? {}).some(
+                    (operation) =>
+                      operation.kind === "configurationHandoff.prepare" &&
+                      operation.receiptDelivery?.state === "confirmed",
+                  )
+                )
+                  break;
+                expect(Date.now()).toBeLessThan(until);
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+              // The return value means confirmed containment, not stored intent.
+              expect(await jobRunner.cancel(accepted.jobId)).toBe(false);
+              expect((await readJob()).finishedAt).toBeNull();
+              expect(dm.settlePosts).toBe(0);
+            }
             let originalRows: unknown, originalPlatformRows: unknown;
             if (version === "launch-native-system-release-api-after-save") {
               const original = (await readJob()).result as {
@@ -985,7 +1025,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
                 OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
               },
-              version === "launch-native-release-wrong-config"
+              version === "launch-native-release-wrong-config" ||
+                version === "launch-native-system-release-pull-failure"
                 ? { failureStage: "application" }
                 : version === "launch-native-system-release-killed"
                   ? {
@@ -996,6 +1037,45 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     }
                   : {},
             );
+            if (version === "launch-native-system-release-pull-failure") {
+              const file = join(
+                  host.infraDir,
+                  "control-private/ops-agent/observations",
+                  `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
+                ),
+                original = readFileSync(file);
+              expect(JSON.parse(String(original)).payload).toMatchObject({
+                phase: "recovery_required",
+                completedAt: null,
+              });
+              await nativeHelper(
+                host,
+                {
+                  OPENMAPX_ROOT_DIR: host.root,
+                  OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+                  OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+                  OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+                },
+                { failureStage: "adoption" },
+              );
+              expect(readFileSync(file)).toEqual(original);
+              await jobRunner.reconcile();
+              const pending = await readJob();
+              expect(pending.status).toBe("running");
+              expect(pending.finishedAt).toBeNull();
+              expect(dm.settlePosts).toBe(0);
+              await expect(dm.assertDataAdmission()).rejects.toThrow();
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(1);
+              expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
+                false,
+              );
+              expect(existsSync(join(host.infraDir, ".ops-agent-releases/current.json"))).toBe(
+                false,
+              );
+              return;
+            }
             if (version === "launch-native-system-release-agent-restart") {
               expect(nativeAgentExited).toBe(true);
               nativeAgents.push(
@@ -1079,7 +1159,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const settleDeadline = Date.now() + 90000;
             let job = await readJob();
-            while (job.status === "running" && Date.now() < settleDeadline) {
+            while (
+              ["running", "cancel_pending"].includes(job.status) &&
+              Date.now() < settleDeadline
+            ) {
               if (!apiRestart) await jobRunner.reconcile();
               await new Promise((resolve) => setTimeout(resolve, 250));
               job = await readJob();
@@ -1106,6 +1189,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 })),
               }),
             ).toBe("success");
+            if (version === "launch-native-system-release-late-cancel")
+              expect(
+                typeof (job.result as { _cancelRequestedAt?: unknown })._cancelRequestedAt,
+              ).toBe("string");
             expect(job.payload).toEqual(
               systemRelease
                 ? {
