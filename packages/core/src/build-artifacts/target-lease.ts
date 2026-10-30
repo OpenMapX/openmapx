@@ -2106,6 +2106,110 @@ export async function settlePreparedConfigurationHandoff(
     closeState(s);
   }
 }
+/** Receipt-only reopening of the original completed fixed helper. The signed
+ * completion/effect and original ready adoption must already exist. No target
+ * acquire/adopt, forward capability or clock renewal is available here. */
+export async function settleRetainedConfigurationHandoffHelper(
+  authority: VerifiedExecutionAuthority,
+): Promise<void> {
+  const owner = executionAuthorityState(authority);
+  if (owner.kind !== "configuration-helper" || !owner.installation.fixedChildId || !owner.origin)
+    throw Error("Original completed fixed helper required");
+  const raw = readPrivateRecord(
+      owner.installation,
+      "executions",
+      `${owner.execution.operationKey}.json`,
+      65536,
+    ) as { payload: { operation: { handoffId?: unknown } } },
+    source = readCompletedConfigurationHandoff(
+      owner.installation.installation,
+      uuid.parse(raw.payload.operation.handoffId),
+    ),
+    adopted = readPrivateRecord(
+      owner.installation,
+      "adoptions",
+      `${source.intent.delegationId}.json`,
+      8192,
+    ),
+    adoption = z
+      .object({
+        state: z.literal("ready"),
+        execution: executionRefSchema,
+        assertion: z.string(),
+        grantDigest: digest,
+      })
+      .parse(adopted),
+    assertion = parseControlAssertion(adoption.assertion);
+  verifyFamilyOwnedRecord(
+    owner.installation,
+    owner.origin,
+    {
+      scope: "private",
+      namespace: "adoptions",
+      container: "",
+      name: `${source.intent.delegationId}.json`,
+    },
+    canonicalJson(adopted),
+  );
+  if (
+    canonicalJson(source.intent.helper) !== canonicalJson(owner.execution) ||
+    source.intent.helperPublicKey !== owner.installation.installation.publicKey ||
+    source.intent.delegationId !== owner.installation.fixedChildId ||
+    adoption.assertion !== source.intent.assertion ||
+    canonicalJson(adoption.execution) !== canonicalJson(owner.execution) ||
+    assertion.leaseId !== source.intent.leaseId ||
+    assertion.delegationId !== source.intent.delegationId ||
+    assertion.grantDigest !== adoption.grantDigest
+  )
+    throw Error("Original helper ready adoption changed");
+  const s = openState(owner.installation.dataRoot, source.intent.leaseId, owner.installation);
+  try {
+    const current = tree(s),
+      grant = current.grants.get(source.intent.delegationId),
+      child = current.children.get(source.intent.delegationId);
+    if (
+      controlDigest(s.certificateEnvelope) !== source.intent.ownerCertificateDigest ||
+      !sameControlOrigin(s.certificate.origin, owner.origin) ||
+      grant?.recipient !== "configuration-helper" ||
+      grant.childKind !== "configuration-helper" ||
+      grant.childPublicKey !== owner.installation.installation.publicKey ||
+      child?.grantDigest !== adoption.grantDigest ||
+      canonicalJson(grant.child) !== canonicalJson(owner.execution) ||
+      !child
+    )
+      throw Error("Original retained helper tree changed");
+    if (child.phase === "settled") {
+      if (canonicalJson(child.settlement) !== canonicalJson(source.settlement))
+        throw Error("Original helper settlement changed");
+      return;
+    }
+    verifyControlPreparedTerminal(owner.installation, source.intent.preparer);
+    s.node = source.intent.delegationId;
+    s.execution = owner.execution;
+    s.key = owner.installation.privateKey;
+    s.authority = owner;
+    s.verifiedAuthority = authority;
+    s.settlementOnly = true;
+    const lease = Object.freeze({
+      leaseId: source.intent.leaseId,
+      owner: s.certificate.owner,
+      execution: owner.execution,
+      serviceIds: grant.serviceIds,
+      mode: "borrowed" as const,
+    });
+    handles.set(lease, s);
+    try {
+      await settleArtifactTargetLeaseChild(
+        lease,
+        verifyControlEffectSettlement(owner.installation.installation, owner.execution),
+      );
+    } finally {
+      handles.delete(lease);
+    }
+  } finally {
+    closeState(s);
+  }
+}
 /** Verify the exact agent-signed shared child node; no sibling private mount or
  * caller status can stand in for actual target containment. */
 export function inspectArtifactTargetLeaseChildSettlement(

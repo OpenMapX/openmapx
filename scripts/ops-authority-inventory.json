@@ -50,6 +50,8 @@
       "configuration.hardlinks.preview",
       "configuration.inspect",
       "configuration.sources.inspect",
+      "configurationHandoff.inspect",
+      "configurationHandoff.prepare",
       "configurationMaintenance.decide",
       "configurationMaintenance.inspect",
       "configurationMaintenance.prepare",
@@ -368,13 +370,17 @@
         "apps/api/src/services/prospective-configuration.ts#inspectConfigurationMaintenance",
         "apps/api/src/services/prospective-configuration.ts#decideConfigurationMaintenance",
         "apps/api/src/services/prospective-configuration.ts#settleConfigurationMaintenance",
-        "apps/ops-agent/src/configuration-maintenance-store.ts#prepareConfigurationMaintenanceAdmission"
+        "apps/ops-agent/src/configuration-maintenance-store.ts#prepareConfigurationMaintenanceAdmission",
+        "apps/ops-agent/src/configuration-handoff-store.ts#launchPreparedConfigurationHandoff",
+        "apps/ops-agent/src/configuration-handoff-store.ts#inspectConfigurationHandoff"
       ],
       "typedKinds": [
         "configurationMaintenance.prepare",
         "configurationMaintenance.inspect",
         "configurationMaintenance.decide",
-        "configurationMaintenance.settle"
+        "configurationMaintenance.settle",
+        "configurationHandoff.prepare",
+        "configurationHandoff.inspect"
       ]
     },
     {

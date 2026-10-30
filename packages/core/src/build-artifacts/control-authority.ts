@@ -1974,7 +1974,8 @@ export function retainControlEffectReceipt(
     if (!parsed.success) throw Error("Unsupported effect receipt evidence");
     const receipt = parsed.data;
     let outcome: ChildSettlement["outcome"] = "unknown",
-      publication: ChildSettlement["publication"] = "unknown";
+      publication: ChildSettlement["publication"] = "unknown",
+      helperCompletedAt: number | undefined;
     if (receipt.kind === "catalog-pins-initialized") {
       if (
         s.kind !== "catalog-pins.initialize" ||
@@ -2179,6 +2180,7 @@ export function retainControlEffectReceipt(
         completion.preparationDigest !== controlDigest(progress) ||
         controlDigest(completion.execution) !== controlDigest(s.execution) ||
         completion.phase !== "applied" ||
+        completion.completedAt === null ||
         completion.launch.containerId !== progress.launch.containerId ||
         receipt.completionDigest !== controlDigest(completion) ||
         completion.targets.length !== intent.operation.serviceIds.length ||
@@ -2192,6 +2194,7 @@ export function retainControlEffectReceipt(
         )
       )
         throw Error("Actual original helper completion required");
+      helperCompletedAt = completion.completedAt;
       outcome = "committed";
       publication = "committed";
     } else if (receipt.kind === "fixed-cli-exit") {
@@ -2337,6 +2340,7 @@ export function retainControlEffectReceipt(
             s.execution,
             outcome !== "unknown",
             controlDigest(payload),
+            helperCompletedAt,
           );
         return;
       }
@@ -2346,7 +2350,21 @@ export function retainControlEffectReceipt(
         raw,
         settlementSchema.extend({ receipt: effectObservationSchema }),
       );
-      if (controlDigest(prior) === controlDigest(payload)) return;
+      if (controlDigest(prior) === controlDigest(payload)) {
+        // A completed helper may have lost the write acknowledgement after
+        // the signed effect landed but before its family terminal fact. Repair
+        // only this exact source using its original signed completion time.
+        if (s.origin && helperCompletedAt !== undefined)
+          markFamilyTerminal(
+            s.installation,
+            s.origin,
+            s.execution,
+            true,
+            controlDigest(payload),
+            helperCompletedAt,
+          );
+        return;
+      }
       // A later transport/journal failure must never erase proved committed effects.
       if (prior.outcome !== "unknown") return;
       writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
@@ -2361,6 +2379,7 @@ export function retainControlEffectReceipt(
         s.execution,
         outcome !== "unknown",
         controlDigest(payload),
+        helperCompletedAt,
       );
   });
 }

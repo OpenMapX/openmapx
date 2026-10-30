@@ -16,14 +16,26 @@ import {
   executionAuthorityState,
   openFixedChildInstallation,
   readConfigurationHandoffSpawnIntent,
+  readPrivateRecord,
+  restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
+  retainControlEffectReceipt,
+  settleRetainedConfigurationHandoffHelper,
   type VerifiedExecutionAuthority,
   verifiedParentForArtifactDelegation,
   verifyConfigurationHelperReady,
+  verifyControl,
+  verifyFamilyOwnedRecord,
   verifyFixedCliControlPeer,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
-import type { ConfigurationHandoffIntentRecord } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
+import {
+  type ConfigurationHandoffIntentRecord,
+  configurationHandoffRecordDomains,
+  configurationHandoffRecordName,
+  configurationHandoffWorkerRecordSchema,
+} from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
+import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 
 declare const childBrand: unique symbol;
 export type ConfigurationHandoffChild = Readonly<{ readonly [childBrand]: true }>;
@@ -113,6 +125,58 @@ export async function openConfigurationHandoffChild(input: {
     if (lease) closeArtifactTargetLeaseHandle(lease);
     closeControlInstallation(installation);
     throw error;
+  }
+}
+/** A completed original worker can repair only its receipt/physical leaf. An
+ * unfinished attempted worker must never become another forward execution. */
+export async function reconcileCompletedConfigurationHandoff(input: {
+  rootDir: string;
+  handoffId: string;
+  assertion: string;
+  execution: ExecutionRef;
+}): Promise<"applied" | null> {
+  const execution = executionRefSchema.parse(input.execution),
+    installation = openFixedChildInstallation({
+      infraDir: join(input.rootDir, "infra/docker"),
+      assertion: input.assertion,
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+    });
+  try {
+    const intent = readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+      state = installationState(installation),
+      file = configurationHandoffRecordName(input.handoffId, "completion");
+    if (intent.assertion !== input.assertion) throw Error("Original helper assertion required");
+    let raw: unknown;
+    try {
+      raw = readPrivateRecord(state, "observations", file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    const worker = verifyControl(
+      installation.publicKey,
+      configurationHandoffRecordDomains.completion,
+      raw,
+      configurationHandoffWorkerRecordSchema,
+    );
+    verifyFamilyOwnedRecord(
+      state,
+      intent.origin,
+      { scope: "private", namespace: "observations", container: "", name: file },
+      canonicalJson(raw),
+    );
+    if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
+      throw Error("Unfinished original helper remains fenced");
+    const authority = restoreAdmittedControlExecution(installation, execution);
+    retainControlEffectReceipt(authority, {
+      outcome: "committed",
+      publication: "committed",
+      receipt: { kind: "configuration-helper-completion", completionDigest: controlDigest(worker) },
+    });
+    await settleRetainedConfigurationHandoffHelper(authority);
+    return "applied";
+  } finally {
+    closeControlInstallation(installation);
   }
 }
 export function configurationHandoffChildState(child: ConfigurationHandoffChild) {

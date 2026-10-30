@@ -389,12 +389,14 @@ export function inspectConfigurationHandoff(
         )
           throw Error("Original helper completion changed");
         if (worker.phase === "applied") {
-          const child = openFixedChildInstallation({
-            infraDir,
-            assertion: intent.assertion,
-            container: existsSync("/run/secrets/openmapx-control-verifiers"),
-          });
+          let child: ReturnType<typeof openFixedChildInstallation> | undefined,
+            contained = false;
           try {
+            child = openFixedChildInstallation({
+              infraDir,
+              assertion: intent.assertion,
+              container: existsSync("/run/secrets/openmapx-control-verifiers"),
+            });
             const effect = childSettlementState(
               verifyControlEffectSettlement(child, intent.helper),
             ).evidence;
@@ -413,27 +415,33 @@ export function inspectConfigurationHandoff(
               { leaseId: intent.leaseId, delegationId: intent.delegationId, phase: "ready" },
               intent.helper,
             );
+            contained = true;
+          } catch {
+            // A worker publication without the exact effect and physical leaf
+            // remains recovery-required. It cannot satisfy parent/root closure.
           } finally {
-            closeControlInstallation(child);
+            if (child) closeControlInstallation(child);
           }
-          return {
-            handoffId,
-            phase: "applied",
-            expectedRevisionId: intent.operation.expectedCurrentRevisionId,
-            appliedRevisionId: intent.operation.expectedCurrentRevisionId,
-            completedServiceIds: worker.targets
-              .filter((target) => target.phase === "verified")
-              .map((target) => target.serviceId),
-            failedServiceIds: [],
-            recoveryCodes: [],
-          };
+          if (contained)
+            return {
+              handoffId,
+              phase: "applied",
+              expectedRevisionId: intent.operation.expectedCurrentRevisionId,
+              appliedRevisionId: intent.operation.expectedCurrentRevisionId,
+              completedServiceIds: worker.targets
+                .filter((target) => target.phase === "verified")
+                .map((target) => target.serviceId),
+              failedServiceIds: [],
+              recoveryCodes: [],
+            };
         }
         return {
           handoffId,
           phase:
-            worker.phase === "draining" ||
-            worker.phase === "applying" ||
-            worker.phase === "verifying"
+            Date.now() < intent.helper.deadlineAt &&
+            (worker.phase === "draining" ||
+              worker.phase === "applying" ||
+              worker.phase === "verifying")
               ? worker.phase
               : "recovery_required",
           expectedRevisionId: intent.operation.expectedCurrentRevisionId,
@@ -444,7 +452,9 @@ export function inspectConfigurationHandoff(
           failedServiceIds: worker.targets
             .filter((target) => target.phase === "unknown")
             .map((target) => target.serviceId),
-          recoveryCodes: ["receipt_pending"],
+          recoveryCodes: [
+            Date.now() >= intent.helper.deadlineAt ? "deadline_expired" : "receipt_pending",
+          ],
         };
       }
     }
