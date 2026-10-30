@@ -86,6 +86,13 @@ export async function clearAdminCacheRequest<T>(
 ): Promise<T> {
   return clearAdminCacheBound<T>(url, options);
 }
+const clearAdminReleaseSelectionBound = bindAdminOperation("clearAdminReleaseSelection");
+export async function clearAdminReleaseSelectionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return clearAdminReleaseSelectionBound<T>(url, options);
+}
 const completeAdminReauthenticationBound = bindAdminOperation("completeAdminReauthentication");
 export async function completeAdminReauthenticationRequest<T>(
   url: string,

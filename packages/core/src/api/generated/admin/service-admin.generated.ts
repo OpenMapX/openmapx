@@ -13,6 +13,7 @@ import {
   applyAdminPlatformConfigurationRequest,
   checkAdminServicesRequest,
   clearAdminCacheRequest,
+  clearAdminReleaseSelectionRequest,
   createAdminArtifactTransferRequest,
   createAdminServiceBackupRequest,
   deleteAdminArtifactTransferRequest,
@@ -84,6 +85,18 @@ import type {
   ClearAdminCache429,
   ClearAdminCache500,
   ClearAdminCacheBody,
+  ClearAdminReleaseSelection202,
+  ClearAdminReleaseSelection400,
+  ClearAdminReleaseSelection401,
+  ClearAdminReleaseSelection403,
+  ClearAdminReleaseSelection409,
+  ClearAdminReleaseSelection413,
+  ClearAdminReleaseSelection415,
+  ClearAdminReleaseSelection429,
+  ClearAdminReleaseSelection500,
+  ClearAdminReleaseSelection503,
+  ClearAdminReleaseSelectionBody,
+  ClearAdminReleaseSelectionHeaders,
   CreateAdminArtifactTransfer200,
   CreateAdminArtifactTransfer400,
   CreateAdminArtifactTransfer401,
@@ -4693,6 +4706,116 @@ export const rollbackAdminSharedMobility = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(rollbackAdminSharedMobilityBody),
+    },
+  );
+};
+
+export type clearAdminReleaseSelectionResponse202 = {
+  data: ClearAdminReleaseSelection202;
+  status: 202;
+};
+
+export type clearAdminReleaseSelectionResponse400 = {
+  data: ClearAdminReleaseSelection400;
+  status: 400;
+};
+
+export type clearAdminReleaseSelectionResponse401 = {
+  data: ClearAdminReleaseSelection401;
+  status: 401;
+};
+
+export type clearAdminReleaseSelectionResponse403 = {
+  data: ClearAdminReleaseSelection403;
+  status: 403;
+};
+
+export type clearAdminReleaseSelectionResponse409 = {
+  data: ClearAdminReleaseSelection409;
+  status: 409;
+};
+
+export type clearAdminReleaseSelectionResponse413 = {
+  data: ClearAdminReleaseSelection413;
+  status: 413;
+};
+
+export type clearAdminReleaseSelectionResponse415 = {
+  data: ClearAdminReleaseSelection415;
+  status: 415;
+};
+
+export type clearAdminReleaseSelectionResponse429 = {
+  data: ClearAdminReleaseSelection429;
+  status: 429;
+};
+
+export type clearAdminReleaseSelectionResponse500 = {
+  data: ClearAdminReleaseSelection500;
+  status: 500;
+};
+
+export type clearAdminReleaseSelectionResponse503 = {
+  data: ClearAdminReleaseSelection503;
+  status: 503;
+};
+
+export type clearAdminReleaseSelectionResponseSuccess = clearAdminReleaseSelectionResponse202 & {
+  headers: Headers;
+};
+export type clearAdminReleaseSelectionResponseError = (
+  | clearAdminReleaseSelectionResponse400
+  | clearAdminReleaseSelectionResponse401
+  | clearAdminReleaseSelectionResponse403
+  | clearAdminReleaseSelectionResponse409
+  | clearAdminReleaseSelectionResponse413
+  | clearAdminReleaseSelectionResponse415
+  | clearAdminReleaseSelectionResponse429
+  | clearAdminReleaseSelectionResponse500
+  | clearAdminReleaseSelectionResponse503
+) & {
+  headers: Headers;
+};
+
+export type clearAdminReleaseSelectionResponse =
+  | clearAdminReleaseSelectionResponseSuccess
+  | clearAdminReleaseSelectionResponseError;
+
+export const getClearAdminReleaseSelectionUrl = () => {
+  return `/api/admin/system/release/clear`;
+};
+
+export const clearAdminReleaseSelection = async (
+  clearAdminReleaseSelectionBody: ClearAdminReleaseSelectionBody,
+  headers: ClearAdminReleaseSelectionHeaders,
+  options?: Parameters<typeof clearAdminReleaseSelectionRequest>[1],
+): Promise<clearAdminReleaseSelectionResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return clearAdminReleaseSelectionRequest<clearAdminReleaseSelectionResponse>(
+    getClearAdminReleaseSelectionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(clearAdminReleaseSelectionBody),
     },
   );
 };

@@ -13,6 +13,7 @@ import { adminJobEventsRoute } from "./admin-job-events";
 import { adminOperationsRoute } from "./admin-operations";
 import { adminPlatformRoute } from "./admin-platform";
 import { adminReauthenticationRoute } from "./admin-reauthentication";
+import { adminReleaseControlsRoute } from "./admin-release-controls";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminStandaloneIntegrationsRoute } from "./admin-standalone-integrations";
@@ -136,6 +137,7 @@ export async function registerCoreRoutes(
   await server.register(adminExtensionsRoute, { prefix: "/api" });
   await server.register(adminStandaloneIntegrationsRoute, { prefix: "/api" });
   await server.register(adminCacheRoute, { prefix: "/api" });
+  await server.register(adminReleaseControlsRoute, { prefix: "/api" });
   await server.register(adminSystemRoute, { prefix: "/api" });
   await server.register(attributionRoute, { prefix: "/api" });
 

@@ -1,3 +1,4 @@
+import { handleReleaseClearJob } from "./services/admin-release-controls";
 import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -700,6 +701,7 @@ jobRunner.register("service.apply", async (ctx) => {
 jobRunner.register("data.operation", handleDataOperationJob);
 jobRunner.register("backup.operation", handleBackupOperationJob);
 jobRunner.register("service.bulk", handleServiceBulkJob);
+jobRunner.register("release.clear", handleReleaseClearJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 

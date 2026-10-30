@@ -167,3 +167,70 @@ it("keeps host instructions after a raced apply failure and clears them after a 
     client.clear();
   }
 });
+
+it("clears the selected pin rather than the running release, retaining the request key after a lost response", async () => {
+  const posts: { url: string; body: unknown; key: string | null }[] = [];
+  const status = {
+    deployment: {
+      dockerAvailable: true,
+      composeRendered: true,
+      hostControlConfigured: true,
+      maintenanceReady: true,
+    },
+    release: {
+      currentReleaseId: "running-release",
+      selectedReleaseId: "selected-pin",
+      configuredSelector: "main",
+    },
+    images: [],
+  };
+  vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === "POST") {
+      posts.push({
+        url,
+        body: JSON.parse(String(init.body)),
+        key: new Headers(init.headers).get("idempotency-key"),
+      });
+      return posts.length === 1
+        ? Response.json({ error: "Response unavailable" }, { status: 503 })
+        : Response.json({ ok: true, jobId: "clear-pin-job" }, { status: 202 });
+    }
+    if (url.includes("clear-pin-job"))
+      return Response.json(job({ id: "clear-pin-job", status: "running" }));
+    return Response.json(status);
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <SystemMaintenance />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Selected pin: selected-pin");
+    fireEvent.click(screen.getByRole("button", { name: "Clear selected release pin" }));
+    const confirm = screen.getByRole("button", { name: "Clear release pin" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Clear confirmation"), {
+      target: { value: "CLEAR RELEASE PIN" },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[0]?.url).toBe("http://api.test/api/admin/system/release/clear");
+    expect(posts[0]?.body).toEqual({
+      expectedReleaseId: "selected-pin",
+      confirmation: "CLEAR RELEASE PIN",
+    });
+    expect(posts[0]?.key).toBeTruthy();
+    expect(posts[1]?.key).toBe(posts[0]?.key);
+    expect(screen.getByText("Configured channel: main")).toBeInTheDocument();
+  } finally {
+    cleanup();
+    client.clear();
+  }
+});

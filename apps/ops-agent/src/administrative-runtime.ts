@@ -1020,8 +1020,21 @@ export function createDefaultReleaseEffects(
     const current = state.releaseId ? loadManifest(state.releaseId) : undefined;
     const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
     const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
+    let selectedReleaseId: string | undefined;
+    const overlay = join(rootDir, "infra", "docker", "docker-compose.release.yml");
+    try {
+      const stats = lstatSync(overlay);
+      if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 64 * 1024)
+        throw Error("Unsafe release selection");
+      selectedReleaseId =
+        coreServices.parseReleaseComposeSelection(strictReadFile(overlay, 64 * 1024)).release ??
+        undefined;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     return {
       configuredSelector: configured.kind === "local" ? "local" : configured.selector,
+      ...(selectedReleaseId ? { selectedReleaseId } : {}),
       ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
       ...(current?.product ? { currentVersion: current.product.version } : {}),
       ...(availableReleaseId ? { availableReleaseId } : {}),

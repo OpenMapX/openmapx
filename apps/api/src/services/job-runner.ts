@@ -43,6 +43,7 @@ import { IntegrationBindingConflict as RetainedBindingConflict } from "./integra
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
 import { guardedSystemReleasePayloadSchema } from "./platform-configuration-job";
+import { type RetainedMaintenanceJobType, retainMaintenanceJob } from "./retained-maintenance-job";
 import { appApiRestartCheckpoint } from "./system-update-state";
 import {
   completeTrustedConfigurationApply,
@@ -128,6 +129,8 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "integration.binding.apply",
   "system.diagnostics",
   "system.update",
+  "release.clear",
+  "service.images.pull",
 ] as const;
 
 /** Routing only, never admission authority. The selected fixed producer must
@@ -238,6 +241,17 @@ class AdminJobRunner {
       // Synthetic (loopback) actors have no user row → store null, not a FK violation.
       createdBy: dbActorId(createdBy),
     });
+    setTimeout(() => void this.pump(), 0);
+    return id;
+  }
+
+  async enqueueMaintenance(
+    type: RetainedMaintenanceJobType,
+    payload: Record<string, unknown>,
+    actorId: string,
+    key: string,
+  ): Promise<string> {
+    const id = await retainMaintenanceJob(type, payload, actorId, key);
     setTimeout(() => void this.pump(), 0);
     return id;
   }

@@ -117,6 +117,17 @@ function installReleaseCapabilityBoundary(
       throw error;
     }
   };
+  runtime["release.clear"] = async (operation, context) =>
+    withSource(context.signal, async () => {
+      assertLegacyRecoveryComplete();
+      context.signal.throwIfAborted();
+      const result = await services.clearReleaseComposeSelection({
+        path: join(infraDir, "docker-compose.release.yml"),
+        expectedReleaseId: operation.releaseId,
+      });
+      if (!result.cleared) throw Error("Release selection changed");
+      return { releaseId: operation.releaseId, cleared: true as const };
+    });
   const unavailable = async (signal: AbortSignal): Promise<never> => {
     // The successful observation grants no continuation authority. No legacy
     // transaction, helper launch, backup or image pull follows this check.

@@ -125,6 +125,7 @@ export const OPS_OPERATION_KINDS = [
   "release.resolve",
   "release.pull",
   "release.inspect",
+  "release.clear",
   "release.apply",
   "appApi.replace",
   "appApi.runtime.inspect",
@@ -272,6 +273,7 @@ export const OPS_KIND_POLICIES = {
   "release.resolve": asyncEffect("api", 2 * 60_000),
   "release.pull": asyncEffect("api", 15 * 60_000),
   "release.inspect": sync("api", 30_000, 256 * 1024),
+  "release.clear": asyncEffect("api", 30_000),
   "release.apply": asyncEffect("api", 30 * 60_000),
   "appApi.replace": asyncEffect("api", 10 * 60_000),
   "appApi.runtime.inspect": sync("api", 30_000),
@@ -504,6 +506,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("release.resolve"),
   z.strictObject({ kind: z.literal("release.pull"), releaseId: stableIdSchema }),
   kindOnly("release.inspect"),
+  z.strictObject({ kind: z.literal("release.clear"), releaseId: stableIdSchema }),
   z.strictObject({ kind: z.literal("release.apply"), releaseId: stableIdSchema }),
   z.strictObject({
     kind: z.literal("appApi.replace"),
@@ -1110,6 +1113,7 @@ export const OPS_RESULT_SCHEMAS = {
   "release.pull": release,
   "release.inspect": z.strictObject({
     currentReleaseId: stableIdSchema.optional(),
+    selectedReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
     configuredSelector: z.string().max(128).optional(),
     currentVersion: z.string().max(128).optional(),
@@ -1119,6 +1123,7 @@ export const OPS_RESULT_SCHEMAS = {
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
   }),
+  "release.clear": z.strictObject({ releaseId: stableIdSchema, cleared: z.literal(true) }),
   "release.apply": release,
   "appApi.replace": z.strictObject({ updateJobId: stableIdSchema, replaced: z.boolean() }),
   "appApi.runtime.inspect": z.strictObject({

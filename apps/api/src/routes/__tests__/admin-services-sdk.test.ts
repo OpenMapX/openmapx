@@ -3,6 +3,7 @@ import {
   artifactTransferAdminOperations,
   cacheAdminOperations,
   platformAdminOperations,
+  releaseControlAdminOperations,
   serviceAdminOperations,
 } from "@openmapx/core/api-contracts";
 import {
@@ -562,6 +563,7 @@ describe("actual service producers through final exported SDK", () => {
     const { registered, close } = await wire();
     try {
       const dedicated = new Set([
+        ...Object.keys(releaseControlAdminOperations),
         ...Object.keys(cacheAdminOperations), // Scoped route/SDK/real Valkey coverage is dedicated.
         ...Object.keys(platformAdminOperations),
         ...Object.keys(artifactTransferAdminOperations),

@@ -88,6 +88,56 @@ describe("assembled production service authority", () => {
     },
   );
 
+  it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
+    const host = await fixture(),
+      path = join(host.infraDir, "docker-compose.release.yml");
+    const manifest = {
+      schemaVersion: 1 as const,
+      release: "checked-pin",
+      images: Object.fromEntries(
+        services.RELEASE_IMAGE_NAMES.map((name) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
+        ]),
+      ),
+      privacyReleaseValidation: {
+        version: 1 as const,
+        sourceBuildFingerprint: "a".repeat(64),
+        validatedAt: "2026-09-05T12:00:00.000Z",
+        checks: {
+          translationsConsistent: true as const,
+          openApiConsistent: true as const,
+          policyConsistent: true as const,
+        },
+      },
+    };
+    services.writeReleaseComposeArtifacts(manifest as services.ReleaseManifest, path);
+    expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
+      selectedReleaseId: "checked-pin",
+    });
+    const before = readFileSync(path, "utf8"),
+      pointer = services.currentConfigurationGeneration(host.infraDir);
+    const changed = { kind: "release.clear", releaseId: "different-pin" } as OpsOperation;
+    await expect(
+      dispatchOpsOperation(host.runtime, changed, await host.context(changed)),
+    ).rejects.toThrow(/changed/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    const operation = { kind: "release.clear", releaseId: "checked-pin" } as OpsOperation;
+    expect(
+      await dispatchOpsOperation(host.runtime, operation, await host.context(operation)),
+    ).toEqual({ releaseId: "checked-pin", cleared: true });
+    expect(existsSync(path)).toBe(false);
+    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pointer);
+    expect(
+      host.calls.some(
+        (args) =>
+          args[0] === "pull" ||
+          args[0] === "run" ||
+          args.includes("up") ||
+          args.includes("restart"),
+      ),
+    ).toBe(false);
+  });
   it("refuses unsupported legacy release mutation without staging and keeps inspection available", async () => {
     const host = await fixture();
     const effects = productionReleaseEffects(host.runtime);

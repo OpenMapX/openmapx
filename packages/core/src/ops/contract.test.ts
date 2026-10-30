@@ -272,6 +272,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "release.resolve": { kind: "release.resolve" },
   "release.pull": { kind: "release.pull", releaseId: "2026.08.23" },
   "release.inspect": { kind: "release.inspect" },
+  "release.clear": { kind: "release.clear", releaseId: "checked-release" },
   "release.apply": { kind: "release.apply", releaseId: "2026.08.23" },
   "appApi.replace": {
     kind: "appApi.replace",

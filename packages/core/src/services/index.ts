@@ -168,6 +168,7 @@ export {
   validateResolvedSelection,
   writeReleaseComposeArtifacts,
 } from "./release-manifest";
+export { clearReleaseComposeSelection } from "./release-selection-clear";
 export {
   acquireReleaseStoreLock,
   acquireStoreLock,

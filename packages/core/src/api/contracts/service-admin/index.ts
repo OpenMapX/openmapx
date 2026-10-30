@@ -1,3 +1,7 @@
+import { releaseControlAdminOperations } from "./release-controls";
+
+export * from "./release-controls";
+
 import { cacheAdminOperations } from "./cache";
 
 export * from "./cache";
@@ -85,6 +89,7 @@ export * from "./workflows";
 
 /** Complete service/workflow family. Authentication metadata never grants access. */
 export const serviceAdminOperations = {
+  ...releaseControlAdminOperations,
   ...cacheAdminOperations,
   ...artifactTransferAdminOperations,
   ...platformAdminOperations,

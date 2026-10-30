@@ -301,6 +301,27 @@ describe("clearReleaseSelection", () => {
     return { path, store };
   }
 
+  it("requires the exact checked release when clearing from a remote preview", async () => {
+    const { path, store } = fixture(),
+      before = readFileSync(path, "utf8");
+    await expect(
+      clearReleaseSelection({ path, expectedReleaseId: "different-release" } as Parameters<
+        typeof clearReleaseSelection
+      >[0]),
+    ).rejects.toThrow(/changed/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(
+      await clearReleaseSelection({ path, expectedReleaseId: "deadbeef" } as Parameters<
+        typeof clearReleaseSelection
+      >[0]),
+    ).toEqual({ path, cleared: true });
+    expect(readFileSync(join(store, "current.json"), "utf8")).toBe("running-state");
+    await expect(
+      clearReleaseSelection({ path, expectedReleaseId: "deadbeef" } as Parameters<
+        typeof clearReleaseSelection
+      >[0]),
+    ).rejects.toThrow(/changed/);
+  });
   it("clears only the local overlay idempotently and retains running release evidence", async () => {
     const { path, store } = fixture();
     const evidence = join(dirname(path), ".release-evidence");
@@ -324,6 +345,11 @@ describe("clearReleaseSelection", () => {
     expect(readdirSync(store)).toEqual(["current.json"]);
   });
 
+  it("retains explicit host clearing of malformed overlays without reading unbounded bytes", async () => {
+    const { path } = fixture();
+    writeFileSync(path, Buffer.alloc(100000, 255));
+    await expect(clearReleaseSelection({ path })).resolves.toEqual({ path, cleared: true });
+  });
   it("refuses an active transaction even if the overlay is absent", async () => {
     const { path, store } = fixture();
     writeFileSync(join(store, "transaction.json"), "pending transaction");

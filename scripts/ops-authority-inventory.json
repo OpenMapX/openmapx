@@ -83,6 +83,7 @@
       "integration.settle",
       "integrationConfig.apply",
       "release.apply",
+      "release.clear",
       "release.inspect",
       "release.pull",
       "release.resolve",
@@ -432,6 +433,12 @@
         "apps/ops-agent/src/standalone-ownership-runtime.ts#installStandaloneOwnershipRuntime"
       ],
       "typedKinds": ["integration.inventory", "integration.inspectOwnership", "integration.remove"]
+    },
+    {
+      "id": "api.release-pin-selection",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-release-controls.ts#handleReleaseClearJob"],
+      "typedKinds": ["release.clear"]
     }
   ],
   "mounts": [
