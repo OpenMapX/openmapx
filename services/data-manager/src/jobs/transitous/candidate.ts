@@ -14,59 +14,30 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import {
-  type MotisConfigExpectations,
-  parseMotisConfigExpectations,
-} from "@openmapx/transitous-core";
+  CANDIDATE_MANIFEST_FILENAME,
+  CANDIDATE_PROXY_DIRNAME,
+  type CandidateArtifactHash,
+  type MotisCandidateManifest,
+} from "@openmapx/core/build-artifacts";
+import { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 import { hashArtifactFile } from "../../../../../packages/core/src/build-artifacts/copy-tree";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
-import { safeArtifactPath } from "../../../../../packages/core/src/build-artifacts/manifest";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 
-export const CANDIDATE_MANIFEST_FILENAME = "motis-candidate-manifest.json";
-export const CAPABILITY_SNAPSHOT_FILENAME = "mobility-capabilities.json";
-export const CANDIDATE_PROXY_DIRNAME = ".openmapx-feed-proxy";
-
+export {
+  CANDIDATE_MANIFEST_FILENAME,
+  CANDIDATE_PROXY_DIRNAME,
+  CAPABILITY_SNAPSHOT_FILENAME,
+  type CandidateArtifactHash,
+  type MotisCandidateManifest,
+  readCandidateManifest,
+  verifyCandidateManifest,
+  verifyCandidateManifest as verifyCandidateManifestAsync,
+} from "@openmapx/core/build-artifacts";
 export type { MotisConfigExpectations } from "@openmapx/transitous-core";
-
-export interface CandidateArtifactHash {
-  path: string;
-  sha256: string;
-  sizeBytes: number;
-}
-
-export interface MotisCandidateManifest {
-  schemaVersion: 1;
-  epoch: string;
-  createdAt: string;
-  operationsPolicy?: MotisOperationsPolicy;
-  expectations: MotisConfigExpectations;
-  canary: {
-    bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number };
-    plan: { fromLat: number; fromLng: number; toLat: number; toLng: number };
-    expectedRentalProviderIds: string[];
-    rentalPlan?: {
-      fromLat: number;
-      fromLng: number;
-      toLat: number;
-      toLng: number;
-      providerGroups?: string[];
-      providers?: string[];
-      formFactors?: string[];
-    };
-  };
-  artifacts: {
-    config: CandidateArtifactHash;
-    license: CandidateArtifactHash;
-    proxyConfig: CandidateArtifactHash;
-    proxyVars: CandidateArtifactHash;
-    datasets: CandidateArtifactHash[];
-    sourceIndex?: CandidateArtifactHash;
-    sourceManifest: CandidateArtifactHash;
-  };
-}
 
 export { parseMotisConfigExpectations } from "@openmapx/transitous-core";
 
@@ -264,84 +235,6 @@ export async function createCandidateManifestAsync(
       operationsPolicy,
       hashes,
     );
-  } finally {
-    root.close();
-  }
-}
-export function readCandidateManifest(stagingDir: string): MotisCandidateManifest {
-  const path = join(stagingDir, CANDIDATE_MANIFEST_FILENAME),
-    root = new AnchoredDirectory(realpathSync(stagingDir));
-  let manifest: MotisCandidateManifest;
-  try {
-    manifest = JSON.parse(
-      root.read(CANDIDATE_MANIFEST_FILENAME, 32 * 1024 * 1024, false).toString("utf8"),
-    );
-  } catch {
-    throw Error("Unsupported or malformed candidate manifest");
-  } finally {
-    root.close();
-  }
-  if (
-    manifest.schemaVersion !== 1 ||
-    !manifest.epoch ||
-    !manifest.artifacts ||
-    !manifest.artifacts.sourceManifest
-  ) {
-    throw new Error(`Unsupported or malformed candidate manifest at ${path}`);
-  }
-  return manifest;
-}
-
-export function verifyCandidateManifest(stagingDir: string): MotisCandidateManifest {
-  const manifest = readCandidateManifest(stagingDir);
-  const artifacts = [
-    manifest.artifacts.config,
-    manifest.artifacts.license,
-    manifest.artifacts.proxyConfig,
-    manifest.artifacts.proxyVars,
-    ...manifest.artifacts.datasets,
-    ...(manifest.artifacts.sourceIndex ? [manifest.artifacts.sourceIndex] : []),
-    manifest.artifacts.sourceManifest,
-  ];
-  for (const expected of artifacts) {
-    const current = sha256File(join(stagingDir, expected.path), stagingDir);
-    if (current.sha256 !== expected.sha256 || current.sizeBytes !== expected.sizeBytes) {
-      throw new Error(`Candidate artifact hash mismatch: ${expected.path}`);
-    }
-  }
-  return manifest;
-}
-
-export async function verifyCandidateManifestAsync(
-  stagingDir: string,
-  signal?: AbortSignal,
-): Promise<MotisCandidateManifest> {
-  const manifest = readCandidateManifest(stagingDir),
-    root = new AnchoredDirectory(realpathSync(stagingDir));
-  try {
-    if (
-      !Array.isArray(manifest.artifacts.datasets) ||
-      manifest.artifacts.datasets.length === 0 ||
-      manifest.artifacts.datasets.length > 16384
-    )
-      throw Error("Candidate dataset inventory is invalid");
-    const artifacts = [
-      manifest.artifacts.config,
-      manifest.artifacts.license,
-      manifest.artifacts.proxyConfig,
-      manifest.artifacts.proxyVars,
-      ...manifest.artifacts.datasets,
-      ...(manifest.artifacts.sourceIndex ? [manifest.artifacts.sourceIndex] : []),
-      manifest.artifacts.sourceManifest,
-    ];
-    for (const expected of artifacts) {
-      if (!expected || typeof expected.path !== "string" || !safeArtifactPath(expected.path))
-        throw Error("Candidate artifact path is invalid");
-      const current = await hashArtifactFile(root, expected.path, signal);
-      if (current.sha256 !== expected.sha256 || current.sizeBytes !== expected.sizeBytes)
-        throw Error(`Candidate artifact hash mismatch: ${expected.path}`);
-    }
-    return manifest;
   } finally {
     root.close();
   }

@@ -205,6 +205,16 @@ export {
 } from "./generation-hardlinks-owner";
 export * from "./manifest";
 export {
+  CANDIDATE_MANIFEST_FILENAME,
+  CANDIDATE_PROXY_DIRNAME,
+  CAPABILITY_SNAPSHOT_FILENAME,
+  type CandidateArtifactHash,
+  type MotisCandidateManifest,
+  parseMotisCandidateManifest,
+  readCandidateManifest,
+  verifyCandidateManifest,
+} from "./motis-candidate";
+export {
   inspectControlAdmission,
   inspectDataExecutionAdmission,
   verifiedParentForArtifactDelegation,

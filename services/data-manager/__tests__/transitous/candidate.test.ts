@@ -78,27 +78,29 @@ describe("candidate manifest", () => {
     return tmp;
   }
 
-  it("writes and verifies an immutable artifact tuple", () => {
+  it("writes and verifies an immutable artifact tuple", async () => {
     const dir = fixture();
     const manifest = createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z");
     expect(manifest.epoch).toBe("epoch-1");
     expect(manifest.artifacts.datasets).toHaveLength(1);
-    expect(verifyCandidateManifest(dir)).toEqual(manifest);
+    expect(await verifyCandidateManifest(dir)).toEqual(manifest);
   });
 
-  it("binds the resolved operations policy into the promoted candidate", () => {
+  it("binds the resolved operations policy into the promoted candidate", async () => {
     const dir = fixture();
     const policy = resolveOperationsProfile({ countries: ["de"], source: "mirror" });
     const manifest = createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z", policy);
     expect(manifest.operationsPolicy).toEqual(policy);
-    expect(verifyCandidateManifest(dir).operationsPolicy?.profile).toBe("regional-assisted");
+    expect((await verifyCandidateManifest(dir)).operationsPolicy?.profile).toBe(
+      "regional-assisted",
+    );
   });
 
-  it("detects mutation after the manifest is written", () => {
+  it("detects mutation after the manifest is written", async () => {
     const dir = fixture();
     createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z");
     writeFileSync(join(dir, "license.json"), '[{"changed":true}]\n');
-    expect(() => verifyCandidateManifest(dir)).toThrow(/hash mismatch: license\.json/);
+    await expect(verifyCandidateManifest(dir)).rejects.toThrow(/hash mismatch: license\.json/);
   });
 });
 
