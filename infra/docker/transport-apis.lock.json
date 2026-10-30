@@ -3,9 +3,9 @@
   "schemaVersion": 1,
   "source": "public-transport-transport-apis",
   "ref": "v1",
-  "commit": "d8b236c002c516092ca33ef27ff6ec05dd447a74",
+  "commit": "587514aae841a773b07eddb5de7296f07688507f",
   "entryCount": 85,
-  "lockedAt": "2026-09-22T09:38:51.745Z",
+  "lockedAt": "2026-10-30T00:19:59.041Z",
   "lockedBy": "dev@fwcr.de",
   "comment": "Pinned commit of public-transport/transport-apis consumed by integrations/transit-dynamic-registry. Bump via `pnpm pin:transport-apis`."
 }
