@@ -7,7 +7,7 @@ import { Marker } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
 import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
@@ -80,16 +80,12 @@ export function ArrivalParkingMarkers({
       el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.2)";
       el.textContent = "P";
 
-      el.addEventListener("click", (event) => {
-        if (getMapClickOwner(event)) return;
-        if (!disabled) onSelectPlace(isSelected ? null : place);
-      });
-
-      el.addEventListener("keydown", (e) => {
-        if (!disabled && (e.key === "Enter" || e.key === " " || e.key === "Spacebar")) {
-          e.preventDefault();
-          onSelectPlace(isSelected ? null : place);
-        }
+      // A disabled marker still owns its clicks: it is drawn, so a tap on it
+      // is not a tap on the map below.
+      bindMapMarkerActivation(el, {
+        onActivate: () => {
+          if (!disabled) onSelectPlace(isSelected ? null : place);
+        },
       });
 
       const marker = new Marker({ element: el }).setLngLat(coords).addTo(map);

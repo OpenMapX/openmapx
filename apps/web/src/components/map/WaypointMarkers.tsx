@@ -5,6 +5,7 @@ import { useDirectionsStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 const PIN_SVG_NS = "http://www.w3.org/2000/svg";
@@ -113,6 +114,9 @@ export function WaypointMarkers() {
           const map = mapRef.current;
           if (!map) return;
 
+          // A waypoint is moved by dragging; a plain tap on it must not fill the
+          // next empty waypoint or drop a pin at the spot it covers.
+          bindMapMarkerActivation(el);
           const marker = new maplibregl.Marker({ element: el, anchor, draggable: true })
             .setLngLat(wp.coords)
             .addTo(map);

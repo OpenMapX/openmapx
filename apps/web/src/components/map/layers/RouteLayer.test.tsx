@@ -2,6 +2,7 @@ import { type EvChargeStop, useParkingStore } from "@openmapx/core";
 import { act, fireEvent, render } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
 
@@ -120,6 +121,22 @@ describe("RouteLayer across a style change", () => {
     expect(activateRoute).toHaveBeenCalledTimes(1);
     view.unmount();
     useParkingStore.getState().reset();
+  });
+  it("claims clicks on either route badge from the map", async () => {
+    activateRoute.mockClear();
+    const view = render(<RouteLayer />);
+    await act(async () => {});
+    const canvasContainer = fake.map.getCanvasContainer();
+    const mapClickOwners: unknown[] = [];
+    const mapClick = (event: Event) => mapClickOwners.push(getMapClickOwner(event));
+    canvasContainer.addEventListener("click", mapClick);
+    const pills = [...canvasContainer.querySelectorAll<HTMLElement>(".omx-route-map-pill")];
+    expect(new Set(pills.map((pill) => pill.tagName))).toEqual(new Set(["SPAN", "BUTTON"]));
+    for (const pill of pills) fireEvent.click(pill);
+    expect(activateRoute).toHaveBeenCalledTimes(1);
+    expect(mapClickOwners).toEqual(["marker", "marker"]);
+    canvasContainer.removeEventListener("click", mapClick);
+    view.unmount();
   });
   it("keeps the drawn route", () => {
     render(<RouteLayer />);

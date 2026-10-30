@@ -11,7 +11,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 
 const BADGE_FILL = "#1A73E8";
 
@@ -68,16 +68,7 @@ function buildMarkerElement(label: string, onSelect: () => void): HTMLElement {
   ].join(";");
 
   wrapper.append(badge, caption);
-  wrapper.addEventListener("click", (event) => {
-    if (getMapClickOwner(event)) return;
-    onSelect();
-  });
-  wrapper.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    event.stopPropagation();
-    onSelect();
-  });
+  bindMapMarkerActivation(wrapper, { onActivate: onSelect });
   return wrapper;
 }
 

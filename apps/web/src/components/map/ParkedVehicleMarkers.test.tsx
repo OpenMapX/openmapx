@@ -36,6 +36,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 import { PANEL, useParkingStore, useSidebarStore } from "@openmapx/core";
 import * as mapContext from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { ParkedVehicleMarkers } from "./ParkedVehicleMarkers";
 
 const mapContextTest = (
@@ -89,6 +90,20 @@ describe("ParkedVehicleMarkers", () => {
     fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Enter" });
     expect(useParkingStore.getState().selectedParkedId).toBe("p1");
   });
+  it("claims its click from the map, but leaves a picker's click to it", async () => {
+    const mapClickOwners: unknown[] = [];
+    container.addEventListener("click", (event) => mapClickOwners.push(getMapClickOwner(event)));
+    render(<ParkedVehicleMarkers />);
+    await waitFor(() => expect(container.children).toHaveLength(1));
+
+    (container.firstElementChild as HTMLElement).click();
+    expect(useParkingStore.getState().selectedParkedId).toBe("p1");
+
+    useParkingStore.getState().setPicking(true);
+    (container.firstElementChild as HTMLElement).click();
+    expect(mapClickOwners).toEqual(["marker", "parking"]);
+  });
+
   it("renders one marker per parked record", async () => {
     render(<ParkedVehicleMarkers />);
     await waitFor(() => expect(container.children).toHaveLength(1));
