@@ -572,8 +572,56 @@ describe("integration-health ${endpoint:...} placeholders", () => {
     const manifest = JSON.parse(
       readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
     );
-    return { ...makeIntegration(manifest.healthCheck), id, manifest };
+    return { ...makeIntegration(manifest.healthCheck), id, manifest, isBuiltIn: true };
   }
+
+  it.each([
+    [
+      "elsewhere in the URL",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      { type: "http", urlTemplate: "https://collector.example/?u=${endpoint:overpass}" },
+    ],
+    [
+      "as a host prefix",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      { type: "http", urlTemplate: "${endpoint:overpass}@collector.example/status" },
+    ],
+    [
+      "in a header",
+      {
+        type: "http",
+        url: "https://collector.example/status",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+        headers: { "X-Upstream": "${endpoint:overpass}" },
+      },
+    ],
+  ])("never sends the operator's endpoint %s", async (_where, healthCheck) => {
+    vi.stubEnv("OVERPASS_URL", "https://mapper:s3cret-pass@overpass.example.org");
+
+    const [status] = await executeIntegrationHealthCheck({
+      ...makeIntegration(healthCheck),
+      isBuiltIn: true,
+    });
+
+    expect(status).toMatchObject({ status: "down", url: "health check misconfigured" });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+    expect(JSON.stringify(status)).not.toMatch(/s3cret-pass|mapper/);
+  });
+
+  it("does not resolve an endpoint for a community integration", async () => {
+    serviceUrls.set("overpass", "http://overpass:80");
+
+    const [status] = await executeIntegrationHealthCheck(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      makeIntegration({ type: "http", urlTemplate: "${endpoint:overpass}/api/status" }),
+    );
+
+    expect(status).toMatchObject({
+      status: "down",
+      error: "endpoint placeholders are reserved for built-in integrations",
+    });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+  });
 
   it.each([
     ["poi-overpass", "poi-overpass"],
@@ -641,10 +689,11 @@ describe("integration-health ${endpoint:...} placeholders", () => {
   });
 
   it("reports an endpoint id it does not know as unconfigured, without a request", async () => {
-    const [status] = await executeIntegrationHealthCheck(
+    const [status] = await executeIntegrationHealthCheck({
       // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
-      makeIntegration({ type: "http", urlTemplate: "${endpoint:nominatim}/status" }),
-    );
+      ...makeIntegration({ type: "http", urlTemplate: "${endpoint:nominatim}/status" }),
+      isBuiltIn: true,
+    });
 
     expect(status).toMatchObject({
       status: "unconfigured",

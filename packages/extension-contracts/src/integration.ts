@@ -183,6 +183,12 @@ export function isHealthCheckEndpointId(value: string): value is HealthCheckEndp
   return (HEALTH_CHECK_ENDPOINT_IDS as readonly string[]).includes(value);
 }
 
+/**
+ * A URL template using `${endpoint:<id>}` starts with it, followed by a path or
+ * nothing, and uses it once, so the probe stays on the endpoint's origin.
+ */
+export const ENDPOINT_URL_TEMPLATE = /^\$\{endpoint:[\w-]+\}(?:\/(?![\s\S]*\$\{endpoint:)|$)/;
+
 /** `${endpoint:<id>}` placeholders in `text` naming no known platform endpoint. */
 function unknownEndpointPlaceholders(text: string): string[] {
   return [...text.matchAll(/\$\{endpoint:([^}]*)\}/g)]
@@ -200,7 +206,8 @@ const healthCheckSchema = z.object({
    * the probe needs an API key or similar; the placeholder name must match a
    * key declared in `configSchema.properties`. `${service:<id>}` is a
    * self-hosted service's URL, and `${endpoint:<id>}` the instance of a
-   * platform backend in use (`HEALTH_CHECK_ENDPOINT_IDS`).
+   * platform backend in use (`HEALTH_CHECK_ENDPOINT_IDS`): only as the whole
+   * URL prefix, never in headers, and only in built-in manifests.
    */
   urlTemplate: z.string().optional(),
   /** Same substitution rules as `urlTemplate`. */
@@ -492,12 +499,23 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
         : [manifest.healthCheck]
       : [];
     for (const check of healthChecks) {
-      for (const text of [check.urlTemplate ?? "", ...Object.values(check.headers ?? {})]) {
-        for (const id of unknownEndpointPlaceholders(text)) {
-          errors.push(
-            `manifest.healthCheck: unknown endpoint "${id}" in \${endpoint:${id}} (known: ${HEALTH_CHECK_ENDPOINT_IDS.join(", ")})`,
-          );
-        }
+      const template = check.urlTemplate ?? "";
+      for (const id of unknownEndpointPlaceholders(template)) {
+        errors.push(
+          `manifest.healthCheck: unknown endpoint "${id}" in \${endpoint:${id}} (known: ${HEALTH_CHECK_ENDPOINT_IDS.join(", ")})`,
+        );
+      }
+      // The endpoint can be an internal host with the operator's credentials:
+      // it may only be where the probe goes, never data sent elsewhere.
+      if (template.includes("${endpoint:") && !ENDPOINT_URL_TEMPLATE.test(template)) {
+        errors.push(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: the message names the manifest syntax
+          "manifest.healthCheck: ${endpoint:<id>} must be the whole URL prefix of urlTemplate, used once, followed by a path or nothing",
+        );
+      }
+      if (Object.values(check.headers ?? {}).some((value) => value.includes("${endpoint:"))) {
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: the message names the manifest syntax
+        errors.push("manifest.healthCheck: ${endpoint:<id>} may not appear in headers");
       }
     }
     if (manifest.runtimeDataSources && manifest.dataSources?.length) {

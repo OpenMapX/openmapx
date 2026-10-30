@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
 import {
+  ENDPOINT_URL_TEMPLATE,
   isHealthCheckEndpointId,
   platformEndpointServiceId,
   resolvePlatformEndpoint,
@@ -128,6 +129,15 @@ function secretRedactor(integration: LoadedIntegration): (text: string) => strin
     for (const pattern of patterns) out = out.replace(pattern, "***");
     return out;
   };
+}
+
+/** The endpoint a probe resolved: its origin, and the operator's credentials for it. */
+interface ProbeEndpoint {
+  origin: string;
+  /** The self-hosted or operator instance, which may be internal. */
+  trusted: boolean;
+  authorization?: string;
+  secrets: string[];
 }
 
 /** `redact`, also masking `values` (each at least the redactable length). */
@@ -296,13 +306,27 @@ async function executeSingleHealthCheck(
   let checkUrl: string;
   let unsatisfiedService: string | null = null;
   let unsatisfiedEndpoint: string | null = null;
+  // `${endpoint:id}` names the deployment's own instance, possibly internal and
+  // with the operator's credentials. A built-in manifest may use it only as the
+  // whole URL prefix; its credentials never enter the template and go only to
+  // that origin, as Basic auth.
+  let endpointMisuse: string | null = null;
+  let resolvedEndpoint: ProbeEndpoint | null = null;
   // Hosts the deployment chose (a registered service or the operator's own
   // instance URL), which may be internal; manifest-literal and config-derived
   // hosts must be public.
   const serviceHosts = new Set<string>();
-  function resolvePlaceholder(key: string): string {
+  function resolvePlaceholder(key: string, inHeader = false): string {
     if (key.startsWith("endpoint:")) {
       const endpointId = key.slice("endpoint:".length);
+      if (!integration.isBuiltIn) {
+        endpointMisuse = "endpoint placeholders are reserved for built-in integrations";
+        return "";
+      }
+      if (inHeader) {
+        endpointMisuse = "an endpoint placeholder may not appear in a header";
+        return "";
+      }
       const endpoint = isHealthCheckEndpointId(endpointId)
         ? resolvePlatformEndpoint(endpointId, serviceUrl(platformEndpointServiceId(endpointId)))
         : null;
@@ -310,14 +334,20 @@ async function executeSingleHealthCheck(
         unsatisfiedEndpoint = unsatisfiedEndpoint ?? endpointId;
         return "";
       }
-      if (endpoint.source !== "default") {
-        try {
-          serviceHosts.add(new URL(endpoint.url).host);
-        } catch {
-          // An unparsable operator URL fails the probe's own URL handling below.
-        }
+      const withoutCredentials = urlCredentialsAsBasicAuth(endpoint.url);
+      const base = withoutCredentials.url.replace(/\/$/, "");
+      try {
+        resolvedEndpoint = {
+          origin: new URL(base).origin,
+          trusted: endpoint.source !== "default",
+          authorization: withoutCredentials.authorization,
+          secrets: withoutCredentials.secrets,
+        };
+      } catch {
+        endpointMisuse = `the ${endpointId} endpoint URL is not a valid URL`;
+        return "";
       }
-      return endpoint.url;
+      return base;
     }
     if (key.startsWith("service:")) {
       const serviceId = key.slice("service:".length);
@@ -336,7 +366,11 @@ async function executeSingleHealthCheck(
     return resolveConfigValue(integration, key) ?? "";
   }
   if (hc.urlTemplate) {
-    const resolved = (hc.urlTemplate as string).replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
+    const template = hc.urlTemplate as string;
+    if (template.includes("${endpoint:") && !ENDPOINT_URL_TEMPLATE.test(template)) {
+      endpointMisuse = "an endpoint placeholder must be the whole URL prefix";
+    }
+    const resolved = template.replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
       resolvePlaceholder(key),
     );
     if (unsatisfiedService) {
@@ -365,12 +399,30 @@ async function executeSingleHealthCheck(
     return null;
   }
 
-  // URL credentials (an operator's `https://user:pass@host`) go as Basic auth
-  // and never reach the display URL or an error message.
+  // URL credentials go as Basic auth and never reach the display URL or an
+  // error message: a manifest's own `https://user:pass@host`, or the operator's
+  // endpoint credentials, which only ever go to that endpoint's origin.
   const withoutCredentials = urlCredentialsAsBasicAuth(checkUrl);
   checkUrl = withoutCredentials.url;
-  const credentialHeader = withoutCredentials.authorization;
+  let credentialHeader = withoutCredentials.authorization;
   redactSecrets = withRedactedValues(redactSecrets, withoutCredentials.secrets);
+  // Assigned inside resolvePlaceholder, which TypeScript does not follow.
+  const endpoint = resolvedEndpoint as ProbeEndpoint | null;
+  if (endpoint) {
+    redactSecrets = withRedactedValues(redactSecrets, endpoint.secrets);
+    let origin: string | null = null;
+    try {
+      origin = new URL(checkUrl).origin;
+    } catch {
+      origin = null;
+    }
+    if (origin !== endpoint.origin) {
+      endpointMisuse = endpointMisuse ?? "the probe URL leaves the endpoint's origin";
+    } else {
+      credentialHeader = endpoint.authorization ?? credentialHeader;
+      if (endpoint.trusted) serviceHosts.add(new URL(checkUrl).host);
+    }
+  }
 
   // Mask sensitive data in the display URL. The name-based pass keeps a
   // recognizable `key=***` shape for the common query-parameter form; the
@@ -387,8 +439,18 @@ async function executeSingleHealthCheck(
   const interpolatedHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawHeaders)) {
     interpolatedHeaders[k] = v.replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
-      resolvePlaceholder(key),
+      resolvePlaceholder(key, true),
     );
+  }
+  if (endpointMisuse) {
+    return {
+      id,
+      name,
+      category,
+      url: "health check misconfigured",
+      status: "down",
+      error: endpointMisuse,
+    };
   }
   // A manifest's own Authorization header takes precedence over URL credentials.
   if (

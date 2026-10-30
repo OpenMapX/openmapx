@@ -279,6 +279,7 @@ export {
 export { formatPaymentMethodLabel } from "./paymentMethods";
 export { withPhotoContributors } from "./photo-contributors";
 export {
+  ENDPOINT_URL_TEMPLATE,
   isHealthCheckEndpointId,
   platformEndpointServiceId,
   type ResolvedPlatformEndpoint,

@@ -273,10 +273,17 @@ interpolate three placeholders:
 | `${service:<id>}`  | The URL of the enabled self-hosted service.                                                                                                                        | **Unconfigured**: the service is not enabled.                                   |
 | `${endpoint:<id>}` | The instance of a platform backend that the platform's own client queries: the self-hosted service when enabled, then the operator's URL, then the public default. | **Unconfigured**: no instance is set and there is no public default.            |
 
-Endpoint ids are fixed by the contract (`HEALTH_CHECK_ENDPOINT_IDS`), and
-validation rejects any other. Today the only one is `overpass`: the self-hosted
-`overpass` service, then `OVERPASS_URL`, then `overpass-api.de`. The Overpass
-integrations probe `${endpoint:overpass}/api/status`.
+Endpoint ids are fixed by the contract (`HEALTH_CHECK_ENDPOINT_IDS`); today the
+only one is `overpass`: the self-hosted `overpass` service, then `OVERPASS_URL`,
+then `overpass-api.de`. The Overpass integrations probe
+`${endpoint:overpass}/api/status`. An endpoint can be an internal host carrying
+the operator's credentials, so it is only ever where a probe goes:
+
+- it must be the whole URL prefix of `urlTemplate`, used once, followed by a
+  path or nothing; validation rejects it anywhere else, including headers;
+- only built-in integrations resolve it; a community manifest's probe is marked
+  down;
+- the operator's credentials go only to the endpoint's own origin.
 
 Self-hosted services and an operator's instance may be internal hosts. Every
 other probe URL must be public. Credentials in a URL, such as an operator's

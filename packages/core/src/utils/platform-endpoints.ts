@@ -1,6 +1,6 @@
 import type { HealthCheckEndpointId } from "@openmapx/extension-contracts";
 
-export { isHealthCheckEndpointId } from "@openmapx/extension-contracts";
+export { ENDPOINT_URL_TEMPLATE, isHealthCheckEndpointId } from "@openmapx/extension-contracts";
 
 /**
  * A platform backend that API-side clients query wherever the deployment
