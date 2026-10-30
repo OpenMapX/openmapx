@@ -3,6 +3,7 @@
 import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -59,7 +60,11 @@ export async function inspectMaintenanceDockerRuntime(options: {
         .update("openmapx-private-maintenance-runtime-v1\0")
         .update(value)
         .digest("hex"),
-    lock = await services.acquireReleaseStoreLock(options.stack.infraDir, {}, { failIfBusy: true });
+    lock = await services.acquireReleaseStoreLock(
+      join(options.stack.infraDir, ".ops-agent-releases"),
+      {},
+      { failIfBusy: true },
+    );
   try {
     if (
       !inspectedRevision ||

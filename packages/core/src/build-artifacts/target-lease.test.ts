@@ -1,5 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
@@ -237,6 +245,30 @@ async function api() {
   ).toBe(true);
   return import("./target-lease");
 }
+it("distinguishes an occupied original journal guard before running its source check", async () => {
+  const a = await api(),
+    authority = owner(),
+    lease = await a.acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: authority,
+    });
+  const directory = join(root, "data/.admin-target-control/leases", lease.leaseId),
+    guard = join(directory, ".journal-writer"),
+    before = readFileSync(join(directory, "owner.json"));
+  mkdirSync(guard, { mode: 0o700 });
+  try {
+    expect(() => a.assertArtifactTargetLeaseForward(lease)).toThrow(
+      a.ArtifactTargetJournalBusyError,
+    );
+    expect(readFileSync(join(directory, "owner.json"))).toEqual(before);
+    expect(existsSync(guard)).toBe(true);
+  } finally {
+    rmdirSync(guard);
+  }
+  a.assertArtifactTargetLeaseForward(lease);
+  a.closeArtifactTargetLeaseHandle(lease);
+});
 describe("certified target leases", () => {
   it("requires nominal durable ownership, then fences unknown own effects", async () => {
     const a = await api();

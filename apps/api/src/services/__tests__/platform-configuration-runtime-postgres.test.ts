@@ -1,6 +1,6 @@
-/** Actual API candidate -> production registry/agent -> real DM HTTP/SQL guard.
- * Docker I/O is substituted. This qualifies preparation, launch reconciliation
- * and real child adoption; not native helper application/public platform HTTP. */
+/** Actual API/SDK -> production registry/agent -> real DM HTTP/SQL guard and
+ * separate native helper. Only the session provider and Docker executable I/O
+ * are substituted; image/container replacement acceptance remains separate. */
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -25,7 +25,7 @@ import {
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
-import { services } from "@openmapx/core/server";
+import { repoPaths, services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -775,6 +775,44 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     throw error;
                   }
                   if (version === "launch-native-recovery") {
+                    const { readOwnedConfigurationMaintenance } = await import(
+                        "../../../../ops-agent/src/configuration-maintenance-store"
+                      ),
+                      { inspectMaintenanceDockerRuntime } = await import(
+                        "../../../../ops-agent/src/configuration-maintenance-docker-inspection"
+                      ),
+                      { installationState } = await import(
+                        "../../../../../packages/core/src/build-artifacts/control-authority"
+                      ),
+                      record = prospective.validatedConfigurationCandidateState(candidate).record,
+                      receipt = await prospective.inspectConfigurationMaintenance({
+                        maintenanceId: record.maintenanceId!,
+                        candidateId: candidate.candidateId,
+                      }),
+                      authority = restoreAdmittedControlExecution(installation, receipt.prepare),
+                      owner = readOwnedConfigurationMaintenance(authority),
+                      containers = await host.owned.inspectOwnedServices(
+                        new AbortController().signal,
+                      ),
+                      lock = await services.acquireReleaseStoreLock(
+                        join(host.infraDir, ".ops-agent-releases"),
+                      );
+                    const callsBeforeInspection = host.calls.length;
+                    try {
+                      await expect(
+                        inspectMaintenanceDockerRuntime({
+                          stack: repoPaths(host.root),
+                          execFile: host.execFile,
+                          owner,
+                          containers,
+                          privateKey: installationState(installation).privateKey,
+                          signal: new AbortController().signal,
+                        }),
+                      ).rejects.toThrow("Release store is busy");
+                      expect(host.calls).toHaveLength(callsBeforeInspection);
+                    } finally {
+                      lock.release();
+                    }
                     execution.version = 2;
                     ctx.checkpointResult = {
                       ...ctx.checkpointResult,

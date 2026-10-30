@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  ArtifactTargetJournalBusyError,
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertConfigurationHandoffHostSources as assertHostSources,
@@ -53,21 +54,24 @@ const children = new WeakMap<
  * index. Wait only around source reads, before adoption/forward writes. The
  * original deadline remains authoritative; no lock is removed or stolen. */
 async function waitForHandoffSource<T>(execution: ExecutionRef, read: () => T): Promise<T> {
-  const until = Math.min(execution.deadlineAt, Date.now() + 5000);
+  const started = performance.now();
   for (;;) {
     try {
       return read();
     } catch (error) {
       const io = error as NodeJS.ErrnoException;
+      const familyBusy =
+        io.code === "EEXIST" &&
+        io.syscall === "mkdir" &&
+        !!io.path &&
+        basename(io.path) === ".family-writer";
       if (
-        io.code !== "EEXIST" ||
-        io.syscall !== "mkdir" ||
-        !io.path ||
-        basename(io.path) !== ".family-writer" ||
-        Date.now() >= until
+        (!familyBusy && !(error instanceof ArtifactTargetJournalBusyError)) ||
+        Date.now() >= execution.deadlineAt ||
+        performance.now() - started >= 5000
       )
         throw error;
-      await delay(Math.min(50, Math.max(1, until - Date.now())));
+      await delay(50);
     }
   }
 }

@@ -718,6 +718,13 @@ function writeBounded(
     if (dir !== s.ledger) dir.close();
   }
 }
+/** Only failure to acquire the existing journal guard, before its body runs.
+ * This is coordination evidence, never permission to reclaim a held lock. */
+export class ArtifactTargetJournalBusyError extends Error {
+  constructor(cause: unknown) {
+    super("Lease journal writer is busy or requires supervised recovery", { cause });
+  }
+}
 function guarded<T>(s: State, run: () => T, checkTargets = true): T {
   if (s.journalGuardHeld) throw Error("Nested lease journal writer");
   if (checkTargets) verifyAnchors(s);
@@ -729,8 +736,8 @@ function guarded<T>(s: State, run: () => T, checkTargets = true): T {
   try {
     mkdirSync(path, { mode: 0o700 });
     fsyncSync(s.ledger.fd);
-  } catch {
-    throw Error("Lease journal writer is busy or requires supervised recovery");
+  } catch (cause) {
+    throw new ArtifactTargetJournalBusyError(cause);
   }
   const guard = s.ledger.directory(".journal-writer");
   const expected = identity(guard.stat);
