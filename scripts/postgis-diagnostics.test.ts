@@ -92,6 +92,32 @@ describe("PostGIS diagnostics opt-in", () => {
       expect(result.args).toContain("effective_cache_size=384MB");
     }
   });
+  it("takes the buffer pool and sort memory from the operator", () => {
+    const result = run({
+      FIXTURE_LIMIT: "536870912",
+      POSTGIS_SHARED_BUFFERS: "256MB",
+      POSTGIS_WORK_MEM: "64MB",
+    });
+    expect(result.status).toBe(0);
+    expect(result.args).toContain("shared_buffers=256MB");
+    expect(result.args).not.toContain("shared_buffers=128MB");
+    expect(result.args).toContain("effective_cache_size=384MB");
+    expect(result.args).toContain("work_mem=64MB");
+    // Without a container limit only the operator's sizes are passed.
+    expect(run({ POSTGIS_SHARED_BUFFERS: "1GB" }).args).toEqual([
+      "postgres",
+      "-c",
+      "max_wal_size=4GB",
+      "-c",
+      "shared_buffers=1GB",
+    ]);
+  });
+  it("rejects a memory size postgres would read differently", () => {
+    for (const size of ["16g", "16 GB", "0MB", "-1", "1TB"]) {
+      expect(run({ POSTGIS_SHARED_BUFFERS: size }).status, size).not.toBe(0);
+      expect(run({ POSTGIS_WORK_MEM: size }).status, size).not.toBe(0);
+    }
+  });
   it("enables IO timing independently", () => {
     expect(run({ POSTGIS_TRACK_IO_TIMING: "true" }).args).toEqual([
       "postgres",

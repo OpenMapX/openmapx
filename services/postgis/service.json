@@ -22,6 +22,8 @@
     "environment": {
       "POSTGIS_DIAGNOSTICS": "${POSTGIS_DIAGNOSTICS:-false}",
       "POSTGIS_TRACK_IO_TIMING": "${POSTGIS_TRACK_IO_TIMING:-false}",
+      "POSTGIS_SHARED_BUFFERS": "${POSTGIS_SHARED_BUFFERS:-}",
+      "POSTGIS_WORK_MEM": "${POSTGIS_WORK_MEM:-}",
       "POSTGRES_DB": "openmapx",
       "POSTGRES_USER": "postgres",
       "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — generate a strong value, do not use the default \"postgres\"}",
