@@ -55,7 +55,7 @@ function snapshot(settings: AuthPolicySettings, activationVersion: 0 | 1): AuthP
 }
 export const unactivatedAuthPolicy = snapshot(defaultAuthPolicySettings, 0);
 export async function loadAuthPolicy(
-  database: AuthDatabase = currentAuthDatabase(),
+  database: Pick<AuthDatabase, "select"> = currentAuthDatabase(),
 ): Promise<AuthPolicySnapshot> {
   try {
     const rows = await database.select().from(authPolicyState).where(eq(authPolicyState.id, 1));

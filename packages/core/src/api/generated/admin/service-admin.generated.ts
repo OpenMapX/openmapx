@@ -10,6 +10,7 @@ import type {
 } from "../../admin-sdk-transport";
 import { bindAdminDownloadTarget } from "../../admin-sdk-transport";
 import {
+  applyAdminPlatformConfigurationRequest,
   checkAdminServicesRequest,
   createAdminArtifactTransferRequest,
   createAdminServiceBackupRequest,
@@ -50,6 +51,18 @@ import {
   uploadAdminArtifactTransferContentRequest,
 } from "./operation-bindings.generated";
 import type {
+  ApplyAdminPlatformConfiguration202,
+  ApplyAdminPlatformConfiguration400,
+  ApplyAdminPlatformConfiguration401,
+  ApplyAdminPlatformConfiguration403,
+  ApplyAdminPlatformConfiguration409,
+  ApplyAdminPlatformConfiguration413,
+  ApplyAdminPlatformConfiguration415,
+  ApplyAdminPlatformConfiguration429,
+  ApplyAdminPlatformConfiguration500,
+  ApplyAdminPlatformConfiguration503,
+  ApplyAdminPlatformConfigurationBody,
+  ApplyAdminPlatformConfigurationHeaders,
   CheckAdminServices200,
   CheckAdminServices400,
   CheckAdminServices401,
@@ -2243,6 +2256,117 @@ export const getAdminPlatformConfiguration = async (
     {
       ...options,
       method: "GET",
+    },
+  );
+};
+
+export type applyAdminPlatformConfigurationResponse202 = {
+  data: ApplyAdminPlatformConfiguration202;
+  status: 202;
+};
+
+export type applyAdminPlatformConfigurationResponse400 = {
+  data: ApplyAdminPlatformConfiguration400;
+  status: 400;
+};
+
+export type applyAdminPlatformConfigurationResponse401 = {
+  data: ApplyAdminPlatformConfiguration401;
+  status: 401;
+};
+
+export type applyAdminPlatformConfigurationResponse403 = {
+  data: ApplyAdminPlatformConfiguration403;
+  status: 403;
+};
+
+export type applyAdminPlatformConfigurationResponse409 = {
+  data: ApplyAdminPlatformConfiguration409;
+  status: 409;
+};
+
+export type applyAdminPlatformConfigurationResponse413 = {
+  data: ApplyAdminPlatformConfiguration413;
+  status: 413;
+};
+
+export type applyAdminPlatformConfigurationResponse415 = {
+  data: ApplyAdminPlatformConfiguration415;
+  status: 415;
+};
+
+export type applyAdminPlatformConfigurationResponse429 = {
+  data: ApplyAdminPlatformConfiguration429;
+  status: 429;
+};
+
+export type applyAdminPlatformConfigurationResponse500 = {
+  data: ApplyAdminPlatformConfiguration500;
+  status: 500;
+};
+
+export type applyAdminPlatformConfigurationResponse503 = {
+  data: ApplyAdminPlatformConfiguration503;
+  status: 503;
+};
+
+export type applyAdminPlatformConfigurationResponseSuccess =
+  applyAdminPlatformConfigurationResponse202 & {
+    headers: Headers;
+  };
+export type applyAdminPlatformConfigurationResponseError = (
+  | applyAdminPlatformConfigurationResponse400
+  | applyAdminPlatformConfigurationResponse401
+  | applyAdminPlatformConfigurationResponse403
+  | applyAdminPlatformConfigurationResponse409
+  | applyAdminPlatformConfigurationResponse413
+  | applyAdminPlatformConfigurationResponse415
+  | applyAdminPlatformConfigurationResponse429
+  | applyAdminPlatformConfigurationResponse500
+  | applyAdminPlatformConfigurationResponse503
+) & {
+  headers: Headers;
+};
+
+export type applyAdminPlatformConfigurationResponse =
+  | applyAdminPlatformConfigurationResponseSuccess
+  | applyAdminPlatformConfigurationResponseError;
+
+export const getApplyAdminPlatformConfigurationUrl = () => {
+  return `/api/admin/platform/configuration/apply`;
+};
+
+export const applyAdminPlatformConfiguration = async (
+  applyAdminPlatformConfigurationBody: ApplyAdminPlatformConfigurationBody,
+  headers: ApplyAdminPlatformConfigurationHeaders,
+  options?: Parameters<typeof applyAdminPlatformConfigurationRequest>[1],
+): Promise<applyAdminPlatformConfigurationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return applyAdminPlatformConfigurationRequest<applyAdminPlatformConfigurationResponse>(
+    getApplyAdminPlatformConfigurationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(applyAdminPlatformConfigurationBody),
     },
   );
 };

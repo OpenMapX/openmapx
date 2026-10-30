@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { AdminReauthenticationError } from "../account/admin-reauthentication";
+import { AdminJobFailure } from "../services/admin-job-failure";
 import {
   createDirectAdminOpsKey,
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
+import { jobRunner } from "../services/job-runner";
 import {
   inspectPlatformConfiguration,
   previewPlatformConfiguration,
@@ -12,6 +14,7 @@ import { PlatformPreviewConflict } from "../services/platform-preview-store";
 import { RateLimiter } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
+import { adminReauthNonce } from "./admin-reauthentication";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
 export async function adminPlatformRoute(app: FastifyInstance) {
@@ -29,7 +32,9 @@ export async function adminPlatformRoute(app: FastifyInstance) {
   });
   app.addHook("onClose", async () => limits.destroy());
   const failure = (error: unknown) =>
-    error instanceof PlatformPreviewConflict || error instanceof AdminReauthenticationError
+    error instanceof PlatformPreviewConflict ||
+    error instanceof AdminReauthenticationError ||
+    (error instanceof AdminJobFailure && error.result.errorCode === "conflict")
       ? {
           status: 409,
           error: "Platform preview, source or authorization changed; create a new preview",
@@ -63,6 +68,37 @@ export async function adminPlatformRoute(app: FastifyInstance) {
             parseDirectOpsIdempotency(request.headers["idempotency-key"]),
           ),
         });
+      } catch (error) {
+        const value = failure(error);
+        return reply.code(value.status).send({ error: value.error });
+      }
+    },
+    { preHandler: limits.preHandler() },
+  );
+  registerServiceAdminRoute(
+    app,
+    "applyAdminPlatformConfiguration",
+    async (request, reply) => {
+      const actor = getAdminSession(request);
+      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+        return reply.code(403).send({ error: "A real full administrator session is required" });
+      const { domainProofToken, ...intent } = request.body;
+      const nonce = adminReauthNonce(request.headers.cookie);
+      if (domainProofToken && !nonce)
+        return reply.code(409).send({ error: "Domain recovery proof required" });
+      try {
+        const accepted = await jobRunner.startPlatformConfiguration({
+          ...intent,
+          actorId: actor.user.id,
+          operationKey: createDirectAdminOpsKey(
+            actor.user.id,
+            parseDirectOpsIdempotency(request.headers["idempotency-key"]),
+          ),
+          ...(domainProofToken && nonce
+            ? { proof: { challengeId: domainProofToken, sessionId: actor.session.id, nonce } }
+            : {}),
+        });
+        return reply.code(202).send(accepted);
       } catch (error) {
         const value = failure(error);
         return reply.code(value.status).send({ error: value.error });

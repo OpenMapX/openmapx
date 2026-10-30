@@ -121,6 +121,7 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "service.apply",
   "compose.render",
   "configuration.apply",
+  "platform.apply",
   "compose.start",
   "integration.config.import",
   "integration.binding.apply",
@@ -143,6 +144,7 @@ function hasRetainedImmediateConfiguration(job: {
     [
       "service.apply",
       "configuration.apply",
+      "platform.apply",
       "integration.config.import",
       "integration.binding.apply",
     ].includes(job.type) &&
@@ -294,6 +296,7 @@ class AdminJobRunner {
     options: {
       type:
         | "configuration.apply"
+        | "platform.apply"
         | "service.apply"
         | "compose.start"
         | "integration.config.import"
@@ -302,6 +305,7 @@ class AdminJobRunner {
       operationKey: string;
       intent: unknown;
       signal?: AbortSignal;
+      accepted?: (jobId: string) => void;
     },
     run: (
       ctx: JobContext,
@@ -367,6 +371,7 @@ class AdminJobRunner {
       throw new AdminJobFailure("Retained configuration intent conflicts", {
         errorCode: "conflict",
       });
+    options.accepted?.(job.id);
     if (!(job as { _fresh?: boolean })._fresh) {
       if (["success", "failed"].includes(job.status)) {
         if (checkpoint._configurationRejection)
@@ -379,6 +384,7 @@ class AdminJobRunner {
         ![
           "service.apply",
           "configuration.apply",
+          "platform.apply",
           "integration.config.import",
           "integration.binding.apply",
         ].includes(options.type)
@@ -622,6 +628,41 @@ class AdminJobRunner {
         };
       },
     );
+  }
+
+  /** The response observes durable admission only; disconnecting HTTP cannot
+   * cancel the original mutation or expose its purpose-proof material. */
+  startPlatformConfiguration(
+    options: import("./platform-configuration-application").PlatformConfigurationApplicationInput,
+  ) {
+    const accepted = Promise.withResolvers<{ ok: true; jobId: string }>();
+    void this.immediate(
+      {
+        type: "platform.apply",
+        actorId: options.actorId,
+        operationKey: options.operationKey,
+        intent: {
+          purpose: "platform",
+          previewFingerprint: options.previewFingerprint,
+          expectedCurrentRevisionId: options.expectedCurrentRevisionId,
+          confirmations: options.confirmations,
+        },
+        accepted: (jobId) => accepted.resolve({ ok: true, jobId }),
+      },
+      async (ctx) => {
+        const { runPlatformConfigurationChange } = await import(
+          "./platform-configuration-application"
+        );
+        const value = await runPlatformConfigurationChange(ctx, options);
+        return {
+          value,
+          result: { configuration: value.application },
+          failed: !completeTrustedConfigurationApply(value.application),
+        };
+      },
+      (result) => ({ application: parseTrustedConfigurationApplyOutcome(result.configuration) }),
+    ).catch(accepted.reject);
+    return accepted.promise;
   }
 
   importImmediateIntegrationConfiguration(options: {

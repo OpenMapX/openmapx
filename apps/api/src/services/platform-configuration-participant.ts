@@ -105,6 +105,9 @@ export function retainedPlatformConfigurationIntent(writer: AdministrativeConfig
     expectedCurrentRevisionId: preview.expectedCurrentRevisionId,
     configuration: structuredClone(preview.configuration),
     affectedServiceIds: [...preview.affectedServiceIds],
+    ...(preview.reconcileServiceIds
+      ? { reconcileServiceIds: [...preview.reconcileServiceIds] }
+      : {}),
     expectedDesiredRowVersion: state.expectedDesiredRowVersion,
     confirmations: { ...state.input.confirmations },
     ...(state.authorization ? { authorization: { ...state.authorization } } : {}),
@@ -133,6 +136,7 @@ export function assertPlatformConfigurationSource(
     expectedCurrentRevisionId: p.expectedCurrentRevisionId,
     currentPlatform: source.platform,
     changes: p.configuration,
+    ...(p.reconcileServiceIds ? { reconcileServiceIds: p.reconcileServiceIds } : {}),
     ...input,
   });
   if (rebuilt.previewFingerprint !== p.previewFingerprint) throw new PlatformPreviewConflict();

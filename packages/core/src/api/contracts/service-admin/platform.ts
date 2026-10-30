@@ -1,5 +1,6 @@
 /** Portable platform preview data; these schemas confer no host authority. */
 import z from "zod/v4";
+import { protectedConfigurationReconcileIdsSchema } from "../../../ops/configuration-handoff-records";
 import { platformConfigurationSchema } from "../../../services/platform-configuration";
 import { adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import { adminServiceIdempotencyHeadersSchema } from "./common";
@@ -14,6 +15,7 @@ const url = z.url().max(2048);
 export const adminPlatformPreviewInputSchema = z.strictObject({
   expectedCurrentRevisionId: revision,
   changes: platformConfigurationSchema,
+  reconcileServiceIds: protectedConfigurationReconcileIdsSchema.optional(),
 });
 export const adminPlatformConfirmationSchema = z.strictObject({
   domain: z.boolean(),
@@ -45,6 +47,7 @@ export const adminPlatformPreviewSchema = z.strictObject({
     backupRetentionDays: source,
   }),
   affectedServiceIds: z.array(z.string().min(1).max(64)).max(256),
+  reconcileServiceIds: protectedConfigurationReconcileIdsSchema.optional(),
   oldOrigin: url,
   newOrigin: url,
   originConsumers: z.strictObject({
@@ -64,6 +67,7 @@ export const adminPlatformApplyInputSchema = z.strictObject({
   expectedCurrentRevisionId: revision,
   previewFingerprint: digest,
   confirmations: adminPlatformConfirmationSchema,
+  domainProofToken: z.uuid().optional(),
 });
 export type AdminPlatformPreview = z.infer<typeof adminPlatformPreviewSchema>;
 export const adminPlatformConfigurationSchema = adminPlatformPreviewSchema.pick({
@@ -98,6 +102,18 @@ export const platformAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminPlatformPreviewRetainedSchema),
+      409: adminJson(httpErrorSchema),
+      503: adminJson(httpErrorSchema),
+    },
+  },
+  applyAdminPlatformConfiguration: {
+    method: "POST",
+    path: "/api/admin/platform/configuration/apply",
+    auth: "admin",
+    request: { headers: adminServiceIdempotencyHeadersSchema, body: adminPlatformApplyInputSchema },
+    responses: {
+      ...adminCommonResponses,
+      202: adminJson(z.strictObject({ ok: z.literal(true), jobId: z.uuid() })),
       409: adminJson(httpErrorSchema),
       503: adminJson(httpErrorSchema),
     },

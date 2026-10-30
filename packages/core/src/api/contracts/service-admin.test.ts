@@ -24,6 +24,7 @@ const inventory = [
   ["downloadAdminArtifactTransferContent", "GET", "/artifact-transfers/:stageId/content"],
   ["getAdminPlatformConfiguration", "GET", "/platform/configuration"],
   ["previewAdminPlatformConfiguration", "POST", "/platform/configuration/preview"],
+  ["applyAdminPlatformConfiguration", "POST", "/platform/configuration/apply"],
   ["listAdminServices", "GET", "/services"],
   ["getAdminService", "GET", "/services/:id"],
   ["getAdminServiceConfig", "GET", "/services/:id/config"],

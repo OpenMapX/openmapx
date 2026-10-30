@@ -183,9 +183,10 @@ export async function retainPlatformPreview(
     return decode(row);
   });
 }
-export async function readPlatformPreview(
+/** Historical reads confer no apply authority or renewed TTL. */
+export async function readRetainedPlatformPreview(
   input: { actorId: string; previewFingerprint: string; now?: Date },
-  database: AuthDatabase = db,
+  database: Pick<AuthDatabase, "select"> = db,
 ) {
   const [row] = await database
     .select()
@@ -195,7 +196,14 @@ export async function readPlatformPreview(
     )
     .limit(1);
   if (!row) throw new PlatformPreviewConflict();
-  if (row.expiresAt <= (input.now ?? new Date()))
-    throw new PlatformPreviewConflict("Platform preview expired; create a new preview");
   return decode(row);
+}
+export async function readPlatformPreview(
+  input: { actorId: string; previewFingerprint: string; now?: Date },
+  database: AuthDatabase = db,
+) {
+  const retained = await readRetainedPlatformPreview(input, database);
+  if (new Date(retained.expiresAt) <= (input.now ?? new Date()))
+    throw new PlatformPreviewConflict("Platform preview expired; create a new preview");
+  return retained;
 }

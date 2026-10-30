@@ -1,7 +1,8 @@
 /** The detached helper adopts only its original fixed child grant. It has an
  * ephemeral signing key, no installation role key and no root acquisition. */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
@@ -48,6 +49,28 @@ const children = new WeakMap<
     intent: ConfigurationHandoffIntentRecord;
   }
 >();
+/** Parent terminal/copy publication can briefly own the authenticated source
+ * index. Wait only around source reads, before adoption/forward writes. The
+ * original deadline remains authoritative; no lock is removed or stolen. */
+async function waitForHandoffSource<T>(execution: ExecutionRef, read: () => T): Promise<T> {
+  const until = Math.min(execution.deadlineAt, Date.now() + 5000);
+  for (;;) {
+    try {
+      return read();
+    } catch (error) {
+      const io = error as NodeJS.ErrnoException;
+      if (
+        io.code !== "EEXIST" ||
+        io.syscall !== "mkdir" ||
+        !io.path ||
+        basename(io.path) !== ".family-writer" ||
+        Date.now() >= until
+      )
+        throw error;
+      await delay(Math.min(50, Math.max(1, until - Date.now())));
+    }
+  }
+}
 function immutable<T>(value: T): T {
   if (value && typeof value === "object") {
     for (const child of Object.values(value)) immutable(child);
@@ -72,7 +95,9 @@ export async function openConfigurationHandoffChild(input: {
   let lease: BorrowedArtifactTargetLease | undefined;
   try {
     const intent = immutable(
-      readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+      await waitForHandoffSource(execution, () =>
+        readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+      ),
     );
     if (
       intent.installationId !== installation.installationId ||
@@ -87,13 +112,15 @@ export async function openConfigurationHandoffChild(input: {
         handoffId: input.handoffId,
         intentDigest: controlDigest(intent.operation),
       },
-      peer = verifyFixedCliControlPeer(installation, {
-        assertion: input.assertion,
-        execution,
-        kind: body.kind,
-        recipient: "configuration-helper",
-      }),
-      parent = verifiedParentForArtifactDelegation(installation, input.assertion, execution);
+      { peer, parent } = await waitForHandoffSource(execution, () => ({
+        peer: verifyFixedCliControlPeer(installation, {
+          assertion: input.assertion,
+          execution,
+          kind: body.kind,
+          recipient: "configuration-helper",
+        }),
+        parent: verifiedParentForArtifactDelegation(installation, input.assertion, execution),
+      }));
     if (
       canonicalJson(parent.operationKey) !== canonicalJson(intent.preparer.operationKey) ||
       parent.fingerprint !== intent.preparer.fingerprint
@@ -142,7 +169,9 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
   try {
-    const intent = readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+    const intent = await waitForHandoffSource(execution, () =>
+        readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+      ),
       state = installationState(installation),
       file = configurationHandoffRecordName(input.handoffId, "completion");
     if (intent.assertion !== input.assertion) throw Error("Original helper assertion required");
@@ -159,11 +188,13 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       raw,
       configurationHandoffWorkerRecordSchema,
     );
-    verifyFamilyOwnedRecord(
-      state,
-      intent.origin,
-      { scope: "private", namespace: "observations", container: "", name: file },
-      canonicalJson(raw),
+    await waitForHandoffSource(execution, () =>
+      verifyFamilyOwnedRecord(
+        state,
+        intent.origin,
+        { scope: "private", namespace: "observations", container: "", name: file },
+        canonicalJson(raw),
+      ),
     );
     if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
       throw Error("Unfinished original helper remains fenced");

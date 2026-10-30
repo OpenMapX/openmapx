@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createApiClient } from "@openmapx/core";
 import {
+  applyAdminPlatformConfiguration,
   getAdminPlatformConfiguration,
   previewAdminPlatformConfiguration,
   unwrapAdminResponse,
@@ -8,6 +9,8 @@ import {
 import { services } from "@openmapx/core/server";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ADMIN_REAUTH_COOKIE_NAME } from "../../account/admin-reauthentication";
+import { AdminJobFailure } from "../../services/admin-job-failure";
 import { mockAdminSession } from "../../test/auth";
 
 const mocks = vi.hoisted(() => ({
@@ -135,4 +138,79 @@ it("keeps host failure details out of public responses", async () => {
   expect(result.statusCode).toBe(503);
   expect(result.body).not.toContain("secret-value");
   expect(result.body).not.toContain("/private");
+});
+it("returns the durable apply identity without putting session proof material into the public body", async () => {
+  const body = {
+    expectedCurrentRevisionId: null,
+    previewFingerprint: preview.previewFingerprint,
+    confirmations: preview.requiredConfirmation,
+  };
+  const result = await applyAdminPlatformConfiguration(
+    body,
+    { "idempotency-key": "platform-apply-key-001" },
+    { client },
+  );
+  expect(result.status).toBe(202);
+  expect(unwrapAdminResponse(result)).toEqual(await mocks.apply.mock.results[0].value);
+  expect(mocks.apply).toHaveBeenCalledWith(
+    expect.objectContaining({ ...body, actorId: "test-admin-id" }),
+  );
+  expect(JSON.stringify(result.data)).not.toContain("session");
+});
+it("requires the bound HttpOnly nonce for a domain proof and forwards it privately", async () => {
+  const token = randomUUID(),
+    nonce = Buffer.alloc(32, 7);
+  const body = {
+    expectedCurrentRevisionId: null,
+    previewFingerprint: preview.previewFingerprint,
+    confirmations: preview.requiredConfirmation,
+    domainProofToken: token,
+  };
+  const headers = { "idempotency-key": "platform-proof-key-001" };
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/admin/platform/configuration/apply",
+        headers,
+        payload: body,
+      })
+    ).statusCode,
+  ).toBe(409);
+  expect(mocks.apply).not.toHaveBeenCalled();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/admin/platform/configuration/apply",
+    headers: { ...headers, cookie: `${ADMIN_REAUTH_COOKIE_NAME}=${nonce.toString("base64url")}` },
+    payload: body,
+  });
+  expect(response.statusCode).toBe(202);
+  expect(mocks.apply).toHaveBeenCalledWith(
+    expect.objectContaining({
+      proof: {
+        challengeId: token,
+        sessionId: "test-session-id",
+        nonce,
+      },
+    }),
+  );
+  expect(response.body).not.toContain(token);
+  expect(response.body).not.toContain(nonce.toString("base64url"));
+});
+it("reports a changed retained mutation as a conflict without exposing internal failure details", async () => {
+  mocks.apply.mockRejectedValue(
+    new AdminJobFailure("private internal context", { errorCode: "conflict" }),
+  );
+  const result = await app.inject({
+    method: "POST",
+    url: "/api/admin/platform/configuration/apply",
+    headers: { "idempotency-key": "platform-conflict-001" },
+    payload: {
+      expectedCurrentRevisionId: null,
+      previewFingerprint: preview.previewFingerprint,
+      confirmations: preview.requiredConfirmation,
+    },
+  });
+  expect(result.statusCode).toBe(409);
+  expect(result.body).not.toContain("private internal");
 });

@@ -13,6 +13,12 @@ export const protectedConfigurationServiceIdSchema = z.enum([
   "ops-agent",
 ]);
 export type ProtectedConfigurationServiceId = z.infer<typeof protectedConfigurationServiceIdSchema>;
+/** Explicit reconciliation of already-saved protected settings, never a new image selection. */
+export const protectedConfigurationReconcileIdsSchema = z
+  .array(protectedConfigurationServiceIdSchema)
+  .min(1)
+  .max(6)
+  .refine((ids) => ids.every((id, index) => index === 0 || ids[index - 1]! < id));
 export const configurationHandoffModeSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("configuration") }),
   z.strictObject({

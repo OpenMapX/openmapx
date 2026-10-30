@@ -37,6 +37,13 @@ export async function applyAdminAuthPolicyRequest<T>(
 ): Promise<T> {
   return applyAdminAuthPolicyBound<T>(url, options);
 }
+const applyAdminPlatformConfigurationBound = bindAdminOperation("applyAdminPlatformConfiguration");
+export async function applyAdminPlatformConfigurationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return applyAdminPlatformConfigurationBound<T>(url, options);
+}
 const applyAdminTransitCredentialsBound = bindAdminOperation("applyAdminTransitCredentials");
 export async function applyAdminTransitCredentialsRequest<T>(
   url: string,

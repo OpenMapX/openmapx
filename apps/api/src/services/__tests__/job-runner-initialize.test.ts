@@ -60,6 +60,10 @@ afterEach(() => {
 describe("job runner restart initialization", () => {
   it("keeps typed agent-backed jobs for observation without handler replay", async () => {
     expect(AGENT_RECOVERABLE_ADMIN_JOB_TYPES).toEqual([
+      "standalone.adopt",
+      "standalone.remove",
+      "standalone.preview",
+      "standalone.install",
       "backup.operation",
       "data.operation",
       "service.bulk",
@@ -70,8 +74,10 @@ describe("job runner restart initialization", () => {
       "service.apply",
       "compose.render",
       "configuration.apply",
+      "platform.apply",
       "compose.start",
       "integration.config.import",
+      "integration.binding.apply",
       "system.diagnostics",
       "system.update",
     ]);

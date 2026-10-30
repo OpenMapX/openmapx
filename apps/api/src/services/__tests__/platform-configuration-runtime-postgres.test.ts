@@ -7,6 +7,12 @@ import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync }
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createApiClient } from "@openmapx/core";
+import {
+  applyAdminPlatformConfiguration,
+  previewAdminPlatformConfiguration,
+  unwrapAdminResponse,
+} from "@openmapx/core/api-admin-sdk";
 import {
   closeControlInstallation,
   controlDigest,
@@ -21,7 +27,7 @@ import {
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -29,6 +35,7 @@ import { runContainedProcess } from "../../../../ops-agent/src/docker-runtime";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
+import { mockAdminSession } from "../../test/auth";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 import type { JobContext } from "../job-runner";
 
@@ -36,7 +43,9 @@ const state = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
   services: [] as services.LoadedService[],
   registry: null as InstanceType<typeof services.ServiceRegistry> | null,
+  session: null as ReturnType<typeof mockAdminSession> | null,
 }));
+vi.mock("../../auth", () => ({ auth: { api: { getSession: async () => state.session } } }));
 vi.mock("../../db", () => ({
   get db() {
     return state.fixture.db;
@@ -228,6 +237,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-after-effect",
       "launch-native-killed",
       "launch-native-producer",
+      "launch-native-recovery",
+      "launch-native-job",
+      "launch-native-resource",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
@@ -270,7 +282,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           actualComposeConfig: true,
         });
         state.services = host.loaded;
-        if (version === "launch-native-producer") {
+        if (
+          [
+            "launch-native-producer",
+            "launch-native-recovery",
+            "launch-native-job",
+            "launch-native-resource",
+          ].includes(version)
+        ) {
           state.registry = new services.ServiceRegistry({
             rootDir: host.root,
             enabledIds: new Set(ids),
@@ -391,8 +410,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           DOMAIN: "example.test",
           DATA_MANAGER_URL: dm.baseUrl,
           DATA_MANAGER_AUTH_TOKEN: dm.token,
+          OPENMAPX_DISABLE_LOCALHOST_AUTH: "1",
         }))
           vi.stubEnv(key, value);
+        let publicApi: FastifyInstance | undefined;
         try {
           const actorId = randomUUID(),
             jobId = randomUUID(),
@@ -410,6 +431,113 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               serviceId: "ops-agent",
               config: { OPENMAPX_MEMORY_MIB: 256, OPENMAPX_CPU_LIMIT: 0.5 },
             });
+          if (["launch-native-job", "launch-native-resource"].includes(version)) {
+            const { adminPlatformRoute } = await import("../../routes/admin-platform"),
+              { jobRunner } = await import("../job-runner"),
+              { createDirectAdminOpsKey } = await import("../direct-ops-idempotency");
+            state.session = mockAdminSession();
+            state.session.user.id = actorId;
+            state.session.session.userId = actorId;
+            publicApi = Fastify();
+            await publicApi.register(adminPlatformRoute, { prefix: "/api" });
+            const client = createApiClient({
+                baseUrl: await publicApi.listen({ host: "127.0.0.1", port: 0 }),
+              }),
+              headers = { "idempotency-key": operationKey },
+              reviewed = unwrapAdminResponse(
+                await previewAdminPlatformConfiguration(
+                  {
+                    expectedCurrentRevisionId: host.initial.revisionId,
+                    changes:
+                      version === "launch-native-resource"
+                        ? { version: 1 as const }
+                        : {
+                            version: 1 as const,
+                            backupRetentionDays: { source: "database", value: 14 },
+                          },
+                    ...(version === "launch-native-resource"
+                      ? { reconcileServiceIds: ["ops-agent" as const] }
+                      : {}),
+                  },
+                  headers,
+                  { client },
+                ),
+              ),
+              input = {
+                expectedCurrentRevisionId: reviewed.preview.expectedCurrentRevisionId,
+                previewFingerprint: reviewed.preview.previewFingerprint,
+                confirmations: reviewed.preview.requiredConfirmation,
+              };
+            const apply = async () =>
+              unwrapAdminResponse(
+                await applyAdminPlatformConfiguration(input, headers, { client }),
+              );
+            const accepted = await apply();
+            if (version === "launch-native-resource") {
+              expect(reviewed.preview.configuration).toEqual({ version: 1 });
+              expect(reviewed.preview.affectedServiceIds).toEqual(["ops-agent"]);
+              expect(reviewed.preview.oldOrigin).toBe(reviewed.preview.newOrigin);
+            }
+            expect(await apply()).toEqual(accepted);
+            const readJob = async () =>
+              (
+                await state.fixture.db
+                  .select()
+                  .from(schema.adminJob)
+                  .where(eq(schema.adminJob.id, accepted.jobId))
+              )[0]!;
+            const launchDeadline = Date.now() + 60000;
+            while (!host.calls.some((args) => args[0] === "run") && Date.now() < launchDeadline) {
+              expect((await readJob()).status).not.toBe("failed");
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            const args = host.calls.find((args) => args[0] === "run");
+            expect(args).toBeDefined();
+            const env = (name: string) =>
+              args!.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
+            await nativeHelper(host, {
+              OPENMAPX_ROOT_DIR: host.root,
+              OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+              OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+              OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+            });
+            const settleDeadline = Date.now() + 90000;
+            let job = await readJob();
+            while (job.status === "running" && Date.now() < settleDeadline) {
+              await jobRunner.reconcile();
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              job = await readJob();
+            }
+            expect(
+              job.status,
+              JSON.stringify({
+                error: job.error?.split("\n")[0].slice(0, 200),
+                configuration: (job.result as Record<string, unknown> | null)?.configuration,
+                states: journal.records().map((value) => ({
+                  kind: value.operation.kind,
+                  state: value.state,
+                  errorClass: value.errorClass,
+                })),
+              }),
+            ).toBe("success");
+            expect(job.payload).toEqual({
+              operationKey: createDirectAdminOpsKey(actorId, operationKey),
+            });
+            expect(job.result).toMatchObject({
+              configuration: { outcome: "committed", followUp: "complete" },
+            });
+            expect(await apply()).toEqual(accepted);
+            expect(dm.settlePosts).toBe(1);
+            expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+            expect(
+              host.calls
+                .filter((args) => args[0] === "compose" && args.includes("up"))
+                .map((args) => args.at(-1)),
+            ).toEqual(
+              version === "launch-native-resource" ? ["ops-agent"] : ["app-api", "ops-agent"],
+            );
+            return;
+          }
           await state.fixture.db.insert(schema.adminJob).values({
             id: jobId,
             type: "platform.apply",
@@ -549,7 +677,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           step.ordinal,
                         );
                       expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
-                      if (version === "launch-native-producer") {
+                      if (["launch-native-producer", "launch-native-recovery"].includes(version)) {
                         const args = host.calls.find((args) => args[0] === "run")!,
                           env = (name: string) =>
                             args
@@ -561,6 +689,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
                           OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
                         });
+                        if (version === "launch-native-recovery") return candidate;
                         const result = await prospective.persistAndApplyProspectiveConfiguration(
                           candidate,
                           { coordinatorMode: "require-running" },
@@ -644,6 +773,29 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                       }),
                     );
                     throw error;
+                  }
+                  if (version === "launch-native-recovery") {
+                    execution.version = 2;
+                    ctx.checkpointResult = {
+                      ...ctx.checkpointResult,
+                      _execution: { ...execution },
+                    };
+                    await state.fixture.db
+                      .update(schema.adminJob)
+                      .set({ result: ctx.checkpointResult })
+                      .where(eq(schema.adminJob.id, jobId));
+                    const recovered = await prospective.resumeRetainedConfigurationCandidate();
+                    expect(recovered).toMatchObject({
+                      configuration: { outcome: "committed", followUp: "complete" },
+                    });
+                    expect(dm.settlePosts).toBe(1);
+                    expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+                    expect(
+                      host.calls
+                        .filter((args) => args[0] === "compose" && args.includes("up"))
+                        .map((args) => args.at(-1)),
+                    ).toEqual(["app-api", "ops-agent"]);
+                    return;
                   }
                   if (version === "policy-change" || version === "launch-native-producer") return;
                   const retained = ctx.checkpointResult?._configurationMaintenance as
@@ -1069,16 +1221,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
           );
         } finally {
+          await publicApi?.close();
           await dm.close();
           await app.close();
           closeControlInstallation(installation);
           state.services = [];
           state.registry = null;
+          state.session = null;
           vi.unstubAllEnvs();
           rmSync(host.cleanupRoot, { recursive: true, force: true });
         }
       },
-      120000,
+      180000,
     );
   },
 );

@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import z from "zod/v4";
 import { canonicalJson } from "../ops/canonical-json";
+import { protectedConfigurationReconcileIdsSchema } from "../ops/configuration-handoff-records";
 import { resolveProxyHost } from "./compose-renderer";
 import {
   type PlatformConfiguration,
@@ -33,6 +34,7 @@ export function buildPlatformConfigurationPreview(input: {
   env: Readonly<Record<string, string | undefined>>;
   services: readonly LoadedService[];
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
+  reconcileServiceIds?: readonly string[];
 }) {
   const currentRevisionId = revision.parse(input.currentRevisionId);
   if (revision.parse(input.expectedCurrentRevisionId) !== currentRevisionId)
@@ -45,6 +47,19 @@ export function buildPlatformConfigurationPreview(input: {
     .parse(input.authPolicyRevision);
   const sourceRevision = z.uuid().parse(input.sourceRevision);
   const changes = platformConfigurationSchema.parse(input.changes);
+  const reconcileServiceIds =
+    input.reconcileServiceIds === undefined
+      ? undefined
+      : protectedConfigurationReconcileIdsSchema.parse(input.reconcileServiceIds);
+  if (
+    reconcileServiceIds?.some(
+      (id) =>
+        !input.services.some(
+          (service) => service.isBuiltIn && service.enabled && service.manifest.id === id,
+        ),
+    )
+  )
+    throw Error("Protected reconciliation requires an enabled built-in service");
   const configuration = platformConfigurationSchema.parse({
     ...input.currentPlatform,
     ...changes,
@@ -60,6 +75,7 @@ export function buildPlatformConfigurationPreview(input: {
     .filter((service) => {
       if (!service.isBuiltIn || !service.enabled) return false;
       const m = service.manifest;
+      if (reconcileServiceIds?.includes(m.id as (typeof reconcileServiceIds)[number])) return true;
       const consumer = JSON.stringify({
         environment: m.container.environment,
         command: m.container.command,
@@ -122,6 +138,7 @@ export function buildPlatformConfigurationPreview(input: {
     values: after.values,
     sources: after.sources,
     affectedServiceIds,
+    ...(reconcileServiceIds ? { reconcileServiceIds } : {}),
     oldOrigin,
     newOrigin,
     originConsumers,

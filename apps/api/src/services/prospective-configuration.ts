@@ -346,6 +346,24 @@ async function verifyConfigurationCommitParticipant(
   if (state.overlay.purpose === "integration-binding")
     assertIntegrationBindingOverlay(writer, state.overlay);
   if (state.overlay.purpose === "platform") {
+    if (recoveredCommittedCandidates.has(candidate)) {
+      const { assertSavedPlatformConfiguration } = await import(
+        "./platform-configuration-recovery"
+      );
+      if (!state.record.privatePlatformIntent) throw Error("Original platform candidate required");
+      await assertSavedPlatformConfiguration(
+        {
+          actorId: writer.actorId,
+          jobId: owner.job.jobId,
+          candidateId: candidate.candidateId,
+          revisionId: candidate.revisionId,
+          intent: state.record.privatePlatformIntent,
+          checkpoint: owner.job.checkpointResult,
+        },
+        owner.connection,
+      );
+      return;
+    }
     assertPlatformConfigurationOverlay(writer, state.overlay);
     const intent = retainedPlatformConfigurationIntent(writer);
     if (
@@ -1779,6 +1797,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         record.privateCoordinatorLifecycle && row
           ? assertRetainedCoordinatorLifecycleProvenance(row, record)
           : undefined,
+      platform = record.privatePlatformIntent,
       operation = opsOperationSchema.parse(record.operation),
       overlay = overlaySchema.parse(record.privateOverlay),
       projection = readProjection(result),
@@ -1874,10 +1893,21 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
           overlay.changes.some(
             (change) => change.kind !== "service-secret" || change.serviceId !== "data-manager",
           )
-        : !coordinator ||
-          overlay.purpose !== "render" ||
-          overlay.changes.length !== 0 ||
-          overlay.coordinatorMode !== "ensure-running") ||
+        : coordinator
+          ? overlay.purpose !== "render" ||
+            overlay.changes.length !== 0 ||
+            overlay.coordinatorMode !== "ensure-running"
+          : !platform ||
+            row?.type !== "platform.apply" ||
+            overlay.purpose !== "platform" ||
+            overlay.coordinatorMode !== "require-running" ||
+            record.apiFollowUp !== "platform-apply" ||
+            overlay.changes.length !== 1 ||
+            overlay.changes[0]?.kind !== "platform" ||
+            canonicalJson({ version: 1, ...overlay.changes[0].patch }) !==
+              canonicalJson(platform.configuration) ||
+            platform.sourceRevision !== record.expectedSourceRevision ||
+            platform.expectedCurrentRevisionId !== operation.expectedCurrentRevisionId) ||
       !record.maintenanceId ||
       !record.prepareOperationKey ||
       record.apiJobId !== job.jobId ||
@@ -2083,6 +2113,24 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         connection: tx,
       });
     }
+    if (saved && platform) {
+      const { assertSavedPlatformConfiguration } = await import(
+        "./platform-configuration-recovery"
+      );
+      if (canonicalJson(payload.platform) !== canonicalJson(platform.configuration))
+        throw new JobObservationPending("invalid_identity");
+      await assertSavedPlatformConfiguration(
+        {
+          actorId: writer.actorId,
+          jobId: job.jobId,
+          candidateId: candidate.candidateId,
+          revisionId: candidate.revisionId,
+          intent: platform,
+          checkpoint: result,
+        },
+        tx,
+      );
+    }
     freeze(record);
     freeze(overlay);
     freeze(payload);
@@ -2093,7 +2141,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       overlay,
       payload,
       publisher,
-      source: null,
+      source: platform?.sourceSnapshot ?? null,
       rows: null,
       sourceRows: null,
       integrationReloadSnapshot: null,
@@ -4408,7 +4456,7 @@ export async function persistAndApplyProspectiveConfiguration(
     ["migration", "transit-credentials", "platform"].includes(state.overlay.purpose) &&
     !owner.participant &&
     !(
-      state.overlay.purpose === "transit-credentials" &&
+      ["transit-credentials", "platform"].includes(state.overlay.purpose) &&
       stage === "committed" &&
       recoveredCommittedCandidates.has(candidate)
     )

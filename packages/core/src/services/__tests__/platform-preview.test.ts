@@ -39,6 +39,30 @@ const input = () => ({
   services,
 });
 describe("platform configuration preview", () => {
+  it("previews an explicit protected resource reconciliation without inventing a global setting change", () => {
+    const base = { ...input(), changes: { version: 1 as const } };
+    const preview = buildPlatformConfigurationPreview({
+      ...base,
+      reconcileServiceIds: ["ops-agent"],
+    });
+    expect(preview.affectedServiceIds).toEqual(["ops-agent"]);
+    expect(preview.configuration).toEqual({ version: 1 });
+    expect(preview.oldOrigin).toBe(preview.newOrigin);
+    expect(preview.requiredConfirmation.domain).toBe(false);
+    expect(preview.previewFingerprint).not.toBe(
+      buildPlatformConfigurationPreview(base).previewFingerprint,
+    );
+    expect(() =>
+      buildPlatformConfigurationPreview({ ...base, reconcileServiceIds: ["data-manager"] }),
+    ).toThrow();
+    expect(() =>
+      buildPlatformConfigurationPreview({
+        ...base,
+        services: services.map((service) => ({ ...service, enabled: false })),
+        reconcileServiceIds: ["ops-agent"],
+      }),
+    ).toThrow();
+  });
   it("shows exact public origin consumers and requires domain recovery confirmation", () => {
     const source = input();
     const preview = buildPlatformConfigurationPreview(source);
