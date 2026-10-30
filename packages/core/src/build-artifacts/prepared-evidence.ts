@@ -10,6 +10,7 @@ import {
   withDataDirectory,
   withDataDirectoryAsync,
 } from "./data-evidence";
+import type { FileIdentity } from "./filesystem";
 import {
   artifactFingerprint,
   BUILD_RECORD_DIR,
@@ -83,6 +84,8 @@ export async function capturePreparedBuildEvidence(options: {
   signal?: AbortSignal;
   verifiedFiles?: readonly BundleFile[];
   inputs?: z.infer<typeof fileSchema>[];
+  /** Local publication journals pin the exact new metadata inode before rename. */
+  beforePublish?: (inode: FileIdentity, bytes: string) => void;
 }): Promise<BuildRecordV2> {
   const { dataRoot, signal } = options,
     spec = buildArtifactSpec(options.record.service),
@@ -151,7 +154,9 @@ export async function capturePreparedBuildEvidence(options: {
   withDataDirectory(dataRoot, "", (root) => {
     const records = root.directory(BUILD_RECORD_DIR, true);
     try {
-      records.write(`${record.service}.evidence.json`, bytes);
+      records.write(`${record.service}.evidence.json`, bytes, false, (inode) =>
+        options.beforePublish?.(inode, bytes),
+      );
     } finally {
       records.close();
     }

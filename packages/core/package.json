@@ -213,6 +213,10 @@
     "./configuration-values": {
       "types": "./src/configuration-values.ts",
       "default": "./src/configuration-values.ts"
+    },
+    "./build-artifacts/publication": {
+      "types": "./src/build-artifacts/publication.ts",
+      "default": "./src/build-artifacts/publication.ts"
     }
   },
   "scripts": {
