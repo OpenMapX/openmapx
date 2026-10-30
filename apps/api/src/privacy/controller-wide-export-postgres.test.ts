@@ -69,7 +69,7 @@ function dawarichTar(subjectId: string, cutoff: string): Buffer {
   const manifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.15.3",
+      image: "freikin/dawarich:1.19.0",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: sha256(Buffer.from(subjectId)),
@@ -103,7 +103,7 @@ function backupTar(subjectId: string, cutoff: string): Buffer {
   const dawarichManifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.15.3",
+      image: "freikin/dawarich:1.19.0",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: sha256(Buffer.from(subjectId)),

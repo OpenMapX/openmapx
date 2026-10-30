@@ -22,15 +22,15 @@ const ROTATION_CONFIRMATION = "ROTATE DAWARICH OIDC SECRET";
 const EXPECTED_BUNDLE = [
   {
     id: DAWARICH_APP_SERVICE_ID,
-    version: "1.15.3",
+    version: "1.19.0",
     image: "freikin/dawarich",
-    tag: "1.15.3",
+    tag: "1.19.0",
   },
   {
     id: DAWARICH_WORKER_SERVICE_ID,
-    version: "1.15.3",
+    version: "1.19.0",
     image: "freikin/dawarich",
-    tag: "1.15.3",
+    tag: "1.19.0",
   },
   {
     id: DAWARICH_POSTGIS_SERVICE_ID,
@@ -40,9 +40,9 @@ const EXPECTED_BUNDLE = [
   },
   {
     id: DAWARICH_REDIS_SERVICE_ID,
-    version: "7.4",
+    version: "8.10",
     image: "redis",
-    tag: "7.4-alpine",
+    tag: "8.10-alpine",
   },
 ] as const;
 

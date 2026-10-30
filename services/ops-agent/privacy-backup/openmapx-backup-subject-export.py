@@ -18,10 +18,10 @@ MAX_ENTRY = 256 * 1024 * 1024
 MAX_MANIFEST = 256 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
 MAX_ENTRIES = 256
-DAWARICH_IMAGE = "freikin/dawarich:1.15.3"
-DAWARICH_IMAGE_DIGEST = "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498"
-DAWARICH_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b"
-DAWARICH_SCHEMA_FINGERPRINT = "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09"
+DAWARICH_IMAGE = "freikin/dawarich:1.19.0"
+DAWARICH_IMAGE_DIGEST = "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304"
+DAWARICH_COMMIT = "752641768f37fdc07d5a23e0559fa7c5ff8fae0f"
+DAWARICH_SCHEMA_FINGERPRINT = "d728906287ec3c4f3f38a80c2c4fe6ce77cc40f03b56a5ba0e89b811dd6e631a"
 DAWARICH_RELATION_FINGERPRINT_VERSION = "dawarich-relations-v2"
 SAFE_EXTENSIONS = {"bin", "csv", "fit", "gpx", "json", "jsonl", "jpg", "jpeg", "kml", "mp4", "pdf", "png", "tcx", "txt"}
 
@@ -68,31 +68,89 @@ DAWARICH_SCHEMA_MODELS = [
     ("PlannedTraveller", "planned_travellers", ["id", "trip_id", "name", "owner", "created_at", "updated_at"], ["trip_id"]),
     ("PlannedUnplannedPlace", "planned_unplanned_places", ["id", "trip_id", "name", "address", "latitude", "longitude", "starts_at", "ends_at", "duration_minutes", "position", "category", "notes", "transport_mode", "created_at", "updated_at"], ["trip_id"]),
     ("PointSource", "point_sources", ["id", "digest", "tracker_id", "topic", "ssid", "bssid", "connection", "trigger", "battery_status", "inrids", "in_regions", "created_at", "updated_at"], []),
+    ("GeofenceEvent", "geofence_events", ["id", "user_id", "place_id", "event_type", "occurred_at", "lonlat", "device_id", "created_at", "updated_at"], ["user_id"]),
+    ("Webhook", "webhooks", ["id", "user_id", "name", "url", "secret", "event_types", "place_ids", "created_at", "updated_at"], ["user_id"]),
+    ("WebhookDelivery", "webhook_deliveries", ["id", "webhook_id", "geofence_event_id", "status", "response_body", "error_message", "created_at", "updated_at"], ["webhook_id"]),
+    ("LegacyAreaPlaceMapping", "legacy_area_place_mappings", ["id", "area_id", "place_id", "created_at", "updated_at"], ["area_id"]),
+    ("PointRevision", "point_revisions", ["id", "user_id", "month", "revision"], ["user_id"]),
+    ("TrackRevision", "track_revisions", ["id", "user_id", "month", "revision"], ["user_id"]),
 ]
 
 DAWARICH_EXPECTED_FOREIGN_KEYS = sorted([
-    "achievement_progresses.user_id->users.id", "achievement_unlock_events.user_id->users.id",
+    "achievement_progresses.user_id->users.id",
+    "achievement_unlock_events.user_id->users.id",
     "active_storage_attachments.blob_id->active_storage_blobs.id",
     "active_storage_variant_records.blob_id->active_storage_blobs.id",
-    "areas.user_id->users.id", "digests.user_id->users.id", "families.creator_id->users.id",
-    "family_invitations.family_id->families.id", "family_invitations.invited_by_id->users.id",
-    "family_location_requests.family_id->families.id", "family_location_requests.requester_id->users.id",
-    "family_location_requests.target_user_id->users.id", "family_memberships.family_id->families.id",
-    "family_memberships.user_id->users.id", "flights.user_id->users.id", "notes.user_id->users.id",
-    "notifications.user_id->users.id", "pending_imports.claimed_by_user_id->users.id",
-    "place_visits.place_id->places.id", "place_visits.visit_id->visits.id",
-    "planned_accommodations.trip_id->trips.id", "planned_day_notes.planned_day_id->planned_days.id",
-    "planned_days.trip_id->trips.id", "planned_reservations.planned_day_id->planned_days.id",
-    "planned_reservations.trip_id->trips.id", "planned_stops.planned_day_id->planned_days.id",
-    "planned_travellers.trip_id->trips.id", "planned_unplanned_places.trip_id->trips.id",
-    "points.raw_data_archive_id->points_raw_data_archives.id", "points.user_id->users.id",
-    "points.track_id->tracks.id", "points.visit_id->visits.id", "points_raw_data_archives.user_id->users.id",
-    "posters.user_id->users.id", "route_videos.user_id->users.id", "service_settings.user_id->users.id",
-    "shared_links.user_id->users.id", "stats.user_id->users.id",
-    "taggings.tag_id->tags.id", "tags.user_id->users.id", "track_segments.track_id->tracks.id",
-    "tracks.user_id->users.id", "trip_sources.user_id->users.id", "trips.trip_source_id->trip_sources.id",
-    "trips.user_id->users.id", "user_achievements.user_id->users.id", "visits.area_id->areas.id",
-    "visits.place_id->places.id", "visits.user_id->users.id",
+    "areas.user_id->users.id",
+    "digests.user_id->users.id",
+    "families.creator_id->users.id",
+    "family_invitations.family_id->families.id",
+    "family_invitations.invited_by_id->users.id",
+    "family_location_requests.family_id->families.id",
+    "family_location_requests.requester_id->users.id",
+    "family_location_requests.target_user_id->users.id",
+    "family_memberships.family_id->families.id",
+    "family_memberships.user_id->users.id",
+    "flights.user_id->users.id",
+    "geofence_events.place_id->places.id",
+    "geofence_events.user_id->users.id",
+    "legacy_area_place_mappings.area_id->areas.id",
+    "legacy_area_place_mappings.place_id->places.id",
+    "notes.user_id->users.id",
+    "notifications.user_id->users.id",
+    "pending_imports.claimed_by_user_id->users.id",
+    "place_visits.place_id->places.id",
+    "place_visits.visit_id->visits.id",
+    "planned_accommodations.trip_id->trips.id",
+    "planned_day_notes.planned_day_id->planned_days.id",
+    "planned_days.trip_id->trips.id",
+    "planned_reservations.planned_day_id->planned_days.id",
+    "planned_reservations.trip_id->trips.id",
+    "planned_stops.planned_day_id->planned_days.id",
+    "planned_travellers.trip_id->trips.id",
+    "planned_unplanned_places.trip_id->trips.id",
+    "points.raw_data_archive_id->points_raw_data_archives.id",
+    "points.track_id->tracks.id",
+    "points.user_id->users.id",
+    "points.visit_id->visits.id",
+    "points_raw_data_archives.user_id->users.id",
+    "posters.user_id->users.id",
+    "route_videos.user_id->users.id",
+    "service_settings.user_id->users.id",
+    "shared_links.user_id->users.id",
+    "stats.user_id->users.id",
+    "taggings.tag_id->tags.id",
+    "tags.user_id->users.id",
+    "track_segments.track_id->tracks.id",
+    "tracks.user_id->users.id",
+    "trip_sources.user_id->users.id",
+    "trips.trip_source_id->trip_sources.id",
+    "trips.user_id->users.id",
+    "user_achievements.user_id->users.id",
+    "visits.area_id->areas.id",
+    "visits.place_id->places.id",
+    "visits.user_id->users.id",
+    "webhook_deliveries.geofence_event_id->geofence_events.id",
+    "webhook_deliveries.webhook_id->webhooks.id",
+    "webhooks.user_id->users.id",
+])
+
+# Every table the reviewed release creates.  An owner column without a
+# constraint never appears in the FK graph, so the inventory must match too.
+DAWARICH_EXPECTED_TABLES = sorted([
+    "achievement_progresses", "achievement_unlock_events", "action_text_rich_texts",
+    "active_storage_attachments", "active_storage_blobs", "active_storage_variant_records",
+    "ar_internal_metadata", "areas", "countries", "data_migrations", "digests",
+    "disputed_areas", "exports", "families", "family_invitations", "family_location_requests",
+    "family_memberships", "flights", "flipper_features", "flipper_gates", "geofence_events",
+    "imports", "instance_settings", "legacy_area_place_mappings", "notes", "notifications",
+    "pending_imports", "place_visits", "places", "planned_accommodations", "planned_day_notes",
+    "planned_days", "planned_reservations", "planned_stops", "planned_travellers",
+    "planned_unplanned_places", "point_revisions", "point_sources", "points",
+    "points_raw_data_archives", "posters", "regions", "route_videos", "schema_migrations",
+    "service_settings", "shared_links", "spatial_ref_sys", "stats", "taggings", "tags",
+    "track_revisions", "track_segments", "tracks", "trip_sources", "trips", "user_achievements",
+    "users", "visits", "webhook_deliveries", "webhooks",
 ])
 
 
@@ -149,8 +207,8 @@ def verified_sources(request):
     declared = {(service.get("id"), volume.get("file")): volume for service in manifest.get("services", []) for volume in service.get("volumes", [])}
     contracts = {
         "openmapx-v1": ("openmapx", "postgis", "pg_dump"),
-        "dawarich-1.15.3": ("dawarich", "dawarich-postgis", "pg_dump"),
-        "dawarich-storage-1.15.3": ("dawarich-storage", "dawarich-app", "tar"),
+        "dawarich-1.19.0": ("dawarich", "dawarich-postgis", "pg_dump"),
+        "dawarich-storage-1.19.0": ("dawarich-storage", "dawarich-app", "tar"),
     }
     result = []
     seen = set()
@@ -162,7 +220,7 @@ def verified_sources(request):
         volume = declared.get((source.get("serviceId"), source.get("file")))
         if contract in seen or source.get("family") != family or source.get("serviceId") != service_id or not volume or volume.get("mode") != mode:
             fail("unsupported_schema")
-        if contract == "dawarich-storage-1.15.3" and volume.get("name") != "openmapx-dawarich-storage":
+        if contract == "dawarich-storage-1.19.0" and volume.get("name") != "openmapx-dawarich-storage":
             fail("unsupported_schema")
         path = root / source["file"]
         if path.parent != root or path.is_symlink() or not path.is_file():
@@ -172,11 +230,11 @@ def verified_sources(request):
             fail("backup_digest_changed")
         seen.add(contract)
         result.append({**source, "path": path})
-    if "dawarich-1.15.3" in seen:
+    if "dawarich-1.19.0" in seen:
         managed = manifest.get("privacySourceProvenance", {}).get("managedDawarich")
-        if managed != {"version": "1.15.3", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.15.3"}:
+        if managed != {"version": "1.19.0", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.19.0"}:
             fail("unsupported_schema")
-    if "dawarich-storage-1.15.3" in seen and "dawarich-1.15.3" not in seen:
+    if "dawarich-storage-1.19.0" in seen and "dawarich-1.19.0" not in seen:
         fail("unsupported_schema")
     return result, manifest
 
@@ -235,6 +293,9 @@ FROM (
 ) reviewed_edges;
 """) or b"[]")
     if observed != DAWARICH_EXPECTED_FOREIGN_KEYS:
+        fail("unsupported_schema")
+    tables = json.loads(psql(socket, "SELECT COALESCE(json_agg(table_name::text ORDER BY table_name),'[]'::json) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';") or b"[]")
+    if tables != DAWARICH_EXPECTED_TABLES:
         fail("unsupported_schema")
     document = {
         "version": DAWARICH_RELATION_FINGERPRINT_VERSION,
@@ -475,13 +536,13 @@ def project_openmapx(socket):
 
 DAWARICH = {
     "areas": ("areas", "user_id", ["id", "name", "latitude", "longitude", "radius", "created_at", "updated_at"]),
-    "places": ("places", "user_id", ["id", "name", "city", "country", "latitude", "longitude", "source", "note", "geodata", "created_at", "updated_at"]),
+    "places": ("places", "user_id", ["id", "name", "city", "country", "latitude", "longitude", "source", "note", "geodata", "visit_radius", "geofence", "archived_at", "created_at", "updated_at"]),
     "tags": ("tags", "user_id", ["id", "name", "color", "icon", "privacy_radius_meters", "created_at", "updated_at"]),
     "imports": ("imports", "user_id", ["id", "name", "source", "status", "demo", "points_count", "raw_points", "processed", "doubles", "created_at", "updated_at", "processing_started_at"]),
     "export-records": ("exports", "user_id", ["id", "name", "file_type", "file_format", "status", "start_at", "end_at", "created_at", "updated_at", "processing_started_at"]),
     "trips": ("trips", "user_id", ["id", "name", "started_at", "ended_at", "distance", "path", "visited_countries", "demo", "created_at", "updated_at", "last_recalculated_at"]),
     "notifications": ("notifications", "user_id", ["id", "title", "content", "kind", "read_at", "created_at", "updated_at"]),
-    "visits": ("visits", "user_id", ["id", "name", "started_at", "ended_at", "duration", "confidence", "confidence_breakdown", "status", "area_id", "place_id", "demo", "created_at", "updated_at"]),
+    "visits": ("visits", "user_id", ["id", "name", "location_label", "started_at", "ended_at", "duration", "confidence", "confidence_breakdown", "status", "area_id", "place_id", "demo", "created_at", "updated_at"]),
     "stats": ("stats", "user_id", ["id", "year", "month", "distance", "daily_distance", "h3_hex_ids", "toponyms", "created_at", "updated_at"]),
     "tracks": ("tracks", "user_id", ["id", "start_at", "end_at", "distance", "duration", "avg_speed", "dominant_mode", "elevation_gain", "elevation_loss", "elevation_max", "elevation_min", "tracker_id", "demo", "original_path", "created_at", "updated_at"]),
     "digests": ("digests", "user_id", ["id", "year", "month", "period_type", "distance", "sent_at", "all_time_stats", "first_time_visits", "monthly_distances", "time_spent_by_location", "toponyms", "travel_patterns", "year_over_year", "created_at", "updated_at"]),
@@ -495,8 +556,22 @@ DAWARICH = {
     "user-achievements": ("user_achievements", "user_id", ["id", "achievement_key", "earned_at", "metadata", "created_at", "updated_at"]),
     "route-videos": ("route_videos", "user_id", ["id", "name", "settings", "status", "expired_at", "created_at", "updated_at"]),
     "service-settings": ("service_settings", "user_id", ["id", "service", "provider", "active", "config", "created_at", "updated_at"]),
-    "trip-sources": ("trip_sources", "user_id", ["id", "provider", "base_url", "status", "importing", "last_error", "last_synced_at", "created_at", "updated_at"]),
+    "trip-sources": ("trip_sources", "user_id", ["id", "provider", "base_url", "status", "importing", "skip_ssl_verification", "last_error", "last_synced_at", "created_at", "updated_at"]),
+    # lonlat, the enum labels and the reduced url are added as SQL extras.
+    "geofence-events": ("geofence_events", "user_id", ["id", "occurred_at", "received_at", "place_id", "place_name", "accuracy_m", "device_id", "synthetic", "metadata", "created_at", "updated_at"]),
+    "webhooks": ("webhooks", "user_id", ["id", "name", "event_types", "place_ids", "active", "consecutive_failures", "last_delivery_at", "last_success_at", "created_at", "updated_at"]),
 }
+
+WEBHOOK_REDACTIONS = ["dawarich-webhook-secret-omitted", "dawarich-webhook-endpoint-reduced"]
+WEBHOOK_DELIVERY_REDACTIONS = ["dawarich-webhook-response-omitted"]
+# Scheme, host and non-default port only, as in the Rails collector: a webhook
+# path or query string is commonly the receiver's bearer credential.
+WEBHOOK_ORIGIN_SQL = (
+    "(SELECT CASE WHEN o.scheme IN ('http','https') AND o.host<>'' THEN o.scheme || '://' || o.host"
+    " || CASE WHEN o.port IS NULL OR (o.scheme='http' AND o.port='80') OR (o.scheme='https' AND o.port='443') THEN '' ELSE ':' || o.port END END"
+    " FROM (SELECT lower(m[1]) AS scheme, m[2] AS host, m[3] AS port"
+    " FROM (SELECT regexp_match(t.url, '^([A-Za-z][A-Za-z0-9+.-]*)://(?:[^/?#@]*@)?(\\[[^]/?#]*\\]|[^:/?#]*)(?::([0-9]+))?(?:[/?#]|$)') AS m) parsed) o)"
+)
 
 DAWARICH_PLANNED = {
     "planned-days": ("planned_days", "trip_id", ["id", "trip_id", "date", "title", "notes", "position", "created_at", "updated_at"]),
@@ -525,7 +600,7 @@ def project_dawarich(socket):
         [("redactionCodes", "jsonb_build_array('dawarich-authentication-secrets-redacted')")],
     )
     entries.append(query_descriptor(socket, "dawarich/account.json", f"SELECT {account_projection} FROM users u WHERE u.id={user_id}", False, ["dawarich-authentication-secrets-redacted"]))
-    safe_settings = ["fog_of_war_meters", "fog_of_war_threshold", "fog_of_war_mode", "meters_between_routes", "preferred_map_layer", "speed_colored_routes", "points_rendering_mode", "minutes_between_routes", "time_threshold_minutes", "merge_threshold_minutes", "live_map_enabled", "route_opacity", "route_color", "track_color", "maps", "visits_suggestions_enabled", "enabled_map_layers", "maps_maplibre_style", "maps_maplibre_custom_theme", "globe_projection", "transportation_thresholds", "transportation_expert_thresholds", "transportation_expert_mode", "min_minutes_spent_in_city", "max_gap_minutes_in_city", "gps_filtering_enabled", "gps_accuracy_threshold", "timezone", "visit_radius_meters", "visit_min_points", "visit_min_duration_minutes", "visit_density_fill_enabled", "stay_max_gap_minutes", "point_dragging_enabled", "news_emails_enabled", "show_supporter_badge"]
+    safe_settings = ["fog_of_war_meters", "fog_of_war_threshold", "fog_of_war_mode", "meters_between_routes", "preferred_map_layer", "speed_colored_routes", "points_rendering_mode", "minutes_between_routes", "time_threshold_minutes", "merge_threshold_minutes", "live_map_enabled", "route_opacity", "route_color", "track_color", "maps", "visits_suggestions_enabled", "enabled_map_layers", "maps_maplibre_style", "maps_maplibre_custom_theme", "globe_projection", "transportation_thresholds", "transportation_expert_thresholds", "transportation_expert_mode", "min_minutes_spent_in_city", "max_gap_minutes_in_city", "gps_filtering_enabled", "gps_accuracy_threshold", "timezone", "visit_radius_meters", "visit_min_points", "visit_min_duration_minutes", "visit_density_fill_enabled", "stay_max_gap_minutes", "point_dragging_enabled", "news_emails_enabled", "show_supporter_badge", "achievements_enabled", "family_enabled", "date_format", "time_format", "first_day_of_week", "gps_accuracy_filter_enabled"]
     allow = "ARRAY[" + ",".join(literal(value) for value in safe_settings) + "]::text[]"
     settings = f"SELECT jsonb_build_object('values',COALESCE((SELECT jsonb_object_agg(key,value) FROM jsonb_each(u.settings) WHERE key=ANY({allow})),'{{}}'::jsonb),'redactedKeys',COALESCE((SELECT jsonb_agg(key ORDER BY key) FROM jsonb_each(u.settings) WHERE NOT key=ANY({allow})),'[]'::jsonb),'redactionCodes',jsonb_build_array('dawarich-settings-secrets-redacted')) FROM users u WHERE u.id={user_id}"
     entries.append(query_descriptor(socket, "dawarich/settings.json", settings, False, ["dawarich-settings-secrets-redacted"]))
@@ -536,13 +611,23 @@ def project_dawarich(socket):
             extras.append(("path", "CASE WHEN t.path IS NULL THEN NULL ELSE ST_AsGeoJSON(t.path)::jsonb->'coordinates' END"))
         elif entry_id == "tracks":
             extras.append(("original_path", "ST_AsGeoJSON(t.original_path)::jsonb->'coordinates'"))
+        elif entry_id == "geofence-events":
+            extras.extend([
+                ("lonlat", "jsonb_build_array(ST_X(t.lonlat::geometry), ST_Y(t.lonlat::geometry))"),
+                ("event_type", "CASE t.event_type WHEN 0 THEN 'enter' WHEN 1 THEN 'leave' END"),
+                ("source", "CASE t.source WHEN 0 THEN 'native_app' WHEN 1 THEN 'server_inferred' WHEN 2 THEN 'owntracks_native' END"),
+                ("webhook_skip_reason", "CASE t.webhook_skip_reason WHEN 0 THEN 'late' WHEN 1 THEN 'throttled' END"),
+            ])
+        elif entry_id == "webhooks":
+            extras.extend([("url", WEBHOOK_ORIGIN_SQL), ("redactionCodes", "jsonb_build_array(" + ",".join(literal(code) for code in WEBHOOK_REDACTIONS) + ")")])
         elif entry_id == "notes":
             extras.extend([
                 ("latitude", "CASE WHEN t.lonlat IS NULL THEN NULL ELSE ST_Y(t.lonlat::geometry) END"),
                 ("longitude", "CASE WHEN t.lonlat IS NULL THEN NULL ELSE ST_X(t.lonlat::geometry) END"),
             ])
         select = f"SELECT {projection('t', fields, extras)} FROM {table} t WHERE t.{owner}={user_id} AND t.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY t.id"
-        entries.append(query_descriptor(socket, f"dawarich/{entry_id}.jsonl", select, entry_id in {"places", "imports", "raw-archives", "flights", "notes", "route-videos"}, ["dawarich-rights-of-others-review"] if entry_id == "notes" else []))
+        redactions = {"notes": ["dawarich-rights-of-others-review"], "webhooks": WEBHOOK_REDACTIONS}.get(entry_id, [])
+        entries.append(query_descriptor(socket, f"dawarich/{entry_id}.jsonl", select, entry_id in {"places", "imports", "raw-archives", "flights", "notes", "route-videos", "geofence-events"}, redactions))
     for entry_id, (table, owner, fields) in DAWARICH_PLANNED.items():
         require(socket, table, ["id", owner, "created_at", "updated_at"])
         if owner == "trip_id":
@@ -555,6 +640,17 @@ def project_dawarich(socket):
     tagging_fields = ["id", "tag_id", "taggable_id", "taggable_type", "created_at", "updated_at"]
     taggings = f"SELECT {projection('t', tagging_fields)} FROM taggings t WHERE (t.tag_id IN (SELECT id FROM tags WHERE user_id={user_id}) OR (t.taggable_type='Place' AND t.taggable_id IN (SELECT id FROM places WHERE user_id={user_id}))) AND t.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY t.id"
     entries.append(query_descriptor(socket, "dawarich/taggings.jsonl", taggings))
+    delivery_fields = ["id", "webhook_id", "geofence_event_id", "attempt_count", "response_status", "delivered_at", "created_at", "updated_at"]
+    delivery_extras = [
+        ("status", "CASE d.status WHEN 0 THEN 'pending' WHEN 1 THEN 'success' WHEN 2 THEN 'failure' WHEN 3 THEN 'retrying' END"),
+        ("redactionCodes", "jsonb_build_array(" + ",".join(literal(code) for code in WEBHOOK_DELIVERY_REDACTIONS) + ")"),
+    ]
+    entries.append(query_descriptor(socket, "dawarich/webhook-deliveries.jsonl", f"SELECT {projection('d', delivery_fields, delivery_extras)} FROM webhook_deliveries d WHERE d.webhook_id IN (SELECT id FROM webhooks WHERE user_id={user_id}) AND d.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY d.id", False, WEBHOOK_DELIVERY_REDACTIONS))
+    mapping_fields = ["id", "area_id", "place_id", "created_at", "updated_at"]
+    entries.append(query_descriptor(socket, "dawarich/legacy-area-place-mappings.jsonl", f"SELECT {projection('m', mapping_fields)} FROM legacy_area_place_mappings m WHERE m.area_id IN (SELECT id FROM areas WHERE user_id={user_id}) AND m.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY m.id"))
+    # Revision counters have no timestamps, so the cutoff cannot apply to them.
+    for revision_entry, revision_table in (("point-revisions", "point_revisions"), ("track-revisions", "track_revisions")):
+        entries.append(query_descriptor(socket, f"dawarich/{revision_entry}.jsonl", f"SELECT {projection('r', ['id', 'month', 'revision'])} FROM {revision_table} r WHERE r.user_id={user_id} ORDER BY r.id"))
     segment_fields = ["id", "track_id", "start_index", "end_index", "distance", "duration", "avg_speed", "max_speed", "confidence", "corrected_at", "source", "transportation_mode", "created_at", "updated_at"]
     require(socket, "track_segments", ["id", "track_id", "created_at", "updated_at"])
     entries.append(query_descriptor(socket, "dawarich/track-segments.jsonl", f"SELECT {projection('s', segment_fields)} FROM track_segments s WHERE s.track_id IN (SELECT id FROM tracks WHERE user_id={user_id}) AND s.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY s.id"))
@@ -717,7 +813,7 @@ def restore(source, data, socket, storage):
 
 
 def dawarich_id(path):
-    fixed = {name: name.removesuffix(".jsonl").removesuffix(".json") for name in ["account.json", "settings.json", "areas.jsonl", "places.jsonl", "tags.jsonl", "taggings.jsonl", "imports.jsonl", "trips.jsonl", "notifications.jsonl", "visits.jsonl", "stats.jsonl", "tracks.jsonl", "digests.jsonl", "flights.jsonl", "notes.jsonl", "posters.jsonl", "attachments.jsonl", "rich-text.jsonl", "family.jsonl", "achievement-progress.jsonl", "achievement-unlock-events.jsonl", "user-achievements.jsonl", "route-videos.jsonl", "service-settings.jsonl", "trip-sources.jsonl", "planned-days.jsonl", "planned-day-notes.jsonl", "planned-reservations.jsonl", "planned-stops.jsonl", "planned-accommodations.jsonl", "planned-travellers.jsonl", "planned-unplanned-places.jsonl"]}
+    fixed = {name: name.removesuffix(".jsonl").removesuffix(".json") for name in ["account.json", "settings.json", "areas.jsonl", "places.jsonl", "tags.jsonl", "taggings.jsonl", "imports.jsonl", "trips.jsonl", "notifications.jsonl", "visits.jsonl", "stats.jsonl", "tracks.jsonl", "digests.jsonl", "flights.jsonl", "notes.jsonl", "posters.jsonl", "attachments.jsonl", "rich-text.jsonl", "family.jsonl", "achievement-progress.jsonl", "achievement-unlock-events.jsonl", "user-achievements.jsonl", "route-videos.jsonl", "service-settings.jsonl", "trip-sources.jsonl", "planned-days.jsonl", "planned-day-notes.jsonl", "planned-reservations.jsonl", "planned-stops.jsonl", "planned-accommodations.jsonl", "planned-travellers.jsonl", "planned-unplanned-places.jsonl", "geofence-events.jsonl", "webhooks.jsonl", "webhook-deliveries.jsonl", "legacy-area-place-mappings.jsonl", "point-revisions.jsonl", "track-revisions.jsonl"]}
     fixed.update({"export-records.jsonl": "export-records", "track-segments.jsonl": "track-segments", "raw-archives.jsonl": "raw-archives", "shared-links.jsonl": "shared-links"})
     relative = path.removeprefix("dawarich/")
     if relative in fixed:
@@ -771,8 +867,8 @@ WORK = Path(tempfile.mkdtemp(prefix="restore-", dir="/scratch"))
 try:
     OUTPUT, WARNINGS, DAWARICH_SCHEMA = [], [], None
     ACTIVE_DATABASES = []
-    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.15.3"), None)
-    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.15.3"]
+    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.19.0"), None)
+    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.19.0"]
     for index, source in enumerate(databases):
         data = WORK / f"pg-{index}"
         socket = WORK / f"socket-{index}"

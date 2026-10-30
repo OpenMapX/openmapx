@@ -46,10 +46,10 @@ const service = {
   },
 };
 const bundle = new Map([
-  ["dawarich-app", ["1.15.3", "freikin/dawarich", "1.15.3"]],
-  ["dawarich-sidekiq", ["1.15.3", "freikin/dawarich", "1.15.3"]],
+  ["dawarich-app", ["1.19.0", "freikin/dawarich", "1.19.0"]],
+  ["dawarich-sidekiq", ["1.19.0", "freikin/dawarich", "1.19.0"]],
   ["dawarich-postgis", ["18-3.6", "ghcr.io/baosystems/postgis", "18-3.6"]],
-  ["dawarich-redis", ["7.4", "redis", "7.4-alpine"]],
+  ["dawarich-redis", ["8.10", "redis", "8.10-alpine"]],
 ]);
 const getService = vi.fn((id: string) => {
   const item = bundle.get(id);

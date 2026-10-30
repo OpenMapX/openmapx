@@ -20,9 +20,9 @@ import {
 
 const tuple = {
   version: 1,
-  image: "freikin/dawarich:1.15.3",
-  imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
-  upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
+  image: "freikin/dawarich:1.19.0",
+  imageDigest: "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
+  upstreamCommit: "752641768f37fdc07d5a23e0559fa7c5ff8fae0f",
   subjectUserIdDigest: "a".repeat(64),
   cutoff: "2026-01-01T00:00:00Z",
   snapshotAt: "2026-01-01T00:00:00Z",

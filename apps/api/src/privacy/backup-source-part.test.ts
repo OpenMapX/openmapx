@@ -31,7 +31,7 @@ function fixture(
   const dawarichManifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.15.3",
+      image: "freikin/dawarich:1.19.0",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: digest(Buffer.from("subject-1")),
