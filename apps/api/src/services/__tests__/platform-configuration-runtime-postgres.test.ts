@@ -34,7 +34,7 @@ import {
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
@@ -321,6 +321,86 @@ async function nativeReleaseAgent(
   };
 }
 
+/** The API's actual queued producer/reconciler runs in a killable process. */
+async function nativeReleaseWorker(
+  host: Awaited<ReturnType<typeof ownedServiceHost>>,
+  databaseUrl: string,
+  input:
+    | { action: "release"; actorId: string; releaseId: string; manifestDigest: string }
+    | { action: "reconcile"; jobId: string },
+) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      createRequire(import.meta.url).resolve("tsx/esm"),
+      fileURLToPath(new URL("./fixtures/native-coordinator-api.ts", import.meta.url)),
+    ],
+    {
+      cwd: host.root,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl,
+        OPENMAPX_ROOT_DIR: host.root,
+        NODE_ENV: "test",
+        BETTER_AUTH_SECRET: "synthetic-platform-worker-auth-fixture",
+      },
+    },
+  );
+  const queued = Promise.withResolvers<string>();
+  let pending = "",
+    result: { status?: string; errorClass?: string } | undefined;
+  child.stdout.on("data", (data) => {
+    pending += String(data);
+    if (pending.length > 16384) pending = "";
+    while (pending.includes("\n")) {
+      const end = pending.indexOf("\n"),
+        line = pending.slice(0, end);
+      pending = pending.slice(end + 1);
+      try {
+        const event = JSON.parse(line);
+        if (event.event === "queued" && typeof event.jobId === "string")
+          queued.resolve(event.jobId);
+        if (event.event === "result")
+          result = { status: event.status, errorClass: event.errorClass };
+      } catch {
+        /* Only fixed, non-secret fixture events are observed. */
+      }
+    }
+  });
+  child.stderr.resume();
+  const done = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+    result: typeof result;
+  }>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal, result }));
+  });
+  void done.then(
+    (value) => queued.reject(Error(`Native API exited before queueing (${value.code})`)),
+    (error) => queued.reject(error),
+  );
+  if (input.action === "reconcile") queued.resolve(input.jobId);
+  child.stdin.end(JSON.stringify(input));
+  const timer = setTimeout(() => {
+    child.kill("SIGKILL");
+    queued.reject(Error("Native API queueing timed out"));
+  }, 30000);
+  let jobId: string;
+  try {
+    jobId = await queued.promise;
+  } finally {
+    clearTimeout(timer);
+  }
+  const kill = async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    return await done;
+  };
+  return { jobId, done, kill };
+}
+
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "owned platform preparation",
   () => {
@@ -352,17 +432,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-system-release-ack-loss",
       "launch-native-system-release-killed",
       "launch-native-system-release-agent-restart",
+      "launch-native-system-release-api-before-save",
+      "launch-native-system-release-api-after-save",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
         const nativeAgents: Array<Awaited<ReturnType<typeof nativeReleaseAgent>>> = [];
+        const nativeWorkers: Array<Awaited<ReturnType<typeof nativeReleaseWorker>>> = [];
         let nativeAgentExited = false;
         const helperEffectEntered = Promise.withResolvers<void>(),
           continueHelperEffect = Promise.withResolvers<void>();
         let writersWereReleased = false;
         const native = version.startsWith("launch-native") || version === "launch-bundle",
           application = version === "launch-apply" || native,
-          systemRelease = version.startsWith("launch-native-system-release");
+          systemRelease = version.startsWith("launch-native-system-release"),
+          apiRestart = version.startsWith("launch-native-system-release-api-");
         const ids = [
           "motis",
           "ops-agent",
@@ -411,6 +495,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-system-release-ack-loss",
             "launch-native-system-release-killed",
             "launch-native-system-release-agent-restart",
+            "launch-native-system-release-api-before-save",
+            "launch-native-system-release-api-after-save",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -589,6 +675,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           sql: state.fixture.sql,
           infraDir: host.infraDir,
           serviceIds: ids,
+          pausePrepareResponse: version === "launch-native-system-release-api-before-save",
         });
         const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
         const app = buildOpsAgentServer({
@@ -674,6 +761,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-system-release-ack-loss",
               "launch-native-system-release-killed",
               "launch-native-system-release-agent-restart",
+              "launch-native-system-release-api-before-save",
+              "launch-native-system-release-api-after-save",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -703,6 +792,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           "launch-native-system-release-ack-loss",
                           "launch-native-system-release-killed",
                           "launch-native-system-release-agent-restart",
+                          "launch-native-system-release-api-before-save",
+                          "launch-native-system-release-api-after-save",
                         ].includes(version)
                           ? { version: 1 as const }
                           : {
@@ -731,6 +822,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const apply = async () => {
               if (systemRelease) {
+                if (apiRestart) {
+                  const worker = await nativeReleaseWorker(host, state.fixture.connectionUri, {
+                    action: "release",
+                    actorId,
+                    releaseId: checkedRelease!.releaseId,
+                    manifestDigest: checkedRelease!.manifestDigest,
+                  });
+                  nativeWorkers.push(worker);
+                  return { ok: true as const, jobId: worker.jobId };
+                }
                 const response = await fetch(`${publicUrl}/api/admin/system/updates/apply`, {
                   method: "POST",
                   headers: { "content-type": "application/json" },
@@ -764,6 +865,74 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   .from(schema.adminJob)
                   .where(eq(schema.adminJob.id, accepted.jobId))
               )[0]!;
+            const waitForOriginalLease = async () => {
+              const until = Date.now() + 65000;
+              for (;;) {
+                const row = await readJob(),
+                  expiry = (row.result as { _observationLeaseUntil?: string } | null)
+                    ?._observationLeaseUntil;
+                expect(typeof expiry).toBe("string");
+                if (Date.parse(expiry!) <= Date.now()) break;
+                expect(Date.now()).toBeLessThan(until);
+                await new Promise((resolve) => setTimeout(resolve, 250));
+              }
+            };
+            const readDesiredPlatform = async () => {
+              const { PLATFORM_CONFIGURATION_SETTING } = await import("../platform-configuration");
+              return state.fixture.db
+                .select({ key: schema.systemSettings.key, rowVersion: sql<string>`xmin::text` })
+                .from(schema.systemSettings)
+                .where(eq(schema.systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+            };
+            if (version === "launch-native-system-release-api-before-save") {
+              await Promise.race([
+                dm.prepareReplyEntered,
+                nativeWorkers[0]!.done.then(() => {
+                  throw Error("API exited before prepared response");
+                }),
+              ]);
+              expect(await nativeWorkers[0]!.kill()).toMatchObject({
+                code: null,
+                signal: "SIGKILL",
+              });
+              dm.releasePrepareResponse();
+              await waitForOriginalLease();
+              const replacement = await nativeReleaseWorker(host, state.fixture.connectionUri, {
+                action: "reconcile",
+                jobId: accepted.jobId,
+              });
+              nativeWorkers.push(replacement);
+              expect(await replacement.done).toMatchObject({
+                code: 2,
+                signal: null,
+                result: { status: "failed" },
+              });
+              const recovered = await readJob(),
+                result = recovered.result as Record<string, unknown>;
+              expect((result._execution as { version: number }).version).toBe(2);
+              expect(result.configuration).toMatchObject({
+                outcome: "not_committed",
+                cleanupFailed: false,
+              });
+              expect(result.phase).toBe("not_applied");
+              expect(await readDesiredPlatform()).toEqual([]);
+              expect(dm.preparePosts).toBe(1);
+              expect(dm.settlePosts).toBe(1);
+              await dm.assertDataAdmission();
+              expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                host.initial.revisionId,
+              );
+              expect(
+                host.calls.some(
+                  (args) =>
+                    args[0] === "run" ||
+                    args.includes("up") ||
+                    args[0] === "pull" ||
+                    (args[0] === "image" && args[1] === "pull"),
+                ),
+              ).toBe(false);
+              return;
+            }
             const launchDeadline = Date.now() + 60000;
             while (!host.calls.some((args) => args[0] === "run") && Date.now() < launchDeadline) {
               const current = await readJob();
@@ -785,6 +954,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const args = host.calls.find((args) => args[0] === "run");
             expect(args).toBeDefined();
+            let originalRows: unknown, originalPlatformRows: unknown;
+            if (version === "launch-native-system-release-api-after-save") {
+              const original = (await readJob()).result as {
+                _configurationCandidate?: { sealedOperationKey?: string; rowVersions?: unknown };
+              };
+              const packet = join(
+                  host.queue,
+                  ".candidates",
+                  `${original._configurationCandidate!.sealedOperationKey}.json`,
+                ),
+                bytes = readFileSync(packet);
+              originalRows = original._configurationCandidate!.rowVersions;
+              originalPlatformRows = await readDesiredPlatform();
+              expect(originalPlatformRows).toHaveLength(1);
+              expect(originalRows).toBeDefined();
+              expect(await nativeWorkers[0]!.kill()).toMatchObject({
+                code: null,
+                signal: "SIGKILL",
+              });
+              expect(readFileSync(packet)).toEqual(bytes);
+            }
             const env = (name: string) =>
               args!.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
             await nativeHelper(
@@ -815,6 +1005,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   Number(new URL(url).port),
                 ),
               );
+            }
+            if (version === "launch-native-system-release-api-after-save") {
+              await waitForOriginalLease();
+              const replacement = await nativeReleaseWorker(host, state.fixture.connectionUri, {
+                action: "reconcile",
+                jobId: accepted.jobId,
+              });
+              nativeWorkers.push(replacement);
+              expect(await replacement.done).toMatchObject({
+                code: 0,
+                signal: null,
+                result: { status: "success" },
+              });
+              const recovered = (await readJob()).result as {
+                _execution?: { version: number };
+                _configurationCandidate?: { rowVersions?: unknown };
+              };
+              expect(recovered._execution?.version).toBe(2);
+              expect(recovered._configurationCandidate?.rowVersions).toEqual(originalRows);
+              expect(await readDesiredPlatform()).toEqual(originalPlatformRows);
             }
             if (version === "launch-native-system-release-killed") {
               const file = join(
@@ -870,7 +1080,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const settleDeadline = Date.now() + 90000;
             let job = await readJob();
             while (job.status === "running" && Date.now() < settleDeadline) {
-              await jobRunner.reconcile();
+              if (!apiRestart) await jobRunner.reconcile();
               await new Promise((resolve) => setTimeout(resolve, 250));
               job = await readJob();
             }
@@ -1678,6 +1888,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
         } finally {
           await publicApi?.close();
+          for (const worker of nativeWorkers) await worker.kill();
           for (const agent of nativeAgents) await agent.close();
           await dm.close();
           await app.close();
@@ -1689,7 +1900,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           rmSync(host.cleanupRoot, { recursive: true, force: true });
         }
       },
-      180000,
+      240000,
     );
   },
 );

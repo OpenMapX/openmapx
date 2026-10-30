@@ -9,11 +9,15 @@ import { handleServiceBulkJob } from "../../admin-job-handlers";
 import { serviceApply } from "../../admin-ops";
 import { jobRunner } from "../../job-runner";
 import { initServiceRegistry } from "../../service-registry";
+import { handleSystemUpdateJob } from "../../system-maintenance";
 
 let body = "";
 for await (const chunk of process.stdin) body += chunk;
 const input = JSON.parse(body) as {
-  action: "apply" | "update" | "reconcile";
+  action: "apply" | "update" | "release" | "reconcile";
+  actorId?: string;
+  releaseId?: string;
+  manifestDigest?: string;
   jobId?: string;
   serviceIds?: string[];
   noDeps?: boolean;
@@ -93,6 +97,7 @@ try {
     ...(await serviceApply(ctx.payload.service as string, ctx)),
   }));
   jobRunner.register("service.bulk", handleServiceBulkJob);
+  jobRunner.register("system.update", handleSystemUpdateJob);
   let id: string;
   if (input.action === "reconcile") {
     if (typeof input.jobId !== "string" || !/^[a-f0-9-]{36}$/.test(input.jobId))
@@ -100,18 +105,41 @@ try {
     id = input.jobId;
     await jobRunner.reconcile({ limit: 1 });
   } else {
-    if (input.action !== "apply" && input.action !== "update")
-      throw Error("Invalid fixture action");
-    id = await jobRunner.enqueue(
-      input.action === "apply" ? "service.apply" : "service.bulk",
-      input.action === "apply"
-        ? { service: "data-manager" }
-        : {
-            action: "update",
-            serviceIds: input.serviceIds ?? ["data-manager"],
-            ...(input.noDeps ? { noDeps: true } : {}),
-          },
-    );
+    if (input.action === "release") {
+      if (
+        typeof input.actorId !== "string" ||
+        !/^[a-f0-9-]{36}$/.test(input.actorId) ||
+        typeof input.releaseId !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.releaseId) ||
+        typeof input.manifestDigest !== "string" ||
+        !/^[a-f0-9]{64}$/.test(input.manifestDigest)
+      )
+        throw Error("Invalid fixture release");
+      id = await jobRunner.enqueue(
+        "system.update",
+        {
+          operation: "apply",
+          workflow: "guarded-release",
+          createBackup: false,
+          releaseId: input.releaseId,
+          expectedDigest: input.manifestDigest,
+        },
+        input.actorId,
+      );
+    } else {
+      if (input.action !== "apply" && input.action !== "update")
+        throw Error("Invalid fixture action");
+      id = await jobRunner.enqueue(
+        input.action === "apply" ? "service.apply" : "service.bulk",
+        input.action === "apply"
+          ? { service: "data-manager" }
+          : {
+              action: "update",
+              serviceIds: input.serviceIds ?? ["data-manager"],
+              ...(input.noDeps ? { noDeps: true } : {}),
+            },
+      );
+    }
     process.stdout.write(JSON.stringify({ event: "queued", jobId: id }) + "\n");
     const until = Date.now() + 240000;
     for (;;) {

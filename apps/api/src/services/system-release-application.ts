@@ -122,7 +122,10 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
   const configuration = parseTrustedConfigurationApplyOutcome(result.configuration),
     output = { operation: "apply", release: payload.releaseId, phase: "complete", configuration };
   if (!completeTrustedConfigurationApply(configuration))
-    throw new AdminJobFailure("Checked release did not apply completely", output);
+    throw new AdminJobFailure("Checked release did not apply completely", {
+      ...output,
+      phase: "not_applied",
+    });
   await ctx.setProgress(100);
   return output;
 }

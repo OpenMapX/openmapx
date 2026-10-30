@@ -20,9 +20,11 @@ export async function ownedDataManager(options: {
   loseSettlementCommitAcknowledgement?: boolean;
   settlementSqlFault?: "update-ack-loss" | "terminate-before-commit";
   pauseSettlementBeforeCommit?: boolean;
+  pausePrepareResponse?: boolean;
 }) {
   let settlementCommits = 0, settlementUpdates = 0, settlementRollbacks = 0, terminatedSettlementSession = false;
   const commitEntered = Promise.withResolvers<void>(), continueCommit = Promise.withResolvers<void>();
+  const prepareReplyEntered = Promise.withResolvers<void>(), continuePrepareReply = Promise.withResolvers<void>();
   const uncertainConnections = new Set<Awaited<ReturnType<typeof options.sql.reserve>>>();
   // Named external SQL transport fault. The installed production adapter and
   // original reserved PostgreSQL connection still perform the actual UPDATE
@@ -92,6 +94,7 @@ export async function ownedDataManager(options: {
       if (id) maintenanceIds.add(id);
       preparePosts++;
       maintenanceReplies.push({ status: reply.statusCode, error: typeof payload === "string" ? JSON.parse(payload).error : null });
+      if (options.pausePrepareResponse && reply.statusCode === 200) { prepareReplyEntered.resolve(); await continuePrepareReply.promise; }
       if (options.losePrepareResponse) reply.raw.destroy();
     }
     if (request.method === "POST" && request.url === "/executions/generation-hardlinks") {
@@ -121,11 +124,13 @@ export async function ownedDataManager(options: {
   let stopped = false;
   const stopForRestart = async () => {
     if (stopped) return;
+    continuePrepareReply.resolve();
     await runtime.close(); app.server.closeAllConnections(); await app.close();
     for (const connection of uncertainConnections) connection.release();
     uncertainConnections.clear(); journal.close(); closeControlInstallation(installation); stopped = true;
   };
   return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; },
+    prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),
     get settlementSqlIo() { return { commits: settlementCommits, updates: settlementUpdates }; },
     get settlementContainmentIo() { return { rollbacks: settlementRollbacks, terminated: terminatedSettlementSession }; },
     get fenceInspections() { return structuredClone(fenceInspectionReplies); }, stopForRestart,
