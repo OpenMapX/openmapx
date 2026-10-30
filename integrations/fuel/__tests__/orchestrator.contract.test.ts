@@ -278,7 +278,7 @@ describe("fuel orchestrator", () => {
     expect((await source.getDetail("a:1")).data).toBeNull();
   });
 
-  test("results and a cold detail defer the uncredited Commons brand logo", async () => {
+  test("results and a cold detail carry the same metadata-checked catalogue logo selection", async () => {
     const aral = station({ id: "a:1", name: "Aral Berlin", brand: "Aral", country: "DE" });
     const source = createFuelDataSource(ctxWith([provider("a", [aral])]));
 
@@ -288,6 +288,11 @@ describe("fuel orchestrator", () => {
 
     const [result] = (await source.search(BBOX)).data;
     expect(result.branding?.logoUrl).toBe(detail?.branding?.logoUrl);
+    expect(result.branding?.catalogueLogo).toEqual(detail?.branding?.catalogueLogo);
+    expect(result.branding?.catalogueLogo).toMatchObject({
+      qid: "Q565734",
+      file: expect.any(String),
+    });
     expect(result.operator).toBe("Aral");
   });
 

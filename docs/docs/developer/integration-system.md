@@ -454,6 +454,19 @@ upstreams still require manifest source/privacy metadata and source-ID-keyed
 localized disclosures. A producer's selected display lineage must not replace
 its broader rights/audit dependency set.
 
+Catalogue branding carries `DataSourceBranding.catalogueLogo = { qid, file }`
+as a captured selection, with separate `catalogueLogo.qid` and
+`catalogueLogo.file` field receipts. It is not permission to construct a Commons
+image URL. `gapFillBranding` preserves supplier images and labels; the shared
+`BrandMark` resolves the selected file through `useBrandLogoAttribution`, using
+the same per-brand/file query cache and metadata checks as place-header logos.
+Missing, mismatched or incomplete metadata keeps the fallback initial. Only a
+displayed logo contributes its selection receipts and image-bound creator,
+licence and file credits; loading errors remove those image credits while
+retaining displayed name/color ownership. Interactive rows place file credits
+outside their button, and catalogue content credits join the panel's shared
+footer. Fuel, charging and parking use this common contract.
+
 ### Reviewed placement of current credits
 
 Use the [shared attribution placement contract](./licensing.md#attribution-placement). Producer-captured per-binding source/product policies override reviewed exact licence defaults. The host renders permanent notices and one-action full details uniformly on map, content and image surfaces; do not infer placement from source names or hide mandatory notices using `maxVisible`. Preserve actual authors, publishers and API branding with each record/view.

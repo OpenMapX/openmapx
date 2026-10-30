@@ -190,6 +190,10 @@ describe("mapParkingSiteToResult", () => {
 
     expect(result.operator).toBe("APCOA");
     expect(result.branding?.logoUrl).toBeUndefined();
+    expect(result.branding?.catalogueLogo).toEqual({
+      qid: expect.stringMatching(/^Q\d+$/),
+      file: expect.any(String),
+    });
     expect(result.attributions).toEqual([
       {
         sourceId: "de-bw-mobidata-parking",
@@ -478,6 +482,10 @@ describe("mapParkingSiteToDetail", () => {
     expect(detail.operator).toEqual({ name: "APCOA", url: "https://apcoa.de" });
     expect(detail.identity).toEqual({ operator: "APCOA" });
     expect(detail.branding?.logoUrl).toBeUndefined();
+    expect(detail.branding?.catalogueLogo).toEqual({
+      qid: expect.stringMatching(/^Q\d+$/),
+      file: expect.any(String),
+    });
     expect(detail.parkAndRide).toBeUndefined();
   });
 

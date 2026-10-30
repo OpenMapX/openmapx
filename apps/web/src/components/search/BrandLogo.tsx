@@ -28,7 +28,7 @@ interface BrandLogoProps {
  */
 export function BrandLogo({ brand, size = 20, children, render }: BrandLogoProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const { data: photo } = useBrandLogoAttribution(brand.qid, Boolean(brand.logoFile));
+  const { data: photo } = useBrandLogoAttribution(brand.qid, brand.logoFile);
   const validPhoto =
     photo && photo.logoFile === brand.logoFile && isDisplayablePhoto(photo) ? photo : undefined;
   const url = validPhoto ? proxyImageUrl(validPhoto.thumbnailUrl ?? validPhoto.url) : null;

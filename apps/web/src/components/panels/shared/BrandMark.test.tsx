@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
+import { apiClient } from "../../../../../../packages/core/src/api/client";
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { BrandMark } from "./BrandMark";
 
@@ -121,4 +124,76 @@ it("lets interactive rows keep required credit links outside the station button"
   );
   expect(screen.getByRole("heading", { name: "Shell" }).closest("button")).not.toBeNull();
   expect(screen.getByRole("link", { name: "Required supplier" }).closest("button")).toBeNull();
+});
+
+it("resolves one credited file per distinct catalogue brand and clears image-only credits on failure", async () => {
+  const file = {
+    logoFile: "Aral.svg",
+    url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Aral.svg",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Aral.svg",
+    source: "wikimedia-commons",
+    author: "Logo artist",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
+    contributors: [{ sourceId: "wikimedia-commons", name: "Wikimedia Commons" }],
+  };
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue(file);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <AttributionDetailsGroup placement="footer">
+            {[1, 2].map((id) => (
+              <BrandMark
+                key={id}
+                branding={{
+                  name: "Aral",
+                  catalogueLogo: { qid: "Q1", file: "Aral.svg" },
+                  fieldContributors: {
+                    name: [{ sourceId: "label", name: "Catalogue name" }],
+                    "catalogueLogo.file": [{ sourceId: "selection", name: "Selected file" }],
+                  },
+                }}
+                renderRow={({ content, credits }) => (
+                  <>
+                    <button type="button">{content}</button>
+                    {credits}
+                  </>
+                )}
+              >
+                <h3>Aral station {id}</h3>
+              </BrandMark>
+            ))}
+          </AttributionDetailsGroup>
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByText("Logo artist")).toBeNull();
+    await waitFor(() => expect(screen.getAllByRole("img", { name: "Aral" })).toHaveLength(2));
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith(expect.stringContaining("/Q1/logo-attribution"), {
+      fileMetadata: "3",
+    });
+    expect(screen.getAllByText("Logo artist")).toHaveLength(2);
+    for (const link of screen.getAllByRole("link", { name: "CC-BY-4.0" }))
+      expect(link.closest("button")).toBeNull();
+    for (const img of screen.getAllByRole("img")) {
+      expect(img.getAttribute("src")).toContain("/api/image-proxy?");
+      fireEvent.error(img);
+    }
+    expect(screen.queryByText("Logo artist")).toBeNull();
+    expect(screen.getAllByText("A")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /credits/i }));
+    expect(
+      within(screen.getByRole("dialog")).getAllByText("Catalogue name").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Selected file")).toBeNull();
+  } finally {
+    get.mockRestore();
+    client.clear();
+  }
 });

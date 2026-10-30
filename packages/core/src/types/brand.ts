@@ -14,7 +14,7 @@ export interface BrandSummary extends ContributingRecord {
   description?: string;
   /**
    * Wikimedia Commons *filename* (not a URL), derived by NSI from Wikidata
-   * P154; render the URL with `commonsLogoUrl`. Absent for roughly two thirds
+   * P154; acquire exact-file metadata with `useBrandLogoAttribution` before display. Absent for roughly two thirds
    * of entries.
    */
   logoFile?: string;
