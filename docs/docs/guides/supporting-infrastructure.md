@@ -74,7 +74,9 @@ pnpm openmapx services start postgis
 
 The wrapper derives memory tuning from the container limit. Spatial imports,
 Overture conflation, and extensions can make the default inadequate; measure the
-workload. Larger WAL and checkpoint intervals can reduce repeated writes but
+workload. `POSTGIS_SHARED_BUFFERS` replaces the derived buffer pool, and
+`POSTGIS_WORK_MEM` sets how much a sort or hash uses before it spills to
+temporary files, which `pg_stat_io` does not count. Larger WAL and checkpoint intervals can reduce repeated writes but
 increase disk use and crash-recovery work. See
 [PostgreSQL workload diagnostics](../install/managing-services.md#postgresql-workload-diagnostics)
 for the separate diagnostics opt-ins and their staging requirements.
