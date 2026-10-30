@@ -487,7 +487,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const journal: OpsJobJournal =
     options.journal ??
     ({ records: () => [], replace: async () => undefined } satisfies OpsJobJournal);
-  const unregisterMaintenanceJournal = registerConfigurationMaintenanceJournal(runtime, journal);
+  const unregisterMaintenanceJournal = registerConfigurationMaintenanceJournal(
+    runtime,
+    journal,
+    options.controlInstallation,
+  );
   app.addHook("onClose", async () => unregisterMaintenanceJournal());
   let literalProductionRuntime = false;
   try {

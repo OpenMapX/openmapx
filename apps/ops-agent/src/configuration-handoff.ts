@@ -34,6 +34,7 @@ export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts)
     "OPENMAPX_CONTROL_EXECUTION",
     "OPENMAPX_CONTROL_DELEGATION",
     "OPENMAPX_PARENT_EXECUTION",
+    "OPENMAPX_ROOT_DIR",
   ]);
   return z
     .array(
@@ -73,7 +74,9 @@ export function configurationHandoffRunArgs(
   const args = agentHandoffRunArgs(
       {
         ...facts,
-        envNames: facts.envNames.filter((name) => name !== "OPS_CONFIGURATION_HANDOFF_ID"),
+        envNames: facts.envNames.filter(
+          (name) => !["OPS_CONFIGURATION_HANDOFF_ID", "OPENMAPX_ROOT_DIR"].includes(name),
+        ),
       },
       rootDir,
       handoffId,
@@ -91,6 +94,8 @@ export function configurationHandoffRunArgs(
   args.splice(
     workdir,
     0,
+    "--env",
+    `OPENMAPX_ROOT_DIR=${rootDir}`,
     "--env",
     `OPS_CONFIGURATION_HANDOFF_ID=${handoffId}`,
     "--env",

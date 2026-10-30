@@ -2,12 +2,13 @@
  * Docker I/O is substituted. This qualifies preparation, launch reconciliation
  * and real child adoption; not native helper application/public platform HTTP. */
 import { randomUUID } from "node:crypto";
-import { existsSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   closeControlInstallation,
   openControlInstallation,
   restoreAdmittedControlExecution,
+  verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -57,7 +58,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     afterEach(async () => {
       await state.fixture?.stop();
     });
-    it.each(["old", "1", "launch", "launch-lost", "policy-change"])(
+    it.each(["old", "1", "launch", "launch-lost", "policy-change", "launch-apply"])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
         const ids = [
@@ -78,17 +79,90 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           },
           configurationHelperVersion: version === "old" ? "old" : "1",
           configurationHelperLaunchResponseLoss: version === "launch-lost",
+          configurationHelperReleaseInventory: version === "launch-apply",
+          ...(version === "launch-apply"
+            ? {
+                schemas: {
+                  "ops-agent": JSON.parse(
+                    readFileSync(
+                      new URL("../../../../../services/ops-agent/service.json", import.meta.url),
+                      "utf8",
+                    ),
+                  ).configSchema,
+                },
+              }
+            : {}),
           actualComposeConfig: true,
         });
         state.services = host.loaded;
-        host.setRows(
-          ids.map((id, index) => ({
-            ...host.row,
-            Id: String(index + 1).repeat(64),
-            ConfigImage: `example/${id}:1`,
-            Labels: { ...host.row.Labels, "com.docker.compose.service": id },
-          })),
-        );
+        let rows = ids.map((id, index) => ({
+          ...host.row,
+          Id: String(index + 1).repeat(64),
+          ConfigImage: `example/${id}:1`,
+          Labels: { ...host.row.Labels, "com.docker.compose.service": id },
+        }));
+        host.setRows(rows);
+        if (version === "launch-apply") {
+          const inspections: Parameters<typeof host.setRuntimeInspections>[0] = {};
+          host.setCreatingProcess(async (args) => {
+            const id = args.at(-1)!,
+              old = rows.find((row) => row.Labels["com.docker.compose.service"] === id);
+            if (!old || !["app-api", "ops-agent"].includes(id))
+              throw Error("Unexpected protected target");
+            const prefix = args.slice(0, args.indexOf("up")),
+              options = {
+                signal: new AbortController().signal,
+                timeout: 15000,
+                maxBuffer: 1024 * 1024,
+              },
+              config = JSON.parse(
+                (await host.execFile("docker", [...prefix, "config", "--format", "json"], options))
+                  .stdout,
+              ),
+              hash = (
+                await host.execFile("docker", [...prefix, "config", "--hash", id], options)
+              ).stdout
+                .trim()
+                .split(/\s+/)
+                .at(-1)!,
+              compose = services.configurationGenerationComposeFile(
+                host.infraDir,
+                services.currentConfigurationGeneration(host.infraDir)!,
+              ),
+              row = {
+                ...old,
+                Id: (id === "app-api" ? "a" : "b").repeat(64),
+                Labels: {
+                  ...old.Labels,
+                  "com.docker.compose.project.working_dir": join(compose, ".."),
+                  "com.docker.compose.project.config_files": compose,
+                  "com.docker.compose.config-hash": hash,
+                },
+              },
+              spec = config.services[id],
+              limits = spec.deploy?.resources?.limits;
+            rows = rows.map((value) => (value === old ? row : value));
+            host.setRows(rows);
+            inspections[row.Id] = {
+              Id: row.Id,
+              Image: row.Image,
+              State: { Status: "running", Running: true, Health: { Status: "healthy" } },
+              Config: {
+                Image: row.ConfigImage,
+                Labels: row.Labels,
+                Env: Object.entries(spec.environment ?? {}).map(
+                  ([key, value]) => `${key}=${value}`,
+                ),
+              },
+              HostConfig: {
+                Memory: Number(limits?.memory ?? 0),
+                NanoCpus: Math.round(Number(limits?.cpus ?? 0) * 1e9),
+              },
+              Mounts: [],
+            };
+            host.setRuntimeInspections(inspections);
+          });
+        }
         const installation = openControlInstallation({
           infraDir: host.infraDir,
           role: "ops-agent",
@@ -133,6 +207,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             email: `${actorId}@example.test`,
             role: "admin",
           });
+          if (version === "launch-apply")
+            await state.fixture.db.insert(schema.serviceConfig).values({
+              id: randomUUID(),
+              serviceId: "ops-agent",
+              config: { OPENMAPX_MEMORY_MIB: 256, OPENMAPX_CPU_LIMIT: 0.5 },
+            });
           await state.fixture.db.insert(schema.adminJob).values({
             id: jobId,
             type: "platform.apply",
@@ -419,6 +499,97 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         child,
                         AbortSignal.timeout(2000),
                       );
+                      if (version === "launch-apply") {
+                        const { runConfigurationHandoffApplication } = await import(
+                          "../../../../ops-agent/src/configuration-handoff-application"
+                        );
+                        expect(
+                          await runConfigurationHandoffApplication({
+                            child,
+                            rootDir: host.root,
+                            execFile: host.execFile,
+                          }),
+                        ).toMatchObject({
+                          phase: "applied",
+                          completedServiceIds: ["app-api", "ops-agent"],
+                        });
+                        const actual = childControl.configurationHandoffChildState(child);
+                        verifyRetainedArtifactTargetSettlement(
+                          actual.installation,
+                          {
+                            leaseId: actual.intent.leaseId,
+                            delegationId: actual.intent.delegationId,
+                            phase: "ready",
+                          },
+                          actual.intent.helper,
+                        );
+                        const { inspectConfigurationHandoff } = await import(
+                          "../../../../ops-agent/src/configuration-handoff-store"
+                        );
+                        const completionFile = join(
+                            host.infraDir,
+                            "control-private/ops-agent/observations",
+                            `configuration-handoff-${actual.intent.operation.handoffId}.completion.json`,
+                          ),
+                          retainedFile = `${completionFile}.retained`;
+                        renameSync(completionFile, retainedFile);
+                        try {
+                          writeFileSync(completionFile, readFileSync(retainedFile), {
+                            mode: 0o600,
+                          });
+                          expect(() =>
+                            inspectConfigurationHandoff(
+                              host.infraDir,
+                              actual.intent.operation.handoffId,
+                            ),
+                          ).toThrow();
+                        } finally {
+                          rmSync(completionFile);
+                          renameSync(retainedFile, completionFile);
+                        }
+                        expect(
+                          await inspectConfigurationHandoff(
+                            host.infraDir,
+                            actual.intent.operation.handoffId,
+                          ),
+                        ).toMatchObject({
+                          phase: "applied",
+                          appliedRevisionId: candidate.revisionId,
+                          completedServiceIds: ["app-api", "ops-agent"],
+                          recoveryCodes: [],
+                        });
+                        const applied = await prospective.inspectConfigurationMaintenance({
+                          maintenanceId: receipt.binding.maintenanceId,
+                          candidateId: candidate.candidateId,
+                        });
+                        expect(applied.followUp).toBe("complete");
+                        const settled = await prospective.settleConfigurationMaintenance({
+                          kind: "configurationMaintenance.settle",
+                          maintenanceId: applied.binding.maintenanceId,
+                          candidateId: candidate.candidateId,
+                          prepareOperationKey: applied.prepare.operationKey,
+                          prepareFingerprint: applied.prepare.operationFingerprint,
+                          planDigest: applied.planDigest,
+                          decisionId: applied.decision!.decisionId,
+                          expectedSequence: applied.sequence,
+                          evidenceDigest: configurationMaintenanceSettleRequestDigest(applied),
+                        });
+                        expect(settled.state).toBe("settled");
+                        expect(dm.settlePosts).toBe(1);
+                        await dm.assertDataAdmission();
+                        const { configurationHandoffPendingMaintenanceIds } = await import(
+                          "../../../../ops-agent/src/configuration-maintenance-store"
+                        );
+                        expect(configurationHandoffPendingMaintenanceIds(host.runtime).size).toBe(
+                          0,
+                        );
+                        expect(
+                          host.calls
+                            .filter((args) => args[0] === "compose" && args.includes("up"))
+                            .map((args) => args.at(-1)),
+                        ).toEqual(["app-api", "ops-agent"]);
+                        return;
+                      }
                       childControl.assertConfigurationHandoffHostSources(child);
                       writeFileSync(join(host.infraDir, ".env"), "OPENMAPX_SYNTHETIC_DRIFT=1\n");
                       expect(() =>

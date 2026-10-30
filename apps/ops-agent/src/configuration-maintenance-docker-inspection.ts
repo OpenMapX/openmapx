@@ -21,6 +21,8 @@ export async function inspectMaintenanceDockerRuntime(options: {
   containers: readonly OwnedServiceSnapshot[];
   privateKey: KeyObject;
   signal: AbortSignal;
+  /** Interim fixed-helper check only; the final producer always checks all targets. */
+  handoffTargetId?: string;
 }) {
   const { owner, containers, signal } = options,
     checks = [],
@@ -29,13 +31,17 @@ export async function inspectMaintenanceDockerRuntime(options: {
       owner.receipt.generation === "not_committed"
         ? owner.plan.operation.expectedCurrentRevisionId
         : owner.plan.operation.revisionId,
-    ids = [
-      ...new Set(
-        owner.plan.steps
+    allIds = [
+      ...new Set([
+        ...owner.plan.steps
           .filter((value) => value.phase === "maintenance-recreate")
           .map((value) => ("serviceId" in value.operation ? value.operation.serviceId : "")),
-      ),
-    ].sort();
+        ...(owner.plan.handoff?.serviceIds ?? []),
+      ]),
+    ].sort(),
+    ids = options.handoffTargetId ? [options.handoffTargetId] : allIds;
+  if (options.handoffTargetId && !owner.plan.handoff?.serviceIds.includes(options.handoffTargetId))
+    throw Error("Original handoff target required");
   const run = async (args: string[]) => {
       signal.throwIfAborted();
       const response = await options.execFile("docker", args, {

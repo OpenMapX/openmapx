@@ -116,6 +116,36 @@ export type ConfigurationHandoffIntentRecord = z.infer<
   typeof configurationHandoffIntentRecordSchema
 >;
 export type ConfigurationHandoffProgress = z.infer<typeof configurationHandoffProgressSchema>;
+export const configurationHandoffWorkerRecordSchema = configurationHandoffProgressSchema
+  .safeExtend({
+    execution: executionRefSchema,
+    preparationDigest: digest,
+    observations: z
+      .array(
+        z.strictObject({
+          serviceId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+          checksDigest: digest,
+          detailsDigest: digest,
+        }),
+      )
+      .max(64),
+  })
+  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536)
+  .refine(
+    (value) =>
+      new Set(value.observations.map((item) => item.serviceId)).size === value.observations.length,
+  )
+  .refine(
+    (value) =>
+      value.phase !== "applied" ||
+      (value.observations.length === value.targets.length &&
+        value.targets.every((target) =>
+          value.observations.some((item) => item.serviceId === target.serviceId),
+        )),
+  );
+export type ConfigurationHandoffWorkerRecord = z.infer<
+  typeof configurationHandoffWorkerRecordSchema
+>;
 export const configurationHandoffRecordDomains = {
   intent: "openmapx-configuration-handoff-intent-v1",
   progress: "openmapx-configuration-handoff-progress-v1",

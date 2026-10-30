@@ -83,6 +83,7 @@ import {
   installationState,
   newControlKey,
   parseControlAssertion,
+  readCompletedConfigurationHandoff,
   readControlExecutionWitness,
   readPrivateRecord,
   recordLeaseControlAttempt,
@@ -2016,6 +2017,95 @@ export async function settleArtifactTargetLeaseChild(
     tree(s);
   });
 }
+/** Complete only the original terminal handoff preparer after its exact fixed
+ * helper has committed and physically settled. No target/root is acquired. */
+export async function settlePreparedConfigurationHandoff(
+  authority: VerifiedExecutionAuthority,
+): Promise<void> {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.kind !== "configurationHandoff.prepare" ||
+    owner.installation.fixedChildId ||
+    owner.installation.installation.role !== "ops-agent" ||
+    !owner.origin
+  )
+    throw Error("Original handoff preparer required");
+  const admitted = readPrivateRecord(
+      owner.installation,
+      "executions",
+      `${owner.execution.operationKey}.json`,
+      65536,
+    ) as { payload: { operation: unknown } },
+    operation = opsOperationSchema.parse(admitted.payload.operation);
+  if (operation.kind !== "configurationHandoff.prepare")
+    throw Error("Original handoff operation required");
+  const source = readCompletedConfigurationHandoff(
+      owner.installation.installation,
+      operation.handoffId,
+    ),
+    s = openState(owner.installation.dataRoot, source.intent.leaseId, owner.installation);
+  try {
+    const current = tree(s),
+      parent = [...current.grants.values()].filter(
+        (grant) => canonicalJson(grant.child) === canonicalJson(owner.execution),
+      ),
+      helper = current.grants.get(source.intent.delegationId),
+      child = current.children.get(source.intent.delegationId);
+    if (
+      parent.length !== 1 ||
+      canonicalJson(source.intent.preparer) !== canonicalJson(owner.execution) ||
+      canonicalJson(source.intent.operation) !== canonicalJson(operation) ||
+      source.intent.preparerAdmissionDigest !== owner.receiptDigest ||
+      source.intent.ownerCertificateDigest !== controlDigest(s.certificateEnvelope) ||
+      canonicalJson(source.intent.ownerPrepare) !== canonicalJson(s.execution) ||
+      helper?.parentNode !== parent[0]!.delegationId ||
+      helper.recipient !== "configuration-helper" ||
+      helper.phase !== "configuration-handoff" ||
+      helper.childKind !== "configuration-helper" ||
+      helper.childPublicKey !== source.intent.helperPublicKey ||
+      canonicalJson(helper.child) !== canonicalJson(source.intent.helper) ||
+      child?.phase !== "settled" ||
+      canonicalJson(child.settlement) !== canonicalJson(source.settlement) ||
+      parent[0]!.childPublicKey !== owner.installation.installation.publicKey
+    )
+      throw Error("Original prepared helper tree changed");
+    verifyControlPreparedTerminal(owner.installation, owner.execution);
+    const evidence = verifyControlEffectSettlement(
+        owner.installation.installation,
+        owner.execution,
+      ),
+      proof = childSettlementState(evidence).evidence;
+    if (proof.outcome !== "committed" || proof.publication !== "committed")
+      throw Error("Original prepared handoff effect required");
+    const prior = current.children.get(parent[0]!.delegationId);
+    if (prior?.phase === "settled") {
+      if (canonicalJson(prior.settlement) !== canonicalJson(proof))
+        throw Error("Original handoff settlement changed");
+      return;
+    }
+    s.node = parent[0]!.delegationId;
+    s.execution = owner.execution;
+    s.key = owner.installation.privateKey;
+    s.authority = owner;
+    s.verifiedAuthority = authority;
+    s.settlementOnly = true;
+    const lease = Object.freeze({
+      leaseId: source.intent.leaseId,
+      owner: s.certificate.owner,
+      execution: owner.execution,
+      serviceIds: parent[0]!.serviceIds,
+      mode: "borrowed" as const,
+    });
+    handles.set(lease, s);
+    try {
+      await settleArtifactTargetLeaseChild(lease, evidence);
+    } finally {
+      handles.delete(lease);
+    }
+  } finally {
+    closeState(s);
+  }
+}
 /** Verify the exact agent-signed shared child node; no sibling private mount or
  * caller status can stand in for actual target containment. */
 export function inspectArtifactTargetLeaseChildSettlement(
@@ -3209,6 +3299,34 @@ export function readOriginalMaintenanceFinalChildren(
           terminalDigest: terminal.terminalDigest,
           terminalAt: terminal.terminalAt,
           effectSettlementDigest: controlDigest(physical.settlement),
+          publication: "committed",
+        }),
+      );
+    }
+    if (step.phase === "maintenance-handoff" && owner.plan.handoff && owner.plan.nestedHandoff) {
+      const helper = readCompletedConfigurationHandoff(
+          state.installation.installation,
+          owner.plan.handoff.handoffId,
+        ),
+        physical = tree.children.find(
+          (value) => canonicalJson(value.execution) === canonicalJson(helper.intent.helper),
+        );
+      if (
+        canonicalJson(helper.intent.operation) !== canonicalJson(step.operation) ||
+        canonicalJson(helper.intent.preparer) !== canonicalJson(actual.execution) ||
+        helper.intent.ownerCertificateDigest !== owner.rootCertificateDigest ||
+        !physical ||
+        canonicalJson(physical.settlement) !== canonicalJson(helper.settlement)
+      )
+        throw Error("Original fixed helper settlement unavailable");
+      allowed.add(controlDigest(helper.intent.helper));
+      children.push(
+        configurationChildEvidenceSchema.parse({
+          planIndex: step.ordinal,
+          execution: helper.intent.helper,
+          terminalDigest: controlDigest(helper.completion),
+          terminalAt: helper.completion.completedAt,
+          effectSettlementDigest: controlDigest(helper.settlement),
           publication: "committed",
         }),
       );

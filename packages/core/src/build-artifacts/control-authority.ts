@@ -1,8 +1,10 @@
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
   configurationHandoffIntentRecordSchema,
+  configurationHandoffProgressSchema,
   configurationHandoffRecordDomains,
   configurationHandoffRecordName,
+  configurationHandoffWorkerRecordSchema,
 } from "./configuration-handoff-records";
 import {
   type ControlChildPhase,
@@ -1595,6 +1597,7 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("data-command"), status: dataExecutionStatusSchema }),
   z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }),
   z.strictObject({ kind: z.literal("feed-proxy-validation-failure"), commitmentDigest: digest }),
+  z.strictObject({ kind: z.literal("configuration-helper-completion"), completionDigest: digest }),
   z.strictObject({
     kind: z.literal("fixed-cli-exit"),
     args: z.array(z.string().max(256)).max(64),
@@ -2105,6 +2108,92 @@ export function retainControlEffectReceipt(
         outcome = "committed";
         publication = "committed";
       }
+    } else if (receipt.kind === "configuration-helper-completion") {
+      if (s.kind !== "configuration-helper" || !s.installation.fixedChildId || !s.origin)
+        throw Error("Original fixed configuration helper required");
+      const admitted = readPrivateRecord(
+          s.installation,
+          "executions",
+          `${s.execution.operationKey}.json`,
+          65536,
+        ) as { payload: { operation: unknown } },
+        body = z
+          .strictObject({
+            kind: z.literal("configuration-helper"),
+            handoffId: uuid,
+            intentDigest: digest,
+          })
+          .parse(admitted.payload.operation),
+        intent = readConfigurationHandoffSpawnIntent(
+          s.installation.installation,
+          s.execution,
+          body.handoffId,
+        ),
+        progressName = configurationHandoffRecordName(body.handoffId, "progress"),
+        progressRaw = readPrivateRecord(s.installation, "observations", progressName),
+        progress = verifyControl(
+          s.installation.publicKeys["ops-agent"],
+          configurationHandoffRecordDomains.progress,
+          progressRaw,
+          configurationHandoffProgressSchema,
+        ),
+        completionName = configurationHandoffRecordName(body.handoffId, "completion"),
+        completionRaw = readPrivateRecord(s.installation, "observations", completionName),
+        completion = verifyControl(
+          s.installation.installation.publicKey,
+          configurationHandoffRecordDomains.completion,
+          completionRaw,
+          configurationHandoffWorkerRecordSchema,
+        ),
+        spawnName = `${s.installation.fixedChildId}.json`,
+        spawn = readPrivateRecord(s.installation, "spawn-started", spawnName) as {
+          execution: unknown;
+        },
+        startedName = `${s.execution.operationKey}.json`,
+        started = readPrivateRecord(s.installation, "effect-started", startedName) as {
+          execution: unknown;
+          receiptDigest: unknown;
+        };
+      for (const [namespace, name, value] of [
+        ["executions", startedName, admitted],
+        ["observations", progressName, progressRaw],
+        ["observations", completionName, completionRaw],
+        ["spawn-started", spawnName, spawn],
+        ["effect-started", startedName, started],
+      ] as const)
+        verifyFamilyOwnedRecord(
+          s.installation,
+          s.origin,
+          { scope: "private", namespace, container: "", name },
+          canonicalJson(value),
+        );
+      if (
+        body.intentDigest !== controlDigest(intent.operation) ||
+        controlDigest(spawn.execution) !== controlDigest(s.execution) ||
+        controlDigest(started.execution) !== controlDigest(s.execution) ||
+        started.receiptDigest !== s.receiptDigest ||
+        progress.intentDigest !== controlDigest(intent) ||
+        progress.phase !== "launched" ||
+        progress.launch.state !== "confirmed" ||
+        completion.intentDigest !== controlDigest(intent) ||
+        completion.preparationDigest !== controlDigest(progress) ||
+        controlDigest(completion.execution) !== controlDigest(s.execution) ||
+        completion.phase !== "applied" ||
+        completion.launch.containerId !== progress.launch.containerId ||
+        receipt.completionDigest !== controlDigest(completion) ||
+        completion.targets.length !== intent.operation.serviceIds.length ||
+        completion.targets.some(
+          (target) =>
+            !intent.operation.serviceIds.includes(target.serviceId) ||
+            target.expectedImageId !== intent.operation.expectedImageIdentities[target.serviceId] ||
+            target.oldContainerId !==
+              progress.targets.find((original) => original.serviceId === target.serviceId)
+                ?.oldContainerId,
+        )
+      )
+        throw Error("Actual original helper completion required");
+      outcome = "committed";
+      publication = "committed";
     } else if (receipt.kind === "fixed-cli-exit") {
       if (!s.installation.fixedChildId)
         throw Error("Fixed command receipt requires certified child");
@@ -4990,6 +5079,90 @@ export function beginFixedCliExecution(
       begin();
     });
   else begin();
+}
+
+/** Original agent-owned helper publication and its fixed-child committed
+ * effect. Data only: no forward/adoption/lease authority is constructed. */
+export function readCompletedConfigurationHandoff(
+  installation: ControlInstallation,
+  handoffId: string,
+) {
+  const state = installationState(installation);
+  if (installation.role !== "ops-agent") throw Error("Original helper observer required");
+  const intentName = configurationHandoffRecordName(handoffId, "intent"),
+    intentRaw = readPrivateRecord(state, "observations", intentName),
+    intent = verifyControl(
+      state.publicKeys["ops-agent"],
+      configurationHandoffRecordDomains.intent,
+      intentRaw,
+      configurationHandoffIntentRecordSchema,
+    ),
+    progressName = configurationHandoffRecordName(handoffId, "progress"),
+    progressRaw = readPrivateRecord(state, "observations", progressName),
+    progress = verifyControl(
+      state.publicKeys["ops-agent"],
+      configurationHandoffRecordDomains.progress,
+      progressRaw,
+      configurationHandoffProgressSchema,
+    ),
+    completionName = configurationHandoffRecordName(handoffId, "completion"),
+    completionRaw = readPrivateRecord(state, "observations", completionName),
+    completion = verifyControl(
+      intent.helperPublicKey,
+      configurationHandoffRecordDomains.completion,
+      completionRaw,
+      configurationHandoffWorkerRecordSchema,
+    ),
+    effectName = `${intent.helper.operationKey}.json`,
+    effectRaw = readPrivateRecord(state, "effects", effectName, 65536),
+    effect = verifyControl(
+      intent.helperPublicKey,
+      "openmapx-control-settlement-v1",
+      effectRaw,
+      settlementSchema.extend({ receipt: effectObservationSchema }),
+    );
+  for (const [namespace, name, raw] of [
+    ["observations", intentName, intentRaw],
+    ["observations", progressName, progressRaw],
+    ["observations", completionName, completionRaw],
+    ["effects", effectName, effectRaw],
+  ] as const)
+    verifyFamilyOwnedRecord(
+      state,
+      intent.origin,
+      { scope: "private", namespace, container: "", name },
+      canonicalJson(raw),
+    );
+  if (
+    intent.installationId !== installation.installationId ||
+    intent.operation.handoffId !== handoffId ||
+    progress.intentDigest !== controlDigest(intent) ||
+    progress.phase !== "launched" ||
+    progress.launch.state !== "confirmed" ||
+    completion.intentDigest !== controlDigest(intent) ||
+    completion.preparationDigest !== controlDigest(progress) ||
+    completion.phase !== "applied" ||
+    completion.launch.containerId !== progress.launch.containerId ||
+    canonicalJson(completion.execution) !== canonicalJson(intent.helper) ||
+    canonicalJson(effect.identity) !== canonicalJson(intent.helper) ||
+    effect.outcome !== "committed" ||
+    effect.publication !== "committed" ||
+    effect.receipt.kind !== "configuration-helper-completion" ||
+    effect.receipt.completionDigest !== controlDigest(completion) ||
+    effect.terminalReceiptDigest !== controlDigest(effect.receipt) ||
+    completion.targets.length !== intent.operation.serviceIds.length ||
+    completion.targets.some(
+      (target) =>
+        !intent.operation.serviceIds.includes(target.serviceId) ||
+        target.expectedImageId !== intent.operation.expectedImageIdentities[target.serviceId] ||
+        target.oldContainerId !==
+          progress.targets.find((original) => original.serviceId === target.serviceId)
+            ?.oldContainerId,
+    )
+  )
+    throw Error("Original committed configuration helper required");
+  const { receipt: _private, ...settlement } = effect;
+  return { intent, completion, settlement };
 }
 
 const executionWitnessSchema = z.strictObject({

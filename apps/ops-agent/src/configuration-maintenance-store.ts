@@ -80,6 +80,7 @@ import {
   restoreArtifactTargetLeaseForSettlement,
   restoreConfigurationMaintenancePhaseIssuer,
   retainControlEffectReceipt,
+  settlePreparedConfigurationHandoff,
   signControl,
   type VerifiedExecutionAuthority,
   type VerifiedPreparedDataConfigurationFence,
@@ -466,6 +467,50 @@ export function readOwnedConfigurationMaintenance(
   authority: VerifiedExecutionAuthority,
 ): ConfigurationMaintenanceOwnerRecord {
   return read(authority);
+}
+/** Observation-only completion of the original prepared handoff. All sources
+ * and physical descendants must already be settled; this runs no Docker I/O. */
+async function observeOwnedConfigurationHandoff(
+  authority: VerifiedExecutionAuthority,
+): Promise<void> {
+  const owner = read(authority);
+  if (
+    !owner.plan.handoff ||
+    owner.receipt.followUp === "complete" ||
+    owner.final ||
+    owner.receipt.generation !== "committed"
+  )
+    return;
+  const step = owner.plan.steps.find((value) => value.phase === "maintenance-handoff"),
+    source = owner.apiControls.steps.find((value) => value.ordinal === step?.ordinal);
+  if (!source?.canonical || !source.receiptDelivery) return;
+  await settlePreparedConfigurationHandoff(
+    restoreAdmittedControlExecution(
+      executionAuthorityState(authority).installation.installation,
+      source.execution,
+    ),
+  );
+  const lease = restoreArtifactTargetLeaseForSettlement(authority);
+  try {
+    readOriginalMaintenanceFinalChildren(
+      authority,
+      observeConfigurationMaintenanceRuntimeTree(authority),
+    );
+    withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
+      const current = read(authority);
+      if (current.receipt.followUp === "complete") return;
+      if (canonicalJson(current) !== canonicalJson(owner))
+        throw Error("Original handoff owner changed during completion");
+      const sequence = current.sequence + 1;
+      write(authority, {
+        ...current,
+        sequence,
+        receipt: { ...current.receipt, sequence, followUp: "complete" },
+      });
+    });
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
 }
 declare const controlOwnerBrand: unique symbol;
 export type ConfigurationMaintenanceControlOwner = Readonly<{ [controlOwnerBrand]: true }>;
@@ -3797,6 +3842,7 @@ export async function assertStagedCoordinatorConfigurationWrite(
   throw new OpsExecutionFailure("configuration_prerequisite", {});
 }
 const journals = new WeakMap<OpsRuntime, OpsJobJournal>();
+const journalInstallations = new WeakMap<OpsRuntime, ControlInstallation>();
 /** Conservative drain gate from the actual durable journal. This closes new
  * work only; a matching ID never supplies continuation or release authority. */
 export function configurationHandoffPendingMaintenanceIds(
@@ -3804,7 +3850,36 @@ export function configurationHandoffPendingMaintenanceIds(
 ): ReadonlySet<string> {
   return new Set(
     (journals.get(runtime)?.records() ?? [])
-      .filter((job) => job.operation.kind === "configurationHandoff.prepare")
+      .filter((job) => {
+        if (job.operation.kind !== "configurationHandoff.prepare") return false;
+        const installation = journalInstallations.get(runtime);
+        if (!installation) return true;
+        try {
+          const local = installationState(installation),
+            file = `${job.operation.maintenanceId}.json`,
+            raw = readPrivateRecord(local, "configuration-maintenance", file),
+            owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
+          verifyFamilyOwnedRecord(
+            local,
+            owner.origin,
+            { scope: "private", namespace: "configuration-maintenance", container: "", name: file },
+            canonicalJson(raw),
+          );
+          if (
+            owner.receipt.state !== "settled" ||
+            !owner.plan.handoff ||
+            owner.plan.handoff.handoffId !== job.operation.handoffId
+          )
+            return true;
+          const authority = restoreAdmittedControlExecution(installation, owner.plan.prepare);
+          restoreOwnedMaintenanceFinal(authority);
+          assertConfigurationMaintenanceRootClosure(authority);
+          verifyRetainedArtifactTargetRootRelease(authority);
+          return false;
+        } catch {
+          return true;
+        }
+      })
       .map(
         (job) =>
           (job.operation as Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>)
@@ -3817,11 +3892,16 @@ export function configurationHandoffPendingMaintenanceIds(
 export function registerConfigurationMaintenanceJournal(
   runtime: OpsRuntime,
   journal: OpsJobJournal,
+  installation?: ControlInstallation,
 ) {
   if (journals.has(runtime)) throw Error("Maintenance journal source already bound");
   journals.set(runtime, journal);
+  if (installation) journalInstallations.set(runtime, installation);
   return () => {
-    if (journals.get(runtime) === journal) journals.delete(runtime);
+    if (journals.get(runtime) === journal) {
+      journals.delete(runtime);
+      journalInstallations.delete(runtime);
+    }
   };
 }
 declare const admissionBrand: unique symbol;
@@ -4257,9 +4337,12 @@ export async function inspectFrozenMaintenanceRuntime(
         ? inspectOriginalOwnerServices(source, authority, signal)
         : source.ownedServices.inspectOwnedServices(signal);
     const containers = await inspectContainers(),
-      recreateIds = owner.plan.steps
-        .filter((step) => step.phase === "maintenance-recreate")
-        .map((step) => ("serviceId" in step.operation ? step.operation.serviceId : "")),
+      recreateIds = [
+        ...owner.plan.steps
+          .filter((step) => step.phase === "maintenance-recreate")
+          .map((step) => ("serviceId" in step.operation ? step.operation.serviceId : "")),
+        ...(owner.plan.handoff?.serviceIds ?? []),
+      ],
       unchanged = containers.filter((value) => !recreateIds.includes(value.serviceId));
     if (
       canonicalJson(unchanged) !==
@@ -4818,6 +4901,14 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       state = executionAuthorityState(authority);
     let owner = readOwnedConfigurationMaintenance(authority);
     context.signal.throwIfAborted();
+    if (owner.plan.handoff && owner.receipt.followUp !== "complete") {
+      try {
+        await observeOwnedConfigurationHandoff(authority);
+      } catch {
+        /* Unfinished/unknown helpers retain all fences. */
+      }
+      owner = readOwnedConfigurationMaintenance(authority);
+    }
     if (owner.final && owner.apiControls.settle?.result === null) {
       try {
         if (owner.receipt.state !== "settled")

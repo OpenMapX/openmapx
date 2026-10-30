@@ -276,11 +276,12 @@ function assertExecutedConfigurationMaintenanceFinalState(
       ? owner.plan.operation.expectedCurrentRevisionId
       : owner.plan.operation.revisionId,
     ids = [
-      ...new Set(
-        owner.plan.steps
+      ...new Set([
+        ...owner.plan.steps
           .filter((value) => value.phase === "maintenance-recreate")
           .map((value) => ("serviceId" in value.operation ? value.operation.serviceId : "")),
-      ),
+        ...(owner.plan.handoff?.serviceIds ?? []),
+      ]),
     ].sort(),
     requiredChecks = configurationMaintenanceRequiredChecksSchema.parse([
       ...["generation", "owner-containers", "dm-guard"].map((check) => ({

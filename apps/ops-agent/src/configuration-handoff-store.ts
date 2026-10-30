@@ -23,7 +23,9 @@ import {
   signControl,
   type VerifiedExecutionAuthority,
   verifyControl,
+  verifyControlEffectSettlement,
   verifyFamilyOwnedRecord,
+  verifyRetainedArtifactTargetSettlement,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -37,10 +39,14 @@ import {
   type ConfigurationHandoffProgress,
   configurationHandoffIntentRecordSchema,
   configurationHandoffProgressSchema,
+  configurationHandoffWorkerRecordSchema,
   configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
-import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
+import {
+  childSettlementState,
+  installationState,
+} from "../../../packages/core/src/build-artifacts/control-authority";
 import {
   CONFIGURATION_HANDOFF_LABEL,
   configurationHandoffEnvironmentNames,
@@ -360,6 +366,88 @@ export function inspectConfigurationHandoff(
               : progress.phase === "verifying"
                 ? "verifying"
                 : "prepared";
+    if (progress.launch.state === "confirmed") {
+      let completionRaw: unknown;
+      const completionName = recordName(handoffId, "completion");
+      try {
+        completionRaw = readPrivateRecord(local, "observations", completionName);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (completionRaw !== undefined) {
+        const worker = verifyControl(
+          intent.helperPublicKey,
+          domains.completion,
+          completionRaw,
+          configurationHandoffWorkerRecordSchema,
+        );
+        indexed(authority, completionName, completionRaw);
+        if (
+          worker.intentDigest !== controlDigest(intent) ||
+          worker.preparationDigest !== controlDigest(progress) ||
+          bytes(worker.execution) !== bytes(intent.helper)
+        )
+          throw Error("Original helper completion changed");
+        if (worker.phase === "applied") {
+          const child = openFixedChildInstallation({
+            infraDir,
+            assertion: intent.assertion,
+            container: existsSync("/run/secrets/openmapx-control-verifiers"),
+          });
+          try {
+            const effect = childSettlementState(
+              verifyControlEffectSettlement(child, intent.helper),
+            ).evidence;
+            if (
+              effect.outcome !== "committed" ||
+              effect.publication !== "committed" ||
+              effect.terminalReceiptDigest !==
+                controlDigest({
+                  kind: "configuration-helper-completion",
+                  completionDigest: controlDigest(worker),
+                })
+            )
+              throw Error("Original helper completion remains uncontained");
+            verifyRetainedArtifactTargetSettlement(
+              child,
+              { leaseId: intent.leaseId, delegationId: intent.delegationId, phase: "ready" },
+              intent.helper,
+            );
+          } finally {
+            closeControlInstallation(child);
+          }
+          return {
+            handoffId,
+            phase: "applied",
+            expectedRevisionId: intent.operation.expectedCurrentRevisionId,
+            appliedRevisionId: intent.operation.expectedCurrentRevisionId,
+            completedServiceIds: worker.targets
+              .filter((target) => target.phase === "verified")
+              .map((target) => target.serviceId),
+            failedServiceIds: [],
+            recoveryCodes: [],
+          };
+        }
+        return {
+          handoffId,
+          phase:
+            worker.phase === "draining" ||
+            worker.phase === "applying" ||
+            worker.phase === "verifying"
+              ? worker.phase
+              : "recovery_required",
+          expectedRevisionId: intent.operation.expectedCurrentRevisionId,
+          appliedRevisionId: null,
+          completedServiceIds: worker.targets
+            .filter((target) => target.phase === "verified")
+            .map((target) => target.serviceId),
+          failedServiceIds: worker.targets
+            .filter((target) => target.phase === "unknown")
+            .map((target) => target.serviceId),
+          recoveryCodes: ["receipt_pending"],
+        };
+      }
+    }
     return {
       handoffId,
       phase,

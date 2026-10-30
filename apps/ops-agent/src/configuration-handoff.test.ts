@@ -48,6 +48,9 @@ it("launches the existing confined old-image helper with only original control r
   ]);
   expect(args).not.toContain("OPS_AGENT_HANDOFF_ID");
   expect(args).not.toContain("OPS_CONFIGURATION_HANDOFF_ID");
+  expect(args.filter((value) => value.startsWith("OPENMAPX_ROOT_DIR="))).toEqual([
+    "OPENMAPX_ROOT_DIR=/synthetic/host",
+  ]);
 });
 it("orders dependencies and the agent last without silently expanding frozen targets", () => {
   expect(

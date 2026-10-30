@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -44,7 +44,7 @@ export async function ownedServiceHost(options: { configurationHelperLaunchRespo
   mkdirSync(join(root, "services"));
   mkdirSync(join(root, "custom_integrations"));
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
-  const loaded: services.LoadedService[] = [
+  const loaded: services.LoadedService[] = (options.configurationHelperReleaseInventory ? [...services.RELEASE_BUILT_IN_SERVICE_IDS] : [
     "motis",
     "ops-agent",
     "app-api",
@@ -53,7 +53,7 @@ export async function ownedServiceHost(options: { configurationHelperLaunchRespo
     "redis",
     ...(withCoordinator ? ["data-manager"] : []),
     ...(options.extraServiceIds ?? []),
-  ].map((id) => ({
+  ]).map((id) => ({
     manifest: {
       id,
       name: id,
@@ -80,9 +80,11 @@ export async function ownedServiceHost(options: { configurationHelperLaunchRespo
     mkdirSync(service.directory, { recursive: true });
     writeFileSync(join(service.directory, "service.json"), JSON.stringify(service.manifest));
   }
+  const releaseInventory = options.configurationHelperReleaseInventory ? await services.captureReleaseServiceAuthority(root) : undefined;
   const loadAuthority = createTrustedConfigurationAuthorityLoader({
     rootDir: root,
     builtInServices: loaded,
+    ...(releaseInventory ? {builtInAuthorityDigest:releaseInventory.digest} : {}),
   });
   const initial = await services.commitConfigurationGeneration({
     infraDir,
