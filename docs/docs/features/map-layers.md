@@ -123,7 +123,8 @@ incident displays a localized card: what it is and the road and direction it
 affects, how much it affects traffic, until when it holds (or when it starts,
 including recurring schedule windows in the source's local timezone), what it
 does to traffic (closed roads and lanes, vehicle limits, delays, detours), the
-source's own description, and one credit line per source with when it was last
+source's own description (a long one shows its first lines and opens in place with
+"Show more"), and one credit line per source with when it was last
 updated. Overlapping markers are automatically grouped into a single scrollable
 popup (ordered most-severe first) so all incidents at the same spot stay reachable, and
 linear events (such as segment closures) render as line segments directly on the map.

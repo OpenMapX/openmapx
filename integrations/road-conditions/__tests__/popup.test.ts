@@ -151,6 +151,22 @@ describe("incident card content", () => {
     ).not.toHaveProperty("headline");
   });
 
+  it("prints a short text in full and opens a long one in place, never in a scroll area", () => {
+    const short = render([situation({ description: text("Erneuerung an der Decke") })]).html;
+    expect(short).toContain("Erneuerung an der Decke");
+    expect(short).not.toContain("omx-incident__more");
+
+    const long = "Angespannte Verkehrslage zwischen Duisburg-Beeck und Oberhausen-West. ".repeat(4);
+    const shown = card([situation({ headline: text("A42 | Duisburg"), description: text(long) })]);
+    expect(shown?.more).toEqual({ show: "panel.showMore", hide: "panel.showLess" });
+    const html = render([situation({ description: text(long) })]).html;
+    // The whole text is in the card; the disclosure only lifts its fade.
+    expect(html).toContain(long.trim());
+    expect(html).toContain('<details class="omx-incident__more"><summary>');
+    expect(html).toContain("panel.showMore");
+    expect(html).toContain("panel.showLess");
+  });
+
   it("shows the headline, description and road names in the reader's language", () => {
     const event = situation({
       headline: [

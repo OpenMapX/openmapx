@@ -67,6 +67,8 @@ export interface IncidentCard {
   /** The source's own headline, where it says more than the title. */
   headline?: string;
   description?: string;
+  /** Present when the source's text runs longer than the card shows at first. */
+  more?: { show: string; hide: string };
   warning?: string;
   /** The captured credit of every source shown, as the map credits receive them. */
   credits: Attribution[];
@@ -414,6 +416,10 @@ export function buildIncidentCard(
   const formatUpdated = input.formatRelative ?? input.formatDateTime;
   const sameText = (a?: string, b?: string) =>
     Boolean(a && b && a.toLocaleLowerCase() === b.toLocaleLowerCase());
+  const shownHeadline =
+    headline && !sameText(headline, title) && !sameText(headline, description)
+      ? headline
+      : undefined;
   return {
     severity,
     glyph: markerGlyph(representative),
@@ -424,10 +430,11 @@ export function buildIncidentCard(
     ...(events.every(isUnconfirmedCrowd) ? { unconfirmed: translate("report.unconfirmed") } : {}),
     when: whenText(groupValidity(events, representative), future, input),
     impacts,
-    ...(headline && !sameText(headline, title) && !sameText(headline, description)
-      ? { headline }
-      : {}),
+    ...(shownHeadline ? { headline: shownHeadline } : {}),
     ...(description ? { description } : {}),
+    ...(estimatedLines([shownHeadline, description]) > TEXT_LINES_SHOWN + 1
+      ? { more: { show: translate("panel.showMore"), hide: translate("panel.showLess") } }
+      : {}),
     ...(input.needsRefresh
       ? { warning: translate("freshness.needsRefresh") }
       : expired
@@ -438,6 +445,18 @@ export function buildIncidentCard(
       ? { updated: translate("panel.updated", { time: formatUpdated(updatedAt) }) }
       : {}),
   };
+}
+
+/** The lines of the source's text a card shows before "Show more". */
+const TEXT_LINES_SHOWN = 4;
+/** Roughly the characters of one line of card text. */
+const CHARS_PER_LINE = 38;
+
+/** About how many lines the texts take in a card, each paragraph and line break apart. */
+function estimatedLines(texts: readonly (string | undefined)[]): number {
+  return texts
+    .flatMap((text) => (text ? text.split("\n") : []))
+    .reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / CHARS_PER_LINE)), 0);
 }
 
 function glyphSvg(glyph: string): string {
@@ -478,12 +497,18 @@ export function renderIncidentCard(card: IncidentCard, options: PopupCreditsOpti
           .map((line) => `<li>${escapeHtml(line)}</li>`)
           .join("")}</ul>`
       : "";
-  const text =
-    card.headline || card.description
-      ? `<div class="omx-incident__text">${
-          card.headline ? `<p class="omx-incident__headline">${escapeHtml(card.headline)}</p>` : ""
-        }${card.description ? `<p>${escapeHtml(card.description)}</p>` : ""}</div>`
-      : "";
+  const paragraphs = `${
+    card.headline ? `<p class="omx-incident__headline">${escapeHtml(card.headline)}</p>` : ""
+  }${card.description ? `<p>${escapeHtml(card.description)}</p>` : ""}`;
+  // A long text shows its first lines and opens in place, so the card never
+  // holds a second scroll area.
+  const text = !paragraphs
+    ? ""
+    : card.more
+      ? `<div class="omx-incident__text omx-incident__text--long"><div class="omx-incident__body">${paragraphs}</div><details class="omx-incident__more"><summary><span class="omx-incident__show">${escapeHtml(
+          card.more.show,
+        )}</span><span class="omx-incident__hide">${escapeHtml(card.more.hide)}</span></summary></details></div>`
+      : `<div class="omx-incident__text"><div class="omx-incident__body">${paragraphs}</div></div>`;
   const warning = card.warning
     ? `<div class="omx-incident__warning" role="status">${escapeHtml(card.warning)}</div>`
     : "";
