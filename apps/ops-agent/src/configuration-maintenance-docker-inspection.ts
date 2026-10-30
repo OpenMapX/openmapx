@@ -10,6 +10,7 @@ import {
   maintenanceDockerContainerSchema as container,
 } from "../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
+import { verifyConfigurationRuntimeResources } from "./configuration-resource-inspection";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OwnedServiceSnapshot } from "./owned-services";
 
@@ -109,6 +110,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
         );
       if (Object.keys(expectedEnv).some((key) => actualEnv[key] !== expectedEnv[key]))
         throw Error("Original applied runtime environment differs");
+      const resources = verifyConfigurationRuntimeResources(spec, observed);
       checks.push({
         serviceId: id,
         ordinal: null,
@@ -120,6 +122,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
         containerId: owned.containerId,
         expectedConfigHash: hash,
         actualConfigHash: observed.Config.Labels["com.docker.compose.config-hash"],
+        resources,
         expectedEnvironmentDigest: keyed(canonicalJson(expectedEnv)),
         actualEnvironmentDigest: keyed(
           canonicalJson(

@@ -2105,6 +2105,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
     }, 60000);
     it("uses one ownership-only maintenance decision before a durable nonempty coordinator credential continuation", async () => {
+      // Synthetic example/* images intentionally have no published release overlay.
+      vi.stubEnv("OPENMAPX_RELEASE", "local");
+      vi.stubEnv("DOMAIN", "example.test");
       dm = await ownedDataManager({
         sql: fixture.sql,
         infraDir: host.infraDir,

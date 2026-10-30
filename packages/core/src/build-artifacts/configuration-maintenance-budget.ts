@@ -172,6 +172,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
         containerId: hash,
         expectedConfigHash: hash,
         actualConfigHash: hash,
+        resources: { memoryBytes: Number.MAX_SAFE_INTEGER, nanoCpus: Number.MAX_SAFE_INTEGER },
         expectedEnvironmentDigest: hash,
         actualEnvironmentDigest: hash,
       },

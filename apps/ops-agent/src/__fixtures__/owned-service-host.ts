@@ -369,7 +369,12 @@ export async function ownedServiceHost(options: { configurationHelperLaunchRespo
       if(!service)throw Error("Named Docker fixture service unavailable");
       service.State=state;
     },
-    setRuntimeInspections(value: typeof runtimeInspections) { runtimeInspections = value; },
+    setRuntimeInspections(value: typeof runtimeInspections) {
+      // Real Docker inspect includes these fields. Historical fixture services
+      // declare no limits; explicitly supplied resource observations win.
+      for(const row of Object.values(value)) if(row && typeof row==="object" && !Object.hasOwn(row,"HostConfig")) Object.assign(row,{HostConfig:{Memory:0,NanoCpus:0}});
+      runtimeInspections = value;
+    },
     setRuntimeSecretBytes(value: typeof runtimeSecretBytes) { runtimeSecretBytes = value; },
     setRawListing(value: string) {
       rawListing = value;

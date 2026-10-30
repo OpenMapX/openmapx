@@ -9,9 +9,42 @@ const string = z.string().max(65536),
     Destination: string,
     RW: z.boolean(),
   });
+const normalizedMemory = z.union([
+    z.number().int().nonnegative().safe(),
+    z.string().max(16).regex(/^\d+$/),
+  ]),
+  normalizedCpu = z.union([
+    z.number().finite().nonnegative().max(4096),
+    z
+      .string()
+      .max(32)
+      .regex(/^\d+(?:\.\d+)?$/),
+  ]);
+export const maintenanceDockerResourceSpecSchema = z.object({
+  mem_limit: normalizedMemory.optional(),
+  cpus: normalizedCpu.optional(),
+  deploy: z
+    .object({
+      resources: z
+        .object({
+          limits: z
+            .object({ memory: normalizedMemory.optional(), cpus: normalizedCpu.optional() })
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+export const maintenanceDockerHostResourcesSchema = z.object({
+  Memory: z.number().int().nonnegative().safe(),
+  NanoCpus: z.number().int().nonnegative().safe(),
+  CpuQuota: z.number().int().min(-1).safe().default(0),
+  CpuPeriod: z.number().int().nonnegative().safe().default(0),
+});
 export const maintenanceDockerContainerSchema = z.object({
   Id: z.string().regex(/^[a-f0-9]{64}$/),
   Image: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  HostConfig: maintenanceDockerHostResourcesSchema,
   State: z.object({
     Status: z.string(),
     Running: z.boolean(),
@@ -25,6 +58,7 @@ export const maintenanceDockerContainerSchema = z.object({
   Mounts: z.array(mount).max(512),
 });
 const service = z.object({
+  ...maintenanceDockerResourceSpecSchema.shape,
   image: string,
   environment: z
     .record(z.string(), z.union([string, z.number(), z.boolean(), z.null()]))
