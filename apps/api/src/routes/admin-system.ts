@@ -40,6 +40,7 @@ function isExactSystemUpdateBody(body: unknown): boolean {
 
 const HOST_MUTATING_JOB_TYPES = [
   "system.update",
+  "platform.apply",
   "system.diagnostics",
   "service.start",
   "service.stop",
@@ -277,11 +278,14 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         return { error: "A maintenance operation is already active", jobId: active.id };
       }
       const admin = getAdminSession(request);
+      if (admin.user.id === "loopback" || admin.session.impersonatedBy)
+        return reply.code(403).send({ error: "A real full administrator session is required" });
       const createBackup = request.body?.createBackup !== false;
       const jobId = await jobRunner.enqueue(
         "system.update",
         {
           operation: "apply",
+          workflow: "guarded-release",
           createBackup,
           releaseId: request.body.releaseId,
           expectedDigest: request.body.expectedDigest,

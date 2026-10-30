@@ -19,6 +19,7 @@ import {
   user,
 } from "../db/schema";
 import { jobOwnership } from "./admin-job-state";
+import { platformJobMatchesPreview } from "./platform-configuration-job";
 import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
 
 /** Called in the SAME desired-row transaction as purpose-proof consumption
@@ -103,7 +104,7 @@ export async function commitPlatformConfigurationIntent(
   const [actor] = await tx.select().from(user).where(eq(user.id, input.actorId)).for("share");
   if (
     !job ||
-    job.type !== "platform.apply" ||
+    !["platform.apply", "system.update"].includes(job.type) ||
     job.createdBy !== input.actorId ||
     actor?.role !== "admin" ||
     actor.banned === true
@@ -124,6 +125,7 @@ export async function commitPlatformConfigurationIntent(
   const retained = await readPlatformPreview(input, tx),
     preview = retained.preview;
   if (
+    !platformJobMatchesPreview(job, preview) ||
     retained.consumedByJobId ||
     (retained.desiredRowVersion !== undefined &&
       retained.desiredRowVersion !== input.expectedDesiredRowVersion) ||

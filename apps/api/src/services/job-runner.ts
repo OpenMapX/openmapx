@@ -41,7 +41,8 @@ import {
 import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
-import { ApiOpsError, OpsObservationPending } from "./ops-client";
+import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
+import { guardedSystemReleasePayloadSchema } from "./platform-configuration-job";
 import { appApiRestartCheckpoint } from "./system-update-state";
 import {
   completeTrustedConfigurationApply,
@@ -172,6 +173,17 @@ function hasRetainedQueuedCoordinator(job: {
   const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
   if (job.type === "service.bulk" && payload.action === "update" && batch) return true; // Routing only; the fixed handler validates the actual owned batch/ACK chain.
   if (!candidate) return false;
+  if (job.type === "system.update") {
+    const fixed = (job.result as Record<string, unknown> | null)?._systemRelease;
+    return (
+      guardedSystemReleasePayloadSchema.safeParse(payload).success &&
+      !!fixed &&
+      typeof fixed === "object" &&
+      (fixed as { operationKey?: unknown }).operationKey ===
+        createDurableOpsKey("admin-job.guarded-release", job.id) &&
+      candidate.operationKey === createDurableOpsKey("admin-job.guarded-release", job.id)
+    );
+  }
   const ordinal =
     job.type === "service.apply" &&
     payload.service === "data-manager" &&

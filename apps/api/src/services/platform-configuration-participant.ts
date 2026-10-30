@@ -20,6 +20,7 @@ import {
   PLATFORM_CONFIGURATION_SETTING,
   type PlatformConfigurationCommitInput,
 } from "./platform-configuration";
+import { platformJobMatchesPreview } from "./platform-configuration-job";
 import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
 import type {
   ProspectiveConfigurationOverlay,
@@ -57,7 +58,10 @@ const intents = new WeakMap<PlatformConfigurationIntent, State>(),
   participants = new WeakMap<ConfigurationCommitParticipant, State>();
 function active(writer: AdministrativeConfigurationWriter) {
   const owner = administrativeConfigurationState(writer);
-  if (owner.job.jobType !== "platform.apply" || !owner.job.execution)
+  if (
+    !["platform.apply", "system.update"].includes(owner.job.jobType ?? "") ||
+    !owner.job.execution
+  )
     throw new PlatformPreviewConflict();
   return owner;
 }
@@ -157,6 +161,7 @@ export async function preparePlatformConfigurationChange(
     ),
     preview = immutable(retained.preview);
   if (
+    !platformJobMatchesPreview({ type: owner.job.jobType!, payload: owner.job.payload }, preview) ||
     retained.consumedByJobId ||
     !retained.sourceSnapshot ||
     retained.desiredRowVersion === undefined ||

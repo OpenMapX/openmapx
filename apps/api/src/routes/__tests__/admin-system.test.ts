@@ -174,6 +174,7 @@ describe("admin system routes", () => {
       "system.update",
       {
         operation: "apply",
+        workflow: "guarded-release",
         createBackup: true,
         releaseId: "release-123",
         expectedDigest: "a".repeat(64),
@@ -182,6 +183,31 @@ describe("admin system routes", () => {
     );
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update.apply" }));
   });
+
+  it.each(["loopback", "impersonated"])(
+    "refuses %s release application before enqueue",
+    async (kind) => {
+      const original = session.user.id;
+      if (kind === "loopback") session.user.id = "loopback";
+      else session.session.impersonatedBy = "another-admin";
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/admin/system/updates/apply",
+          payload: {
+            confirmation: "UPDATE OPENMAPX",
+            releaseId: "release-123",
+            expectedDigest: "a".repeat(64),
+          },
+        });
+        expect(response.statusCode).toBe(403);
+        expect(enqueue).not.toHaveBeenCalled();
+      } finally {
+        session.user.id = original;
+        session.session.impersonatedBy = null;
+      }
+    },
+  );
 
   it("allows an operator to skip the optional backup", async () => {
     const response = await app.inject({
@@ -199,6 +225,7 @@ describe("admin system routes", () => {
       "system.update",
       {
         operation: "apply",
+        workflow: "guarded-release",
         createBackup: false,
         releaseId: "release-123",
         expectedDigest: "a".repeat(64),

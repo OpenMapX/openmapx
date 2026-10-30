@@ -250,6 +250,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-resource",
       "launch-native-release",
       "launch-native-release-wrong-config",
+      "launch-native-system-release",
+      "launch-native-system-release-ack-loss",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
@@ -257,7 +259,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           continueHelperEffect = Promise.withResolvers<void>();
         let writersWereReleased = false;
         const native = version.startsWith("launch-native") || version === "launch-bundle",
-          application = version === "launch-apply" || native;
+          application = version === "launch-apply" || native,
+          systemRelease = version.startsWith("launch-native-system-release");
         const ids = [
           "motis",
           "ops-agent",
@@ -277,7 +280,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           configurationHelperVersion: version === "old" ? "old" : "1",
           configurationHelperLaunchResponseLoss: version === "launch-lost",
           configurationHelperReleaseInventory: application,
-          configurationReleaseMetadata: version.startsWith("launch-native-release"),
+          configurationReleaseMetadata:
+            version.startsWith("launch-native-release") || systemRelease,
           ...(application
             ? {
                 schemas: {
@@ -301,6 +305,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-resource",
             "launch-native-release",
             "launch-native-release-wrong-config",
+            "launch-native-system-release",
+            "launch-native-system-release-ack-loss",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -318,7 +324,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }));
         host.setRows(rows);
         let checkedRelease: { releaseId: string; manifestDigest: string } | undefined;
-        if (version.startsWith("launch-native-release")) {
+        if (version.startsWith("launch-native-release") || systemRelease) {
           vi.stubEnv("OPENMAPX_RELEASE", "main");
           vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
           const manifest = services.parseReleaseManifest(
@@ -481,6 +487,29 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           journal,
           controlInstallation: installation,
         });
+        let acknowledgementLost = false;
+        app.addHook("onSend", async (request, reply, payload) => {
+          const operation = (
+            request.body as { operation?: { kind?: string; operationKey?: string } } | undefined
+          )?.operation;
+          if (
+            version === "launch-native-system-release-ack-loss" &&
+            !acknowledgementLost &&
+            reply.statusCode === 200 &&
+            operation?.kind === "controlRetention.acknowledge" &&
+            journal
+              .records()
+              .some(
+                (row) =>
+                  row.operationKey === operation.operationKey &&
+                  row.operation.kind === "configurationHandoff.prepare",
+              )
+          ) {
+            acknowledgementLost = true;
+            reply.raw.destroy();
+          }
+          return payload;
+        });
         const url = await app.listen({ host: "127.0.0.1", port: 0 });
         const tokenFile = join(host.root, "platform-api-token");
         writeFileSync(tokenFile, host.token, { mode: 0o600 });
@@ -521,6 +550,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-resource",
               "launch-native-release",
               "launch-native-release-wrong-config",
+              "launch-native-system-release",
+              "launch-native-system-release-ack-loss",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -535,45 +566,70 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 baseUrl: await publicApi.listen({ host: "127.0.0.1", port: 0 }),
               }),
               headers = { "idempotency-key": operationKey },
-              reviewed = unwrapAdminResponse(
-                await previewAdminPlatformConfiguration(
-                  {
-                    expectedCurrentRevisionId: host.initial.revisionId,
-                    changes: [
-                      "launch-native-resource",
-                      "launch-native-release",
-                      "launch-native-release-wrong-config",
-                    ].includes(version)
-                      ? { version: 1 as const }
-                      : {
-                          version: 1 as const,
-                          backupRetentionDays: { source: "database", value: 14 },
-                        },
-                    ...(version === "launch-native-resource"
-                      ? { reconcileServiceIds: ["ops-agent" as const] }
-                      : {}),
-                    ...(checkedRelease ? { release: checkedRelease } : {}),
-                  },
-                  headers,
-                  { client },
-                ),
-              ),
-              input = {
-                expectedCurrentRevisionId: reviewed.preview.expectedCurrentRevisionId,
-                previewFingerprint: reviewed.preview.previewFingerprint,
-                confirmations: reviewed.preview.requiredConfirmation,
-              };
+              reviewed = systemRelease
+                ? undefined
+                : unwrapAdminResponse(
+                    await previewAdminPlatformConfiguration(
+                      {
+                        expectedCurrentRevisionId: host.initial.revisionId,
+                        changes: [
+                          "launch-native-resource",
+                          "launch-native-release",
+                          "launch-native-release-wrong-config",
+                          "launch-native-system-release",
+                          "launch-native-system-release-ack-loss",
+                        ].includes(version)
+                          ? { version: 1 as const }
+                          : {
+                              version: 1 as const,
+                              backupRetentionDays: { source: "database", value: 14 },
+                            },
+                        ...(version === "launch-native-resource"
+                          ? { reconcileServiceIds: ["ops-agent" as const] }
+                          : {}),
+                        ...(checkedRelease ? { release: checkedRelease } : {}),
+                      },
+                      headers,
+                      { client },
+                    ),
+                  ),
+              input = reviewed
+                ? {
+                    expectedCurrentRevisionId: reviewed.preview.expectedCurrentRevisionId,
+                    previewFingerprint: reviewed.preview.previewFingerprint,
+                    confirmations: reviewed.preview.requiredConfirmation,
+                  }
+                : undefined;
+            if (systemRelease) {
+              const { handleSystemUpdateJob } = await import("../system-maintenance");
+              jobRunner.register("system.update", handleSystemUpdateJob);
+            }
             const apply = async () =>
-              unwrapAdminResponse(
-                await applyAdminPlatformConfiguration(input, headers, { client }),
-              );
+              systemRelease
+                ? {
+                    ok: true as const,
+                    jobId: await jobRunner.enqueue(
+                      "system.update",
+                      {
+                        operation: "apply",
+                        workflow: "guarded-release",
+                        createBackup: false,
+                        releaseId: checkedRelease!.releaseId,
+                        expectedDigest: checkedRelease!.manifestDigest,
+                      },
+                      actorId,
+                    ),
+                  }
+                : unwrapAdminResponse(
+                    await applyAdminPlatformConfiguration(input!, headers, { client }),
+                  );
             const accepted = await apply();
             if (version === "launch-native-resource") {
-              expect(reviewed.preview.configuration).toEqual({ version: 1 });
-              expect(reviewed.preview.affectedServiceIds).toEqual(["ops-agent"]);
-              expect(reviewed.preview.oldOrigin).toBe(reviewed.preview.newOrigin);
+              expect(reviewed!.preview.configuration).toEqual({ version: 1 });
+              expect(reviewed!.preview.affectedServiceIds).toEqual(["ops-agent"]);
+              expect(reviewed!.preview.oldOrigin).toBe(reviewed!.preview.newOrigin);
             }
-            expect(await apply()).toEqual(accepted);
+            if (!systemRelease) expect(await apply()).toEqual(accepted);
             const readJob = async () =>
               (
                 await state.fixture.db
@@ -641,6 +697,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               job.status,
               JSON.stringify({
                 error: job.error?.split("\n")[0].slice(0, 200),
+                observation: (job.result as Record<string, unknown> | null)?.observation,
+                settled: !!(job.result as Record<string, unknown> | null)?._settled,
+                candidate: (() => {
+                  const value = (
+                    job.result as {
+                      _configurationCandidate?: { phase?: string; retirement?: unknown };
+                    } | null
+                  )?._configurationCandidate;
+                  return { phase: value?.phase, retired: !!value?.retirement };
+                })(),
                 configuration: (job.result as Record<string, unknown> | null)?.configuration,
                 states: journal.records().map((value) => ({
                   kind: value.operation.kind,
@@ -649,13 +715,23 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 })),
               }),
             ).toBe("success");
-            expect(job.payload).toEqual({
-              operationKey: createDirectAdminOpsKey(actorId, operationKey),
-            });
+            expect(job.payload).toEqual(
+              systemRelease
+                ? {
+                    operation: "apply",
+                    workflow: "guarded-release",
+                    createBackup: false,
+                    releaseId: checkedRelease!.releaseId,
+                    expectedDigest: checkedRelease!.manifestDigest,
+                  }
+                : {
+                    operationKey: createDirectAdminOpsKey(actorId, operationKey),
+                  },
+            );
             expect(job.result).toMatchObject({
               configuration: { outcome: "committed", followUp: "complete" },
             });
-            expect(await apply()).toEqual(accepted);
+            if (!systemRelease) expect(await apply()).toEqual(accepted);
             if (checkedRelease) {
               const pulls = host.calls.filter((args) => args[0] === "image" && args[1] === "pull");
               expect(pulls).toHaveLength(services.RELEASE_IMAGE_NAMES.length);
@@ -682,6 +758,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 digest: checkedRelease.manifestDigest,
               });
             }
+            if (version === "launch-native-system-release-ack-loss")
+              expect(acknowledgementLost).toBe(true);
             expect(dm.settlePosts).toBe(1);
             expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
             expect(

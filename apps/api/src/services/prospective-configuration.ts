@@ -124,6 +124,10 @@ import { integrationConfigRevision } from "./integration-runtime-evidence";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import {
+  guardedSystemReleasePayloadSchema,
+  platformJobMatchesPreview,
+} from "./platform-configuration-job";
+import {
   assertPlatformConfigurationOverlay,
   assertPlatformConfigurationSource,
   retainedPlatformConfigurationIntent,
@@ -1354,9 +1358,21 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
               job.jobId,
               completedCoordinatorMaintenance(original!).originalOrdinal,
             )));
+    const queuedRelease =
+      row?.type === "system.update" &&
+      job.jobType === row.type &&
+      row.createdBy === writer.actorId &&
+      canonicalJson(row.payload) === canonicalJson(job.payload) &&
+      guardedSystemReleasePayloadSchema.safeParse(row.payload).success &&
+      writer.operationKey === createDurableOpsKey("admin-job.guarded-release", job.jobId) &&
+      (original?._systemRelease as { actorId?: unknown; operationKey?: unknown } | undefined)
+        ?.actorId === writer.actorId &&
+      (original?._systemRelease as { operationKey?: unknown } | undefined)?.operationKey ===
+        writer.operationKey;
     if (
       !original ||
       (!queued &&
+        !queuedRelease &&
         (original._immediateJobId !== job.jobId ||
           original._immediateActorId !== writer.actorId)) ||
       retained?.operationKey !== writer.operationKey ||
@@ -1898,7 +1914,8 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
             overlay.changes.length !== 0 ||
             overlay.coordinatorMode !== "ensure-running"
           : !platform ||
-            row?.type !== "platform.apply" ||
+            !row ||
+            !platformJobMatchesPreview(row, { release: platform.release }) ||
             overlay.purpose !== "platform" ||
             overlay.coordinatorMode !== "require-running" ||
             record.apiFollowUp !== "platform-apply" ||
