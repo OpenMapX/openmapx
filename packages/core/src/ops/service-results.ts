@@ -142,7 +142,13 @@ export const serviceActionDecisionSchema = z
       ])
       .nullable(),
     workflow: z
-      .enum(["core-restart", "system-update", "coordinator-apply", "coordinator-update"])
+      .enum([
+        "core-restart",
+        "system-update",
+        "coordinator-apply",
+        "coordinator-update",
+        "image-stage",
+      ])
       .nullable(),
   })
   .refine((decision) =>

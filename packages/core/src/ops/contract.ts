@@ -1,3 +1,4 @@
+import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 import {
   catalogProposalInputSchema,
   catalogProposalSchema,
@@ -115,6 +116,7 @@ export const OPS_OPERATION_KINDS = [
   "service.recreate",
   "service.recreateIsolated",
   "service.pull",
+  "service.image.stage",
   "service.remove",
   "service.update",
   "service.build",
@@ -263,6 +265,7 @@ export const OPS_KIND_POLICIES = {
   "service.recreate": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.recreateIsolated": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.pull": asyncEffect("api", 15 * 60_000),
+  "service.image.stage": asyncEffect("api", 15 * 60000, 16384),
   "service.remove": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.update": asyncEffect("api", 15 * 60_000),
   "service.build": asyncEffect("api", 12 * 3600_000),
@@ -472,6 +475,11 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   serviceRecreateOperationSchema,
   serviceRecreateIsolatedOperationSchema,
   servicePullOperationSchema,
+  z.strictObject({
+    kind: z.literal("service.image.stage"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   serviceOperation("service.remove"),
   z.strictObject({
     kind: z.literal("service.update"),
@@ -800,7 +808,8 @@ export async function authorizeOpsResources(
       (NEVER_MANAGE.has(operation.serviceId) &&
         operation.kind !== "coreService.restart" &&
         operation.kind !== "service.logs" &&
-        operation.kind !== "service.logs.follow") ||
+        operation.kind !== "service.logs.follow" &&
+        operation.kind !== "service.image.stage") ||
       !(await allowed(policy.allowService?.(operation.kind, operation.serviceId)))
     )
       return false;
@@ -1080,6 +1089,16 @@ export const OPS_RESULT_SCHEMAS = {
   "services.buildAll": z.strictObject({
     completedServiceIds: z.array(serviceIdSchema).max(256),
     failedServiceIds: z.array(serviceIdSchema).max(256),
+  }),
+  "service.image.stage": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema,
+    requestedReference: serviceImageReferenceSchema,
+    stagedReference: serviceImageReferenceSchema,
+    imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    releaseSelectionDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
   }),
   "service.logs": z.strictObject({
     lines: z

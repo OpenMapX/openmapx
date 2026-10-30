@@ -129,3 +129,16 @@ export function useServicesBulkAction() {
     serviceOrThrow(sdk.runAdminServicesBulkAction(body, { client })),
   );
 }
+export function useServiceImageStage() {
+  return useServiceWrite(
+    { kind: "catalog" },
+    (client, values: { serviceIds: string[]; idempotencyKey: string }) =>
+      serviceOrThrow(
+        sdk.pullAdminServiceImages(
+          { serviceIds: values.serviceIds },
+          { "idempotency-key": values.idempotencyKey },
+          { client },
+        ),
+      ),
+  );
+}

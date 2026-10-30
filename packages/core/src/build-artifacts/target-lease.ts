@@ -143,6 +143,7 @@ import {
   trackFamilyDirectory,
   verifyCoordinatorPullAdmissionReadOnly,
   verifyFamilyOwnedRecord,
+  verifyImageStageAdmissionReadOnly,
   verifyPublishedBoundDmConfigurationSettlementSlots,
   verifyPublishedUnusedDmConfigurationSettlementSlots,
 } from "./retention-family";
@@ -835,6 +836,16 @@ function removeSlot(dir: AnchoredDirectory, slot: z.infer<typeof slotSchema>) {
 export function assertCoordinatorPullLeaseCompatibility(
   authority: VerifiedExecutionAuthority,
 ): void {
+  assertImagePullTargetLeaseCompatibility(authority, "service.pull");
+}
+/** Conservative reciprocal target check for the one fixed immutable image stage. */
+export function assertImageStageLeaseCompatibility(authority: VerifiedExecutionAuthority): void {
+  assertImagePullTargetLeaseCompatibility(authority, "service.image.stage");
+}
+function assertImagePullTargetLeaseCompatibility(
+  authority: VerifiedExecutionAuthority,
+  kind: "service.pull" | "service.image.stage",
+): void {
   const state = executionAuthorityState(authority),
     raw = readPrivateRecord(
       state.installation,
@@ -848,7 +859,7 @@ export function assertCoordinatorPullLeaseCompatibility(
       raw,
       z
         .object({
-          kind: z.literal("service.pull"),
+          kind: z.literal(kind),
           execution: executionRefSchema,
           operation: opsOperationSchema,
         })
@@ -857,16 +868,22 @@ export function assertCoordinatorPullLeaseCompatibility(
   if (
     !state.origin ||
     state.installation.fixedChildId ||
-    state.kind !== "service.pull" ||
+    state.kind !== kind ||
     controlDigest(raw) !== state.receiptDigest ||
     controlDigest(admitted.execution) !== controlDigest(state.execution) ||
-    admitted.operation.kind !== "service.pull" ||
-    admitted.operation.serviceId !== "data-manager" ||
-    !admitted.operation.candidateId ||
+    admitted.operation.kind !== kind ||
+    !("serviceId" in admitted.operation) ||
+    (admitted.operation.kind === "service.pull" &&
+      (admitted.operation.serviceId !== "data-manager" || !admitted.operation.candidateId)) ||
     opsOperationFingerprint(admitted.operation) !== state.execution.operationFingerprint
   )
     throw Error("Actual normal coordinator pull required");
-  verifyCoordinatorPullAdmissionReadOnly(authority);
+  if (kind === "service.pull") verifyCoordinatorPullAdmissionReadOnly(authority);
+  else verifyImageStageAdmissionReadOnly(authority);
+  if (!("serviceId" in admitted.operation)) throw Error("Image target required");
+  const target = admitted.operation.serviceId;
+  if (!state.installation.registeredTargets.has(target))
+    throw Error("Registered image target required");
   const opened: AnchoredDirectory[] = [],
     open = (parent: AnchoredDirectory, name: string) => {
       const dir = parent.directory(name);
@@ -937,7 +954,7 @@ export function assertCoordinatorPullLeaseCompatibility(
         ),
       before = snapshot(),
       matched = new Set<string>();
-    if (locks.listBounded(256).includes("data-manager")) throw Error("Coordinator target is held");
+    if (locks.listBounded(256).includes(target)) throw Error("Coordinator target is held");
     const names = leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3).sort();
     for (const name of names) {
       if ([".retention-count", ".retention-highwater", ".retention-transaction"].includes(name))
@@ -959,7 +976,7 @@ export function assertCoordinatorPullLeaseCompatibility(
             throw Error("Unproved physical release");
           continue;
         }
-        if (owner.certificate.serviceIds.includes("data-manager"))
+        if (owner.certificate.serviceIds.includes(target))
           throw Error("Coordinator target is unreleased");
         const slot = before[slots.active.name];
         if (
@@ -979,7 +996,7 @@ export function assertCoordinatorPullLeaseCompatibility(
       canonicalJson(snapshot()) !== canonicalJson(before) ||
       canonicalJson(leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3).sort()) !==
         canonicalJson(names) ||
-      locks.listBounded(256).includes("data-manager")
+      locks.listBounded(256).includes(target)
     )
       throw Error("Physical target index is changing");
     for (const dir of opened) dir.check();

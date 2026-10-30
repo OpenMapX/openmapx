@@ -1158,13 +1158,23 @@ export function verifyCatalogPinReceiptRepairPreimage(
 export function verifyCoordinatorPullAdmissionReadOnly(
   authority: VerifiedExecutionAuthority,
 ): void {
+  verifyNormalImageAdmissionReadOnly(authority, "service.pull");
+}
+/** Same indexed normal source guard; the fixed stage kind cannot select another address. */
+export function verifyImageStageAdmissionReadOnly(authority: VerifiedExecutionAuthority): void {
+  verifyNormalImageAdmissionReadOnly(authority, "service.image.stage");
+}
+function verifyNormalImageAdmissionReadOnly(
+  authority: VerifiedExecutionAuthority,
+  kind: "service.pull" | "service.image.stage",
+): void {
   const source = executionAuthorityState(authority),
     state = source.installation;
   if (
     !source.origin ||
     state.fixedChildId ||
     state.installation.role !== "ops-agent" ||
-    source.kind !== "service.pull" ||
+    source.kind !== kind ||
     source.execution.executor !== "ops-agent" ||
     source.execution.principal !== "api"
   )
@@ -1204,13 +1214,23 @@ export function verifyCoordinatorPullAdmissionReadOnly(
       controlDigest(raw) !== source.receiptDigest
     )
       throw Error("Original active coordinator admission changed");
-    z.object({
-      kind: z.literal("service.pull"),
-      serviceId: z.literal("data-manager"),
-      candidateId: z.uuid(),
-    })
-      .passthrough()
-      .parse((raw as { payload: { operation: unknown } }).payload.operation);
+    const operation = (raw as { payload: { operation: unknown } }).payload.operation;
+    if (kind === "service.pull")
+      z.object({
+        kind: z.literal("service.pull"),
+        serviceId: z.literal("data-manager"),
+        candidateId: z.uuid(),
+      })
+        .passthrough()
+        .parse(operation);
+    else
+      z.object({
+        kind: z.literal("service.image.stage"),
+        serviceId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+        expectedConfigurationRevisionId: z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
+      })
+        .passthrough()
+        .parse(operation);
     const retained = findRecord(family, address),
       bytes = canonicalJson(raw);
     if (!retained || retained.state !== "written" || retained.digest !== controlDigest(bytes))

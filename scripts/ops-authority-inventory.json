@@ -88,6 +88,7 @@
       "release.pull",
       "release.resolve",
       "service.build",
+      "service.image.stage",
       "service.logs",
       "service.logs.follow",
       "service.pull",
@@ -439,6 +440,15 @@
       "callSiteIds": [],
       "semanticSources": ["apps/api/src/services/admin-release-controls.ts#handleReleaseClearJob"],
       "typedKinds": ["release.clear"]
+    },
+    {
+      "id": "api.immutable-image-staging",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-image-staging.ts#handleImageStageJob",
+        "apps/ops-agent/src/image-stage-runtime.ts#installImageStageRuntime"
+      ],
+      "typedKinds": ["service.image.stage"]
     }
   ],
   "mounts": [

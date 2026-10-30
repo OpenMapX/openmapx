@@ -65,6 +65,7 @@ export function serviceActionForOperation(kind: OpsOperationKind): ServiceAction
     case "service.recreateIsolated":
     case "service.remove":
       return "apply";
+    case "service.image.stage":
     case "service.pull":
       return "pull";
     case "service.update":
@@ -133,7 +134,9 @@ export function createRegistryResourcePolicy(options: {
         decision.available &&
         (kind === "coreService.restart"
           ? decision.workflow === "core-restart"
-          : decision.execution === "direct")
+          : kind === "service.image.stage"
+            ? decision.execution === "direct" || decision.workflow === "image-stage"
+            : decision.execution === "direct")
       );
     },
     allowBackup: options.resourceAuthority?.allowBackup ?? (() => false),
@@ -372,6 +375,8 @@ export function createRegistryResourceClaimer(options: {
             !registeredServiceIds.has(operation.serviceId) ||
             (!decision.available && !checkedCoordinatorUpdate) ||
             (decision.execution !== "direct" &&
+              !checkedCoordinatorUpdate &&
+              !(operation.kind === "service.image.stage" && decision.workflow === "image-stage") &&
               !(operation.kind === "coreService.restart" && decision.workflow === "core-restart") &&
               !isOwnedMaintenanceRecreateAdmission(
                 owner?.maintenanceStep,

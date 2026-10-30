@@ -1,3 +1,4 @@
+import { handleImageStageJob } from "./services/admin-image-staging";
 import { handleReleaseClearJob } from "./services/admin-release-controls";
 import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
@@ -702,6 +703,7 @@ jobRunner.register("data.operation", handleDataOperationJob);
 jobRunner.register("backup.operation", handleBackupOperationJob);
 jobRunner.register("service.bulk", handleServiceBulkJob);
 jobRunner.register("release.clear", handleReleaseClearJob);
+jobRunner.register("service.images.pull", handleImageStageJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 

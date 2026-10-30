@@ -90,6 +90,15 @@ services. Each
 action is queued as a background job — the toast names the job id, and the
 **View Jobs** link opens the activity view where the job's log streams.
 
+**Stage selected images** downloads immutable image content without rendering,
+retagging, starting, or recreating services. It resolves the configured image for
+the host's platform; release-managed services use the exact selected release pin.
+Configured tags and running-container ownership stay unchanged. In local release
+mode, floating references are resolved to manifest digests. An unavailable or
+ambiguous platform manifest fails before downloading. Follow the retained job in
+Activity; retrying its confirmation after a connection failure observes the same
+request. Apply an update separately when you want services to use newer images.
+
 ## A single service in detail
 
 `/admin/services/<id>` is the per-service page. A header shows the name, quality

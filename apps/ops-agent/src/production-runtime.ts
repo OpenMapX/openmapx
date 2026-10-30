@@ -30,6 +30,7 @@ import {
   type DockerRuntimeOptions,
   runContainedProcess,
 } from "./docker-runtime";
+import { installImageStageRuntime } from "./image-stage-runtime";
 import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
@@ -274,6 +275,11 @@ export async function createProductionOpsRuntime(
     ownedServices: owned,
     execFile: options.docker?.execFile,
   });
+  installImageStageRuntime(runtime, {
+    infraDir: options.stack.infraDir,
+    loadAuthority: options.loadAuthority,
+    execFile: options.docker?.execFile,
+  });
   const releaseEffects = installReleaseCapabilityBoundary(
     runtime,
     options.rootDir,
@@ -341,6 +347,7 @@ export async function createProductionOpsRuntime(
     "service.recreate",
     "service.recreateIsolated",
     "service.pull",
+    "service.image.stage",
     "service.remove",
     "service.update",
     "service.build",
@@ -394,7 +401,11 @@ export async function createProductionOpsRuntime(
         (operation.kind === "service.recreate" || operation.kind === "service.recreateIsolated")
       )
         await assertOwnedMaintenanceRecreateRuntime(runtime, operation, context);
-      else if (!decision.available || decision.execution !== "direct") {
+      else if (
+        !decision.available ||
+        (decision.execution !== "direct" &&
+          !(operation.kind === "service.image.stage" && decision.workflow === "image-stage"))
+      ) {
         if (operation.kind === "service.pull" && operation.serviceId === "data-manager")
           await assertAdmittedCoordinatorPullRuntime(runtime, operation, context);
         else throw new Error("Service action denied");

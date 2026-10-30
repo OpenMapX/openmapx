@@ -40,6 +40,7 @@ import {
   previewAdminOperationRequest,
   previewAdminPlatformConfigurationRequest,
   provisionAdminDawarichRequest,
+  pullAdminServiceImagesRequest,
   restoreAdminServiceBackupRequest,
   rollbackAdminSharedMobilityRequest,
   rotateAdminDawarichOidcSecretRequest,
@@ -365,6 +366,18 @@ import type {
   ProvisionAdminDawarich500,
   ProvisionAdminDawarich503,
   ProvisionAdminDawarichBody,
+  PullAdminServiceImages202,
+  PullAdminServiceImages400,
+  PullAdminServiceImages401,
+  PullAdminServiceImages403,
+  PullAdminServiceImages409,
+  PullAdminServiceImages413,
+  PullAdminServiceImages415,
+  PullAdminServiceImages429,
+  PullAdminServiceImages500,
+  PullAdminServiceImages503,
+  PullAdminServiceImagesBody,
+  PullAdminServiceImagesHeaders,
   RestoreAdminServiceBackup200,
   RestoreAdminServiceBackup400,
   RestoreAdminServiceBackup401,
@@ -3424,6 +3437,116 @@ export const getAdminServiceData = async (
     {
       ...options,
       method: "GET",
+    },
+  );
+};
+
+export type pullAdminServiceImagesResponse202 = {
+  data: PullAdminServiceImages202;
+  status: 202;
+};
+
+export type pullAdminServiceImagesResponse400 = {
+  data: PullAdminServiceImages400;
+  status: 400;
+};
+
+export type pullAdminServiceImagesResponse401 = {
+  data: PullAdminServiceImages401;
+  status: 401;
+};
+
+export type pullAdminServiceImagesResponse403 = {
+  data: PullAdminServiceImages403;
+  status: 403;
+};
+
+export type pullAdminServiceImagesResponse409 = {
+  data: PullAdminServiceImages409;
+  status: 409;
+};
+
+export type pullAdminServiceImagesResponse413 = {
+  data: PullAdminServiceImages413;
+  status: 413;
+};
+
+export type pullAdminServiceImagesResponse415 = {
+  data: PullAdminServiceImages415;
+  status: 415;
+};
+
+export type pullAdminServiceImagesResponse429 = {
+  data: PullAdminServiceImages429;
+  status: 429;
+};
+
+export type pullAdminServiceImagesResponse500 = {
+  data: PullAdminServiceImages500;
+  status: 500;
+};
+
+export type pullAdminServiceImagesResponse503 = {
+  data: PullAdminServiceImages503;
+  status: 503;
+};
+
+export type pullAdminServiceImagesResponseSuccess = pullAdminServiceImagesResponse202 & {
+  headers: Headers;
+};
+export type pullAdminServiceImagesResponseError = (
+  | pullAdminServiceImagesResponse400
+  | pullAdminServiceImagesResponse401
+  | pullAdminServiceImagesResponse403
+  | pullAdminServiceImagesResponse409
+  | pullAdminServiceImagesResponse413
+  | pullAdminServiceImagesResponse415
+  | pullAdminServiceImagesResponse429
+  | pullAdminServiceImagesResponse500
+  | pullAdminServiceImagesResponse503
+) & {
+  headers: Headers;
+};
+
+export type pullAdminServiceImagesResponse =
+  | pullAdminServiceImagesResponseSuccess
+  | pullAdminServiceImagesResponseError;
+
+export const getPullAdminServiceImagesUrl = () => {
+  return `/api/admin/services/images/pull`;
+};
+
+export const pullAdminServiceImages = async (
+  pullAdminServiceImagesBody: PullAdminServiceImagesBody,
+  headers: PullAdminServiceImagesHeaders,
+  options?: Parameters<typeof pullAdminServiceImagesRequest>[1],
+): Promise<pullAdminServiceImagesResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return pullAdminServiceImagesRequest<pullAdminServiceImagesResponse>(
+    getPullAdminServiceImagesUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(pullAdminServiceImagesBody),
     },
   );
 };

@@ -36,6 +36,14 @@ export function decideServiceAction(
     return snapshot
       ? { available: true, execution: "direct", reason: null, workflow: null }
       : denied("not_owned");
+  if (action === "pull") {
+    if (!authority.enabledServiceIds.has(service.serviceId)) return denied("disabled");
+    return controlPlane.has(service.serviceId) ||
+      dependencies.has(service.serviceId) ||
+      service.serviceId === "data-manager"
+      ? { available: true, execution: "workflow", reason: null, workflow: "image-stage" }
+      : { available: true, execution: "direct", reason: null, workflow: null };
+  }
   if (controlPlane.has(service.serviceId)) {
     if (action === "restart" && service.serviceId !== "ops-agent") {
       if (!service.isBuiltIn || !authority.enabledServiceIds.has(service.serviceId))
@@ -50,9 +58,6 @@ export function decideServiceAction(
   if (dependencies.has(service.serviceId)) return denied("host_only", "host");
   if (action !== "stop" && !authority.enabledServiceIds.has(service.serviceId))
     return denied("disabled");
-  // Pull-only DM staging needs Plan09 M3's purpose-bound producer. The installed
-  // coordinator Update's private checked submission is a separate fixed path.
-  if (service.serviceId === "data-manager" && action === "pull") return denied("unavailable");
   if (service.serviceId === "data-manager" && (action === "apply" || action === "update"))
     return {
       available: true,

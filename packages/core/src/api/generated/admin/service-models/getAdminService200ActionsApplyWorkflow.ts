@@ -10,4 +10,5 @@ export const GetAdminService200ActionsApplyWorkflow = {
   "system-update": "system-update",
   "coordinator-apply": "coordinator-apply",
   "coordinator-update": "coordinator-update",
+  "image-stage": "image-stage",
 } as const;

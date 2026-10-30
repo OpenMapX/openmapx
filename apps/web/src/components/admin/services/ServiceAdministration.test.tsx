@@ -15,6 +15,42 @@ const availableActions = Object.fromEntries(
     { available: true, execution: "direct", reason: null, workflow: null },
   ]),
 );
+
+it("confirms immutable image staging and reuses the request key after a lost response", async () => {
+  let attempts = 0;
+  const requests = setup((url) => {
+    if (url.pathname === "/api/admin/services/images/pull") {
+      attempts++;
+      return attempts === 1
+        ? Response.json({ error: "Connection interrupted" }, { status: 503 })
+        : Response.json({ ok: true, jobId: "staged-images" }, { status: 202 });
+    }
+    return undefined;
+  });
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select demo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Stage selected images" }));
+  expect(
+    await screen.findByText(/Configured tags and running containers stay unchanged/),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Stage images" }));
+  await waitFor(() => expect(attempts).toBe(1));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Stage images" })).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Stage images" }));
+  await waitFor(() => expect(attempts).toBe(2));
+  const staged = requests.filter((request) => request.url.pathname.endsWith("/images/pull"));
+  expect(staged.map((request) => JSON.parse(String(request.init.body)))).toEqual([
+    { serviceIds: ["demo"] },
+    { serviceIds: ["demo"] },
+  ]);
+  expect(new Headers(staged[0].init.headers).get("idempotency-key")).toBeTruthy();
+  expect(new Headers(staged[0].init.headers).get("idempotency-key")).toBe(
+    new Headers(staged[1].init.headers).get("idempotency-key"),
+  );
+});
 const acquisition = { state: "available", reason: null };
 let apiUrl = "http://admin.test";
 const toast = vi.fn();

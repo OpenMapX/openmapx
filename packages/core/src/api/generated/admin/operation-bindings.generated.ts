@@ -788,6 +788,13 @@ export async function provisionAdminDawarichRequest<T>(
 ): Promise<T> {
   return provisionAdminDawarichBound<T>(url, options);
 }
+const pullAdminServiceImagesBound = bindAdminOperation("pullAdminServiceImages");
+export async function pullAdminServiceImagesRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return pullAdminServiceImagesBound<T>(url, options);
+}
 const refreshAdminExtensionCatalogBound = bindAdminOperation("refreshAdminExtensionCatalog");
 export async function refreshAdminExtensionCatalogRequest<T>(
   url: string,

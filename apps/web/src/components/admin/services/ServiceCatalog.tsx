@@ -32,6 +32,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   useServiceHealthCheck,
+  useServiceImageStage,
   useServiceSelection,
   useServiceSelectionSave,
   useServicesBulkAction,
@@ -45,6 +46,7 @@ import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { useClientPagination } from "../shared/tableHooks";
@@ -186,6 +188,10 @@ function ServiceCatalogView() {
   const [preset, setPreset] = useState("");
   const [noDeps, setNoDeps] = useState(false);
   const [motisImport, setMotisImport] = useState(false);
+  const [stageIntent, setStageIntent] = useState<{
+    serviceIds: string[];
+    idempotencyKey: string;
+  } | null>(null);
   const presets = useQuery({
     queryKey: ["admin", "service-presets", apiUrl],
     queryFn: async () => unwrapAdminResponse(await listAdminServicePresets({ client })),
@@ -259,6 +265,21 @@ function ServiceCatalogView() {
   const healthCheckMutation = useServiceHealthCheck();
   const saveSelectionMutation = useServiceSelectionSave();
   const bulkMutation = useServicesBulkAction();
+  const stageMutation = useServiceImageStage();
+  async function stageImages() {
+    if (!stageIntent) return;
+    const execution = owner;
+    try {
+      const result = await stageMutation.mutateAsync(stageIntent);
+      if (execution.active) {
+        setStageIntent(null);
+        showToast(`Queued image staging (${result.jobId})`);
+      }
+    } catch (error) {
+      if (execution.active)
+        showToast(error instanceof Error ? error.message : "Image staging failed", "error");
+    }
+  }
 
   async function checkHealth() {
     const execution = owner;
@@ -355,6 +376,15 @@ function ServiceCatalogView() {
         gap: 2,
       }}
     >
+      <ConfirmDialog
+        open={stageIntent !== null}
+        title="Stage selected images"
+        message={`Download immutable images for ${stageIntent?.serviceIds.join(", ") ?? ""}. Configured tags and running containers stay unchanged. Follow progress in Activity.`}
+        confirmLabel="Stage images"
+        loading={stageMutation.isPending}
+        onConfirm={() => void stageImages()}
+        onCancel={() => setStageIntent(null)}
+      />
       {data?.acquisition.state === "unavailable" && (
         <CompactAlert severity="warning">
           Operations agent is unavailable. Service state is unknown.{" "}
@@ -632,6 +662,26 @@ function ServiceCatalogView() {
               }
             >
               Update selected
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={
+                stageMutation.isPending ||
+                selectedIds.size === 0 ||
+                selectedIds.size > 64 ||
+                [...selectedIds].some(
+                  (id) => !services.find((service) => service.id === id)?.actions?.pull.available,
+                )
+              }
+              onClick={() =>
+                setStageIntent({
+                  serviceIds: [...selectedIds],
+                  idempotencyKey: crypto.randomUUID(),
+                })
+              }
+            >
+              Stage selected images
             </Button>
             <Button
               size="small"

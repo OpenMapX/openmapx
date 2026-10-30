@@ -248,6 +248,11 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     serviceId: "motis",
     expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
   },
+  "service.image.stage": {
+    kind: "service.image.stage",
+    serviceId: "data-manager",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.pull": {
     kind: "service.pull",
     serviceId: "motis",

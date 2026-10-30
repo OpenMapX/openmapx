@@ -1360,6 +1360,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           // under writer -> release lock, then begins immediately before Docker.
           if (
             job.operation.kind !== "coreService.restart" &&
+            job.operation.kind !== "service.image.stage" &&
             !(
               job.operation.kind === "service.pull" &&
               job.operation.serviceId === "data-manager" &&
@@ -1368,7 +1369,20 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           )
             beginControlEffect(authority);
         }
-        return dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
+        try {
+          return await dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
+        } catch (error) {
+          if (authority && job.operation.kind === "service.image.stage") {
+            try {
+              // The nominal producer checks the original started cell and all
+              // children. A begun stage cannot be relabeled as unissued.
+              retainConfigurationPreEffectRefusal(authority);
+            } catch {
+              // Existing begun/unknown evidence remains fenced.
+            }
+          }
+          throw error;
+        }
       })
       .then(
         async (rawResult) => {

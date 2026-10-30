@@ -102,6 +102,11 @@ export {
   validateExtensionManifest,
   verifiedCatalogEntrySchema,
 } from "./extension-schema";
+export {
+  type ImageStagePlatform,
+  imageStagePlatform,
+  immutableImageStageReference,
+} from "./image-stage";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
   isSafePostgresIdentifier,
