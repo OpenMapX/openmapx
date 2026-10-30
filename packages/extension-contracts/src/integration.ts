@@ -170,6 +170,26 @@ export function readCredentialSetup(propertyDef: unknown): CredentialSetup | und
   return parsed.success ? parsed.data : undefined;
 }
 
+/**
+ * Platform backends a health check can probe as `${endpoint:<id>}`. Each
+ * resolves to the instance the platform's own client for it queries: the
+ * self-hosted service when it is enabled, then the operator's URL, then the
+ * public default.
+ */
+export const HEALTH_CHECK_ENDPOINT_IDS = ["overpass"] as const;
+export type HealthCheckEndpointId = (typeof HEALTH_CHECK_ENDPOINT_IDS)[number];
+
+export function isHealthCheckEndpointId(value: string): value is HealthCheckEndpointId {
+  return (HEALTH_CHECK_ENDPOINT_IDS as readonly string[]).includes(value);
+}
+
+/** `${endpoint:<id>}` placeholders in `text` naming no known platform endpoint. */
+function unknownEndpointPlaceholders(text: string): string[] {
+  return [...text.matchAll(/\$\{endpoint:([^}]*)\}/g)]
+    .map((match) => match[1] ?? "")
+    .filter((id) => !isHealthCheckEndpointId(id));
+}
+
 const healthCheckSchema = z.object({
   name: z.string().optional(),
   type: z.enum(["http", "ping", "tcp", "custom"]),
@@ -178,7 +198,9 @@ const healthCheckSchema = z.object({
    * Template with `${configKey}` placeholders resolved from the integration's
    * configSchema cascade (defaults → database → vault → env). Use this when
    * the probe needs an API key or similar; the placeholder name must match a
-   * key declared in `configSchema.properties`.
+   * key declared in `configSchema.properties`. `${service:<id>}` is a
+   * self-hosted service's URL, and `${endpoint:<id>}` the instance of a
+   * platform backend in use (`HEALTH_CHECK_ENDPOINT_IDS`).
    */
   urlTemplate: z.string().optional(),
   /** Same substitution rules as `urlTemplate`. */
@@ -463,6 +485,20 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
       errors.push(
         "manifest.healthCheck is required for integrations with infrastructure dependencies (requires)",
       );
+    }
+    const healthChecks = manifest.healthCheck
+      ? Array.isArray(manifest.healthCheck)
+        ? manifest.healthCheck
+        : [manifest.healthCheck]
+      : [];
+    for (const check of healthChecks) {
+      for (const text of [check.urlTemplate ?? "", ...Object.values(check.headers ?? {})]) {
+        for (const id of unknownEndpointPlaceholders(text)) {
+          errors.push(
+            `manifest.healthCheck: unknown endpoint "${id}" in \${endpoint:${id}} (known: ${HEALTH_CHECK_ENDPOINT_IDS.join(", ")})`,
+          );
+        }
+      }
     }
     if (manifest.runtimeDataSources && manifest.dataSources?.length) {
       errors.push(

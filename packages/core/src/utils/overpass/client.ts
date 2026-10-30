@@ -1,11 +1,12 @@
 import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
+import { type ResolvedPlatformEndpoint, resolvePlatformEndpoint } from "../platform-endpoints";
 import { USER_AGENT } from "../userAgent";
 import type { OverpassResponse } from "./types";
 
-const DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter";
-let configuredOverpassUrl: string | null = null;
+/** The enabled self-hosted service's URL, which the integrations set when they activate. */
+let selfHostedOverpassUrl: string | null = null;
 
 let captureSupplier: (url: string) => readonly Attribution[] = () => [OPENSTREETMAP_ATTRIBUTION];
 
@@ -16,20 +17,15 @@ export function setOverpassContributorResolver(
   captureSupplier = resolve ?? (() => [OPENSTREETMAP_ATTRIBUTION]);
 }
 
-function normalizeOverpassUrl(url: string): string {
-  const trimmed = url.replace(/\/$/, "");
-  return trimmed.endsWith("/api/interpreter") ? trimmed : `${trimmed}/api/interpreter`;
-}
-
-function currentOverpassUrl(): string {
-  if (configuredOverpassUrl) return configuredOverpassUrl;
-  const envUrl = process.env.OVERPASS_URL?.trim();
-  return envUrl ? normalizeOverpassUrl(envUrl) : DEFAULT_OVERPASS_URL;
+/** The instance queries go to, resolved as `${endpoint:overpass}` health checks resolve it. */
+function currentOverpassEndpoint(): ResolvedPlatformEndpoint {
+  const endpoint = resolvePlatformEndpoint("overpass", selfHostedOverpassUrl);
+  if (!endpoint) throw new Error("Overpass has a public default endpoint");
+  return endpoint;
 }
 
 export function setOverpassUrl(url: string | undefined): void {
-  const trimmed = url?.trim();
-  configuredOverpassUrl = trimmed && trimmed.length > 0 ? normalizeOverpassUrl(trimmed) : null;
+  selfHostedOverpassUrl = url?.trim() || null;
 }
 
 export class OverpassRateLimitError extends Error {
@@ -185,16 +181,16 @@ export function isOverpassRuntimeLimit(remark: string | undefined): boolean {
  * When a custom OVERPASS_URL is set (e.g. local instance), the fallback is skipped.
  */
 export async function overpassQuery(query: string): Promise<OverpassResponse> {
+  const endpoint = currentOverpassEndpoint();
   try {
-    return await fetchOverpass(currentOverpassUrl(), query);
+    return await fetchOverpass(`${endpoint.url}/api/interpreter`, query);
   } catch (err) {
     // Only fall back to the public mirror when using the default public endpoint.
-    // A custom OVERPASS_URL means a local/private instance — no point falling back
-    // to a different public server.
-    const usingCustomUrl = configuredOverpassUrl !== null || !!process.env.OVERPASS_URL;
+    // A self-hosted or operator instance is the deployment's choice — no point
+    // falling back to a different public server.
     const isFallbackable =
       err instanceof OverpassRateLimitError || err instanceof OverpassUnavailableError;
-    if (!usingCustomUrl && isFallbackable) {
+    if (endpoint.source === "default" && isFallbackable) {
       return fetchOverpass(OVERPASS_FALLBACK_URL, query);
     }
     throw err;

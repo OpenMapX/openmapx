@@ -10,6 +10,7 @@ const coreServerMocks = vi.hoisted(() => ({
   safeFetchStatus: vi.fn(),
 }));
 const dnsMocks = vi.hoisted(() => ({ lookup: vi.fn() }));
+const serviceUrls = vi.hoisted(() => new Map<string, string>());
 const netMocks = vi.hoisted(() => ({ createConnection: vi.fn() }));
 
 vi.mock("@openmapx/core/server", () => coreServerMocks);
@@ -23,7 +24,7 @@ vi.mock("node:dns/promises", () => dnsMocks);
 vi.mock("../service-registry", () => ({
   serviceUrl: (id: string) => {
     if (id === "valhalla") return "http://valhalla:8002";
-    return undefined;
+    return serviceUrls.get(id);
   },
 }));
 
@@ -550,6 +551,106 @@ describe("integration-health placeholder substitution", () => {
         headers: expect.objectContaining({ "X-Api-Key": "secret-token-123" }),
       }),
     );
+  });
+});
+
+// biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+describe("integration-health ${endpoint:...} placeholders", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    serviceUrls.clear();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  function manifestIntegration(id: string): LoadedIntegration {
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
+    );
+    return { ...makeIntegration(manifest.healthCheck), id, manifest };
+  }
+
+  it.each([
+    ["poi-overpass", "poi-overpass"],
+    ["transit-overpass", "transit-overpass"],
+    ["overlay-hiking", "overlay-hiking:OpenStreetMap Overpass"],
+  ])("%s probes the self-hosted Overpass when it is enabled", async (id, statusId) => {
+    vi.stubEnv("OVERPASS_URL", "https://overpass.example.org");
+    serviceUrls.set("overpass", "http://overpass:80");
+
+    const statuses = await executeIntegrationHealthCheck(manifestIntegration(id));
+
+    expect(statuses.find((status) => status.id === statusId)).toMatchObject({
+      status: "up",
+      url: "http://overpass:80/api/status",
+    });
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "http://overpass:80/api/status",
+      expect.objectContaining({ allowPrivateHosts: ["overpass"] }),
+    );
+    expect(fetchSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain(
+      "https://overpass-api.de/api/status",
+    );
+  });
+
+  it("probes an operator's private instance, sending its URL credentials as Basic auth", async () => {
+    vi.stubEnv("OVERPASS_URL", "http://mapper:s3cret-pass@overpass.lan:8080/api/interpreter");
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("poi-overpass"));
+
+    expect(status).toMatchObject({ status: "up", url: "http://overpass.lan:8080/api/status" });
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "http://overpass.lan:8080/api/status",
+      expect.objectContaining({
+        allowPrivateHosts: ["overpass.lan"],
+        allowedRedirectOrigin: "http://overpass.lan:8080",
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from("mapper:s3cret-pass").toString("base64")}`,
+        }),
+      }),
+    );
+  });
+
+  it("never shows URL credentials, even in an error message that repeats them", async () => {
+    vi.stubEnv("OVERPASS_URL", "https://mapper:s3cret-pass@overpass.example.org");
+    coreServerMocks.safeFetchStatus.mockRejectedValue(
+      new Error("request to https://mapper:s3cret-pass@overpass.example.org failed"),
+    );
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("poi-overpass"));
+
+    expect(status?.status).toBe("down");
+    expect(JSON.stringify(status)).not.toMatch(/s3cret-pass|mapper/);
+  });
+
+  it("probes the public default, as a public host, when nothing is configured", async () => {
+    vi.stubEnv("OVERPASS_URL", "");
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("transit-overpass"));
+
+    expect(status?.url).toBe("https://overpass-api.de/api/status");
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "https://overpass-api.de/api/status",
+      expect.objectContaining({ allowPrivateHosts: [] }),
+    );
+  });
+
+  it("reports an endpoint id it does not know as unconfigured, without a request", async () => {
+    const [status] = await executeIntegrationHealthCheck(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      makeIntegration({ type: "http", urlTemplate: "${endpoint:nominatim}/status" }),
+    );
+
+    expect(status).toMatchObject({
+      status: "unconfigured",
+      url: "nominatim endpoint not configured",
+    });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
   });
 });
 

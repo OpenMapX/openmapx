@@ -27,8 +27,8 @@
     }
   },
   "healthCheck": {
-    "type": "ping",
-    "url": "https://overpass-api.de/api/status"
+    "type": "http",
+    "urlTemplate": "${endpoint:overpass}/api/status"
   },
   "quality": "built-in",
   "category": "Geocoding",
