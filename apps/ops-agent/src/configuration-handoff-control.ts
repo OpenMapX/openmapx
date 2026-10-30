@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
+  assertConfigurationHandoffHostSources as assertHostSources,
   type BorrowedArtifactTargetLease,
   beginFixedCliExecution,
   bindBorrowedControlExecution,
@@ -119,6 +120,11 @@ export function configurationHandoffChildState(child: ConfigurationHandoffChild)
   if (!state) throw Error("Original nominal helper required");
   executionAuthorityState(state.authority);
   return state;
+}
+export function assertConfigurationHandoffHostSources(child: ConfigurationHandoffChild): void {
+  const state = configurationHandoffChildState(child);
+  verifyConfigurationHelperReady(state.lease);
+  assertHostSources(state.authority);
 }
 export async function waitForConfigurationHandoffPreparation(
   child: ConfigurationHandoffChild,

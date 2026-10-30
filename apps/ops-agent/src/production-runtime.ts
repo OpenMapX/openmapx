@@ -250,7 +250,7 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile,
   });
   installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
-  installPlatformConfigurationRuntime(runtime);
+  installPlatformConfigurationRuntime(runtime, { infraDir: options.stack.infraDir });
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
     runFixedCli,

@@ -8,6 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import { loadAuthPolicy } from "../account/auth-policy";
 import { platformConfigurationPreview, systemSettings } from "../db/schema";
+import { readProjection } from "./admin-job-projection";
 import {
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
@@ -221,6 +222,28 @@ export async function preparePlatformConfigurationChange(
           })
       )
         throw new PlatformPreviewConflict();
+      const generation = Object.values(
+        readProjection(current.job.checkpointResult).operations,
+      ).find(
+        (entry) =>
+          entry.operation?.kind === "stack.render" &&
+          entry.operation.candidateId === candidate.candidateId &&
+          entry.operation.revisionId === candidate.revisionId,
+      );
+      if (!generation?.attempt) {
+        // A consumed proof authorizes this saved intent, not an indefinitely
+        // delayed first effect under a changed policy or expired preview.
+        // Attempted work remains lookup-only and never consumes another proof.
+        const original = await readPlatformPreview(
+          { actorId: writer.actorId, previewFingerprint: preview.previewFingerprint },
+          current.connection,
+        );
+        if (
+          canonicalJson(original.preview) !== canonicalJson(preview) ||
+          (await loadAuthPolicy(current.connection)).revision !== preview.authPolicyRevision
+        )
+          throw new PlatformPreviewConflict("Platform policy changed; create a new preview");
+      }
       return;
     }
     const stored = await readPlatformPreview(

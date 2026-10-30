@@ -23,6 +23,30 @@ export const CONFIGURATION_HANDOFF_VERSION = "1";
 export const CONFIGURATION_HANDOFF_IMAGE_LABEL = "openmapx.configuration-handoff.version";
 const protectedOrder = ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"] as const;
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+/** Only original inherited environment values participate in the private source
+ * copy. Container identity and fixed helper transport necessarily differ. */
+export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts): string[] {
+  const excluded = new Set([
+    "HOSTNAME",
+    "DOCKER_CONFIG",
+    "OPS_AGENT_HANDOFF_ID",
+    "OPS_CONFIGURATION_HANDOFF_ID",
+    "OPENMAPX_CONTROL_EXECUTION",
+    "OPENMAPX_CONTROL_DELEGATION",
+    "OPENMAPX_PARENT_EXECUTION",
+  ]);
+  return z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(256)
+        .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+    )
+    .max(256)
+    .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
+    .parse([...new Set(facts.envNames.filter((name) => !excluded.has(name)))].sort());
+}
 export function configurationHandoffServiceOrder(serviceIds: readonly string[]): string[] {
   const values = z.array(id).min(1).max(64).parse(serviceIds);
   if (new Set(values).size !== values.length) throw Error("Duplicate frozen handoff target");
@@ -99,6 +123,7 @@ export async function inspectConfigurationHandoffPrerequisite(input: {
       input.signal,
     );
     if (facts.imageId !== input.imageId) throw new OpsHostUpdateRequiredError();
+    configurationHandoffEnvironmentNames(facts);
     const version = (
       await input.runDocker(
         [

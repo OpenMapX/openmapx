@@ -4754,6 +4754,8 @@ export async function publishPreparedTrustedConfigurationSnapshot(
 ) {
   assertCommittedConfigurationCandidate(candidate);
   const state = validatedConfigurationCandidateState(candidate);
+  if (state.record.privatePlatformIntent)
+    await verifyConfigurationCommitParticipant(candidate, state.writer);
   const inspected = inspectPreparedConfigurationRecord(
     encodePreparedConfigurationRecord(state.record, state.publisher.token),
     state.publisher.token,

@@ -29,6 +29,18 @@ export const configurationHandoffIntentRecordSchema = z
       .min(32)
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
+    sourceDigest: digest,
+    environmentNames: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(256)
+          .regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+      )
+      .max(256)
+      .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
+      .refine((names) => names.every((name, index) => index === 0 || names[index - 1]! < name)),
     preparerAdmissionDigest: digest,
     ownerCertificateDigest: digest,
     leaseId: z.uuid(),

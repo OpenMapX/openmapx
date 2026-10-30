@@ -34,6 +34,8 @@ export {
   verifyPublishedUnusedConfigurationCapacity,
 } from "./configuration-no-guard";
 export {
+  assertConfigurationHandoffHostSources,
+  captureConfigurationHandoffHostSources,
   configurationHostFields,
   observeConfigurationSources,
   verifyConfigurationReleaseSourceWitness,

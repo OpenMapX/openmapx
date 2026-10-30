@@ -2,7 +2,7 @@
  * Docker I/O is substituted. This qualifies preparation, launch reconciliation
  * and real child adoption; not native helper application/public platform HTTP. */
 import { randomUUID } from "node:crypto";
-import { rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   closeControlInstallation,
@@ -57,7 +57,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     afterEach(async () => {
       await state.fixture?.stop();
     });
-    it.each(["old", "1", "launch", "launch-lost"])(
+    it.each(["old", "1", "launch", "launch-lost", "policy-change"])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
         const ids = [
@@ -76,7 +76,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "ops-agent": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
             "app-api": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
           },
-          configurationHelperVersion: version.startsWith("launch") ? "1" : version,
+          configurationHelperVersion: version === "old" ? "old" : "1",
           configurationHelperLaunchResponseLoss: version === "launch-lost",
           actualComposeConfig: true,
         });
@@ -221,7 +221,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     });
                     await prospective.stageProspectiveConfigurationMaintenance(candidate);
                     await prospective.prepareConfigurationMaintenance(candidate);
-                    if (version.startsWith("launch")) {
+                    if (version.startsWith("launch") || version === "policy-change") {
                       const decision =
                         await prospective.commitProspectiveConfigurationMaintenance(candidate);
                       await prospective.decideConfigurationMaintenance(decision);
@@ -231,6 +231,41 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                             .maintenanceId!,
                         candidateId: candidate.candidateId,
                       });
+                      if (version === "policy-change") {
+                        const { applyAuthPolicy, defaultAuthPolicySettings } = await import(
+                          "../../account/auth-policy"
+                        );
+                        await applyAuthPolicy(
+                          {
+                            confirmed: true,
+                            expectedRevision: policy.revision,
+                            idempotencyKey: randomUUID(),
+                            settings: { ...defaultAuthPolicySettings, passwordMinLength: 14 },
+                          },
+                          actorId,
+                          state.fixture.db,
+                        );
+                        await expect(
+                          prospective.executeConfigurationMaintenanceStep(candidate, 0),
+                        ).rejects.toThrow(/policy|preview/i);
+                        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                          host.initial.revisionId,
+                        );
+                        expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(0);
+                        expect(existsSync(join(host.queue, `${candidate.revisionId}.json`))).toBe(
+                          false,
+                        );
+                        const [desired] = await state.fixture.db
+                          .select()
+                          .from(schema.systemSettings)
+                          .where(eq(schema.systemSettings.key, "platformConfiguration"));
+                        expect(desired?.value).toMatchObject({
+                          candidateId: candidate.candidateId,
+                          revisionId: candidate.revisionId,
+                        });
+                        await expect(dm.assertDataAdmission()).rejects.toThrow();
+                        return candidate;
+                      }
                       for (const step of prepared.steps)
                         await prospective.executeConfigurationMaintenanceStep(
                           candidate,
@@ -278,6 +313,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     );
                     throw error;
                   }
+                  if (version === "policy-change") return;
                   const retained = ctx.checkpointResult?._configurationMaintenance as
                     | { phase?: string; receipt?: { state?: string; steps?: { phase: string }[] } }
                     | undefined;
@@ -305,6 +341,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   expect(owner.plan.nestedHandoff?.recipient).toBe("configuration-helper");
                   expect(receipt.binding.expectedSourceRevision).toBe(source.sourceRevision);
                   if (version.startsWith("launch")) {
+                    const handoff = await createApiOpsClient().execute({
+                      kind: "configurationHandoff.inspect",
+                      handoffId: owner.plan.handoff!.handoffId,
+                    });
+                    expect(handoff).toMatchObject({
+                      execution: "sync",
+                      value: {
+                        phase: "prepared",
+                        appliedRevisionId: null,
+                        completedServiceIds: [],
+                        failedServiceIds: [],
+                      },
+                    });
                     expect(receipt).toMatchObject({
                       state: "applying",
                       followUp: "unknown",
@@ -370,6 +419,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         child,
                         AbortSignal.timeout(2000),
                       );
+                      childControl.assertConfigurationHandoffHostSources(child);
+                      writeFileSync(join(host.infraDir, ".env"), "OPENMAPX_SYNTHETIC_DRIFT=1\n");
+                      expect(() =>
+                        childControl.assertConfigurationHandoffHostSources(child),
+                      ).toThrow("Helper host sources changed");
                       expect(
                         host.calls.filter((args) => args[0] === "compose" && args.includes("up")),
                       ).toHaveLength(0);

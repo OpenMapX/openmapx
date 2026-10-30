@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import {
   assertArtifactTargetLeaseForward,
   bindControlChildPhase,
+  captureConfigurationHandoffHostSources,
   closeControlInstallation,
   consumeControlChildDispatch,
   controlDigest,
@@ -14,9 +15,11 @@ import {
   issueControlChildPhase,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
+  openControlInstallation,
   openFixedChildInstallation,
   prepareFixedControlChild,
   readPrivateRecord,
+  restoreAdmittedControlExecution,
   signControl,
   type VerifiedExecutionAuthority,
   verifyControl,
@@ -27,6 +30,7 @@ import {
   canonicalJson,
   configurationHandoffPrepareOperationSchema,
   type OpsOperation,
+  type OpsResultFor,
 } from "@openmapx/core/ops";
 import {
   type ConfigurationHandoffIntentRecord,
@@ -36,8 +40,10 @@ import {
   configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
+import { installationState } from "../../../packages/core/src/build-artifacts/control-authority";
 import {
   CONFIGURATION_HANDOFF_LABEL,
+  configurationHandoffEnvironmentNames,
   configurationHandoffRunArgs,
   inspectConfigurationHandoffPrerequisite,
 } from "./configuration-handoff";
@@ -207,9 +213,11 @@ export async function prepareConfigurationHandoffLaunch(
     assertion: attempt.assertion,
     container: existsSync("/run/secrets/openmapx-control-verifiers"),
   });
-  let helperPublicKey: string;
+  let helperPublicKey: string, sourceDigest: string;
+  const environmentNames = configurationHandoffEnvironmentNames(facts);
   try {
     helperPublicKey = child.publicKey;
+    sourceDigest = captureConfigurationHandoffHostSources(authority, child, environmentNames);
   } finally {
     closeControlInstallation(child);
   }
@@ -224,6 +232,8 @@ export async function prepareConfigurationHandoffLaunch(
     requestedDeadlineAt: binding.requestedDeadlineAt,
     operation,
     helperPublicKey,
+    sourceDigest,
+    environmentNames,
     preparerAdmissionDigest: local.receiptDigest,
     ownerCertificateDigest: owned.owner.rootCertificateDigest,
     leaseId: observed.leaseId,
@@ -312,6 +322,63 @@ function readProgress(
   )
     throw Error("Original handoff progress changed");
   return value;
+}
+
+/** Safe observation only. Terminal progress is not application or containment;
+ * those require the completed original helper/physical receipt chain. */
+export function inspectConfigurationHandoff(
+  infraDir: string,
+  handoffId: string,
+): OpsResultFor<"configurationHandoff.inspect"> {
+  const installation = openControlInstallation({
+    infraDir,
+    role: "ops-agent",
+    container: existsSync("/run/secrets/openmapx-control-verifiers"),
+  });
+  try {
+    const local = installationState(installation),
+      raw = readPrivateRecord(local, "observations", recordName(handoffId, "intent")),
+      observed = verifyControl(
+        installation.publicKey,
+        domains.intent,
+        raw,
+        configurationHandoffIntentRecordSchema,
+      ),
+      authority = restoreAdmittedControlExecution(installation, observed.preparer),
+      intent = readIntent(authority, handoffId),
+      progress = readProgress(authority, intent),
+      unresolved = ["applied", "rolled_back", "failed", "recovery_required"].includes(
+        progress.phase,
+      ),
+      phase: OpsResultFor<"configurationHandoff.inspect">["phase"] =
+        unresolved || progress.launch.state === "attempted"
+          ? "recovery_required"
+          : progress.phase === "draining"
+            ? "draining"
+            : progress.phase === "applying"
+              ? "applying"
+              : progress.phase === "verifying"
+                ? "verifying"
+                : "prepared";
+    return {
+      handoffId,
+      phase,
+      expectedRevisionId: intent.operation.expectedCurrentRevisionId,
+      appliedRevisionId: null,
+      completedServiceIds: [],
+      failedServiceIds: progress.targets
+        .filter((target) => target.phase === "unknown")
+        .map((target) => target.serviceId),
+      recoveryCodes:
+        progress.launch.state === "attempted" ? ["launch_unknown"] : ["receipt_pending"],
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      throw new OpsExecutionFailure("not_found", {});
+    throw error;
+  } finally {
+    closeControlInstallation(installation);
+  }
 }
 
 /** First dispatch alone consumes the original helper ticket. Once launch intent
