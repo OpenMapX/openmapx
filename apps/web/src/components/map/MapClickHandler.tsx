@@ -17,6 +17,7 @@ import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick, getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
 
 // Configure before any map listener mounts. Read live mode state at the first
@@ -119,6 +120,9 @@ export function MapClickHandler() {
         <path d="M13.5 0C6.044 0 0 6.044 0 13.5c0 9.219 13.5 29.5 13.5 29.5S27 22.719 27 13.5C27 6.044 20.956 0 13.5 0z" fill="#757575" stroke="#424242" stroke-width="1"/>
         <circle cx="13.5" cy="13.5" r="5.5" fill="white"/>
       </svg>`;
+        // Tapping the dropped pin would otherwise re-drop it at the tapped spot,
+        // a pin's height above where it stood.
+        bindMapMarkerActivation(el);
         markerRef.current = new ml.Marker({ element: el, anchor: "bottom" })
           .setLngLat(clickedLngLat)
           .addTo(mapRef.current);

@@ -5,9 +5,10 @@ import { MeasurementLayer } from "@integrations/overlay-tool-measurement/map-lay
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { TravelTimeLayer } from "@integrations/overlay-tool-travel-time/map-layer";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import { useParkingStore } from "@openmapx/core";
+import { useMapClickStore, useParkingStore } from "@openmapx/core";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { claimMapClickForMarker } from "@/integration-api/map/mapClickOwnership";
 import { createFakeMap } from "@/test/fakeMap";
 import { MapClickHandler } from "./MapClickHandler";
 
@@ -93,6 +94,48 @@ describe("physical map click ownership", () => {
       expect(useTravelTimeStore.getState().origin).toBeNull();
     },
   );
+
+  it("leaves a click a marker claimed to the marker", () => {
+    const fake = toolMap();
+    useMapClickStore.getState().setClickedLngLat(null);
+    render(<MapClickHandler />);
+    const onMarker = new MouseEvent("click");
+    expect(claimMapClickForMarker(onMarker)).toBe(true);
+    act(() =>
+      fake.emit("click", {
+        point: { x: 1, y: 2 },
+        lngLat: { lng: 8, lat: 50 },
+        originalEvent: onMarker,
+      }),
+    );
+    expect(useMapClickStore.getState().clickedLngLat).toBeNull();
+
+    act(() =>
+      fake.emit("click", {
+        point: { x: 1, y: 2 },
+        lngLat: { lng: 8, lat: 50 },
+        originalEvent: new MouseEvent("click"),
+      }),
+    );
+    expect(useMapClickStore.getState().clickedLngLat).toEqual([8, 50]);
+    useMapClickStore.getState().setClickedLngLat(null);
+  });
+
+  it("does not let a marker claim a click an active tool owns", () => {
+    const fake = toolMap();
+    act(() => useMeasurementStore.getState().activate());
+    render(<MeasurementLayer />);
+    const onMarker = new MouseEvent("click");
+    expect(claimMapClickForMarker(onMarker)).toBe(false);
+    act(() =>
+      fake.emit("click", {
+        point: { x: 1, y: 2 },
+        lngLat: { lng: 8, lat: 50 },
+        originalEvent: onMarker,
+      }),
+    );
+    expect(useMeasurementStore.getState().points).toEqual([[8, 50]]);
+  });
 
   it("gives measurement priority over travel-time when both tools are active", () => {
     const fake = toolMap();

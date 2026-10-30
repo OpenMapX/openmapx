@@ -3,6 +3,7 @@
 import type { CategoryPlace } from "@openmapx/core";
 import { useParkingStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { fireEvent, render } from "@/test";
 
 const { createdMarkers, FakeMarker } = vi.hoisted(() => {
@@ -152,6 +153,36 @@ describe("ArrivalParkingMarkers", () => {
     expect(onSelectPlace).not.toHaveBeenCalled();
     fireEvent.keyDown(marker as HTMLElement, { key: "Enter" });
     expect(onSelectPlace).toHaveBeenCalledWith(samplePlaces[0]);
+  });
+
+  it("claims clicks from the map, even while disabled", () => {
+    mockMapContext.current = { mapRef: { current: { container: mapContainer } } };
+    const mapClickOwners: unknown[] = [];
+    const mapClick = (event: Event) => mapClickOwners.push(getMapClickOwner(event));
+    mapContainer.addEventListener("click", mapClick);
+    const onSelectPlace = vi.fn();
+    const { rerender } = render(
+      <ArrivalParkingMarkers
+        places={samplePlaces}
+        selectedPlace={null}
+        onSelectPlace={onSelectPlace}
+      />,
+    );
+    fireEvent.click(mapContainer.querySelector(".omx-arrival-parking-marker") as HTMLElement);
+    expect(onSelectPlace).toHaveBeenCalledWith(samplePlaces[0]);
+
+    rerender(
+      <ArrivalParkingMarkers
+        places={samplePlaces}
+        selectedPlace={null}
+        onSelectPlace={onSelectPlace}
+        disabled
+      />,
+    );
+    fireEvent.click(mapContainer.querySelector(".omx-arrival-parking-marker") as HTMLElement);
+    expect(onSelectPlace).toHaveBeenCalledTimes(1);
+    expect(mapClickOwners).toEqual(["marker", "marker"]);
+    mapContainer.removeEventListener("click", mapClick);
   });
 
   it("renders without crashing when map context is null", () => {

@@ -1153,6 +1153,23 @@ missing. Fence asynchronous completions by the current effect, map and source
 identity. Layer-scoped event listeners tolerate a layer that does not exist yet,
 so bind interactions to the overlay's visibility rather than to installation.
 
+A physical map click has one owner. Every map click handler, layer-scoped or
+not, starts with `getMapClickOwner(event)` from
+`@/integration-api/map/mapClickOwnership` and leaves an owned click alone; an
+active picker or tool takes its point with `claimMapClick(event, owner)`.
+
+MapLibre mounts DOM markers inside the map's event container, so a click on a
+marker is also a map click at that point. Unclaimed, the plain-map handler drops
+a pin there and layer handlers open whatever lies beneath. Bind each marker
+element with `bindMapMarkerActivation(element, { onActivate })` from
+`@/integration-api/map/mapMarkerActivation`. It claims the click for the marker
+and runs the action, leaves a click an active picker owns to the picker, and
+handles Enter and Space. The click is claimed, not stopped, so listeners outside
+the map such as click-away dismissal still see it. Omit `onActivate` for a
+marker that has no action but still covers the map. A static test rejects map
+click handlers that skip the ownership check and marker code that bypasses the
+binding.
+
 The modules under `apps/web/src/integration-api/` are an app-local API for
 trusted integrations compiled into the OpenMapX web build. They group map,
 overlay, runtime, and reusable component capabilities behind focused import

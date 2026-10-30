@@ -9,7 +9,7 @@ import {
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
-import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 import { useMarkerMapAttributions } from "@/integration-api/overlay/useMarkerMapAttributions";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 
@@ -266,17 +266,11 @@ export function usePinMarker(
           el.tabIndex = 0;
           el.setAttribute("aria-label", label);
         }
-        el.addEventListener("click", (event) => {
-          if (getMapClickOwner(event)) return;
-          if (!onActivateRef.current) return;
-          event.stopPropagation();
-          onActivateRef.current();
-        });
-        el.addEventListener("keydown", (event) => {
-          if (!onActivateRef.current || (event.key !== "Enter" && event.key !== " ")) return;
-          event.preventDefault();
-          event.stopPropagation();
-          onActivateRef.current();
+        // Without an action the pin is see-through: a hover pin drawn over a
+        // feature still lets that feature take the click.
+        bindMapMarkerActivation(el, {
+          onActivate: () => onActivateRef.current?.(),
+          isEnabled: () => Boolean(onActivateRef.current),
         });
 
         const svgDiv = document.createElement("div");

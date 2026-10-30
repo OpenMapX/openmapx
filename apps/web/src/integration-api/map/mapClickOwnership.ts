@@ -1,18 +1,18 @@
 import { useParkingStore } from "@openmapx/core";
 
-type MapClickOwner = "parking" | "crowd" | "measurement" | "travel-time";
+/** `marker`: a DOM marker took the click; see `bindMapMarkerActivation`. */
+type MapClickOwner = "parking" | "crowd" | "measurement" | "travel-time" | "marker";
+type ModeOwner = Exclude<MapClickOwner, "parking" | "marker">;
 interface Ownership {
   owner: MapClickOwner | null;
   claimed: boolean;
 }
 
 const ownership = new WeakMap<object, Ownership>();
-let readToolOwner: () => Exclude<MapClickOwner, "parking"> | null = () => null;
+let readToolOwner: () => ModeOwner | null = () => null;
 
 /** The map shell supplies integration state; this API stays independent of it. */
-export function configureMapClickOwnership(
-  resolver: () => Exclude<MapClickOwner, "parking"> | null,
-): void {
+export function configureMapClickOwnership(resolver: () => ModeOwner | null): void {
   readToolOwner = resolver;
 }
 
@@ -41,6 +41,19 @@ export function getMapClickOwner(event: object): MapClickOwner | null {
 export function claimMapClick(event: object, owner: MapClickOwner): boolean {
   const captured = getOwnership(event);
   if (captured.owner !== owner || captured.claimed) return false;
+  captured.claimed = true;
+  return true;
+}
+
+/**
+ * A DOM marker takes a click no picker or tool owns. Every map click handler
+ * then sees an owner and leaves the click alone, while listeners outside the
+ * map (click-away dismissal) still receive it.
+ */
+export function claimMapClickForMarker(event: object): boolean {
+  const captured = getOwnership(event);
+  if (captured.owner) return false;
+  captured.owner = "marker";
   captured.claimed = true;
   return true;
 }

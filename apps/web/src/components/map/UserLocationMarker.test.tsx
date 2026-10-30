@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@/components/panels/MyLocationCard", () => ({
@@ -80,6 +81,22 @@ describe("UserLocationMarker", () => {
     fireEvent.keyDown(mapContainer.firstElementChild as HTMLElement, { key: " " });
     expect(screen.getByText("my-location-card")).toBeInTheDocument();
   });
+  it("claims its click from the map", async () => {
+    const mapContainer = document.createElement("div");
+    const mapClickOwners: unknown[] = [];
+    mapContainer.addEventListener("click", (event) => mapClickOwners.push(getMapClickOwner(event)));
+    mapContextTest.mapRef.current = { container: mapContainer };
+    mapContextTest.mapReady = true;
+    useMapStore.setState({ userLocation: [13.4, 52.5] });
+    render(<UserLocationMarker />);
+    await waitFor(() => expect(mapContainer.children).toHaveLength(1));
+
+    fireEvent.click(mapContainer.firstElementChild as HTMLElement);
+
+    expect(screen.getByText("my-location-card")).toBeInTheDocument();
+    expect(mapClickOwners).toEqual(["marker"]);
+  });
+
   it("adds a location published before map readiness when the map becomes ready", async () => {
     const mapContainer = document.createElement("div");
     useMapStore.setState({ userLocation: [13.4, 52.5] });
