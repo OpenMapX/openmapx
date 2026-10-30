@@ -279,6 +279,13 @@ export {
 export { formatPaymentMethodLabel } from "./paymentMethods";
 export { withPhotoContributors } from "./photo-contributors";
 export {
+  ENDPOINT_URL_TEMPLATE,
+  isHealthCheckEndpointId,
+  platformEndpointServiceId,
+  type ResolvedPlatformEndpoint,
+  resolvePlatformEndpoint,
+} from "./platform-endpoints";
+export {
   computePlusCode,
   decodePlusCode,
   decodeShortPlusCode,
@@ -435,6 +442,7 @@ export {
   TRAFFIC_BAND_COLORS,
   type TrafficBand,
 } from "./trafficSeverity";
+export { type UrlWithoutCredentials, urlCredentialsAsBasicAuth } from "./url-credentials";
 export {
   contactDomain,
   USER_AGENT,

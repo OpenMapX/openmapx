@@ -13,8 +13,19 @@ export {
   extensionManifestSchema,
   validateExtensionManifest,
 } from "./extension";
-export type { IntegrationDataSource, IntegrationManifest } from "./integration";
-export { integrationManifestSchema, validateDataSource, validateManifest } from "./integration";
+export type {
+  HealthCheckEndpointId,
+  IntegrationDataSource,
+  IntegrationManifest,
+} from "./integration";
+export {
+  ENDPOINT_URL_TEMPLATE,
+  HEALTH_CHECK_ENDPOINT_IDS,
+  integrationManifestSchema,
+  isHealthCheckEndpointId,
+  validateDataSource,
+  validateManifest,
+} from "./integration";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export type { ManifestProvenance, ServiceManifest } from "./service";
 export { serviceManifestSchema, validateServiceManifest } from "./service";

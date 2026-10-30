@@ -256,18 +256,39 @@ interface HealthCheck {
   name?: string;
   type: "http" | "ping" | "tcp" | "custom";
   url?: string;
-  urlTemplate?: string;                       // ${configKey} placeholders
+  urlTemplate?: string;                       // ${configKey}, ${service:<id>}, ${endpoint:<id>}
   headers?: Record<string, string>;
   requiredConfigKeys?: string[];              // unconfigured if any is unset
   category?: string;
 }
 ```
 
-A `healthCheck` makes the integration probeable. `urlTemplate` and `headers`
-interpolate `${configKey}` placeholders resolved through the config cascade, so a
-probe can carry an API key without hard-coding it. If a key listed in
-`requiredConfigKeys` is unset, the probe reports **unconfigured** rather than
-attempting a request without the required configuration.
+A `healthCheck` makes the integration probeable. Probe the instance the
+integration actually queries, not a fixed public URL. `urlTemplate` and `headers`
+interpolate three placeholders:
+
+| Placeholder        | Resolves to                                                                                                                                                        | When it cannot resolve                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `${configKey}`     | The value from the config cascade, so a probe can carry an API key without hard-coding it.                                                                         | Empty; list the key in `requiredConfigKeys` to report **unconfigured** instead. |
+| `${service:<id>}`  | The URL of the enabled self-hosted service.                                                                                                                        | **Unconfigured**: the service is not enabled.                                   |
+| `${endpoint:<id>}` | The instance of a platform backend that the platform's own client queries: the self-hosted service when enabled, then the operator's URL, then the public default. | **Unconfigured**: no instance is set and there is no public default.            |
+
+Endpoint ids are fixed by the contract (`HEALTH_CHECK_ENDPOINT_IDS`); today the
+only one is `overpass`: the self-hosted `overpass` service, then `OVERPASS_URL`,
+then `overpass-api.de`. The Overpass integrations probe
+`${endpoint:overpass}/api/status`. An endpoint can be an internal host carrying
+the operator's credentials, so it is only ever where a probe goes:
+
+- it must be the whole URL prefix of `urlTemplate`, used once, followed by a
+  path or nothing; validation rejects it anywhere else, including headers;
+- only built-in integrations resolve it; a community manifest's probe is marked
+  down;
+- the operator's credentials go only to the endpoint's own origin.
+
+Self-hosted services and an operator's instance may be internal hosts. Every
+other probe URL must be public. Credentials in a URL, such as an operator's
+`https://user:pass@host`, are sent as Basic auth and never shown in the status
+URL or an error. A manifest's own `Authorization` header takes precedence.
 Use cheap, static endpoints for third-party reachability checks. Set
 `healthCheckIntervalMs` to a considerate background cadence (Mangrove uses
 900000 ms, or 15 minutes). The scheduler reuses cached results between probes
