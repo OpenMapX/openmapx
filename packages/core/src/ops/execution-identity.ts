@@ -54,6 +54,7 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "data.overtureIngest": 24 * 3600_000,
   "data.overtureExtract": 24 * 3600_000,
   "platform.config.apply": 3600_000,
+  "configuration-helper": 3600_000,
   "download-osm": 24 * 3600_000,
   "download-fonts": 24 * 3600_000,
   "convert-overpass": 24 * 3600_000,

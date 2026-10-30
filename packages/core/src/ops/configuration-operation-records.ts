@@ -1,6 +1,7 @@
 /** Canonical existing configuration effect inputs, shared by request and
  * maintenance receipt schemas. Contains no result schema/runtime policy. */
 import { z } from "zod";
+import { configurationHandoffPrepareOperationSchema } from "./configuration-handoff-records";
 import { coordinatorModeSchema } from "./configuration-preparation-records";
 
 export const serviceIdSchema = z
@@ -94,4 +95,5 @@ export const configurationMaintenanceEffectOperationSchema = z.discriminatedUnio
   serviceConfigApplyOperationSchema,
   integrationConfigApplyOperationSchema,
   vaultApplyOperationSchema,
+  configurationHandoffPrepareOperationSchema,
 ]);

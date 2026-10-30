@@ -2970,6 +2970,7 @@ export function publishConfigurationMaintenanceForwardWitness(
       parentDeadlineAt: receipt.parentDeadlineAt,
       planDigest: receipt.planDigest,
       ...(owner.plan.coordinatorImage ? { coordinatorImage: owner.plan.coordinatorImage } : {}),
+      ...(owner.plan.handoff ? { handoff: owner.plan.handoff } : {}),
       serviceIds: receipt.serviceIds,
       steps: receipt.steps,
     });
@@ -3168,6 +3169,7 @@ export function verifyConfigurationMaintenanceGenerationWitness(
       sourceAuthorityRevision: "not-shared",
       previewDigest: "0".repeat(64),
       ...(graph.coordinatorImage ? { coordinatorImage: graph.coordinatorImage } : {}),
+      ...(graph.handoff ? { handoff: graph.handoff } : {}),
       hardlinkPlan: request.plan,
       serviceIds: root.serviceIds,
       recreateServiceIds: graph.steps.flatMap((step) =>

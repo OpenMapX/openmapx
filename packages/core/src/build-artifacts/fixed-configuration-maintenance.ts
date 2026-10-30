@@ -3,6 +3,10 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
+  type ConfigurationHandoffIntent,
+  configurationHandoffIntentSchema,
+} from "../ops/configuration-handoff-records";
+import {
   type ConfigurationMaintenancePrepare,
   type ConfigurationMaintenanceStep,
   configurationMaintenancePrepareSchema,
@@ -56,6 +60,8 @@ export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
   sourceAuthorityRevision: z.string().min(1).max(128),
   previewDigest: digest,
   coordinatorImage: coordinatorImageSchema.optional(),
+  handoff: configurationHandoffIntentSchema.optional(),
+  nestedHandoff: z.lazy(() => controlChildReservationSchema).optional(),
   serviceIds: ids,
   planDigest: digest,
   hardlinkPlan: generationHardlinksPlanSchema,
@@ -86,7 +92,7 @@ function address(
   root: string,
   phase: string,
   ordinal: number,
-  executor: "ops-agent" | "data-manager",
+  executor: "ops-agent" | "data-manager" | "host-cli",
 ) {
   const bytes = createHash("sha256")
     .update(`openmapx-fixed-configuration-maintenance-v1\0${root}\0${phase}\0${ordinal}`)
@@ -103,7 +109,7 @@ function address(
         })();
   return {
     executor,
-    principal: "api" as const,
+    principal: executor === "host-cli" ? ("host-cli" as const) : ("api" as const),
     executionId,
     operationKey: controlChildOperationKey(
       root,
@@ -132,6 +138,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   serviceIds: readonly string[];
   recreateServiceIds: readonly string[];
   coordinatorImage?: z.infer<typeof coordinatorImageSchema>;
+  handoff?: ConfigurationHandoffIntent;
 }): FixedConfigurationMaintenancePlan {
   const prepare = executionRefSchema.parse(input.prepare),
     operation = configurationMaintenancePrepareSchema.parse(input.operation),
@@ -144,7 +151,6 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     prepare.executor !== "ops-agent" ||
     prepare.principal !== "api" ||
     prepare.operationFingerprint !== opsOperationFingerprint(operation) ||
-    operation.followUp === "platform-apply" ||
     ![
       "stack.render",
       "serviceSelection.apply",
@@ -176,6 +182,13 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   )
     throw Error("Fixed maintenance candidate binding conflict");
   const recreates = [...new Set(input.recreateServiceIds)].sort();
+  const handoff = input.handoff ? configurationHandoffIntentSchema.parse(input.handoff) : undefined;
+  if (
+    handoff &&
+    (operation.followUp !== "platform-apply" ||
+      handoff.serviceIds.some((id) => !serviceIds.includes(id) || recreates.includes(id)))
+  )
+    throw Error("Fixed protected handoff scope conflict");
   if (
     input.coordinatorImage &&
     (canonicalJson(recreates) !== '["data-manager"]' ||
@@ -197,7 +210,9 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     throw Error("Fixed maintenance continuation conflict");
   const intents: {
     phase: ConfigurationMaintenanceStep["phase"];
-    operation: OpsOperation;
+    operation:
+      | OpsOperation
+      | Omit<Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>, "planDigest">;
     prerequisites: number[];
   }[] = [{ phase: "configuration-commit", operation: apply, prerequisites: [] }];
   if (hardlinkPlan.plan.length)
@@ -223,6 +238,18 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       },
       prerequisites: [intents.length - 1],
     });
+  if (handoff)
+    intents.push({
+      phase: "maintenance-handoff",
+      operation: {
+        ...handoff,
+        kind: "configurationHandoff.prepare",
+        maintenanceId: operation.maintenanceId,
+        candidateId: operation.candidateId,
+        expectedCurrentRevisionId: operation.revisionId,
+      },
+      prerequisites: [intents.length - 1],
+    });
   if (intents.length > 32) throw Error("Fixed maintenance effect capacity exceeded");
   const { kind: _kind, ...binding } = operation;
   const planDigest = createHash("sha256")
@@ -233,6 +260,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
         binding,
         serviceIds,
         ...(input.coordinatorImage ? { coordinatorImage: input.coordinatorImage } : {}),
+        ...(handoff ? { handoff } : {}),
         steps: intents.map((step, ordinal) => ({ ...step, ordinal, serviceIds })),
       }),
     )
@@ -244,7 +272,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
         ? intent.operation
         : { ...intent.operation, planDigest };
     const execution = address(prepare.operationKey, intent.phase, ordinal, "ops-agent"),
-      operationFingerprint = opsOperationFingerprint(body as OpsOperation);
+      operationFingerprint = opsOperationFingerprint(opsOperationSchema.parse(body));
     reservations.push({
       version: 1,
       phase: intent.phase,
@@ -317,6 +345,24 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     operationFingerprint: controlDigest({ kind: "configuration-maintenance.settle", ...dmSettle }),
   });
   const middle = reservations.find((value) => value.phase === "maintenance-hardlinks");
+  const handoffStep = steps.find((step) => step.phase === "maintenance-handoff");
+  const nestedHandoff =
+    handoff && handoffStep
+      ? {
+          version: 1 as const,
+          phase: "configuration-handoff" as const,
+          ordinal: 0,
+          kind: "configuration-helper",
+          recipient: "configuration-helper" as const,
+          serviceIds: handoff.serviceIds,
+          execution: address(handoffStep.operationKey, "configuration-handoff", 0, "host-cli"),
+          operationFingerprint: controlDigest({
+            kind: "configuration-helper",
+            handoffId: handoff.handoffId,
+            intentDigest: controlDigest(handoffStep.operation),
+          }),
+        }
+      : undefined;
   return freeze(
     fixedConfigurationMaintenancePlanSchema.parse({
       version: 1,
@@ -327,6 +373,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       sourceAuthorityRevision: input.sourceAuthorityRevision,
       previewDigest: input.previewDigest,
       ...(input.coordinatorImage ? { coordinatorImage: input.coordinatorImage } : {}),
+      ...(handoff ? { handoff, nestedHandoff } : {}),
       serviceIds,
       planDigest,
       hardlinkPlan,
@@ -371,6 +418,7 @@ export function assertFixedConfigurationMaintenancePlan(
     sourceAuthorityRevision: plan.sourceAuthorityRevision,
     previewDigest: plan.previewDigest,
     ...(plan.coordinatorImage ? { coordinatorImage: plan.coordinatorImage } : {}),
+    ...(plan.handoff ? { handoff: plan.handoff } : {}),
     hardlinkPlan: plan.hardlinkPlan,
     serviceIds: plan.serviceIds,
     recreateServiceIds,

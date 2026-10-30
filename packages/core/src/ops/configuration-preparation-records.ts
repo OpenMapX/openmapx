@@ -42,6 +42,42 @@ export const configurationHardlinksPreviewSchema = z.strictObject({
 });
 export type ConfigurationHardlinksPreview = z.infer<typeof configurationHardlinksPreviewSchema>;
 
+export const platformConfigurationIntentSchema = z
+  .strictObject({
+    version: z.literal(1),
+    handoffId: z.uuid(),
+    previewId: z.uuid(),
+    previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    authPolicyRevision: z.string().regex(/^[a-f0-9]{64}$/),
+    sourceRevision: z.uuid(),
+    expectedCurrentRevisionId: revision.nullable(),
+    configuration: platformConfigurationSchema,
+    affectedServiceIds: z
+      .array(id)
+      .max(256)
+      .refine((ids) => ids.every((v, i) => i === 0 || ids[i - 1]! < v)),
+    expectedDesiredRowVersion: z
+      .string()
+      .regex(/^\d{1,10}$/)
+      .nullable(),
+    confirmations: z.strictObject({
+      domain: z.boolean(),
+      dnsTls: z.boolean(),
+      oauth: z.boolean(),
+      passkeys: z.boolean(),
+      alternateLogin: z.boolean(),
+    }),
+    authorization: z
+      .strictObject({
+        ciphertext: z.string().min(1).max(8192),
+        iv: z.string().min(1).max(64),
+        tag: z.string().min(1).max(64),
+      })
+      .optional(),
+  })
+  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 32768);
+export type PlatformConfigurationIntentRecord = z.infer<typeof platformConfigurationIntentSchema>;
+
 export const preparedConfigurationRecordSchema = z.strictObject({
   version: z.literal(1),
   candidateId: z.uuid(),
@@ -64,8 +100,10 @@ export const preparedConfigurationRecordSchema = z.strictObject({
       "integration-reload",
       "coordinator-apply",
       "coordinator-update",
+      "platform-apply",
     ])
     .optional(),
+  privatePlatformIntent: platformConfigurationIntentSchema.optional(),
   privateCoordinatorLifecycle: coordinatorLifecycleMetadataSchema.optional(),
   privateCoordinatorSource: configurationSourcesInspectionSchema.optional(),
   // Exact current DM credential persistence inputs retained before its helper

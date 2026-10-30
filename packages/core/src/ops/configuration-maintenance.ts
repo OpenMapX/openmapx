@@ -15,16 +15,11 @@ const ids = z
   .max(256)
   .refine((ids) => ids.every((id, index) => index === 0 || ids[index - 1]! < id));
 const sequence = z.number().int().nonnegative().safe();
-/** Reserved08.3 continuation targets; this task never admits that adapter. */
-export const protectedConfigurationServiceIdSchema = z.enum([
-  "postgis",
-  "redis",
-  "app-web",
-  "app-api",
-  "traefik",
-  "ops-agent",
-]);
-export type ProtectedConfigurationServiceId = z.infer<typeof protectedConfigurationServiceIdSchema>;
+
+export {
+  type ProtectedConfigurationServiceId,
+  protectedConfigurationServiceIdSchema,
+} from "./configuration-handoff-records";
 export const configurationMaintenanceBindingSchema = z.strictObject({
   maintenanceId: z.uuid(),
   candidateId: z.uuid(),

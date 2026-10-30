@@ -122,6 +122,11 @@ import { capturedBindingState } from "./integration-binding-state";
 import { integrationConfigRevision } from "./integration-runtime-evidence";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
+import {
+  assertPlatformConfigurationOverlay,
+  assertPlatformConfigurationSource,
+  retainedPlatformConfigurationIntent,
+} from "./platform-configuration-participant";
 import { encrypt } from "./secrets";
 import { resolveServiceConfigWithSourcesStrict } from "./service-config-resolver";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./service-registry";
@@ -338,6 +343,19 @@ async function verifyConfigurationCommitParticipant(
     assertLegacyIntegrationImportOverlay(writer, state.overlay);
   if (state.overlay.purpose === "integration-binding")
     assertIntegrationBindingOverlay(writer, state.overlay);
+  if (state.overlay.purpose === "platform") {
+    assertPlatformConfigurationOverlay(writer, state.overlay);
+    const intent = retainedPlatformConfigurationIntent(writer);
+    if (
+      state.writer !== writer ||
+      !state.record.maintenanceId ||
+      state.record.apiFollowUp !== "platform-apply" ||
+      state.source?.sourceRevision !== intent.sourceRevision ||
+      canonicalJson(state.payload.platform) !== canonicalJson(intent.configuration) ||
+      canonicalJson(state.record.privatePlatformIntent) !== canonicalJson(intent)
+    )
+      throw Error("Original platform candidate required");
+  }
   await owner.participant?.verify(candidate, writer);
 }
 export function assertCommittedConfigurationCandidate(
@@ -2792,14 +2810,15 @@ function validateOverlay(overlay: Overlay, writer: AdministrativeConfigurationWr
   if (overlay.purpose === "integration-binding") assertIntegrationBindingOverlay(writer, overlay);
   if (overlay.purpose === "migration" && state.participant?.kind !== "configuration-migration")
     throw Error("Configuration commit participant unavailable");
+  if (overlay.purpose === "platform") assertPlatformConfigurationOverlay(writer, overlay);
   if (
-    overlay.purpose === "platform" ||
-    overlay.changes.some((change) => change.kind === "platform")
+    overlay.changes.some((change) => change.kind === "platform") &&
+    overlay.purpose !== "platform"
   )
-    throw Error("Platform configuration adapter unavailable");
+    throw Error("Platform configuration participant required");
   const fields = new Set<string>();
   for (const change of overlay.changes) {
-    if (change.kind === "platform") throw Error("Platform configuration adapter unavailable");
+    if (change.kind === "platform") continue;
     const target =
       "serviceId" in change
         ? change.serviceId
@@ -2865,8 +2884,11 @@ function validateOverlay(overlay: Overlay, writer: AdministrativeConfigurationWr
     "integration-binding": "integration-binding",
     "transit-credentials": "service-secret",
     selection: "selection",
+    platform: "platform",
   } as const;
   const kind = permitted[overlay.purpose as keyof typeof permitted];
+  if (overlay.purpose === "platform" && overlay.changes.length !== 1)
+    throw Error("Single fixed platform intent required");
   if (kind && overlay.changes.some((change) => change.kind !== kind))
     throw Error("Configuration purpose conflicts with overlay");
 }
@@ -3056,6 +3078,8 @@ export async function prepareProspectiveConfiguration(input: {
     : null;
   input.signal?.throwIfAborted();
   const overlay = overlaySchema.parse(input.overlay);
+  const platformIntent =
+    overlay.purpose === "platform" ? retainedPlatformConfigurationIntent(writer) : undefined;
   if (overlay.purpose === "transit-credentials") {
     const { assertTransitCredentialOverlay } = await import(
       "./transit-feed-credential-participant"
@@ -3093,10 +3117,18 @@ export async function prepareProspectiveConfiguration(input: {
         const selection = overlay.changes.find((change) => change.kind === "selection");
         const payload = trustedConfigurationPayloadSchema.parse({
           ...(await withAdministrativeConfigurationReadScope(read, () =>
-            buildConfigurationInput(read, source.platform),
+            buildConfigurationInput(read, platformIntent?.configuration ?? source.platform),
           )),
           ...(selection?.kind === "selection" ? { selectedRoots: selection.selectedRoots } : {}),
         });
+        if (platformIntent)
+          assertPlatformConfigurationSource(writer, source, {
+            services: context.services,
+            env: context.env,
+            resolvedServiceConfigs: new Map(
+              payload.serviceConfigs.map((entry) => [entry.serviceId, entry.values]),
+            ),
+          });
         const integrationReloadSnapshot = await withAdministrativeConfigurationReadScope(
           read,
           async () =>
@@ -3127,17 +3159,21 @@ export async function prepareProspectiveConfiguration(input: {
             throw Error("Configuration schema rejected");
         }
         const candidateId = coordinator?.candidateId ?? randomUUID();
-        const affectedServiceIds = coordinator
-          ? ["data-manager"]
-          : [
-              ...new Set(
-                overlay.changes.flatMap((change) =>
-                  change.kind !== "integration-binding" && "serviceId" in change && change.serviceId
-                    ? [change.serviceId]
-                    : [],
+        const affectedServiceIds = platformIntent
+          ? [...platformIntent.affectedServiceIds]
+          : coordinator
+            ? ["data-manager"]
+            : [
+                ...new Set(
+                  overlay.changes.flatMap((change) =>
+                    change.kind !== "integration-binding" &&
+                    "serviceId" in change &&
+                    change.serviceId
+                      ? [change.serviceId]
+                      : [],
+                  ),
                 ),
-              ),
-            ].sort();
+              ].sort();
         const kind =
           overlay.purpose === "selection"
             ? "serviceSelection.apply"
@@ -3151,11 +3187,17 @@ export async function prepareProspectiveConfiguration(input: {
         if (input.followUp && (kind !== "vault.apply" || affectedServiceIds.length !== 1))
           throw Error("Invalid credential continuation");
         const maintenanceId =
-          coordinator || (input.followUp && affectedServiceIds[0] === "data-manager")
+          platformIntent ||
+          coordinator ||
+          (input.followUp && affectedServiceIds[0] === "data-manager")
             ? randomUUID()
             : null;
         const apiFollowUp =
-          (coordinator ? (`coordinator-${coordinator.action}` as const) : input.followUp) ??
+          (platformIntent
+            ? "platform-apply"
+            : coordinator
+              ? (`coordinator-${coordinator.action}` as const)
+              : input.followUp) ??
           (kind === "integrationConfig.apply" ||
           (overlay.purpose === "migration" && owner.participant?.kind === "configuration-migration")
             ? "integration-reload"
@@ -3264,6 +3306,7 @@ export async function prepareProspectiveConfiguration(input: {
           parentDeadlineAt: root.parent.deadlineAt,
           affectedServiceIds,
           apiFollowUp,
+          ...(platformIntent ? { privatePlatformIntent: platformIntent } : {}),
           ...(coordinatorLifecycle
             ? {
                 privateCoordinatorLifecycle: coordinatorLifecycle,
@@ -3388,6 +3431,7 @@ export async function prepareProspectiveConfiguration(input: {
             overlay.coordinatorMode === "require-running" &&
             (state.preview.entries ||
               coordinator ||
+              platformIntent ||
               (maintenanceId && input.followUp === "service-apply")) &&
             state.preview.coordinatorState !== "running"
           )
@@ -3481,6 +3525,16 @@ function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown)
 
 function savedRowIntents(state: CandidateState) {
   const { rows, sourceRows } = state;
+  if (state.record.privatePlatformIntent)
+    return [
+      {
+        kind: "platform" as const,
+        ownerId: "platform",
+        rowId: "platformConfiguration",
+        previousRowVersion: state.record.privatePlatformIntent.expectedDesiredRowVersion,
+        state: "present" as const,
+      },
+    ];
   if (!rows || !sourceRows) throw Error("Original prospective desired state required");
   if (state.record.privateCoordinatorLifecycle) {
     const rowVersion = (row: object) => {
@@ -3624,18 +3678,31 @@ async function readSavedRowVersions(
       rowVersion: sql<string>`xmin::text`,
     })
     .from(schema.integrationSecret);
-  const receipts = savedRowIntents(state).map((intent) => {
+  const intents = savedRowIntents(state);
+  const platformRows = intents.some((row) => row.kind === "platform")
+    ? await tx
+        .select({
+          id: schema.systemSettings.key,
+          ownerId: sql<string>`'platform'`,
+          rowVersion: sql<string>`xmin::text`,
+        })
+        .from(schema.systemSettings)
+        .where(eq(schema.systemSettings.key, "platformConfiguration"))
+    : [];
+  const receipts = intents.map((intent) => {
     const rows =
-      intent.kind === "service-config"
-        ? serviceRows
-        : intent.kind === "integration-config"
-          ? integrationRows
-          : intent.kind === "service-secret"
-            ? serviceSecrets
-            : integrationSecrets;
+      intent.kind === "platform"
+        ? platformRows
+        : intent.kind === "service-config"
+          ? serviceRows
+          : intent.kind === "integration-config"
+            ? integrationRows
+            : intent.kind === "service-secret"
+              ? serviceSecrets
+              : integrationSecrets;
+    const key = "key" in intent ? intent.key : undefined;
     const matches = rows.filter(
-      (row) =>
-        row.ownerId === intent.ownerId && (!intent.key || ("key" in row && row.key === intent.key)),
+      (row) => row.ownerId === intent.ownerId && (!key || ("key" in row && row.key === key)),
     );
     if (intent.state === "absent") {
       if (matches.length) throw Error("Configuration deletion receipt conflict");
@@ -4269,7 +4336,7 @@ export async function persistAndApplyProspectiveConfiguration(
   )
     throw Error("Configuration candidate persistence refused");
   if (
-    ["migration", "transit-credentials"].includes(state.overlay.purpose) &&
+    ["migration", "transit-credentials", "platform"].includes(state.overlay.purpose) &&
     !owner.participant &&
     !(
       state.overlay.purpose === "transit-credentials" &&

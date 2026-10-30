@@ -66,6 +66,22 @@ const transferClaim = {
   bytes: 4,
 };
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "configurationHandoff.prepare": {
+    kind: "configurationHandoff.prepare",
+    handoffId: "77777777-7777-4777-8777-777777777777",
+    maintenanceId: maintenanceBinding.maintenanceId,
+    candidateId: maintenanceBinding.candidateId,
+    planDigest: "d".repeat(64),
+    previewFingerprint: "e".repeat(64),
+    expectedCurrentRevisionId: maintenanceBinding.revisionId,
+    serviceIds: ["app-api"],
+    expectedImageIdentities: { "app-api": `sha256:${"1".repeat(64)}` },
+    mode: { kind: "configuration" },
+  },
+  "configurationHandoff.inspect": {
+    kind: "configurationHandoff.inspect",
+    handoffId: "77777777-7777-4777-8777-777777777777",
+  },
   "integration.inventory": { kind: "integration.inventory" },
   "integration.inspectOwnership": {
     kind: "integration.inspectOwnership",

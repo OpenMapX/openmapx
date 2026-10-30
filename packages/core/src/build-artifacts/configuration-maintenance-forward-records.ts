@@ -23,6 +23,7 @@ export const configurationMaintenanceForwardGraphSchema = z.strictObject({
   parentDeadlineAt: z.number().int().positive().safe(),
   planDigest: digest,
   coordinatorImage: z.lazy(() => fixedConfigurationMaintenancePlanSchema.shape.coordinatorImage),
+  handoff: z.lazy(() => fixedConfigurationMaintenancePlanSchema.shape.handoff),
   serviceIds: z.lazy(() => configurationMaintenanceReceiptSchema.shape.serviceIds),
   steps: z.lazy(() => configurationMaintenanceReceiptSchema.shape.steps),
 });

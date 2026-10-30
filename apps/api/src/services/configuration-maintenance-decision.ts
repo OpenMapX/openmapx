@@ -15,7 +15,13 @@ const version = z.string().regex(/^\d{1,10}$/),
   id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 export const configurationSavedRowSchema = z
   .strictObject({
-    kind: z.enum(["service-config", "integration-config", "service-secret", "integration-secret"]),
+    kind: z.enum([
+      "service-config",
+      "integration-config",
+      "service-secret",
+      "integration-secret",
+      "platform",
+    ]),
     ownerId: id,
     key: z.string().min(1).max(128).optional(),
     rowId: z.string().min(1).max(128),
@@ -25,6 +31,10 @@ export const configurationSavedRowSchema = z
   })
   .refine(
     (row) =>
+      (row.kind !== "platform" ||
+        (row.ownerId === "platform" &&
+          row.rowId === "platformConfiguration" &&
+          row.state === "present")) &&
       row.kind.endsWith("secret") === (row.key !== undefined) &&
       (row.state === "present" ? row.rowVersion !== null : row.rowVersion === null),
   );
@@ -90,6 +100,15 @@ export async function assertConfigurationSavedRows(
     const key = `${row.kind}:${row.ownerId}:${row.key ?? ""}`;
     if (seen.has(key)) throw Error("Configuration saved row ownership changed");
     seen.add(key);
+    if (row.kind === "platform") {
+      const [actual] = await tx
+        .select({ version: sql<string>`xmin::text` })
+        .from(schema.systemSettings)
+        .where(eq(schema.systemSettings.key, "platformConfiguration"));
+      if (actual?.version !== row.rowVersion)
+        throw Error("Configuration saved row ownership changed");
+      continue;
+    }
     const table =
       row.kind === "service-config"
         ? schema.serviceConfig

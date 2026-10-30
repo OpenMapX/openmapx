@@ -4,6 +4,12 @@ export * from "./artifact-transfer-capability";
 export { ArtifactStageTransportError } from "./artifact-transfer-client";
 export * from "./catalog-pin-approval";
 export * from "./client";
+export {
+  type ConfigurationHandoffIntent,
+  configurationHandoffInspectionSchema,
+  configurationHandoffIntentSchema,
+  configurationHandoffPrepareOperationSchema,
+} from "./configuration-handoff-records";
 export * from "./configuration-maintenance";
 export * from "./configuration-maintenance-control-validation";
 export * from "./configuration-preparation";

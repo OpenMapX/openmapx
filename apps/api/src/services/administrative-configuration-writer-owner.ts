@@ -53,7 +53,8 @@ export interface ConfigurationCommitParticipant {
     | "integration-binding"
     | "configuration-migration"
     | "credential-import"
-    | "transit-credentials";
+    | "transit-credentials"
+    | "platform";
   readonly mode: "preview" | "apply";
   readonly actorId: string;
   readonly operationKey: string;

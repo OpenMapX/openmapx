@@ -178,3 +178,97 @@ it("retains the frozen coordinator image in the cross-role graph used to reconst
   expect(rebuilt.planDigest).toBe(plan.planDigest);
   expect(rebuilt.steps).toEqual(plan.steps);
 });
+
+it("freezes protected handoff after the original generation and ordinary children", async () => {
+  const source = input();
+  const { serviceId: _serviceId, ...ordinary } = source.apply as Extract<
+    typeof source.apply,
+    { kind: "vault.apply" }
+  >;
+  const apply = { ...ordinary, kind: "stack.render" as const };
+  const operation = {
+    ...source.operation,
+    followUp: "platform-apply" as const,
+    applyOperationFingerprint: opsOperationFingerprint(apply),
+  };
+  const operationFingerprint = opsOperationFingerprint(operation);
+  const prepare = {
+    ...source.prepare,
+    operationFingerprint,
+    fingerprint: executionFingerprint({
+      kind: operation.kind,
+      operationFingerprint,
+      deadlineAt: source.prepare.deadlineAt,
+      parent: source.apiParent,
+    }),
+  };
+  const handoff = {
+    handoffId: "77777777-7777-4777-8777-777777777777",
+    previewFingerprint: "e".repeat(64),
+    serviceIds: ["app-api", "ops-agent"],
+    expectedImageIdentities: {
+      "app-api": `sha256:${"1".repeat(64)}`,
+      "ops-agent": `sha256:${"2".repeat(64)}`,
+    },
+    mode: { kind: "configuration" as const },
+  };
+  const args = {
+    ...source,
+    apply,
+    operation,
+    prepare,
+    serviceIds: ["app-api", "data-manager", "motis", "ops-agent"],
+    handoff,
+  };
+  const plan = buildFixedConfigurationMaintenancePlan(args);
+  expect(plan.steps.map((s) => s.phase)).toEqual([
+    "configuration-commit",
+    "maintenance-hardlinks",
+    "maintenance-recreate",
+    "maintenance-handoff",
+  ]);
+  const step = plan.steps.at(-1)!;
+  expect(step.operation).toMatchObject({
+    kind: "configurationHandoff.prepare",
+    handoffId: handoff.handoffId,
+    expectedCurrentRevisionId: operation.revisionId,
+    maintenanceId: operation.maintenanceId,
+    candidateId: operation.candidateId,
+    planDigest: plan.planDigest,
+    mode: { kind: "configuration" },
+  });
+  expect(step.prerequisites).toEqual([2]);
+  expect(plan.nestedHandoff).toMatchObject({
+    phase: "configuration-handoff",
+    ordinal: 0,
+    kind: "configuration-helper",
+    recipient: "configuration-helper",
+    serviceIds: handoff.serviceIds,
+  });
+  const { configurationMaintenanceForwardGraphSchema } = await import(
+    "./configuration-maintenance-forward-records"
+  );
+  const { kind: _kind, ...binding } = operation;
+  if (source.apiParent.issuer !== "api") throw Error("API plan fixture required");
+  const graph = configurationMaintenanceForwardGraphSchema.parse({
+    version: 1,
+    binding,
+    prepare,
+    apiJobId: source.apiParent.apiJobId,
+    parentOperationKey: source.apiParent.operationKey,
+    parentFingerprint: source.apiParent.fingerprint,
+    parentDeadlineAt: source.apiParent.deadlineAt,
+    planDigest: plan.planDigest,
+    serviceIds: plan.serviceIds,
+    steps: plan.steps,
+    handoff: plan.handoff,
+  });
+  expect(graph).toHaveProperty("handoff", handoff);
+  expect(plan.nestedHandoff?.execution.operationKey).toBe(
+    controlChildOperationKey(step.operationKey, "configuration-handoff", 0),
+  );
+  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  const changed = structuredClone(plan);
+  changed.handoff!.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
+  expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
+});

@@ -11,6 +11,12 @@ import {
   artifactTransferResultSchemas,
 } from "./artifact-transfer";
 import {
+  configurationHandoffInspectionSchema,
+  configurationHandoffInspectOperationSchema,
+  configurationHandoffPreparedSchema,
+  configurationHandoffPrepareOperationSchema,
+} from "./configuration-handoff-records";
+import {
   configurationGenerationRevisionSchema,
   configurationHardlinksApplyOperationSchema,
   integrationConfigApplyOperationSchema,
@@ -96,6 +102,8 @@ export const OPS_OPERATION_KINDS = [
   "configurationMaintenance.inspect",
   "configurationMaintenance.decide",
   "configurationMaintenance.settle",
+  "configurationHandoff.prepare",
+  "configurationHandoff.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -240,6 +248,8 @@ export const OPS_KIND_POLICIES = {
   "configurationMaintenance.inspect": sync("api", 15_000, 65536),
   "configurationMaintenance.decide": asyncEffect("api", 60_000, 65536),
   "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
+  "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
+  "configurationHandoff.inspect": sync("api", 15_000, 65536),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -412,6 +422,8 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("configuration.inspect"),
   kindOnly("configuration.sources.inspect"),
   configurationMaintenancePrepareSchema,
+  configurationHandoffPrepareOperationSchema,
+  configurationHandoffInspectOperationSchema,
   z.strictObject({
     kind: z.literal("configurationMaintenance.inspect"),
     maintenanceId: z.uuid(),
@@ -1092,6 +1104,8 @@ export const OPS_RESULT_SCHEMAS = {
   "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
   "configuration.hardlinks.apply": hardlinkApplySummarySchema,
   "configurationMaintenance.prepare": configurationMaintenanceReceiptSchema,
+  "configurationHandoff.prepare": configurationHandoffPreparedSchema,
+  "configurationHandoff.inspect": configurationHandoffInspectionSchema,
   "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
