@@ -11,6 +11,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useMemo } from "react";
+import { useNavJunctionStore } from "@/lib/navigation/junctionStore";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 /**
@@ -43,6 +44,9 @@ export function NavManeuverSlot() {
   // stretch neither the lanes nor the "Then …" preview clutter the banner.
   const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
   const showLanes = !!step?.lanes && approaching;
+  // Where each lane leads per OSM, from the junction lookup: at a split whose
+  // lanes all point straight on, the only way to tell the branches apart.
+  const laneDestinations = useNavJunctionStore((s) => s.laneDestinationsByStep.get(upcomingIndex));
   // Preview the maneuver after this one only when it's both relevant (approaching)
   // and follows closely (a short gap), so back-to-back turns chain but far-apart
   // ones don't.
@@ -74,6 +78,7 @@ export function NavManeuverSlot() {
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
       nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
       lanes={showLanes ? step.lanes : undefined}
+      laneDestinations={laneDestinations}
       sign={step.sign}
       country={country}
       units={units}

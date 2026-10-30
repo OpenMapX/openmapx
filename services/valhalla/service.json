@@ -50,7 +50,8 @@
     {
       "source": "config/valhalla.json",
       "target": "/custom_files/valhalla.json",
-      "readOnly": false
+      "readOnly": false,
+      "writableCopy": "@infra:data/valhalla/config/valhalla.json"
     },
     {
       "source": "scripts/traffic-watchdog.py",

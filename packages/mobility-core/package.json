@@ -216,13 +216,13 @@
   },
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
-    "@motis-project/motis-client": "^2.11.3",
+    "@motis-project/motis-client": "^2.11.4",
+    "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
-    "spdx-expression-parse": "5.0.0",
-    "@openmapx/extension-contracts": "workspace:^",
     "lru-cache": "11.5.3",
-    "p-map": "7.1.1"
+    "p-map": "7.1.1",
+    "spdx-expression-parse": "5.0.0"
   },
   "devDependencies": {
     "@types/spdx-expression-parse": "4.0.0"

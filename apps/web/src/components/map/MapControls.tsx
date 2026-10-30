@@ -21,9 +21,10 @@ import { clearAlignAnnouncement, useAlignAnnouncement } from "@/lib/alignAnnounc
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
+import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
 import { AlignToStreetsIcon, gridScreenTilt } from "./AlignToStreetsIcon";
-import { resolveControlPlacement } from "./controlPlacement";
+import { gridCeiling, resolveControlPlacement } from "./controlPlacement";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
@@ -89,6 +90,19 @@ export function MapControls() {
           heights.safeBottom,
         )
       : { columns: 1 as const, bottom: desiredBottom };
+  // While a sheet drives the follow, the controls ride its top edge on the
+  // compositor (see lib/sheetFollow); the column choice above stays live.
+  const followTrack = useSheetFollowTrack();
+  const follow = followTrack
+    ? planSheetFollow(followTrack, {
+        offset: PANEL_GAP,
+        max:
+          placement.columns === 2
+            ? gridCeiling(vh, topInset, heights.grid, heights.safeBottom)
+            : undefined,
+      })
+    : null;
+  const bottom = follow ? follow.base : placement.bottom;
 
   useEffect(() => {
     const stack = stackRef.current;
@@ -156,7 +170,8 @@ export function MapControls() {
           // swipe sheet) register their live height in the shared registry, so
           // the controls always sit just above the tallest one — no hard-coded
           // per-context clearance.
-          bottom: `calc(${placement.bottom}px + var(--omx-safe-bottom))`,
+          bottom: `calc(${bottom}px + var(--omx-safe-bottom))`,
+          ...sheetFollowSx(follow),
           right: "calc(12px + var(--omx-safe-right))",
           display: placement.columns === 2 ? "grid" : "flex",
           flexDirection: "column",
@@ -164,7 +179,9 @@ export function MapControls() {
           alignItems: "center",
           gap: 1,
           zIndex: 10,
-          transition: "bottom 0.25s ease",
+          // No `bottom` transition: the sheet republishes its height on every
+          // frame it moves, and an eased transition restarted per frame would
+          // trail the sheet by a few hundred pixels instead of riding on it.
           "@media (pointer: coarse)": {
             "& .MuiIconButton-root": { width: 44, height: 44 },
           },

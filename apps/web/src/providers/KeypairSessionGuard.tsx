@@ -1,35 +1,21 @@
 "use client";
 
-import { useSession } from "@openmapx/core";
 import { MANGROVE_KEYPAIR_QUERY_KEY, useKeypairStore } from "@openmapx/mangrove-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect } from "react";
+import { useSettledSessionAuthority } from "./SessionAuthorityBoundary";
 
-/**
- * Wipes the in-memory Mangrove keypair and evicts its query-cached envelope
- * whenever the Better Auth session leaves the currently-tracked user — either
- * signing out, or switching to a different authenticated user id (account
- * switch, impersonation). The explicit teardown on sign-out still fires; this
- * handler covers silent transitions (expiry, cookie deletion, revocation from
- * another tab) and user swaps that never pass through the signed-out state.
- *
- * Mounted once at the app root so it runs for the whole session regardless
- * of which screens are active.
- */
+/** The existing authority boundary owns session settlement and remounting. */
 export function KeypairSessionGuard() {
-  const { data: session, isPending } = useSession();
+  const { authorityKey } = useSettledSessionAuthority();
   const queryClient = useQueryClient();
-  const lastUserId = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (isPending) return;
-    const currentUserId = session?.user?.id ?? null;
-    if (lastUserId.current && lastUserId.current !== currentUserId) {
-      useKeypairStore.getState().clear();
+  useLayoutEffect(() => {
+    useKeypairStore.getState().bindOwner(authorityKey);
+    return () => {
+      // Invalidate delayed crypto and network completions before the next owner mounts.
+      useKeypairStore.getState().bindOwner(null);
       queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
-    }
-    lastUserId.current = currentUserId;
-  }, [session, isPending, queryClient]);
-
+    };
+  }, [authorityKey, queryClient]);
   return null;
 }

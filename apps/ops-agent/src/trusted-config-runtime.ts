@@ -43,6 +43,7 @@ import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime
 import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsExecutionContext, OpsRuntime, OpsTrustedClaim } from "./runtime";
 import { OpsHostUpdateRequiredError } from "./runtime";
+import { agentLogLine } from "./service-files-at-start";
 import { renderCoordinatorCandidate } from "./service-pull-runtime";
 
 const FAILED = "Trusted configuration apply failed";
@@ -74,12 +75,24 @@ export interface TrustedConfigurationRuntimeOptions {
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
+  /**
+   * Whether a container still mounts the checkout's Traefik dynamic
+   * directory; `undefined` when Docker can't tell. Omitted, it is not known.
+   */
+  legacyTraefikDynamicMounted?: () => Promise<boolean | undefined>;
+  /**
+   * Every container's bind mounts; `undefined` when Docker can't tell. A
+   * service-file tree one of them mounts is kept. Omitted, it is not known.
+   */
+  containerBindMounts?: () => Promise<coreServices.ContainerBindMounts[] | undefined>;
 }
 
 export interface TrustedConfigurationAuthoritySnapshot {
   revisionId: string;
   services: readonly coreServices.LoadedService[];
   integrationSchemas: ReadonlyMap<string, Record<string, unknown>>;
+  /** Installed integrations left out of the schemas, and why. */
+  integrationProblems?: readonly coreServices.IntegrationAuthorityProblem[];
 }
 
 /** The enabled services of the applied generation, or null before the first render. */
@@ -102,6 +115,8 @@ export async function initializeTrustedConfigurationRuntime(infraDir: string): P
   }
 }
 
+const MAX_RECORDED_FAILURES = 32;
+
 async function commitGeneration(
   runtime: OpsRuntime,
   options: TrustedConfigurationRuntimeOptions,
@@ -109,6 +124,7 @@ async function commitGeneration(
   payload: TrustedConfigurationPayload,
   claim: OpsTrustedClaim,
   signal: AbortSignal,
+  failures: Map<string, string>,
   executionContext?: OpsExecutionContext,
 ): Promise<ConfigurationApplyResult> {
   try {
@@ -214,7 +230,23 @@ async function commitGeneration(
           selectedRoots = desired.roots;
           allowMissingSelected = desired.source === "default";
         }
+        // The generation's containers run as the deployment's user, which
+        // .env names; the agent reads it and refuses one without it.
+        coreServices.assertRunningAsDeploymentUser(
+          coreServices.readDeploymentUser(options.infraDir),
+          "The operations agent",
+        );
+        // This generation mounts the agent's state from its own directory;
+        // an earlier release's directories move there first.
+        coreServices.prepareAgentStateDirectories(options.infraDir);
+        // And its stores, which the generation mounts into app-api.
+        coreServices.prepareAgentStores(options.infraDir);
+        // A Traefik not recreated since an earlier release still reads its
+        // routes from the checkout, where they are written too until none does.
+        const legacyTraefik = await options.legacyTraefikDynamicMounted?.();
+        const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
+          ...(mounts ? { containerBindMounts: mounts } : {}),
           services,
           ownedServiceGenerations,
           observedServiceContainerIds: inventory?.observedContainerIds,
@@ -231,7 +263,15 @@ async function commitGeneration(
           beforeCommit: options.beforeCommit,
           afterGenerationRename: options.afterGenerationRename,
           afterCommit: options.afterCommit,
+          legacyTraefikDynamicMounted: legacyTraefik,
         });
+        for (const problem of committed.stackFileProblems) process.stderr.write(`${problem}\n`);
+        for (const line of committed.serviceFileReport) {
+          process.stderr.write(`${agentLogLine(line)}\n`);
+        }
+        if (legacyTraefik === true) {
+          process.stderr.write(`${coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE}\n`);
+        }
         return {
           outcome: "committed",
           revisionId: committed.revisionId,
@@ -246,9 +286,32 @@ async function commitGeneration(
     const original = configurationGenerationNonCommitForError(error);
     if (original && executionContext?.controlAuthority)
       retainConfigurationGenerationNonCommit(executionContext.controlAuthority, original);
+    const problem = operatorProblem(error);
+    if (problem) {
+      // The agent's log, and the admin panel through configuration.failure.inspect.
+      process.stderr.write(`${problem}\n`);
+      failures.set(operation.revisionId, problem);
+      while (failures.size > MAX_RECORDED_FAILURES) {
+        failures.delete(failures.keys().next().value as string);
+      }
+    }
     if (error instanceof coreServices.ConfigurationGenerationError) return error.result;
     return { outcome: "not_committed", reason: "failed", cleanupFailed: false };
   }
+}
+
+/**
+ * The message of a failure the operator can fix (a service file or override,
+ * a one-time step only a render on the host can do, or .env without the
+ * deployment's user), or null.
+ */
+function operatorProblem(error: unknown): string | null {
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    if (cause instanceof coreServices.ServiceFileError) return cause.message;
+    if (cause instanceof coreServices.CheckoutRequiredError) return cause.message;
+    if (cause instanceof coreServices.DeploymentUserError) return cause.message;
+  }
+  return null;
 }
 
 function trustedPayload(
@@ -496,6 +559,12 @@ export function installTrustedConfigurationRuntime(
         .digest("hex"),
     };
   };
+  // Why recent applies were not committed, when the operator can act on it.
+  const failures = new Map<string, string>();
+  runtime["configuration.failure.inspect"] = async (operation) => ({
+    attemptedRevisionId: operation.attemptedRevisionId,
+    problem: failures.get(operation.attemptedRevisionId)?.slice(0, 4_096) ?? null,
+  });
   runtime["configuration.inspect"] = (_operation, context) =>
     coreServices.withConfigurationGenerationWriter(
       options.infraDir,
@@ -510,6 +579,7 @@ export function installTrustedConfigurationRuntime(
       trustedPayload(operation, context),
       context.claim,
       context.signal,
+      failures,
       context,
     );
   // The plan lives in the applied generation, which only this service can
@@ -547,6 +617,7 @@ export function installTrustedConfigurationRuntime(
       trustedPayload(operation, context),
       context.claim,
       context.signal,
+      failures,
       context,
     );
   runtime["serviceConfig.apply"] = async (operation, context) => {
@@ -560,6 +631,7 @@ export function installTrustedConfigurationRuntime(
       payload,
       context.claim,
       context.signal,
+      failures,
       context,
     );
   };
@@ -577,6 +649,7 @@ export function installTrustedConfigurationRuntime(
       payload,
       context.claim,
       context.signal,
+      failures,
       context,
     );
   };
@@ -591,6 +664,7 @@ export function installTrustedConfigurationRuntime(
       payload,
       context.claim,
       context.signal,
+      failures,
       context,
     );
   };

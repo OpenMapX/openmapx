@@ -1,14 +1,10 @@
 # Contributing to OpenMapX
 
-Thanks for your interest in contributing. OpenMapX is a community-driven,
-self-hostable mapping platform built entirely from open data and
-open-source services. There's lots of surface area, which means lots of
-ways to help.
-
-Have a usage question or an idea to discuss? Please start in
-[GitHub Discussions](https://github.com/OpenMapX/openmapx/discussions) rather
-than the issue tracker — see [SUPPORT.md](SUPPORT.md). All participation is
-covered by our [Code of Conduct](CODE_OF_CONDUCT.md).
+You can contribute code, integrations, translations, tests, or documentation.
+For usage questions and ideas, start in
+[GitHub Discussions](https://github.com/OpenMapX/openmapx/discussions).
+See [SUPPORT.md](SUPPORT.md) for help and reporting routes. All participation
+is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
@@ -24,7 +20,8 @@ covered by our [Code of Conduct](CODE_OF_CONDUCT.md).
   See the README's "Two plugin systems" section.
 - **Documentation** — the README and the docs site (sources in `docs/`,
   published to [docs.openmapx.org](https://docs.openmapx.org)) both welcome
-  improvements.
+  improvements. See the [documentation guide](docs/docs/developer/documentation.md)
+  for page structure, writing, and site checks.
 - **Translations** — strings live in `packages/i18n/`. Run
   `pnpm check-translations` to verify completeness.
 
@@ -74,25 +71,10 @@ into linked tasks with independently verifiable outcomes.
 
 ## Development setup
 
-Requirements:
-
-- Node 24.22.1+ (`.nvmrc` is authoritative)
-- pnpm 12
-- Docker + Docker Compose if you want to run the self-hosted services
-
-```bash
-pnpm install
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-cp infra/docker/.env.example infra/docker/.env
-
-pnpm dev          # apps/web + apps/api in dev mode (Turborepo)
-```
-
-The Docker stack (PostGIS, Martin, MOTIS, Pelias, etc.) is rendered on
-demand from the manifests via the `openmapx` CLI (`pnpm openmapx compose
-render` / `up`). See the [CLI reference](https://docs.openmapx.org/developer/cli-reference/)
-and the [self-hosting guide](https://docs.openmapx.org/install/getting-started/).
+Follow [Development setup](docs/docs/developer/development-setup.md) for the
+pinned Node and pnpm versions, environment files, local database, and API/web
+processes. The [self-hosting guide](docs/docs/install/getting-started.md) covers
+running the managed Docker deployment; it is a separate workflow.
 
 ## Quality bar
 
@@ -312,30 +294,15 @@ The historical mixed queue has been cleared without consuming its bumps. Private
 2. Open an issue first if the change is non-trivial — saves rework when
    scope or approach needs alignment.
 3. Push your branch and open a PR. Fill out the PR template.
-4. PR CI runs lint, types, tests, production builds, and non-publishing Docker
-   builds for the deployable targets affected by the PR. After a merge to
-   `main`, a separate release workflow accepts only the current commit after successful CI,
-   rebuilds images whose Docker build inputs changed since the last published
-   release and reuses unchanged digests. All seven application digests pass the current
-   vulnerability scan before publication. It publishes run-qualified release
-   tags (`<commit>-<run-id>`) plus SHA convenience aliases and the
-   complete release manifest with its CI run/attempt receipt, then advances and verifies all seven application `main`
-   aliases. These development aliases move independently. The final
-   `release-manifest:main` update is the pointer for atomic release selection.
-   Weekly scheduled CI forces a no-cache security refresh through the same gates.
-   Images at least seven days old also refresh on the next release. Set the
-   repository variable `OPENMAPX_FORCE_IMAGE_REBUILD=true` to force the next run
-   to rebuild all images; unset it afterwards to resume selective builds.
-   SHA aliases can move on a refresh of the same commit; pin a run-qualified tag
-   or digest for rollback. Each image retains its original source revision and
-   build time in the manifest's `buildMetadata` when reused. Initial migration
-   from a manifest without this metadata rebuilds all seven images.
-   Manual dispatch cannot bypass the successful-CI requirement.
-   Documentation publishes independently through `.github/workflows/docs.yml`,
-   with its own build, type check and mandatory image scan. It never waits for
-   application release jobs; see `docs/README.md` for its deployment procedure.
-   The application release manifest is a **release lockfile**: it fixes the image
-   set selected for an update. Container replacement still happens in steps.
+4. PR CI checks code, tests, production builds, and affected Docker targets
+   without publishing them. After merge, application release automation requires
+   successful CI and publishes a coherent set of seven application images plus
+   its release manifest. Use a run-qualified tag or digest for rollback; SHA
+   aliases can move after a security rebuild. See
+   [Product releases](docs/docs/developer/product-releases.md) for publication,
+   image reuse, security refreshes, and release selection. Documentation builds
+   and publishes independently through `.github/workflows/docs.yml`; see
+   [the docs deployment procedure](docs/README.md#deploy).
 5. A maintainer reviews. Squash-merge is the only merge method; the reviewed
    PR title and body become the squash commit message. Make both accurate
    and retain contributor attribution.

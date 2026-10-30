@@ -20,7 +20,7 @@ const facts = {
     "DOCKER_CONFIG",
   ],
   dockerSocketSource: "/var/run/docker.sock",
-  rootSource: "/synthetic/host",
+  rootMounts: [{ source: "/synthetic/host", target: "/synthetic/host", readOnly: false }],
 };
 it("launches the existing confined old-image helper with only original control references", () => {
   const args = configurationHandoffRunArgs(facts, "/synthetic/host", {

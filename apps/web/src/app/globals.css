@@ -33,6 +33,23 @@
   --omx-safe-right: env(safe-area-inset-right, 0px);
 }
 
+/* Map chrome that rides the mobile bottom sheet follows the sheet's scroll
+ * position on the compositor (see lib/sheetFollow.ts): the driving sheet's
+ * host names this timeline, the scope makes it visible page-wide, and each
+ * follower supplies its own range and travel. */
+:root {
+  timeline-scope: --omx-sheet-follow;
+}
+
+@keyframes omx-sheet-follow {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(-1 * var(--omx-sheet-follow-travel, 0px));
+  }
+}
+
 .omx-route-map-pill {
   display: inline-flex;
   align-items: center;
@@ -271,5 +288,240 @@ main {
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px solid var(--omx-border-light);
+  }
+
+  /* Popup credits (buildPopupCreditsHtml): links read like AttributionText's
+   * in panels, in the surrounding colour and underlined on hover. */
+  .omx-credits {
+    overflow-wrap: anywhere;
+  }
+  .omx-credits a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .omx-credits a:hover,
+  .omx-credits a:focus-visible {
+    text-decoration: underline;
+  }
+  .omx-credits__notice--prominent {
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+  .omx-credits__details {
+    display: inline;
+  }
+  .omx-credits__details > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 6px;
+    padding: 0 3px;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+    vertical-align: middle;
+  }
+  .omx-credits__details > summary::-webkit-details-marker {
+    display: none;
+  }
+  .omx-credits__details > summary:hover {
+    background: var(--omx-hover-bg);
+  }
+  .omx-credits__details > summary:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+  .omx-credits__details[open] {
+    display: block;
+  }
+  .omx-credits__details > ul {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    line-height: 1.5;
+  }
+  .omx-credits__details li + li {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--omx-border-light);
+  }
+  .omx-credits__logo {
+    height: 18px;
+    width: auto;
+    max-width: 100%;
+    margin: 0 4px;
+    vertical-align: middle;
+    object-fit: contain;
+  }
+
+  /* Road incident card: what it is and where, when, what it does to
+   * traffic, the source's own words, and a quiet credit line. */
+  /* The card is the popup's only scroll area, reached only when an opened
+   * text or a stack of conditions outgrows the screen. */
+  .omx-incident {
+    width: 268px;
+    max-width: 100%;
+    max-height: 60vh;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .omx-incident__count {
+    padding-right: 26px;
+    margin-bottom: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.65;
+  }
+  .omx-incident__card + .omx-incident__card {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--omx-border-light);
+  }
+  .omx-incident__card--future .omx-incident__icon {
+    opacity: 0.7;
+  }
+  .omx-incident__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* Reserve room on the right for the absolute close button. */
+    padding-right: 26px;
+  }
+  .omx-incident--stack .omx-incident__head {
+    padding-right: 0;
+  }
+  .omx-incident__icon {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+  .omx-incident__heading {
+    min-width: 0;
+  }
+  .omx-incident__title {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .omx-incident__where {
+    margin-top: 1px;
+    font-size: 13px;
+    opacity: 0.7;
+  }
+  .omx-incident__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .omx-incident__tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--omx-hover-bg);
+  }
+  .omx-incident__tag--major,
+  .omx-incident__tag--critical {
+    background: rgba(204, 0, 51, 0.12);
+    color: #b00029;
+  }
+  .omx-incident__tag--moderate {
+    background: rgba(255, 153, 51, 0.18);
+    color: #8a4a00;
+  }
+  .omx-incident__tag--minor {
+    background: rgba(255, 222, 51, 0.3);
+    color: #5c4a00;
+  }
+  .dark .omx-incident__tag--major,
+  .dark .omx-incident__tag--critical {
+    color: #ff8a9e;
+  }
+  .dark .omx-incident__tag--moderate {
+    color: #ffb766;
+  }
+  .dark .omx-incident__tag--minor {
+    color: #ffe680;
+  }
+  .omx-incident__when {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 10px;
+    font-weight: 500;
+  }
+  .omx-incident__when-icon {
+    flex: none;
+    margin-top: 2px;
+    opacity: 0.6;
+  }
+  .omx-incident__impacts {
+    margin: 8px 0 0;
+    padding: 0 0 0 20px;
+    list-style: disc;
+  }
+  .omx-incident__impacts li + li {
+    margin-top: 2px;
+  }
+  .omx-incident__text {
+    margin-top: 10px;
+    white-space: pre-line;
+  }
+  .omx-incident__body {
+    opacity: 0.85;
+  }
+  /* A long text shows its first four lines, fading out, until opened. */
+  .omx-incident__text--long:not(:has(.omx-incident__more[open])) .omx-incident__body {
+    max-height: calc(4 * 1.4em);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  }
+  .omx-incident__more summary {
+    display: inline-block;
+    margin-top: 2px;
+    font-weight: 600;
+    color: var(--omx-brand);
+    cursor: pointer;
+    list-style: none;
+  }
+  .omx-incident__more summary::-webkit-details-marker {
+    display: none;
+  }
+  .omx-incident__more summary:hover,
+  .omx-incident__more summary:focus-visible {
+    text-decoration: underline;
+  }
+  .omx-incident__more[open] .omx-incident__show,
+  .omx-incident__more:not([open]) .omx-incident__hide {
+    display: none;
+  }
+  .omx-incident__text p {
+    margin: 0;
+  }
+  .omx-incident__text p + p {
+    margin-top: 2px;
+  }
+  .omx-incident__headline {
+    font-weight: 500;
+  }
+  .omx-incident__warning {
+    margin-top: 10px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(255, 153, 51, 0.16);
+  }
+  .omx-incident__footer {
+    margin-top: 12px;
+    font-size: 11px;
+    line-height: 1.35;
+    opacity: 0.55;
   }
 }

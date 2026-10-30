@@ -12,10 +12,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   BUNDLE_MANIFEST_PATH,
   type BuildRecord,
+  buildProvenance,
   exportBuildBundle,
   importBuildBundle,
   readBuildRecord,
@@ -97,6 +99,70 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
+});
+
+describe("build provenance", () => {
+  const digest = (c: string) => `sha256:${c.repeat(64)}`;
+  const release: services.ReleaseManifest = {
+    schemaVersion: 1,
+    release: "abc123-1-1",
+    images: {
+      api: `ghcr.io/openmapx/api@${digest("a")}`,
+      web: `ghcr.io/openmapx/web@${digest("b")}`,
+      "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
+      "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
+      "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
+      "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
+      "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
+    },
+    privacyReleaseValidation: {
+      version: 1,
+      sourceBuildFingerprint: "2".repeat(64),
+      validatedAt: "2026-09-05T12:00:00.000Z",
+      checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
+    },
+  };
+
+  function checkoutAtCommit(): string {
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", buildHost, ...args], { encoding: "utf-8" }).trim();
+    git("init", "-q");
+    git(
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "c",
+    );
+    return git("rev-parse", "HEAD");
+  }
+
+  it("records the checkout's commit and the selected release for a checkout's CLI", async () => {
+    const commit = checkoutAtCommit();
+    services.writeReleaseComposeArtifacts(release, join(buildHost, "infra", "docker"));
+
+    await expect(buildProvenance(buildHost, { bundled: false })).resolves.toEqual({
+      revision: commit,
+      release: "abc123-1-1",
+    });
+  });
+
+  it("records only the release for the operations agent's CLI, which is not the checkout's code", async () => {
+    checkoutAtCommit();
+    services.writeReleaseComposeArtifacts(release, join(buildHost, "infra", "docker"));
+
+    await expect(buildProvenance(buildHost, { bundled: true })).resolves.toEqual({
+      release: "abc123-1-1",
+    });
+  });
+
+  it("records nothing it cannot read", async () => {
+    await expect(buildProvenance(buildHost, { bundled: true })).resolves.toEqual({});
+  });
 });
 
 describe("build bundles", () => {

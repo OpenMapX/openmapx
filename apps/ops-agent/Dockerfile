@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.20
 
-FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
@@ -49,14 +49,33 @@ COPY --parents \
     packages/transitous-core/ \
     ./
 COPY apps/ops-agent/ apps/ops-agent/
-# The CLI imports these data-manager modules and, for `transit-registry bump`,
-# this integration.
+# The bundle embeds every built-in service and integration manifest, the files
+# those services mount (scripts/service-files.mjs lists them) and the release's
+# catalog pins: the agent and its CLI run the release's, not the host
+# checkout's.
 COPY --parents \
     services/data-manager/src/transitous-lock.ts \
     services/data-manager/src/gbfs-catalog-lock.ts \
     services/data-manager/src/jobs/transitous-feeds-overlay.ts \
     services/data-manager/src/utils/atomic-write.ts \
     integrations/transit-dynamic-registry/ \
+    services/*/service.json \
+    services/service-file-history.json \
+    services/brouter/scripts/ \
+    services/dawarich-app/scripts/ \
+    services/dawarich-sidekiq/scripts/ \
+    services/martin/config/martin.yaml \
+    services/otp/config/ \
+    services/pelias/config/pelias.json \
+    services/postgis/scripts/sync-password.sh \
+    services/tileserver/config/config.json \
+    services/traefik/config/ \
+    services/valhalla/config/valhalla.json \
+    services/valhalla/scripts/traffic-watchdog.py \
+    services/well-known/config/ \
+    integrations/*/manifest.json \
+    infra/docker/transitous.lock.json \
+    infra/docker/gbfs-catalog.lock.json \
     ./
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
@@ -71,13 +90,25 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/apps/ops-agent/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM base AS runner
+# The runner needs no package manager: starting from the plain Node image keeps
+# the pnpm that corepack prepared for the build stages, and its bundled
+# dependencies, out of the shipped image.
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
 LABEL openmapx.configuration-handoff.version="1"
 WORKDIR /app
-# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
-# git fetches community service repositories into services/.community.
-RUN apk upgrade --no-cache libcrypto3 libssl3 && \
-    apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
+# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. curl and
+# libcurl 8.23.0-r0 fix CVE-2026-92392.
+# git fetches community service repositories into the agent's community store.
+# The upgrade runs after the install: `apk upgrade` of a package that isn't
+# installed yet does nothing. `apk add` alone is not enough: a release build can
+# restore this layer from the registry build cache with the curl it held then.
+# Naming curl in the upgrade, and the version floor checked after, change this
+# instruction, which keeps such a layer from being reused; the floor also fails
+# the build on a mirror that doesn't have the fix yet.
+RUN apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
+    apk upgrade --no-cache libcrypto3 libssl3 curl libcurl && \
+    libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
+    test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 

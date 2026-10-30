@@ -1,14 +1,24 @@
 ---
-title: Schematic Transit Map
-description: Metro-map style transit network overlay rendered from OpenStreetMap by LOOM.
+title: Schematic transit map
+description: View rail networks as geographic, octilinear, or radial plans.
 ---
 
-# Schematic Transit Map
+# Schematic transit map
 
-The schematic transit map overlay draws tram, metro and light rail, commuter rail, and long-distance rail networks the way printed network plans do. Choose between the geographic layout (`geo`), the classic metro-map octilinear layout (`octi`), and a radial layout (`orthorad`) from the legend, and toggle between the four network groups (`tram`, `subway-lightrail`, `rail-commuter`, and `rail`). (The experimental upstream `geo-octi` layout is deliberately not offered).
+Enable **Schematic transit map** in Layers, then choose a layout in the legend:
+geographic, octilinear, or radial. Choose the network group for trams,
+metro/light rail, commuter rail, or long-distance rail. The group controls select
+one network at a time.
 
-Because this overlay provides a complete stylized network plan, turning it on automatically disables the standard OpenStreetMap **Transit lines** overlay to prevent competing visual geometries from stacking.
+The schematic layer and ordinary **Transit lines** exclude one another. Turning
+one on switches the other off. Bus and ferry networks are not included.
 
-Tiles are rendered from OpenStreetMap data by [LOOM](https://loom.cs.uni-freiburg.de/tiles) (University of Freiburg) and proxied through the OpenMapX server — the browser never contacts the upstream service. Upstream tile 404s for unpopulated tiles are proxied as HTTP 204 No Content with long cache headers to prevent MapLibre rendering errors. Coverage and freshness follow OpenStreetMap's transit mapping and LOOM's rebuild cadence, so both vary by region. Bus and ferry networks are not part of the upstream data.
+LOOM at the University of Freiburg renders the tiles from OpenStreetMap data;
+OpenMapX proxies them through its server. Coverage and update frequency depend
+on OSM mapping and LOOM publication. A network plan does not supply current
+service, departures, or disruption information. Use
+[Public transit](./public-transit.md) for those features.
 
-The overlay is enabled by default and needs no credentials. Operators can disable it, or point `tileBaseUrl` at a self-hosted LOOM instance, under **Admin → Integrations → Schematic Transit Map**.
+The integration is enabled by default and needs no credentials. Operators can
+disable it or set `tileBaseUrl` to a compatible self-hosted LOOM endpoint under
+**Admin → Integrations**.

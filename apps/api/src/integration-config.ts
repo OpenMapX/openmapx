@@ -1,4 +1,4 @@
-import { constants, existsSync, readFileSync } from "node:fs";
+import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
@@ -6,6 +6,7 @@ import { type IntegrationManifest, integrationEnvVarName } from "@openmapx/integ
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { integrationConfig } from "./db/schema";
+import { readIntegrationFile } from "./integration-files";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
@@ -129,10 +130,12 @@ export async function resolveConfigWithSources(
     // vault unavailable
   }
 
-  const configJsonPath = join(directory, "config.json");
-  if (existsSync(configJsonPath)) {
+  // Read through the verifier: in an installed directory the operations agent
+  // owns, only a config.json it installed is used.
+  const configJson = readIntegrationFile(directory, "config.json");
+  if (configJson) {
     try {
-      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
+      const fileConfig = JSON.parse(configJson.toString("utf-8"));
       if (typeof fileConfig === "object" && fileConfig !== null) {
         for (const [key, value] of Object.entries(fileConfig as Record<string, unknown>)) {
           if (knownKeys.has(key)) result[key] = { value, source: "config.json" };
@@ -234,6 +237,8 @@ export async function resolveIntegrationConfigWithSourcesStrict(
         mtime: stat.mtimeMs,
         ctime: stat.ctimeMs,
       });
+      const verified = readIntegrationFile(directory, "config.json");
+      if (!verified || !verified.equals(bytes)) throw new Error("unverified config");
       overlay(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), "config.json");
     } catch (error) {
       if (handle !== undefined || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

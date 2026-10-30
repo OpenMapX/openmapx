@@ -62,6 +62,7 @@ const reloaded = {
     z.union([httpErrorSchema, configurationSourceOwnedSchema, configurationVersionConflictSchema]),
   ),
 };
+const notApplied = { 409: adminJson(httpErrorSchema) };
 const _ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
@@ -141,6 +142,7 @@ export const integrationAdminOperations = {
     },
     responses: {
       ...missing,
+      ...notApplied,
       400: configErrors,
       200: adminJson(adminIntegrationConfigUpdatedSchema),
       409: adminJson(

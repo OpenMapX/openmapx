@@ -1,4 +1,4 @@
-import type { OsmContributionContext } from "@openmapx/core";
+import { type OsmContributionContext, useSettingsStore } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useReducer } from "react";
@@ -79,6 +79,14 @@ function Harness({
   );
 }
 
+async function nudgeHour(field: HTMLElement | undefined, key: string) {
+  if (!field) throw new Error("expected a time field");
+  await userEvent.click(field);
+  screen.getByRole("slider").focus();
+  await userEvent.keyboard(key);
+  await userEvent.click(screen.getByRole("button", { name: "timePicker.ok" }));
+}
+
 describe("OpeningHoursControl", () => {
   it("applies quick presets and updates the live OSM preview", async () => {
     render(<Harness />);
@@ -135,28 +143,37 @@ describe("OpeningHoursControl", () => {
   });
 
   it("supports multiple time spans, extended next-day hours, and comments", async () => {
-    render(<Harness currentOpeningHours="Mo-Fr 09:00-12:00" />);
+    render(<Harness currentOpeningHours="Mo-Fr 08:00-34:00" />);
 
-    // Add second time span -> Mo-Fr 09:00-12:00,09:00-17:00
+    // Add second time span -> Mo-Fr 08:00-34:00,09:00-17:00
     await userEvent.click(screen.getByText("+ osmContributions.ohAddTimeSpan"));
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
-      "Mo-Fr 09:00-12:00,09:00-17:00",
+      "Mo-Fr 08:00-34:00,09:00-17:00",
     );
 
-    // Toggle next day (+24h) on the first time span's end time
-    const [firstNextDayCheckbox] = screen.getAllByLabelText("osmContributions.ohNextDayHint");
-    if (!firstNextDayCheckbox) throw new Error("expected next day checkbox");
-    await userEvent.click(firstNextDayCheckbox);
+    // Only the closing time already past 24:00 offers next day (+24h)
+    const nextDayBoxes = screen.getAllByLabelText("osmContributions.ohNextDayHint");
+    expect(nextDayBoxes).toHaveLength(1);
+    const [nextDayCheckbox] = nextDayBoxes;
+    if (!nextDayCheckbox) throw new Error("expected next day checkbox");
+    expect((nextDayCheckbox as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(nextDayCheckbox);
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
-      "Mo-Fr 09:00-36:00,09:00-17:00",
+      "Mo-Fr 08:00-10:00,09:00-17:00",
     );
+    expect(screen.queryByLabelText("osmContributions.ohNextDayHint")).toBeNull();
 
     // Enter a rule comment
     const commentInput = screen.getByLabelText("osmContributions.ohCommentLabel");
     fireEvent.change(commentInput, { target: { value: "kitchen until 22:00" } });
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
-      'Mo-Fr 09:00-36:00,09:00-17:00 "kitchen until 22:00"',
+      'Mo-Fr 08:00-10:00,09:00-17:00 "kitchen until 22:00"',
     );
+  });
+
+  it.each(["Mo-Fr 09:00-17:00", "Fr 18:00-02:00"])("offers no next day (+24h) for %s", (value) => {
+    render(<Harness currentOpeningHours={value} />);
+    expect(screen.queryByLabelText("osmContributions.ohNextDayHint")).toBeNull();
   });
 
   it("supports advanced year, month, date, week, and nth-weekday constraints", async () => {
@@ -214,6 +231,39 @@ describe("OpeningHoursControl", () => {
     expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
       "easter -2 days-easter +1 day: 10:00-18:00",
     );
+  });
+
+  it("edits times on the clock field and keeps a past-midnight end on the next day", async () => {
+    render(<Harness currentOpeningHours="Fr 18:00-26:30" />);
+    const [opens, closes] = screen.getAllByRole("textbox", { name: /timePicker\.open/ });
+
+    await nudgeHour(closes, "{ArrowUp}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 18:00-27:30");
+
+    await nudgeHour(opens, "{ArrowDown}");
+    expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe("Fr 17:00-27:30");
+  });
+
+  it("closes at 24:00 when the closing time reaches midnight", async () => {
+    useSettingsStore.setState({ timeFormat: "24h" });
+    try {
+      render(<Harness currentOpeningHours="Mo-Su 10:00-23:00" />);
+      const closes = () => screen.getAllByRole("textbox", { name: /timePicker\.open/ })[1];
+
+      await nudgeHour(closes(), "{ArrowUp}");
+      expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
+        "Mo-Su 10:00-24:00",
+      );
+      expect(screen.getByDisplayValue("24:00")).toBeTruthy();
+      expect(screen.queryByRole("checkbox", { name: "osmContributions.ohNextDayHint" })).toBeNull();
+
+      await nudgeHour(closes(), "{ArrowUp}");
+      expect(screen.getByTestId("opening-hours-live-preview").textContent).toBe(
+        "Mo-Su 10:00-01:00",
+      );
+    } finally {
+      useSettingsStore.setState({ timeFormat: "auto" });
+    }
   });
 
   it("supports explicit removal and undo via RemoveToggle", async () => {

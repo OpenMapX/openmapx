@@ -76,6 +76,9 @@ dist/
 .env
 # Downloaded source data (managed by data-manager service / `openmapx data` CLI)
 infra/docker/data/
+infra/docker/state/
+# The operator's whole-file replacements of release service files
+infra/docker/overrides/
 
 # Community integrations (user-installed, not version-controlled)
 custom_integrations/

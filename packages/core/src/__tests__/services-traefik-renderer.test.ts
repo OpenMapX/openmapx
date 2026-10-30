@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 import { renderCompose, resolveProxyHost } from "../services/compose-renderer";
 import { findServiceManifestDirs } from "../services/manifest-discovery";
 import { serviceManifestSchema } from "../services/manifest-schema";
+import { DEFAULT_SELECTED_SERVICE_IDS } from "../services/selection";
 import {
   renderTraefikDynamicConfiguration,
+  renderTraefikDynamicYaml,
   renderTraefikServiceConfiguration,
 } from "../services/traefik-renderer";
 import type { LoadedService, ServiceManifest } from "../services/types";
@@ -147,6 +149,26 @@ describe("generated Traefik file configuration", () => {
         resolveProxyHost: (candidate) => resolveProxyHost(candidate, { domain: DOMAIN }),
       }),
     ).toThrow(/Duplicate Traefik router/);
+  });
+
+  it("leaves out the empty sections Traefik would refuse the whole file for", () => {
+    const context = {
+      domain: DOMAIN,
+      resolveProxyHost: (candidate: ServiceManifest) =>
+        resolveProxyHost(candidate, { domain: DOMAIN }),
+    };
+    // The default selection strips no prefix, so it has no middlewares.
+    const defaults = manifests.filter((manifest) =>
+      (DEFAULT_SELECTED_SERVICE_IDS as readonly string[]).includes(manifest.id),
+    );
+    expect(defaults.length).toBeGreaterThan(0);
+    const yaml = renderTraefikDynamicYaml(renderTraefikDynamicConfiguration(defaults, context));
+    const parsed = parseYaml(yaml) as { http: Record<string, unknown> };
+    expect(Object.keys(parsed.http).sort()).toEqual(["routers", "services"]);
+    expect(yaml).not.toContain("{}");
+
+    const nothing = renderTraefikDynamicYaml(renderTraefikDynamicConfiguration([], context));
+    expect(parseYaml(nothing)).toEqual({});
   });
 
   it("renders nothing for a service that declares no proxy", () => {

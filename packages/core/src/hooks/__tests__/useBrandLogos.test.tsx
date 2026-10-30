@@ -68,11 +68,11 @@ it("keeps a complete cached logo and its captured credit during a failed refresh
     pageUrl: "https://commons.wikimedia.org/wiki/File:Logo.svg",
     contributors: [{ sourceId: "wikimedia-commons", name: "Cached file receipt" }],
   };
-  client.setQueryDefaults(["brand-logo-attribution-v3"], { retryDelay: 0 });
-  client.setQueryData(["brand-logo-attribution-v3", "Q1"], photo);
+  client.setQueryDefaults(["brand-logo-attribution-v4"], { retryDelay: 0 });
+  client.setQueryData(["brand-logo-attribution-v4", "Q1", "Logo.svg"], photo);
   const get = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("metadata unavailable"));
   try {
-    const { result } = renderHook(() => useBrandLogoAttribution("Q1", true), {
+    const { result } = renderHook(() => useBrandLogoAttribution("Q1", "Logo.svg"), {
       wrapper: createQueryWrapper(client),
     });
     expect(result.current.data).toEqual(photo);
@@ -101,6 +101,38 @@ it("preserves the selected logo file's captured catalogue receipt", async () => 
         fieldContributors: row.fieldContributors,
       }),
     );
+  } finally {
+    get.mockRestore();
+  }
+});
+
+it("fetches a changed captured filename independently and defers mismatched or incomplete files", async () => {
+  const { useBrandLogoAttribution } = await import("../useBrandDetail");
+  const file = {
+    logoFile: "Old.svg",
+    url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Old.svg",
+    source: "wikimedia-commons",
+    author: "Artist",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Old.svg",
+    licensing: licensingFromDeclaration(
+      "CC BY 4.0",
+      "https://creativecommons.org/licenses/by/4.0/",
+    ),
+  };
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue(file);
+  try {
+    const { result, rerender } = renderHook(({ file }) => useBrandLogoAttribution("Q1", file), {
+      initialProps: { file: "Old.svg" },
+      wrapper: createQueryWrapper(),
+    });
+    await waitFor(() => expect(result.current.data?.logoFile).toBe("Old.svg"));
+    rerender({ file: "New.svg" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBeUndefined();
+    get.mockResolvedValue({ ...file, logoFile: "New.svg", licensing: undefined });
+    await result.current.refetch();
+    expect(result.current.data).toBeUndefined();
   } finally {
     get.mockRestore();
   }

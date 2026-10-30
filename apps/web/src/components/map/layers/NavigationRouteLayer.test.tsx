@@ -340,6 +340,7 @@ it("credits only actual line hits through progress, empty viewport and unrelated
   Object.defineProperty(fake.map, "style", {
     configurable: true,
     value: {
+      projection: { worldCoordinateHelper: {} },
       tileManagers: {
         [SOURCE]: {
           getVisibleCoordinates: () => [{}],

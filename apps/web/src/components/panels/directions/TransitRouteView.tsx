@@ -41,6 +41,7 @@ import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { formatCo2Emission } from "../../../lib/formatCo2";
+import { TransitAccessibilityIndicator } from "./TransitAccessibilityIndicator";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
   low: 0,
@@ -326,9 +327,6 @@ export function TransitItineraryCard({
     (leg) => leg.mode !== "walking" && leg.mode !== "cycling" && leg.mode !== "driving",
   );
   const cancelledLegs = itinerary.legs.filter((leg) => leg.cancelled === true).length;
-  const wheelchairRestrictedLegs = itinerary.legs.filter(
-    (leg) => leg.wheelchairAccessible === false,
-  ).length;
   // Plan-time robustness cue: a very short scheduled transfer buffer.
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   // Resolve each offset label before formatting the time it gates: unlike
@@ -457,52 +455,33 @@ export function TransitItineraryCard({
         )}
       </Box>
       {firstBoardingLeg && <BoardingSummary leg={firstBoardingLeg} />}
-      {metaBits.length > 0 && (
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-            display: "block",
-          }}
-        >
-          {metaBits.join(" · ")}
-        </Typography>
+      {(metaBits.length > 0 ||
+        itinerary.legs.some((leg) => leg.wheelchairAccessible === false)) && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
+          {metaBits.length > 0 && (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {metaBits.join(" · ")}
+            </Typography>
+          )}
+          <TransitAccessibilityIndicator itinerary={itinerary} />
+        </Box>
       )}
-      {(cancelledLegs > 0 || wheelchairRestrictedLegs > 0) && (
+      {cancelledLegs > 0 && (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 0.75 }}>
-          {cancelledLegs > 0 && (
-            <Typography
-              variant="caption"
-              data-testid="transit-cancelled-summary"
-              sx={{
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: "error.main",
-                color: "error.contrastText",
-                fontWeight: 600,
-              }}
-            >
-              {t("cancelledServices", { count: cancelledLegs })}
-            </Typography>
-          )}
-          {wheelchairRestrictedLegs > 0 && (
-            <Typography
-              variant="caption"
-              data-testid="transit-accessibility-summary"
-              sx={{
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: "warning.main",
-                color: "warning.contrastText",
-                fontWeight: 600,
-              }}
-            >
-              {t("wheelchairRestrictedLegs", { count: wheelchairRestrictedLegs })}
-            </Typography>
-          )}
+          <Typography
+            variant="caption"
+            data-testid="transit-cancelled-summary"
+            sx={{
+              px: 0.75,
+              py: 0.25,
+              borderRadius: 99,
+              bgcolor: "error.main",
+              color: "error.contrastText",
+              fontWeight: 600,
+            }}
+          >
+            {t("cancelledServices", { count: cancelledLegs })}
+          </Typography>
         </Box>
       )}
       {tightTransfer && (

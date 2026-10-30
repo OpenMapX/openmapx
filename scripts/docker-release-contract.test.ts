@@ -147,7 +147,7 @@ describe("Docker release trust gate", () => {
     expect(release).toContain(["@", "$", "{{ steps.candidate.outputs.digest }}"].join(""));
     expect(release).toContain("severity: CRITICAL,HIGH");
     expect(release).toContain("- name: Audit exact candidate digest with Trivy");
-    expect(release.match(/version: v0\.75\.0/g)).toHaveLength(2);
+    expect(release.match(/version: v0\.76\.1/g)).toHaveLength(2);
     expect(release).toContain('ignore-unfixed: "false"');
     expect(release).toContain('exit-code: "0"');
     expect(release).toContain("- name: Gate exact candidate digest with Trivy");
@@ -413,7 +413,7 @@ describe("Docker release trust gate", () => {
     expect(ci).toContain("needs: docker-changes");
     expect(ci).toContain("needs.docker-changes.outputs.apps != '[]'");
     expect(ci).toContain("push: false");
-    expect(ci).toMatch(/needs: \[[^\]]*docker-build[^\]]*\]/);
+    expect(ci).toMatch(/needs:\s*\[[^\]]*\bdocker-build\b[^\]]*\]/);
     expect(read("apps/web/Dockerfile")).toContain(
       "COPY apps/api/openapi.json apps/api/openapi.json",
     );
@@ -442,7 +442,7 @@ describe("Docker release trust gate", () => {
       expect(read(dockerfile)).toContain("build-gtfsclean.sh");
     }
     expect(read("services/motis/tools/transitous/build-gtfsclean.sh")).toContain(
-      "golang.org/x/text@v0.41.0",
+      "golang.org/x/text@v0.43.0",
     );
   });
 

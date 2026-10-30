@@ -3,7 +3,13 @@ import type { GantryModel, JunctionWay } from "../../types/junction";
 import type { Route } from "../../types/routing";
 import fixture from "../__fixtures__/junction/a57-neuss-exit20.json";
 import { findJunctionDecisionPoints } from "../junctionDetect";
-import { mergeExitPanel, parseLaneTags, selectApproachWay, selectRampWay } from "../laneTags";
+import {
+  laneDestinationsAt,
+  mergeExitPanel,
+  parseLaneTags,
+  selectApproachWay,
+  selectRampWay,
+} from "../laneTags";
 
 const a57Point = findJunctionDecisionPoints(fixture.route as unknown as Route)[0];
 
@@ -269,5 +275,42 @@ describe("way selection", () => {
       way({ wayId: 8, highway: "motorway_link", bearing: 305, startDistanceMeters: 3 }),
     ];
     expect(selectRampWay(ramps, a57Point).map((r) => r.wayId)).toEqual([8, 7]);
+  });
+});
+
+describe("laneDestinationsAt", () => {
+  const point = { ...a57Point, laneCount: 4 };
+  const split = way({
+    wayId: 152275743,
+    highway: "motorway_link",
+    bearing: 285,
+    endDistanceMeters: 2,
+    tags: {
+      lanes: 4,
+      destinationLanes: "Düsseldorf|Düsseldorf|Liège|Liège",
+      destinationRefLanes: "A 44|A 44|A 44|A 44",
+    },
+  });
+
+  it("reads the split's lanes off a link carrying the route into it", () => {
+    const mainline = way({ wayId: 1, bearing: 285, endDistanceMeters: 30, tags: { lanes: 3 } });
+    expect(laneDestinationsAt({ approach: [mainline], ramps: [split] }, point)).toEqual([
+      { destinations: ["Düsseldorf"], refs: ["A 44"] },
+      { destinations: ["Düsseldorf"], refs: ["A 44"] },
+      { destinations: ["Liège"], refs: ["A 44"] },
+      { destinations: ["Liège"], refs: ["A 44"] },
+    ]);
+  });
+
+  it("needs the engine's lane count, so the lanes line up one to one", () => {
+    expect(
+      laneDestinationsAt({ approach: [], ramps: [split] }, { ...point, laneCount: 3 }),
+    ).toBeUndefined();
+  });
+
+  it("skips a way leaving the split or heading elsewhere", () => {
+    const leaving = { ...split, endDistanceMeters: -60 };
+    const crossing = { ...split, bearing: 20 };
+    expect(laneDestinationsAt({ approach: [], ramps: [leaving, crossing] }, point)).toBeUndefined();
   });
 });

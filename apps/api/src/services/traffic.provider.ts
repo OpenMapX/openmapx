@@ -1,7 +1,9 @@
+import type { Readable } from "node:stream";
+
 export interface TrafficTile {
   contentType: string;
   cacheControl?: string;
-  bytes: ArrayBuffer;
+  body: Readable;
 }
 
 export class TrafficProviderHttpError extends Error {
@@ -15,5 +17,5 @@ export class TrafficProviderHttpError extends Error {
 }
 
 export interface TrafficProvider {
-  getFlowTile: (z: number, x: number, y: number) => Promise<TrafficTile>;
+  getFlowTile: (z: number, x: number, y: number, signal?: AbortSignal) => Promise<TrafficTile>;
 }

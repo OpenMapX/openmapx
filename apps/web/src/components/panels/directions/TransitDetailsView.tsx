@@ -70,6 +70,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { getWheelchairStatus } from "./transitAccessibility";
 
 /**
  * Per-mode rendering for non-transit street legs (walk + intermodal bike/car
@@ -121,7 +122,7 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
   };
 }
 
-function LegStatusDetails({ leg }: { leg: TripLeg }) {
+function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
   const t = useTranslations("directions");
   const tNav = useTranslations("navigation");
   const [stepsExpanded, setStepsExpanded] = useState(false);
@@ -130,8 +131,10 @@ function LegStatusDetails({ leg }: { leg: TripLeg }) {
   if (leg.realtime === true) statuses.push(t("realtimeSupported"));
   if (leg.bikesAllowed === true) statuses.push(t("bikesSupported"));
   if (leg.bikesAllowed === false) statuses.push(t("bikesNotSupported"));
-  if (leg.wheelchairAccessible === true) statuses.push(t("wheelchairSupported"));
-  if (leg.wheelchairAccessible === false) statuses.push(t("wheelchairNotSupported"));
+  const wheelchairStatus = getWheelchairStatus(leg, itinerary);
+  if (wheelchairStatus === "accessible") statuses.push(t("wheelchairSupported"));
+  if (wheelchairStatus === "inaccessible") statuses.push(t("wheelchairNotSupported"));
+  if (wheelchairStatus === "unconfirmed") statuses.push(t("wheelchairUnconfirmed"));
   if (leg.rental?.returnConstraint === "ANY_STATION") statuses.push(t("returnAnyStation"));
   if (leg.rental?.returnConstraint === "ROUNDTRIP_STATION") {
     statuses.push(t("returnSameStation"));
@@ -690,7 +693,7 @@ export function TransitDetailsView({
                       )}
                     </Box>
                   )}
-                  <LegStatusDetails leg={leg} />
+                  <LegStatusDetails leg={leg} itinerary={itinerary} />
                 </Box>
               </Box>
               {/* Interchange summary after a ride that changes onto another. When a

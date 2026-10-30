@@ -293,6 +293,12 @@ export interface RoutingOptions extends BikeRoutingOptions {
   /** Polygon rings the router must not enter, e.g. road-closure boundaries. */
   excludePolygons?: LngLat[][];
   /**
+   * Points the router must not pass in one direction: one carriageway of a
+   * closed road, the other direction left open. Only providers declaring
+   * `supportsDirectedExclusions` honour them.
+   */
+  directedExclusions?: DirectedExclusion[];
+  /**
    * Request live speed observations, when the selected provider supports them,
    * in addition to its normal historical/predicted speed model. Callers should
    * default this on for motorised modes and off for bike/pedestrian; the policy
@@ -312,6 +318,12 @@ export interface RoutingOptions extends BikeRoutingOptions {
    * finish on it, or pass it to reach a street only reachable through it.
    */
   localAccess?: { origin?: LocalAccessEndpoint; destination?: LocalAccessEndpoint };
+}
+
+/** A point on a road and the direction of travel excluded there, degrees clockwise from north. */
+export interface DirectedExclusion {
+  point: LngLat;
+  heading: number;
 }
 
 /** How one end of a route may use a road closed to all but local access. */

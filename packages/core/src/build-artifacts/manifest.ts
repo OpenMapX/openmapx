@@ -39,6 +39,7 @@ export interface BuildRecord {
   builtAt: string;
   region?: string;
   revision?: string;
+  release?: string;
   sourcePbf?: { name: string; sizeBytes: number };
   runtimeImages: Record<string, string>;
   toolImages: Record<string, string>;
@@ -70,6 +71,7 @@ const common = {
   builtAt: z.iso.datetime(),
   region: string.optional(),
   revision: string.optional(),
+  release: string.optional(),
   sourcePbf: z.strictObject({ name: string, sizeBytes: size }).optional(),
   runtimeImages: images,
   toolImages: images,

@@ -12,8 +12,8 @@ import {
 } from "./index";
 
 describe("data-manager wire contracts", () => {
-  it("owns all 58 explicit operations with two named glyph HEAD/GET contracts", () => {
-    expect(Object.keys(dataManagerOperations)).toHaveLength(58);
+  it("owns all 61 explicit operations with two named glyph HEAD/GET contracts", () => {
+    expect(Object.keys(dataManagerOperations)).toHaveLength(61);
     expect(dataManagerOperations.getOfflineGlyph.path).toBe(
       "/offline/packages/glyphs/:version/:fontstack/:range.pbf",
     );
@@ -244,6 +244,11 @@ describe("data-manager wire contracts", () => {
         connection: "keep-alive",
       }),
     ).toEqual({ "retry-after": "30" });
+    expect(
+      dataManagerOperations.getOfflinePackageArchive.responses[503].headers?.parse({
+        "retry-after": "10",
+      }),
+    ).toEqual({ "retry-after": "10" });
   });
   it("keeps portable licensing structured and preserves semantic checks", () => {
     const body = {

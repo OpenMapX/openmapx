@@ -52,7 +52,7 @@ export const run: StageFn = async (ctx) => {
     // outage here is logged at warn level and otherwise non-fatal.
     await persistFetchOutcomes(selectedFeedFiles, failures, ctx);
 
-    if (failures.length === 0) finalizeTransitSourceManifest(ctx);
+    if (failures.length === 0) await finalizeTransitSourceManifest(ctx);
 
     // A feed file with N active schedule sources may surface 1..N failures
     // attributable to specific sources. We treat the stage as fully failed

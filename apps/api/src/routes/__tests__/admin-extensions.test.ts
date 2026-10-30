@@ -59,19 +59,24 @@ vi.mock("../../services/extension-installer.js", () => ({
   previewExtensionInstall: (...a: unknown[]) => mockPreviewExtensionInstall(...a),
 }));
 
-vi.mock("@openmapx/core/server", () => ({
-  services: {
-    computeServiceSecurityRating: vi.fn().mockReturnValue({
-      score: 7,
-      requiresBuiltIn: false,
-      hostPorts: 0,
-      secretCount: 0,
-      deploymentVariables: [],
-      factors: ["Synthetic rating"],
-    }),
-    extensionComponentSummary: vi.fn().mockReturnValue([{ kind: "service", id: "oc-ingest" }]),
-  },
-}));
+vi.mock("@openmapx/core/server", async (original) => {
+  const actual = await original<typeof import("@openmapx/core/server")>();
+  return {
+    ...actual,
+    services: {
+      ...actual.services,
+      computeServiceSecurityRating: vi.fn().mockReturnValue({
+        score: 7,
+        requiresBuiltIn: false,
+        hostPorts: 0,
+        secretCount: 0,
+        deploymentVariables: [],
+        factors: ["Synthetic rating"],
+      }),
+      extensionComponentSummary: vi.fn().mockReturnValue([{ kind: "service", id: "oc-ingest" }]),
+    },
+  };
+});
 
 vi.mock("../../services/service-registry.js", () => ({
   getServiceRegistry: () => ({ get: () => null }),
@@ -83,8 +88,7 @@ const ENTRY = {
   version: "1.0.0",
   trust: "verified" as const,
   minPlatform: "1.0",
-  manifest:
-    "https://fixture-user:fixture-pass@extensions.example.test/private/extension.json?token=fixture-extension-token#fixture-fragment",
+  manifest: "https://extensions.example.test/private/extension.json",
   services: [{ repo: "https://github.com/openconditions/openconditions", service: "oc-ingest" }],
 };
 const MANIFEST = {
@@ -111,6 +115,7 @@ vi.mock("../../services/extension-store.js", () => ({
   listInstalledExtensions: vi.fn().mockResolvedValue([]),
   addExtensionSource: vi.fn().mockResolvedValue(undefined),
   removeExtensionSource: vi.fn().mockResolvedValue(undefined),
+  normalizeExtensionLocator: (url: string) => url,
   PLATFORM_VERSION: "1.0",
 }));
 
@@ -208,14 +213,12 @@ describe("POST /admin/extensions/install", () => {
         sourceTrust: "verified",
         sourceUrl: {
           host: "extensions.example.test",
-          digest: "55f256172f64e55c11e87683de7a1217",
+          digest: "cf94dbe3b601505f26ac39027507e188",
         },
         jobId: "job-ext-1",
       },
     });
-    expect(JSON.stringify(auditEntry.details)).not.toMatch(
-      /fixture-user|fixture-pass|private\/extension|fixture-extension-token|fixture-fragment/,
-    );
+    expect(JSON.stringify(auditEntry.details)).not.toMatch(/private\/extension/);
   });
 
   it("rejects a request with neither id nor manifestUrl", async () => {

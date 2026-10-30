@@ -130,6 +130,10 @@ export const roadConditionsPolicySnapshotSchema = z.strictObject({
   validUntil: timestamp.nullable(),
   revision: z.string(),
   disallowedSourceIds: z.array(z.string()),
+  /** Sources whose rights are unclear (a permission `unknown`) may be used. */
+  allowGreyArea: z.boolean(),
+  /** Sources whose licence forbids commercial use may be used. */
+  allowNonCommercial: z.boolean(),
 });
 export type TransitStateSummary = z.infer<typeof transitStateSummarySchema>;
 export type TransitFeed = z.infer<typeof transitFeedSchema>;

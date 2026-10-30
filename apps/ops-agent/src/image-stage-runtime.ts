@@ -80,7 +80,7 @@ export function installImageStageRuntime(
       return await services.withConfigurationGenerationWriter(
         options.infraDir,
         async () => {
-          const directory = join(options.infraDir, ".ops-agent-releases"),
+          const directory = services.releaseStatePaths(options.infraDir).store,
             lock = await services.acquireReleaseStoreLock(directory);
           try {
             const source = await (async () => {

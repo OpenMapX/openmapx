@@ -58,7 +58,7 @@
     {
       "name": "OpenStreetMap Overpass",
       "type": "http",
-      "url": "https://overpass-api.de/api/status"
+      "urlTemplate": "${endpoint:overpass}/api/status"
     }
   ],
   "quality": "built-in",
@@ -170,6 +170,12 @@
           }
         ]
       }
+    }
+  ],
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
     }
   ]
 }

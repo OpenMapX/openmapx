@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.20
 
-FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS base
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
@@ -124,7 +124,7 @@ WORKDIR /app/apps/api
 RUN --network=none pnpm --config.verify-deps-before-run=false build
 
 # Production image
-FROM node:24.22.1-alpine@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS runner
+FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
 WORKDIR /app
 
 # curl is required by the container healthcheck (generated from
@@ -145,8 +145,16 @@ WORKDIR /app
 # socket became reachable.
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456, and git
 # pulls in libexpat, whose CVE-2026-66046 fix landed after this base was cut.
+# curl pulls in brotli-libs; 1.2.1-r0 fixes CVE-2026-111497. curl and libcurl
+# 8.23.0-r0 fix CVE-2026-92392. `apk add` alone is not enough: a release build
+# can restore this layer from the registry build cache with the curl it held
+# then. Naming curl here, and the version floor checked after, change this
+# instruction, which keeps such a layer from being reused; the floor also
+# fails the build on a mirror that doesn't have the fix yet.
 RUN apk add --no-cache curl ca-certificates git && \
-    apk upgrade --no-cache libcrypto3 libssl3 libexpat && \
+    apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl && \
+    libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
+    test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
@@ -245,18 +253,21 @@ COPY tsconfig.base.json ./
 COPY apps/api/tsconfig.json ./apps/api/
 COPY packages/core/tsconfig.json ./packages/core/
 
-# Run as the image's existing non-root `node` user (uid/gid 1000). Only the
-# directories the runtime actually writes are handed over; the rest of /app
-# stays read-only to the process. A root API process was the difference between
+# Compose runs the API as the deployment's user (`user: "${UID}:${GID}"`),
+# whatever its uid; `node` is only the image's default. /app stays root-owned
+# and read-only to the process. A root API process was the difference between
 # "compromised service" and "compromised container" for every remaining mount.
 #
-# The runtime-recovery journal must be a 0700 directory the process owns; it
-# is a named volume, which Docker seeds with this directory's owner and mode.
+# The API writes bind mounts the host creates for that user, and two named
+# volumes, which Docker seeds with the owner and mode of these directories:
+# root-owned, world-writable and sticky, like /tmp, so the API's uid creates
+# its own 0700 directory inside (see private-volume-directory.ts). Only the
+# API mounts them. Volumes seeded by earlier images belong to uid 1000 and are
+# used as they are by an API running as that uid.
 RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
+      /var/lib/openmapx/erasure /var/lib/openmapx/subject-exports \
       /app/infra/docker/.runtime-recovery && \
-    chown -R node:node /app/custom_integrations /var/lib/openmapx \
-      /app/infra/docker/.runtime-recovery && \
-    chmod 0700 /app/infra/docker/.runtime-recovery
+    chmod 1777 /var/lib/openmapx/subject-exports /app/infra/docker/.runtime-recovery
 USER node
 
 WORKDIR /app/apps/api

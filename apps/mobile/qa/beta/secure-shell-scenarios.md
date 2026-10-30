@@ -1,8 +1,11 @@
-# Secure shell — scenarios that need a physical device
+# Secure shell: scenarios that need a physical device
 
-Everything in this file is **unverified**. These are the behaviours that a
-simulator or emulator either cannot reproduce or reproduces dishonestly, so they
-are deferred to the volunteer store beta rather than claimed here.
+<a id="secure-shell--scenarios-that-need-a-physical-device"></a>
+
+All physical cases remain unverified in committed evidence. Virtual runs may
+exercise injected permission and lifecycle states, but they cannot establish
+physical OS delivery, power management or audio behavior. Navigation cases also
+require the foreground dispatcher currently absent from `src/App.tsx`.
 
 Nothing in this document may be marked verified from a simulator run, a code
 review, or an emulator screenshot. A scenario becomes verified only when a named
@@ -11,14 +14,14 @@ build recorded alongside the result.
 
 ## Why these cannot be qualified locally
 
-| Behaviour                      | Why a simulator cannot answer it                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Background location delivery   | The simulator never applies a real power policy, never throttles for thermal state, and never suspends the app the way a locked phone does. |
-| Locked-screen audio            | Route and interruption behaviour depends on the physical audio session and on what else the device is playing.                              |
-| Doze / App Standby (Android)   | Emulators do not enter Doze under the same conditions, and OEM battery managers do not exist there at all.                                  |
-| OEM permission revocation      | Vendor-specific "restrict background activity" behaviour has no emulator equivalent.                                                        |
-| Force-stop and reboot survival | The emulator's process lifecycle does not match a device under memory pressure.                                                             |
-| Precise-location downgrade     | The simulator grants precise location without the system dialogs a real user sees.                                                          |
+| Behaviour                      | Why a simulator cannot answer it                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Background location delivery   | Virtual results do not qualify real locked-screen, thermal or power-policy delivery.                           |
+| Locked-screen audio            | Route and interruption behaviour depends on the physical audio session and on what else the device is playing. |
+| Doze / App Standby (Android)   | Injected Doze states can be tested virtually; actual power behavior and OEM managers need hardware.            |
+| OEM permission revocation      | Vendor-specific "restrict background activity" behaviour has no emulator equivalent.                           |
+| Force-stop and reboot survival | The emulator's process lifecycle does not match a device under memory pressure.                                |
+| Precise-location downgrade     | Virtual permission tests do not establish real Settings transitions or location quality.                       |
 
 ## Permission matrix
 
@@ -74,9 +77,11 @@ build recorded alongside the result.
 The `LocationDriver` interface exists so that `expo-location` can be replaced
 without touching the coordinator, storage, bridge, web UI or engines.
 
-Replacement is triggered **only** by beta evidence: two independent volunteers
-reporting the same driver-specific background failure on devices where the same
-scenario succeeds with a direct platform API. Until that evidence exists,
+Evaluate replacement only after the same driver-specific background-survival,
+delivery-gap, duplicate-stream or teardown failure reproduces twice on the same
+beta build. Record the reproductions and maintainer decision; compare direct
+platform behavior where needed to isolate the cause. This matches the ground
+scenarios and `LocationDriver.ts`; the schema does not switch drivers. Until then,
 `expo-location` remains selected, and its record in
 `apps/mobile/qa/assumptions/location-driver.json` stays unresolved.
 

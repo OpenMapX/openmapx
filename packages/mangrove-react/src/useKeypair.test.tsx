@@ -1,377 +1,421 @@
 import {
-  encryptWithPassphrase,
   generateKeypair,
+  importPublicJwk,
   keypairToJwk,
-  type MangroveKeypair,
-  signMangroveReview,
+  publicKeyToPem,
 } from "@openmapx/mangrove-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useKeypairStore } from "./keypairStore";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { keypairOwner, useKeypairStore } from "./keypairStore";
 import { MangroveProvider } from "./provider";
 import type { MangroveCurrentUser, MangroveTransport } from "./transport";
-import type { CreateKeypairEnvelopePayload, EnvelopeState, WrapMeta } from "./types";
-import { useSetupKeypair, useUnlockKeypair, useUserKeypair } from "./useKeypair";
+import { type EnvelopeState, MangroveConflictError } from "./types";
+import {
+  MANGROVE_KEYPAIR_QUERY_KEY,
+  useAddWrap,
+  useChangePassphrase,
+  useImportMangroveKeypair,
+  useMangroveKeypairExport,
+  useRemoveWrap,
+  useSetupKeypair,
+  useUnlockKeypair,
+  useUserKeypair,
+} from "./useKeypair";
 
-// Tests that run a real age/scrypt passphrase KDF are skipped under the coverage
-// run: v8 instrumentation inflates scrypt ~4x (a single KDF blows past the 15s
-// timeout under parallel load). They run in full under the normal `pnpm test`
-// (pre-push) gate, where the crypto is fast and the real path is verified.
-// `test:coverage` sets OPENMAPX_SKIP_SLOW_CRYPTO=1.
-const skipSlowCrypto = process.env.OPENMAPX_SKIP_SLOW_CRYPTO === "1";
-
-// A minimal in-memory transport. Only the keypair-envelope surface is exercised
-// by these tests; the review/image methods reject so an accidental network call
-// fails loudly instead of silently passing.
-function createMockTransport(initial: EnvelopeState | null = null) {
-  let envelope: EnvelopeState | null = initial;
-  const created: CreateKeypairEnvelopePayload[] = [];
-  const transport: MangroveTransport = {
-    getKeypairEnvelope: vi.fn(async () => envelope),
-    createKeypairEnvelope: vi.fn(async (payload) => {
-      created.push(payload);
-      envelope =
-        payload.mode === "unencrypted"
-          ? {
-              state: "ready",
-              mode: "unencrypted",
-              publicJwk: payload.publicJwk,
-              privateJwk: payload.privateJwk,
-            }
-          : {
-              state: "ready",
-              mode: "encrypted",
-              publicJwk: payload.publicJwk,
-              passphraseCiphertext: payload.passphraseCiphertext,
-              recipientsCiphertext: payload.recipientsCiphertext,
-              wraps: payload.wraps.map((w: WrapMeta, i: number) => ({
-                id: `wrap-${i}`,
-                wrapType: w.wrapType,
-                label: w.label,
-                identityString: w.identityString,
-                createdAt: "2026-06-14T00:00:00Z",
-              })),
-            };
-    }),
-    updateKeypairWraps: vi.fn(async () => {}),
-    deleteKeypairEnvelope: vi.fn(async () => {
-      envelope = { state: "uninitialized" };
-    }),
-    submitReview: vi.fn(async () => {
-      throw new Error("submitReview must not be called in these tests");
-    }),
-    uploadReviewImage: vi.fn(async () => {
-      throw new Error("uploadReviewImage must not be called");
-    }),
-    fetchPlaceReviews: vi.fn(async () => []),
-    fetchPlaceReviewAggregate: vi.fn(async () => ({}) as never),
-  };
-  return { transport, created, setEnvelope: (e: EnvelopeState | null) => (envelope = e) };
-}
-
-const USER: MangroveCurrentUser = { id: "user-1", nickname: "tester" };
-
-function createWrapper(transport: MangroveTransport, currentUser: MangroveCurrentUser | null) {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0, staleTime: 0 },
-      mutations: { retry: false },
-    },
+vi.mock("@openmapx/mangrove-client", async (original) => ({
+  ...(await original<object>()),
+  encryptWithPassphrase: vi.fn(async (jwk) => JSON.stringify(jwk)),
+  decryptWithPassphrase: vi.fn(async (cipher) => JSON.parse(cipher)),
+  createWebAuthnIdentity: vi.fn(async () => "test-identity"),
+  encryptForWebAuthnIdentities: vi.fn(async (jwk) => JSON.stringify(jwk)),
+}));
+const USER = { id: "u1", authorityId: "s1" };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
   });
-  return function Wrapper({ children }: { children: ReactNode }) {
+  return { promise, resolve };
+}
+async function envelope(): Promise<
+  Extract<EnvelopeState, { state: "ready" }> & { passphraseCiphertext: string }
+> {
+  const { publicJwk, privateJwk } = await keypairToJwk(await generateKeypair());
+  return {
+    state: "ready",
+    revision: "r1",
+    publicJwk,
+    passphraseCiphertext: JSON.stringify(privateJwk),
+    recipientsCiphertext: null,
+    wraps: [
+      {
+        id: "w",
+        wrapType: "passphrase",
+        label: "Pass",
+        identityString: null,
+        createdAt: "2026-10-28",
+      },
+    ],
+  };
+}
+function harness(env: EnvelopeState = { state: "uninitialized" }) {
+  const owner: { current: MangroveCurrentUser | null } = { current: USER };
+  const transport: MangroveTransport = {
+    getKeypairEnvelope: vi.fn(async () => env),
+    createKeypairEnvelope: vi.fn(async () => ({ revision: "created" })),
+    updateKeypairWraps: vi.fn(async () => ({ revision: "r2" })),
+    deleteKeypairEnvelope: vi.fn(async () => {}),
+    submitReview: vi.fn(),
+    uploadReviewImage: vi.fn(),
+    fetchPlaceReviews: vi.fn(),
+    fetchPlaceReviewAggregate: vi.fn(),
+  };
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
+  function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <MangroveProvider transport={transport} currentUser={currentUser}>
+        <MangroveProvider transport={transport} currentUser={owner.current}>
           {children}
         </MangroveProvider>
       </QueryClientProvider>
     );
-  };
+  }
+  return { owner, transport, wrapper, client };
 }
-
-/** Assert a string is a structurally well-formed compact JWS (header.payload.sig). */
-function expectWellFormedJwt(jwt: string) {
-  const parts = jwt.split(".");
-  expect(parts).toHaveLength(3);
-  for (const p of parts) expect(p.length).toBeGreaterThan(0);
-  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString());
-  expect(header.alg).toBe("ES256");
-  expect(header.typ).toBe("JWT");
-  // Mangrove quirk: kid is a single-line PEM, jwk is a STRINGIFIED public JWK.
-  expect(header.kid).toContain("BEGIN PUBLIC KEY");
-  expect(typeof header.jwk).toBe("string");
-  return { parts, header };
-}
-
-describe("useUserKeypair", () => {
-  beforeEach(() => useKeypairStore.getState().clear());
-  afterEach(() => useKeypairStore.getState().clear());
-
-  it("reports needsSetup when the user has no envelope", async () => {
-    const { transport } = createMockTransport({ state: "uninitialized" });
-    const { result } = renderHook(() => useUserKeypair(), {
-      wrapper: createWrapper(transport, USER),
-    });
-    await waitFor(() => expect(result.current.needsSetup).toBe(true));
-    expect(result.current.keypair).toBeNull();
-    expect(result.current.needsUnlock).toBe(false);
-  });
-
-  it.skipIf(skipSlowCrypto)(
-    "reports needsUnlock for an encrypted-but-locked envelope and publishes the public identity",
-    async () => {
-      const kp = await generateKeypair();
-      const { publicJwk, privateJwk } = await keypairToJwk(kp);
-      const passphraseCiphertext = await encryptWithPassphrase(privateJwk, "hunter2");
-      const { transport } = createMockTransport({
-        state: "ready",
-        mode: "encrypted",
-        publicJwk,
-        passphraseCiphertext,
-        recipientsCiphertext: null,
-        wraps: [
-          {
-            id: "wrap-0",
-            wrapType: "passphrase",
-            label: "Passphrase",
-            identityString: null,
-            createdAt: "2026-06-14T00:00:00Z",
-          },
-        ],
-      });
-
-      const { result } = renderHook(() => useUserKeypair(), {
-        wrapper: createWrapper(transport, USER),
-      });
-
-      await waitFor(() => expect(result.current.isEncrypted).toBe(true));
-      expect(result.current.needsUnlock).toBe(true);
-      expect(result.current.keypair).toBeNull();
-      // Public identity is derivable without unlocking the private half.
-      await waitFor(() => expect(result.current.publicPem).toContain("BEGIN PUBLIC KEY"));
-    },
-  );
-
-  it("auto-imports an unencrypted envelope into a usable, signable keypair", async () => {
-    const kp = await generateKeypair();
-    const { publicJwk, privateJwk } = await keypairToJwk(kp);
-    const { transport } = createMockTransport({
-      state: "ready",
-      mode: "unencrypted",
-      publicJwk,
-      privateJwk,
-    });
-
-    const { result } = renderHook(() => useUserKeypair(), {
-      wrapper: createWrapper(transport, USER),
-    });
-
-    await waitFor(() => expect(result.current.keypair).not.toBeNull());
-    expect(result.current.needsUnlock).toBe(false);
-    expect(result.current.isEncrypted).toBe(false);
-    expect(result.current.publicPem).toContain("BEGIN PUBLIC KEY");
-
-    // The imported private key must actually sign.
-    const live = result.current.keypair as MangroveKeypair;
-    const jwt = await signMangroveReview({ sub: "geo:50.0,6.0?q=X&u=30", rating: 80 }, live);
-    expectWellFormedJwt(jwt);
-  });
+afterEach(() => {
+  useKeypairStore.getState().clear();
+  vi.clearAllMocks();
 });
-
-describe("useSetupKeypair", () => {
-  beforeEach(() => useKeypairStore.getState().clear());
-  afterEach(() => useKeypairStore.getState().clear());
-
-  it("generates a keypair, persists the unencrypted envelope, and unlocks the store", async () => {
-    const { transport, created } = createMockTransport({ state: "uninitialized" });
-    const { result } = renderHook(() => useSetupKeypair(), {
-      wrapper: createWrapper(transport, USER),
-    });
-
-    await result.current.mutateAsync({ mode: "unencrypted" });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(transport.createKeypairEnvelope).toHaveBeenCalledTimes(1);
-    expect(created[0].mode).toBe("unencrypted");
-    if (created[0].mode === "unencrypted") {
-      expect(created[0].publicJwk.crv).toBe("P-256");
-      expect(created[0].privateJwk.d).toBeTruthy();
-    }
-
-    // The store is now unlocked with a signable keypair.
-    const stored = useKeypairStore.getState();
-    expect(stored.keypair).not.toBeNull();
-    expect(stored.encrypted).toBe(false);
-    expect(stored.publicPem).toContain("BEGIN PUBLIC KEY");
-
-    const jwt = await signMangroveReview(
-      { sub: "geo:50.0,6.0?q=Y&u=30", rating: 100 },
-      stored.keypair as MangroveKeypair,
+describe("encrypted lifecycle", () => {
+  it("setup sends encrypted data only and binds returned revision", async () => {
+    const h = harness();
+    const { result } = renderHook(useSetupKeypair, { wrapper: h.wrapper });
+    await act(() => result.current.mutateAsync({ mode: "passphrase", passphrase: "pass" }));
+    const payload = vi.mocked(h.transport.createKeypairEnvelope).mock.calls[0][0];
+    expect(payload).not.toHaveProperty("mode");
+    expect(payload).not.toHaveProperty("privateJwk");
+    expect(useKeypairStore.getState().getSigningSnapshot(keypairOwner(USER))?.revision).toBe(
+      "created",
     );
-    const { parts } = expectWellFormedJwt(jwt);
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    expect(payload.rating).toBe(100);
-    expect(payload.sub).toBe("geo:50.0,6.0?q=Y&u=30");
   });
-
-  it.skipIf(skipSlowCrypto)(
-    "encrypted setup stores ciphertext + private JWK and flips the store to encrypted mode",
-    async () => {
-      const { transport, created } = createMockTransport({ state: "uninitialized" });
-      const { result } = renderHook(() => useSetupKeypair(), {
-        wrapper: createWrapper(transport, USER),
-      });
-
-      await result.current.mutateAsync({ mode: "passphrase", passphrase: "correct horse" });
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(created[0].mode).toBe("encrypted");
-      if (created[0].mode === "encrypted") {
-        expect(created[0].passphraseCiphertext).toBeTruthy();
-        expect(created[0].wraps).toEqual([
-          { wrapType: "passphrase", label: "Passphrase", identityString: null },
-        ]);
+  it.each(["logout", "same-user-session", "clear", "unmount"])(
+    "blocks delayed setup after %s",
+    async (change) => {
+      const h = harness();
+      const pending = deferred<{ revision: string }>();
+      vi.mocked(h.transport.createKeypairEnvelope).mockReturnValue(pending.promise);
+      const hook = renderHook(useSetupKeypair, { wrapper: h.wrapper });
+      const operation = hook.result.current.mutateAsync({ mode: "passphrase", passphrase: "pass" });
+      const rejected = expect(operation).rejects.toThrow();
+      await waitFor(() => expect(h.transport.createKeypairEnvelope).toHaveBeenCalledTimes(1));
+      if (change === "unmount") hook.unmount();
+      else if (change === "clear") useKeypairStore.getState().clear();
+      else {
+        h.owner.current = change === "logout" ? null : { ...USER, authorityId: "s2" };
+        hook.rerender();
       }
-      // Encrypted mode must never ship the cleartext private JWK over the wire.
-      expect(Object.hasOwn(created[0], "privateJwk")).toBe(false);
-
-      const stored = useKeypairStore.getState();
-      expect(stored.encrypted).toBe(true);
-      expect(stored.keypair).not.toBeNull();
-      // Private JWK retained in memory for re-wrap without a second unlock.
-      expect(stored.privateJwk?.d).toBeTruthy();
+      pending.resolve({ revision: "late" });
+      await rejected;
+      expect(useKeypairStore.getState().keypair).toBeNull();
     },
   );
-});
-
-describe("useUnlockKeypair", () => {
-  beforeEach(() => useKeypairStore.getState().clear());
-  afterEach(() => useKeypairStore.getState().clear());
-
-  it.skipIf(skipSlowCrypto)(
-    "decrypts the passphrase wrap and produces a signable keypair",
-    async () => {
-      const kp = await generateKeypair();
-      const { publicJwk, privateJwk } = await keypairToJwk(kp);
-      const passphraseCiphertext = await encryptWithPassphrase(privateJwk, "right-pass");
-      const { transport } = createMockTransport({
-        state: "ready",
-        mode: "encrypted",
-        publicJwk,
-        passphraseCiphertext,
-        recipientsCiphertext: null,
-        wraps: [
-          {
-            id: "wrap-0",
-            wrapType: "passphrase",
-            label: "Passphrase",
-            identityString: null,
-            createdAt: "2026-06-14T00:00:00Z",
-          },
-        ],
-      });
-
-      const { result } = renderHook(() => useUnlockKeypair(), {
-        wrapper: createWrapper(transport, USER),
-      });
-
-      await result.current.mutateAsync({ method: "passphrase", passphrase: "right-pass" });
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      const stored = useKeypairStore.getState();
-      expect(stored.keypair).not.toBeNull();
-      expect(stored.encrypted).toBe(true);
-      expect(stored.privateJwk?.d).toBeTruthy();
-
-      const jwt = await signMangroveReview(
-        { sub: "geo:1.0,2.0?q=Z&u=30", opinion: "ok" },
-        stored.keypair as MangroveKeypair,
-      );
-      expectWellFormedJwt(jwt);
+  it.each(["clear", "logout", "same-user-session", "unmount"])(
+    "blocks delayed decrypt after %s",
+    async (change) => {
+      const env = await envelope();
+      const h = harness(env);
+      const { decryptWithPassphrase } = await import("@openmapx/mangrove-client");
+      const pending = deferred<JsonWebKey>();
+      vi.mocked(decryptWithPassphrase).mockReturnValueOnce(pending.promise);
+      const { result, rerender, unmount } = renderHook(useUnlockKeypair, { wrapper: h.wrapper });
+      const operation = result.current.mutateAsync({ method: "passphrase", passphrase: "pass" });
+      const rejected = expect(operation).rejects.toThrow();
+      await waitFor(() => expect(decryptWithPassphrase).toHaveBeenCalled());
+      if (change === "unmount") unmount();
+      else if (change === "clear") useKeypairStore.getState().clear();
+      else {
+        h.owner.current = change === "logout" ? null : { ...USER, authorityId: "s2" };
+        rerender();
+      }
+      pending.resolve(JSON.parse(env.passphraseCiphertext));
+      await rejected;
+      expect(useKeypairStore.getState().keypair).toBeNull();
     },
   );
-
-  it.skipIf(skipSlowCrypto)(
-    "rejects an incorrect passphrase with a generic error and leaves the store locked",
-    async () => {
-      const kp = await generateKeypair();
-      const { publicJwk, privateJwk } = await keypairToJwk(kp);
-      const passphraseCiphertext = await encryptWithPassphrase(privateJwk, "right-pass");
-      const { transport } = createMockTransport({
-        state: "ready",
-        mode: "encrypted",
-        publicJwk,
-        passphraseCiphertext,
-        recipientsCiphertext: null,
-        wraps: [
-          {
-            id: "wrap-0",
-            wrapType: "passphrase",
-            label: "Passphrase",
-            identityString: null,
-            createdAt: "2026-06-14T00:00:00Z",
-          },
-        ],
-      });
-
-      const { result } = renderHook(() => useUnlockKeypair(), {
-        wrapper: createWrapper(transport, USER),
-      });
-
-      await expect(
-        result.current.mutateAsync({ method: "passphrase", passphrase: "WRONG" }),
-      ).rejects.toThrow("Incorrect passphrase");
-      // The mutation rejecting IS the store-stays-locked guarantee: the unlock
-      // mutationFn throws on a bad decrypt before it ever reaches `setKeypair`
-      // (useKeypair.ts), so a failed unlock can't populate the store. Asserting
-      // the module-global store directly here is cross-test-pollution-prone, so we
-      // assert the component-local error state instead.
-      await waitFor(() => expect(result.current.isError).toBe(true));
-    },
-  );
-});
-
-describe("signing path (end-to-end signature verification)", () => {
-  beforeEach(() => useKeypairStore.getState().clear());
-  afterEach(() => useKeypairStore.getState().clear());
-
-  it("produces a JWT whose signature verifies against the keypair's public key", async () => {
-    // Drive setup so the keypair originates from the real hook lifecycle.
-    const { transport } = createMockTransport({ state: "uninitialized" });
-    const { result } = renderHook(() => useSetupKeypair(), {
-      wrapper: createWrapper(transport, USER),
+  it("verifies actual private/public agreement after decrypt", async () => {
+    const env = await envelope();
+    const other = await envelope();
+    env.passphraseCiphertext = other.passphraseCiphertext;
+    const h = harness(env);
+    const { result } = renderHook(useUnlockKeypair, { wrapper: h.wrapper });
+    await expect(
+      result.current.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    ).rejects.toThrow();
+    expect(useKeypairStore.getState().keypair).toBeNull();
+  });
+  it("unlocks, preserves identity while locked, and refuses a different session", async () => {
+    const env = await envelope();
+    const h = harness(env);
+    const { result, rerender } = renderHook(
+      () => ({ unlock: useUnlockKeypair(), live: useUserKeypair() }),
+      { wrapper: h.wrapper },
+    );
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    expect(result.current.live.keypair).not.toBeNull();
+    act(() => useKeypairStore.getState().lock());
+    expect(result.current.live.keypair).toBeNull();
+    expect(result.current.live.publicPem).toContain("PUBLIC KEY");
+    h.owner.current = { ...USER, authorityId: "s2" };
+    rerender();
+    expect(result.current.live.keypair).toBeNull();
+  });
+  it("publishes a verified replacement envelope so the current identity can sign and export", async () => {
+    const original = await envelope();
+    const replacement = { ...(await envelope()), revision: "r2" };
+    const h = harness(original);
+    const queryKey = [...MANGROVE_KEYPAIR_QUERY_KEY, keypairOwner(USER)];
+    const { result } = renderHook(
+      () => ({
+        unlock: useUnlockKeypair(),
+        live: useUserKeypair(),
+        exported: useMangroveKeypairExport(),
+      }),
+      { wrapper: h.wrapper },
+    );
+    await waitFor(() => expect(result.current.live.publicPem).toContain("PUBLIC KEY"));
+    expect(h.client.getQueryData(queryKey)).toEqual(original);
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue(replacement);
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    await waitFor(() => expect(result.current.live.keypair).not.toBeNull());
+    expect(h.client.getQueryData(queryKey)).toEqual(replacement);
+    expect(result.current.live.needsUnlock).toBe(false);
+    const publicKey = await importPublicJwk(replacement.publicJwk);
+    expect(result.current.live.publicPem).toBe(await publicKeyToPem(publicKey));
+    expect(result.current.exported).toEqual({
+      privateJwk: JSON.parse(replacement.passphraseCiphertext),
+      reason: null,
     });
-    await result.current.mutateAsync({ mode: "unencrypted" });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const live = useKeypairStore.getState().keypair as MangroveKeypair;
-    const jwt = await signMangroveReview(
-      { sub: "geo:48.85,2.35?q=Paris&u=30", rating: 60, opinion: "decent" },
-      live,
-    );
-    const { parts } = expectWellFormedJwt(jwt);
-
-    // Recompute the signing input and verify the ES256 signature cryptographically.
-    const signingInput = `${parts[0]}.${parts[1]}`;
-    const signature = Buffer.from(parts[2], "base64url");
-    const ok = await globalThis.crypto.subtle.verify(
+    const keypair = result.current.live.keypair;
+    if (!keypair) throw new Error("Expected the replacement keypair to be available for signing");
+    const challenge = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const signature = await globalThis.crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" },
-      live.publicKey,
-      signature,
-      new TextEncoder().encode(signingInput),
+      keypair.privateKey,
+      challenge,
     );
-    expect(ok).toBe(true);
-
-    // A tampered payload must fail verification (signature is load-bearing).
-    const tampered = new TextEncoder().encode(`${signingInput}x`);
-    const bad = await globalThis.crypto.subtle.verify(
-      { name: "ECDSA", hash: "SHA-256" },
-      live.publicKey,
-      signature,
-      tampered,
+    expect(
+      await globalThis.crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        publicKey,
+        signature,
+        challenge,
+      ),
+    ).toBe(true);
+  });
+  it("does not publish a delayed unlock into either session's envelope cache", async () => {
+    const original = await envelope();
+    const replacement = { ...(await envelope()), revision: "r2" };
+    const nextSessionEnvelope = { ...(await envelope()), revision: "r3" };
+    const h = harness(original);
+    const originalQueryKey = [...MANGROVE_KEYPAIR_QUERY_KEY, keypairOwner(USER)];
+    // Retain the old session's cache so a late completion cannot silently replace it.
+    h.client.setQueryDefaults(originalQueryKey, { gcTime: Number.POSITIVE_INFINITY });
+    const { result, rerender } = renderHook(
+      () => ({ unlock: useUnlockKeypair(), live: useUserKeypair() }),
+      { wrapper: h.wrapper },
     );
-    expect(bad).toBe(false);
+    await waitFor(() => expect(result.current.live.publicPem).toContain("PUBLIC KEY"));
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue(replacement);
+    const { decryptWithPassphrase } = await import("@openmapx/mangrove-client");
+    const pending = deferred<JsonWebKey>();
+    vi.mocked(decryptWithPassphrase).mockReturnValueOnce(pending.promise);
+    const operation = result.current.unlock.mutateAsync({
+      method: "passphrase",
+      passphrase: "pass",
+    });
+    const rejected = expect(operation).rejects.toThrow("Keypair session changed");
+    await waitFor(() => expect(decryptWithPassphrase).toHaveBeenCalled());
+    expect(h.client.getQueryData(originalQueryKey)).toEqual(original);
+    h.owner.current = { ...USER, authorityId: "s2" };
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue(nextSessionEnvelope);
+    rerender();
+    await waitFor(() => expect(result.current.live.publicPem).toContain("PUBLIC KEY"));
+    pending.resolve(JSON.parse(replacement.passphraseCiphertext));
+    await rejected;
+    expect(h.client.getQueryData(originalQueryKey)).toEqual(original);
+    expect(
+      h.client.getQueryData([...MANGROVE_KEYPAIR_QUERY_KEY, keypairOwner(h.owner.current)]),
+    ).toEqual(nextSessionEnvelope);
+    expect(result.current.live.keypair).toBeNull();
+  });
+  it("wrap replacement uses the unlocked revision and refuses a freshly fetched replacement", async () => {
+    const env = await envelope();
+    const h = harness(env);
+    const { result } = renderHook(
+      () => ({ unlock: useUnlockKeypair(), change: useChangePassphrase() }),
+      { wrapper: h.wrapper },
+    );
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue({ ...env, revision: "recreated" });
+    await expect(result.current.change.mutateAsync({ passphrase: "next" })).rejects.toBeInstanceOf(
+      MangroveConflictError,
+    );
+    expect(h.transport.updateKeypairWraps).not.toHaveBeenCalled();
+    expect(useKeypairStore.getState().getSigningSnapshot(keypairOwner(USER))).toBeNull();
+  });
+  it("advances revision on wrap success and propagates 409 without retry", async () => {
+    const env = await envelope();
+    const h = harness(env);
+    const { result } = renderHook(
+      () => ({ unlock: useUnlockKeypair(), change: useChangePassphrase() }),
+      { wrapper: h.wrapper },
+    );
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    await act(() => result.current.change.mutateAsync({ passphrase: "next" }));
+    expect(h.transport.updateKeypairWraps).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedRevision: "r1" }),
+    );
+    expect(useKeypairStore.getState().revision).toBe("r2");
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue({ ...env, revision: "r2" });
+    vi.mocked(h.transport.updateKeypairWraps).mockRejectedValue({ status: 409 });
+    await expect(result.current.change.mutateAsync({ passphrase: "again" })).rejects.toBeInstanceOf(
+      MangroveConflictError,
+    );
+    expect(h.transport.updateKeypairWraps).toHaveBeenCalledTimes(2);
+  });
+  it("does not delete a freshly fetched replacement when import began with an old revision", async () => {
+    const env = await envelope();
+    const first = harness(env);
+    const unlocked = renderHook(useUnlockKeypair, { wrapper: first.wrapper });
+    await act(() =>
+      unlocked.result.current.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    const replacement = harness({ ...env, revision: "replacement" });
+    const importing = renderHook(useImportMangroveKeypair, { wrapper: replacement.wrapper });
+    await act(async () => {
+      await expect(
+        importing.result.current.mutateAsync({
+          mode: "passphrase",
+          passphrase: "new",
+          importJwk: JSON.parse(env.passphraseCiphertext),
+        }),
+      ).rejects.toBeInstanceOf(MangroveConflictError);
+    });
+    expect(replacement.transport.deleteKeypairEnvelope).not.toHaveBeenCalled();
+  });
+  it.skipIf(process.env.OPENMAPX_SKIP_SLOW_CRYPTO === "1")(
+    "real age passphrase setup and unlock remain interoperable",
+    async () => {
+      const real = await vi.importActual<typeof import("@openmapx/mangrove-client")>(
+        "@openmapx/mangrove-client",
+      );
+      const env = await envelope(),
+        privateJwk = JSON.parse(env.passphraseCiphertext);
+      env.passphraseCiphertext = await real.encryptWithPassphrase(privateJwk, "correct-pass");
+      const { decryptWithPassphrase } = await import("@openmapx/mangrove-client");
+      vi.mocked(decryptWithPassphrase).mockImplementationOnce(real.decryptWithPassphrase);
+      const h = harness(env),
+        { result } = renderHook(useUnlockKeypair, { wrapper: h.wrapper });
+      await act(() =>
+        result.current.mutateAsync({ method: "passphrase", passphrase: "correct-pass" }),
+      );
+      const snapshot = useKeypairStore.getState().getSigningSnapshot(keypairOwner(USER));
+      expect(snapshot?.privateJwk.d).toBe(privateJwk.d);
+    },
+  );
+  it("adds and removes passkey wraps with the unlocked revision", async () => {
+    const env = await envelope(),
+      h = harness(env);
+    const { result } = renderHook(
+      () => ({ unlock: useUnlockKeypair(), add: useAddWrap(), remove: useRemoveWrap() }),
+      { wrapper: h.wrapper },
+    );
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    await act(() => result.current.add.mutateAsync({ wrapType: "webauthn", label: "Device" }));
+    expect(h.transport.updateKeypairWraps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedRevision: "r1",
+        wraps: expect.arrayContaining([
+          { wrapType: "webauthn", label: "Device", identityString: "test-identity" },
+        ]),
+      }),
+    );
+    vi.mocked(h.transport.getKeypairEnvelope).mockResolvedValue({
+      ...env,
+      revision: "r2",
+      recipientsCiphertext: "recipients",
+      wraps: [
+        ...env.wraps,
+        {
+          id: "device",
+          wrapType: "webauthn",
+          label: "Device",
+          identityString: "test-identity",
+          createdAt: "now",
+        },
+      ],
+    });
+    vi.mocked(h.transport.updateKeypairWraps).mockResolvedValue({ revision: "r3" });
+    await act(() => result.current.remove.mutateAsync("device"));
+    expect(h.transport.updateKeypairWraps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedRevision: "r2",
+        recipientsCiphertext: null,
+        passphraseCiphertext: env.passphraseCiphertext,
+      }),
+    );
+  });
+  it("rejects a 33rd wrap before creating a credential", async () => {
+    const env = await envelope();
+    env.wraps.push(
+      ...Array.from({ length: 31 }, (_, i) => ({
+        id: `w-${i}`,
+        wrapType: "webauthn" as const,
+        label: "Device",
+        identityString: "identity",
+        createdAt: "now",
+      })),
+    );
+    const h = harness(env);
+    const { result } = renderHook(() => ({ unlock: useUnlockKeypair(), add: useAddWrap() }), {
+      wrapper: h.wrapper,
+    });
+    await act(() =>
+      result.current.unlock.mutateAsync({ method: "passphrase", passphrase: "pass" }),
+    );
+    await expect(result.current.add.mutateAsync({ wrapType: "webauthn" })).rejects.toThrow(
+      "At most 32",
+    );
+    expect(h.transport.updateKeypairWraps).not.toHaveBeenCalled();
+    const { createWebAuthnIdentity } = await import("@openmapx/mangrove-client");
+    expect(createWebAuthnIdentity).not.toHaveBeenCalled();
+  });
+  it("import must not swallow a deletion conflict or create a new envelope", async () => {
+    const env = await envelope();
+    const h = harness(env);
+    vi.mocked(h.transport.deleteKeypairEnvelope).mockRejectedValue({ status: 409 });
+    const { result } = renderHook(useImportMangroveKeypair, { wrapper: h.wrapper });
+    await expect(
+      result.current.mutateAsync({
+        mode: "passphrase",
+        passphrase: "new",
+        importJwk: JSON.parse(env.passphraseCiphertext),
+      }),
+    ).rejects.toBeInstanceOf(MangroveConflictError);
+    expect(h.transport.createKeypairEnvelope).not.toHaveBeenCalled();
   });
 });

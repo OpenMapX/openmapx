@@ -167,5 +167,64 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const labels = await app.inject({ method: "GET", url: "/api/saved/labels" });
       expect(labels.json().labels[0].fieldContributors).toEqual(fieldContributors);
     });
+    it("preserves token rotation, expiry, revocation and foreign ownership through the SDK", async () => {
+      const sdk = await import("@openmapx/core/sharing-sdk");
+      const { createApiClient } = await import("../../../../../packages/core/src/api/client");
+      const { administrationSdkFetch } = await import("./helpers/administration-sdk-fetch");
+      const { hashShareToken } = await import("../../services/share-links");
+      vi.stubGlobal("fetch", administrationSdkFetch(app));
+      try {
+        const client = createApiClient({ baseUrl: "https://sharing.example", credentials: "omit" });
+        const created = sdk.unwrapSharingResponse(
+          await sdk.createShare(
+            {
+              targetType: "route",
+              route: {
+                mode: "walking",
+                waypoints: [
+                  { lat: 52, lng: 13 },
+                  { lat: 53, lng: 14 },
+                ],
+              },
+            },
+            { client },
+          ),
+        );
+        expect((await sdk.resolvePublicShare(created.token, { client })).status).toBe(200);
+        const rotated = sdk.unwrapSharingResponse(
+          await sdk.rotateShareToken(created.id, { client }),
+        );
+        expect((await sdk.resolvePublicShare(created.token, { client })).status).toBe(404);
+        expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(200);
+        await fixture.db
+          .update(shareLink)
+          .set({ expiresAt: new Date(0) })
+          .where(eq(shareLink.id, created.id));
+        expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(404);
+        expect((await sdk.revokeShare(created.id, { client })).status).toBe(200);
+        expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(404);
+        await fixture.db.insert(user).values({
+          id: "foreign-share-user",
+          name: "Foreign",
+          email: "foreign-share@example.test",
+        });
+        await fixture.db.insert(shareLink).values({
+          id: "foreign-share",
+          userId: "foreign-share-user",
+          tokenHash: hashShareToken("F".repeat(43)),
+          targetType: "route",
+          mode: "snapshot",
+          label: "Foreign",
+        });
+        expect((await sdk.rotateShareToken("foreign-share", { client })).status).toBe(404);
+        expect((await sdk.revokeShare("foreign-share", { client })).status).toBe(404);
+        expect(
+          (await fixture.db.select().from(shareLink).where(eq(shareLink.id, "foreign-share")))[0]
+            .tokenHash,
+        ).toBe(hashShareToken("F".repeat(43)));
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   },
 );

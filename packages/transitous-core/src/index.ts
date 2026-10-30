@@ -17,6 +17,13 @@ export {
   reviewCatalogPair,
 } from "./catalog-diff";
 export {
+  decodeGbfsCatalogLock,
+  decodeTransitousLock,
+  type GbfsCatalogLock,
+  parseRefShaPair,
+  type TransitousLock,
+} from "./catalog-pins.js";
+export {
   fetchPinnedGbfsCatalog,
   parseCatalogGbfsRows,
   type ResolvedGbfsCatalogPin,

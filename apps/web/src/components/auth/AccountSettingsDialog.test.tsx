@@ -49,6 +49,8 @@ const credentials = vi.hoisted(() => ({
   remove: vi.fn(),
   link: vi.fn(),
   unlink: vi.fn(),
+  requestEmail: vi.fn(),
+  changeEmail: vi.fn(),
 }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -63,12 +65,18 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       listAccounts: credentials.listAccounts,
       linkSocial: credentials.link,
       unlinkAccount: credentials.unlink,
+      emailOtp: {
+        requestEmailChange: credentials.requestEmail,
+        changeEmail: credentials.changeEmail,
+      },
     },
     getInitials: () => "AT",
     oauthProviders: [{ providerId: "openstreetmap", name: "OpenStreetMap", icon: "/osm-logo.svg" }],
     proxyImageUrl: (url: string) => url,
   };
 });
+
+const emailOk = { data: { success: true }, error: null };
 
 beforeEach(() => {
   for (const mock of Object.values(credentials)) mock.mockReset();
@@ -78,6 +86,8 @@ beforeEach(() => {
   credentials.remove.mockResolvedValue({ data: { status: true }, error: null });
   credentials.link.mockResolvedValue({ data: { url: "/oauth", redirect: true }, error: null });
   credentials.unlink.mockResolvedValue({ data: { status: true }, error: null });
+  credentials.requestEmail.mockResolvedValue(emailOk);
+  credentials.changeEmail.mockResolvedValue(emailOk);
 });
 
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -165,10 +175,12 @@ describe("AccountSettingsDialog timeline targeting", () => {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function renderAccount() {
@@ -513,5 +525,496 @@ describe("AccountSettingsDialog credential actions", () => {
     });
     expect(screen.getByText("Account B passkey")).toBeInTheDocument();
     expect(screen.queryByText("Account A passkey")).not.toBeInTheDocument();
+  });
+});
+
+type EmailResult = { data: { success: boolean } | null; error: { message?: string } | null };
+type Outcome = "success" | "error" | "thrown";
+const outcomes: Outcome[] = ["success", "error", "thrown"];
+const staleError = "stale server error";
+
+function pendingEmail() {
+  return deferred<EmailResult>();
+}
+
+/** Serves the given results to successive calls of an email endpoint, in order. */
+function serve(
+  mock: typeof credentials.requestEmail,
+  ...results: (Promise<EmailResult> | (() => Promise<EmailResult>))[]
+) {
+  const queue = [...results];
+  mock.mockImplementation(() => {
+    const next = queue.shift();
+    return typeof next === "function" ? next() : next;
+  });
+}
+
+async function settle(pending: ReturnType<typeof pendingEmail>, outcome: Outcome) {
+  await act(async () => {
+    if (outcome === "success") pending.resolve(emailOk);
+    else if (outcome === "error") pending.resolve({ data: null, error: { message: staleError } });
+    else pending.reject(new Error("stale offline"));
+  });
+}
+
+const addressField = () => screen.queryByLabelText("account.newEmailAddress");
+const codeField = () => screen.queryByLabelText("account.verificationCode");
+const addressValue = () =>
+  (screen.getByLabelText("account.newEmailAddress") as HTMLInputElement).value;
+const sendButton = () => screen.getByRole("button", { name: "account.sendVerificationCode" });
+const confirmButton = () => screen.getByRole("button", { name: "account.confirmChange" });
+const emailCalls = (mock: typeof credentials.requestEmail) => mock.mock.calls.map(([arg]) => arg);
+
+async function fillAddress(address: string) {
+  const field = screen.getByLabelText("account.newEmailAddress");
+  await userEvent.clear(field);
+  await userEvent.type(field, address);
+}
+
+async function openEmailForm() {
+  await userEvent.click(screen.getByRole("button", { name: "common.change" }));
+}
+
+async function requestCode(address: string) {
+  await fillAddress(address);
+  await userEvent.click(sendButton());
+}
+
+async function enterCode(code: string) {
+  const field = await screen.findByLabelText("account.verificationCode");
+  await userEvent.clear(field);
+  await userEvent.type(field, code);
+}
+
+function replaceUser(view: ReturnType<typeof renderAccount>, props: { open: boolean; id: string }) {
+  view.rerender(
+    <AccountSettingsDialog
+      open={props.open}
+      onClose={vi.fn()}
+      user={{ ...user, id: props.id }}
+      initialSection={null}
+    />,
+  );
+}
+
+/** Each way the old email flow can stop being the current one. */
+const retirements: Record<
+  string,
+  (view: ReturnType<typeof renderAccount>, onClose: () => void) => Promise<void>
+> = {
+  cancel: async () => {
+    await userEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+  },
+  "close button": async (_view, onClose) => {
+    await userEvent.click(screen.getByRole("button", { name: "common.close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  },
+  escape: async (_view, onClose) => {
+    // A disabled pending button drops focus to the body, outside the dialog's key handler.
+    await userEvent.click(screen.getByLabelText("account.newEmailAddress"));
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  },
+  "close and reopen": async (view) => {
+    replaceUser(view, { open: false, id: user.id });
+    replaceUser(view, { open: true, id: user.id });
+  },
+  "account replacement": async (view) => replaceUser(view, { open: true, id: "user-b" }),
+  "account A-B-A": async (view) => {
+    replaceUser(view, { open: true, id: "user-b" });
+    replaceUser(view, { open: true, id: user.id });
+  },
+};
+
+describe("AccountSettingsDialog email change", () => {
+  it("sends a code for the submitted address and confirms it with that code", async () => {
+    renderAccount();
+    await openEmailForm();
+    await requestCode("new@example.test");
+    expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+    expect(emailCalls(credentials.requestEmail)).toEqual([{ newEmail: "new@example.test" }]);
+    await enterCode("123456");
+    await userEvent.click(confirmButton());
+    expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+    expect(emailCalls(credentials.changeEmail)).toEqual([
+      { newEmail: "new@example.test", otp: "123456" },
+    ]);
+    expect(addressField()).not.toBeInTheDocument();
+    expect(screen.getByText(user.email)).toBeInTheDocument();
+  });
+
+  it.each(["returned", "thrown"])(
+    "keeps the form usable after a %s send failure and allows a deliberate retry",
+    async (mode) => {
+      serve(
+        credentials.requestEmail,
+        mode === "returned"
+          ? Promise.resolve({ data: null, error: { message: "denied" } })
+          : () => Promise.reject(new Error("offline")),
+        Promise.resolve(emailOk),
+      );
+      renderAccount();
+      await openEmailForm();
+      await requestCode("new@example.test");
+      expect(
+        await screen.findByText(mode === "returned" ? "denied" : "account.failedChangeEmail"),
+      ).toBeInTheDocument();
+      expect(codeField()).not.toBeInTheDocument();
+      expect(sendButton()).not.toBeDisabled();
+      expect(credentials.requestEmail).toHaveBeenCalledTimes(1);
+      await userEvent.click(sendButton());
+      expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+      expect(credentials.requestEmail).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(["returned", "thrown"])(
+    "keeps the code after a %s confirmation failure and allows a deliberate retry",
+    async (mode) => {
+      serve(
+        credentials.changeEmail,
+        mode === "returned"
+          ? Promise.resolve({ data: null, error: { message: "wrong" } })
+          : () => Promise.reject(new Error("offline")),
+        Promise.resolve(emailOk),
+      );
+      renderAccount();
+      await openEmailForm();
+      await requestCode("new@example.test");
+      await enterCode("123456");
+      await userEvent.click(confirmButton());
+      expect(
+        await screen.findByText(mode === "returned" ? "wrong" : "account.failedChangeEmail"),
+      ).toBeInTheDocument();
+      expect(codeField()).toHaveValue("123456");
+      expect(confirmButton()).not.toBeDisabled();
+      expect(credentials.changeEmail).toHaveBeenCalledTimes(1);
+      await userEvent.click(confirmButton());
+      expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+      expect(credentials.changeEmail).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("falls back to the translated message when a returned error has no text", async () => {
+    serve(credentials.requestEmail, Promise.resolve({ data: null, error: {} }));
+    renderAccount();
+    await openEmailForm();
+    await requestCode("new@example.test");
+    expect(await screen.findByText("account.failedEmailChange")).toBeInTheDocument();
+  });
+
+  it("submits once when Send or Confirm is activated twice in the same render", async () => {
+    const send = pendingEmail();
+    const confirm = pendingEmail();
+    serve(credentials.requestEmail, send.promise);
+    serve(credentials.changeEmail, confirm.promise);
+    renderAccount();
+    await openEmailForm();
+    await fillAddress("new@example.test");
+    act(() => {
+      sendButton().click();
+      sendButton().click();
+    });
+    expect(credentials.requestEmail).toHaveBeenCalledTimes(1);
+    expect(sendButton()).toBeDisabled();
+    expect(screen.getByRole("button", { name: "common.cancel" })).not.toBeDisabled();
+    await settle(send, "success");
+    await enterCode("123456");
+    act(() => {
+      confirmButton().click();
+      confirmButton().click();
+    });
+    expect(credentials.changeEmail).toHaveBeenCalledTimes(1);
+    expect(confirmButton()).toBeDisabled();
+    expect(codeField()).toBeDisabled();
+    expect(screen.getByRole("button", { name: "common.cancel" })).not.toBeDisabled();
+    await settle(confirm, "success");
+    expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+  });
+
+  it("completes a current request under StrictMode effect replay", async () => {
+    const QueryWrapper = createQueryWrapper();
+    render(
+      <StrictMode>
+        <QueryWrapper>
+          <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />
+        </QueryWrapper>
+      </StrictMode>,
+    );
+    await openEmailForm();
+    await requestCode("new@example.test");
+    expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+    await enterCode("123456");
+    await userEvent.click(confirmButton());
+    expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+  });
+
+  it.each(outcomes)(
+    "keeps a replacement send pending when an old send settles as %s after Cancel",
+    async (outcome) => {
+      const stale = pendingEmail();
+      const current = pendingEmail();
+      serve(credentials.requestEmail, stale.promise, current.promise);
+      renderAccount();
+      await openEmailForm();
+      await requestCode("old@example.test");
+      await userEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+      await openEmailForm();
+      await requestCode("new@example.test");
+      await settle(stale, outcome);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(codeField()).not.toBeInTheDocument();
+      expect(sendButton()).toBeDisabled();
+      await settle(current, "success");
+      expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+      expect(emailCalls(credentials.requestEmail)).toEqual([
+        { newEmail: "old@example.test" },
+        { newEmail: "new@example.test" },
+      ]);
+    },
+  );
+
+  it.each(outcomes)(
+    "keeps a replacement's sent code and message when an old send settles as %s",
+    async (outcome) => {
+      const stale = pendingEmail();
+      serve(credentials.requestEmail, stale.promise, Promise.resolve(emailOk));
+      renderAccount();
+      await openEmailForm();
+      await requestCode("old@example.test");
+      await userEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+      await openEmailForm();
+      await requestCode("new@example.test");
+      await enterCode("654321");
+      await settle(stale, outcome);
+      expect(codeField()).toHaveValue("654321");
+      expect(screen.getByText("account.verificationCodeSent")).toBeInTheDocument();
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    },
+  );
+
+  it.each(outcomes)(
+    "abandons a pending send when the address is edited and the old send settles as %s",
+    async (outcome) => {
+      const stale = pendingEmail();
+      serve(credentials.requestEmail, stale.promise, Promise.resolve(emailOk));
+      renderAccount();
+      await openEmailForm();
+      await requestCode("old@example.test");
+      await fillAddress("other@example.test");
+      expect(sendButton()).not.toBeDisabled();
+      await settle(stale, outcome);
+      expect(codeField()).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      await userEvent.click(sendButton());
+      expect(await screen.findByLabelText("account.verificationCode")).toBeInTheDocument();
+      expect(emailCalls(credentials.requestEmail)).toEqual([
+        { newEmail: "old@example.test" },
+        { newEmail: "other@example.test" },
+      ]);
+    },
+  );
+
+  it("does not treat an A-B-A address edit as the original request", async () => {
+    const stale = pendingEmail();
+    serve(credentials.requestEmail, stale.promise, Promise.resolve(emailOk));
+    renderAccount();
+    await openEmailForm();
+    await requestCode("a@example.test");
+    await fillAddress("b@example.test");
+    await fillAddress("a@example.test");
+    await settle(stale, "success");
+    expect(codeField()).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(sendButton()).not.toBeDisabled();
+  });
+
+  it("returns to Send and clears the code when a verified address is edited", async () => {
+    renderAccount();
+    await openEmailForm();
+    await requestCode("a@example.test");
+    await enterCode("123456");
+    await fillAddress("b@example.test");
+    expect(codeField()).not.toBeInTheDocument();
+    expect(screen.queryByText("account.verificationCodeSent")).not.toBeInTheDocument();
+    await userEvent.click(sendButton());
+    expect(await screen.findByLabelText("account.verificationCode")).toHaveValue("");
+    expect(emailCalls(credentials.requestEmail)).toEqual([
+      { newEmail: "a@example.test" },
+      { newEmail: "b@example.test" },
+    ]);
+  });
+
+  describe.each(["send", "confirm"] as const)("owned %s failure", (step) => {
+    const failures = {
+      returned: () => Promise.resolve({ data: null, error: { message: "denied" } }),
+      thrown: () => Promise.reject(new Error("offline")),
+    };
+
+    async function failEmailStep(mode: keyof typeof failures) {
+      if (step === "send") serve(credentials.requestEmail, failures[mode]);
+      else serve(credentials.changeEmail, failures[mode]);
+      await openEmailForm();
+      await requestCode("a@example.test");
+      if (step === "confirm") {
+        await enterCode("123456");
+        await userEvent.click(confirmButton());
+      }
+      expect(
+        await screen.findByText(mode === "returned" ? "denied" : "account.failedChangeEmail"),
+      ).toBeInTheDocument();
+    }
+
+    it.each(["returned", "thrown"] as const)(
+      "is cleared with its address when a %s error is followed by an address edit",
+      async (mode) => {
+        renderAccount();
+        await failEmailStep(mode);
+        await fillAddress("b@example.test");
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(codeField()).not.toBeInTheDocument();
+        expect(sendButton()).not.toBeDisabled();
+      },
+    );
+
+    it("leaves an unrelated credential message in place when the address is edited", async () => {
+      credentials.remove.mockResolvedValue({ data: null, error: { message: "denied" } });
+      await seedCredentials();
+      await failEmailStep("returned");
+      await userEvent.click(screen.getByRole("button", { name: "account.removePasskey" }));
+      expect(await screen.findByText("account.failedRemovePasskey")).toBeInTheDocument();
+      await fillAddress("b@example.test");
+      expect(screen.getByText("account.failedRemovePasskey")).toBeInTheDocument();
+    });
+  });
+
+  it("leaves a newer unrelated message in place when a pending send is abandoned by an edit", async () => {
+    credentials.remove.mockResolvedValue({ data: null, error: { message: "denied" } });
+    serve(credentials.requestEmail, pendingEmail().promise);
+    await seedCredentials();
+    await openEmailForm();
+    await requestCode("a@example.test");
+    await userEvent.click(screen.getByRole("button", { name: "account.removePasskey" }));
+    expect(await screen.findByText("account.failedRemovePasskey")).toBeInTheDocument();
+    await fillAddress("b@example.test");
+    expect(screen.getByText("account.failedRemovePasskey")).toBeInTheDocument();
+    expect(sendButton()).not.toBeDisabled();
+  });
+
+  it("keeps the email-updated message visible after a successful change", async () => {
+    renderAccount();
+    await openEmailForm();
+    await requestCode("a@example.test");
+    await enterCode("123456");
+    await userEvent.click(confirmButton());
+    expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+    await openEmailForm();
+    expect(screen.getByText("account.emailUpdated")).toBeInTheDocument();
+  });
+
+  it.each(outcomes)(
+    "keeps a replacement send pending when an old confirmation settles as %s after an address edit",
+    async (outcome) => {
+      const stale = pendingEmail();
+      const current = pendingEmail();
+      serve(credentials.requestEmail, Promise.resolve(emailOk), current.promise);
+      serve(credentials.changeEmail, stale.promise);
+      renderAccount();
+      await openEmailForm();
+      await requestCode("a@example.test");
+      await enterCode("123456");
+      await userEvent.click(confirmButton());
+      await requestCode("b@example.test");
+      await settle(stale, outcome);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(addressValue()).toBe("b@example.test");
+      expect(codeField()).not.toBeInTheDocument();
+      expect(sendButton()).toBeDisabled();
+      expect(credentials.changeEmail).toHaveBeenCalledTimes(1);
+      await settle(current, "success");
+      expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+      expect(codeField()).toHaveValue("");
+    },
+  );
+
+  describe.each(Object.keys(retirements))("after %s", (retirement) => {
+    it.each(outcomes)(
+      "ignores an old send that settles as %s before any replacement starts",
+      async (outcome) => {
+        const stale = pendingEmail();
+        serve(credentials.requestEmail, stale.promise);
+        const onClose = vi.fn();
+        const view = render(
+          <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+          { wrapper: createQueryWrapper() },
+        );
+        await openEmailForm();
+        await requestCode("old@example.test");
+        await retirements[retirement]?.(view, onClose);
+        await settle(stale, outcome);
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        if (!addressField()) await openEmailForm();
+        expect(codeField()).not.toBeInTheDocument();
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      },
+    );
+
+    it.each(outcomes)("ignores an old send that settles as %s", async (outcome) => {
+      const stale = pendingEmail();
+      const current = pendingEmail();
+      serve(credentials.requestEmail, stale.promise, current.promise);
+      const onClose = vi.fn();
+      const view = render(
+        <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+        { wrapper: createQueryWrapper() },
+      );
+      await openEmailForm();
+      await requestCode("old@example.test");
+      await retirements[retirement]?.(view, onClose);
+      if (!addressField()) await openEmailForm();
+      if (!addressValue()) await fillAddress("fresh@example.test");
+      const address = addressValue();
+      await userEvent.click(sendButton());
+      expect(emailCalls(credentials.requestEmail)).toEqual([
+        { newEmail: "old@example.test" },
+        { newEmail: address },
+      ]);
+      await settle(stale, outcome);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(codeField()).not.toBeInTheDocument();
+      expect(sendButton()).toBeDisabled();
+      await settle(current, "success");
+      expect(await screen.findByText("account.verificationCodeSent")).toBeInTheDocument();
+    });
+
+    it.each(outcomes)("ignores an old confirmation that settles as %s", async (outcome) => {
+      const stale = pendingEmail();
+      const current = pendingEmail();
+      serve(credentials.changeEmail, stale.promise, current.promise);
+      const onClose = vi.fn();
+      const view = render(
+        <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+        { wrapper: createQueryWrapper() },
+      );
+      await openEmailForm();
+      await requestCode("old@example.test");
+      await enterCode("111111");
+      await userEvent.click(confirmButton());
+      await retirements[retirement]?.(view, onClose);
+      if (!addressField()) await openEmailForm();
+      if (!addressValue()) await fillAddress("fresh@example.test");
+      if (!codeField()) await userEvent.click(sendButton());
+      await enterCode("222222");
+      await userEvent.click(confirmButton());
+      expect(credentials.changeEmail).toHaveBeenCalledTimes(2);
+      await settle(stale, outcome);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(addressField()).toBeInTheDocument();
+      expect(codeField()).toHaveValue("222222");
+      expect(confirmButton()).toBeDisabled();
+      await settle(current, "success");
+      expect(await screen.findByText("account.emailUpdated")).toBeInTheDocument();
+      expect(addressField()).not.toBeInTheDocument();
+    });
   });
 });

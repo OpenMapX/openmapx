@@ -39,6 +39,12 @@ export type GetAdminService200Manifest = {
   selectionDependencies?: string[];
   /** @items.pattern ^[a-z0-9][a-z0-9-]*$ */
   communityNetworkAccess?: string[];
+  /**
+   * @minItems 1
+   * @items.pattern ^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$
+   */
+  privateNetworks?: string[];
+  platformNetwork?: boolean;
   configSchema?: GetAdminService200ManifestConfigSchema;
   envVars?: GetAdminService200ManifestEnvVarsItem[];
   /** @pattern ^[a-z_][a-z0-9_]*$ */

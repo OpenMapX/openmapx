@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   type ActivationTransactionScope,
@@ -19,6 +19,7 @@ import {
   PLATFORM_VERSION,
   type RouteHandler,
   type RouteOptions,
+  resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
   validateDataSource,
   validateManifest,
@@ -44,6 +45,7 @@ import {
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
+import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
@@ -115,6 +117,49 @@ function normalizeIntegrationDirs(
   );
 }
 
+/** An installed integration the operations agent reports intact, with the digests of its files. */
+export interface AgentInstalledIntegration {
+  integrationId: string;
+  files: ReadonlyArray<{ path: string; sha256: string }>;
+}
+
+/**
+ * The installed integrations the operations agent reports loadable, injected
+ * by server.ts. It resolves to null when no agent is configured (host
+ * development); the custom directories are then scanned as they are.
+ */
+let installedIntegrationResolver:
+  | (() => Promise<readonly AgentInstalledIntegration[] | null>)
+  | null = null;
+
+export function setInstalledIntegrationResolver(
+  fn: (() => Promise<readonly AgentInstalledIntegration[] | null>) | null,
+): void {
+  installedIntegrationResolver = fn;
+}
+
+async function resolveInstalledIntegrations(): Promise<
+  readonly AgentInstalledIntegration[] | null
+> {
+  if (!installedIntegrationResolver) return null;
+  try {
+    return await installedIntegrationResolver();
+  } catch (error) {
+    // Unknown is not "scan the directory": load none of them.
+    _fastify?.log.warn(error, "Installed integrations are unavailable; none are loaded");
+    return [];
+  }
+}
+
+function parseManifest(bytes: Buffer | null): ReturnType<typeof JSON.parse> | null {
+  if (!bytes) return null;
+  try {
+    return JSON.parse(bytes.toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
 async function discoverManifests(
   dirs: NormalizedIntegrationDirectory[],
 ): Promise<
@@ -126,7 +171,38 @@ async function discoverManifests(
     isBuiltIn: boolean;
   }> = [];
 
+  // With an operations agent, an installed directory is loaded only when the
+  // agent reports it intact, and each file read from it is verified against
+  // the digests the agent recorded.
+  const installed = dirs.some((dir) => !dir.isBuiltIn)
+    ? await resolveInstalledIntegrations()
+    : null;
+  const verifiedRoots = installed
+    ? dirs.filter((dir) => !dir.isBuiltIn).map((dir) => dir.directory)
+    : [];
+  const verified = new Map<string, AgentInstalledIntegration["files"]>();
+  for (const root of verifiedRoots) {
+    for (const entry of installed ?? [])
+      verified.set(resolve(root, entry.integrationId), entry.files);
+  }
+  setVerifiedIntegrationFiles(verifiedRoots, verified);
+
   for (const { directory: baseDir, isBuiltIn } of dirs) {
+    if (!isBuiltIn && installed) {
+      for (const { integrationId } of installed) {
+        const directory = resolve(baseDir, integrationId);
+        const manifest = parseManifest(readIntegrationFile(directory, "manifest.json"));
+        if (!manifest) {
+          _fastify?.log.warn(
+            { integrationId },
+            `Skipping installed integration ${integrationId}: its manifest.json is not the one the operations agent installed`,
+          );
+          continue;
+        }
+        results.push({ manifest, directory, isBuiltIn });
+      }
+      continue;
+    }
     if (!existsSync(baseDir)) continue;
 
     const entries = readdirSync(baseDir, { withFileTypes: true });
@@ -160,7 +236,9 @@ function loadStrings(directory: string): IntegrationStrings {
     for (const file of readdirSync(stringsDir)) {
       if (!file.endsWith(".json")) continue;
       const locale = file.replace(".json", "");
-      const content = JSON.parse(readFileSync(join(stringsDir, file), "utf-8"));
+      const bytes = readIntegrationFile(directory, join("strings", file));
+      if (!bytes) continue;
+      const content = JSON.parse(bytes.toString("utf-8"));
       if (content && typeof content === "object") {
         strings[locale] = content;
       }
@@ -597,6 +675,13 @@ function buildIntegrationContext(args: {
     getRequiredService(key: string) {
       return requiresMap.get(key) ?? null;
     },
+    resolvePlatformEndpoint(endpointId) {
+      return resolveIntegrationPlatformEndpoint(
+        { manifest, config },
+        (serviceId) => requiresMap.get(serviceId),
+        endpointId,
+      );
+    },
     registerTransitProvider(provider) {
       const existing = providers.get("transit") ?? [];
       existing.push(provider);
@@ -764,7 +849,14 @@ function buildIntegrationContext(args: {
     async getRoadConditionsPolicySnapshot() {
       return roadConditionsPolicyResolver
         ? roadConditionsPolicyResolver()
-        : { authoritative: false, revision: "", validUntil: null, disallowedSourceIds: [] };
+        : {
+            authoritative: false,
+            revision: "",
+            validUntil: null,
+            disallowedSourceIds: [],
+            allowGreyArea: false,
+            allowNonCommercial: false,
+          };
     },
     getDisallowedIntegrationIds() {
       return disallowedIntegrationResolver
@@ -1029,7 +1121,13 @@ export async function initIntegrations(
       return reply.status(404).send({ error: "Not found" });
     }
 
-    const bytes = readFileSync(previewPath);
+    const bytes = readIntegrationFile(
+      integration.directory,
+      relative(realpathSync(integration.directory), previewPath),
+    );
+    if (!bytes) {
+      return reply.status(404).send({ error: "Not found" });
+    }
     const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
     reply.header("Content-Type", "image/svg+xml; charset=utf-8");
     reply.header("X-Content-Type-Options", "nosniff");
@@ -1081,7 +1179,7 @@ export async function initIntegrations(
   // Run initial health check to seed the cache, then periodically refresh
   const runHealthRefresh = () => {
     const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
-    executeAllIntegrationHealthChecks(enabled).catch((err) =>
+    executeAllIntegrationHealthChecks(enabled, { scheduled: true }).catch((err) =>
       fastify.log.warn(err, "Health cache refresh failed"),
     );
   };
@@ -1090,6 +1188,11 @@ export async function initIntegrations(
   // Refresh every 60 seconds
   const healthInterval = setInterval(runHealthRefresh, 60_000);
   healthInterval.unref();
+}
+
+/** Whether `initIntegrations` has run, so `reloadIntegrations` can. */
+export function isIntegrationHostInitialized(): boolean {
+  return _fastify !== null;
 }
 
 export function getIntegration(id: string): LoadedIntegration | undefined {

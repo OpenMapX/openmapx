@@ -244,9 +244,10 @@ describe("actual CLI service lifecycle preparation", () => {
       }),
       "ghcr.io/openmapx",
     );
-    const path = join(root, "infra/docker/docker-compose.release.yml");
+    const infraDir = join(root, "infra/docker");
+    const path = services.releaseStatePaths(infraDir).overlay;
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      await expect(selectRelease({ path, resolve: async () => manifest })).rejects.toThrow(
+      await expect(selectRelease({ infraDir, resolve: async () => manifest })).rejects.toThrow(
         "Release store is busy",
       );
       expect(existsSync(path)).toBe(false);

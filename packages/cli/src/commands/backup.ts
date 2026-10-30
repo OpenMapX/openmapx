@@ -87,11 +87,11 @@ export interface BackupManifest {
   services: BackupServiceEntry[];
   privacySourceProvenance?: {
     managedDawarich?: {
-      version: "1.15.3";
+      version: "1.19.0";
       image: "freikin/dawarich";
       imageDigest: string;
       upstreamCommit: string;
-      schemaContract: "dawarich-1.15.3";
+      schemaContract: "dawarich-1.19.0";
     };
   };
 }
@@ -236,11 +236,11 @@ export function readBackupManifest(filePath: string): BackupManifest {
   const managed = raw.privacySourceProvenance?.managedDawarich;
   if (
     managed &&
-    (managed.version !== "1.15.3" ||
+    (managed.version !== "1.19.0" ||
       managed.image !== "freikin/dawarich" ||
       !/^sha256:[a-f0-9]{64}$/.test(managed.imageDigest) ||
       !/^[a-f0-9]{40}$/.test(managed.upstreamCommit) ||
-      managed.schemaContract !== "dawarich-1.15.3")
+      managed.schemaContract !== "dawarich-1.19.0")
   )
     throw new Error(`Malformed Dawarich privacy provenance in ${filePath}`);
   if (!isValidBackupName(raw.name)) {
@@ -453,17 +453,11 @@ export async function resolveVolumeNames(
  */
 export async function listRunningServices(ctx: ComposeContext): Promise<Set<string>> {
   const stdout = await dockerCompose(ctx, ["ps", "--status=running", "--format", "json"]);
+  // Output that can't be read refuses the restore: reading it as no running
+  // services would skip stopping the ones it needs stopped.
   const running = new Set<string>();
-  // `docker compose ps --format json` emits one JSON object per line.
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const obj = JSON.parse(trimmed) as { Service?: string };
-      if (obj.Service) running.add(obj.Service);
-    } catch {
-      // ignore malformed lines
-    }
+  for (const entry of coreServices.parseComposePsJson(stdout)) {
+    if (typeof entry.Service === "string" && entry.Service) running.add(entry.Service);
   }
   return running;
 }
@@ -650,12 +644,12 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
       ? {
           privacySourceProvenance: {
             managedDawarich: {
-              version: "1.15.3",
+              version: "1.19.0",
               image: "freikin/dawarich",
               imageDigest:
-                "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
-              upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
-              schemaContract: "dawarich-1.15.3",
+                "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
+              upstreamCommit: "752641768f37fdc07d5a23e0559fa7c5ff8fae0f",
+              schemaContract: "dawarich-1.19.0",
             },
           },
         }

@@ -235,13 +235,24 @@ export interface AttributionPresentation {
   prominence?: "normal";
 }
 
+/** Localised wording the presentation adds to a receipt's own. */
+export interface AttributionLabels {
+  /** Said beside the credit of data that was changed from its source (`Attribution.modified`). */
+  modified: string;
+}
+
+const DEFAULT_LABELS: AttributionLabels = { modified: "data modified" };
+
 /** Project one captured receipt without consulting mutable provider catalogues. */
 export function buildAttributionPresentation(
   attribution: Attribution,
   surface: AttributionSurface,
+  labels: AttributionLabels = DEFAULT_LABELS,
 ): AttributionPresentation {
   const detail = structuredClone(attribution);
   let publisherHtml = "";
+  // A change notice belongs to the source note itself, wherever it is shown.
+  const modified = attribution.modified ? escapeHtml(labels.modified) : "";
   const fullParts = [buildRuntimeAttributionHtml(attribution, { includeSoftware: true })];
   const original = parseAttributionHtml(fullParts[0] ?? "");
   const sourceUrl = safeExternalUrl(attribution.url);
@@ -270,6 +281,7 @@ export function buildAttributionPresentation(
     fullParts.push(publisherHtml);
   }
   if (attribution.notes) fullParts.push(escapeHtml(attribution.notes));
+  if (modified) fullParts.push(modified);
   if (attribution.retrievedAt) fullParts.push(escapeHtml(attribution.retrievedAt));
   if (attribution.licensing) {
     const represented = new Set(
@@ -286,8 +298,14 @@ export function buildAttributionPresentation(
   const fullHtml = fullParts.filter(Boolean).join(" — ");
   const licensing =
     attribution.licensing === undefined ? undefined : parseLicensing(attribution.licensing);
+  const noted = (html: string) => (html && modified ? `${html} — ${modified}` : html);
   if (!licensing || licensing.bindings.length === 0) {
-    return { detail, fullHtml, visibleHtml: buildRuntimeAttributionHtml(attribution), logos: [] };
+    return {
+      detail,
+      fullHtml,
+      visibleHtml: noted(buildRuntimeAttributionHtml(attribution)),
+      logos: [],
+    };
   }
   const visible = licensing.bindings
     .map((binding) => ({ binding, decision: resolveBindingPlacement(binding, surface) }))
@@ -337,9 +355,11 @@ export function buildAttributionPresentation(
   return {
     detail,
     fullHtml,
-    visibleHtml: [...new Set([visibleHtml, ...supplemental, ...perItemNotices, publisher])]
-      .filter(Boolean)
-      .join(" | "),
+    visibleHtml: noted(
+      [...new Set([visibleHtml, ...supplemental, ...perItemNotices, publisher])]
+        .filter(Boolean)
+        .join(" | "),
+    ),
     logos,
     ...(prominence ? { prominence } : {}),
   };

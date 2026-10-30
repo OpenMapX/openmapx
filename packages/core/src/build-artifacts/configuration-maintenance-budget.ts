@@ -17,6 +17,7 @@ import {
   STACK_PROJECT,
 } from "../services/deployment";
 import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
+import { releaseStatePaths } from "../services/release-state";
 import { assertProspectiveConfigurationSettlementPacketBudget } from "./configuration-fence-settlement-budget";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-owner-records";
 import {
@@ -110,7 +111,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
     ]),
     futureBase = join(
       rendered.context.infraDir!,
-      ".trusted-config-generations",
+      CONFIGURATION_GENERATIONS,
       plan.operation.revisionId,
     ),
     longest = (a: string, b: string) => (bytes(a) > bytes(b) ? a : b),
@@ -331,6 +332,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
         overlay: Buffer.from(
           renderReleaseCompose(
             parseReleaseManifest(plan.release.canonicalManifest, plan.release.imagePrefix),
+            rendered.context.infraDir!,
           ),
         ).toString("base64"),
         state: Buffer.from(
@@ -504,7 +506,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
       apply.expectedCurrentRevisionId ?? apply.revisionId,
       GENERATED_COMPOSE_FILE,
     ),
-    release = join(input.infraDir, "docker-compose.release.yml");
+    release = releaseStatePaths(input.infraDir).overlay;
   const longest = (a: string, b: string) => (bytes(a) > bytes(b) ? a : b);
   const observed = new Map(input.originalContainers.map((value) => [value.serviceId, value]));
   // Any selected service may become an owned current-generation container in

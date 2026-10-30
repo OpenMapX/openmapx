@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { type OfflinePackageCapability, parseOfflinePackageRequest } from "@openmapx/core";
 import * as dm from "@openmapx/core/data-manager-sdk";
+import { RollingStreamBudget, type RollingStreamBudgetLease } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { redis } from "../redis.js";
@@ -9,6 +10,7 @@ import {
   OfflinePackagePrepareRateLimiter,
   readOfflinePackagePrincipalKeyFile,
 } from "../services/offline-package-principal.js";
+import { requestNetworkKey } from "../utils/rate-limit.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
@@ -21,10 +23,15 @@ const ARCHIVE_HEADERS = [
   "content-range",
   "content-type",
   "etag",
+  "retry-after",
 ] as const;
 const ASSET_HEADERS = ["cache-control", "content-length", "content-type", "etag"] as const;
 const PRINCIPAL_HEADER = "x-offline-package-principal";
 const PRINCIPAL_KEY_FILE_DEFAULT = "/run/secrets/offline-package-principal-key";
+const DEFAULT_DELIVERY_MAX_BYTES = 4_000_000_000;
+const DEFAULT_DELIVERY_WINDOW_MS = 600_000;
+const DEFAULT_DELIVERY_MAX_CONCURRENT_PER_NETWORK = 4;
+const DEFAULT_DELIVERY_MAX_CONCURRENT_GLOBAL = 16;
 
 interface PrepareLimiter {
   consume(principal: string): Promise<{ allowed: boolean; retryAfterSeconds: number }>;
@@ -33,15 +40,81 @@ interface PrepareLimiter {
 export interface OfflinePackagesRouteOptions {
   principalKey?: Buffer;
   prepareLimiter?: PrepareLimiter;
+  deliveryBudget?: RollingStreamBudget;
 }
 
-function dataManagerOptions() {
+function envPositiveSafeInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]?.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function createDeliveryBudgetFromEnv(): RollingStreamBudget {
+  return new RollingStreamBudget({
+    maxBytesPerKey: envPositiveSafeInt(
+      "RATE_LIMIT_OFFLINE_PACKAGE_MAX_BYTES",
+      DEFAULT_DELIVERY_MAX_BYTES,
+    ),
+    windowMs: envPositiveSafeInt(
+      "RATE_LIMIT_OFFLINE_PACKAGE_WINDOW_MS",
+      DEFAULT_DELIVERY_WINDOW_MS,
+    ),
+    maxConcurrentPerKey: envPositiveSafeInt(
+      "RATE_LIMIT_OFFLINE_PACKAGE_MAX_CONCURRENT_PER_NETWORK",
+      DEFAULT_DELIVERY_MAX_CONCURRENT_PER_NETWORK,
+    ),
+    maxConcurrentGlobal: envPositiveSafeInt(
+      "RATE_LIMIT_OFFLINE_PACKAGE_MAX_CONCURRENT_GLOBAL",
+      DEFAULT_DELIVERY_MAX_CONCURRENT_GLOBAL,
+    ),
+  });
+}
+
+function archiveContentLength(response: { headers: Headers }): number | undefined {
+  const value = response.headers.get("content-length");
+  if (!value || !/^[1-9]\d*$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function cancelBody(response: Response): void {
+  try {
+    void response.body?.cancel().catch(() => {});
+  } catch {
+    // Cancellation is best-effort and must not delay or replace the rejection.
+  }
+}
+
+function sendDeliveryRejection(
+  reply: FastifyReply,
+  statusCode: 429 | 503,
+  retryAfterSeconds: number,
+): FastifyReply {
+  reply.header("Retry-After", String(retryAfterSeconds));
+  return reply.code(statusCode).send({
+    error: "Offline package delivery capacity exceeded",
+    retryAfterSeconds,
+  });
+}
+
+function dataManagerOptions(signal?: AbortSignal) {
   return {
     transport: dm.createDataManagerTransport({
       baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
       authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      ...(signal ? { signal } : {}),
     }),
   };
+}
+
+function archiveResponseMatchesPreflight(
+  preflight: { status: number; headers: Headers },
+  response: Response,
+): boolean {
+  if (response.status !== preflight.status) return false;
+  for (const name of ["content-length", "content-range", "etag"] as const) {
+    if (response.headers.get(name) !== preflight.headers.get(name)) return false;
+  }
+  return true;
 }
 
 function isContentAddressedPackageId(value: string): boolean {
@@ -67,6 +140,7 @@ export function createOfflinePackagesRoute(
 ): FastifyPluginAsync {
   return async (fastify) => {
     declareRouteAuth(fastify, "public");
+    const deliveryBudget = options.deliveryBudget ?? createDeliveryBudgetFromEnv();
 
     fastify.get("/offline/packages/capability", async (_request, reply) => {
       try {
@@ -294,16 +368,110 @@ export function createOfflinePackagesRoute(
       const ifRange = request.headers["if-range"];
       if (typeof range === "string") headers.range = range;
       if (typeof ifRange === "string") headers["if-range"] = ifRange;
+      const acquisition = new AbortController();
+      let lease: RollingStreamBudgetLease | undefined;
+      let reservedBytes: number | undefined;
+      let stream: Readable | undefined;
+      const refundReservation = () => {
+        if (reservedBytes === undefined) return;
+        lease?.refund(reservedBytes);
+        reservedBytes = undefined;
+      };
+      const release = () => lease?.release();
+      const abortDelivery = () => {
+        if (!acquisition.signal.aborted) {
+          acquisition.abort(new Error("Offline package client disconnected"));
+        }
+        if (stream && !stream.destroyed) {
+          stream.destroy(new Error("Offline package client disconnected"));
+        } else {
+          refundReservation();
+        }
+        release();
+      };
+      request.raw.once("aborted", abortDelivery);
+      reply.raw.once("close", () => {
+        if (!reply.raw.writableEnded) abortDelivery();
+        else release();
+      });
       try {
-        const result = await (request.method === "HEAD"
-          ? dm.headOfflinePackageArchive(packageId, headers, dataManagerOptions())
-          : dm.getOfflinePackageArchive(packageId, headers, dataManagerOptions()));
+        const preflight = await dm.headOfflinePackageArchive(
+          packageId,
+          headers,
+          dataManagerOptions(acquisition.signal),
+        );
+        if (request.method === "HEAD") {
+          copyArchiveHeaders(preflight, reply);
+          return reply.code(preflight.status).send();
+        }
+        if (preflight.status !== 200 && preflight.status !== 206) {
+          copyArchiveHeaders(preflight, reply);
+          if (preflight.status === 404) {
+            return reply.code(404).send({ ok: false, error: "offline package not found" });
+          }
+          return reply.code(preflight.status).send();
+        }
+        const bytes = archiveContentLength(preflight);
+        if (bytes === undefined) {
+          return reply.code(502).send({ error: "Invalid archive response length" });
+        }
+        if (acquisition.signal.aborted) return reply;
+
+        const admission = deliveryBudget.tryAcquire(requestNetworkKey(request));
+        if (!admission.allowed) {
+          return sendDeliveryRejection(
+            reply,
+            admission.reason === "global-concurrency" ? 503 : 429,
+            admission.retryAfterSeconds,
+          );
+        }
+        lease = admission.lease;
+        const byteAdmission = lease.consume(bytes);
+        if (!byteAdmission.allowed) {
+          release();
+          return sendDeliveryRejection(reply, 429, byteAdmission.retryAfterSeconds);
+        }
+        reservedBytes = bytes;
+
+        const result = await dm.getOfflinePackageArchive(
+          packageId,
+          headers,
+          dataManagerOptions(acquisition.signal),
+        );
+        if (!(result.data instanceof Response)) {
+          copyArchiveHeaders(result, reply);
+          refundReservation();
+          release();
+          return reply.code(result.status).send(result.data);
+        }
+        if (!result.data.body) {
+          refundReservation();
+          release();
+          return reply.code(502).send({ error: "Empty archive response" });
+        }
+        if (!archiveResponseMatchesPreflight(preflight, result.data)) {
+          cancelBody(result.data);
+          refundReservation();
+          release();
+          return reply.code(502).send({ error: "Archive response changed after preflight" });
+        }
+        if (acquisition.signal.aborted) {
+          cancelBody(result.data);
+          refundReservation();
+          release();
+          return reply;
+        }
+
+        stream = Readable.fromWeb(result.data.body as never);
+        reservedBytes = undefined;
         copyArchiveHeaders(result, reply);
-        if (request.method === "HEAD") return reply.code(result.status).send();
-        if (!(result.data instanceof Response)) return reply.code(result.status).send(result.data);
-        if (!result.data.body) return reply.code(502).send({ error: "Empty archive response" });
-        return reply.code(result.status).send(Readable.fromWeb(result.data.body as never));
+        stream.once("close", release);
+        stream.once("error", release);
+        return reply.code(result.status).send(stream);
       } catch {
+        refundReservation();
+        release();
+        if (acquisition.signal.aborted) return reply;
         return reply.code(502).send({ error: "Offline package service unavailable" });
       }
     };

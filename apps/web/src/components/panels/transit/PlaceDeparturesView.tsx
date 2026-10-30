@@ -19,6 +19,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useNow } from "@/lib/useNow";
+import { useSearchBarClearance } from "../searchBarClearance";
 import { DepartureRow } from "./DepartureRow";
 import { TransitQueryNotice } from "./TransitDataStatus";
 
@@ -37,7 +38,6 @@ const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
 interface PlaceDeparturesViewProps {
   place: Place;
   onBack: () => void;
-  clearSearchBar?: boolean;
   modeFilter?: TransportMode | null;
   onDepartureClick: (dep: MergedDeparture) => void;
 }
@@ -45,13 +45,13 @@ interface PlaceDeparturesViewProps {
 export function PlaceDeparturesView({
   place,
   onBack,
-  clearSearchBar = false,
   modeFilter,
   onDepartureClick,
 }: PlaceDeparturesViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
   const now = useNow(30_000);
+  const searchBarClearance = useSearchBarClearance();
   const departuresQuery = useLinkedTransitDepartures(place);
   const { data: departures, isLoading: depsLoading } = departuresQuery;
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
@@ -105,7 +105,7 @@ export function PlaceDeparturesView({
           px: 1,
           pb: 1,
           // Clear the floating search bar via top padding instead of a spacer element
-          pt: clearSearchBar ? { xs: 1, sm: "72px" } : 1,
+          pt: searchBarClearance ?? 1,
           flexShrink: 0,
           position: { xs: "sticky", sm: "static" },
           top: { xs: 0, sm: "auto" },

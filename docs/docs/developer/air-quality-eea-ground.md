@@ -5,8 +5,10 @@ description: Why the optional official EEA UTD/hybrid provider is blocked.
 
 # EEA ground-provider review
 
-**Decision:** a request-time provider is blocked; raw UTD needs a separate
-background ingestion component.
+Raw EEA up-to-date (UTD) observations are not implemented as a request-time
+provider. They require a separate background ingestion component.
+The operating policy below is a proposal for that component, not
+current scheduling, retention, or freshness behavior.
 
 The EEA Air Quality Download Service is a documented, CC BY 4.0 source for raw
 verified and up-to-date observations. Its supported API creates bulk Parquet
@@ -41,8 +43,8 @@ internally consistent station coordinates and units, no duplicate station/time/
 pollutant rows, and a non-regressing source update time. A failed candidate
 leaves the previous complete partition active.
 
-Freshness is measured from the newest source observation, never from download
-completion. Three hours is the soft current-data threshold: older rows remain
+Under the proposed policy, freshness would be measured from the newest source
+observation, never from download completion. Three hours is the soft current-data threshold: older rows remain
 visible only as stale evidence. Twelve hours is the hard threshold: the serving
 layer returns no current evidence from that partition. Forecast, history, and
 backfill products need separate thresholds rather than inheriting these current-
@@ -50,15 +52,16 @@ observation values.
 
 The ingestion service also needs operator-owned storage, scheduling, retry,
 retention, and monitoring. Adding those operational commitments to an API
-process would create a fragile downloader and still would not reproduce the
-viewer hybrid feed.
+process would add long-lived download and scheduling state to the request
+server without reproducing the viewer hybrid feed.
 
 Revisit the raw-UTD path when OpenMapX is ready to operate that ingestion/store
 boundary and the download workflow can be automated without representing an
 operator or end user. Revisit hybrid evidence only when an official documented
 endpoint exposes station classification and per-sample quality/gap-fill
-identity. Until then, OpenAQ remains the request-time ground source and
-Open-Meteo/CAMS remains separately identified model evidence.
+identity. OpenAQ provides request-time ground evidence, and UK-AIR provides
+official station DAQI. Open-Meteo/CAMS remains separately identified model
+evidence. A direct AirNow provider is not implemented.
 
 - [EEA Air Quality Download Service](https://www.eea.europa.eu/en/datahub/datahubitem-view/778ef9f5-6293-4846-badd-56a29c70880d)
 - [European Air Quality Index methodology](https://airindex.eea.europa.eu/AQI/?webgl=0)

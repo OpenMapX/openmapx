@@ -2,9 +2,9 @@
   "$schema": "./gbfs-catalog.lock.schema.json",
   "schemaVersion": 1,
   "source": "mobilitydata-gbfs",
-  "commit": "b4fb1b71c536262d533c6e6b8fc7371e87139c63",
-  "url": "https://raw.githubusercontent.com/MobilityData/gbfs/b4fb1b71c536262d533c6e6b8fc7371e87139c63/systems.csv",
-  "sha256": "4f7d30889b8d84aad25a4cce09a74e4d0187bb04be4f1d33b4be4b470331900c",
-  "lockedAt": "2026-10-11T20:51:35.224Z",
+  "commit": "98c2f3bf101c069c8d09665a80d9acadbf94e58c",
+  "url": "https://raw.githubusercontent.com/MobilityData/gbfs/98c2f3bf101c069c8d09665a80d9acadbf94e58c/systems.csv",
+  "sha256": "4791bb34e93b39332ce9a4ea05b18f22f76b27742263b60a234f19e126920e03",
+  "lockedAt": "2026-10-30T00:19:48.555Z",
   "lockedBy": "dev@fwcr.de"
 }

@@ -14,8 +14,9 @@ import {
   currentConfigurationGeneration,
   readAppliedPlatformConfiguration,
 } from "../services/configuration-generation";
-import { SERVICE_SELECTION_FILE } from "../services/deployment";
+import { serviceSelectionPath } from "../services/deployment";
 import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
+import { releaseStatePaths } from "../services/release-state";
 import type { LoadedService } from "../services/types";
 import {
   configurationHandoffRecordDomains,
@@ -208,6 +209,7 @@ export function assertConfigurationHandoffHostSources(authority: VerifiedExecuti
     Buffer.from(files.release.bytes, "base64").toString("utf8") !==
       renderReleaseCompose(
         parseReleaseManifest(intent.release.canonicalManifest, intent.release.imagePrefix),
+        infraDir,
       ) ||
     !matches(keyed({ ...files, release: intent.previousReleaseOverlay }))
   )
@@ -250,7 +252,7 @@ function hostEnv(infraDir: string, env: NodeJS.ProcessEnv) {
   let selection: { identity: unknown; bytes: string } | null = null;
   let selectionFd: number | undefined;
   try {
-    const path = join(infraDir, SERVICE_SELECTION_FILE);
+    const path = serviceSelectionPath(infraDir);
     selectionFd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const before = fstatSync(selectionFd);
     if (!before.isFile() || before.nlink !== 1 || before.size > 65536)
@@ -326,10 +328,10 @@ function readHandoffSourceFile(path: string, maximumBytes: number) {
 }
 /** Raw values stay exclusively in role-private helper records. */
 export function readConfigurationHandoffReleaseOverlay(infraDir: string) {
-  return readHandoffSourceFile(join(infraDir, "docker-compose.release.yml"), 128 * 1024);
+  return readHandoffSourceFile(releaseStatePaths(infraDir).overlay, 128 * 1024);
 }
 export function readConfigurationHandoffReleaseState(infraDir: string) {
-  return readHandoffSourceFile(join(infraDir, ".ops-agent-releases", "current.json"), 4096);
+  return readHandoffSourceFile(join(releaseStatePaths(infraDir).store, "current.json"), 4096);
 }
 function currentSources(infraDir: string, env: NodeJS.ProcessEnv) {
   const platform = readAppliedPlatformConfiguration(infraDir);

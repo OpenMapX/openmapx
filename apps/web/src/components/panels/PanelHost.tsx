@@ -74,7 +74,7 @@ export function PanelHost() {
           // on mobile, where only the top one is reachable — so tell the lower
           // one to step aside while a detail panel is open.
           <SidebarShell
-            contentSx={sidebarEntry.contentSx}
+            searchBarClearance={sidebarEntry.searchBarClearance}
             detents={sidebarEntry.detents}
             obscured={Boolean(DetailContent)}
           >

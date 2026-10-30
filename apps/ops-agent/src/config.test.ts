@@ -14,8 +14,10 @@ describe("ops-agent configuration", () => {
       apiTokenFile: "/run/secrets/ops-agent-api-token",
       dataManagerTokenFile: "/run/secrets/ops-agent-data-manager-token",
       rootDir: "/srv/openmapx",
-      journalFile: "/srv/openmapx/infra/docker/data/ops-agent/jobs-v1.json",
-      trustedConfigDirectory: "/var/lib/openmapx/trusted-config",
+      journalFile: "/srv/openmapx/infra/docker/state/ops-agent/jobs-v1.json",
+      // The checkout's state directory, not the container's own mount, which an
+      // agent recreated from an earlier generation still points at the old one.
+      trustedConfigDirectory: "/srv/openmapx/infra/docker/state/ops-agent/trusted-config",
       host: "0.0.0.0",
       port: 4300,
     });

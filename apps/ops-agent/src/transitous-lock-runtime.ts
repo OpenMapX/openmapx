@@ -9,6 +9,7 @@ import {
   retainCatalogProposal,
 } from "@openmapx/core/catalog-pins";
 import type { OpsResultFor } from "@openmapx/core/ops";
+import { releaseTransitousPin } from "@openmapx/transitous-core/pins";
 import { OpsNotWiredError, type OpsRuntime } from "./runtime";
 
 // The catalog lock lives in the repository's `infra/docker/`, which only the
@@ -78,6 +79,15 @@ export function createTransitousLockRuntime(
     )
       throw new OpsNotWiredError();
     return active;
+  };
+  runtime["transitousPin.inspect"] = async () => {
+    const active = pair();
+    if (!active) throw new OpsNotWiredError();
+    const { ref, submodules, lockedAt, lockedBy, comment } = releaseTransitousPin();
+    return {
+      release: { ref, submodules, lockedAt, lockedBy, ...(comment ? { comment } : {}) },
+      active: active.transitous,
+    };
   };
   runtime["catalogPins.inspect"] = async () => {
     const active = pair();

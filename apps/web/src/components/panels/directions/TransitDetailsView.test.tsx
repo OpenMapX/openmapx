@@ -270,3 +270,24 @@ it("keeps selected itinerary A independent of a later mixed-page envelope", () =
   expect(markup).toContain("de_DELFI");
   expect(markup).not.toContain("ch_SBB");
 });
+
+it.each([
+  ["mo", false, "wheelchairUnconfirmed"],
+  ["ms", false, "wheelchairUnconfirmed"],
+  ["otp", false, "wheelchairNotSupported"],
+  ["mo", true, "wheelchairSupported"],
+] as const)("describes %s accessibility %s as %s", (instance, accessible, expected) => {
+  const itinerary = makeItinerary([undefined]);
+  itinerary.instance = instance;
+  itinerary.legs[0].wheelchairAccessible = accessible;
+  const markup = renderToStaticMarkup(
+    <TransitDetailsView
+      itinerary={itinerary}
+      originLabel="A"
+      destinationLabel="B"
+      onBack={() => {}}
+    />,
+  );
+  expect(markup).toContain(expected);
+  if (instance !== "otp") expect(markup).not.toContain("wheelchairNotSupported");
+});

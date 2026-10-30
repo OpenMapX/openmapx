@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -15,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { services } from "@openmapx/core/server";
 import {
   backupInstalledIntegration,
   packageIntegration,
@@ -62,7 +65,8 @@ function writeTarGz(sourceDir: string, artifactPath: string): void {
 
 interface TarFixtureEntry {
   name: string;
-  type?: "0" | "2" | "7" | "g" | "x";
+  type?: "0" | "1" | "2" | "5" | "7" | "g" | "x";
+  mode?: number;
   data?: Buffer | string;
   linkName?: string;
   claimedSize?: number;
@@ -79,7 +83,7 @@ function tarFixtureEntry(entry: TarFixtureEntry): Buffer {
   const claimedSize = entry.claimedSize ?? payload.length;
   const header = Buffer.alloc(512);
   header.write(entry.name, 0, 100, "utf-8");
-  writeTarOctal(header, 100, 8, 0o644);
+  writeTarOctal(header, 100, 8, entry.mode ?? 0o644);
   writeTarOctal(header, 108, 8, 0);
   writeTarOctal(header, 116, 8, 0);
   writeTarOctal(header, 124, 12, claimedSize);
@@ -916,6 +920,199 @@ describe("packageIntegration", () => {
     const installed = join(tmp, "custom_integrations", "package-preview");
     expect(readFileSync(join(installed, "preview.svg"), "utf-8")).toBe(svg);
     expect(existsSync(join(installed, "dist", "frontend", "index.js"))).toBe(false);
+  });
+});
+
+describe("installIntegration (what the operations agent loads)", () => {
+  const schemaManifest = (id: string, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      ...baseManifest,
+      id,
+      configSchema: { type: "object", properties: { region: { enum: ["eu", "us"] } } },
+      ...extra,
+    });
+  const install = (source: string, sourceKind: "artifact" | "source" = "artifact") =>
+    installIntegration({ source, sourceKind, rootDir: tmp });
+  /**
+   * The installed integrations the agent's per-integration check accepts. The
+   * agent itself loads only what it installed and recorded; this is what a
+   * direct install leaves for it to verify.
+   */
+  const agentLoads = () =>
+    readdirSync(join(tmp, "custom_integrations"))
+      .filter((name) => !name.startsWith("."))
+      .filter((name) => {
+        try {
+          services.assertTrustedIntegrationDirectory(join(tmp, "custom_integrations", name), name);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .sort();
+  const mode = (path: string) => lstatSync(path).mode & 0o777;
+
+  /** A Debian or Ubuntu login shell's umask while `run` runs. */
+  async function underUmask002<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.umask(0o002);
+    try {
+      return await run();
+    } finally {
+      process.umask(previous);
+    }
+  }
+
+  async function installKept(): Promise<void> {
+    const artifact = join(tmp, "kept.tar.gz");
+    writeTarFixture(artifact, [{ name: "manifest.json", data: schemaManifest("kept") }]);
+    await install(artifact);
+  }
+
+  it("installs an archive declaring 0666 and 0664 modes with the modes the agent loads", async () => {
+    const artifact = join(tmp, "loose-modes.tar.gz");
+    writeTarFixture(artifact, [
+      { name: "assets/", type: "5", mode: 0o777 },
+      { name: "manifest.json", data: schemaManifest("loose-modes"), mode: 0o666 },
+      { name: "strings/en.json", data: "{}", mode: 0o664 },
+      { name: "assets/data.json", data: "{}", mode: 0o000 },
+    ]);
+    await underUmask002(() => install(artifact));
+
+    const installed = join(tmp, "custom_integrations", "loose-modes");
+    expect(mode(join(tmp, "custom_integrations"))).toBe(0o755);
+    expect(mode(installed)).toBe(0o755);
+    expect(mode(join(installed, "manifest.json"))).toBe(0o644);
+    expect(mode(join(installed, "strings"))).toBe(0o755);
+    expect(mode(join(installed, "strings", "en.json"))).toBe(0o644);
+    expect(mode(join(installed, "assets"))).toBe(0o755);
+    expect(mode(join(installed, "assets", "data.json"))).toBe(0o644);
+    expect(agentLoads()).toEqual(["loose-modes"]);
+  });
+
+  it("installs a local source written under umask 002 with the modes the agent loads", async () => {
+    const source = join(tmp, "local-loose");
+    mkdirSync(join(source, "strings"), { recursive: true });
+    writeFileSync(join(source, "manifest.json"), schemaManifest("local-loose"));
+    writeFileSync(join(source, "strings", "en.json"), "{}");
+    chmodSync(join(source, "manifest.json"), 0o664);
+    chmodSync(join(source, "strings"), 0o775);
+    await underUmask002(() => install(source, "source"));
+
+    const installed = join(tmp, "custom_integrations", "local-loose");
+    expect(mode(installed)).toBe(0o755);
+    expect(mode(join(installed, "manifest.json"))).toBe(0o644);
+    expect(mode(join(installed, "strings"))).toBe(0o755);
+    expect(agentLoads()).toEqual(["local-loose"]);
+  });
+
+  it("refuses a hard-linked manifest.json and keeps the installed integrations loadable", async () => {
+    await installKept();
+    const linkedTo = join(tmp, "manifest-linked-to.tar.gz");
+    writeTarFixture(linkedTo, [
+      { name: "copy.json", data: schemaManifest("linked-to") },
+      { name: "manifest.json", type: "1", linkName: "copy.json" },
+    ]);
+    await expectArtifactRejection(linkedTo, "linked-to", /must not be hard-linked/);
+    const linkedFrom = join(tmp, "manifest-linked-from.tar.gz");
+    writeTarFixture(linkedFrom, [
+      { name: "manifest.json", data: schemaManifest("linked-from") },
+      { name: "alias.json", type: "1", linkName: "manifest.json" },
+    ]);
+    await expectArtifactRejection(linkedFrom, "linked-from", /must not be hard-linked/);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("refuses a symlinked manifest.json from an archive or a local source", async () => {
+    await installKept();
+    const artifact = join(tmp, "manifest-symlink.tar.gz");
+    writeTarFixture(artifact, [
+      { name: "real.json", data: schemaManifest("manifest-symlink") },
+      { name: "manifest.json", type: "2", linkName: "real.json" },
+    ]);
+    await expectArtifactRejection(artifact, "manifest-symlink", /not a symbolic link/);
+
+    const source = join(tmp, "local-symlink");
+    mkdirSync(source);
+    writeFileSync(join(source, "real.json"), schemaManifest("local-symlink"));
+    symlinkSync("real.json", join(source, "manifest.json"));
+    await expect(install(source, "source")).rejects.toThrow(/not a symbolic link/);
+    expect(existsSync(join(tmp, "custom_integrations", "local-symlink"))).toBe(false);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("installs a local source's hard-linked manifest.json as a file of its own", async () => {
+    // A local source is copied file by file, so no link survives the copy.
+    const source = join(tmp, "local-hardlink");
+    mkdirSync(source);
+    writeFileSync(join(source, "manifest.json"), schemaManifest("local-hardlink"));
+    linkSync(join(source, "manifest.json"), join(source, "alias.json"));
+    await install(source, "source");
+    const installed = join(tmp, "custom_integrations", "local-hardlink", "manifest.json");
+    expect(lstatSync(installed).nlink).toBe(1);
+    expect(agentLoads()).toEqual(["local-hardlink"]);
+  });
+
+  /** A manifest whose description holds a byte that is not UTF-8. */
+  function invalidUtf8Manifest(id: string): Buffer {
+    const [head, tail] = schemaManifest(id, { description: "X" }).split('"X"');
+    return Buffer.concat([Buffer.from(`${head}"`), Buffer.from([0xff]), Buffer.from(`"${tail}`)]);
+  }
+
+  it("refuses manifests the agent's loader would reject", async () => {
+    await installKept();
+    const cases: Array<[string, Buffer | string, RegExp]> = [
+      [
+        "oversized",
+        `${schemaManifest("oversized")}${" ".repeat(services.MAX_INTEGRATION_MANIFEST_BYTES)}`,
+        /exceeds the 128 KiB limit/,
+      ],
+      [
+        "unaccepted-schema",
+        schemaManifest("unaccepted-schema", {
+          configSchema: {
+            type: "object",
+            properties: { region: { type: "string", examples: ["eu"] } },
+          },
+        }),
+        /configSchema uses a construct/,
+      ],
+      ["invalid-utf8", invalidUtf8Manifest("invalid-utf8"), /not valid UTF-8/],
+      [`a${"b".repeat(64)}`, schemaManifest(`a${"b".repeat(64)}`), /longer than the 64 characters/],
+    ];
+    for (const [id, data, message] of cases) {
+      const artifact = join(tmp, "refused.tar.gz");
+      writeTarFixture(artifact, [{ name: "manifest.json", data }]);
+      await expectArtifactRejection(artifact, id, message);
+    }
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+
+  it("restores a rollback backup with the modes the agent loads", async () => {
+    await installKept();
+    const target = join(tmp, "custom_integrations", "kept");
+    const backup = backupInstalledIntegration(tmp, "kept") as NonNullable<
+      ReturnType<typeof backupInstalledIntegration>
+    >;
+    chmodSync(join(backup.backupDirectory, "manifest.json"), 0o666);
+    chmodSync(backup.backupDirectory, 0o777);
+    restoreInstalledIntegration(tmp, backup);
+    expect(mode(target)).toBe(0o755);
+    expect(mode(join(target, "manifest.json"))).toBe(0o644);
+    expect(agentLoads()).toEqual(["kept"]);
+  });
+});
+
+describe("packageIntegration (what the operations agent loads)", () => {
+  it("refuses a manifest larger than the agent reads", async () => {
+    const source = join(tmp, "oversized-source");
+    mkdirSync(source);
+    writeFileSync(
+      join(source, "manifest.json"),
+      `${JSON.stringify({ ...baseManifest, id: "oversized-source" })}${" ".repeat(services.MAX_INTEGRATION_MANIFEST_BYTES)}`,
+    );
+    await expect(
+      packageIntegration({ rootDir: tmp, source, outFile: join(tmp, "out.tar.gz") }),
+    ).rejects.toThrow(/manifest\.json exceeds its 131072-byte limit/);
   });
 });
 

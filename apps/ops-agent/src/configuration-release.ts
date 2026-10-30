@@ -1,9 +1,11 @@
 /** Checked release data only. Reading this does not acquire targets or grant effects. */
+
 import { createHash } from "node:crypto";
+import { relative, sep } from "node:path";
 import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { z } from "zod";
-import { readAgentHandoffFromInfra } from "./agent-handoff";
+import { readAgentHandoffFile, readAgentHandoffFromInfra } from "./agent-handoff";
 
 const selectionSchema = z.strictObject({
   releaseId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
@@ -28,7 +30,19 @@ export function readCheckedConfigurationRelease(
   if (channel.kind === "local") throw new services.ReleaseChannelDisabledError();
   const infra = new AnchoredDirectory(infraDir);
   try {
-    const directory = infra.directory(".ops-agent-releases", false, true);
+    const parents: AnchoredDirectory[] = [];
+    let directory = infra;
+    try {
+      for (const part of relative(infraDir, services.releaseStatePaths(infraDir).store).split(
+        sep,
+      )) {
+        directory = directory.directory(part, false, true);
+        parents.push(directory);
+      }
+    } catch (error) {
+      for (const parent of parents.reverse()) parent.close();
+      throw error;
+    }
     try {
       // The legacy entrypoint has no owned handoff source for this new root.
       // Preserve its journal; never reinterpret startup cleanup as authority.
@@ -39,7 +53,9 @@ export function readCheckedConfigurationRelease(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT")
           throw Error("Legacy release transaction requires recovery");
       }
-      const legacy = readAgentHandoffFromInfra(infraDir);
+      const legacy =
+        readAgentHandoffFile(services.agentStatePaths(infraDir).handoff) ??
+        readAgentHandoffFromInfra(infraDir);
       if (
         legacy &&
         !(legacy.consumed === true && ["applied", "rolled_back"].includes(legacy.phase))
@@ -68,7 +84,7 @@ export function readCheckedConfigurationRelease(
         },
       });
     } finally {
-      directory.close();
+      for (const parent of parents.reverse()) parent.close();
     }
   } finally {
     infra.close();

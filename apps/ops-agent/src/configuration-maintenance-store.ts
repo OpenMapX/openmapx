@@ -4439,6 +4439,7 @@ export async function inspectFrozenMaintenanceRuntime(
               owner.plan.release.canonicalManifest,
               owner.plan.release.imagePrefix,
             ),
+            source.infraDir,
           )
       )
         throw Error("Original helper release publication changed before final inspection");

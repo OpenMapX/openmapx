@@ -17,6 +17,8 @@ const REJECTED_EXTENSIONS = /\.(svg|pdf|ogg|ogv|webm|tiff?|djvu|xcf|stl|gif)$/i;
 
 const MAX_TAG_PHOTOS = 6;
 
+type TagSearchOptions = NonNullable<Parameters<NonNullable<PhotoProvider["searchByTags"]>>[2]>;
+
 export const wikimediaProvider: PhotoProvider = {
   id: "wikimedia",
   name: "Wikimedia Commons",
@@ -31,7 +33,7 @@ export const wikimediaProvider: PhotoProvider = {
   async searchByTags(
     osmTags: Record<string, string>,
     limit?: number,
-    options?: { strict?: boolean; signal?: AbortSignal },
+    options?: TagSearchOptions,
   ): Promise<PlacePhoto[]> {
     return searchByTags(osmTags, limit, options);
   },
@@ -41,7 +43,7 @@ export const wikimediaProvider: PhotoProvider = {
 async function searchByTags(
   osmTags: Record<string, string>,
   limit?: number,
-  options?: { strict?: boolean; signal?: AbortSignal },
+  options?: TagSearchOptions,
 ): Promise<PlacePhoto[]> {
   const tag = osmTags.wikimedia_commons?.trim();
   if (!tag) return [];

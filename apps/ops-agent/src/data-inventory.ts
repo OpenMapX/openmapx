@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
-import { lstatSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { listCatalogProposals } from "@openmapx/core/catalog-pins";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
+import type { DescriptorWriteModeOption } from "./descriptor-file";
 import { readDescriptorAnchoredUtf8 } from "./descriptor-file";
 import { inspectOsmInventory } from "./osm-inventory";
 import { inspectPreparedInventory } from "./prepared-inventory";
@@ -47,11 +50,44 @@ function isDirectory(path: string): boolean {
   return stat?.isDirectory() === true && stat.isSymbolicLink() === false;
 }
 
-function readBoundedUtf8(rootDir: string, path: string): string | null {
+/** Whether the agent holds a Transitous pin proposal; unreadable state reads as none. */
+function transitousProposalPending(infraDir: string): boolean {
+  const installation = openControlInstallation({
+    infraDir,
+    role: "ops-agent",
+    serviceIds: [],
+    container: existsSync("/run/secrets/openmapx-control-verifiers"),
+  });
   try {
-    const child = relative(rootDir, path);
+    return listCatalogProposals({ rootDir: join(infraDir, "../.."), installation }).total > 0;
+  } finally {
+    closeControlInstallation(installation);
+  }
+}
+
+/**
+ * How the data directory is read. data-manager writes it as this same user by
+ * design, so its group write bit protects nothing and is not required: a fresh
+ * install's directory may be 0775. Every entry must still be this user's own,
+ * with one link for a file and no other write, and is opened without following
+ * links.
+ */
+const DATA_DIRECTORY: DescriptorWriteModeOption = { allowGroupWritable: true };
+
+/**
+ * Reads `path` anchored at `anchor`: the data directory (or `infra/docker` for
+ * its own files, strictly), never the checkout root.
+ */
+function readBoundedUtf8(
+  anchor: string,
+  path: string,
+  writeModes: DescriptorWriteModeOption = DATA_DIRECTORY,
+): string | null {
+  try {
+    const child = relative(anchor, path);
     if (!child || child.startsWith(`..${sep}`) || child === "..") return null;
-    return readDescriptorAnchoredUtf8(rootDir, child.split(sep), {
+    return readDescriptorAnchoredUtf8(anchor, child.split(sep), {
+      ...writeModes,
       maximumBytes: MAX_STATUS_FILE_BYTES,
     });
   } catch {
@@ -59,8 +95,8 @@ function readBoundedUtf8(rootDir: string, path: string): string | null {
   }
 }
 
-function readJsonObject(rootDir: string, path: string): Record<string, unknown> | null {
-  const text = readBoundedUtf8(rootDir, path);
+function readJsonObject(anchor: string, path: string): Record<string, unknown> | null {
+  const text = readBoundedUtf8(anchor, path);
   if (text === null) return null;
   try {
     const value: unknown = JSON.parse(text);
@@ -72,13 +108,13 @@ function readJsonObject(rootDir: string, path: string): Record<string, unknown> 
   }
 }
 
-function readEpoch(rootDir: string, path: string): string | null {
-  const value = boundedString(readJsonObject(rootDir, path)?.epoch);
+function readEpoch(anchor: string, path: string): string | null {
+  const value = boundedString(readJsonObject(anchor, path)?.epoch);
   return value && value.length > 0 ? value : null;
 }
 
-function hashFile(rootDir: string, path: string): string | null {
-  const value = readBoundedUtf8(rootDir, path);
+function hashFile(anchor: string, path: string): string | null {
+  const value = readBoundedUtf8(anchor, path);
   return value === null ? null : createHash("sha256").update(value).digest("hex");
 }
 
@@ -106,8 +142,8 @@ function missingGbfsCatalog(): MotisInventory["gbfsCatalog"] {
   };
 }
 
-function inspectGbfsCatalog(rootDir: string, motisDir: string): MotisInventory["gbfsCatalog"] {
-  const parsed = readJsonObject(rootDir, join(motisDir, "gbfs-source-index.json"));
+function inspectGbfsCatalog(anchor: string, motisDir: string): MotisInventory["gbfsCatalog"] {
+  const parsed = readJsonObject(anchor, join(motisDir, "gbfs-source-index.json"));
   if (!parsed) return missingGbfsCatalog();
   if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.sources)) {
     return { ...missingGbfsCatalog(), state: "error" };
@@ -175,8 +211,8 @@ function inspectGbfsCatalog(rootDir: string, motisDir: string): MotisInventory["
   };
 }
 
-function inspectCapability(rootDir: string, path: string): MobilityCapabilitySnapshot | null {
-  const parsed = readJsonObject(rootDir, path);
+function inspectCapability(anchor: string, path: string): MobilityCapabilitySnapshot | null {
+  const parsed = readJsonObject(anchor, path);
   if (parsed?.schemaVersion !== 1) return null;
   const epoch = boundedString(parsed.epoch);
   const testedAt = boundedString(parsed.testedAt);
@@ -234,31 +270,27 @@ function inspectCapability(rootDir: string, path: string): MobilityCapabilitySna
   };
 }
 
-async function inspectMotis(
-  rootDir: string,
-  infraDir: string,
-  dataRoot: string,
-): Promise<MotisInventory> {
+async function inspectMotis(infraDir: string, dataRoot: string): Promise<MotisInventory> {
   const motisDir = join(dataRoot, "motis", "live");
   const feedProxyDir = join(dataRoot, "motis-feed-proxy");
   const configPath = join(motisDir, "config.yml");
   const licensePath = join(motisDir, "license.json");
-  const configText = readBoundedUtf8(rootDir, configPath);
+  const configText = readBoundedUtf8(dataRoot, configPath);
   const feedProxyConfigFound =
-    readBoundedUtf8(rootDir, join(feedProxyDir, "conf", "default.conf")) !== null;
-  const feedProxyVars = readJsonObject(rootDir, join(feedProxyDir, "feed-proxy-vars.json"));
+    readBoundedUtf8(dataRoot, join(feedProxyDir, "conf", "default.conf")) !== null;
+  const feedProxyVars = readJsonObject(dataRoot, join(feedProxyDir, "feed-proxy-vars.json"));
   const snapshotPath = join(motisDir, "mobility-capabilities.json");
-  const snapshotText = readBoundedUtf8(rootDir, snapshotPath);
-  const snapshot = inspectCapability(rootDir, snapshotPath);
+  const snapshotText = readBoundedUtf8(dataRoot, snapshotPath);
+  const snapshot = inspectCapability(dataRoot, snapshotPath);
   const capabilityError =
     snapshotText !== null && !snapshot ? "invalid capability snapshot" : undefined;
   const candidateEpoch = readEpoch(
-    rootDir,
+    dataRoot,
     join(dataRoot, "motis", "staging", "motis-candidate-manifest.json"),
   );
-  const slotState = readJsonObject(rootDir, join(dataRoot, "motis", "slot-state.json"));
-  const activeManifest = readJsonObject(rootDir, join(motisDir, "motis-candidate-manifest.json"));
-  const preflight = readJsonObject(rootDir, join(dataRoot, "motis", "preflight.json"));
+  const slotState = readJsonObject(dataRoot, join(dataRoot, "motis", "slot-state.json"));
+  const activeManifest = readJsonObject(dataRoot, join(motisDir, "motis-candidate-manifest.json"));
+  const preflight = readJsonObject(dataRoot, join(dataRoot, "motis", "preflight.json"));
   const operationsPolicy =
     activeManifest?.operationsPolicy &&
     typeof activeManifest.operationsPolicy === "object" &&
@@ -297,7 +329,7 @@ async function inspectMotis(
     activeEpoch: snapshot?.epoch ?? null,
     candidateEpoch,
     testedAt: snapshot?.testedAt ?? null,
-    licenseHash: hashFile(rootDir, licensePath),
+    licenseHash: hashFile(dataRoot, licensePath),
     rentalProviderCount: countBoundedStrings(snapshot?.rentals?.providerIds),
     rentalProviderGroupCount: countBoundedStrings(snapshot?.rentals?.providerGroupIds),
     rollbackAvailable:
@@ -322,10 +354,15 @@ async function inspectMotis(
       capacity.freeDiskBytes >= 0
         ? capacity.freeDiskBytes
         : null,
-    pinProposalPending:
-      readBoundedUtf8(rootDir, join(infraDir, "transitous.lock.proposed.json")) !== null,
+    pinProposalPending: (() => {
+      try {
+        return transitousProposalPending(infraDir);
+      } catch {
+        return false;
+      }
+    })(),
     crowdsourceState: "disabled-pending-review" as const,
-    gbfsCatalog: inspectGbfsCatalog(rootDir, motisDir),
+    gbfsCatalog: inspectGbfsCatalog(dataRoot, motisDir),
   };
   if (configText === null) {
     return {
@@ -424,6 +461,6 @@ export async function inspectDataInventory(
   return {
     osm,
     builds: inspectPreparedInventory(dataRoot, osm),
-    motisTransitous: await inspectMotis(rootDir, infraDir, dataRoot),
+    motisTransitous: await inspectMotis(infraDir, dataRoot),
   };
 }

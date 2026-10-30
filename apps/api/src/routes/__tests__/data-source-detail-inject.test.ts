@@ -33,7 +33,20 @@ const provider = {
   getDetail: async (id: string) => {
     asked.push(id);
     return {
-      data: { id, name: "P", coordinates: [3.68, 51.02], source: "oc", sections: [] },
+      data: {
+        id,
+        name: "P",
+        coordinates: [3.68, 51.02],
+        source: "oc",
+        sections: [],
+        branding: {
+          name: "APCOA",
+          catalogueLogo: { qid: "Q1", file: "Logo.svg" },
+          fieldContributors: {
+            "catalogueLogo.file": [{ sourceId: "wikidata", name: "Captured file selection" }],
+          },
+        },
+      },
       attributions: [],
       freshness: FRESHNESS,
     };
@@ -88,5 +101,12 @@ describe("data-source detail over the production dispatcher", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(asked).toEqual([id]);
     expect(response.json().data.id).toBe(id);
+    expect(response.json().data.branding).toEqual({
+      name: "APCOA",
+      catalogueLogo: { qid: "Q1", file: "Logo.svg" },
+      fieldContributors: {
+        "catalogueLogo.file": [{ sourceId: "wikidata", name: "Captured file selection" }],
+      },
+    });
   });
 });

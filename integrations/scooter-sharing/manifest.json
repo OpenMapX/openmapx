@@ -100,7 +100,7 @@
     {
       "name": "Transitous Rentals",
       "type": "http",
-      "url": "https://api.transitous.org/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
     },
     {
       "name": "NRW Mobidrom E-Scooter",
@@ -110,6 +110,11 @@
         "de-nw-mobidrom-scooter-client-id",
         "de-nw-mobidrom-scooter-client-secret"
       ]
+    },
+    {
+      "name": "MOTIS self-hosted",
+      "type": "ping",
+      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
     }
   ],
   "quality": "built-in",

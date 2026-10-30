@@ -9,6 +9,24 @@ import {
   usePrivacyCaseClient,
 } from "@/lib/admin/privacyAdmin";
 import { createTestQueryClient } from "@/test/query";
+
+function PrivacyTestHost({
+  value,
+  binding,
+  children,
+}: {
+  value: PrivacyAdminDetail;
+  binding: Parameters<typeof usePrivacyCaseClient>[1];
+  children: (client: PrivacyCaseClient) => ReactNode;
+}) {
+  const client = usePrivacyCaseClient(value, binding);
+  return (
+    <>
+      {client.errorCode && <output>{client.errorCode}</output>}
+      {children(client)}
+    </>
+  );
+}
 export function renderPrivacyComponent(
   detail: PrivacyAdminDetail,
   children: (client: PrivacyCaseClient) => ReactNode,
@@ -21,18 +39,11 @@ export function renderPrivacyComponent(
     actorId: "synthetic-worker",
     queries: privacyAdminQueries(api, "http://privacy.test", "synthetic-worker"),
   };
-  function Host({ value }: { value: PrivacyAdminDetail }) {
-    const client = usePrivacyCaseClient(value, binding);
-    return (
-      <>
-        {client.errorCode && <output>{client.errorCode}</output>}
-        {children(client)}
-      </>
-    );
-  }
   const result = render(
     <QueryClientProvider client={qc}>
-      <Host value={detail} />
+      <PrivacyTestHost value={detail} binding={binding}>
+        {children}
+      </PrivacyTestHost>
     </QueryClientProvider>,
   );
   return { ...result, qc, api };

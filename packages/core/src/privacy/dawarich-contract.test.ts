@@ -56,7 +56,7 @@ describe("managed Dawarich contract", () => {
   it("rejects compatibility drift", () => {
     const base = {
       version: 1,
-      image: "freikin/dawarich:1.15.3",
+      image: "freikin/dawarich:1.19.0",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: "a".repeat(64),
@@ -96,7 +96,7 @@ describe("managed Dawarich contract", () => {
   it("accepts only content-addressed dynamic members", () => {
     const base = {
       version: 1 as const,
-      image: "freikin/dawarich:1.15.3",
+      image: "freikin/dawarich:1.19.0",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: "a".repeat(64),

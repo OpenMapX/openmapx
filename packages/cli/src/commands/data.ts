@@ -28,10 +28,15 @@ import {
   TRANSITOUS_COUNTRIES_ENV,
 } from "../lib/env-defaults";
 import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
+
 import { log, routeLogsToStderr, table } from "../lib/output";
+import { repoPaths } from "../lib/paths";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
-import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
+import {
+  describeTransitousApiKeysMigration,
+  generateTransitousApiKeys,
+} from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
 function createCliTransport() {
@@ -190,10 +195,7 @@ async function runFontDownload(transport: ReturnType<typeof createCliTransport>)
 async function renderAndApplyHardlinks(): Promise<void> {
   const rendered = await renderComposeForRepo({});
   for (const warning of rendered.selectionWarnings) log.warn(warning);
-  const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-  log.ok(
-    `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-  );
+  logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
 }
 
 function dataManagerHint(): void {
@@ -308,7 +310,7 @@ export function registerDataCommands(program: Command): void {
         completeCliCommand(1);
       }
       log.ok(
-        `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
+        `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${typeof manifest.release === "string" ? ` with release ${manifest.release.slice(0, 128)}` : ""}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
       );
       log.info(
         `Start the consumers with \`openmapx services start ${buildArtifactSpec(manifest.service).consumers.join(" ")}\``,
@@ -390,10 +392,7 @@ export function registerDataCommands(program: Command): void {
         // dirs the operator no longer wants.
         const rendered = await renderComposeForRepo({});
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const result = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-        log.ok(
-          `Linked ${result.linked} files (${result.skipped} already linked, ${result.pruned} stale file${result.pruned === 1 ? "" : "s"} pruned)`,
-        );
+        logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
       } catch (err) {
         log.err(`link failed: ${(err as Error).message}`);
         completeCliCommand(1);
@@ -869,11 +868,11 @@ export function registerDataCommands(program: Command): void {
   data
     .command("generate-api-keys")
     .description(
-      "Generate Transitous API-key template at services/motis/tools/transitous/api-keys.json",
+      "Generate the Transitous API-key template at infra/docker/secrets/transitous-api-keys/api-keys.json",
     )
     .option(
       "--output <path>",
-      "Override output path (default: services/motis/tools/transitous/api-keys.json)",
+      "Override output path (default: infra/docker/secrets/transitous-api-keys/api-keys.json)",
     )
     .option("--proposal <id>", "Use this retained paired proposal instead of active pins")
     .action(async (options: { output?: string; proposal?: string }) => {
@@ -883,6 +882,9 @@ export function registerDataCommands(program: Command): void {
           outputPath: options.output,
           proposalId: options.proposal,
         });
+        const carried =
+          result.keysFile && describeTransitousApiKeysMigration(result.keysFile, repoPaths().root);
+        if (carried) log[carried.level](carried.message);
         const preserved =
           result.preservedCount > 0
             ? ` (${result.preservedCount} existing value${result.preservedCount === 1 ? "" : "s"} preserved)`

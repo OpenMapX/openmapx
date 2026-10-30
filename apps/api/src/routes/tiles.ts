@@ -1,13 +1,27 @@
 import { USER_AGENT } from "@openmapx/core";
+import {
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  readBoundedBinaryResponse,
+} from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   encodeRasterContributors,
   RASTER_CONTRIBUTORS_HEADER,
-  readRasterResponseBytes,
 } from "@openmapx/mobility-core/raster-contributors";
 import type { FastifyPluginAsync } from "fastify";
+import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { parseWebMercatorTileCoordinates } from "../utils/tile-coordinates.js";
+import {
+  discardUpstreamResponse,
+  normalizeUpstreamResponseStream,
+} from "../utils/upstream-response.js";
+
+const CYCLOSM_MAX_ZOOM = 20;
+const WAYMARKED_MAX_ZOOM = 18;
+const PNG_MEDIA_TYPES = ["image/png"] as const;
 
 const OSM_ATTRIBUTION: Attribution = {
   sourceId: "openstreetmap",
@@ -75,14 +89,6 @@ const TILE_PARAMS_SCHEMA = {
   },
 };
 
-function validateTileCoords(z: string, x: string, y: string): [number, number, number] | null {
-  const zn = Number(z);
-  const xn = Number(x);
-  const yn = Number(y);
-  if (![zn, xn, yn].every((v) => Number.isFinite(v) && v >= 0)) return null;
-  return [zn, xn, yn];
-}
-
 export const tilesRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
@@ -92,36 +98,95 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
   }>("/tiles/cyclosm/:z/:x/:y.png", {
     schema: { params: TILE_PARAMS_SCHEMA },
     handler: async (req, reply) => {
-      const coords = validateTileCoords(req.params.z, req.params.x, req.params.y);
+      const coords = parseWebMercatorTileCoordinates(
+        req.params.z,
+        req.params.x,
+        req.params.y,
+        CYCLOSM_MAX_ZOOM,
+      );
       if (!coords) {
         return reply.status(400).send({ message: "Invalid tile coordinates" });
       }
-      const [z, x, y] = coords;
+      const { z, x, y } = coords;
+      reply.header("Cache-Control", "no-store");
+      const requestAbort = bindRequestAbort(req, reply);
 
-      // Capture complete notices before either asynchronous acquisition. The
-      // chosen header travels with these successful bytes through HTTP caches.
-      const primaryReceipt = encodeRasterContributors(THUNDERFOREST_ATTRIBUTIONS);
-      const fallbackReceipt = encodeRasterContributors(CYCLOSM_ATTRIBUTIONS);
-      const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
-      if (thunderforestKey) {
-        const tfSub = nextThunderforestSubdomain();
-        const tfUrl = `https://${tfSub}.tile.thunderforest.com/cycle/${z}/${x}/${y}.png?apikey=${thunderforestKey}`;
+      try {
+        // Capture complete notices before either asynchronous acquisition. The
+        // chosen header travels with these successful bytes through HTTP caches.
+        const primaryReceipt = encodeRasterContributors(THUNDERFOREST_ATTRIBUTIONS);
+        const fallbackReceipt = encodeRasterContributors(CYCLOSM_ATTRIBUTIONS);
+        const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
+        if (thunderforestKey) {
+          const tfSub = nextThunderforestSubdomain();
+          const tfUrl = `https://${tfSub}.tile.thunderforest.com/cycle/${z}/${x}/${y}.png?apikey=${thunderforestKey}`;
+
+          try {
+            const tfResponse = await fetch(tfUrl, {
+              headers: { "User-Agent": USER_AGENT },
+              redirect: "error",
+              signal: withDeadline(requestAbort.signal, 10_000),
+            });
+
+            if (!tfResponse.ok) {
+              discardUpstreamResponse(tfResponse);
+              throw new Error(`Thunderforest returned ${tfResponse.status}`);
+            }
+
+            const { data } = await readBoundedBinaryResponse(tfResponse, {
+              maxBytes: MAX_RASTER_TILE_BYTES,
+              allowedContentTypes: PNG_MEDIA_TYPES,
+              label: "Thunderforest tile",
+            });
+            reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+            reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+            reply.header("X-Tile-Source", "thunderforest");
+            reply.header(RASTER_CONTRIBUTORS_HEADER, primaryReceipt);
+            reply.header(
+              "Access-Control-Expose-Headers",
+              [reply.getHeader("Access-Control-Expose-Headers"), RASTER_CONTRIBUTORS_HEADER]
+                .filter(Boolean)
+                .join(", "),
+            );
+            reply.type("image/png");
+            return reply.send(data);
+          } catch (error) {
+            req.log.warn({ err: error, z, x, y }, "Thunderforest tile fetch failed");
+          }
+        }
+
+        const baseUrl = envString(
+          "CYCLOSM_TILE_URL",
+          "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+        );
+
+        const sub = nextCyclOSMSubdomain();
+        const url = baseUrl
+          .replace("{s}", sub)
+          .replace("{z}", String(z))
+          .replace("{x}", String(x))
+          .replace("{y}", String(y));
 
         try {
-          const tfResponse = await fetch(tfUrl, {
+          const response = await fetch(url, {
             headers: { "User-Agent": USER_AGENT },
-            signal: AbortSignal.timeout(10_000),
+            signal: withDeadline(requestAbort.signal, 10_000),
           });
 
-          if (!tfResponse.ok) {
-            throw new Error(`Thunderforest returned ${tfResponse.status}`);
+          if (!response.ok) {
+            discardUpstreamResponse(response);
+            return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
           }
 
-          const tfBuffer = Buffer.from(await readRasterResponseBytes(tfResponse));
+          const { data } = await readBoundedBinaryResponse(response, {
+            maxBytes: MAX_RASTER_TILE_BYTES,
+            allowedContentTypes: PNG_MEDIA_TYPES,
+            label: "CyclOSM tile",
+          });
           reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
           reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-          reply.header("X-Tile-Source", "thunderforest");
-          reply.header(RASTER_CONTRIBUTORS_HEADER, primaryReceipt);
+          reply.header("X-Tile-Source", "cyclosm");
+          reply.header(RASTER_CONTRIBUTORS_HEADER, fallbackReceipt);
           reply.header(
             "Access-Control-Expose-Headers",
             [reply.getHeader("Access-Control-Expose-Headers"), RASTER_CONTRIBUTORS_HEADER]
@@ -129,50 +194,13 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
               .join(", "),
           );
           reply.type("image/png");
-          return reply.send(tfBuffer);
+          return reply.send(data);
         } catch (error) {
-          req.log.warn({ err: error, z, x, y }, "Thunderforest tile fetch failed");
+          req.log.warn({ err: error, z, x, y }, "CyclOSM fallback tile fetch failed");
+          return reply.status(502).send({ message: "All cycling tile providers unavailable" });
         }
-      }
-
-      const baseUrl = envString(
-        "CYCLOSM_TILE_URL",
-        "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
-      );
-
-      const sub = nextCyclOSMSubdomain();
-      const url = baseUrl
-        .replace("{s}", sub)
-        .replace("{z}", String(z))
-        .replace("{x}", String(x))
-        .replace("{y}", String(y));
-
-      try {
-        const response = await fetch(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: AbortSignal.timeout(10_000),
-        });
-
-        if (!response.ok) {
-          return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
-        }
-
-        const buffer = Buffer.from(await readRasterResponseBytes(response));
-        reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.header("X-Tile-Source", "cyclosm");
-        reply.header(RASTER_CONTRIBUTORS_HEADER, fallbackReceipt);
-        reply.header(
-          "Access-Control-Expose-Headers",
-          [reply.getHeader("Access-Control-Expose-Headers"), RASTER_CONTRIBUTORS_HEADER]
-            .filter(Boolean)
-            .join(", "),
-        );
-        reply.type("image/png");
-        return reply.send(buffer);
-      } catch (error) {
-        req.log.warn({ err: error, z, x, y }, "CyclOSM fallback tile fetch failed");
-        return reply.status(502).send({ message: "All cycling tile providers unavailable" });
+      } finally {
+        requestAbort.dispose();
       }
     },
   });
@@ -183,11 +211,18 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
   }>("/tiles/cycling-routes/:z/:x/:y.png", {
     schema: { params: TILE_PARAMS_SCHEMA },
     handler: async (req, reply) => {
-      const coords = validateTileCoords(req.params.z, req.params.x, req.params.y);
+      const coords = parseWebMercatorTileCoordinates(
+        req.params.z,
+        req.params.x,
+        req.params.y,
+        WAYMARKED_MAX_ZOOM,
+      );
       if (!coords) {
         return reply.status(400).send({ message: "Invalid tile coordinates" });
       }
-      const [z, x, y] = coords;
+      const { z, x, y } = coords;
+      reply.header("Cache-Control", "no-store");
+      const requestAbort = bindRequestAbort(req, reply);
 
       const baseUrl = envString(
         "WAYMARKED_CYCLING_TILE_URL",
@@ -204,18 +239,28 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
           headers: {
             "User-Agent": USER_AGENT,
           },
-          signal: AbortSignal.timeout(15_000),
+          signal: withDeadline(requestAbort.signal, 15_000),
         });
 
         if (!response.ok) {
+          discardUpstreamResponse(response);
           return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
+        const proxy = createBoundedBinaryProxyStream(response, {
+          maxBytes: MAX_RASTER_TILE_BYTES,
+          allowedContentTypes: PNG_MEDIA_TYPES,
+          label: "Waymarked Trails tile",
+        });
         reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
         reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.type("image/png");
-        return reply.send(buffer);
+        reply.type(proxy.contentType);
+        return reply.send(
+          normalizeUpstreamResponseStream(
+            proxy.body,
+            "Waymarked Trails tile provider returned an invalid response",
+          ),
+        );
       } catch (error) {
         req.log.warn({ err: error, z, x, y }, "Waymarked Trails tile fetch failed");
         return reply.status(502).send({ message: "Waymarked Trails tile provider unavailable" });

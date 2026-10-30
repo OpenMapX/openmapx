@@ -11,6 +11,8 @@ interface LayoutElements {
   bottomHeader: HTMLElement | null;
   isMobile: boolean;
   sheetClearance: number;
+  /** The speed badge rides the sheet by translation, so its margins exclude the clearance. */
+  speedLimitRidesSheet: boolean;
   sheetOccupiedHeight: number;
   mobilePanelPending: boolean;
 }
@@ -31,6 +33,7 @@ export function useJunctionPreviewBudget({
   bottomHeader,
   isMobile,
   sheetClearance,
+  speedLimitRidesSheet,
   sheetOccupiedHeight,
   mobilePanelPending,
 }: LayoutElements): number | null {
@@ -48,9 +51,12 @@ export function useJunctionPreviewBudget({
         return;
       }
       const speedHeight =
-        (speedLimit?.getBoundingClientRect().height ?? 0) + verticalMargins(speedLimit);
+        (speedLimit?.getBoundingClientRect().height ?? 0) +
+        verticalMargins(speedLimit) +
+        (speedLimitRidesSheet ? sheetClearance : 0);
       const headerHeight = bottomHeader?.getBoundingClientRect().height ?? 0;
-      // The speed badge's mobile margin already includes sheet clearance.
+      // The speed badge's height now includes sheet clearance, from its mobile
+      // margin or, while it rides the sheet, added above.
       // Desktop headers never shrink, even if their containing panel does.
       const minimumControls = isMobile
         ? Math.max(speedHeight, sheetClearance, sheetOccupiedHeight, headerHeight)
@@ -92,6 +98,7 @@ export function useJunctionPreviewBudget({
     bottomHeader,
     isMobile,
     sheetClearance,
+    speedLimitRidesSheet,
     sheetOccupiedHeight,
     mobilePanelPending,
   ]);

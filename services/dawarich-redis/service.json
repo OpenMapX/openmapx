@@ -1,10 +1,12 @@
 {
   "id": "dawarich-redis",
   "name": "Dawarich Redis",
-  "version": "7.4",
+  "version": "8.10",
   "description": "Dedicated transient job queue and cache for the managed Dawarich timeline.",
-  "license": "RSALv2 OR SSPL-1.0",
+  "license": "RSALv2 OR SSPL-1.0 OR AGPL-3.0",
   "quality": "built-in",
+  "platformNetwork": false,
+  "privateNetworks": ["dawarich"],
   "homepage": "https://redis.io/",
   "subjectData": {
     "storesPersonalData": true,
@@ -14,8 +16,8 @@
   },
   "container": {
     "image": "redis",
-    "tag": "7.4-alpine",
-    "digest": "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+    "tag": "8.10-alpine",
+    "digest": "sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537",
     "expose": [6379],
     "command": ["redis-server", "--save", "900", "1", "--save", "300", "10", "--appendonly", "no"],
     "memory": "512m",

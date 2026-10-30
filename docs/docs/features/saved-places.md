@@ -7,20 +7,19 @@ sidebar_position: 8
 # Saved places
 
 Signed-in users can keep their own places on the map. The **Save** button on any
-[place card](./places.md) adds that place to a list, and the **Saved** panel —
-opened from the hamburger menu — is where those places live. Saving is tied to
+[place card](./places.md) adds that place to a list, and the **Saved** panel, opened from the main menu, lets you manage them. Saving is tied to
 your account, so your lists follow you across devices.
 
 ## Lists and labels
 
 The Saved panel has two tabs:
 
-- **Lists** — collections of places. Every account starts with three built-in
+- **Lists**: collections of places. Every account starts with three built-in
   lists: **Favorites**, **Want to go**, and **Starred places**. You can also
   create your own lists, give them a name and an emoji icon, and add or remove
   places from a list's detail view. Each saved place can carry a free-text
   **note**.
-- **Labeled** — single, named places for fast recall, such as **Home** and
+- **Labeled**: single, named places for fast recall, such as **Home** and
   **Work**. Labeled places are set from the **Add a label** row on a place's
   Overview tab, and they surface near the top of search.
 
@@ -69,14 +68,12 @@ not be verified. They are excluded by default; include them only if that
 uncertainty is acceptable. **Not found** places have no usable coordinates and
 are skipped; expand the count to see their names. Check the result summary for
 imported places, duplicates, and any failures. Successful batches remain saved
-if a later batch fails. Files and extracted archive contents are limited to
-200 MB per selected file.
+if a later batch fails. Each selected file and its expanded archive contents are limited to
+200 MiB, with at most 10,000 archive entries.
 
 ## Exporting a list
 
-Any list can be exported to a standard geographic file, so you can take your
-places to another tool — a GPS device, a hiking app, Google Earth, or an OSM
-editor:
+Export a list to use its places in another map or geographic tool:
 
 | Format      | Best for                                             | File       |
 | ----------- | ---------------------------------------------------- | ---------- |
@@ -98,63 +95,57 @@ OpenMapX preserves captured source credits through GPX, KML, and GeoJSON export
 and re-import. Its exports also keep addresses separate from personal notes, so
 re-importing a list does not add generated credits or address lines to your notes.
 
-:::note[What exports — and what doesn't]
+:::note[Export scope]
 Export covers the places in a single **list**. Labeled places (Home, Work) and
 exporting every list at once aren't part of export yet.
 :::
-
-Export is server-side and dependency-free — it reads your own saved places and
-runs the converters in the API, so it works on any deployment that has the user
-database, with no extra service or credentials.
 
 ## How saved data is protected
 
 Signed-in lists, labels, names, coordinates, addresses, notes, and place metadata
 are stored as server-readable rows in this deployment's PostgreSQL database.
-TLS protects them in transit and every API request is scoped to the signed-in
-account, but the content is **not end-to-end encrypted**: the API and an operator
+Use HTTPS to protect them in transit. Private saved-data API requests are scoped
+to the signed-in account. The content is **not end-to-end encrypted**: the API and an operator
 with database access can read it. Database backups retain the rows that existed
 when each backup was made, until the operator's backup-retention period expires.
 
-This server-readable design is also what makes server-side export, search, and
-live sharing possible. The [user-data trust model](../developer/user-data-trust-model.md)
-explains the accepted boundary and the review gates for any future client
-encryption.
+See [Accounts and your data](./accounts-and-privacy.md) for data-access requests
+and account deletion, and the [user-data trust model](../developer/user-data-trust-model.md)
+for implementation details.
 
 ## Sharing a list
 
-Any list can be published through a **share link** — a short URL
+Any list can be published through a **share link**, a short URL
 (`https://<your-host>/s/…`) that anyone can open without an account. Open a
 list, press **Share**, and choose the link type:
 
-- **Live** — viewers always see the current list, including later edits.
-- **Snapshot** — viewers see the list exactly as it was when the link was
+- **Live**: viewers always see the current list, including later edits.
+- **Snapshot**: viewers see the list exactly as it was when the link was
   created.
 
 Links can be given an optional expiry (Never, 1, 7, or 30 days), **reset**
 (the old URL stops working immediately and a new one is issued), or **deleted**
-at any time — revocation is immediate and responses are strictly non-cacheable
+at any time. Revocation is immediate and responses are non-cacheable
 (`Cache-Control: no-store`).
 
-A few quotas and security properties apply:
+Each account can hold 100 share links, including expired links until deleted.
+Snapshot lists support at most 1,000 places. Live list reads also return at most
+1,000 entries, so use smaller lists when sharing a large collection.
 
-- **Quotas**: Each account may hold up to 100 stored share links (`MAX_SHARES_PER_USER = 100`),
-  including expired links until they are deleted.
-  Snapshot links support lists up to 1,000 places (`MAX_SNAPSHOT_PLACES = 1000`).
-- **Cryptographic tokens**: Share URLs use 32 random bytes (43 base64url characters).
-  Tokens are stored in the database exclusively as SHA-256 hashes; the database never
-  stores the raw token.
-- **Privacy**: Share pages are excluded from search-engine indexing (`noindex, nofollow`)
-  and never expose your username, email, or account ID — only the list name, emoji icon,
-  and place entries. The server must still read those entries to render a live share,
-  and stores snapshot content as server-readable JSON; hashing the bearer token does
-  not encrypt the shared payload.
+Anyone with the URL can read the shared content. The page omits account identity
+and asks search engines not to index it; that does not prevent recipients from
+copying or forwarding it. Place names, notes, addresses, and locations can still
+identify you. Review them before creating a link.
+
+The database stores a hash of the bearer token, while the list or snapshot
+content remains readable to the server. A revoked link cannot retract copies a
+recipient already saved.
 
 Manage every link you've created under **Account settings → Shared links**.
 
 ## Related features
 
-- **[Places & enrichment](./places.md)** — the place card and its **Save**
+- **[Places & enrichment](./places.md)**: the place card and its **Save**
   button.
-- **[Search & autocomplete](./search.md)** — labeled places (Home, Work) surface
+- **[Search & autocomplete](./search.md)**: labeled places (Home, Work) surface
   near the top of search results.

@@ -6,29 +6,23 @@ sidebar_position: 2
 
 # Development setup
 
-This page sets up a local environment for working **on** OpenMapX. It is
-different from [Getting started](../install/getting-started.md), which deploys
-the full stack as Docker containers. Here, you run the two application
-processes — the Next.js frontend and the Fastify API — directly on your host
-with hot reload, and back them with just two infrastructure containers,
-PostGIS and Redis.
+Run the Next.js web app and Fastify API on your host with hot reload, backed by
+local PostGIS and Valkey containers. This setup is for developing OpenMapX.
+For a container deployment, follow [Getting started](../install/getting-started.md).
 
-If you only want to deploy OpenMapX, follow [Getting started](../install/getting-started.md)
-instead. If you want to understand how the pieces fit together first, read
-[How it works](../overview/how-it-works.md).
+For the runtime model, read [How it works](../overview/how-it-works.md).
 
 ## Prerequisites
 
-You need the same host tooling as a deployment — Node.js, pnpm, and a Docker
-Engine with the Compose v2 plugin. The exact versions are listed under
+Install Node.js, pnpm, and Docker Engine with the Compose v2 plugin. The exact versions are listed under
 [Requirements](../install/requirements.md) and pinned in the repo's root
 `package.json` (`engines.node` and `packageManager`). The `openmapx` CLI runs
 its TypeScript sources directly, so there is no global install and no build step
 to bootstrap.
 
-You will not install PostgreSQL or Redis on the host. The CLI starts them as
-Docker containers from the same manifests a production deployment uses, so your
-dev database and cache never drift from production versions.
+The CLI starts PostgreSQL and Valkey from the repository service manifests.
+Keep ports `5432` and `6379` free. Existing containers and volumes may still use
+older images or credentials; check their status when reusing an environment.
 
 ## Clone and install
 
@@ -38,9 +32,11 @@ cd openmapx
 pnpm install
 ```
 
-A single `pnpm install` at the repo root wires up the whole workspace — every
-app, package, and integration — plus the `openmapx` CLI, which you invoke as
-`pnpm openmapx <command>` from the root.
+The root install includes applications, shared packages, integrations, and the
+`openmapx` CLI. Run `pnpm openmapx <command>` from the repository root.
+The documentation site has a separate dependency set; install it with
+`pnpm -C docs install --frozen-lockfile` when working on docs or preparing
+full local verification.
 
 ## Start the database and cache
 
@@ -48,24 +44,31 @@ The repo ships a `dev` preset that boots only the two infrastructure services
 the host-run app actually needs: `postgis` and `redis`. Both come from the same
 images a deployment uses, so versions stay aligned.
 
-First, set a database password. The PostGIS container refuses to boot without
-one — there is no default. The Docker stack reads exactly one environment file,
-`infra/docker/.env`, so copy the example and set the password there:
+The CLI renders the persisted service selection before starting the requested
+subset. Its secret validation applies to the dev preset too. Create the
+renderer environment and protect it:
 
 ```bash
 cp infra/docker/.env.example infra/docker/.env
+chmod 600 infra/docker/.env
+pwd
 ```
 
-Open `infra/docker/.env` and set `POSTGRES_PASSWORD`. For local development a
-simple value like `postgres` is fine:
+Edit `infra/docker/.env` before starting services:
 
-```bash
-POSTGRES_PASSWORD=postgres
-```
+| Setting                   | Development value                                         |
+| ------------------------- | --------------------------------------------------------- |
+| `DOMAIN`                  | `localhost`                                               |
+| `OPENMAPX_HOST_DIR`       | Absolute checkout path printed by `pwd`                   |
+| `POSTGRES_PASSWORD`       | Unique password of at least 24 characters; not `postgres` |
+| `BETTER_AUTH_SECRET`      | Separate random secret of at least 32 characters          |
+| `DATA_MANAGER_AUTH_TOKEN` | Separate random token of at least 32 characters           |
 
-The other variables in that file (`DOMAIN`, `OPENMAPX_HOST_DIR`,
-`BETTER_AUTH_SECRET`, and so on) are only consumed by the full self-hosting
-stack. The `dev` preset boots only PostGIS and Redis and ignores them.
+Generate each credential separately with `openssl rand -hex 32`. Keep the
+values stable when reusing database volumes. The last two credentials and the
+host path are needed to validate/render the configuration even though this
+preset starts only PostgreSQL and Valkey. The CLI loads this file itself; it
+does not export the values to your shell or the host-run API.
 
 Now start the two containers:
 
@@ -73,9 +76,10 @@ Now start the two containers:
 pnpm openmapx services start --preset dev
 ```
 
-Both bind their ports to `127.0.0.1` — PostgreSQL on `5432`, Redis on `6379` —
-and persist data in named Docker volumes, so your database survives restarts.
-A few useful follow-ups:
+Both bind to `127.0.0.1`: PostgreSQL on `5432` and Valkey on `6379`.
+They use named Docker volumes, so data survives container restarts. Check that
+PostGIS is healthy before migrating. If startup fails, inspect its logs and
+check the configured password and port availability:
 
 ```bash
 pnpm openmapx services status              # show running containers
@@ -91,46 +95,76 @@ The API reads its own environment file, `apps/api/.env`. Copy the example:
 cp apps/api/.env.example apps/api/.env
 ```
 
-The defaults already match the `dev` preset — `DATABASE_URL` points at
-`postgres:postgres@localhost:5432/openmapx`, `REDIS_URL` at
-`redis://localhost:6379`, and `REDIS_PASSWORD_FILE` at
-`../../infra/docker/secrets/redis-password` (the ACL secret rendered automatically
-when starting the dev preset). If you set `POSTGRES_PASSWORD` to anything other than
-`postgres`, update the password segment of `DATABASE_URL` to match. Set a
-`BETTER_AUTH_SECRET` (any string of at least 32 characters works for dev; the
-example notes the `npx @better-auth/cli@latest secret` generator).
+In `apps/api/.env`, replace the example password in `DATABASE_URL` with the
+`POSTGRES_PASSWORD` from `infra/docker/.env`. Keep the database/user and host
+consistent with the dev preset:
 
-Apply the database schema and start the server with hot reload:
+```dotenv
+DATABASE_URL=postgresql://postgres:YOUR_GENERATED_PASSWORD@localhost:5432/openmapx
+```
+
+Replace `YOUR_GENERATED_PASSWORD`; it is not a working credential. Hexadecimal
+output from `openssl rand -hex 32` needs no URL escaping. Other passwords may
+need percent-encoding in a connection URL.
+
+The cache defaults are `REDIS_URL=redis://localhost:6379` and
+`REDIS_PASSWORD_FILE=../../infra/docker/secrets/redis-password`. The file is
+created when the CLI renders the authenticated Valkey service.
+
+Copy the `BETTER_AUTH_SECRET` value into `apps/api/.env` as well. Generate a
+separate vault key:
+
+```bash
+openssl rand -hex 32
+```
+
+Use that value for `OPENMAPX_SECRETS_KEY` in `apps/api/.env`; it must contain
+exactly 64 hexadecimal characters. The integration host refuses startup without
+it when discovered integrations declare vault-backed credentials. Keep the auth
+and vault keys stable so existing sessions and encrypted credentials remain
+usable. The host API does not need the data-manager token unless you also
+configure it to call a data-manager.
+
+Apply the committed migrations to the development database and start the server
+with hot reload. Run these commands from the repository root:
 
 ```bash
 cd apps/api
-pnpm db:push
+pnpm exec node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate
 pnpm dev
 ```
 
-The API listens on `http://localhost:3001`. `pnpm dev` runs the server under
-`node --watch`, so it reloads on source changes — including edits to
+The migration command explicitly loads `.env`; bare `drizzle-kit migrate`
+otherwise uses the exported `DATABASE_URL` or the config's default connection.
+The API also applies pending committed migrations during startup and refuses to
+start if a required migration fails. It listens on `http://localhost:3001`. `pnpm dev` runs the server under
+`node --watch`, so it reloads imported source changes, including edits to
 integrations under `integrations/`.
 
-The package exposes a few schema helpers worth knowing:
+The package exposes a few schema helpers. Use the committed migrations for a
+working development database: `db:push` synchronizes the declared schema but does
+not replay custom SQL migrations.
 
 ```bash
 pnpm db:generate    # generate a migration from schema changes
-pnpm db:push        # push the schema directly (dev shortcut)
+pnpm db:push        # schema-only experiment on a disposable database
 pnpm db:studio      # open Drizzle Studio, a visual database browser
 pnpm auth:generate  # regenerate the Better Auth schema
 ```
 
 ## Run the web app
 
-The frontend reads a Next.js env file. Copy the example to `.env.local`:
+Open a second terminal at the repository root. The frontend reads a Next.js env
+file; copy the example to `.env.local`:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-The one value that matters for local development is `NEXT_PUBLIC_API_URL`, which
-already defaults to `http://localhost:3001` — the API you just started. The
+Keep `NEXT_PUBLIC_API_URL=http://localhost:3001` for the API started above.
+Use `http://localhost:3000` for the web app, matching the API's default
+`CORS_ORIGIN` and authentication origin configuration. If you change either
+origin or port, update those settings together. The
 default OpenMapX style uses keyless OpenFreeMap when the API has no MapTiler key.
 A configured server-side `MAPTILER_KEY` in `apps/api/.env` or admin settings
 selects MapTiler in `auto` mode; the key never enters the browser bundle. Override
@@ -153,19 +187,21 @@ token is bundled into the browser JavaScript.
 
 Mapillary is available as an opt-in extra: enable it in the admin panel and set
 its access token, and its coverage joins the layer. Review Mapillary's Terms
-first — they restrict use in connection with real-time navigation or route
+first; they restrict use in connection with real-time navigation or route
 guidance.
 :::
 
 ## Run both at once
 
-From the repo root, `turbo` can drive both dev servers together:
+From the repository root, filter the development task to the web and API:
 
 ```bash
-pnpm dev
+pnpm dev --filter=web --filter=@openmapx/api
 ```
 
-This runs the `dev` task across the workspace (web on `3000`, API on `3001`).
+This starts web on `3000` and API on `3001`. Bare `pnpm dev` also selects
+`ops-agent`, `transitous-runner`, and `data-manager`, which require their own
+configuration. Use the filtered command for this two-process setup.
 Running each app in its own terminal is equally fine, and often clearer when you
 are watching one of them closely.
 
@@ -178,35 +214,37 @@ are watching one of them closely.
 
 ## Optional self-hosted backends
 
-The `dev` preset only boots PostGIS and Redis. Features that depend on
-self-hosted routing, geocoding, transit, or OSM queries need their services
-running too. Start them through the same CLI, on top of the dev preset:
+The dev preset starts only PostgreSQL and Valkey. Local routing, geocoding,
+transit, and OSM-query engines require explicit service selection and prepared
+source data. `services start <id>` does not enable an unselected service;
+`services enable <id>` changes the persisted selection. Follow
+[Managing services](../install/managing-services.md) and
+[Preparing data](../install/preparing-data.md) before starting an engine.
 
-```bash
-pnpm openmapx services start valhalla osrm   # routing
-pnpm openmapx services start motis           # transit
-pnpm openmapx services start --preset routing # or a whole preset
-```
+There is also a network boundary: the service registry resolves a bound engine
+to its Docker hostname, such as `http://valhalla:8002`. The host-run API above
+cannot resolve that name. An integration's endpoint override may have lower
+precedence than its service binding, so setting a loopback URL alone does not
+repair an active Docker binding.
 
-Without them, integrations that require those backends report as unhealthy or
-unconfigured, but the rest of the app works against external APIs. Bringing up
-self-hosted engines also involves downloading and building source data — see
-[Getting started](../install/getting-started.md) and the
-[CLI reference](./cli-reference.md) for the data and build commands. For how
-services, integrations, and capabilities relate, see
-[Architecture](./architecture.md) and the
-[integration system](./integration-system.md).
+For development that uses bound engines, run the API and engines together on
+the generated Docker network using the
+[managed deployment workflow](../install/getting-started.md). Use the host-run
+setup for work against separately supported hosted providers. Verify each
+adapter's endpoint and binding precedence before configuring a different
+arrangement. See [Architecture](./architecture.md) and the
+[integration system](./integration-system.md) for the resolution contract.
 
 ## Everyday commands
 
-All of these run from the repo root and fan out across the workspace via
-`turbo`. They are the same checks CI runs.
+Run these from the repository root. Build and type-check commands use Turbo;
+lint, formatting, and Vitest run through their own root scripts.
 
 ```bash
 pnpm build         # build every app and package
 pnpm check-types   # type-check with tsc, no emit
-pnpm lint          # Biome lint + check (also runs translation checks)
-pnpm format        # format the whole repo with Biome (writes in place)
+pnpm lint          # Biome, Markdown/YAML formatting, and translations
+pnpm format        # Biome + Markdown/YAML formatting (writes in place)
 pnpm test          # run the Vitest suite once
 ```
 
@@ -215,26 +253,45 @@ Tooling notes:
 - **Biome** handles both linting and formatting (config in `biome.json`):
   two-space indent, double quotes, a 100-column line width, and import
   organization. `pnpm format` rewrites files; `pnpm lint` checks without
-  writing.
+  writing. Prettier formats Markdown and YAML; Biome owns the other supported
+  source files.
 - **Vitest** runs the tests from a single root config (`vitest.config.ts`),
   split into two projects: `node` (API, integrations, packages, services) and
   `web` (the Next.js app and React-bound packages, in jsdom). All test commands
   run from the repo root:
-  - `pnpm test` — run the whole suite once
-  - `pnpm discovery-eval --out /tmp/openmapx-eval` — run the versioned offline
+  - `pnpm test`: run the whole suite once
+  - `pnpm discovery-eval --out /tmp/openmapx-eval`: run the versioned offline
     [discovery evaluation](discovery-evaluation.md) and save a comparison report
-  - `pnpm test:watch` — watch mode
-  - `pnpm test:coverage` — run with a V8 coverage report (written to `coverage/`)
-  - `pnpm test --project web` / `--project node` — scope to one environment
-  - `pnpm exec vitest run <path-or-name>` — scope to specific files (e.g.
+  - `pnpm test:watch`: watch mode
+  - `pnpm test:coverage`: run with a V8 coverage report (written to `coverage/`)
+  - `pnpm test --project web` / `--project node`: scope to one environment
+  - `pnpm exec vitest run <path-or-name>`: scope to specific files (e.g.
     `pnpm exec vitest run packages/core`)
 
-  There are intentionally no per-package Vitest configs or `test` scripts —
-  scope a run with a path/name filter instead of `pnpm -C <pkg> test`.
+  Scope Vitest with a path/name filter from the repository root. The native
+  mobile app has a separate Jest and native test workflow, described below.
 
 - **Type-checking** is per-package via `pnpm check-types`. The API and web both
   type-check their integration and service-worker configs in addition to the
   main project.
+
+## Native mobile development
+
+`apps/mobile` is an Expo native host with its own platform setup. It is not
+started by `pnpm dev`. Use the [mobile architecture](./mobile-architecture.md)
+and [mobile release guide](./mobile-release.md) for configuration, generated
+native projects, permissions, and device qualification.
+
+```bash
+pnpm mobile:doctor          # check the Expo/native toolchain
+pnpm mobile:verify          # Jest, native tests, types, and doctor
+pnpm mobile:prebuild:check   # verify clean native generation separately
+pnpm mobile:bundle:check    # check the background bundle separately
+```
+
+These checks require the platform tooling described in the mobile guides. A
+passing portable Vitest run does not establish native build, permission,
+background-location, or physical-device behavior.
 
 ## Commit conventions
 
@@ -251,21 +308,25 @@ fix(transit): handle empty MOTIS itinerary response
 docs(developer): document the dev setup flow
 ```
 
-A Husky `pre-commit` hook also runs the lint, type-check, legal-table, data-flow,
-and test gates before each commit, so a clean commit means those checks already
-passed locally. Both hooks are installed automatically by the `prepare` script
-the first time you run `pnpm install`.
+The Husky `pre-commit` hook checks staged source files with Biome and staged
+Markdown/YAML with Prettier. It checks an index snapshot without editing or
+staging files. The `commit-msg` hook checks the commit message. A successful
+commit does not establish that types, tests, or policy checks pass; run the
+checks appropriate to your change. There is no pre-push gate. Hooks are installed
+by the root `prepare` script during `pnpm install`. See the
+[contribution quality bar](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#quality-bar)
+for full local verification and checks that run separately.
 
 ## Where to go next
 
-- **[Map comparison baseline](./map-comparison-baseline.md)** — fixed German
+- [Map comparison baseline](./map-comparison-baseline.md): fixed German
   camera, search and place-sheet checks for visual and discovery changes.
 
-- **[Architecture](./architecture.md)** — how the services, integrations, and
+- [Architecture](./architecture.md): how the services, integrations, and
   capability bindings fit together.
-- **[Integration system](./integration-system.md)** — the manifest schema and
+- [Integration system](./integration-system.md): the manifest schema and
   the typed contracts integrations implement.
-- **[Writing an integration](./writing-an-integration.md)** — a hands-on guide
+- [Writing an integration](./writing-an-integration.md): a hands-on guide
   to building your own feature.
-- **[CLI reference](./cli-reference.md)** — every `pnpm openmapx` command,
+- [CLI reference](./cli-reference.md): every `pnpm openmapx` command,
   including the data and service-lifecycle ones this page only touched on.

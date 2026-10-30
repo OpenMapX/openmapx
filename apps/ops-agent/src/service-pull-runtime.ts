@@ -226,7 +226,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
             operation.expectedConfigurationRevisionId
           )
             throw Error("Pull configuration revision changed");
-          const directory = join(options.infraDir, ".ops-agent-releases");
+          const directory = services.releaseStatePaths(options.infraDir).store;
           await mkdir(directory, { mode: 0o700, recursive: true });
           const lock = await services.acquireReleaseStoreLock(directory);
           try {
@@ -301,7 +301,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
                   options.infraDir,
                   operation.expectedConfigurationRevisionId,
                 ),
-                composeReleasePath: join(options.infraDir, "docker-compose.release.yml"),
+                composeReleasePath: services.releaseStatePaths(options.infraDir).overlay,
               });
               const config = JSON.parse(
                 (

@@ -3,6 +3,7 @@ import {
   type KnowledgeResult,
   mergeKnowledgeResults,
   type Place,
+  type RequestJsonScope,
 } from "@openmapx/core";
 import { getIntegrationsByDomain } from "../../integration-host.js";
 import { getGatedIntegrationIds } from "../data-use-policy.js";
@@ -36,6 +37,8 @@ export async function getPlaceKnowledge(
   options?: {
     cardPhoto?: boolean;
     signal?: AbortSignal;
+    /** Request-local Wikimedia JSON scope owned by one full enrichment; never for card-photo or signalled work. */
+    jsonScope?: RequestJsonScope;
     onError?: (error: unknown) => void;
     onPhotos?: (photos: NonNullable<KnowledgeResult["photos"]>) => void;
   },
@@ -55,6 +58,7 @@ export async function getPlaceKnowledge(
           ids: place.ids,
           cardPhoto: options?.cardPhoto,
           signal: options?.signal,
+          ...(options?.jsonScope ? { jsonScope: options.jsonScope } : {}),
         })
         .then(
           (result) => {

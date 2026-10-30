@@ -9,7 +9,7 @@ const COMMUNITY_SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
  * manifest schema: a plain service id, a community quality label, an image
  * pinned by digest, and a configuration schema the trusted renderer accepts.
  * The operations agent applies these rules before it installs a repository and
- * whenever it reads `services/.community`; the API applies them again to the
+ * whenever it reads its community store; the API applies them again to the
  * manifests the agent reports.
  */
 export function communityServiceManifestProblems(raw: unknown): string[] {

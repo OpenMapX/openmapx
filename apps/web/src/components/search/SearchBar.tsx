@@ -93,6 +93,7 @@ import {
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
+import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET } from "@/lib/layout";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useHydrated } from "@/lib/useHydrated";
@@ -1025,10 +1026,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         onBlurCapture={handleBlur}
         sx={{
           position: "absolute",
-          top: "calc(12px + var(--omx-safe-top))",
-          left: "calc(12px + var(--omx-safe-left))",
+          top: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-top))`,
+          left: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-left))`,
           right: {
-            xs: "calc(12px + var(--omx-safe-right))",
+            xs: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-right))`,
             sm: "auto",
           },
           // Above CategoryChips (z-index 10) so the dropdown covers the chip
@@ -1060,7 +1061,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
             sx={{
               display: "flex",
               alignItems: "center",
-              height: 48,
+              height: SEARCH_BAR_HEIGHT,
               px: 0.5,
               // The app-wide MuiIconButton override sets borderRadius: 8 (a
               // rounded square) which clashes with the pill-shaped search bar.

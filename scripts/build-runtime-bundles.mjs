@@ -48,6 +48,15 @@ export const RUNTIME_BUNDLES = {
       "configuration-handoff-main": "apps/ops-agent/src/configuration-handoff-main.ts",
       cli: "packages/cli/src/index.ts",
     },
+    // The agent and its fixed CLI take built-in service manifests, and the
+    // files those services mount, from copies this bundle embeds, not from
+    // the host checkout.
+    replaceModules: {
+      "packages/core/src/services/embedded-built-in-services.ts":
+        "packages/core/src/services/embedded-built-in-services.bundle.ts",
+      "packages/core/src/services/embedded-service-files.ts":
+        "packages/core/src/services/embedded-service-files.bundle.ts",
+    },
   },
   "data-manager": {
     tsconfig: "services/data-manager/tsconfig.json",
@@ -225,10 +234,29 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   const sideEffectModules = new Set(
     (config.sideEffectModules ?? []).map((path) => join(absoluteRoot, path)),
   );
+  // A module the bundle replaces with another, for code that must differ
+  // between the bundle and source: an environment variable could be set by
+  // whoever controls the deployment, the bundle's contents cannot.
+  const replacedModules = new Map(
+    Object.entries(config.replaceModules ?? {}).map(([from, to]) => [
+      join(absoluteRoot, from),
+      join(absoluteRoot, to),
+    ]),
+  );
+  for (const [from, to] of replacedModules) {
+    if (!existsSync(from) || !existsSync(to)) {
+      throw new Error(
+        `Runtime bundle ${image} rejected:\n  replaceModules names ${relative(absoluteRoot, existsSync(from) ? to : from)}, which does not exist`,
+      );
+    }
+  }
+  const replaced = new Set();
   // Bundled code is evaluated after every npm import of its bundle. An import
   // of another entry's source therefore loads that entry's output as its own
   // module, which keeps its place in the evaluation order.
-  const workspaceModule = (path) => {
+  const workspaceModule = (resolvedPath) => {
+    const path = replacedModules.get(resolvedPath) ?? resolvedPath;
+    if (path !== resolvedPath) replaced.add(resolvedPath);
     const entry = entryNames.get(path);
     if (entry) return { path: `./${entry}.mjs`, external: true };
     return sideEffectModules.has(path) ? { path } : { path, sideEffects: false };
@@ -407,6 +435,15 @@ export async function buildRuntimeBundle(root, image, config = RUNTIME_BUNDLES[i
   for (const path of config.sideEffectModules ?? []) {
     if (!included.has(join(absoluteRoot, path))) {
       problems.push(`sideEffectModules lists ${path}, which the bundle does not include`);
+    }
+  }
+  // A replacement nothing imports would leave the bundle silently running the
+  // source variant once the import moves.
+  for (const [from, to] of replacedModules) {
+    if (!replaced.has(from) || !included.has(to)) {
+      problems.push(
+        `replaceModules replaces ${relative(absoluteRoot, from)}, which the bundle does not include`,
+      );
     }
   }
   const installed = await runtimePackages(absoluteRoot, outdir, externals, problems);

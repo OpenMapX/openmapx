@@ -6,22 +6,22 @@ sidebar_position: 9
 
 # Navigation performance runbook
 
-Sustained turn-by-turn navigation is the hardest thing OpenMapX asks of a
-phone: the screen stays on, the GPS radio runs continuously, the map re-renders
-every frame, and the app keeps fetching tiles and live conditions. When that
-combination gets too expensive the device — not the app — reacts: Android
-raises a thermal warning, throttles the CPU/GPU, dims the display, sometimes
-shuts mobile data down, and in the worst case kills the browser tab.
+Use this runbook to compare navigation changes on the same physical phone.
+Record operation counts, frame pacing, battery use, and observed OS behavior
+under fixed conditions. Portable tests and simulator runs cover different
+contracts and do not establish physical-device thermal performance.
 
-No unit test can see any of that. This page is the protocol for measuring it, so
-that a navigation optimization is judged against a captured baseline rather than
-against a plausible-sounding diff.
+The HUD below measures the browser navigation shell. The Expo host has separate
+[native architecture](./mobile-architecture.md) and
+[release/device checks](./mobile-release.md); a passing browser run does not
+qualify background native guidance.
 
-:::info The instrument is not telemetry
+:::info[Local QA measurements]
 The HUD described here is a QA aid. It is off unless you put `?navperf=1` in the
 URL, it collects only bounded aggregates in memory, and it writes a file only
-when you click **export**. Nothing is uploaded, and no coordinates, route
-geometry, search terms or request URLs are ever retained.
+when you click **export**. Nothing is uploaded. The automatic counters retain no coordinates, route
+geometry, search terms, or request URLs. Review manually entered metadata
+before sharing the export.
 :::
 
 ## The QA HUD
@@ -37,23 +37,23 @@ left, next to the simulator panel (`?navsim=1`), with:
 | **export**           | Downloads the current aggregates as `navperf-run.json`.                               |
 | **meta**             | Reveals the scenario picker and the manual test-metadata fields.                      |
 
-The readout refreshes once per second — deliberately, so the HUD is not itself a
-per-frame workload.
+The readout refreshes once per second. The measurement frame loop runs
+separately while recording is active.
 
 ### What it records
 
-- **frames** — frame-to-frame deltas from a `requestAnimationFrame` loop:
+- frames: frame-to-frame deltas from a `requestAnimationFrame` loop:
   implied FPS, the p95 over the retained window, and how many frames exceeded
   32 ms and 50 ms.
-- **long tasks** — browser `longtask` entries (count, total, longest). Shows
+- long tasks: browser `longtask` entries (count, total, longest). Shows
   `n/a` on browsers without that entry type; use Chrome for a real run.
-- **map** — MapLibre `render`, `move`, `moveend` and `idle` event counts.
-- **progress** — navigation-store publications, split into "publications that
+- map: MapLibre `render`, `move`, `moveend` and `idle` event counts.
+- progress: navigation-store publications, split into "publications that
   changed the progress object" over "all store notifications".
-- **net** — resource-timing counts, total duration, transfer and encoded bytes
+- net: resource-timing counts, total duration, transfer and encoded bytes
   bucketed into `tile`, `road-conditions`, `routing` and `other`. Each URL is
   classified on arrival and thrown away immediately.
-- **metadata** — device model, browser version, build SHA, brightness percent,
+- metadata: device model, browser version, build SHA, brightness percent,
   network type and scenario. All typed in by you; nothing is sniffed from the
   device.
 
@@ -70,11 +70,11 @@ DevTools Memory panel for heap questions instead of adding a counter here.
 Always compare like with like. The four canonical runs are also listed inside
 the simulator panel so they are visible while you set a run up:
 
-1. **city** — 10 minutes at 14 m/s on a normal route.
-2. **highway** — 10 minutes at 33 m/s on a normal route.
-3. **city + reroute** — 10 minutes of city driving containing exactly one
+1. city: 10 minutes at 14 m/s on a normal route.
+2. highway: 10 minutes at 33 m/s on a normal route.
+3. city + reroute: 10 minutes of city driving containing exactly one
    off-route/reroute sequence (use the simulator's off-route toggle).
-4. **stationary** — 5 minutes parked in follow mode.
+4. stationary: 5 minutes parked in follow mode.
 
 Use the **same** recording (record/replay in the `?navsim=1` panel) or the same
 generated route before and after an optimization. The simulator shows the loaded
@@ -92,7 +92,7 @@ panel carries a permanent `perf runs stay at 1×` reminder for this reason.
 ### Build and serve
 
 1. Build the production PWA (`pnpm build` in `apps/web`, or deploy the build you
-   want to measure) — never measure a dev build; hot reload, source maps and
+   want to measure). Avoid dev builds: hot reload, source maps, and
    React development mode dominate the profile.
 2. Serve it over HTTPS to the phone (staging deployment, or a TLS tunnel to the
    local build). Geolocation and service workers need a secure context.
@@ -102,16 +102,16 @@ panel carries a permanent `perf runs stay at 1×` reminder for this reason.
 
 Everything below stays identical across the before and after run:
 
-- **brightness** — a fixed percentage, auto-brightness off. Display power
+- brightness: a fixed percentage, auto-brightness off. Display power
   usually dominates the total.
-- **screen** — on for the entire run, device not in a case, resting on the same
+- screen: on for the entire run, device not in a case, resting on the same
   surface (a case or a car mount changes heat dissipation more than most code
   changes do).
-- **network** — the same radio type (record `4G`, `5G` or `Wi-Fi`), same
+- network: the same radio type (record `4G`, `5G` or `Wi-Fi`), same
   location, comparable signal strength.
-- **route, zoom, pitch, overlays** — same route, same camera mode, same layers
+- route, zoom, pitch, overlays: same route, same camera mode, same layers
   enabled.
-- **battery** — start in a comparable state of charge (for example 80–90%), not
+- battery: start in a comparable state of charge (for example 80 to 90%), not
   charging. Charging heats the battery and invalidates the thermal comparison.
 
 Run each scenario twice: once with live traffic/conditions enabled and once with
@@ -120,16 +120,18 @@ data plane or the render loop is the cost driver.
 
 ### Instrument and trace
 
-1. Connect the phone over USB and open `chrome://inspect` on the host
-   (Android Chrome remote inspection; enable USB debugging on the device).
-2. Start navigation, click **start** in the HUD, and let the session warm up for
-   **five minutes** before recording anything. Early frames include style load,
-   tile fill and service-worker warm-up, which are not the steady state you care
-   about.
-3. Record a DevTools **Performance** trace covering at least **two minutes**
-   after the warm-up. Save the trace file.
-4. Let the session run to the scenario's full length, then click **export** and
-   save `navperf-run.json` next to the trace.
+1. For an Android Chrome diagnostic trace, enable remote inspection and open
+   `chrome://inspect` on the host. Record whether debugging and a cable were
+   attached. A charging USB trace is a separate diagnostic run; repeat thermal
+   and battery measurements unplugged, with the same debugger state before/after.
+2. Start navigation and let the session warm up for five minutes. Click
+   **start**, then **reset** if you recorded the warm-up. The exported window
+   should cover the declared scenario, not initial style/tile loading.
+3. In the diagnostic run, record a DevTools **Performance** trace for at least
+   two minutes of the measured scenario. Save it privately for inspection.
+4. Complete the scenario, click **stop**, then **export**. Save
+   `navperf-run.json` with the run conditions and any separate diagnostic trace.
+   The 30-minute release run below is additional to the shorter scenarios.
 
 ### Record the physical outcome
 
@@ -141,32 +143,36 @@ For each run, write down:
 - whether the browser tab was killed or reloaded;
 - the trace filename, the exported JSON filename, and the build SHA.
 
-:::danger Never attach a navigation recording to a public issue
-A `?navsim=1` recording contains the real GPS fix stream and the route geometry
-of an actual trip. The `navperf` export is safe to attach; the recording is not.
+:::danger[Review artifacts before sharing]
+A `?navsim=1` recording can contain a real trip's GPS fixes and route geometry.
+Keep it private. DevTools traces can also include request URLs and private
+inputs. The HUD export contains bounded counters and manually entered metadata;
+inspect that metadata before attaching it to a public issue.
 :::
 
 ## Operation-count budgets
 
-Elapsed-time thresholds are worthless across devices — a flagship and a
-mid-range phone disagree by a factor of five on identical code. Operation counts
-do not vary with device speed, so those are the CI-adjacent budgets. Each is
-introduced by a specific optimization step and is expected to hold from then on.
+Use operation counts to detect redundant work independently of device speed.
+Elapsed time still matters on the target device. The budgets below are
+maintenance contracts, not evidence that an arbitrary phone passes the thermal
+gate. Read the owning implementation and its adjacent tests when changing one.
 
-| Budget                                                                                                                                                                                        | From            |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| One `Marker.addTo` per map/session; one marker attachment per map/session; no perpetual no-fix/settled RAF loop; unchanged moving-frame camera/puck cadence                                   | 021             |
-| One navigation-store publication per accepted real fix                                                                                                                                        | 022             |
-| No full route snapshot or route-package geometry scan between checkpoints                                                                                                                     | 023             |
-| No full active-route GeoJSON source upload on progress-only changes                                                                                                                           | 025             |
-| One road-condition request/polling/projection owner per route/window revision across engine, alerts and crowd prompt                                                                          | 026             |
-| Bounded viewport road-condition scheduler evaluations regardless of MapLibre `moveend` frequency                                                                                              | 027             |
-| No cold dialog/menu/root render on progress-only updates                                                                                                                                      | 028             |
-| Sub-quadratic flow-overlap operation growth                                                                                                                                                   | 029             |
-| No production module invokes legacy `snapToRoute`; prepared matcher construction happens once per stable geometry or once per ephemeral batch, never inside a point/sample/waypoint/stop loop | 024 / 026 / 029 |
+| Budget                                                                                                                                             | Implementation and regression entry point                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| One marker attachment per map/session; no perpetual no-fix or settled animation loop; preserve moving camera/puck cadence                          | `apps/web/src/lib/navigation/useNavCamera.ts`, `navCameraScheduler.ts`, and adjacent tests                         |
+| One navigation-store publication per accepted real fix                                                                                             | `packages/core/src/stores/navigationStore.ts` and navigation-engine tests                                          |
+| No full route snapshot or route-package geometry scan between checkpoints                                                                          | `apps/web/src/lib/navigation/useNavigationSessionPersistence.ts` and adjacent tests                                |
+| No full active-route GeoJSON upload for progress-only changes                                                                                      | `apps/web/src/components/map/layers/NavigationRouteLayer.tsx` and adjacent tests                                   |
+| One road-condition request/polling/projection owner per route/window revision across engine, alerts, and crowd prompt                              | `apps/web/src/components/navigation/NavIncidentsProvider.tsx` and `apps/web/src/lib/navigation/useNavIncidents.ts` |
+| Bound viewport scheduler evaluations independently of `moveend` frequency                                                                          | `integrations/road-conditions/viewport-scheduler.ts` and adjacent tests                                            |
+| No cold dialog/menu/root render on progress-only updates                                                                                           | `apps/web/src/components/navigation/navigationRenderBoundaries.test.tsx`                                           |
+| Sub-quadratic flow-overlap operation growth                                                                                                        | `packages/core/src/navigation/flowProjection.ts` and `__tests__/flowProjection.test.ts`                            |
+| No production call to legacy `snapToRoute`; prepare matchers once per stable geometry or ephemeral batch, outside point/sample/waypoint/stop loops | `packages/core/src/navigation/routeMatcher.ts` and consumer tests                                                  |
 
-The HUD's `map`, `progress` and `net` counters are how most of these are checked
-on-device; the rest are checked by unit tests and by reading the diff.
+The HUD's `map`, `progress`, and `net` counters show aggregate runtime activity.
+Use focused tests, traces, and source inspection for budgets the HUD cannot
+identify directly, such as marker attachment, source uploads, and component
+renders.
 
 ## The release gate
 
@@ -182,9 +188,9 @@ values, so only the same-device relative change between two runs is meaningful.
 
 ## Escalation after the budgets pass
 
-If plans 021–030 all meet their operation budgets and the same-device thermal
-gate still fails, escalate in this order. Each step requires evidence; a hot
-phone alone authorizes nothing.
+If the operation-count budgets pass and the same-device thermal gate still
+fails, investigate in this order. Record the residual trace and the decision,
+including a decision to keep work on the main thread.
 
 1. **Attribute the residual cost.** Capture a new trace and split the remaining
    work between main-thread long tasks, MapLibre worker/GPU work, network
@@ -195,8 +201,8 @@ phone alone authorizes nothing.
    immutable input/output shape and compare clone/transfer bytes, end-to-end
    latency, main-thread responsiveness, total CPU time, and the device's power
    and thermal response. Adopt offloading only when responsiveness improves
-   without a material increase in total power — moving the same work to another
-   thread is not a thermal success.
+   without a material increase in total power. Moving work to another thread
+   alone does not establish a thermal improvement.
 3. **Compare against native only as a last step.** If the budgets pass and the
    dominant remaining cost is demonstrably a browser/PWA platform constraint
    that cannot preserve the required feature contract, write a native
@@ -205,9 +211,10 @@ phone alone authorizes nothing.
    parity, and maintenance burden. A failed thermal gate on its own does not
    authorize a rewrite.
 
-Whatever the outcome, link the residual trace and the decision from here —
-including a justified "no Worker" or "no native spike" conclusion when the
-evidence does not support one.
+Record a justified decision against a Worker or further native migration when
+the measurements do not support it. OpenMapX already has a native host; compare
+the remaining browser work with that implementation before proposing another
+runtime boundary.
 
 ## Route-stop comparisons
 

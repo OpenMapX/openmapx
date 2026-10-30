@@ -17,7 +17,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import {
   BUILD_ARTIFACTS,
   type BuildRecord,
-  currentRevision,
+  buildProvenance,
   writeBuildRecord,
 } from "./build-artifacts";
 import { assertCliControlForward } from "./control-context";
@@ -241,7 +241,7 @@ async function recordBuild(
 ): Promise<void> {
   assertCliExecutionAvailable();
   assertCliControlForward();
-  const revision = await currentRevision(rootDir);
+  const provenance = await buildProvenance(rootDir);
   assertCliExecutionAvailable();
   assertCliControlForward();
   const record: BuildRecord = {
@@ -250,7 +250,7 @@ async function recordBuild(
     ...(region ? { region } : {}),
     sourcePbf: { name: basename(artifact.sourcePbf), sizeBytes: statSync(artifact.sourcePbf).size },
     builtAt: new Date().toISOString(),
-    ...(revision ? { revision } : {}),
+    ...provenance,
     runtimeImages: artifact.runtimeImages,
     toolImages: artifact.toolImages,
   };

@@ -243,6 +243,10 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "configuration.hardlinks.inspect",
     revisionId: `cfg1_${"a".repeat(43)}`,
   },
+  "configuration.failure.inspect": {
+    kind: "configuration.failure.inspect",
+    attemptedRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "stack.render": {
     expectedCurrentRevisionId: null,
     expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
@@ -375,6 +379,37 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     extensionId: "maps-bundle",
   },
   "communityServices.inspect": { kind: "communityServices.inspect" },
+  "catalogIntegration.inspect": {
+    kind: "catalogIntegration.inspect",
+    source: {
+      kind: "artifact",
+      url: "https://example.test/weather-radar-1.0.0.tar.gz",
+      sha256: "c".repeat(64),
+    },
+  },
+  "catalogIntegration.publish": {
+    kind: "catalogIntegration.publish",
+    integrationId: "weather-radar",
+    source: { kind: "upload", sha256: "c".repeat(64) },
+    extensionId: "maps-bundle",
+  },
+  "catalogIntegration.settle": {
+    kind: "catalogIntegration.settle",
+    integrationId: "weather-radar",
+    transactionId: `itx1_${"d".repeat(24)}`,
+    outcome: "rollback",
+  },
+  "catalogIntegration.remove": {
+    kind: "catalogIntegration.remove",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "catalogIntegration.adopt": {
+    kind: "catalogIntegration.adopt",
+    integrationId: "weather-radar",
+    extensionId: "maps-bundle",
+  },
+  "installedIntegrations.inspect": { kind: "installedIntegrations.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
     expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
@@ -488,6 +523,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     acknowledgeLicenseChanges: false,
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
+  "transitousPin.inspect": { kind: "transitousPin.inspect" },
 };
 
 it("compares projections independent of object ordering while preserving array and value identity", () => {
@@ -574,6 +610,44 @@ describe("ops contract", () => {
         }),
       ).toThrow(OpsContractError);
     }
+  });
+
+  it.each([
+    "https://sentinel-user:sentinel-password@example.test/integration.tgz",
+    "https://example.test/integration.tgz?token=sentinel-query",
+    "https://example.test/integration.tgz#sentinel-fragment",
+  ])("rejects unsafe integration artifact locators before agent dispatch: %s", (url) => {
+    const source = { kind: "artifact", url, sha256: "a".repeat(64) };
+    for (const operation of [
+      { kind: "catalogIntegration.inspect", source },
+      { kind: "catalogIntegration.publish", integrationId: "fixture", source },
+      { kind: "catalogIntegration.adopt", integrationId: "fixture", source },
+    ]) {
+      expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow(OpsContractError);
+    }
+  });
+
+  it("canonicalizes accepted integration artifact locators before dispatch", () => {
+    const parsed = parseOpsRequest(
+      request({
+        kind: "catalogIntegration.inspect",
+        source: {
+          kind: "artifact",
+          url: "https://ARTIFACTS.example.test:443/releases/../integration.tgz",
+          sha256: "a".repeat(64),
+        },
+      }),
+      { role: "api" },
+    );
+
+    expect(parsed.operation).toEqual({
+      kind: "catalogIntegration.inspect",
+      source: {
+        kind: "artifact",
+        url: "https://artifacts.example.test/integration.tgz",
+        sha256: "a".repeat(64),
+      },
+    });
   });
 
   it("rejects flag-shaped, path-shaped, malformed, and unregistered service IDs", () => {
@@ -925,6 +999,31 @@ describe("ops contract", () => {
       });
     },
   );
+
+  it("gives the api role a read-only view of the Transitous pins, and nothing of the lock", () => {
+    expect(authorizeOpsOperation("api", "transitousPin.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "transitousPin.inspect")).toBe(false);
+    for (const kind of [
+      "transitousLock.inspect",
+      "transitousLock.propose",
+      "transitousLock.approve",
+    ] as const) {
+      expect(authorizeOpsOperation("api", kind)).toBe(false);
+    }
+    const pin = {
+      ref: `main@${"a".repeat(40)}`,
+      submodules: { "transitland-atlas": "b".repeat(40) },
+      lockedAt: "2026-10-25T00:00:00.000Z",
+      lockedBy: "dev@example.test",
+    };
+    expect(parseOpsResult("transitousPin.inspect", { release: pin, active: pin })).toEqual({
+      release: pin,
+      active: pin,
+    });
+    expect(() =>
+      parseOpsResult("transitousPin.inspect", { release: pin, active: pin, proposed: pin }),
+    ).toThrow();
+  });
 
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
     expect(authorizeOpsOperation("api", "catalogPins.inspect")).toBe(true);

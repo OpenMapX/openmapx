@@ -1,4 +1,8 @@
-import { closesRoadForCars, type TrafficApplicationReceipt } from "@openmapx/core";
+import {
+  closesRoadForCars,
+  type RoadConditionRightsPolicy,
+  type TrafficApplicationReceipt,
+} from "@openmapx/core";
 import {
   type BoundCondition,
   conditionRoutingDecision,
@@ -20,6 +24,8 @@ export function buildTrafficReceipts(options: {
   appliedObservationIds: string[];
   graphGeneration: string;
   policyRevision: string;
+  /** The policy the writer classified under, so a receipt never outranks the write. */
+  rightsPolicy?: RoadConditionRightsPolicy;
   validUntil: string;
   evaluatedAt?: number;
 }): TrafficApplicationReceipt[] {
@@ -33,7 +39,10 @@ export function buildTrafficReceipts(options: {
   const applied = new Set(options.appliedObservationIds);
   return options.conditions.flatMap((c) => {
     const e = c.routingEvidence;
-    const decision = conditionRoutingDecision(c, { evaluatedAt: now });
+    const decision = conditionRoutingDecision(c, {
+      evaluatedAt: now,
+      ...(options.rightsPolicy ? { rightsPolicy: options.rightsPolicy } : {}),
+    });
     if (!applied.has(c.id) || !decision.eligible || !decision.validUntil) return [];
     const edges = [...options.overrides.entries()].filter(([, o]) =>
       (o.contributorIds ?? [o.observationId]).includes(c.id),

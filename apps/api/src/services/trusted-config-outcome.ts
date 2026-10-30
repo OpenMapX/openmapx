@@ -3,7 +3,7 @@ import { type ConfigurationApplyResult, configurationApplyResultSchema } from "@
 export type TrustedConfigurationApplyOutcome = (
   | ConfigurationApplyResult
   | { outcome: "unknown"; reason: "transport_or_result" }
-) & { publisherCleanupFailed: boolean; registryUpdateFailed: boolean };
+) & { publisherCleanupFailed: boolean; registryUpdateFailed: boolean; problem?: string };
 export function completeTrustedConfigurationApply(
   outcome: TrustedConfigurationApplyOutcome,
 ): boolean {
@@ -22,11 +22,18 @@ export function parseTrustedConfigurationApplyOutcome(
 ): TrustedConfigurationApplyOutcome {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Configuration outcome unavailable");
-  const { publisherCleanupFailed, registryUpdateFailed, ...application } = value as Record<
+  const { publisherCleanupFailed, registryUpdateFailed, problem, ...application } = value as Record<
     string,
     unknown
   >;
   if (typeof publisherCleanupFailed !== "boolean" || typeof registryUpdateFailed !== "boolean")
+    throw new Error("Configuration outcome unavailable");
+  if (problem !== undefined && typeof problem !== "string")
+    throw new Error("Configuration outcome unavailable");
+  if (
+    problem !== undefined &&
+    (application.outcome !== "not_committed" || application.reason !== "failed")
+  )
     throw new Error("Configuration outcome unavailable");
   if (application.outcome === "unknown") {
     if (application.reason !== "transport_or_result" || Object.keys(application).length !== 2)
@@ -40,19 +47,24 @@ export function parseTrustedConfigurationApplyOutcome(
   }
   return {
     ...configurationApplyResultSchema.parse(application),
+    ...(problem === undefined ? {} : { problem }),
     publisherCleanupFailed,
     registryUpdateFailed,
   };
 }
 
 export class TrustedConfigurationApplyError extends Error {
+  /** A failure the operator can fix answers 409 with its reason; any other stays a 500. */
+  readonly statusCode?: number;
+
   constructor(readonly outcome: TrustedConfigurationApplyOutcome) {
     super(
       outcome.outcome === "not_committed"
-        ? "Trusted configuration unavailable"
+        ? (outcome.problem ?? "Trusted configuration unavailable")
         : "Trusted configuration requires reconciliation",
     );
     this.name = "TrustedConfigurationApplyError";
+    if (outcome.outcome === "not_committed" && outcome.problem) this.statusCode = 409;
   }
 }
 

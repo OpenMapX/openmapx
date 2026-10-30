@@ -45,11 +45,23 @@ export const extensionCatalogFixture = {
   },
 };
 export const extensionManifestFixture = {
-  id: extensionCatalogFixture.id,
+  id: "synthetic-extension",
   name: extensionCatalogFixture.name,
   version: "2.0",
-  services: extensionCatalogFixture.services,
-  integrations: extensionCatalogFixture.integrations,
+  services: [
+    {
+      repo: "https://github.com/openmapx/community-fixture.git",
+      service: "synthetic",
+      ref: "a".repeat(40),
+    },
+  ],
+  integrations: [
+    {
+      artifact: "https://example.test/integration.tar.gz",
+      id: "synthetic-integration",
+      sha256: "b".repeat(64),
+    },
+  ],
 };
 export const extensionServiceFixture = {
   id: "synthetic",

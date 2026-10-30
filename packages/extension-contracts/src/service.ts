@@ -34,6 +34,8 @@ const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
 const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+// A DNS-label-shaped name; the renderer prefixes it to `openmapx-private-<name>`.
+const PRIVATE_NETWORK_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const CONFIG_PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** PostgreSQL role/database names passed as individual docker-compose argv values. */
 export const POSTGRES_IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
@@ -277,10 +279,29 @@ const bindMountSchema = z
     // are substituted by docker-compose at stack-up time, so `optional` on
     // those is rejected here — there's no host path to stat.
     optional: z.boolean().optional(),
+    // A file the container rewrites (valhalla.json): it gets a writable copy
+    // at this `@infra:data/...` path, seeded from the release's file or an
+    // operator's override, and is never imported as an override itself.
+    writableCopy: z
+      .string()
+      .refine((copy) => {
+        if (!copy.startsWith(`${INFRA_BIND_SOURCE_PREFIX}data/`)) return false;
+        return !pathHasParentEscape(copy.slice(INFRA_BIND_SOURCE_PREFIX.length));
+      }, "writableCopy must be an @infra:data/<rel-path> without '..'")
+      .optional(),
   })
   .refine(
     (bm) => !(bm.optional && isComposeVarReference(bm.source)),
     "optional: true is not supported with Compose-variable sources — the host path is unknown until stack-up time",
+  )
+  .refine(
+    (bm) =>
+      bm.writableCopy === undefined ||
+      (bm.readOnly === false &&
+        !bm.optional &&
+        !bm.source.startsWith("@") &&
+        !isComposeVarReference(bm.source)),
+    "writableCopy needs a writable, non-optional mount of the service's own file",
   );
 
 const dependsOnSchema = z.object({
@@ -474,6 +495,12 @@ export const serviceManifestSchema = z.object({
     .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
     .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
     .optional(),
+  privateNetworks: z
+    .array(z.string().regex(PRIVATE_NETWORK_REGEX, "must be a private network name"))
+    .min(1)
+    .refine((names) => new Set(names).size === names.length, "must not contain duplicates")
+    .optional(),
+  platformNetwork: z.boolean().optional(),
 
   configSchema: configSchema.optional(),
   envVars: z.array(envVarSchema).optional(),

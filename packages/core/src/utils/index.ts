@@ -7,6 +7,7 @@ export {
 export { isCityOrSmaller } from "./administrativePlace";
 export {
   type AttributionDetail,
+  type AttributionLabels,
   type AttributionPresentation,
   buildAttributionHtml,
   buildAttributionPresentation,
@@ -278,6 +279,16 @@ export {
 export { formatPaymentMethodLabel } from "./paymentMethods";
 export { withPhotoContributors } from "./photo-contributors";
 export {
+  ENDPOINT_URL_TEMPLATE,
+  isPlatformEndpointId,
+  PLATFORM_ENDPOINTS,
+  type PlatformEndpointDefinition,
+  type PlatformEndpointInputs,
+  platformEndpointServiceId,
+  type ResolvedPlatformEndpoint,
+  resolvePlatformEndpoint,
+} from "./platform-endpoints";
+export {
   computePlusCode,
   decodePlusCode,
   decodeShortPlusCode,
@@ -309,6 +320,7 @@ export { pointInIsochroneGeometry } from "./pointInPolygon";
 export type { RankedPoiResults } from "./poiRanking";
 export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
+export { createRequestJsonScope, type RequestJsonScope } from "./requestJsonScope";
 export {
   type DistanceReference,
   resolveDistanceReference,
@@ -348,6 +360,8 @@ export {
   getRoadConditionRoutingDecision,
   isRoadConditionRoutingEvidence,
   isRoutingRelevantBinding,
+  type RoadConditionRightsPolicy,
+  routingRightsReasons,
 } from "./roadConditionRouting";
 export { isSystemSavedList } from "./savedLists";
 export {
@@ -431,6 +445,7 @@ export {
   TRAFFIC_BAND_COLORS,
   type TrafficBand,
 } from "./trafficSeverity";
+export { type UrlWithoutCredentials, urlCredentialsAsBasicAuth } from "./url-credentials";
 export {
   contactDomain,
   USER_AGENT,

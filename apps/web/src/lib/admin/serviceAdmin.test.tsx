@@ -1,9 +1,15 @@
 import { createApiClient } from "@openmapx/core";
+import * as sdk from "@openmapx/core/api-admin-sdk";
+import { ADMIN_COMPOSE_REVISION_HEADER } from "@openmapx/core/api-contracts";
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, createTestQueryClient, renderHookWithQuery, waitFor } from "@/test";
-import { invalidateServiceAdministration, serviceAdminQueries } from "./serviceAdmin";
+import {
+  invalidateServiceAdministration,
+  serviceAdminQueries,
+  serviceOrThrow,
+} from "./serviceAdmin";
 
 let apiUrl = "http://admin.test";
 const availableActions = Object.fromEntries(
@@ -189,7 +195,12 @@ describe("service administration query acquisition", () => {
               canceled = true;
             },
           }),
-          { headers: { "content-type": name === "compose" ? "text/yaml" : "application/json" } },
+          {
+            headers: {
+              "content-type": name === "compose" ? "text/yaml" : "application/json",
+              ...(name === "compose" ? { [ADMIN_COMPOSE_REVISION_HEADER]: "none" } : {}),
+            },
+          },
         );
       });
       const qc = cache();
@@ -237,6 +248,7 @@ describe("service administration query acquisition", () => {
       Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: {
           unknown: 0,
           running: 0,
@@ -252,6 +264,23 @@ describe("service administration query acquisition", () => {
       qc.getQueryData(second.list().queryKey),
     );
   });
+  it("shows why a saved configuration was not applied, when the operator can fix it", async () => {
+    const problem =
+      "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a symbolic link.";
+    vi.stubGlobal("fetch", () => Response.json({ error: problem }, { status: 409 }));
+    const client = createApiClient({ baseUrl: apiUrl, credentials: "include" });
+    await expect(
+      serviceOrThrow(
+        sdk.updateAdminServiceConfig(
+          "martin",
+          { config: {} },
+          { "idempotency-key": "merge-service-config-001" },
+          { client },
+        ),
+      ),
+    ).rejects.toThrow(problem);
+  });
+
   it("forwards query disposal through body cancellation and rejects malformed wire data safely", async () => {
     let canceled = false;
     vi.stubGlobal(

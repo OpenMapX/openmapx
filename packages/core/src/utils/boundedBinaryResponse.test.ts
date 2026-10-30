@@ -6,6 +6,34 @@ function response(body: string, headers: Record<string, string> = {}) {
 }
 
 describe("bounded binary responses", () => {
+  it.each([
+    ["an oversized declared length", { "Content-Length": "100" }],
+    ["a disallowed media type", { "Content-Type": "text/html" }],
+  ])("cancels the upstream body after rejecting %s", async (_label, headers) => {
+    let cancelled = false;
+    const upstream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const upstreamResponse = new Response(upstream, {
+      headers: { "Content-Type": "image/png", ...headers },
+    });
+
+    expect(() =>
+      createBoundedBinaryProxyStream(upstreamResponse, {
+        maxBytes: 10,
+        allowedContentTypes: ["image/png"],
+      }),
+    ).toThrow();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(cancelled).toBe(true);
+  });
+
   it("rejects an oversized declared length before exposing a stream", () => {
     expect(() =>
       createBoundedBinaryProxyStream(response("x", { "Content-Length": "100" }), {
@@ -24,6 +52,15 @@ describe("bounded binary responses", () => {
     for await (const chunk of body) chunks.push(Buffer.from(chunk));
     expect(Buffer.concat(chunks).toString()).toBe("tile");
     expect(contentType).toBe("image/png");
+  });
+
+  it("accepts a body exactly at the byte ceiling", async () => {
+    await expect(
+      readBoundedBinaryResponse(response("0123456789"), {
+        maxBytes: 10,
+        allowedContentTypes: ["image/png"],
+      }),
+    ).resolves.toMatchObject({ data: Buffer.from("0123456789") });
   });
 
   it("destroys the stream when actual bytes exceed the ceiling", async () => {

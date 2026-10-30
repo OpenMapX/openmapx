@@ -9,8 +9,12 @@ const USER_ID = "user-1";
 const authMock = mockRequireAuth(USER_ID);
 vi.mock("../../utils/require-auth.js", () => authMock);
 
-const dbMock = createDbMock();
-vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
+let dbMock = createDbMock();
+vi.mock("../../db/index.js", () => ({
+  get db() {
+    return dbMock.db;
+  },
+}));
 
 const LIST_ROW = {
   id: "list-1",
@@ -58,6 +62,7 @@ beforeEach(async () => {
   const { resetShareRateLimitsForTests } = await import("../shares.js");
   resetShareRateLimitsForTests();
   vi.clearAllMocks();
+  dbMock = createDbMock();
 });
 
 function insertedRow(): Record<string, unknown> {
@@ -151,19 +156,13 @@ describe("POST /api/shares", () => {
   });
 
   it("400s a list mint without targetId/mode and a route mint without payload", async () => {
-    // [payload, reachesHandler] — schema-rejected bodies never consume the
-    // per-user-cap select, so queuing for them would leak into later tests.
-    const cases: Array<[Record<string, unknown>, boolean]> = [
-      [{ targetType: "list" }, true],
-      [{ targetType: "list", targetId: "list-1" }, true],
-      [{ targetType: "route" }, true],
-      [{ targetType: "route", route: { ...ROUTE_PAYLOAD, mode: "transit" } }, false],
+    const cases = [
+      { targetType: "list" },
+      { targetType: "list", targetId: "list-1" },
+      { targetType: "route" },
+      { targetType: "route", route: { ...ROUTE_PAYLOAD, mode: "transit" } },
     ];
-    for (const [payload, reachesHandler] of cases) {
-      if (reachesHandler) {
-        dbMock.queueSelect([{ id: USER_ID }]);
-        dbMock.queueSelect([{ count: 0 }]);
-      }
+    for (const payload of cases) {
       const res = await app.inject({ method: "POST", url: "/api/shares", payload });
       expect(res.statusCode).toBe(400);
     }
@@ -355,4 +354,58 @@ describe("GET /api/shares/:token (public)", () => {
     expect(res.statusCode).toBe(429);
     expect(res.headers["retry-after"]).toBeDefined();
   });
+});
+
+describe("sharing wire contracts", () => {
+  it("treats malformed public snapshot coordinates as uniformly gone", async () => {
+    dbMock.queueSelect([
+      {
+        id: "share-1",
+        userId: USER_ID,
+        targetType: "list",
+        mode: "snapshot",
+        targetId: "list-1",
+        expiresAt: null,
+        snapshot: { name: "Trip", icon: null, places: [{ name: "Invalid", lat: 999, lng: 13 }] },
+      },
+    ]);
+    const response = await app.inject({ method: "GET", url: `/api/shares/${"A".repeat(43)}` });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().message ?? response.json().error).toBe("Share link not found");
+  });
+  it("rejects an invalid owner projection before sending a successful reply", async () => {
+    dbMock.queueSelect([
+      {
+        id: "share-1",
+        targetType: "internal-invalid-target",
+        mode: "invalid-mode",
+        targetId: null,
+        label: "Trip",
+        expiresAt: null,
+        createdAt: new Date("2026-10-23T00:00:00Z"),
+        updatedAt: new Date("2026-10-23T00:00:00Z"),
+      },
+    ]);
+    const response = await app.inject({ method: "GET", url: "/api/shares" });
+    expect(response.statusCode).toBe(500);
+    expect(response.body).not.toContain("internal-invalid-target");
+  });
+});
+
+it("does not erase malformed captured attribution to publish a live share", async () => {
+  dbMock.queueSelect([
+    {
+      id: "share",
+      userId: USER_ID,
+      targetType: "list",
+      mode: "live",
+      targetId: "list-1",
+      expiresAt: null,
+    },
+  ]);
+  dbMock.queueSelect([LIST_ROW]);
+  dbMock.queueSelect([{ ...PLACE_ROW, fieldContributors: { name: [{ sourceId: "provider" }] } }]);
+  const res = await app.inject({ method: "GET", url: `/api/shares/${"A".repeat(43)}` });
+  expect(res.statusCode).toBe(404);
+  expect(res.json()).toEqual({ error: "Share link not found" });
 });

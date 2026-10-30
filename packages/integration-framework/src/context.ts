@@ -1,4 +1,6 @@
+import type { ResolvedPlatformEndpoint } from "@openmapx/core";
 import type { Disclosure } from "@openmapx/core/api-contracts";
+import type { PlatformEndpointId } from "@openmapx/extension-contracts";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "./contracts/border-crossing-provider.js";
 import type { CameraProvider } from "./contracts/camera-provider.js";
@@ -635,6 +637,10 @@ export interface IntegrationContext {
     revision: string;
     validUntil: string | null;
     disallowedSourceIds: string[];
+    /** Whether a source whose rights are unclear (a permission `unknown`) may be used. */
+    allowGreyArea?: boolean;
+    /** Whether a source whose licence forbids commercial use may be used. */
+    allowNonCommercial?: boolean;
   }>;
 
   /**
@@ -656,4 +662,13 @@ export interface IntegrationContext {
    *   is reachable, `null` otherwise.
    */
   getRequiredService(key: string): { serviceId: string; url: string; enabled: boolean } | null;
+
+  /**
+   * The instance of a platform backend this integration should query: its
+   * enabled self-hosted requirement, then its own URL setting (manifest
+   * `endpointConfigKeys`), then the operator's URL, then the public default.
+   * A `${endpoint:<id>}` health check resolves the same instance. Null when
+   * none is set and the backend has no public default (a self-hosted MOTIS).
+   */
+  resolvePlatformEndpoint(id: PlatformEndpointId): ResolvedPlatformEndpoint | null;
 }

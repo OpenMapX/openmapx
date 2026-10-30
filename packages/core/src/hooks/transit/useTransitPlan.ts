@@ -1,5 +1,6 @@
 import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { fetchTransitPlan } from "../../api/transit";
 import type { LngLat } from "../../types/geometry";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
@@ -81,7 +82,14 @@ export function useTransitPlan({
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
   // of treating every refetch as a new query due to a fresh timestamp.
-  const effectiveTime = arriveBy ?? departAt ?? floorToMinute(new Date().toISOString());
+  const explicitTime = arriveBy ?? departAt;
+  const unpagedTime = explicitTime ?? floorToMinute(new Date().toISOString());
+  // A page token is signed against the request that issued it, time included.
+  // Earlier/later requests therefore reuse the minute the unpaged search ran at
+  // instead of drifting to the current one; a fresh unpaged search re-anchors.
+  const [retainedTime, setRetainedTime] = useState(unpagedTime);
+  if (!pageToken && retainedTime !== unpagedTime) setRetainedTime(unpagedTime);
+  const effectiveTime = pageToken && !explicitTime ? retainedTime : unpagedTime;
 
   const query = useQuery({
     queryKey: [

@@ -996,6 +996,7 @@ describe("actual integration producers through generated SDK", () => {
         auth: unexpected,
         tile: unexpected,
         expensive: unexpected,
+        integrationIngress: unexpected,
         status: unexpected,
         public: limiter.preHandler(),
       }),

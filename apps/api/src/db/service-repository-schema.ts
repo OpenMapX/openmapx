@@ -2,7 +2,7 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Community service repositories installed by extensions. The operations agent
- * owns the checkouts under `services/.community/<hash>`; this table records
+ * owns the checkouts in its community store; this table records
  * which extension installed which exact commit.
  */
 export const serviceRepository = pgTable("service_repository", {

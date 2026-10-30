@@ -1,7 +1,7 @@
 {
   "revision": "42a7964f9b8eaf28a6c2749ab8608e3b1d1f8e19",
-  "explicitOperations": 58,
-  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter. Task05.2 explicitly adds the country-only server preflight route; parser, paging and metadata changes retain existing route identities.",
+  "explicitOperations": 61,
+  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter. Task05.2 explicitly adds the country-only server preflight route; parser, paging and metadata changes retain existing route identities. Merge review explicitly retains the installed Overture recovery inspection and main read-only transit pin inspection; no additional mutation is admitted.",
   "operations": [
     {
       "method": "POST",
@@ -50,6 +50,38 @@
     {
       "method": "POST",
       "path": "/download/osm"
+    },
+    {
+      "method": "POST",
+      "path": "/executions"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/:id"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/:id/cancel"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/by-key/:operationKey"
+    },
+    {
+      "method": "GET",
+      "path": "/executions/configuration-maintenance/:maintenanceId"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/configuration-maintenance/:maintenanceId/settle"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/configuration-maintenance/prepare"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/generation-hardlinks"
     },
     {
       "method": "GET",
@@ -125,6 +157,10 @@
     },
     {
       "method": "GET",
+      "path": "/overture/recovery"
+    },
+    {
+      "method": "GET",
       "path": "/overture/status"
     },
     {
@@ -148,6 +184,10 @@
       "path": "/traffic/conditions/applied"
     },
     {
+      "method": "GET",
+      "path": "/traffic/conditions/closures"
+    },
+    {
       "method": "POST",
       "path": "/traffic/predicted/bake"
     },
@@ -162,6 +202,10 @@
     {
       "method": "GET",
       "path": "/transit/catalog"
+    },
+    {
+      "method": "GET",
+      "path": "/transit/pins"
     },
     {
       "method": "POST",
@@ -189,47 +233,15 @@
     },
     {
       "method": "POST",
+      "path": "/transit/sources/:sourceId/disable"
+    },
+    {
+      "method": "POST",
       "path": "/transit/sources/:sourceId/enable"
     },
     {
       "method": "POST",
       "path": "/transit/sync"
-    },
-    {
-      "method": "POST",
-      "path": "/executions"
-    },
-    {
-      "method": "GET",
-      "path": "/executions/:id"
-    },
-    {
-      "method": "GET",
-      "path": "/executions/by-key/:operationKey"
-    },
-    {
-      "method": "POST",
-      "path": "/executions/:id/cancel"
-    },
-    {
-      "method": "POST",
-      "path": "/executions/configuration-maintenance/prepare"
-    },
-    {
-      "method": "GET",
-      "path": "/executions/configuration-maintenance/:maintenanceId"
-    },
-    {
-      "method": "POST",
-      "path": "/executions/configuration-maintenance/:maintenanceId/settle"
-    },
-    {
-      "method": "POST",
-      "path": "/executions/generation-hardlinks"
-    },
-    {
-      "method": "POST",
-      "path": "/transit/sources/:sourceId/disable"
     },
     {
       "method": "POST",

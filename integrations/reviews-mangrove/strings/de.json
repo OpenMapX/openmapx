@@ -6,6 +6,11 @@
       "purpose": "Lesen, Aggregieren und Einreichen offener, signierter Ortsbewertungen über das Mangrove.reviews-Netzwerk",
       "dataSent": "Beim Lesen: eine geo:-Subjekt-URI mit den Koordinaten des Ortes und einem Unsicherheitsradius (ohne Ortsname). Beim Einreichen: ein vom Nutzer signiertes Bewertungs-JWT (Bewertung, Meinung, Metadaten). Beim Bild-Upload: die angehängte Bilddatei",
       "dataReceived": "Signierte Bewertungen zum Subjekt (Bewertung, Meinung, Bilder, Autorenschlüssel und Spitzname, Zeitstempel) sowie URLs hochgeladener Bilder"
+    },
+    "mangrove-signer": {
+      "purpose": "Optionale Anmeldung und delegiertes Signieren von Bewertungen beim offiziellen Mangrove-Signierdienst. Der Dienst kann den privaten Schlüssel entschlüsseln und in deinem Namen signieren; dies ist keine Ende-zu-Ende-Verschlüsselung und schützt nicht vor einem kompromittierten Signierdienst.",
+      "dataSent": "Browser-Weiterleitung: registrierte Client-ID, Rückruf-URL, Anmeldeanbieter, zufälliger Statuswert und optionaler Bluesky-Handle. Die Anmeldung beim Anbieter erfolgt über Mangrove. Authentifizierte Weiterleitung: Sitzungstoken und beim Signieren der Bewertungsinhalt. OpenMapX speichert die Token nicht dauerhaft.",
+      "dataReceived": "Sitzungstoken im Browser-Rückruf; Bewertenden-ID, öffentlicher Signierschlüssel, optionale DID und Kontoname beim Anbieter; signiertes Bewertungs-JWT; Ergebnis des Token-Widerrufs."
     }
   }
 }

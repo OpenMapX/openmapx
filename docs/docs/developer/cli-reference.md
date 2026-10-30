@@ -1,35 +1,26 @@
 ---
 title: CLI reference
-description: Every command group of the openmapx self-hosting CLI — services, integrations, compose, data, ext, backup, users, check, cache, and transitous.
+description: Commands and authentication for service management, data jobs, extensions, backups, and catalog pins.
 sidebar_position: 8
 ---
 
 # CLI reference
 
-`openmapx` is the operator's command-line front end for the whole self-hosting
-workflow: discovering and selecting services, rendering the Docker Compose stack,
-downloading and building data, managing community extensions, and the day-to-day
-lifecycle of a running deployment. It's exposed as the `openmapx` bin from the
-`@openmapx/cli` workspace package, so the canonical invocation from anywhere in
-the repo is:
+Run the self-hosting CLI from the repository root:
 
 ```bash
 pnpm openmapx <command> [args]
+pnpm openmapx --help
+pnpm openmapx ext install --help
 ```
 
-Before it does anything, the CLI auto-loads `infra/docker/.env` — the same file
-`docker compose` reads. That means `DOMAIN`, the shared secrets, and every
-`SERVICE_<ID>_<KEY>` override are in scope for every command, so a render done by
-the CLI and a `docker compose up` agree on configuration. The CLI runs directly
-off TypeScript (no build step) and finds the repo root by walking up from your
-working directory, so you can run it from any subdirectory.
+The root script invokes the TypeScript sources through `tsx`; no separate CLI
+build or global installation is required. The CLI loads `infra/docker/.env`
+when it exists. Values already exported in the shell take precedence.
 
-This page is a flat reference to every command group and subcommand. The
-day-to-day workflows behind them are covered in depth elsewhere — start with
-[Managing services](../install/managing-services.md),
+For complete workflows, see [Managing services](../install/managing-services.md),
 [Preparing data](../install/preparing-data.md), and
-[Backup and restore](../administration/backup-and-restore.md) — and this page
-links into those for the longer treatments.
+[Backup and restore](../administration/backup-and-restore.md).
 
 ## Notation
 
@@ -50,13 +41,20 @@ where the CLI points and how it authenticates:
 | `DOMAIN`                       | `localhost`             | the public domain baked into renders        |
 | `DATA_MANAGER_URL`             | `http://localhost:4000` | the `data` commands                         |
 | `DATA_MANAGER_AUTH_TOKEN`      | (unset)                 | bearer token for data-manager mutations     |
-| `OPENMAPX_API_URL` / `API_URL` | `http://localhost:3001` | the `ext` admin commands                    |
+| `API_URL` / `OPENMAPX_API_URL` | `http://localhost:3001` | the `ext` admin commands                    |
 | `OPENMAPX_REGION`              | (unset)                 | fallback region for `data` downloads/builds |
 | `OPENMAPX_ENABLED_SERVICES`    | (unset)                 | overrides the persisted service selection   |
 
-The data-manager and admin tokens are attached automatically when present, so
-the commands below "just work" as long as the same secrets are set on both the
-CLI side and the services.
+`ext` sends the `x-openmapx-local-admin` header, using
+`OPENMAPX_LOCAL_ADMIN_TOKEN` when configured. The local administrator path
+requires a loopback connection and the API's matching token policy. Production
+requires a configured token; `OPENMAPX_DISABLE_LOCALHOST_AUTH=1` disables this
+path. The managed API service does not publish port 3001 on the host, so the
+default CLI endpoint is unavailable in that deployment. Use the authenticated
+admin UI there. Pointing the CLI at a remote host does not grant administrator
+access. `API_URL` takes
+precedence over `OPENMAPX_API_URL`. Data-manager commands send the configured
+bearer token. See [Users and access](../administration/users-and-access.md).
 
 ## `services`
 
@@ -69,7 +67,7 @@ in full under [Managing services](../install/managing-services.md).
 | `services list`             | List discovered services as a table. Filters: `--capability <cap>`, `--quality <built-in\|community-verified\|community>`, `--enabled`.                                                                                                             |
 | `services get <id>`         | Print one service's full manifest as JSON.                                                                                                                                                                                                          |
 | `services selected`         | Show the requested roots and the effective set after dependency expansion.                                                                                                                                                                          |
-| `services enable <ids...>`  | Persistently add root services to `infra/docker/service-selection.json`.                                                                                                                                                                            |
+| `services enable <ids...>`  | Persistently add root services to `infra/docker/state/ops-agent/service-selection.json`.                                                                                                                                                            |
 | `services disable <ids...>` | Persistently remove root services from the selection file.                                                                                                                                                                                          |
 | `services build <ids...>`   | Build prepared artifacts for the named services, then re-render and re-link. Flags: `--region <region>`, `--continue-on-error`, `--import` (MOTIS only: also run `motis import`).                                                                   |
 | `services build-all`        | Build every service that declares a build, in order. Flags: `--region <region>`, `--fail-fast`.                                                                                                                                                     |
@@ -93,14 +91,14 @@ and mix freely with explicit ids — see the
 Render and operate the generated Docker Compose stack. OpenMapX keeps no
 hand-written compose file — the renderer derives it from the enabled manifests.
 
-| Command                         | Description                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `compose render`                | Apply the selection as a new configuration generation: compose file and hardlink plan from the manifests, with the settings and credentials the admin panel last applied. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`.                                                                                     |
-| `compose up`                    | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`.                                                                                                                                                           |
-| `compose release`               | Resolve `OPENMAPX_RELEASE` (main, preview, exact version/digest; default main) and write `infra/docker/docker-compose.release.yml`, pinning `app-api`, `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous helper image by digest. Every service/compose command includes this overlay automatically once it exists. |
-| `compose down`                  | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**).                                                                                                                                                                                                                                               |
-| `compose pull [ids...]`         | Pull the selected images (no args pulls all services); resolve or preserve a coherent overlay for product services. For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md).                                                                                                        |
-| `compose rotate-redis-password` | Atomically rotate Redis authentication files while Redis clients are stopped. Flag: `--confirm-clients-stopped`.                                                                                                                                                                                                                                 |
+| Command                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `compose render`                | Apply the selection as a new configuration generation: compose file and hardlink plan from the manifests, with the settings and credentials the admin panel last applied. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`.                                                                                                                                                                                                                                                                               |
+| `compose up`                    | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`.                                                                                                                                                                                                                                                                                                                                                     |
+| `compose release`               | Resolve `OPENMAPX_RELEASE` (main, preview, exact version/digest; default main) and write `infra/docker/state/ops-agent/releases/docker-compose.release.yml`, pinning the seven product images: API, web, data-manager, ops-agent, privacy-backup, Transitous runner, and Transitous tools. `--status` inspects local pins without registry access; `--clear` clears local selection without changing running containers. Lifecycle commands include the selected overlay. `OPENMAPX_RELEASE=local` explicitly disables release resolution. |
+| `compose down`                  | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**).                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `compose pull [ids...]`         | Pull the selected images (no args pulls all services); resolve or preserve a coherent overlay for product services. For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md).                                                                                                                                                                                                                                                                                                  |
+| `compose rotate-redis-password` | Replace the password and reconcile its ACL while Redis clients are stopped. Each file is replaced atomically; the pair is not one transaction. Flag: `--confirm-clients-stopped`. Follow the [rotation procedure](https://github.com/OpenMapX/openmapx/blob/main/infra/docker/secrets/README.md#redis-password-and-redis-aclconf-generated).                                                                                                                                                                                               |
 
 For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
@@ -113,33 +111,34 @@ linked to producer data through the data-manager. The full workflow — regions,
 hardlinks, authenticated feeds — lives in
 [Preparing data](../install/preparing-data.md).
 
-| Command                            | Description                                                                                                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `data download <kind> [region]`    | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`. |
-| `data build <kind> [region]`       | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tileserver`.                                                                              |
-| `data convert <kind> [region]`     | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2).                                                                                                               |
-| `data update [region]`             | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`.                   |
-| `data sync`                        | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes.                           |
-| `data source list`                 | List requested and active transit sources together with origin, region, and lifecycle state.                                                                                                     |
-| `data source add <url>`            | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`.                                                              |
-| `data source remove <sourceId>`    | Disable a desired source and queue a sync. Catalog sources remain known and can be re-enabled.                                                                                                   |
-| `data source enable <sourceId>`    | Re-enable a disabled catalog source and queue a sync.                                                                                                                                            |
-| `data export <service> <bundle>`   | Write a built artifact (`tileserver`, `osrm`, `otp`, `pelias`, `motis`) and its checksummed manifest as a tar bundle. `-` streams to stdout.                                                     |
-| `data import <bundle>`             | Verify a bundle from `data export` (`-` reads stdin), check its runtime images match this host, swap it in, then render and link.                                                                |
-| `data link`                        | Re-render the hardlink plan from the current selection, then apply and prune it.                                                                                                                 |
-| `data status`                      | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly.                                                                                         |
-| `data clean <target>`              | Remove local data for one type alias (e.g. `osm`, `gtfs`, `fonts`, `osrm-graph`) or `all`.                                                                                                       |
-| `data generate-api-keys`           | Generate the Transitous API-key template for feeds that require keys. Flags: `--repo-url <url>`, `--output <path>`.                                                                              |
-| `data overture-sync [region]`      | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild.                                                                   |
-| `data overture-pull [region]`      | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract.                                                                   |
-| `data overture-ingest [region]`    | Verify and ingest the newest completed local regional Places snapshot into PostGIS. Pull a partition first; recovery does not discover a different upstream release.                             |
-| `data overture-conflate [region]`  | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction.             |
-| `data overture-status`             | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error.                                                                                              |
-| `data overture-extract [region]`   | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use).                                                                                    |
-| `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically.                                                                                 |
-| `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                               |
-| `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                             |
-| `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                  |
+| Command                            | Description                                                                                                                                                                                                                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data download <kind> [region]`    | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`.                                                                                 |
+| `data build <kind> [region]`       | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tileserver`.                                                                                                                                                              |
+| `data convert <kind> [region]`     | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2).                                                                                                                                                                                               |
+| `data update [region]`             | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`.                                                                                                   |
+| `data sync`                        | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes.                                                                                                           |
+| `data source list`                 | List requested and active transit sources together with origin, region, and lifecycle state.                                                                                                                                                                                     |
+| `data source add <url>`            | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`.                                                                                                                                              |
+| `data source remove <sourceId>`    | Remove an operator source's saved metadata and queue a sync. Catalog sources cannot be removed.                                                                                                                                                                                  |
+| `data source disable <sourceId>`   | Reversibly disable a catalog or operator source and queue a sync; its metadata is retained.                                                                                                                                                                                      |
+| `data source enable <sourceId>`    | Re-enable a disabled catalog source and queue a sync.                                                                                                                                                                                                                            |
+| `data export <service> <bundle>`   | Write a built artifact (`tileserver`, `osrm`, `otp`, `pelias`, `motis`) and its checksummed manifest as a tar bundle. `-` streams to stdout.                                                                                                                                     |
+| `data import <bundle>`             | Verify a bundle from `data export` (`-` reads stdin), check its runtime images match this host, journal-publish it and apply the current generation's hardlinks without rendering or starting consumers.                                                                         |
+| `data link`                        | Re-render the hardlink plan from the current selection, then apply and prune it.                                                                                                                                                                                                 |
+| `data status`                      | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly.                                                                                                                                                                         |
+| `data clean <target>`              | Remove local data for one type alias (e.g. `osm`, `gtfs`, `fonts`, `osrm-graph`) or `all`.                                                                                                                                                                                       |
+| `data generate-api-keys`           | Write the Transitous API-key template to `infra/docker/secrets/transitous-api-keys/api-keys.json`, preserving existing values and orphaned keys from the exact cached pins. Flags: `--proposal <id>`, `--output <path>`. No upstream acquisition or mutable repository override. |
+| `data overture-sync [region]`      | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild.                                                                                                                                                   |
+| `data overture-pull [region]`      | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract.                                                                                                                                                   |
+| `data overture-ingest [region]`    | Verify and ingest the newest completed local regional Places snapshot into PostGIS. Pull a partition first; recovery does not discover a different upstream release.                                                                                                             |
+| `data overture-conflate [region]`  | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction.                                                                                             |
+| `data overture-status`             | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error.                                                                                                                                                                              |
+| `data overture-extract [region]`   | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use).                                                                                                                                                                    |
+| `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically.                                                                                                                                                                 |
+| `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                                                                                                               |
+| `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
+| `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing
@@ -154,40 +153,38 @@ database, and temporary-disk cost.
 
 ## `ext`
 
-Browse and manage **extensions** — the unified store for integrations, services,
-and bundles of both. These commands call the admin API (`$OPENMAPX_API_URL`,
-default `http://localhost:3001`), which short-circuits authentication for loopback
-connections. See [Community extensions](../administration/community-extensions.md)
-for the trust model.
+Browse and manage bundles of declarative integrations and isolated services.
+These commands use the admin API and its local administrator policy described
+above. See [Community extensions](../administration/community-extensions.md)
+for installation, host-port exposure, and recovery.
 
-| Command                 | Description                                                                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `ext browse`            | List catalog extensions. Flags: `-q, --query <text>`, `--trust <verified\|community>`, `--type <service\|integration>`. |
-| `ext list`              | List installed extensions, their components, and available updates.                                                     |
-| `ext install <id\|url>` | Install by catalog id, or by `extension.json` URL (the latter installs as the **community** tier).                      |
-| `ext update <id>`       | Re-pin an installed extension to the latest published version.                                                          |
-| `ext remove <id>`       | Uninstall an extension — removes its services and integrations.                                                         |
+| Command                 | Description                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ext browse`            | List catalog entries. Flags: `-q, --query <text>`, `--trust <verified\|community>`, `--type <service\|integration>`.                                          |
+| `ext list`              | List installed extensions and update information. Local inventory remains available when optional catalog enrichment fails; update status can be unavailable. |
+| `ext preview <idOrUrl>` | Resolve and inspect the current component snapshot, effective host ports, and confirmation fingerprint. Preview can fetch and stage repositories.             |
+| `ext install <idOrUrl>` | Preview and queue installation by catalog ID or `extension.json` URL.                                                                                         |
+| `ext update <id>`       | Preview and queue an update from the current catalog entry.                                                                                                   |
+| `ext remove <id>`       | Queue removal of the installed bundle's services and integrations.                                                                                            |
 
-Install is one orchestrated, atomic job: it registers and pins each service repo,
-renders and starts the container(s), installs each integration artifact (SHA-256
-verified), reloads the integration host, and records the result — rolling back on
-any failure. Community backend code runs only in its service container;
-community integration artifacts cannot install API/data-manager entry points.
-Install only from sources you trust because service components still execute
-code and declarative artifacts still influence the UI.
-
-Installing the [OpenConditions](https://github.com/openconditions/openconditions)
-bundle (ingest service + contributions API, read through the built-in
-`openconditions` integration, which feeds roads — the road-conditions overlay,
-navigation and closure avoidance — and fuel, the fuel-station layer),
-published as the first verified catalog entry, is one command:
+For an install or update that exposes host ports, inspect the preview and supply
+its exact fingerprint with `--host-port-confirmation <fingerprint>`. An updated
+snapshot requires a new review. A preview alone does not authorize exposure.
 
 ```bash
+pnpm openmapx ext preview openconditions
 pnpm openmapx ext install openconditions
 ```
 
-See [Building an external extension](./building-an-external-extension.md) for the
-full walkthrough.
+The install command can require the confirmation flag after preview; it does not
+silently approve ports. A returned job ID means the operation was queued. Check
+**Admin → Activity** for completion, failure, and any cleanup work. If a request
+times out, the server job may still be running: inspect Activity before retrying.
+Do not assume that every failed operation has fully rolled back.
+
+Service components execute container code. Integration artifacts are declarative
+and cannot install executable API, web, or data-manager entry points. Review the
+source and requested access before installing either component type.
 
 ## `integrations`
 
@@ -196,14 +193,14 @@ The developer-side build/package tooling for integrations (distinct from the
 packaged; the API container never builds at runtime. The integration model is
 documented in [Integration system](./integration-system.md).
 
-| Command                         | Description                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `integrations scaffold <id>`    | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold). |
-| `integrations list`             | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`.                                                                                                                                                                                                     |
-| `integrations install <source>` | Install a declarative integration from a Git URL, local path, or artifact. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Executable runtime entry points are rejected.                                                                                                                                                      |
-| `integrations remove <id>`      | Remove a community integration.                                                                                                                                                                                                                                                                                                      |
-| `integrations validate [id]`    | Validate one integration's manifest, or all if `id` is omitted.                                                                                                                                                                                                                                                                      |
-| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected.                    |
+| Command                         | Description                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integrations scaffold <id>`    | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold).                                             |
+| `integrations list`             | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`.                                                                                                                                                                                                                                                 |
+| `integrations install <source>` | Install a declarative integration from a Git URL, local path, or artifact through the operations agent, which records it. Local and Git sources are packaged on the host first. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Executable runtime entry points are rejected. Without a running agent (development) it installs directly, and the agent will not load it. |
+| `integrations remove <id>`      | Remove a community integration through the operations agent. Only an integration installed with this command, not one an extension installed, can be removed this way. That ownership keeps manual and extension installs from replacing each other; it is not a security boundary.                                                                                              |
+| `integrations validate [id]`    | Validate one integration's manifest, or all if `id` is omitted.                                                                                                                                                                                                                                                                                                                  |
+| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected.                                                                |
 
 After installing or removing an integration, restart `app-api` so the
 integration host picks up the change:
@@ -212,8 +209,8 @@ integration host picks up the change:
 ## `users`
 
 Manage user accounts directly against the PostGIS database (the commands run
-`psql` inside the `postgis` container, so the stack must be up). Handy for
-bootstrapping the first admin before SMTP is configured.
+`psql` inside the `postgis` container, so the stack must be up). Use them to
+bootstrap the first administrator before email delivery is configured.
 
 | Command                 | Description                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------ |
@@ -230,7 +227,7 @@ existing row rather than creating one.
 Create, list, restore, prune, and delete on-disk backups of service volumes under
 `infra/docker/backups/`. See
 [Backup and restore](../administration/backup-and-restore.md) for what's included
-and how restore swaps volumes safely.
+and the restore prerequisites and recovery procedure.
 
 | Command                 | Description                                                                                                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -244,6 +241,12 @@ and how restore swaps volumes safely.
 
 Inspect and clear the Redis cache. These commands run `redis-cli` inside the
 `redis` container, so the stack must be running.
+
+The current CLI does not pass the generated Redis password to `redis-cli`.
+These commands therefore fail with `NOAUTH` against the managed authenticated
+Valkey service. Do not disable authentication to make them work. The table below
+describes their intended operations; it is not a working managed-deployment
+cache maintenance procedure.
 
 | Command                | Description                                                                                                                                                                                  |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -265,7 +268,7 @@ then fires in-network HTTP deep probes (from an ephemeral curl container on the
 Compose network) that catch wedged-but-running states a plain healthcheck misses.
 Pass `--no-probe` to skip the deep probes and report engine-level health only.
 The command exits non-zero if any service is unhealthy, restarting, or fails its
-probe.
+probe, and when `docker compose ps` prints something other than Compose's JSON.
 
 ## `transitous`
 
@@ -285,15 +288,11 @@ validation, acknowledgement of the exact diff and final confirmation. It promote
 the tested dataset and selects its pair under the same retained operation.
 Scheduled auto-bumps also create proposals and cannot approve them.
 
-## `transit-registry`
-
-Manage the pinned commit of the upstream `public-transport/transport-apis` catalog
-used by the dynamic transit registry, recorded in `infra/docker/transport-apis.lock.json`.
-
-| Command                 | Description                                                                                                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transit-registry show` | Print the current `transport-apis.lock.json` lockfile contents.                                                                                                                  |
-| `transit-registry bump` | Fetch the upstream catalog, validate all endpoint declarations, report candidate diffs, and write the new lockfile. Flags: `--yes` (skip interactive prompt), `--branch <name>`. |
+The MobilityData GBFS registry is part of the reviewed managed pair.
+`transitous show` reads back that active pair and its generation ID; bump,
+validation or a Data Manager restart alone does not activate a proposal.
+The transport-apis catalog pin remains release-owned; maintainers update it in
+the repository. See [Catalog pins](../guides/transit-engines.md#catalog-pins).
 
 ## Where to go next
 

@@ -8,6 +8,7 @@ import {
   renderServiceSnippet,
   resolveProxyHost,
 } from "../services/compose-renderer";
+import { CURRENT_CONFIGURATION } from "../services/deployment";
 import type { LoadedService } from "../services/types";
 
 function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
@@ -312,6 +313,70 @@ describe("renderServiceSnippet", () => {
   it("still rejects a built-in bridge target", () => {
     const bridge = svc("audited-bridge", { communityNetworkAccess: ["redis"] });
     expect(() => renderCompose([bridge, svc("redis")], {})).toThrow(/redis.*built-in/);
+  });
+
+  it("keeps a private bundle off openmapx and bridges only its declared peers", () => {
+    const bundle = { platformNetwork: false, privateNetworks: ["bundle"] };
+    const { composeYaml } = renderCompose(
+      [
+        svc("bundle-web", {
+          platformNetwork: false,
+          privateNetworks: ["bundle", "bundle-ingress"],
+        }),
+        svc("bundle-worker", bundle),
+        svc("bundle-db", {
+          ...bundle,
+          container: { image: "t/db", tag: "1", networkAliases: ["db"] },
+        }),
+        svc("gateway", { privateNetworks: ["bundle-ingress"] }),
+        svc("redis"),
+      ],
+      {},
+    );
+    const doc = parseYaml(composeYaml) as {
+      services: Record<string, { networks: unknown }>;
+      networks: Record<string, { enable_ipv6?: boolean; ipam?: { config: { subnet: string }[] } }>;
+    };
+
+    expect(doc.services["bundle-web"].networks).toEqual([
+      "openmapx-private-bundle",
+      "openmapx-private-bundle-ingress",
+    ]);
+    expect(doc.services["bundle-worker"].networks).toEqual(["openmapx-private-bundle"]);
+    expect(doc.services["bundle-db"].networks).toEqual({
+      "openmapx-private-bundle": { aliases: ["db"] },
+    });
+    expect(doc.services.gateway.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
+    expect(doc.services.redis.networks).toEqual(["openmapx"]);
+    const bundleNet = doc.networks["openmapx-private-bundle"];
+    const ingressNet = doc.networks["openmapx-private-bundle-ingress"];
+    expect(bundleNet?.enable_ipv6).toBe(true);
+    expect(bundleNet?.ipam?.config[0]?.subnet).toMatch(/^fd4d:5058:0:[0-9a-f]{1,4}::\/64$/);
+    expect(bundleNet?.ipam?.config[0]?.subnet).not.toBe(ingressNet?.ipam?.config[0]?.subnet);
+  });
+
+  it("joins a bridge to a private network only while another enabled member declares it", () => {
+    const gateway = svc("gateway", { privateNetworks: ["bundle-ingress"] });
+    const disabledWeb = {
+      ...svc("bundle-web", { platformNetwork: false, privateNetworks: ["bundle-ingress"] }),
+      enabled: false,
+    };
+    const doc = parseYaml(renderCompose([gateway, disabledWeb], {}).composeYaml) as {
+      services: Record<string, { networks: unknown }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services.gateway.networks).toEqual(["openmapx"]);
+    expect(doc.networks).not.toHaveProperty("openmapx-private-bundle-ingress");
+  });
+
+  it("rejects private networks on a community service and a bundle member without one", () => {
+    expect(() =>
+      renderServiceSnippet(communitySvc("community-bundle", { privateNetworks: ["bundle"] }), {}),
+    ).toThrow(/private_network_forbidden/);
+    expect(() => renderServiceSnippet(svc("orphan", { platformNetwork: false }), {})).toThrow(
+      /requires at least one privateNetworks/,
+    );
   });
 
   it("fails closed when different community ids normalize to the same network", () => {
@@ -644,11 +709,11 @@ describe("renderServiceSnippet", () => {
         bindMounts: [{ source: "@infra:data/osm", target: "/data/osm", readOnly: false }],
       }),
       {
-        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        composeOutDir: `/repo/infra/docker/${CURRENT_CONFIGURATION}`,
         infraDir: "/repo/infra/docker",
       },
     );
-    expect(snippet.volumes).toEqual(["../data/osm:/data/osm"]);
+    expect(snippet.volumes).toEqual(["../../../../data/osm:/data/osm"]);
   });
 
   it("reads env files from the infra root, wherever the compose file lives", () => {
@@ -657,10 +722,10 @@ describe("renderServiceSnippet", () => {
     });
     expect(
       renderServiceSnippet(service, {
-        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        composeOutDir: `/repo/infra/docker/${CURRENT_CONFIGURATION}`,
         infraDir: "/repo/infra/docker",
       }).env_file,
-    ).toEqual(["../.env"]);
+    ).toEqual(["../../../../.env"]);
     expect(renderServiceSnippet(service, { composeOutDir: "/repo/infra/docker" }).env_file).toEqual(
       [".env"],
     );
@@ -719,7 +784,7 @@ describe("renderServiceSnippet", () => {
       expect(warnings[0]).toContain("/repo/infra/docker/secrets/transitous-feed-proxy.age");
     });
 
-    it("preserves existing behaviour for non-optional mounts whose source does not exist", () => {
+    it("still emits a non-optional mount whose checkout source is missing, with an advisory", () => {
       const warnings: string[] = [];
       const snippet = renderServiceSnippet(
         svc("svc", {
@@ -736,10 +801,30 @@ describe("renderServiceSnippet", () => {
           warnings,
         },
       );
-      // No `optional` flag → emit the mount unchanged, no advisory.
+      // No `optional` flag → emit the mount unchanged, and say the checkout
+      // lacks the file the release's manifest mounts.
       expect(snippet.volumes).toEqual([
         "../../services/svc/config/missing.json:/etc/missing.json:ro",
       ]);
+      expect(warnings).toEqual([
+        'service "svc": bind-mount source config/missing.json is not present at /repo/services/svc/config/missing.json; update the checkout to the selected release',
+      ]);
+    });
+
+    it("does not report missing sources outside the checkout's service directories", () => {
+      const warnings: string[] = [];
+      renderServiceSnippet(
+        svc("svc", {
+          bindMounts: [
+            { source: "@infra:data/svc", target: "/data", readOnly: false },
+            { source: "@docker-socket", target: "/var/run/docker.sock" },
+            { source: "/etc/localtime", target: "/etc/localtime" },
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: literal docker-compose variable interpolation
+            { source: "${HOST_DIR}/custom", target: "/custom" },
+          ],
+        }),
+        { composeOutDir: "/repo/infra/docker", existsSync: () => false, warnings },
+      );
       expect(warnings).toEqual([]);
     });
   });

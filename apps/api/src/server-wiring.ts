@@ -175,7 +175,17 @@ export function uniformErrorHandler(
 ) {
   const statusCode = error.statusCode ?? 500;
   if (statusCode >= 500) {
-    return reply.status(statusCode).send({ error: "Internal Server Error" });
+    // A stream can fail after Fastify copied its success headers to the raw
+    // response but before the first byte was committed. Clear those headers
+    // so the fixed error body is valid JSON and cannot inherit public caching.
+    reply.removeHeader("Content-Type");
+    reply.removeHeader("Content-Length");
+    reply.removeHeader("Cache-Control");
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("application/json")
+      .status(statusCode)
+      .send({ error: "Internal Server Error" });
   }
   return reply.status(statusCode).send({ error: error.message });
 }
@@ -194,6 +204,7 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
       "Content-Length",
       "Content-Disposition",
       "X-Artifact-Sha256",
+      "Vary",
       "X-Tile-Source",
       "Accept-Ranges",
       "Content-Range",
@@ -214,7 +225,7 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
-  /^\/api\/offline\/packages\/(glyphs\/|omp2-[0-9a-f]{64}\/archive(?:$|\?))/,
+  /^\/api\/offline\/packages\/glyphs\//,
 ];
 
 export const EXPENSIVE_PUBLIC_PATTERNS = [
@@ -344,9 +355,13 @@ export interface RateLimitTiers {
   auth: Limit;
   tile: Limit;
   expensive: Limit;
+  integrationIngress: Limit;
   status: Limit;
   public: Limit;
 }
+
+const INTEGRATION_DISPATCHER_ROUTES = new Set(["/api/integrations/:id", "/api/integrations/:id/*"]);
+const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Global rate limiting for the public surface.
 //
@@ -374,14 +389,20 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
     // limiter or broad public floor on this privacy-sensitive route.
     if (isTimelineDayRequest(request)) return;
 
-    // Only the matched dispatcher owns tier enforcement. Direct host routes
-    // under the same URL prefix still need the public floor.
-    const route = request.routeOptions.url;
-    if (route === "/api/integrations/:id" || route === "/api/integrations/:id/*") return;
-
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;
     if (peer && LOOPBACK.has(peer)) return;
+
+    // Fastify parses these methods' bodies before the dispatcher can select
+    // the matched route's declared tier. Charge a separate admission bucket
+    // first; GET/HEAD keep their deliberate tile/public/expensive late tier.
+    const route = request.routeOptions.url;
+    if (route && INTEGRATION_DISPATCHER_ROUTES.has(route)) {
+      if (BODY_CAPABLE_METHODS.has(request.method)) {
+        await limits.integrationIngress(request, reply);
+      }
+      return;
+    }
 
     if (url.startsWith("/api/auth/")) {
       await limits.auth(request, reply);

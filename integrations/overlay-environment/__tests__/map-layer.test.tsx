@@ -18,6 +18,8 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   }),
 }));
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));

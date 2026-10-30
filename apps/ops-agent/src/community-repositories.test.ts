@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -71,7 +72,10 @@ function fixture(snapshots: Record<string, Snapshot>) {
   roots.push(root);
   chmodSync(root, 0o755);
   mkdirSync(join(root, "services"), { mode: 0o755 });
-  mkdirSync(join(root, "custom_integrations"), { mode: 0o755 });
+  mkdirSync(join(root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
+    recursive: true,
+    mode: 0o755,
+  });
   const clones: string[] = [];
   const clone: CommunityRepositoryClone = async ({ url, ref, targetDir }) => {
     clones.push(`${url}@${ref}`);
@@ -93,7 +97,7 @@ function fixture(snapshots: Record<string, Snapshot>) {
     loadAuthority,
     clone,
   });
-  const community = join(root, "services", ".community");
+  const community = join(root, "infra", "docker", "state", "ops-agent", "community");
   return { root, community, store, loadAuthority, clones };
 }
 
@@ -286,6 +290,24 @@ describe("community repository store", () => {
     });
     expect(readdirSync(community).sort()).toEqual([`.repository-${REPOSITORY}.json`, REPOSITORY]);
     expect((await store.list()).repositories[0]).toMatchObject({ commit: SECOND, pending: null });
+    // The record pins the published manifest by digest; changed bytes are refused.
+    const installed = join(community, REPOSITORY, "services", "live", "service.json");
+    const record = JSON.parse(
+      readFileSync(join(community, `.repository-${REPOSITORY}.json`), "utf8"),
+    ) as { version: number; manifests: unknown };
+    expect(record).toMatchObject({
+      version: 2,
+      manifests: [
+        {
+          path: "services/live",
+          sha256: createHash("sha256").update(readFileSync(installed)).digest("hex"),
+        },
+      ],
+    });
+    const published = readFileSync(installed);
+    writeFileSync(installed, manifest("community-live", "9.9.9"));
+    await expect(loadAuthority()).rejects.toThrow("Trusted configuration authority rejected");
+    writeFileSync(installed, published);
     // Settling the same transaction again changes nothing.
     await expect(
       store.settle({

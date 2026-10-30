@@ -9,6 +9,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
+import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
 import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
 import {
   AdminJobFailure,
@@ -39,6 +40,7 @@ import {
   restoreConfigurationRejection,
 } from "./configuration-ownership-view";
 import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
+import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
@@ -108,8 +110,37 @@ function cancellationReceiptContext(job: typeof adminJob.$inferSelect): JobConte
   return context;
 }
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
+function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string, unknown> {
+  try {
+    const { opsProjection, ...output } = value;
+    // Host-owned recovery packets are protocol state, not extension output.
+    // Redacting their signatures/owner IDs would destroy original authority.
+    const retained = Object.fromEntries(
+      Object.entries(output).filter(([key]) => key.startsWith("_")),
+    );
+    const ordinaryOutput = Object.fromEntries(
+      Object.entries(output).filter(([key]) => !key.startsWith("_")),
+    );
+    const serialized = JSON.stringify(ordinaryOutput, (_key, child: unknown) =>
+      typeof child === "string" ? sanitizeExtensionOutputString(child) : child,
+    );
+    if (serialized === undefined) return { value: "[redacted]" };
+    const sanitized = sanitizeLogMetadata(JSON.parse(serialized) as unknown);
+    Object.assign(sanitized, retained);
+    if (opsProjection === undefined) return sanitized;
+    sanitized.opsProjection = readProjection({ opsProjection }) as unknown as Record<
+      string,
+      unknown
+    >;
+    return sanitized;
+  } catch {
+    return { value: "[redacted]" };
+  }
+}
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
+  "extension.install",
+  "extension.remove",
   "standalone.adopt",
   "standalone.remove",
   "standalone.preview",
@@ -224,6 +255,19 @@ function hasRetainedStandalone(job: { type: string; result: unknown }) {
 }
 class JobPersistenceUnavailable extends Error {}
 
+/** Rejoin original extension receipts only; a nested service completion is not
+ * evidence that the extension's bookkeeping and transaction settlement finished. */
+async function observeExtensionJob(ctx: JobContext): Promise<Record<string, unknown> | undefined> {
+  try {
+    const result = await resumeAdminJobObservation(ctx);
+    const settled = ctx.checkpointResult?._settled as { status?: unknown } | undefined;
+    if (settled?.status === "success") return result;
+  } catch (error) {
+    if (!(error instanceof AdminJobFailure)) throw error;
+  }
+  throw new JobObservationPending("recovery_required");
+}
+
 class AdminJobRunner {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly active = new Map<string, AbortController>();
@@ -239,12 +283,14 @@ class AdminJobRunner {
     payload: Record<string, unknown>,
     createdBy?: string | null,
   ): Promise<string> {
+    const durablePayload =
+      type === "extension.install" ? normalizeExtensionInstallPayload(payload) : payload;
     const id = randomUUID();
     await db.insert(adminJob).values({
       id,
       type,
       status: "queued",
-      payload,
+      payload: durablePayload,
       // Synthetic (loopback) actors have no user row → store null, not a FK violation.
       createdBy: dbActorId(createdBy),
     });
@@ -1225,25 +1271,49 @@ class AdminJobRunner {
         : retainedQueuedCoordinator || retainedStandalone || retainedMaintenance
           ? this.handlers.get(type)
           : observe
-            ? resumeAdminJobObservation
+            ? ["extension.install", "extension.remove"].includes(type)
+              ? observeExtensionJob
+              : resumeAdminJobObservation
             : (immediateHandler ?? this.handlers.get(type));
     const execution = readJobExecution(checkpointResult);
     let checkpointTail = Promise.resolve();
     let checkpointBaseline = structuredClone((checkpointResult ?? {}) as Record<string, unknown>);
+    const sanitizeExtensionOutput = type === "extension.install";
+    let executionPayload = payload;
+    if (sanitizeExtensionOutput) {
+      try {
+        executionPayload = normalizeExtensionInstallPayload(payload);
+      } catch {
+        const finishedAt = new Date();
+        const error = "Invalid extension install payload";
+        await db
+          .update(adminJob)
+          .set({ status: "failed", error, finishedAt })
+          .where(jobOwnership(jobId, execution));
+        this.announce(jobId, "failed", { error, finishedAt: finishedAt.toISOString() });
+        return;
+      }
+    }
+    const durableRecord = (value: Record<string, unknown>): Record<string, unknown> =>
+      sanitizeExtensionOutput ? sanitizeExtensionRecord(value) : value;
+    const durableLine = (value: string): string =>
+      sanitizeExtensionOutput ? sanitizeExtensionOutputString(value) : value;
+
     const ctx: JobContext = {
       jobId,
       jobType: type,
       execution,
       observationOnly: observe && !retainedConfiguration,
-      payload,
+      payload: executionPayload,
       signal,
-      checkpointResult,
+      checkpointResult: checkpointResult === null ? null : durableRecord(checkpointResult),
       log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
         const localSeq = this.logSeq.get(jobId) ?? 0;
         const seq = sourceSeq ?? localSeq;
         this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
         const id = sourceEventId ?? randomUUID();
         const createdAt = new Date();
+        const durableLogLine = durableLine(line);
         signal.throwIfAborted();
         let inserted: boolean;
         try {
@@ -1252,7 +1322,7 @@ class AdminJobRunner {
             jobId,
             seq,
             stream,
-            line,
+            line: durableLogLine,
             createdAt,
           });
         } catch (error) {
@@ -1266,7 +1336,7 @@ class AdminJobRunner {
           id,
           seq,
           stream,
-          line,
+          line: durableLogLine,
           createdAt: createdAt.toISOString(),
         });
       },
@@ -1284,6 +1354,7 @@ class AdminJobRunner {
         jobEventBus.publish(jobId, { type: "progress", progress });
       },
       checkpoint: async (result, progress, admissionKey, stepAddress) => {
+        result = durableRecord(result);
         const write = checkpointTail.then(async () => {
           const isV3 = (result.opsProjection as { version?: number } | undefined)?.version === 3;
           if (isV3) {
@@ -1387,6 +1458,7 @@ class AdminJobRunner {
       error?: string,
       knownFailure = false,
     ) => {
+      if (error !== undefined) error = durableLine(error);
       try {
         await checkpointTail;
         const merged: Record<string, unknown> = {
@@ -1395,12 +1467,13 @@ class AdminJobRunner {
           ...(execution ? { _execution: execution } : {}),
         };
         delete merged.observation;
+        const safeMerged = durableRecord(merged);
         if (hasUnsettledManagedOperation(ctx.checkpointResult)) {
           if (status === "success" || knownFailure)
             await db
               .update(adminJob)
               .set({
-                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+                result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
               })
               .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           throw new JobObservationPending("recovery_required");
@@ -1409,7 +1482,7 @@ class AdminJobRunner {
           await db
             .update(adminJob)
             .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
             })
             .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           throw new JobObservationPending("receipt_delivery");
@@ -1419,7 +1492,7 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status,
-            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(merged).filter(([key]) => !["opsProjection", "_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
+            result: sql`(coalesce(${adminJob.result}, '{}'::jsonb) - 'observation') || ${JSON.stringify(Object.fromEntries(Object.entries(safeMerged).filter(([key]) => !["opsProjection", "_opsLogEvents", "_opsLogBytes"].includes(key))))}::jsonb`,
             error: error ?? null,
             finishedAt,
             ...(status === "success" ? { progress: 100 } : {}),
@@ -1434,7 +1507,7 @@ class AdminJobRunner {
           .returning({ id: adminJob.id });
         if (rows.length) {
           this.announce(jobId, status, {
-            result: publicAdminJobResult(merged),
+            result: publicAdminJobResult(safeMerged),
             error: error ?? null,
             ...(status === "success" ? { progress: 100 } : {}),
             finishedAt: finishedAt.toISOString(),
@@ -1444,7 +1517,7 @@ class AdminJobRunner {
           await db
             .update(adminJob)
             .set({
-              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(merged), error } })}::jsonb`,
+              result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || ${JSON.stringify({ _settled: { status, result: publicAdminJobResult(safeMerged), error } })}::jsonb`,
             })
             .where(jobOwnership(jobId, execution, ["running", "cancel_pending"]));
           await pending("receipt_delivery");

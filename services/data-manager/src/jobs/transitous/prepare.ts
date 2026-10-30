@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { parseCatalogPinSet } from "@openmapx/core/catalog-pins";
-import { ensureCatalog } from "@openmapx/transitous-core";
+import { ensureCatalog, parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
-import { parseRefShaPair, type TransitousLock } from "../../transitous-lock.js";
 import { selectedCatalogPins } from "./catalog-selection.js";
+
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
@@ -116,11 +116,12 @@ function pruneOrphanedGtfsDatasets(ctx: JobContext): void {
 const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/;
 
 /**
- * Hard-reset the catalog to the SHA pinned in
- * the agent-owned `infra/docker/transitous.lock.json` before running the pipeline.
+ * Hard-reset the catalog to the commit the operations agent reports as the pin
+ * in effect, before running the pipeline: the release's pin, or one an
+ * administrator or the auto-bump approved over it.
  *
- * This fails CLOSED. A missing repo root, a missing, unreadable, or malformed
- * lockfile, or a ref whose SHA is not an exact 40-hex commit all abort
+ * This fails CLOSED. A pin the agent cannot report, a missing or malformed
+ * ref, or a ref whose SHA is not an exact 40-hex commit all abort
  * preparation. Continuing would run upstream Transitous code against whatever
  * the catalog's remote HEAD happens to be — code that was never reviewed and is
  * not what any operator pinned.
@@ -132,6 +133,7 @@ async function enforceTransitousLock(
   pinned: TransitousLock,
 ): Promise<TransitousLock> {
   const lock = pinned;
+
   let sha: string;
   try {
     ({ sha } = parseRefShaPair(lock.ref));
@@ -151,7 +153,7 @@ async function enforceTransitousLock(
   const currentSha = await readGitHeadSha(catalogDir);
   if (currentSha === sha) return lock;
   logger.info(
-    `transitous-pipeline: catalog HEAD ${currentSha || "(unknown)"} differs from lockfile ${sha}; resetting`,
+    `transitous-pipeline: catalog HEAD ${currentSha || "(unknown)"} differs from the pinned commit ${sha}; resetting`,
   );
   await runner("git", [...safeArgs, "-C", catalogDir, "fetch", "origin", sha], {
     cwd: catalogDir,

@@ -75,7 +75,7 @@
     {
       "name": "Transitous Rentals",
       "type": "http",
-      "url": "https://api.transitous.org/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
     },
     {
       "name": "Communauto",
@@ -91,6 +91,11 @@
       "name": "Dégage",
       "type": "http",
       "url": "https://degapp.be/api/car/stands"
+    },
+    {
+      "name": "MOTIS self-hosted",
+      "type": "ping",
+      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
     }
   ],
   "quality": "built-in",

@@ -5,6 +5,7 @@ import {
   isVehicleSpecific,
   type RoadConditionEffect,
   type RoadConditionEvent,
+  type RoadConditionRightsPolicy,
   type RoadConditionRouteImpact,
   speedCapKph,
   type TravelMode,
@@ -17,6 +18,8 @@ export interface RoadConditionRouteContext {
   sharedTrafficApplied: boolean;
   allowLegacyGeometry?: boolean;
   disallowedSources?: ReadonlySet<string>;
+  /** The operator's data-use policy; routing takes no unclear or non-commercial rights without it. */
+  rightsPolicy?: RoadConditionRightsPolicy;
 }
 
 export function evidenceBoundCacheTtlSeconds(
@@ -101,6 +104,7 @@ export function assessRoadConditionForRoute(
     travelAt: context.travelAt,
     disallowedSources: context.disallowedSources,
     sharedTraffic: true,
+    ...(context.rightsPolicy ? { rightsPolicy: context.rightsPolicy } : {}),
   });
   if (!eligibility.eligible) {
     return {

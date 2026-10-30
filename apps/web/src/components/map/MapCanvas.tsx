@@ -8,9 +8,11 @@ import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
   isBuildingStyleLayer,
+  readLastMapView,
   useMapStore,
   useNavigationStore,
   useSettingsStore,
+  writeLastMapView,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -25,8 +27,9 @@ import { attributedRasterRequestTransform } from "@/integration-api/overlay/rast
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
+import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
-import { useMapObstructionInsets } from "@/lib/mapObstructions";
+import { useMapObstructionExtent, useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
@@ -38,6 +41,7 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
+import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { localizeMapLabels } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
@@ -111,9 +115,21 @@ export function MapCanvas() {
   const viewportHeight = useWindowHeight();
   const viewportWidth = useWindowWidth();
   const sheetClearance = useMobilePanelClearance(viewportHeight);
+  // The live footer and sheet edges rather than `insets.bottom`, which holds a
+  // moving sheet's last settled height and would leave the scale behind it.
+  const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
   const scaleLeft = 12;
-  const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
+  const scaleBottom = Math.max(102, footerExtent + 12, sheetClearance + 12);
+  // While a sheet drives the follow, the scale rides the footer (or, with the
+  // footer docked, the sheet edge) on the compositor (see lib/sheetFollow).
+  const followTrack = useSheetFollowTrack();
+  const footerBox = useMapFooterBox();
+  const scaleFollow = followTrack ? planAboveFooter(followTrack, footerBox, 12, 102) : null;
+  // Turn-by-turn guidance has no use for a distance scale, and its speed-limit
+  // badge sits over the same corner.
+  const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
   const scaleVisible =
+    !groundNavigating &&
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
 
@@ -124,7 +140,12 @@ export function MapCanvas() {
     // Read initial viewport values once at mount — not reactive dependencies.
     // Adding center/zoom/bearing/pitch to the dep array would cause the map to
     // be destroyed and re-created every time the user pans or zooms.
-    const { center, zoom, bearing, pitch } = useMapStore.getState();
+    const { bearing, pitch, ...storeView } = useMapStore.getState();
+    // A view the page was opened on (a shared link, a reload) wins; otherwise
+    // reopen where the map was last left, unless the user switched that off.
+    const linkedView = new URLSearchParams(window.location.search).has("map");
+    const lastView = linkedView ? null : readLastMapView();
+    const { center, zoom } = lastView ?? storeView;
 
     const attempt = retryKey;
     let destroyed = false;
@@ -233,6 +254,7 @@ export function MapCanvas() {
         setZoom(map.getZoom());
         setBearing(map.getBearing());
         setPitch(map.getPitch());
+        writeLastMapView({ center, zoom: map.getZoom() });
       });
 
       mapRef.current = map;
@@ -330,11 +352,11 @@ export function MapCanvas() {
     // If location permission is already granted, move to the user's location
     // (zoom 14) and show the marker when it arrives — without prompting. Opening
     // the map is not a moment to spend somebody's one permission prompt.
-    // A view the page opened on (a shared link, a reload) or a move the user
-    // made while the fix was on its way wins: the fix then only places the
-    // marker. A slow fix used to pull a linked view, and what was being
-    // searched there, over to the user's own town.
-    let cameraTaken = new URLSearchParams(window.location.search).has("map");
+    // A view the page opened on (a shared link, a reload, the view the map was
+    // last left on) or a move the user made while the fix was on its way wins:
+    // the fix then only places the marker. A slow fix used to pull a linked
+    // view, and what was being searched there, over to the user's own town.
+    let cameraTaken = linkedView || lastView !== null;
     const recenter = (lngLat: LngLat) =>
       void mapInitialization.then((map) => {
         if (!isActive() || attemptFailed || !map || mapRef.current !== map) return;
@@ -449,13 +471,13 @@ export function MapCanvas() {
           "& .maplibregl-ctrl-bottom-left > .maplibregl-ctrl-scale": {
             display: scaleVisible ? "block" : "none",
             marginLeft: `${scaleLeft}px`,
-            marginBottom: `${scaleBottom}px`,
+            marginBottom: `${scaleFollow ? scaleFollow.base : scaleBottom}px`,
+            ...sheetFollowSx(scaleFollow),
             pointerEvents: "none",
             bgcolor: "background.paper",
             color: "text.primary",
             borderColor: "currentColor",
             fontSize: 10,
-            transition: "margin-bottom 0.25s ease",
           },
         }}
       />

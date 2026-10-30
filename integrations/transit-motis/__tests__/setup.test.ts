@@ -1,9 +1,17 @@
+import { readFileSync } from "node:fs";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
-import { assertTransitProviderContract } from "@openmapx/integration-framework";
+import {
+  assertTransitProviderContract,
+  resolveIntegrationPlatformEndpoint,
+} from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
 const ORIGINAL_MOTIS_URL = process.env.MOTIS_URL;
+
+const MANIFEST = JSON.parse(
+  readFileSync(new URL("../manifest.json", import.meta.url), "utf8"),
+) as IntegrationContext["manifest"];
 
 function registeredProviders(
   options: { config?: Record<string, unknown>; serviceUrl?: string } = {},
@@ -14,6 +22,13 @@ function registeredProviders(
     manifest: { dataSources: [] },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     getRequiredService: () => (options.serviceUrl ? { url: options.serviceUrl } : null),
+    // Resolved as the host does, through the manifest's endpoint settings.
+    resolvePlatformEndpoint: (id: Parameters<IntegrationContext["resolvePlatformEndpoint"]>[0]) =>
+      resolveIntegrationPlatformEndpoint(
+        { manifest: MANIFEST, config: options.config ?? {} },
+        () => (options.serviceUrl ? { url: options.serviceUrl, enabled: true } : null),
+        id,
+      ),
     onActivate: (activate: () => void) => activate(),
     registerTransitProvider: (provider: TransitProvider) => providers.push(provider),
   } as unknown as IntegrationContext;

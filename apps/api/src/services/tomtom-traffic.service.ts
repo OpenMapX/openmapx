@@ -1,5 +1,7 @@
 import { USER_AGENT } from "@openmapx/core";
+import { createBoundedBinaryProxyStream, MAX_RASTER_TILE_BYTES } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
+import { discardUpstreamResponse } from "../utils/upstream-response.js";
 import type { TrafficProvider, TrafficTile } from "./traffic.provider";
 import { TrafficProviderHttpError } from "./traffic.provider";
 
@@ -8,6 +10,7 @@ const TOMTOM_TRAFFIC_STYLE = envString("TOMTOM_TRAFFIC_STYLE", "relative-delay")
 const TOMTOM_TRAFFIC_VERSION = envString("TOMTOM_TRAFFIC_VERSION", "4");
 const TOMTOM_TRAFFIC_TILE_SIZE = envString("TOMTOM_TRAFFIC_TILE_SIZE", "256");
 const TOMTOM_TRAFFIC_THICKNESS = process.env.TOMTOM_TRAFFIC_THICKNESS;
+const TOMTOM_TRAFFIC_TIMEOUT_MS = 15_000;
 
 function getTomTomTrafficKey(): string {
   const key = process.env.TOMTOM_TRAFFIC_KEY;
@@ -30,32 +33,42 @@ function buildFlowTileUrl(z: number, x: number, y: number): URL {
   return url;
 }
 
-async function fetchFlowTile(z: number, x: number, y: number): Promise<TrafficTile> {
+async function fetchFlowTile(
+  z: number,
+  x: number,
+  y: number,
+  callerSignal?: AbortSignal,
+): Promise<TrafficTile> {
+  const timeoutSignal = AbortSignal.timeout(TOMTOM_TRAFFIC_TIMEOUT_MS);
+  const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
   const res = await fetch(buildFlowTileUrl(z, x, y), {
     headers: {
-      Accept: "image/png,image/*;q=0.8,*/*;q=0.5",
+      Accept: "image/png,application/json;q=0.8",
       "User-Agent": USER_AGENT,
     },
+    redirect: "error",
+    signal,
   });
 
   if (!res.ok) {
-    const errorBody = await res.text();
-    const detail = errorBody.trim().slice(0, 300);
-    throw new TrafficProviderHttpError(
-      `TomTom traffic flow tile error ${res.status}${detail ? `: ${detail}` : ""}`,
-      res.status,
-    );
+    discardUpstreamResponse(res);
+    throw new TrafficProviderHttpError(`TomTom traffic flow tile error ${res.status}`, res.status);
   }
 
+  const proxy = createBoundedBinaryProxyStream(res, {
+    maxBytes: MAX_RASTER_TILE_BYTES,
+    allowedContentTypes: ["image/png"],
+    label: "TomTom traffic flow tile",
+  });
   return {
-    contentType: res.headers.get("content-type") ?? "image/png",
+    contentType: proxy.contentType,
     cacheControl: res.headers.get("cache-control") ?? "public, max-age=30, s-maxage=30",
-    bytes: await res.arrayBuffer(),
+    body: proxy.body,
   };
 }
 
 export const tomtomTrafficService: TrafficProvider = {
-  async getFlowTile(z: number, x: number, y: number): Promise<TrafficTile> {
-    return fetchFlowTile(z, x, y);
+  async getFlowTile(z: number, x: number, y: number, signal?: AbortSignal): Promise<TrafficTile> {
+    return fetchFlowTile(z, x, y, signal);
   },
 };

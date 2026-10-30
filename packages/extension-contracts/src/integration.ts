@@ -170,6 +170,43 @@ export function readCredentialSetup(propertyDef: unknown): CredentialSetup | und
   return parsed.success ? parsed.data : undefined;
 }
 
+/**
+ * Platform backends whose instance the deployment chooses. Integrations ask
+ * for the instance in use with `ctx.resolvePlatformEndpoint(id)`, and a health
+ * check probes it as `${endpoint:<id>}`; both resolve the self-hosted service
+ * when it is enabled, then the integration's own URL setting
+ * (`endpointConfigKeys`), then the operator's URL, then the public default.
+ * `motis` is a self-hosted MOTIS; `transitous` the hosted MOTIS of Transitous.
+ */
+export const PLATFORM_ENDPOINT_IDS = [
+  "overpass",
+  "nominatim",
+  "photon",
+  "pelias",
+  "osrm",
+  "valhalla",
+  "motis",
+  "transitous",
+] as const;
+export type PlatformEndpointId = (typeof PLATFORM_ENDPOINT_IDS)[number];
+
+export function isPlatformEndpointId(value: string): value is PlatformEndpointId {
+  return (PLATFORM_ENDPOINT_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * A URL template using `${endpoint:<id>}` starts with it, followed by a path or
+ * nothing, and uses it once, so the probe stays on the endpoint's origin.
+ */
+export const ENDPOINT_URL_TEMPLATE = /^\$\{endpoint:[\w-]+\}(?:\/(?![\s\S]*\$\{endpoint:)|$)/;
+
+/** `${endpoint:<id>}` placeholders in `text` naming no known platform endpoint. */
+function unknownEndpointPlaceholders(text: string): string[] {
+  return [...text.matchAll(/\$\{endpoint:([^}]*)\}/g)]
+    .map((match) => match[1] ?? "")
+    .filter((id) => !isPlatformEndpointId(id));
+}
+
 const healthCheckSchema = z.object({
   name: z.string().optional(),
   type: z.enum(["http", "ping", "tcp", "custom"]),
@@ -178,7 +215,10 @@ const healthCheckSchema = z.object({
    * Template with `${configKey}` placeholders resolved from the integration's
    * configSchema cascade (defaults → database → vault → env). Use this when
    * the probe needs an API key or similar; the placeholder name must match a
-   * key declared in `configSchema.properties`.
+   * key declared in `configSchema.properties`. `${service:<id>}` is a
+   * self-hosted service's URL, and `${endpoint:<id>}` the instance of a
+   * platform backend in use (`PLATFORM_ENDPOINT_IDS`): only as the whole
+   * URL prefix, never in headers, and only in built-in manifests.
    */
   urlTemplate: z.string().optional(),
   /** Same substitution rules as `urlTemplate`. */
@@ -362,8 +402,16 @@ export const integrationManifestSchema = z.object({
   backend: backendSchema.optional(),
 
   configSchema: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * The setting in `configSchema` that overrides a platform endpoint for this
+   * integration, ranked after the self-hosted service and before the
+   * operator's URL: `{ "motis": "endpoint" }`.
+   */
+  endpointConfigKeys: z.record(z.string(), z.string()).optional(),
 
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
+  /** Minimum time between background probes; explicit admin checks remain immediate. */
+  healthCheckIntervalMs: z.number().int().min(60_000).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
   dataSources: z.array(dataSourceSchema).optional(),
@@ -461,6 +509,47 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
       errors.push(
         "manifest.healthCheck is required for integrations with infrastructure dependencies (requires)",
       );
+    }
+    const configKeys = Object.keys(
+      ((manifest.configSchema as { properties?: Record<string, unknown> } | undefined)
+        ?.properties ?? {}) as Record<string, unknown>,
+    );
+    for (const [endpointId, configKey] of Object.entries(manifest.endpointConfigKeys ?? {})) {
+      if (!isPlatformEndpointId(endpointId)) {
+        errors.push(
+          `manifest.endpointConfigKeys: unknown endpoint "${endpointId}" (known: ${PLATFORM_ENDPOINT_IDS.join(", ")})`,
+        );
+      }
+      if (!configKeys.includes(configKey)) {
+        errors.push(
+          `manifest.endpointConfigKeys.${endpointId}: "${configKey}" is not a configSchema property`,
+        );
+      }
+    }
+    const healthChecks = manifest.healthCheck
+      ? Array.isArray(manifest.healthCheck)
+        ? manifest.healthCheck
+        : [manifest.healthCheck]
+      : [];
+    for (const check of healthChecks) {
+      const template = check.urlTemplate ?? "";
+      for (const id of unknownEndpointPlaceholders(template)) {
+        errors.push(
+          `manifest.healthCheck: unknown endpoint "${id}" in \${endpoint:${id}} (known: ${PLATFORM_ENDPOINT_IDS.join(", ")})`,
+        );
+      }
+      // The endpoint can be an internal host with the operator's credentials:
+      // it may only be where the probe goes, never data sent elsewhere.
+      if (template.includes("${endpoint:") && !ENDPOINT_URL_TEMPLATE.test(template)) {
+        errors.push(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: the message names the manifest syntax
+          "manifest.healthCheck: ${endpoint:<id>} must be the whole URL prefix of urlTemplate, used once, followed by a path or nothing",
+        );
+      }
+      if (Object.values(check.headers ?? {}).some((value) => value.includes("${endpoint:"))) {
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: the message names the manifest syntax
+        errors.push("manifest.healthCheck: ${endpoint:<id>} may not appear in headers");
+      }
     }
     if (manifest.runtimeDataSources && manifest.dataSources?.length) {
       errors.push(

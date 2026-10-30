@@ -11,6 +11,11 @@ The seven-image manifest is the selection unit. A new name never makes reused im
 
 ## Prepare a candidate
 
+Before dispatch, identify the reviewed preparation commit, a complete successful
+main CI producer run and the account authorized for `named-release` approval.
+The workflow validates the configured environment policy; source tests do not
+establish live registry, GitHub or staging access.
+
 1. Prepare a normal PR with `node scripts/prepare-product-release.mjs --version 0.1.0-alpha.1 [release-notes/selected-fragment.md ...]`. Review `scripts/product-release.json` and the matching page under `docs/docs/releases/`. Curate ordinary changes from merged PRs; incorporate and remove only fragments included in that release. The helper only edits local metadata and notes; it creates no commit, PR or release. Existing notes are edited deliberately rather than overwritten.
 2. Merge the reviewed preparation PR and wait for its complete main CI run, including the coherent Docker producer. A superseded or skipped producer is ineligible. If no eligible complete image set exists, prepare a new reviewed source/run; there is no old-commit build bypass.
 3. Dispatch **Prepare or publish a named product prerelease** on **main**, operation `prepare`, with that successful `source_run_id`. It reads the selected source's preparation record and notes as data. It runs trusted orchestration code from the main workflow ref. Main may have advanced after the selected eligible producer finished.
@@ -71,6 +76,6 @@ Use `pnpm openmapx compose release --status` to inspect deliberate pins and `pnp
 
 ## Verification boundaries
 
-Portable tests exercise selection, identity, failure recovery and publication state machines using synthetic registries/GitHub data. They do not establish live workflow dispatch, GHCR promotion, installation, upgrade, restore or native-device acceptance. The first real candidate and preview-to-preview cycle require those separate authorized gates. This implementation does not publish alpha.1 or change a running instance.
-
-The design adopts staged artifact promotion from [Authentik](https://github.com/goauthentik/authentik/blob/0bf3eb26917c7fdbee26b48ea8cc0145f3bdc9d5/.github/workflows/release-publish.yml), protected deliberate publication from [Immich](https://github.com/immich-app/immich/blob/53618ff7496ee313d1cff7b3bcdf19c82b765cdf/.github/workflows/draft-release.yml), and release-specific migration guidance from [Nextcloud](https://docs.nextcloud.com/server/stable/admin_manual/maintenance/upgrade.html) and [Mastodon](https://docs.joinmastodon.org/admin/upgrading/). Their build order and maintenance machinery are not copied wholesale.
+Portable tests exercise selection, identity, failure recovery and publication state machines using synthetic registries/GitHub data. They do not establish live workflow dispatch, GHCR promotion, installation, upgrade, restore or native-device acceptance. The first real candidate and preview-to-preview cycle require those separate authorized gates. The committed preparation record does not establish that alpha.1 has been
+published or accepted on a running instance. Inspect the actual release, bound
+readiness evidence and target deployment before making those claims.

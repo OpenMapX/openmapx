@@ -1,6 +1,6 @@
 /** Fixed prepared-artifact consumer. Filesystem paths and Docker acquisition stay agent-local. */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import {
   AnchoredDirectory,
   buildArtifactSpec,
@@ -372,8 +372,22 @@ export function installPreparedImportRuntime(
         materializeMotis,
         signal: context.signal,
         beforePublication: async () => {
-          const infra = new AnchoredDirectory(source.infraDir),
-            releases = infra.directory(".ops-agent-releases", true, true);
+          const infra = new AnchoredDirectory(source.infraDir);
+          const releaseParents: AnchoredDirectory[] = [];
+          let releases = infra;
+          try {
+            for (const part of relative(
+              source.infraDir,
+              services.releaseStatePaths(source.infraDir).store,
+            ).split(sep)) {
+              releases = releases.directory(part, true, true);
+              releaseParents.push(releases);
+            }
+          } catch (error) {
+            for (const parent of releaseParents.reverse()) parent.close();
+            infra.close();
+            throw error;
+          }
           let lock: Awaited<ReturnType<typeof services.acquireReleaseStoreLock>> | undefined;
           try {
             lock = await services.acquireReleaseStoreLock(
@@ -391,7 +405,7 @@ export function installPreparedImportRuntime(
               try {
                 lock?.release();
               } finally {
-                releases.close();
+                for (const parent of releaseParents.reverse()) parent.close();
                 infra.close();
               }
             };
@@ -399,7 +413,7 @@ export function installPreparedImportRuntime(
             try {
               lock?.release();
             } finally {
-              releases.close();
+              for (const parent of releaseParents.reverse()) parent.close();
               infra.close();
             }
             throw error;

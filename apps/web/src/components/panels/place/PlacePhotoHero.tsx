@@ -8,12 +8,12 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { isDisplayablePhoto, type PlacePhoto, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useSearchBarClearance } from "../searchBarClearance";
 import { PhotoAttribution } from "./PhotoAttribution";
 
 interface Props {
   photos: PlacePhoto[];
   placeName: string;
-  clearSearchBar?: boolean;
   onClose?: () => void;
   onViewPhotos: () => void;
   /**
@@ -24,16 +24,10 @@ interface Props {
   onPhotoError?: (url: string) => void;
 }
 
-export function PlacePhotoHero({
-  photos,
-  placeName,
-  clearSearchBar = false,
-  onClose,
-  onViewPhotos,
-  onPhotoError,
-}: Props) {
+export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPhotoError }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
+  const searchBarClearance = useSearchBarClearance();
   const photo = photos.find(isDisplayablePhoto);
   if (!photo) return null;
 
@@ -91,7 +85,7 @@ export function PlacePhotoHero({
           className="view-photos-pill"
           sx={{
             position: "absolute",
-            top: clearSearchBar ? { xs: 12, sm: "72px" } : 12,
+            top: searchBarClearance ?? 12,
             left: 12,
             maxWidth: "calc(100% - 76px)",
             display: "flex",

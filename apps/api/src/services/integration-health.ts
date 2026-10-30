@@ -1,7 +1,17 @@
 import { createConnection } from "node:net";
-import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
+import {
+  ENDPOINT_URL_TEMPLATE,
+  isPlatformEndpointId,
+  USER_AGENT,
+  urlCredentialsAsBasicAuth,
+  validatePublicUrl,
+} from "@openmapx/core";
 import { resolvePublicConnectionAddresses, safeFetchStatus } from "@openmapx/core/server";
-import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
+import {
+  type LoadedIntegration,
+  resolveIntegrationPlatformEndpoint,
+  toIntegrationMeta,
+} from "@openmapx/integration-framework";
 import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
@@ -123,6 +133,35 @@ function secretRedactor(integration: LoadedIntegration): (text: string) => strin
   };
 }
 
+/** The endpoint a probe resolved: its origin, and the operator's credentials for it. */
+interface ProbeEndpoint {
+  origin: string;
+  /**
+   * The self-hosted service, the integration's URL setting or the operator's
+   * instance: the deployment's choice, which may be internal.
+   */
+  trusted: boolean;
+  authorization?: string;
+  secrets: string[];
+}
+
+/** `redact`, also masking `values` (each at least the redactable length). */
+function withRedactedValues(
+  redact: (text: string) => string,
+  values: string[],
+): (text: string) => string {
+  const patterns = [...new Set(values)]
+    .filter((value) => value.length >= MIN_REDACTABLE_SECRET_LENGTH)
+    .sort((a, b) => b.length - a.length)
+    .map(encodedSecretPattern);
+  if (patterns.length === 0) return redact;
+  return (text) => {
+    let out = redact(text);
+    for (const pattern of patterns) out = out.replace(pattern, "***");
+    return out;
+  };
+}
+
 async function executeSingleHealthCheck(
   integration: LoadedIntegration,
   hc: {
@@ -145,7 +184,7 @@ async function executeSingleHealthCheck(
   const name = hc.name
     ? `${toIntegrationMeta(integration).name} — ${hc.name}`
     : toIntegrationMeta(integration).name;
-  const redactSecrets = secretRedactor(integration);
+  let redactSecrets = secretRedactor(integration);
 
   // Skip the probe when any required config key is unresolved (no value from
   // defaults / DB / vault / env). The cascade is populated at integration
@@ -258,7 +297,7 @@ async function executeSingleHealthCheck(
   }
 
   // URL template interpolation (fall back to static url if template produces a broken URL).
-  // Two placeholder syntaxes:
+  // Three placeholder syntaxes:
   //   - `${configKey}` — resolves against the integration's resolved config
   //     (same source used at request time).
   //   - `${service:id}` — resolves to the URL of a self-hosted service in the
@@ -266,10 +305,60 @@ async function executeSingleHealthCheck(
   //     "unconfigured" rather than falling through to the static `url` (which
   //     is typically the public-fallback endpoint a self-hosted operator
   //     doesn't actually use).
+  //   - `${endpoint:id}` — resolves to the instance of a platform backend its
+  //     clients query: the self-hosted service, the operator's URL or the
+  //     public default (`resolvePlatformEndpoint`).
   let checkUrl: string;
   let unsatisfiedService: string | null = null;
+  let unsatisfiedEndpoint: string | null = null;
+  // `${endpoint:id}` names the deployment's own instance, possibly internal and
+  // with the operator's credentials. A built-in manifest may use it only as the
+  // whole URL prefix; its credentials never enter the template and go only to
+  // that origin, as Basic auth.
+  let endpointMisuse: string | null = null;
+  let resolvedEndpoint: ProbeEndpoint | null = null;
+  // Hosts the deployment chose (a registered service or the operator's own
+  // instance URL), which may be internal; manifest-literal and config-derived
+  // hosts must be public.
   const serviceHosts = new Set<string>();
-  function resolvePlaceholder(key: string): string {
+  function resolvePlaceholder(key: string, inHeader = false): string {
+    if (key.startsWith("endpoint:")) {
+      const endpointId = key.slice("endpoint:".length);
+      if (!integration.isBuiltIn) {
+        endpointMisuse = "endpoint placeholders are reserved for built-in integrations";
+        return "";
+      }
+      if (inHeader) {
+        endpointMisuse = "an endpoint placeholder may not appear in a header";
+        return "";
+      }
+      // The instance the integration's own queries use (`ctx.resolvePlatformEndpoint`).
+      const endpoint = isPlatformEndpointId(endpointId)
+        ? resolveIntegrationPlatformEndpoint(
+            integration,
+            (serviceId) => integration.resolvedServices?.[serviceId],
+            endpointId,
+          )
+        : null;
+      if (!endpoint) {
+        unsatisfiedEndpoint = unsatisfiedEndpoint ?? endpointId;
+        return "";
+      }
+      const withoutCredentials = urlCredentialsAsBasicAuth(endpoint.url);
+      const base = withoutCredentials.url.replace(/\/$/, "");
+      try {
+        resolvedEndpoint = {
+          origin: new URL(base).origin,
+          trusted: endpoint.source !== "default",
+          authorization: withoutCredentials.authorization,
+          secrets: withoutCredentials.secrets,
+        };
+      } catch {
+        endpointMisuse = `the ${endpointId} endpoint URL is not a valid URL`;
+        return "";
+      }
+      return base;
+    }
     if (key.startsWith("service:")) {
       const serviceId = key.slice("service:".length);
       const url = serviceUrl(serviceId);
@@ -287,7 +376,11 @@ async function executeSingleHealthCheck(
     return resolveConfigValue(integration, key) ?? "";
   }
   if (hc.urlTemplate) {
-    const resolved = (hc.urlTemplate as string).replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
+    const template = hc.urlTemplate as string;
+    if (template.includes("${endpoint:") && !ENDPOINT_URL_TEMPLATE.test(template)) {
+      endpointMisuse = "an endpoint placeholder must be the whole URL prefix";
+    }
+    const resolved = template.replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
       resolvePlaceholder(key),
     );
     if (unsatisfiedService) {
@@ -299,12 +392,46 @@ async function executeSingleHealthCheck(
         status: "unconfigured",
       };
     }
+    if (unsatisfiedEndpoint) {
+      return {
+        id,
+        name,
+        category,
+        url: `${unsatisfiedEndpoint} endpoint not configured`,
+        status: "unconfigured",
+      };
+    }
     const hasHost = /^https?:\/\/[^/]/.test(resolved);
     checkUrl = hasHost ? resolved : ((hc.url as string | undefined) ?? resolved);
   } else if (hc.url) {
     checkUrl = hc.url as string;
   } else {
     return null;
+  }
+
+  // URL credentials go as Basic auth and never reach the display URL or an
+  // error message: a manifest's own `https://user:pass@host`, or the operator's
+  // endpoint credentials, which only ever go to that endpoint's origin.
+  const withoutCredentials = urlCredentialsAsBasicAuth(checkUrl);
+  checkUrl = withoutCredentials.url;
+  let credentialHeader = withoutCredentials.authorization;
+  redactSecrets = withRedactedValues(redactSecrets, withoutCredentials.secrets);
+  // Assigned inside resolvePlaceholder, which TypeScript does not follow.
+  const endpoint = resolvedEndpoint as ProbeEndpoint | null;
+  if (endpoint) {
+    redactSecrets = withRedactedValues(redactSecrets, endpoint.secrets);
+    let origin: string | null = null;
+    try {
+      origin = new URL(checkUrl).origin;
+    } catch {
+      origin = null;
+    }
+    if (origin !== endpoint.origin) {
+      endpointMisuse = endpointMisuse ?? "the probe URL leaves the endpoint's origin";
+    } else {
+      credentialHeader = endpoint.authorization ?? credentialHeader;
+      if (endpoint.trusted) serviceHosts.add(new URL(checkUrl).host);
+    }
   }
 
   // Mask sensitive data in the display URL. The name-based pass keeps a
@@ -315,21 +442,40 @@ async function executeSingleHealthCheck(
     checkUrl.replace(/([?&](api_?key|key|apikey|app_key|token|access_token))=[^&]+/gi, "$1=***"),
   );
 
-  // Interpolate `${configKey}` and `${service:id}` placeholders in headers
-  // (same resolution rules as urlTemplate — resolved config or service
-  // registry, not raw process.env).
+  // Interpolate `${configKey}`, `${service:id}` and `${endpoint:id}`
+  // placeholders in headers (same resolution rules as urlTemplate — resolved
+  // config, service registry or platform endpoint, not raw process.env).
   const rawHeaders = (hc.headers as Record<string, string>) ?? {};
   const interpolatedHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawHeaders)) {
     interpolatedHeaders[k] = v.replace(/\$\{([\w:-]+)\}/g, (_, key: string) =>
-      resolvePlaceholder(key),
+      resolvePlaceholder(key, true),
     );
+  }
+  if (endpointMisuse) {
+    return {
+      id,
+      name,
+      category,
+      url: "health check misconfigured",
+      status: "down",
+      error: endpointMisuse,
+    };
+  }
+  // A manifest's own Authorization header takes precedence over URL credentials.
+  if (
+    credentialHeader &&
+    !Object.keys(interpolatedHeaders).some((key) => key.toLowerCase() === "authorization")
+  ) {
+    interpolatedHeaders.Authorization = credentialHeader;
   }
 
   // SSRF guard: a manifest-controlled health-check URL must not target an
-  // internal/loopback/link-local host. Registered `service:` hosts are exempt
-  // (they are SUPPOSED to be internal); everything else (manifest-literal or
-  // ${config}-derived) is validated. Comparing the FINAL host against the set
+  // internal/loopback/link-local host. Registered `service:` hosts and the
+  // instance an `endpoint:` resolves (self-hosted service, integration URL
+  // setting or operator URL) are exempt: they are the deployment's own choice
+  // and may be internal. Everything else (manifest-literal, ${config}-derived
+  // or a public default) is validated. Comparing the FINAL host against the set
   // of service-substituted hosts prevents smuggling an internal IP past the
   // guard by also referencing a service elsewhere in the template.
   let hostExempt = false;
@@ -419,13 +565,37 @@ export async function executeIntegrationHealthCheck(
   return results.filter((r): r is ServiceStatus => r !== null);
 }
 
+// Key by the loaded generation so a reload seeds fresh health immediately.
+const scheduledChecks = new WeakMap<LoadedIntegration, { startedAt: number; pending: boolean }>();
+
 export async function executeAllIntegrationHealthChecks(
   integrations: LoadedIntegration[],
+  options: { scheduled?: boolean } = {},
 ): Promise<ServiceStatus[]> {
-  const checks = integrations.filter((i) => i.manifest.healthCheck);
+  const now = Date.now();
+  const checks = integrations.filter((integration) => {
+    if (!integration.manifest.healthCheck) return false;
+    if (!options.scheduled) return true;
+    const previous = scheduledChecks.get(integration);
+    const interval = integration.manifest.healthCheckIntervalMs ?? 60_000;
+    if (previous && (previous.pending || now - previous.startedAt < interval)) return false;
+    scheduledChecks.set(integration, { startedAt: now, pending: true });
+    return true;
+  });
+  if (options.scheduled && checks.length === 0) {
+    return getCachedIntegrationHealthSnapshot(integrations).results;
+  }
   const results = await Promise.all(
     checks.map(async (integration) => {
-      const subResults = await executeIntegrationHealthCheck(integration);
+      let subResults: ServiceStatus[];
+      try {
+        subResults = await executeIntegrationHealthCheck(integration);
+      } finally {
+        if (options.scheduled) {
+          const state = scheduledChecks.get(integration);
+          if (state) state.pending = false;
+        }
+      }
       // Multi-check integrations (e.g. fuel with 4 country sub-checks) write
       // entries under composite ids `<integration>:<sub>`, never under the
       // bare id. The integration-list endpoint looks up the bare id, gets
@@ -454,7 +624,7 @@ export async function executeAllIntegrationHealthChecks(
   }
   healthCacheUpdatedAt = Date.now();
 
-  return filtered;
+  return options.scheduled ? getCachedIntegrationHealthSnapshot(integrations).results : filtered;
 }
 
 /**

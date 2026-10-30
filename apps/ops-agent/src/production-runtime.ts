@@ -4,6 +4,7 @@ import { type OpsOperation, SERVICE_ACTIONS, type ServiceActionDecision } from "
 import { services } from "@openmapx/core/server";
 import {
   type AdministrativeReleaseEffects,
+  type AdministrativeReleaseRuntimeOptions,
   createAdministrativeRuntime,
   createDefaultFixedCli,
   createDefaultReleaseEffects,
@@ -32,6 +33,7 @@ import {
   runContainedProcess,
 } from "./docker-runtime";
 import { installImageStageRuntime } from "./image-stage-runtime";
+import { type IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
@@ -62,6 +64,8 @@ export interface ProductionOpsRuntimeOptions {
   stack: services.StackPaths;
   loadAuthority(): Promise<TrustedConfigurationAuthoritySnapshot>;
   communityRepositories: CommunityRepositoryStore;
+  integrationStore?: IntegrationStore;
+  releaseRuntimeOptions?: AdministrativeReleaseRuntimeOptions;
   docker?: Pick<DockerRuntimeOptions, "execFile" | "followLogs" | "fileExists">;
   runFixedCli?: FixedCliRunner;
   candidateSource?: ConfigurationCandidateSource;
@@ -79,7 +83,7 @@ function installReleaseCapabilityBoundary(
   owned: OwnedServiceResolver,
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>,
 ): AdministrativeReleaseEffects {
-  const directory = join(infraDir, ".ops-agent-releases");
+  const directory = services.releaseStatePaths(infraDir).store;
   const assertLegacyRecoveryComplete = () => {
     try {
       lstatSync(join(directory, "transaction.json"));
@@ -124,7 +128,7 @@ function installReleaseCapabilityBoundary(
       assertLegacyRecoveryComplete();
       context.signal.throwIfAborted();
       const result = await services.clearReleaseComposeSelection({
-        path: join(infraDir, "docker-compose.release.yml"),
+        path: services.releaseStatePaths(infraDir).overlay,
         expectedReleaseId: operation.releaseId,
       });
       if (!result.cleared) throw Error("Release selection changed");
@@ -229,7 +233,12 @@ export async function createProductionOpsRuntime(
   });
   const runtime = createDockerRuntime({
     stack: options.stack,
-    fileExists: options.docker?.fileExists ?? existsSync,
+    fileExists:
+      options.docker?.fileExists ??
+      ((path) =>
+        path === options.stack.composeReleasePath
+          ? services.ownedStateFilePresent(path)
+          : existsSync(path)),
     execFile: options.docker?.execFile,
     followLogs: options.docker?.followLogs,
     trafficDataRoot: join(options.stack.infraDir, "data"),
@@ -244,7 +253,37 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile ?? runContainedProcess,
     ownedServices: owned,
     candidateSource: options.candidateSource,
+    legacyTraefikDynamicMounted: async () => {
+      try {
+        const result = await (options.docker?.execFile ?? runContainedProcess)(
+          "docker",
+          [
+            "ps",
+            "--all",
+            "--quiet",
+            "--filter",
+            `volume=${services.legacyTraefikDynamicDirectory(options.stack.infraDir)}`,
+          ],
+          { signal: AbortSignal.timeout(30_000), timeout: 30_000, maxBuffer: 64 * 1024 },
+        );
+        return result.stdout.trim() !== "";
+      } catch {
+        return undefined;
+      }
+    },
+    containerBindMounts: () =>
+      services.readContainerBindMounts(
+        async (args) =>
+          (
+            await (options.docker?.execFile ?? runContainedProcess)("docker", args, {
+              signal: AbortSignal.timeout(30_000),
+              timeout: 30_000,
+              maxBuffer: 4 * 1024 * 1024,
+            })
+          ).stdout,
+      ),
   });
+  if (options.integrationStore) installIntegrationRuntime(runtime, options.integrationStore);
   installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned, lifecycle);
   installConfigurationHardlinksRuntime(runtime, { infraDir: options.stack.infraDir });
   registerConfigurationMaintenanceSource(runtime, {
@@ -289,7 +328,7 @@ export async function createProductionOpsRuntime(
     runtime,
     options.rootDir,
     options.stack.infraDir,
-    createDefaultReleaseEffects(options.rootDir, runFixedCli),
+    createDefaultReleaseEffects(options.rootDir, runFixedCli, options.releaseRuntimeOptions),
     owned,
     options.docker?.execFile ?? runContainedProcess,
   );

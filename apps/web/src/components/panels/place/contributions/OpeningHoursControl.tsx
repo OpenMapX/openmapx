@@ -53,6 +53,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { ClockTimeField } from "@/components/ui/ClockTimeField";
 import type { OsmContributionEvent, OsmDraft } from "./osmContributionDraft";
 
 const WEEKDAY_LABEL_KEY: Record<OsmWeekday, string> = {
@@ -83,27 +84,6 @@ function withPosition<T>(
     position,
     slotKey: `${prefix}-${position}`,
   }));
-}
-
-function formatClockInput(hours: number, minutes: number): string {
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-
-function parseClockInput(
-  raw: string,
-  allowExtended: boolean,
-): { hours: number; minutes: number } | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(raw.trim());
-  const hRaw = match?.[1];
-  const mRaw = match?.[2];
-  if (!hRaw || !mRaw) return null;
-  const hours = Number.parseInt(hRaw, 10);
-  const minutes = Number.parseInt(mRaw, 10);
-  const maxHours = allowExtended ? 48 : 24;
-  if (minutes > 59 || hours > maxHours || (hours === maxHours && minutes > 0)) {
-    return null;
-  }
-  return { hours, minutes };
 }
 
 function formatNthEntries(entries?: OsmNthEntry[]): string {
@@ -980,10 +960,13 @@ function TimePointEditor({
   onChange,
 }: TimePointEditorProps) {
   const t = useTranslations("osmContributions");
-  const [clockText, setClockText] = useState<string | null>(null);
-
-  const displayedClock =
-    point.kind === "clock" ? (clockText ?? formatClockInput(point.hours, point.minutes)) : "09:00";
+  // Only a closing time strictly after 24:00 is on the next day; 24:00 itself ends this one.
+  const clockMinutes = point.kind === "clock" ? point.hours * 60 + point.minutes : 0;
+  const afterMidnight = allowExtended && clockMinutes > 24 * 60;
+  // A span past midnight needs no checkbox: 18:00-02:00 means the same as 18:00-26:00.
+  // Times past 24:00 only matter for spans over 24 hours, so the checkbox is offered
+  // only to keep such a time from an existing tag editable; new ones go in OSM syntax.
+  const showNextDay = afterMidnight;
 
   return (
     <Stack spacing={1} sx={{ flex: 1, width: "100%" }}>
@@ -996,7 +979,6 @@ function TimePointEditor({
             disabled={disabled}
             onChange={(e) => {
               const nextKind = e.target.value as "clock" | "variable";
-              setClockText(null);
               if (nextKind === "clock") {
                 onChange({ kind: "clock", hours: 9, minutes: 0 });
               } else {
@@ -1010,26 +992,23 @@ function TimePointEditor({
         </FormControl>
 
         {point.kind === "clock" ? (
-          <TextField
-            size="small"
+          <ClockTimeField
             label={label}
-            value={displayedClock}
+            hours={
+              allowExtended ? (afterMidnight ? point.hours - 24 : point.hours) : point.hours % 24
+            }
+            minutes={point.minutes}
             disabled={disabled}
-            placeholder="09:00"
-            sx={{ maxWidth: 120 }}
-            onChange={(e) => {
-              const raw = e.target.value;
-              setClockText(raw);
-              const parsed = parseClockInput(raw, allowExtended);
-              if (parsed) {
-                onChange({
-                  kind: "clock",
-                  hours: parsed.hours,
-                  minutes: parsed.minutes,
-                });
-              }
-            }}
-            onBlur={() => setClockText(null)}
+            endOfDay={allowExtended}
+            onChange={(hours, minutes) =>
+              onChange({
+                kind: "clock",
+                // The dial shows the time of day; the next-day checkbox keeps the +24 h.
+                // 24:00 is the end of this day, so it clears the checkbox.
+                hours: afterMidnight && hours < 24 ? hours + 24 : hours,
+                minutes,
+              })
+            }
           />
         ) : (
           <>
@@ -1078,15 +1057,14 @@ function TimePointEditor({
         )}
       </Stack>
 
-      {point.kind === "clock" && allowExtended && (
+      {point.kind === "clock" && showNextDay && (
         <FormControlLabel
           control={
             <Checkbox
               size="small"
-              checked={point.hours >= 24}
+              checked={afterMidnight}
               disabled={disabled}
               onChange={(e) => {
-                setClockText(null);
                 const nextHours = e.target.checked
                   ? Math.min(48, point.hours + 24)
                   : Math.max(0, point.hours - 24);

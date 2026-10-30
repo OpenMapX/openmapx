@@ -1112,6 +1112,16 @@ export function retainAdmittedControlExecution(
     .array(controlChildReservationSchema)
     .max(64)
     .parse(input.reservations ?? []);
+  if (
+    input.kind.startsWith("catalogIntegration.") &&
+    (!parsed.success ||
+      installation.role !== "ops-agent" ||
+      state.fixedChildId ||
+      execution.principal !== "api" ||
+      plan.length ||
+      reservations.length)
+  )
+    throw Error("Catalog integration requires its original agent root without children");
   validateControlChildReservations({
     role: state.fixedChildId ? "fixed-cli" : installation.role,
     kind: input.kind,
@@ -2083,7 +2093,8 @@ export function retainControlEffectReceipt(
         // selects the separate commit/restore operation.
         (s.kind === "integration.install" && result.outcome === "published") ||
         (s.kind === "integration.remove" && result.outcome === "removed") ||
-        (s.kind === "integration.settle" && result.outcome === "restored")
+        (s.kind === "integration.settle" && result.outcome === "restored") ||
+        (s.kind === "catalogIntegration.settle" && ["commit", "rollback"].includes(result.outcome))
       ) {
         outcome = "committed";
         publication = "committed";

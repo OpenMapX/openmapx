@@ -50,7 +50,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 18. Oktober 2026
+        Zuletzt aktualisiert: 28. Oktober 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>
@@ -402,9 +402,10 @@ export default function TermsContentDe({
           <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
             Mangrove Open Reviews Standard
           </Link>{" "}
-          ein. Bewertungen, die Sie &uuml;ber OpenMapX einreichen, werden in Ihrem Browser signiert
-          und im Mangrove-Netzwerk ver&ouml;ffentlicht. F&uuml;r die von Ihnen erstellten
-          Bewertungsinhalte gelten insbesondere die folgenden Bestimmungen.
+          ein. Bewertungen, die Sie über OpenMapX einreichen, werden vom gemeinsamen
+          Mangrove-Signierdienst oder bei gewählter verschlüsselter lokaler Signierung in Ihrem
+          Browser signiert und im Mangrove-Netzwerk veröffentlicht. F&uuml;r die von Ihnen
+          erstellten Bewertungsinhalte gelten insbesondere die folgenden Bestimmungen.
         </Typography>
         <ul>
           <li>
@@ -483,15 +484,16 @@ export default function TermsContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Verantwortung f&uuml;r den Signaturschl&uuml;ssel.</strong> Sie sind f&uuml;r
-              die sichere Aufbewahrung Ihrer Bewertungs-Passphrase und etwaiger registrierter
-              Passkeys verantwortlich. Wer diese besitzt, kann Bewertungen in Ihrem Namen signieren.
-              Wenn Sie den unverschl&uuml;sselten Schl&uuml;sselpaar-Modus ausw&auml;hlen,
-              akzeptieren Sie zus&auml;tzlich, dass der Betreiber technisch Zugriff auf Ihren
-              Signaturschl&uuml;ssel hat. Verlorene Passphrasen und Passkeys k&ouml;nnen nicht
-              wiederhergestellt werden; Sie k&ouml;nnen ein neues Schl&uuml;sselpaar generieren,
-              bestehende Bewertungen bleiben jedoch mit dem alten &ouml;ffentlichen Schl&uuml;ssel
-              verkn&uuml;pft.
+              <strong>Verantwortung für die Signaturidentität.</strong> Beim gemeinsamen
+              Signierdienst verwahrt Mangrove den privaten Schlüssel und signiert in Ihrem Namen.
+              Schützen Sie Anmeldung und Wiederherstellung dieses separaten Mangrove-Kontos und
+              verwalten Sie diese bei Mangrove. Bei der erweiterten verschlüsselten lokalen
+              Signierung schützen Sie Bewertungs-Passphrase, Passkeys und private
+              Schlüsselsicherungen; wer einen nutzbaren Schlüssel besitzt, kann in Ihrem Namen
+              signieren. OpenMapX kann einen lokalen Schlüssel nach Verlust aller Entsperrmethoden
+              und Sicherungen nicht wiederherstellen. Ein neuer Schlüssel überträgt bestehende
+              Bewertungen nicht vom alten öffentlichen Schlüssel. Eine lokale Schlüsselspeicherung
+              im Klartext wird nicht angeboten.
             </Typography>
           </li>
         </ul>

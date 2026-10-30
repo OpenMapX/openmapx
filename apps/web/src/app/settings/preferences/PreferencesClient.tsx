@@ -25,6 +25,8 @@ export function PreferencesClient() {
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
   const searchHistoryEnabled = useSettingsStore((s) => s.searchHistoryEnabled);
   const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
+  const rememberMapView = useSettingsStore((s) => s.rememberMapView);
+  const setRememberMapView = useSettingsStore((s) => s.setRememberMapView);
 
   const handleToggle = (next: boolean) => {
     setHapticsOn(next);
@@ -59,6 +61,25 @@ export function PreferencesClient() {
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
                   {t("searchHistoryHint")}
+                </Typography>
+              </Stack>
+            }
+            sx={{ alignItems: "flex-start", m: 0 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={rememberMapView}
+                onChange={(e) => setRememberMapView(e.target.checked)}
+              />
+            }
+            label={
+              <Stack spacing={0.5}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t("rememberMapView")}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {t("rememberMapViewHint")}
                 </Typography>
               </Stack>
             }

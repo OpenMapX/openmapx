@@ -23,6 +23,14 @@ export interface Attribution {
   retrievedAt?: string;
   /** Supplied credit/modification notices, never operator configuration or privacy prose. */
   notes?: string;
+  /**
+   * The data this credit covers was changed from what the source published:
+   * normalised, combined or derived (a route shaped by its closures). Credits
+   * say so, as change-notice licences require (CC BY's "indicate if You
+   * modified", the Datenlizenz Deutschland's and GeoNutzV's
+   * "Veränderungshinweis").
+   */
+  modified?: true;
 }
 
 /** Standard receipt for a proven OpenStreetMap dataset, independent of transport host. */

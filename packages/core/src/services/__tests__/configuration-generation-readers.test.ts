@@ -23,7 +23,11 @@ import {
   currentConfigurationGeneration,
   readAppliedServiceIds,
 } from "../configuration-generation";
-import { CONFIGURATION_GENERATIONS, SERVICE_SELECTION_FILE } from "../deployment";
+import {
+  CONFIGURATION_DIRECTORY,
+  CONFIGURATION_GENERATIONS,
+  SERVICE_SELECTION_FILE,
+} from "../deployment";
 import type { LoadedService } from "../types";
 
 // Only schedule real filesystem operations at syscall boundaries. No product hooks,
@@ -174,6 +178,8 @@ async function fixture(reader: "selection" | "digest") {
     },
     assertRetained: () => {
       expect(currentConfigurationGeneration(infraDir)).toBe(previous.revisionId);
+      // The writer released its lock, and the earlier releases' one it also took.
+      expect(existsSync(join(infraDir, CONFIGURATION_DIRECTORY, ".writer"))).toBe(false);
       expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(false);
       expect(
         readdirSync(join(infraDir, CONFIGURATION_GENERATIONS)).every(
@@ -359,6 +365,8 @@ describe.each(["selection", "digest"] as const)("same-descriptor %s reader", (re
 
   it("accepts an unchanged private generation, including 0444 secrets, and closes descriptors", async () => {
     const f = await fixture(reader);
+    // Only the reader's own opens; building the fixture writes files.
+    seam.flags.length = 0;
     seam.readLimit = 3; // Real short reads must be accumulated rather than parsed/hashed partially.
     const result = await f.run(() => {});
     if (reader === "selection") expect(result).toEqual(new Set(["alpha"]));

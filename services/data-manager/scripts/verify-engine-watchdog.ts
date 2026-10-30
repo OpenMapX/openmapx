@@ -47,18 +47,23 @@ while (Date.now() < deadline) {
   await new Promise((resolve) => setTimeout(resolve, 100));
 }
 assert.ok(sawClosure, "Closure did not reach the running engine");
-// No DM process or cleanup call runs after publication. The engine must fence itself.
-let stopped = false;
+// No DM process or cleanup call runs after publication. The watchdog must clear
+// the lapsed records in place, and the engine must keep answering throughout.
+let cleared = false;
+let failures = 0;
 while (Date.now() < deadline + 8000) {
   try {
-    await length();
+    if ((await length()) < 2 && Date.now() >= deadline) {
+      cleared = true;
+      break;
+    }
   } catch {
-    stopped = true;
-    break;
+    failures++;
   }
   await new Promise((resolve) => setTimeout(resolve, 100));
 }
-assert.ok(stopped, "Engine continued serving after losing its writer lease");
+assert.ok(cleared, "Lapsed closure still applied after its lease");
+assert.equal(failures, 0, "Engine stopped answering while its lease lapsed");
 console.log(
-  JSON.stringify({ engineSelfFenced: true, delayAfterDeadlineMs: Date.now() - deadline }),
+  JSON.stringify({ engineClearedInPlace: true, delayAfterDeadlineMs: Date.now() - deadline }),
 );

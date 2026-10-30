@@ -1,80 +1,42 @@
 import { createHash, randomBytes } from "node:crypto";
 import { type BikeRoutingOptions, validBikeRoutingOptions } from "@openmapx/core";
 import {
+  MAX_EXPIRES_IN_DAYS,
+  MAX_SHARE_LABEL_LENGTH as MAX_LABEL_LENGTH,
+  MAX_SHARES_PER_USER,
+  MAX_SNAPSHOT_PLACES,
+  MAX_SHARE_WAYPOINTS as MAX_WAYPOINTS,
+  type OwnerShare,
+  type PublicListShare,
+  type PublicRouteShare,
+  type RouteSharePayload,
+  type RouteShareWaypoint,
+  SHARE_TOKEN_PATTERN,
+  type ShareWaypointSchedule,
+  type StoredListSnapshot,
+  sharingListSnapshotSchema,
+  sharingOwnerSchema,
+} from "@openmapx/core/api-contracts";
+import {
   parseSavedPlaceContributors,
   type SavedPlaceFieldContributors,
 } from "@openmapx/core/saved-place-contributors";
 import type { ExportPlace } from "@openmapx/core/saved-place-export";
 
-/** Route-schema pattern for the public token param (43-char base64url plus slack). */
-export const SHARE_TOKEN_PATTERN = "^[A-Za-z0-9_-]{20,64}$";
-export const MAX_SHARES_PER_USER = 100;
-export const MAX_SNAPSHOT_PLACES = 1000;
-export const MAX_EXPIRES_IN_DAYS = 365;
-const MAX_WAYPOINTS = 10;
-const MAX_LABEL_LENGTH = 200;
-
+export type {
+  OwnerShare,
+  PublicListShare,
+  PublicRouteShare,
+  RouteSharePayload,
+  RouteShareWaypoint,
+  ShareWaypointSchedule,
+  StoredListSnapshot,
+};
+export { MAX_EXPIRES_IN_DAYS, MAX_SHARES_PER_USER, MAX_SNAPSHOT_PLACES, SHARE_TOKEN_PATTERN };
 export type ShareMode = "live" | "snapshot";
 export type ShareTargetType = "list" | "route";
-
 const ROUTE_SHARE_MODES = ["driving", "walking", "cycling", "motorcycle"] as const;
 export type RouteShareMode = (typeof ROUTE_SHARE_MODES)[number];
-
-export interface RouteShareWaypoint {
-  lat: number;
-  lng: number;
-  label?: string;
-}
-
-/** Mirrors `WaypointSchedule` in `@openmapx/core`; kept structural so this
- * service does not depend on the web package's type graph. */
-export interface ShareWaypointSchedule {
-  departAfter?: string;
-  arriveBy?: string;
-  fixedAt?: string;
-  dwellSeconds?: number;
-  timeZone?: string;
-}
-
-export interface RouteSharePayload extends BikeRoutingOptions {
-  waypoints: RouteShareWaypoint[];
-  mode: RouteShareMode;
-  avoidHighways?: boolean;
-  avoidTolls?: boolean;
-  avoidFerries?: boolean;
-  /** Bumped when the schedule encoding changes; readers reject an unknown value. */
-  scheduleVersion?: 1;
-  /** Per-waypoint constraints, aligned to `waypoints`. */
-  schedules?: (ShareWaypointSchedule | null)[];
-}
-
-export interface StoredListSnapshot {
-  name: string;
-  icon: string | null;
-  places: ExportPlace[];
-}
-
-export interface PublicListShare extends StoredListSnapshot {
-  type: "list";
-  mode: ShareMode;
-}
-
-export interface PublicRouteShare {
-  type: "route";
-  mode: "snapshot";
-  route: RouteSharePayload;
-}
-
-export interface OwnerShare {
-  id: string;
-  targetType: string;
-  targetId: string | null;
-  mode: string;
-  label: string;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: string | null;
-}
 
 export function generateShareToken(): string {
   return randomBytes(32).toString("base64url");
@@ -224,8 +186,8 @@ export function listSnapshotFrom(
     placeId: string | null;
     fieldContributors?: SavedPlaceFieldContributors | null;
   }>,
-): StoredListSnapshot {
-  return {
+): StoredListSnapshot | null {
+  return parseStoredListSnapshot({
     name: list.name,
     icon: list.icon,
     places: places.map((place) => ({
@@ -235,11 +197,9 @@ export function listSnapshotFrom(
       lng: place.lng,
       note: place.note,
       placeId: place.placeId,
-      ...(place.fieldContributors == null
-        ? {}
-        : { fieldContributors: parseSavedPlaceContributors(place.fieldContributors) ?? {} }),
+      ...(place.fieldContributors == null ? {} : { fieldContributors: place.fieldContributors }),
     })),
-  };
+  });
 }
 
 export function parseStoredListSnapshot(value: unknown): StoredListSnapshot | null {
@@ -269,7 +229,12 @@ export function parseStoredListSnapshot(value: unknown): StoredListSnapshot | nu
       placeId: typeof place.placeId === "string" ? place.placeId : null,
     });
   }
-  return { name, icon: (icon as string | null) ?? null, places: parsed };
+  const result = sharingListSnapshotSchema.safeParse({
+    name,
+    icon: (icon as string | null) ?? null,
+    places: parsed,
+  });
+  return result.success ? result.data : null;
 }
 
 export function toPublicListShare(mode: ShareMode, snap: StoredListSnapshot): PublicListShare {
@@ -291,7 +256,7 @@ export function toOwnerShare(row: {
   updatedAt: Date;
   expiresAt: Date | null;
 }): OwnerShare {
-  return {
+  return sharingOwnerSchema.parse({
     id: row.id,
     targetType: row.targetType,
     targetId: row.targetId,
@@ -300,5 +265,5 @@ export function toOwnerShare(row: {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-  };
+  });
 }

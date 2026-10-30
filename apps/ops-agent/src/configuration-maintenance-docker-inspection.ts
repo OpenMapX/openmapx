@@ -62,7 +62,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
         .update(value)
         .digest("hex"),
     lock = await services.acquireReleaseStoreLock(
-      join(options.stack.infraDir, ".ops-agent-releases"),
+      services.releaseStatePaths(options.stack.infraDir).store,
       {},
       { failIfBusy: true },
     );

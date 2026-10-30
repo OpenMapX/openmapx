@@ -9,6 +9,7 @@ require "digest"
 require "date"
 require "logger"
 require "rubygems/package"
+require "uri"
 require_relative "subject_export/schema"
 
 # `docker exec` starts a new Ruby process; loading the Rails environment is
@@ -54,7 +55,7 @@ module OpenMapxSubjectExport
   SAFE_FIELDS = {
     "User" => %w[id uid provider email first_name last_name created_at updated_at active_until plan status theme],
     "Area" => %w[id name latitude longitude radius created_at updated_at],
-    "Place" => %w[id name city country latitude longitude source note geodata created_at updated_at],
+    "Place" => %w[id name city country latitude longitude source note geodata visit_radius geofence archived_at created_at updated_at],
     "Tag" => %w[id name color icon privacy_radius_meters created_at updated_at],
     "Tagging" => %w[id tag_id taggable_id taggable_type created_at updated_at],
     "Import" => %w[id name source status demo points_count raw_points processed doubles created_at updated_at processing_started_at],
@@ -62,7 +63,7 @@ module OpenMapxSubjectExport
     "Trip" => %w[id name started_at ended_at distance path visited_countries demo created_at updated_at last_recalculated_at],
     "Notification" => %w[id title content kind read_at created_at updated_at],
     "Point" => %w[id lon lat altitude altitude_decimal accuracy battery battery_status city connection country country_name course course_accuracy external_track_id geodata mode motion_data recorded_at timestamp tracker_id trigger velocity vertical_accuracy visit_id track_id import_id anomaly reverse_geocoded_at created_at updated_at],
-    "Visit" => %w[id name started_at ended_at duration confidence confidence_breakdown status area_id place_id demo created_at updated_at],
+    "Visit" => %w[id name location_label started_at ended_at duration confidence confidence_breakdown status area_id place_id demo created_at updated_at],
     "Stat" => %w[id year month distance daily_distance h3_hex_ids toponyms created_at updated_at],
     "Track" => %w[id start_at end_at distance duration avg_speed dominant_mode elevation_gain elevation_loss elevation_max elevation_min tracker_id demo original_path created_at updated_at],
     "TrackSegment" => %w[id track_id start_index end_index distance duration avg_speed max_speed confidence corrected_at source transportation_mode created_at updated_at],
@@ -86,7 +87,17 @@ module OpenMapxSubjectExport
     "UserAchievement" => %w[id achievement_key earned_at metadata created_at updated_at],
     "RouteVideo" => %w[id name settings status expired_at created_at updated_at],
     "ServiceSetting" => %w[id service provider active config created_at updated_at],
-    "TripSource" => %w[id provider base_url status importing last_error last_synced_at created_at updated_at],
+    "TripSource" => %w[id provider base_url status importing skip_ssl_verification last_error last_synced_at created_at updated_at],
+    "GeofenceEvent" => %w[id event_type occurred_at received_at place_id place_name lonlat accuracy_m device_id source synthetic metadata webhook_skip_reason created_at updated_at],
+    # The signing secret is omitted, and the endpoint is reduced to its origin
+    # in serialized_row: a webhook path or query often carries a bearer token.
+    "Webhook" => %w[id name url event_types place_ids active consecutive_failures last_delivery_at last_success_at created_at updated_at],
+    # The response body and error message come from the receiving endpoint and
+    # may echo its own data or credentials; only delivery state is exported.
+    "WebhookDelivery" => %w[id webhook_id geofence_event_id status attempt_count response_status delivered_at created_at updated_at],
+    "LegacyAreaPlaceMapping" => %w[id area_id place_id created_at updated_at],
+    "PointRevision" => %w[id month revision],
+    "TrackRevision" => %w[id month revision],
     "PlannedDay" => %w[id trip_id date title notes position created_at updated_at],
     "PlannedDayNote" => %w[id planned_day_id body noted_at position created_at updated_at],
     "PlannedReservation" => %w[id trip_id planned_day_id reservation_type title location starts_at ends_at status notes created_at updated_at],
@@ -107,6 +118,10 @@ module OpenMapxSubjectExport
     "achievement-unlock-events" => "AchievementUnlockEvent",
     "user-achievements" => "UserAchievement", "route-videos" => "RouteVideo",
     "service-settings" => "ServiceSetting", "trip-sources" => "TripSource",
+    "geofence-events" => "GeofenceEvent", "webhooks" => "Webhook",
+    "webhook-deliveries" => "WebhookDelivery",
+    "legacy-area-place-mappings" => "LegacyAreaPlaceMapping",
+    "point-revisions" => "PointRevision", "track-revisions" => "TrackRevision",
     "planned-days" => "PlannedDay", "planned-day-notes" => "PlannedDayNote",
     "planned-reservations" => "PlannedReservation", "planned-stops" => "PlannedStop",
     "planned-accommodations" => "PlannedAccommodation",
@@ -134,6 +149,8 @@ module OpenMapxSubjectExport
     max_gap_minutes_in_city gps_filtering_enabled gps_accuracy_threshold timezone
     visit_radius_meters visit_min_points visit_min_duration_minutes visit_density_fill_enabled
     stay_max_gap_minutes point_dragging_enabled news_emails_enabled show_supporter_badge
+    achievements_enabled family_enabled date_format time_format first_day_of_week
+    gps_accuracy_filter_enabled
   ].freeze
 
   def fail_code(code)
@@ -231,7 +248,9 @@ module OpenMapxSubjectExport
       "FamilyLocationRequest" => "Family::LocationRequest",
       "RichText" => "ActionText::RichText",
       "AchievementProgress" => "Achievements::Progress",
-      "AchievementUnlockEvent" => "Achievements::UnlockEvent"
+      "AchievementUnlockEvent" => "Achievements::UnlockEvent",
+      "PointRevision" => "Points::Revision",
+      "TrackRevision" => "Tracks::Revision"
     }.fetch(model_name, model_name)
     model = constant.split("::").reduce(Object) { |scope, part| scope.const_get(part, false) }
     return nil unless model.respond_to?(:where) && model.respond_to?(:column_names)
@@ -267,6 +286,12 @@ module OpenMapxSubjectExport
       trip_ids = model_for("Trip")&.where(user_id: user.id)&.select(:id)
       day_ids = model_for("PlannedDay")&.where(trip_id: trip_ids)&.select(:id)
       model.where(planned_day_id: day_ids)
+    when "webhook-deliveries"
+      webhook_ids = model_for("Webhook")&.where(user_id: user.id)&.select(:id)
+      model.where(webhook_id: webhook_ids)
+    when "legacy-area-place-mappings"
+      area_ids = model_for("Area")&.where(user_id: user.id)&.select(:id)
+      model.where(area_id: area_ids)
     when "family-memberships"
       model.where(user_id: user.id)
     else
@@ -319,6 +344,9 @@ module OpenMapxSubjectExport
       end
     end.sort
     fail_code("unsupported_schema") unless observed_foreign_keys == EXPECTED_FOREIGN_KEYS.sort
+    # A table whose owner column has no constraint never appears in the FK
+    # graph, so the reviewed table inventory must match as well.
+    fail_code("unsupported_schema") unless connection.tables.map(&:to_s).sort == EXPECTED_TABLES.sort
 
     fingerprint_rows = REQUIRED_COLUMNS.map do |model_name, _required_columns|
       model = model_for(model_name)
@@ -357,6 +385,22 @@ module OpenMapxSubjectExport
     fail_code("collector_failed")
   end
 
+  WEBHOOK_REDACTIONS = %w[dawarich-webhook-secret-omitted dawarich-webhook-endpoint-reduced].freeze
+  WEBHOOK_DELIVERY_REDACTIONS = %w[dawarich-webhook-response-omitted].freeze
+
+  # Scheme, host and non-default port only: a webhook path or query string is
+  # commonly the receiver's bearer credential (for example a Home Assistant
+  # webhook id), so it never leaves the instance in an export.
+  def endpoint_origin(value)
+    uri = URI.parse(value.to_s)
+    return nil unless uri.is_a?(URI::HTTP) && !uri.host.to_s.empty?
+
+    port = uri.port == uri.default_port ? "" : ":#{uri.port}"
+    "#{uri.scheme}://#{uri.host}#{port}"
+  rescue URI::Error
+    nil
+  end
+
   def serialized_row(record, model_name)
     data = attributes(record, model_name)
     if model_name == "RichText" && record.respond_to?(:body)
@@ -365,6 +409,12 @@ module OpenMapxSubjectExport
       text = record.body.to_s.gsub(/<!--.*?-->/m, " ").gsub(/<[^>]*>/, " ").gsub(/\s+/, " ").strip
       data["bodyText"] = normalize_value(text)
       data["redactionCodes"] = ["dawarich-rich-text-markup-stripped"]
+    end
+    if model_name == "Webhook"
+      data["url"] = endpoint_origin(data["url"])
+      data["redactionCodes"] = WEBHOOK_REDACTIONS
+    elsif model_name == "WebhookDelivery"
+      data["redactionCodes"] = WEBHOOK_DELIVERY_REDACTIONS
     end
     JSON.generate(data) + "\n"
   rescue CollectorError
@@ -408,8 +458,12 @@ module OpenMapxSubjectExport
       records: records,
       sha256: expected_digest,
       article15: true,
-      portability: portability.nil? ? (%w[places points raw-archives imports flights notes route-videos planned-days planned-day-notes planned-reservations planned-stops planned-accommodations planned-travellers planned-unplanned-places].include?(entry_id) || entry_id.start_with?("points-")) : portability,
-      redaction_codes: entry_id == "notes" ? ["dawarich-rights-of-others-review"] : [],
+      portability: portability.nil? ? (%w[places points raw-archives imports flights notes route-videos geofence-events planned-days planned-day-notes planned-reservations planned-stops planned-accommodations planned-travellers planned-unplanned-places].include?(entry_id) || entry_id.start_with?("points-")) : portability,
+      redaction_codes: {
+        "notes" => ["dawarich-rights-of-others-review"],
+        "webhooks" => WEBHOOK_REDACTIONS,
+        "webhook-deliveries" => WEBHOOK_DELIVERY_REDACTIONS
+      }.fetch(entry_id, []),
       write: lambda do |io|
         actual_digest = Digest::SHA256.new
         actual_bytes = 0

@@ -273,7 +273,23 @@
     "showLess": "Weniger anzeigen",
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Suchergebnisse",
-    "detailsPanelAriaLabel": "Ortsdetails"
+    "detailsPanelAriaLabel": "Ortsdetails",
+    "dataModified": "Daten verändert"
+  },
+  "timePicker": {
+    "select": "Uhrzeit auswählen",
+    "enter": "Uhrzeit eingeben",
+    "hour": "Stunde",
+    "minute": "Minute",
+    "hours": "Stunden",
+    "minutes": "Minuten",
+    "open": "Uhrzeit wählen, {time}",
+    "choose": "Uhrzeit wählen",
+    "toKeyboard": "Zur Texteingabe wechseln",
+    "toDial": "Zur Uhr wechseln",
+    "ok": "OK",
+    "date": "Datum",
+    "time": "Uhrzeit"
   },
   "search": {
     "scrollCategoriesLeft": "Kategorien nach links blättern",
@@ -577,29 +593,10 @@
       "other": "Sonstiges"
     },
     "panel": {
-      "type": "Typ",
-      "effects": "Auswirkungen",
-      "direction": "Richtung",
-      "roads": "Betroffene Straßen",
-      "validity": "Status",
-      "startsAt": "Beginnt am",
-      "description": "Details",
-      "sourceRecord": "Quelleneintrag",
-      "sourceRecordCount": "{count, plural, one {# Quelleneintrag} other {# Quelleneinträge}}",
-      "sourceDetails": "Quelldetails ({count, plural, one {# Eintrag} other {# Einträge}})",
-      "relatedRecords": "{headline} ({count} zugehörige Einträge)",
       "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}",
-      "source": "Quelle",
-      "license": "Lizenz",
-      "updatedAt": "Quelle aktualisiert (UTC)",
-      "checkedAt": "Zuletzt geprüft (UTC)",
-      "freshness": "Aktualität",
-      "interpretation": "Auswertung",
-      "report": "Meldung",
-      "binding": "Straßenzuordnung",
-      "routing": "Routenwirkung",
-      "routingCandidate": "Geeignet; Anwendung hängt von der Route ab",
-      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet"
+      "updated": "Aktualisiert {time}",
+      "showMore": "Mehr anzeigen",
+      "showLess": "Weniger anzeigen"
     },
     "binding": {
       "exact": "Exakt",
@@ -627,15 +624,7 @@
       "location_not_exact": "der Ort ist nicht genau genug angegeben"
     },
     "direction": {
-      "positive": "Aufsteigende Straßenreferenz",
-      "negative": "Absteigende Straßenreferenz",
       "both": "Beide Richtungen",
-      "unknown": "Richtung unbekannt",
-      "geometry": {
-        "positive": "In Zeichnungsrichtung der betroffenen Straße",
-        "negative": "Gegen die Zeichnungsrichtung der betroffenen Straße"
-      },
-      "oneWay": "Nur eine Richtung (nicht angegeben)",
       "loop": {
         "inner": "Innerer Ring",
         "outer": "Äußerer Ring"
@@ -772,26 +761,32 @@
       "cancelled": "Abgesagt",
       "unknown": "Status unbekannt"
     },
-    "endedReason": {
-      "source_ended": "von der Quelle beendet",
-      "withdrawn_from_feed": "aus dem Datenstrom entfernt",
-      "expired": "abgelaufen",
-      "superseded": "ersetzt",
-      "cancelled": "abgesagt",
-      "stale": "nicht mehr bestätigt"
-    },
     "compliance": {
       "advisory": "Empfehlung"
     },
-    "interpretation": {
-      "partial": "Einige Regeln konnten nicht vollständig ausgewertet werden; sie werden angezeigt, aber nicht für das Routing verwendet"
-    },
     "freshness": {
-      "stale": "Quelldaten sind möglicherweise veraltet",
-      "needsRefresh": "Aktualisierung erforderlich"
+      "stale": "Diese Angaben sind möglicherweise nicht mehr aktuell",
+      "needsRefresh": "Aktualisierung fehlgeschlagen; diese Angaben sind möglicherweise nicht mehr aktuell"
     },
     "report": {
       "unconfirmed": "Unbestätigte Nutzermeldung"
+    },
+    "impact": {
+      "closed": "{scope} gesperrt"
+    },
+    "impactLevel": {
+      "none": "Keine Auswirkung",
+      "minor": "Geringe Auswirkung",
+      "moderate": "Mittlere Auswirkung",
+      "major": "Starke Auswirkung",
+      "critical": "Sehr starke Auswirkung"
+    },
+    "when": {
+      "until": "Bis {date}",
+      "expectedUntil": "Voraussichtlich bis {date}",
+      "since": "Seit {date}",
+      "starts": "Beginnt {date}",
+      "range": "{start} – {end}"
     }
   },
   "trafficFlow": {
@@ -1053,6 +1048,8 @@
     "bikesSupported": "Fahrradmitnahme möglich",
     "bikesNotSupported": "Keine Fahrradmitnahme",
     "wheelchairSupported": "Barrierefrei",
+    "wheelchairUnconfirmed": "Rollstuhlgerechte Nutzung nicht bestätigt",
+    "wheelchairUnconfirmedLegs": "Rollstuhlgerechte Nutzung für {count, plural, one {1 Abschnitt} other {# Abschnitte}} nicht bestätigt",
     "wheelchairNotSupported": "Nicht barrierefrei",
     "returnAnyStation": "Rückgabe an einer Station",
     "returnSameStation": "Rückgabe an der Abholstation",
@@ -2038,10 +2035,10 @@
       }
     },
     "mangroveSectionTitle": "<m>Mangrove Reviews</m>-Konto",
-    "mangroveSectionIntro": "Ihre Bewertungen werden mit einem kryptografischen Schlüsselpaar signiert. Sie können ein bestehendes Mangrove-Reviews-Konto importieren oder Ihres exportieren, um es zu sichern.",
+    "mangroveSectionIntro": "Ihr Browser signiert Bewertungen mit diesem verschlüsselten lokalen Schlüssel. Importieren Sie einen kompatiblen Schlüssel oder bewahren Sie eine private Sicherung auf.",
     "mangroveIdentity": "Aktuelle Identität",
     "mangroveIdentityNone": "Noch kein Schlüsselpaar",
-    "mangroveImportCta": "Mit bestehendem Konto anmelden",
+    "mangroveImportCta": "Vorhandenen privaten Schlüssel importieren",
     "mangroveExportCta": "Schlüsselpaar anzeigen",
     "mangroveRegenerateCta": "Neu anfangen",
     "mangroveImportTitle": "In bestehendes Mangrove-Reviews-Konto anmelden",
@@ -2064,20 +2061,17 @@
     "mangroveRegenerateFailed": "Neues Schlüsselpaar konnte nicht erzeugt werden.",
     "mangroveSetupPrompt": "Sie haben Ihr Mangrove-Reviews-Schlüsselpaar noch nicht eingerichtet. Wählen Sie, wie Ihr Signaturschlüssel geschützt werden soll.",
     "mangroveSetupStart": "Einrichten",
-    "mangroveSetupTitle": "Schützen Sie Ihr Mangrove-Reviews-Schlüsselpaar",
-    "mangroveSetupIntro": "Ihre Bewertungen werden mit einem kryptografischen Schlüsselpaar signiert. Wählen Sie, wie der private Schlüssel geschützt werden soll — diese Wahl ist unabhängig von Ihrer OpenMapX-Anmeldung.",
+    "mangroveSetupTitle": "Lokalen Bewertungsschlüssel schützen",
+    "mangroveSetupIntro": "Beim lokalen Signieren verwalten Sie Ihren Schlüssel selbst. Wählen Sie eine Passphrase oder fügen Sie einen Passkey zum Entsperren hinzu. Dies ist von Ihrer OpenMapX-Anmeldung getrennt.",
     "mangrovePassphraseDifferenceTitle": "Diese Passphrase ist nicht Ihr Kontopasswort",
-    "mangrovePassphraseDifferenceBody": "Ihre OpenMapX-Anmeldung (E-Mail, Passkey oder OAuth) ist unabhängig von dieser Mangrove-Passphrase. Server-Admins können die Mangrove-Passphrase nie einsehen — genau das hält Ihren Signaturschlüssel auch bei einem Datenbank-Leck privat.",
+    "mangrovePassphraseDifferenceBody": "Ihre OpenMapX-Anmeldung ist von dieser Schlüssel-Passphrase getrennt. Die Passphrase wird in Ihrem Browser verwendet und nicht an den Server gesendet.",
     "mangroveModePassphraseTitle": "Passphrase",
     "mangroveModePassphraseSubtitle": "Verschlüsseln Sie Ihr Schlüsselpaar mit einer Passphrase. Sie geben sie vor dem Signieren einer Bewertung ein (mit kurzer Merk-Phase).",
     "mangroveModePassphraseWebAuthnTitle": "Passphrase + Passkey",
     "mangroveModePassphraseWebAuthnSubtitle": "Empfohlen. Freischalten per Geräte-Biometrie (Face ID, Touch ID, Windows Hello, Security Key). Die Passphrase bleibt als Backup.",
-    "mangroveModeUnencryptedTitle": "Keine Verschlüsselung",
-    "mangroveModeUnencryptedSubtitle": "Ihr Schlüsselpaar wird im Klartext auf dem Server gespeichert. Geringe Hürde, aber jeder Datenbankzugriff kann in Ihrem Namen Bewertungen signieren. Nicht empfohlen.",
     "mangroveWebAuthnUnavailable": "Ihr Browser oder Gerät unterstützt WebAuthn PRF nicht. Verwenden Sie vorerst nur die Passphrase.",
     "mangroveSetupPassphraseTitle": "Passphrase festlegen",
     "mangroveSetupPassphraseWebAuthnTitle": "Passphrase festlegen und Passkey registrieren",
-    "mangroveSetupUnencryptedConfirmTitle": "Unverschlüsselte Einrichtung bestätigen",
     "mangroveLossWarningTitle": "Wer die Passphrase verliert, verliert die Kontrolle über dieses Schlüsselpaar",
     "mangroveLossWarningBody": "Es gibt kein Passwort-Zurücksetzen. Wenn Sie die Passphrase vergessen und kein Passkey registriert ist, können Sie mit diesem Schlüsselpaar signierte Bewertungen nicht mehr bearbeiten oder löschen — sie bleiben öffentlich, aber unveränderlich. Sie können jederzeit mit einem neuen Schlüsselpaar beginnen.",
     "mangrovePassphraseLabel": "Mangrove-Passphrase",
@@ -2090,14 +2084,7 @@
     "mangroveWebAuthnStepBody": "Nach Weiter fragt Ihr Browser nach einer Passkey-Freigabe (Face ID, Touch ID oder Security Key). Der PRF-Ausgang des Passkeys leitet einen Schlüssel ab, der Ihr Mangrove-Schlüsselpaar verschlüsselt. Der Passkey selbst bleibt auf Ihrem Gerät.",
     "mangroveSetupContinue": "Schlüsselpaar erstellen",
     "mangroveSetupFailed": "Einrichtung fehlgeschlagen.",
-    "mangroveUnencryptedWarningTitle": "Server kann Ihre Identität übernehmen",
-    "mangroveUnencryptedWarningBody": "Ohne Verschlüsselung kann jeder mit Datenbankzugriff (Admins, Angreifer nach einem Leck) in Ihrem Namen Bewertungen signieren oder Ihre bestehenden Bewertungen löschen. Wir empfehlen eine Passphrase.",
-    "mangroveUnencryptedAck": "Wählen Sie dies nur, wenn für Sie die Bequemlichkeit wichtiger als die Sicherheit ist — etwa bei einer privaten Entwicklungs-Instanz.",
-    "mangroveUnencryptedProceed": "Ich akzeptiere — ohne Verschlüsselung fortfahren",
     "mangroveEncryptedBadge": "Verschlüsselt — Server sieht nur Chiffretext",
-    "mangroveUnencryptedBadge": "Nicht verschlüsselt — Server sieht den Signaturschlüssel",
-    "mangroveUnencryptedBadgeAlertTitle": "Ihr Schlüsselpaar liegt im Klartext vor",
-    "mangroveUnencryptedBadgeAlertBody": "Fügen Sie Verschlüsselung hinzu (Passphrase oder Passkey), um den Server-Zugriff zu verhindern. Nutzen Sie „Neu anfangen“ unten, um den Modus zu wechseln.",
     "mangroveUnlockMethods": "Freischalt-Methoden",
     "mangroveWrapPassphrase": "Passphrase",
     "mangroveWrapPasskey": "Passkey",
@@ -2242,7 +2229,30 @@
         "refused": "Abgelehnt",
         "closed": "Geschlossen"
       }
-    }
+    },
+    "mangroveConnectTitle": "Mit Mangrove verbinden",
+    "mangroveConnectIntro": "Verwenden Sie dieselbe Bewertungsidentität auf mehreren Geräten und in teilnehmenden Apps. Die Mangrove-Anmeldung ist von Ihrer OpenMapX-Anmeldung getrennt.",
+    "mangroveSignerUnavailable": "Gemeinsames Signieren ist auf dieser Instanz nicht eingerichtet oder nicht verfügbar. Alternativ können Sie einen verschlüsselten lokalen Bewertungsschlüssel verwenden.",
+    "mangroveConnectFailed": "Verbindung mit Mangrove fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "mangroveLoginPasskey": "Mit Passkey fortfahren",
+    "mangroveLoginOsm": "Mit OpenStreetMap fortfahren",
+    "mangroveLoginBluesky": "Mit Bluesky fortfahren",
+    "mangroveBlueskyHandle": "Bluesky-Handle (optional)",
+    "mangroveBlueskyHandleHelp": "Für Konten außerhalb von bsky.social geben Sie Ihren Handle ein.",
+    "mangroveSignerCustody": "Mangrove verwahrt Ihren Bewertungsschlüssel und signiert Bewertungen in Ihrem Auftrag. Die Anmeldung führt zu Mangrove und Ihrem gewählten Anbieter.",
+    "mangroveUseLocal": "Erweitert: verschlüsselten lokalen Schlüssel verwenden",
+    "mangroveLocalExplanation": "Signieren Sie im Browser mit einem selbst verwalteten Schlüssel. Bewahren Sie Passphrase oder Passkey und eine private Sicherung auf.",
+    "mangroveConnectedAs": "Mit Mangrove verbunden als {name}",
+    "mangroveDisconnect": "Verbindung trennen",
+    "mangroveManageAccount": "Mangrove-Konto verwalten",
+    "mangroveReconnect": "Erneut mit Mangrove verbinden",
+    "mangroveConnectionExpired": "Ihre Mangrove-Sitzung ist abgelaufen. Verbinden Sie sich erneut mit derselben Identität.",
+    "mangroveSwitchSigner": "Gemeinsames Signieren über Mangrove verwenden",
+    "mangroveCallbackPending": "Ihre Bewertungsidentität wird verbunden…",
+    "mangroveCallbackFailed": "Diese Mangrove-Anmeldung konnte nicht verifiziert werden. Starten Sie die Verbindung erneut in OpenMapX.",
+    "mangroveReturn": "Zurück zu OpenMapX",
+    "mangroveSharedIntro": "Verbinden Sie sich mit Mangrove, um mit derselben Identität auf mehreren Geräten und in mehreren Apps zu bewerten.",
+    "mangroveLocalTitle": "Verschlüsselter lokaler Bewertungsschlüssel"
   },
   "auth": {
     "signIn": "Anmelden",
@@ -2454,6 +2464,9 @@
     "appearance": "Darstellung",
     "touchZoomButtons": "Zoom-Tasten",
     "touchZoomButtonsHint": "Plus- und Minus-Tasten auf der Karte anzeigen. Ohne sie zoomen Sie mit zwei Fingern oder durch Doppeltippen.",
+    "mapSection": "Karte",
+    "rememberMapView": "Kartenansicht merken",
+    "rememberMapViewHint": "Die Karte dort wieder öffnen, wo Sie sie verlassen haben. Die letzte Ansicht wird nur auf diesem Gerät gespeichert; beim Ausschalten wird sie gelöscht.",
     "languageAndRegion": "Sprache & Region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Zeitpunkt der Sprachansagen",
@@ -3381,7 +3394,7 @@
     "ohTimeKindPoint": "Zeitpunkt",
     "ohStartTime": "Von",
     "ohEndTime": "Bis",
-    "ohPointTypeClock": "Uhrzeit (HH:MM)",
+    "ohPointTypeClock": "Uhrzeit",
     "ohPointTypeSolar": "Sonnenstand",
     "ohSolarDawn": "Morgendämmerung (dawn)",
     "ohSolarSunrise": "Sonnenaufgang (sunrise)",
@@ -3598,6 +3611,7 @@
     "delete": "Löschen",
     "deleteWarning": "Beim Löschen dieses Fahrzeugs wird auch seine Parkposition entfernt.",
     "save": "Speichern",
+    "saveFailed": "Das Fahrzeug konnte nicht gespeichert werden. Deine Änderungen sind noch da. Versuche es erneut.",
     "cancel": "Abbrechen",
     "name": "Name",
     "kind": "Typ",

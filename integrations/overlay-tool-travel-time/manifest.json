@@ -60,9 +60,9 @@
   },
   "healthCheck": [
     {
-      "name": "Self-hosted",
+      "name": "Valhalla",
       "type": "ping",
-      "urlTemplate": "${service:valhalla}/status"
+      "urlTemplate": "${endpoint:valhalla}/status"
     },
     {
       "name": "Stadia Maps",

@@ -1,21 +1,14 @@
 ---
 title: Users & access
-description: Accounts, the admin role, sessions, impersonation, banning, and the sign-in methods OpenMapX supports.
+description: Create the first administrator, assign roles, manage sessions and understand authentication limits.
 sidebar_position: 5
 ---
 
 # Users & access
 
-OpenMapX has accounts. Most of the map works without one — search, directions,
-and transit don't require a login — but signing in unlocks per-user features
-like saved places and writing reviews, and it's how you reach the admin panel.
-This page covers the user model, how someone becomes an admin, the day-to-day
-moderation tools, and the authentication methods you can offer.
-
-Authentication is built on [Better Auth](https://www.better-auth.com/). The
-configuration lives in `apps/api/src/auth.ts`, and most of what an operator
-tunes is exposed in **Settings → Authentication** in the admin panel rather than
-edited there directly.
+Search, directions and transit work without an account. Signing in enables
+personal features such as saved places and reviews. Administrators also gain
+access to operations or privacy casework according to their role.
 
 ## The user model
 
@@ -30,23 +23,44 @@ ban expiry). The three roles are:
 - **`privacy_admin`** — access to the dedicated privacy case workflow; it does
   not grant general instance or account administration.
 
-The role is the single gate in front of the [admin panel](./admin-panel.md). In
-the browser the `/admin` route checks it before rendering, and on the API every
-admin endpoint re-verifies the session and role server-side, so the role is what
-actually grants access — not just what hides a menu item.
+Authentication uses Better Auth, configured in `apps/api/src/auth.ts`.
+
+The API enforces roles independently of the browser layout. Privacy casework
+has additional identity, authentication-assurance and review requirements;
+see [Data-subject requests](./data-subject-requests.md).
 
 ## Becoming an admin
 
-A fresh instance has no admins. You promote the first one from the host's
-command line, and every admin after that can be made from the UI.
-
 ### The first admin
 
-After deploying, register a normal account through the web app, then promote it
-from a shell on the API host with the `openmapx` CLI:
+You need a shell in the deployment checkout, Docker access and a running
+`postgis` service with the generated Compose configuration.
+
+1. Register a normal account through the web app. The first account is not
+   promoted automatically.
+2. Promote the exact email address from the repository root:
+
+   ```bash
+   pnpm openmapx users promote your@email.com
+   ```
+
+3. If email delivery is not configured and verification prevents sign-in,
+   verify that account locally:
+
+   ```bash
+   pnpm openmapx users verify your@email.com
+   ```
+
+4. Sign in again. Open `/admin`, configure **Settings → Email**, and send a
+   test message before relying on self-service verification or recovery.
+
+These commands execute SQL through the `postgis` container; they work while the
+web app or API is down. They require an existing account and report an error if
+no email matches. They do not acquire a session or use loopback HTTP admission.
 
 ```bash
-pnpm openmapx users promote your@email.com
+pnpm openmapx users list
+pnpm openmapx users demote your@email.com
 ```
 
 The command shells into the `postgis` container and flips the account's role to
@@ -86,38 +100,42 @@ account-session confirmation required by assisted recovery.
 
 :::
 
+Keep another working administrator before using `demote`: browser self/last-admin
+protections do not protect the host recovery commands.
+
 ### Promoting and demoting from the UI
 
-Once you have one admin, the rest is point-and-click in **Users**. Change a
-person's role inline from the user list, or open their detail page and set it in
-the **Profile** tab. To stop someone being an admin, set their role back to
-**User**.
+Open **Users**, then change the role in the list or the user's **Profile** tab.
+The list disables self-role changes and protects the last full administrator.
+Treat those controls as browser safeguards, not a guarantee for direct database
+or every authentication API operation.
 
-Two guardrails keep you from locking yourself out: you can't change your own
-role, and the last remaining admin can't be demoted or deleted.
+Select **Privacy admin** to grant casework access without general deployment
+permissions. Granting or revoking this role uses a dedicated full-admin endpoint
+and revokes the target's existing sessions. The person must sign in again.
+That endpoint cannot downgrade a full administrator; change a full-admin role
+through the ordinary account administration flow.
 
 ## Managing users
 
-The **Users** section of the admin panel lists every account, with search by
-email and quick filters for **All / Active / Banned / Admins**. Each row shows
-the role, verification and ban status, and whether two-factor is on. Open a user
-to reach three tabs — **Profile**, **Sessions**, and **Accounts** — or act
-straight from the row's menu. The actions available:
+Search by email and filter **All**, **Active**, **Banned** or **Admins**. Open an
+account for **Profile**, **Sessions** and **Accounts** tabs. Check the exact
+account identity before acting.
 
 ### Create a user
 
-**Create User** makes an account directly — name, email, a password (minimum
-eight characters), and a starting role. Leave **Send welcome email** checked to
-notify the new user, or uncheck it to create the account silently. This is the
-way to onboard someone without making them go through self-service signup.
+Use **Create User** and enter the name, email, password and starting role. The
+form requires at least eight password characters. Its Send welcome email
+checkbox forwards a flag, but the current API has no sender that consumes it.
+Arrange onboarding separately and verify recovery-email delivery; creating an
+account does not notify the recipient by itself.
 
 ### Edit a profile
 
-The **Profile** tab edits a user's display name and role. Email is read-only
-from the admin side: an address change has to come from the user themselves
-(it's verified with a one-time code), so you can't silently move an account to a
-new mailbox. The same tab surfaces read-only facts — account ID, created and
-updated timestamps, verification and two-factor state, and any ban reason.
+Change the display name and role on **Profile**. The administrator form keeps
+email read-only. The account owner changes their address through the verified
+email-change flow. Account ID, timestamps, verification, two-factor state and
+ban reason help distinguish accounts with similar names.
 
 ### Reset a password
 
@@ -160,41 +178,41 @@ New sessions have an absolute lifetime set by **Settings → Authentication
 policy** — seven days by default. Activity does not extend that deadline.
 Existing sessions keep their original expiry after a policy change.
 
+Handle session IP addresses and user-agent details as personal data.
+
 ### Ban and unban
 
-**Ban** immediately prevents an account from signing in; existing sessions stop
-working too. You can record an optional reason, which shows on the user's row
-and detail page. **Unban** reverses it at any time. Banning is reversible and
-preserves the account and its data, which makes it the right tool for
-suspending access — as opposed to deleting, which is permanent. You can't ban
-yourself.
+**Ban** suspends sign-in and invalidates existing access through Better Auth's
+ban handling. Record a reason if needed. **Unban** restores eligibility to sign
+in. Banning preserves account data and can be reversed. The list prevents
+self-banning.
 
 ### Impersonate
 
-**Impersonate** opens the app as that user, so you can reproduce what they see —
-useful for support and for debugging a problem you can't reproduce from your own
-account. You can't impersonate yourself, and you return to your own session when
-you stop impersonating.
+Use **Impersonate** only for authorized support work: it creates access as the
+target user and can expose their personal data. Stop impersonation to return
+to your administrator session. The list prevents impersonating yourself.
 
 ### Delete
 
-**Delete** permanently removes the account and its data, and can't be undone.
-The last admin and your own account are protected from deletion; for everything
-else, prefer **Ban** unless you genuinely need the account gone.
+Deletion removes live account-owned data and invokes the erasure workflow. It
+cannot retract public Mangrove reviews, delete a separate Dawarich account or
+rewrite existing backups. Active privacy cases can retain minimized encrypted
+material under their own retention rules. Follow [User erasure
+operations](./user-erasure.md) for the journal, external systems and verification.
 
-:::note[Every action is logged]
-
-State-changing user actions — role changes, bans, deletions, session revokes —
-are written to the audit log with who did it and to whom. Review them under
-**Activity**; see [Monitoring](./monitoring.md).
-
-:::
+The user list protects self-deletion and the last administrator. Verify that
+another administrator can sign in before removing administrative accounts.
+Audit records capture supported account actions; audit insertion failures are
+logged but generally do not block the action. See [Monitoring](./monitoring.md).
 
 ## Authentication methods
 
-OpenMapX supports several ways to sign in. Which ones are offered depends on
-what you've configured; the sign-in dialog only shows methods that are actually
-set up.
+The current runtime configuration enables email/password with email verification,
+passkeys, the configured OAuth providers, TOTP/backup codes and email OTP
+support. The saved Authentication settings are not read by `auth.ts`: changing
+Require Email Verification, Session Duration, Enable Two-Factor Authentication
+or Minimum Password Length does not currently change Better Auth enforcement.
 
 ### Email and password
 
@@ -210,30 +228,23 @@ messages. See **Settings → Email** and
 
 ### Passkeys
 
-OpenMapX supports passkeys (WebAuthn) for passwordless sign-in. Users add a
-passkey from their own account settings and can then sign in with **Sign in with
-a passkey** — no password prompt. Passkeys need two environment variables to
-match your deployment's domain: `PASSKEY_RP_ID` (your hostname, e.g.
-`maps.example.com`) and `PASSKEY_ORIGIN` (the full origin, e.g.
-`https://maps.example.com`). They default to `localhost`, which only works in
-local development.
+Users enroll passkeys in account settings. Configure the relying-party hostname
+with `PASSKEY_RP_ID`, for example `maps.example.com`, and accepted origins with
+`PASSKEY_ORIGIN`, for example `https://maps.example.com`. The latter accepts a
+comma-separated list. Defaults are `localhost` and `http://localhost:3000` for
+development. Use HTTPS and origins matching the real deployment.
 
 ### OAuth / OIDC providers
 
-Users can sign in with an external identity provider, and link it to an existing
-account. Two providers are built in:
+The built-in providers are OpenStreetMap (OIDC with PKCE) and Mapillary (custom
+token exchange). Configure their client IDs and secrets:
+`OSM_CLIENT_ID` / `OSM_CLIENT_SECRET` and
+`MAPILLARY_CLIENT_ID` / `MAPILLARY_CLIENT_SECRET`.
 
-- **OpenStreetMap** — OpenID Connect, discovery-based, with PKCE.
-- **Mapillary** — a custom token exchange.
-
-Each provider only appears in the sign-in dialog once its client credentials are
-present in the environment (`OSM_CLIENT_ID` / `OSM_CLIENT_SECRET`,
-`MAPILLARY_CLIENT_ID` / `MAPILLARY_CLIENT_SECRET`), and each provider's
-application must list `https://<DOMAIN>/api/auth/callback/<provider>` as its
-redirect URL (see
-[Redirect URLs](../install/configuration.md#redirect-urls)). Linking lets a user connect
-these to an email account and pull in a profile picture; they manage their
-linked accounts from their own account settings, not from the admin panel.
+Register `https://<DOMAIN>/api/auth/callback/<provider>` with the provider.
+The OpenStreetMap provider ID is `openstreetmap`; Mapillary uses `mapillary`.
+See [Redirect URLs](../install/configuration.md#redirect-urls).
+Users manage linked accounts from their own account settings.
 
 ### Two-factor authentication
 
@@ -242,6 +253,8 @@ to their account: a TOTP authenticator app, with backup codes for recovery.
 Email one-time codes are also available. Two-factor is opt-in per user — the
 setting controls whether anyone can enroll, not a blanket requirement — and the
 user list flags accounts that have it turned on.
+
+Verify recovery access before revoking an account's sessions.
 
 ## Effective authentication policy
 
@@ -261,8 +274,6 @@ policy; reload before retrying a changed revision.
 
 ## Where to go next
 
-- **[Admin panel](./admin-panel.md)** — how `/admin` is gated and the loopback
-  escape hatch the CLI uses.
-- **[Monitoring](./monitoring.md)** — the audit log of admin actions.
-- **[Configuration](../install/configuration.md)** — the settings cascade and
-  the environment variables referenced above.
+See [Admin panel](./admin-panel.md) for access boundaries,
+[Monitoring](./monitoring.md) for audit and execution logs, and
+[User erasure operations](./user-erasure.md) for deletion handling.

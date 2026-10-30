@@ -10,6 +10,47 @@ import { type PostgisFixture, startPostgis } from "../helpers/postgis-testcontai
 
 const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
+interface ReservedConnection {
+  unsafe: (query: string) => PromiseLike<Record<string, unknown>[]>;
+  release: () => void;
+}
+
+interface ServiceSql {
+  end: (options?: { timeout?: number }) => Promise<void>;
+  reserve: () => Promise<ReservedConnection>;
+  unsafe: (query: string) => PromiseLike<unknown[]>;
+}
+
+const noop = () => undefined;
+
+interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** Fails the test instead of hanging when something never settles. */
+async function withDeadline<T>(work: PromiseLike<T>, label: string, ms = 10_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   let pg: PostgisFixture;
   let previousDatabaseUrl: string | undefined;
@@ -230,6 +271,275 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
+  });
+
+  describe("operation lock", () => {
+    let harnessCount = 0;
+
+    /**
+     * One disposable service module and pool per case, so a regression that
+     * wedges the pool or the helper's local queue cannot reach another case.
+     * The pool is the real max-4 client; only its sessions are tagged.
+     */
+    async function openLockHarness() {
+      harnessCount += 1;
+      const applicationName = `overture-lock-test-${harnessCount}`;
+      const url = new URL(pg.connectionString);
+      url.searchParams.set("application_name", applicationName);
+      const outerDatabaseUrl = process.env.DATABASE_URL;
+      let service: {
+        sql: ServiceSql;
+        lock: typeof import("../../src/jobs/overture/operation-lock.js");
+      };
+      process.env.DATABASE_URL = url.toString();
+      try {
+        vi.resetModules();
+        service = {
+          sql: ((await import("../../src/db/index.js")) as unknown as { sql: ServiceSql }).sql,
+          lock: await import("../../src/jobs/overture/operation-lock.js"),
+        };
+      } finally {
+        if (outerDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+        else process.env.DATABASE_URL = outerDatabaseUrl;
+      }
+      const { sql, lock } = service;
+      const owned: Promise<unknown>[] = [];
+      const held = new Set<ReservedConnection>();
+      const gates: Deferred[] = [];
+      const settled = (label: string, ms: number) =>
+        withDeadline(Promise.allSettled(owned), label, ms);
+      const sessionsGone = async (ms: number) => {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+          const [row] = await pg.sql.unsafe(
+            `SELECT count(*)::int AS count FROM pg_stat_activity
+             WHERE datname = current_database() AND application_name = $1`,
+            [applicationName],
+          );
+          if (row?.count === 0) return;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("timed out waiting for the service sessions to disconnect");
+      };
+      const terminateSessions = () =>
+        pg.sql.unsafe(
+          `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+           WHERE datname = current_database() AND application_name = $1`,
+          [applicationName],
+        );
+
+      return {
+        sql,
+        lock,
+        /** Starts tracking work so a failure never leaves it unobserved. */
+        own<T>(work: PromiseLike<T>): Promise<T> {
+          const pending = Promise.resolve(work);
+          owned.push(pending.then(noop, noop));
+          return pending;
+        },
+        gate(): Deferred {
+          const gate = deferred();
+          gates.push(gate);
+          return gate;
+        },
+        /** Reserves a service connection; one that arrives after a timeout is still released. */
+        reserve(): Promise<ReservedConnection> {
+          const pending = this.own(
+            Promise.resolve(sql.reserve()).then((connection) => {
+              held.add(connection);
+              return connection;
+            }),
+          );
+          return withDeadline(pending, "a service connection");
+        },
+        release(connection: ReservedConnection) {
+          if (held.delete(connection)) connection.release();
+        },
+        /** Ends everything the case started, however it ended. */
+        async close(caseFailed: boolean) {
+          for (const gate of gates) gate.resolve();
+          const errors: unknown[] = [];
+          let clean = true;
+          try {
+            await settled("lock work to finish", 3_000);
+          } catch (error) {
+            clean = false;
+            if (!caseFailed) errors.push(error);
+          }
+          if (clean) {
+            for (const connection of held) {
+              held.delete(connection);
+              try {
+                connection.release();
+              } catch (error) {
+                errors.push(error);
+              }
+            }
+          } else {
+            // A regression can leave sessions blocked inside PostgreSQL, so the
+            // pool cannot drain. Terminate only this case's tagged sessions.
+            await terminateSessions().catch((error) => errors.push(error));
+          }
+          try {
+            // Destroying the pool also rejects whatever is still queued on it.
+            await withDeadline(sql.end({ timeout: 0 }), "the service pool to end", 5_000);
+            if (!clean) await settled("lock work after the pool ended", 5_000);
+            await sessionsGone(5_000);
+          } catch (error) {
+            errors.push(error);
+          }
+          if (errors.length) throw new AggregateError(errors, "lock case cleanup failed");
+        },
+      };
+    }
+    type LockHarness = Awaited<ReturnType<typeof openLockHarness>>;
+
+    /** Runs a case and always closes its harness; a cleanup failure never hides the case failure. */
+    async function inLockHarness(body: (harness: LockHarness) => Promise<void>) {
+      const harness = await openLockHarness();
+      let failure: unknown;
+      let failed = false;
+      try {
+        await body(harness);
+      } catch (error) {
+        failed = true;
+        failure = error;
+      }
+      try {
+        await harness.close(failed);
+      } catch (cleanupError) {
+        if (!failed) throw cleanupError;
+        throw new AggregateError(
+          [failure, cleanupError],
+          `${failure instanceof Error ? failure.message : String(failure)} (cleanup also failed)`,
+        );
+      }
+      if (failed) throw failure;
+    }
+
+    /** Observes real lock attempts made through the service pool; mocks nothing. */
+    function observeLockAttempts(harness: LockHarness) {
+      const attempts: boolean[] = [];
+      const failedAttempt = deferred();
+      const reserve = harness.sql.reserve.bind(harness.sql);
+      vi.spyOn(harness.sql, "reserve").mockImplementation(async () => {
+        const connection = await reserve();
+        const unsafe = connection.unsafe.bind(connection);
+        connection.unsafe = (query: string) => {
+          const pending = unsafe(query);
+          if (query.includes("pg_try_advisory_lock")) {
+            void Promise.resolve(pending).then((rows) => {
+              const locked = rows[0]?.locked === true;
+              attempts.push(locked);
+              if (!locked) failedAttempt.resolve();
+            }, noop);
+          }
+          return pending;
+        };
+        return connection;
+      });
+      return { attempts, failedAttempt: failedAttempt.promise };
+    }
+
+    it(
+      "keeps queued callers out of the four-connection service pool",
+      () =>
+        inLockHarness(async (harness) => {
+          const gate = harness.gate();
+          const ownerEntered = deferred();
+          const entered: string[] = [];
+          let active = 0;
+          let maxActive = 0;
+          const run = (name: string) =>
+            harness.own(
+              harness.lock.withOvertureOperationLock(async () => {
+                entered.push(name);
+                if (name === "a") ownerEntered.resolve();
+                active += 1;
+                maxActive = Math.max(maxActive, active);
+                try {
+                  if (name === "a") await gate.promise;
+                  // The owner needs an ordinary pooled connection to finish.
+                  await harness.sql.unsafe("SELECT pg_sleep(0.01)");
+                  return name;
+                } finally {
+                  active -= 1;
+                }
+              }),
+            );
+          const calls = ["a", "b", "c", "d"].map(run);
+          await withDeadline(ownerEntered.promise, "the first caller to own the lock");
+          // Unrelated service queries still get a connection while three callers wait.
+          await withDeadline(harness.own(harness.sql.unsafe("SELECT 1")), "an unrelated query");
+          expect(entered).toEqual(["a"]);
+          gate.resolve();
+          await expect(withDeadline(Promise.all(calls), "all queued callers")).resolves.toEqual([
+            "a",
+            "b",
+            "c",
+            "d",
+          ]);
+          expect(entered).toEqual(["a", "b", "c", "d"]);
+          expect(maxActive).toBe(1);
+        }),
+      45_000,
+    );
+
+    it.each([
+      { mode: "exclusive", acquire: "pg_advisory_lock", release: "pg_advisory_unlock" },
+      {
+        mode: "shared",
+        acquire: "pg_advisory_lock_shared",
+        release: "pg_advisory_unlock_shared",
+      },
+    ])(
+      "waits for an external $mode holder without occupying the service pool",
+      ({ acquire, release }) =>
+        inLockHarness(async (harness) => {
+          const keys = `${harness.lock.OVERTURE_LOCK_NAMESPACE}, ${harness.lock.OVERTURE_LOCK_KEY}`;
+          const holder = await pg.sql.reserve();
+          const observer = observeLockAttempts(harness);
+          let holding = false;
+          let ran = false;
+          try {
+            await holder.unsafe(`SELECT ${acquire}(${keys})`);
+            holding = true;
+            const result = harness.own(
+              harness.lock.withOvertureOperationLock(async () => {
+                ran = true;
+                return "done";
+              }),
+            );
+            await withDeadline(observer.failedAttempt, "a refused lock attempt");
+            expect(ran).toBe(false);
+
+            // During backoff the helper holds no service connection at all.
+            const reservations: ReservedConnection[] = [];
+            for (let i = 0; i < 4; i += 1) reservations.push(await harness.reserve());
+            expect(ran).toBe(false);
+            for (const reservation of reservations) harness.release(reservation);
+
+            await holder.unsafe(`SELECT ${release}(${keys})`);
+            holding = false;
+            await expect(withDeadline(result, "the lock holder to release")).resolves.toBe("done");
+            expect(observer.attempts.at(-1)).toBe(true);
+
+            // The helper's lock is gone once it returns.
+            const probe = await pg.sql.reserve();
+            try {
+              const [row] = await probe.unsafe(`SELECT pg_try_advisory_lock(${keys}) AS locked`);
+              expect(row?.locked).toBe(true);
+              await probe.unsafe(`SELECT pg_advisory_unlock(${keys})`);
+            } finally {
+              probe.release();
+            }
+          } finally {
+            if (holding) await holder.unsafe(`SELECT ${release}(${keys})`).catch(noop);
+            holder.release();
+          }
+        }),
+      45_000,
+    );
   });
 
   it("moves an unchanged OSM snapshot into a new Places release without copying it", async () => {

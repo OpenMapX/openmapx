@@ -2,8 +2,9 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { cliControlContext, completeCliCommand } from "../lib/control-context";
+
 import { dockerComposeStream } from "../lib/docker";
-import { applyGeneratedHardlinks } from "../lib/hardlinks";
+import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
@@ -207,7 +208,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently add services to ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = enableSelectedServices(ids);
+        const state = await enableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
@@ -226,7 +227,7 @@ export function registerServicesCommands(program: Command): void {
     .description(`Persistently remove services from ${SERVICE_SELECTION_FILE}`)
     .action(async (ids: string[]) => {
       try {
-        const state = disableSelectedServices(ids);
+        const state = await disableSelectedServices(ids);
         const applied = await getServiceSelectionSummary();
         log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
         log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
@@ -292,10 +293,7 @@ export function registerServicesCommands(program: Command): void {
         if (result.completedIds.length > 0) {
           const rendered = await renderComposeForRepo({});
           for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-          log.ok(
-            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-          );
+          logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
         }
         if (result.failures.length > 0) {
           log.err(
@@ -340,10 +338,7 @@ export function registerServicesCommands(program: Command): void {
           if (result.completedIds.length > 0) {
             const rendered = await renderComposeForRepo({});
             for (const warning of rendered.selectionWarnings) log.warn(warning);
-            const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-            log.ok(
-              `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-            );
+            logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
           }
           if (result.failures.length > 0) {
             log.err(

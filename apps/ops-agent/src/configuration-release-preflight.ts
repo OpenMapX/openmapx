@@ -13,7 +13,9 @@ export async function preflightConfigurationRelease(input: {
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   signal: AbortSignal;
 }) {
-  const lock = await services.acquireReleaseStoreLock(join(input.infraDir, ".ops-agent-releases"));
+  const lock = await services.acquireReleaseStoreLock(
+    services.releaseStatePaths(input.infraDir).store,
+  );
   try {
     input.signal.throwIfAborted();
     const release = readCheckedConfigurationRelease(input.infraDir, input.selection),

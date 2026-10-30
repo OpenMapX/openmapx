@@ -727,7 +727,6 @@ export async function* streamOpenMapxRegistrationRecords(
         database
           .select({
             userId: mangroveKeypair.userId,
-            encryptionMode: mangroveKeypair.encryptionMode,
             publicJwk: mangroveKeypair.publicJwk,
             createdAt: mangroveKeypair.createdAt,
           })

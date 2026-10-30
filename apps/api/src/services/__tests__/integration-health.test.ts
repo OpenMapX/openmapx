@@ -10,6 +10,7 @@ const coreServerMocks = vi.hoisted(() => ({
   safeFetchStatus: vi.fn(),
 }));
 const dnsMocks = vi.hoisted(() => ({ lookup: vi.fn() }));
+const serviceUrls = vi.hoisted(() => new Map<string, string>());
 const netMocks = vi.hoisted(() => ({ createConnection: vi.fn() }));
 
 vi.mock("@openmapx/core/server", () => coreServerMocks);
@@ -23,7 +24,7 @@ vi.mock("node:dns/promises", () => dnsMocks);
 vi.mock("../service-registry", () => ({
   serviceUrl: (id: string) => {
     if (id === "valhalla") return "http://valhalla:8002";
-    return undefined;
+    return serviceUrls.get(id);
   },
 }));
 
@@ -553,6 +554,290 @@ describe("integration-health placeholder substitution", () => {
   });
 });
 
+// biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+describe("integration-health ${endpoint:...} placeholders", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+  });
+
+  afterEach(() => {
+    serviceUrls.clear();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  function manifestIntegration(
+    id: string,
+    services: Record<string, string> = {},
+    config: Record<string, unknown> = {},
+  ): LoadedIntegration {
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
+    );
+    return {
+      ...makeIntegration(manifest.healthCheck),
+      id,
+      manifest,
+      config,
+      isBuiltIn: true,
+      // The integration's own resolved requirements, as the host records them.
+      resolvedServices: Object.fromEntries(
+        Object.entries(services).map(([serviceId, url]) => [
+          serviceId,
+          { serviceId, url, enabled: true },
+        ]),
+      ),
+    };
+  }
+
+  it.each([
+    [
+      "elsewhere in the URL",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      { type: "http", urlTemplate: "https://collector.example/?u=${endpoint:overpass}" },
+    ],
+    [
+      "as a host prefix",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      { type: "http", urlTemplate: "${endpoint:overpass}@collector.example/status" },
+    ],
+    [
+      "in a header",
+      {
+        type: "http",
+        url: "https://collector.example/status",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+        headers: { "X-Upstream": "${endpoint:overpass}" },
+      },
+    ],
+  ])("never sends the operator's endpoint %s", async (_where, healthCheck) => {
+    vi.stubEnv("OVERPASS_URL", "https://mapper:s3cret-pass@overpass.example.org");
+
+    const [status] = await executeIntegrationHealthCheck({
+      ...makeIntegration(healthCheck),
+      isBuiltIn: true,
+    });
+
+    expect(status).toMatchObject({ status: "down", url: "health check misconfigured" });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+    expect(JSON.stringify(status)).not.toMatch(/s3cret-pass|mapper/);
+  });
+
+  it("does not resolve an endpoint for a community integration", async () => {
+    serviceUrls.set("overpass", "http://overpass:80");
+
+    const [status] = await executeIntegrationHealthCheck(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      makeIntegration({ type: "http", urlTemplate: "${endpoint:overpass}/api/status" }),
+    );
+
+    expect(status).toMatchObject({
+      status: "down",
+      error: "endpoint placeholders are reserved for built-in integrations",
+    });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["poi-overpass", "poi-overpass"],
+    ["transit-overpass", "transit-overpass"],
+    ["overlay-hiking", "overlay-hiking:OpenStreetMap Overpass"],
+  ])("%s probes the self-hosted Overpass when it is enabled", async (id, statusId) => {
+    vi.stubEnv("OVERPASS_URL", "https://overpass.example.org");
+
+    const statuses = await executeIntegrationHealthCheck(
+      manifestIntegration(id, { overpass: "http://overpass:80" }),
+    );
+
+    expect(statuses.find((status) => status.id === statusId)).toMatchObject({
+      status: "up",
+      url: "http://overpass:80/api/status",
+    });
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "http://overpass:80/api/status",
+      expect.objectContaining({ allowPrivateHosts: ["overpass"] }),
+    );
+    expect(fetchSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain(
+      "https://overpass-api.de/api/status",
+    );
+  });
+
+  it.each([
+    {
+      id: "geocoding-nominatim",
+      statusId: "geocoding-nominatim",
+      services: { nominatim: "http://nominatim:8080" },
+      probe: "http://nominatim:8080/status",
+      trustedHost: "nominatim",
+    },
+    {
+      id: "geocoding-nominatim",
+      statusId: "geocoding-nominatim",
+      config: { endpoint: "http://nominatim.lan:8080" },
+      probe: "http://nominatim.lan:8080/status",
+      trustedHost: "nominatim.lan",
+    },
+    {
+      id: "geocoding-photon",
+      statusId: "geocoding-photon",
+      env: { PHOTON_URL: "https://photon.example.org" },
+      probe: "https://photon.example.org/api?q=test&limit=1",
+      trustedHost: "photon.example.org",
+    },
+    {
+      id: "geocoding-photon",
+      statusId: "geocoding-photon",
+      probe: "https://photon.komoot.io/api?q=test&limit=1",
+    },
+    {
+      id: "routing-osrm",
+      statusId: "routing-osrm",
+      env: { OSRM_URL: "https://osrm.example.org/" },
+      probe:
+        "https://osrm.example.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false",
+      trustedHost: "osrm.example.org",
+    },
+    {
+      id: "routing-valhalla",
+      statusId: "routing-valhalla:Valhalla",
+      config: { endpoint: "http://valhalla.lan:8002" },
+      probe: "http://valhalla.lan:8002/status",
+      trustedHost: "valhalla.lan",
+    },
+    {
+      id: "transit-motis",
+      statusId: "transit-motis:MOTIS self-hosted",
+      config: { endpoint: "http://motis.lan:8080" },
+      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      trustedHost: "motis.lan",
+    },
+    {
+      id: "transit-motis",
+      statusId: "transit-motis:Transitous",
+      config: { transitousUrl: "https://transitous.example.org" },
+      probe: "https://transitous.example.org/api/v1/geocode?text=test",
+      trustedHost: "transitous.example.org",
+    },
+    {
+      id: "live-transit-motis",
+      statusId: "live-transit-motis:MOTIS self-hosted",
+      services: { motis: "http://motis:8080" },
+      config: { endpoint: "http://motis.lan:8080" },
+      probe: "http://motis:8080/api/v1/geocode?text=test",
+      trustedHost: "motis",
+    },
+    {
+      id: "geocoding-motis",
+      statusId: "geocoding-motis:Transitous",
+      probe: "https://api.transitous.org/api/v1/geocode?text=test",
+    },
+    {
+      id: "bike-sharing",
+      statusId: "bike-sharing:MOTIS self-hosted",
+      env: { MOTIS_URL: "http://motis.lan:8080" },
+      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      trustedHost: "motis.lan",
+    },
+  ])(
+    "$statusId probes $probe",
+    async ({ id, statusId, services, config, env, probe, trustedHost }) => {
+      for (const name of [
+        "NOMINATIM_URL",
+        "PHOTON_URL",
+        "OSRM_URL",
+        "VALHALLA_URL",
+        "MOTIS_URL",
+        "TRANSITOUS_URL",
+      ]) {
+        vi.stubEnv(name, (env as Record<string, string> | undefined)?.[name] ?? "");
+      }
+
+      const statuses = await executeIntegrationHealthCheck(
+        manifestIntegration(id, services as Record<string, string> | undefined, config),
+      );
+
+      expect(statuses.find((status) => status.id === statusId)).toMatchObject({ status: "up" });
+      expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+        probe,
+        expect.objectContaining({ allowPrivateHosts: trustedHost ? [trustedHost] : [] }),
+      );
+    },
+  );
+
+  it.each([
+    ["geocoding-pelias", "geocoding-pelias", "pelias endpoint not configured"],
+    ["transit-motis", "transit-motis:MOTIS self-hosted", "motis endpoint not configured"],
+  ])("%s reports no instance as unconfigured", async (id, statusId, url) => {
+    vi.stubEnv("PELIAS_URL", "");
+    vi.stubEnv("MOTIS_URL", "");
+
+    const statuses = await executeIntegrationHealthCheck(manifestIntegration(id));
+
+    expect(statuses.find((status) => status.id === statusId)).toMatchObject({
+      status: "unconfigured",
+      url,
+    });
+  });
+
+  it("probes an operator's private instance, sending its URL credentials as Basic auth", async () => {
+    vi.stubEnv("OVERPASS_URL", "http://mapper:s3cret-pass@overpass.lan:8080/api/interpreter");
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("poi-overpass"));
+
+    expect(status).toMatchObject({ status: "up", url: "http://overpass.lan:8080/api/status" });
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "http://overpass.lan:8080/api/status",
+      expect.objectContaining({
+        allowPrivateHosts: ["overpass.lan"],
+        allowedRedirectOrigin: "http://overpass.lan:8080",
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from("mapper:s3cret-pass").toString("base64")}`,
+        }),
+      }),
+    );
+  });
+
+  it("never shows URL credentials, even in an error message that repeats them", async () => {
+    vi.stubEnv("OVERPASS_URL", "https://mapper:s3cret-pass@overpass.example.org");
+    coreServerMocks.safeFetchStatus.mockRejectedValue(
+      new Error("request to https://mapper:s3cret-pass@overpass.example.org failed"),
+    );
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("poi-overpass"));
+
+    expect(status?.status).toBe("down");
+    expect(JSON.stringify(status)).not.toMatch(/s3cret-pass|mapper/);
+  });
+
+  it("probes the public default, as a public host, when nothing is configured", async () => {
+    vi.stubEnv("OVERPASS_URL", "");
+
+    const [status] = await executeIntegrationHealthCheck(manifestIntegration("transit-overpass"));
+
+    expect(status?.url).toBe("https://overpass-api.de/api/status");
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "https://overpass-api.de/api/status",
+      expect.objectContaining({ allowPrivateHosts: [] }),
+    );
+  });
+
+  it("reports an endpoint id it does not know as unconfigured, without a request", async () => {
+    const [status] = await executeIntegrationHealthCheck({
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
+      ...makeIntegration({ type: "http", urlTemplate: "${endpoint:geoserver}/status" }),
+      isBuiltIn: true,
+    });
+
+    expect(status).toMatchObject({
+      status: "unconfigured",
+      url: "geoserver endpoint not configured",
+    });
+    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+  });
+});
+
 describe("integration-health secret redaction", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
@@ -906,5 +1191,80 @@ describe("Entur composite health dispatch", () => {
     expect(statuses).toHaveLength(1);
     expect(statuses[0].status).toBe("down");
     expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("scheduled integration health checks", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T12:00:00Z"));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(recordHealthResult).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function mangrove(): LoadedIntegration {
+    const manifest = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "integrations/reviews-mangrove/manifest.json"), "utf8"),
+    );
+    return { ...makeIntegration(manifest.healthCheck), id: "reviews-mangrove", manifest };
+  }
+
+  it("uses a static Mangrove endpoint and probes only once per 15 minutes", async () => {
+    const integration = mangrove();
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://api.mangrove.reviews/robots.txt",
+      expect.anything(),
+    );
+    vi.mocked(globalThis.fetch).mockClear();
+    vi.mocked(recordHealthResult).mockClear();
+    for (let minute = 1; minute < 15; minute++) {
+      vi.setSystemTime(Date.now() + 60_000);
+      const cached = await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+      expect(cached[0]?.status).toBe("up");
+    }
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(recordHealthResult).not.toHaveBeenCalled();
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the default minute cadence and permits explicit on-demand checks", async () => {
+    const normal = makeIntegration({ type: "http", url: "https://example.org/health" });
+    const external = mangrove();
+    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+    vi.mocked(globalThis.fetch).mockClear();
+    vi.setSystemTime(Date.now() + 60_000);
+    await executeAllIntegrationHealthChecks([normal, external], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await executeAllIntegrationHealthChecks([external]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not overlap slow scheduled probes and seeds replacement generations", async () => {
+    const integration = mangrove();
+    let finish!: (response: Response) => void;
+    vi.mocked(globalThis.fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const first = executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    vi.setSystemTime(Date.now() + 16 * 60_000);
+    await executeAllIntegrationHealthChecks([integration], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    finish(new Response(null, { status: 503 }));
+    await first;
+    const replacement = mangrove();
+    await executeAllIntegrationHealthChecks([replacement], { scheduled: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(getCachedIntegrationHealthSnapshot([replacement]).results[0]?.status).toBe("up");
   });
 });

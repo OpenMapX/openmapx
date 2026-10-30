@@ -5,34 +5,34 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
-  mkdirSync,
   openSync,
   readSync,
   type Stats,
   unlinkSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseReleaseComposeSelection } from "./release-manifest";
+import {
+  ensureReleaseStateDirectories,
+  releaseStateFileProblem,
+  releaseStatePaths,
+} from "./release-state";
+import { supersedeLegacyReleaseOverlay } from "./release-state-migration";
 import { acquireReleaseStoreLock } from "./release-store-lock";
 export async function clearReleaseComposeSelection(opts: {
   path: string;
   expectedReleaseId?: string;
+  infraDir?: string;
+  uid?: number;
 }): Promise<{ path: string; cleared: boolean }> {
-  const path = opts.path,
-    parent = dirname(path);
-  const assertDirectory = (directory: string) => {
-    const stat = lstatSync(directory);
-    if (!stat.isDirectory() || stat.isSymbolicLink())
-      throw Error("Release selection directory is unsafe");
-  };
-  assertDirectory(parent);
-  const store = join(parent, ".ops-agent-releases");
-  try {
-    mkdirSync(store, { mode: 0o700 });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  assertDirectory(store);
+  const path = resolve(opts.path);
+  const parent = dirname(path);
+  const infraDir = opts.infraDir ?? resolve(parent, "../../..");
+  const stateOptions = { uid: opts.uid };
+  const paths = releaseStatePaths(infraDir);
+  if (resolve(paths.overlay) !== path) throw Error("Release selection path is unsafe");
+  ensureReleaseStateDirectories(infraDir, stateOptions);
+  const store = paths.store;
   const lock = await acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
     try {
@@ -49,9 +49,11 @@ export async function clearReleaseComposeSelection(opts: {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       if (opts.expectedReleaseId !== undefined) throw Error("Release selection changed");
+      supersedeLegacyReleaseOverlay(infraDir, stateOptions);
       return { path, cleared: false };
     }
     if (
+      releaseStateFileProblem(selected, 128 * 1024, stateOptions) !== null ||
       !selected.isFile() ||
       selected.isSymbolicLink() ||
       selected.nlink !== 1 ||
@@ -101,6 +103,7 @@ export async function clearReleaseComposeSelection(opts: {
     } finally {
       closeSync(descriptor);
     }
+    supersedeLegacyReleaseOverlay(infraDir, stateOptions);
     return { path, cleared: true };
   } finally {
     lock.release();

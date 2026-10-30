@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type RoadConditionBindingDetail,
   type RoadConditionEvent,
   roadConditionFeatureToEvent,
   useOverlayExclusion,
@@ -22,8 +21,8 @@ import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStor
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { usePopupCreditOptions } from "@/integration-api/runtime/usePopupCreditOptions";
 import { roadConditionAttributions } from "./attributions";
-import { loadRoadConditionBindings } from "./bindings";
 import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
@@ -36,7 +35,7 @@ import {
 } from "./incident-layers";
 import { useIncidentsVisible } from "./incidents-visible";
 import { markerImageData, parseMarkerImageId } from "./markers";
-import { buildRoadConditionPopupHtml, popupEvents } from "./popup";
+import { buildRoadConditionPopupHtml } from "./popup";
 import { useRestoredRoadConditionsChoices } from "./restore-choices";
 import { RouteConditionsLayer } from "./route-layer";
 import { RoadSourceLayers } from "./source-layers";
@@ -46,8 +45,6 @@ import {
   type ViewportBox,
   type ViewportFetchScheduler,
 } from "./viewport-scheduler";
-
-export { buildRoadConditionPopupGroups } from "./popup";
 
 type GeoJsonData = Parameters<GeoJSONSource["setData"]>[0];
 
@@ -150,7 +147,6 @@ export function RoadConditionsLayer() {
   const popupSelectionRef = useRef<{
     hits: MapGeoJSONFeature[];
     fallbackCoordinates: [number, number];
-    bindings?: ReadonlyMap<string, RoadConditionBindingDetail>;
   } | null>(null);
   const viewNeedsRefreshRef = useRef(false);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
@@ -170,6 +166,11 @@ export function RoadConditionsLayer() {
   // handler (bound once per effect) always uses the current prefs + locale.
   const dtf = useDateTimeFormat();
   const dtfRef = useRef(dtf);
+  const creditOptions = usePopupCreditOptions();
+  const creditOptionsRef = useRef(creditOptions);
+  useEffect(() => {
+    creditOptionsRef.current = creditOptions;
+  }, [creditOptions]);
   useEffect(() => {
     dtfRef.current = dtf;
   }, [dtf]);
@@ -200,11 +201,12 @@ export function RoadConditionsLayer() {
         eventsByDisplayId: eventsByDisplayIdRef.current,
         formatDateTime: dtfRef.current.dateTime,
         formatDate: dtfRef.current.date,
+        formatRelative: dtfRef.current.relative,
+        creditOptions: creditOptionsRef.current,
         translate: (key, values) => tRef.current(key, values),
         locale: localeRef.current,
         atMs: Date.now(),
         needsRefresh,
-        requireCurrentEvents: true,
       });
       if (content.groupCount === 0) {
         if (mapRef.current) removeMapOverlayPopup(mapRef.current, popup);
@@ -396,25 +398,17 @@ export function RoadConditionsLayer() {
           fallbackCoordinates: [lngLat.lng, lngLat.lat] as [number, number],
         };
         popupSelectionRef.current = selection;
-        const opened = openIncidentPopup(map, popupRef, {
+        openIncidentPopup(map, popupRef, {
           ...selection,
           atMs: Date.now(),
           needsRefresh: viewNeedsRefreshRef.current,
-          requireCurrentEvents: true,
           eventsByDisplayId: eventsByDisplayIdRef.current,
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
+          formatRelative: dtfRef.current.relative,
+          creditOptions: creditOptionsRef.current,
           translate: (key, values) => tRef.current(key, values),
           locale: localeRef.current,
-        });
-        if (!opened) return;
-        // The situation lists carry no bindings; read them for the cards shown.
-        void loadRoadConditionBindings(
-          popupEvents({ hits, eventsByDisplayId: eventsByDisplayIdRef.current }),
-        ).then((bindings) => {
-          if (popupSelectionRef.current !== selection || bindings.size === 0) return;
-          popupSelectionRef.current = { ...selection, bindings };
-          refreshPopup(viewNeedsRefreshRef.current);
         });
       },
     });
@@ -422,7 +416,7 @@ export function RoadConditionsLayer() {
       unregister();
       closeIncidentPopup(map, popupRef);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, refreshPopup]);
+  }, [mapReady, mapRef, styleVersion, layerVisible]);
 
   // The area overlay stops at its min zoom; this covers the route at the zooms
   // below it, where a whole trip is on screen.

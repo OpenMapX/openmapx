@@ -23,6 +23,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
 
 /** Quiet period before a typed note reaches the server. */
@@ -30,7 +31,7 @@ const NOTE_COMMIT_DEBOUNCE_MS = 600;
 /** How often the countdown re-renders. A parking meter does not need seconds. */
 const COUNTDOWN_TICK_MS = 30_000;
 
-/** `datetime-local` wants a local wall-clock string, not an instant. */
+/** The expiry field takes a local wall-clock string, not an instant. */
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
   const at = new Date(iso);
@@ -171,20 +172,18 @@ export function ParkingPanelContent() {
         onChange={(e) => commitNote(e.target.value)}
       />
 
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <TextField
-          size="small"
-          type="datetime-local"
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+        <DateTimeField
           label={t("expires")}
+          dateLabel={t("expires")}
           value={toLocalInput(record.expiresAt)}
-          onChange={(e) =>
+          clearable
+          onChange={(next) =>
             update.mutate({
               id: record.id,
-              expiresAt: e.target.value === "" ? null : new Date(e.target.value).toISOString(),
+              expiresAt: next === "" ? null : new Date(next).toISOString(),
             })
           }
-          slotProps={{ inputLabel: { shrink: true } }}
-          fullWidth
         />
         {remaining !== null &&
           (remaining <= 0 ? (

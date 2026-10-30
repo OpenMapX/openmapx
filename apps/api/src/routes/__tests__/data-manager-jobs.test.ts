@@ -59,6 +59,7 @@ describe("serialized data-manager job projections", () => {
         auth: unexpectedTier,
         tile: unexpectedTier,
         expensive: unexpectedTier,
+        integrationIngress: unexpectedTier,
         status: unexpectedTier,
         public: limiter.preHandler(),
       }),

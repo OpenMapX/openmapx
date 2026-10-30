@@ -1,9 +1,16 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generate } from "orval";
 import { collectArtifacts, writeOrCheckArtifacts as writeOrCheck } from "../codegen/artifacts.mjs";
-import { adminOperationBindings, createCodegenConfig } from "./config.mjs";
+import {
+  adminOperationBindings,
+  createCodegenConfig,
+  garageOperationBindings,
+  savedOperationBindings,
+  selectTaggedDocument,
+  sharingOperationBindings,
+} from "./config.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const generatedDirectory = join(root, "packages/core/src/api/generated");
@@ -17,13 +24,42 @@ export async function generateArtifacts({
   await mkdir(scratchRoot, { recursive: true });
   const directory = await mkdtemp(join(scratchRoot, "generation-"));
   try {
-    for (const name of ["sdk-transport.ts", "admin-sdk-transport.ts", "client.ts"])
+    for (const name of [
+      "sdk-transport.ts",
+      "admin-sdk-transport.ts",
+      "operation-transport.ts",
+      "saved-sdk-transport.ts",
+      "garage-sdk-transport.ts",
+      "sharing-sdk-transport.ts",
+      "client.ts",
+    ])
       await cp(join(root, "packages/core/src/api", name), join(directory, name));
     await mkdir(join(directory, "generated/admin"), { recursive: true });
     await writeFile(
       join(directory, "generated/admin/operation-bindings.generated.ts"),
       adminOperationBindings(inputDocument),
     );
+    if (Object.keys(selectTaggedDocument(inputDocument, "saved-places").paths).length) {
+      await mkdir(join(directory, "generated/saved"), { recursive: true });
+      await writeFile(
+        join(directory, "generated/saved/operation-bindings.generated.ts"),
+        savedOperationBindings(inputDocument),
+      );
+    }
+    if (Object.keys(selectTaggedDocument(inputDocument, "garage").paths).length) {
+      await mkdir(join(directory, "generated/garage"), { recursive: true });
+      await writeFile(
+        join(directory, "generated/garage/operation-bindings.generated.ts"),
+        garageOperationBindings(inputDocument),
+      );
+    }
+    if (Object.keys(selectTaggedDocument(inputDocument, "sharing").paths).length) {
+      await mkdir(join(directory, "generated/sharing"), { recursive: true });
+      await writeFile(
+        join(directory, "generated/sharing/operation-bindings.generated.ts"),
+        sharingOperationBindings(inputDocument),
+      );
+    }
     const config = createCodegenConfig({ inputDocument, outputDirectory: directory });
     await generate(config.runtimeMetadata);
     for (const [family, configuration] of Object.entries(config))
@@ -32,7 +68,9 @@ export async function generateArtifacts({
       "runtime-metadata.generated.ts",
       ...Object.values(config)
         .filter((configuration) => configuration !== config.runtimeMetadata)
-        .map((configuration) => `admin/${configuration.output.target.split("/").at(-1)}`),
+        .map((configuration) =>
+          relative(join(directory, "generated"), configuration.output.target),
+        ),
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

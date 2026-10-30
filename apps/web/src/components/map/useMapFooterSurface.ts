@@ -1,7 +1,11 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
-import { publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
+import {
+  MAP_FOOTER_OBSTRUCTION_ID,
+  publishMapFooterBox,
+  publishMapFooterCenterCovered,
+} from "@/lib/mapFooterCenter";
 import {
   getMapObstructionInsets,
   publishMapObstruction,
@@ -9,8 +13,24 @@ import {
 } from "@/lib/mapObstructions";
 import { subscribeMobileFooterSurfaces, topMobileFooterSurface } from "@/lib/mobileFooterSurface";
 
-/** One portal target for the controller's whole lifetime. Only its physical parent changes. */
-export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean) {
+/** Viewport top of `element`'s layout box, ignoring its own transforms and animations. */
+function layoutTop(element: HTMLElement): number {
+  const parent = element.offsetParent;
+  if (!parent) return element.getBoundingClientRect().top;
+  return parent.getBoundingClientRect().top + element.offsetTop;
+}
+
+/**
+ * One portal target for the controller's whole lifetime. Only its physical parent changes.
+ * `centerCovered` reports whether footer content runs under the legend tab; it
+ * is republished with every move, so a footer leaving the sheet is not left
+ * reporting the "clear" state it had inside it until React next renders.
+ */
+export function useMapFooterSurface(
+  footer: HTMLElement | null,
+  mobile: boolean,
+  centerCovered: () => boolean,
+) {
   const [home, setHome] = useState<HTMLDivElement | null>(null);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [placement, setPlacement] = useState({ docked: false, mapBudget: 0 });
@@ -41,10 +61,10 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
       const mapBudget = Math.max(0, mapBottom - top);
       // One pixel tolerates the engine's fractional snap-marker boundary. The
       // hypothetical rectangle is independent of the current physical parent.
+      const footerHeight = footer?.getBoundingClientRect().height ?? 0;
       const docked =
         !!surface &&
-        (mapBottom > surface.bottom - surface.visibleHeight + 1 ||
-          (footer?.getBoundingClientRect().height ?? 0) > mapBudget + 1);
+        (mapBottom > surface.bottom - surface.visibleHeight + 1 || footerHeight > mapBudget + 1);
       const nextOwner = docked ? surface.host : null;
       if (owner !== nextOwner) {
         owner?.removeAttribute("data-map-footer-owned");
@@ -74,13 +94,23 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
         if (restore && focused.isConnected && document.activeElement !== focused)
           focused.focus({ preventScroll: true });
       }
-      if (docked) publishMapFooterCenterCovered(false);
-      if (footer)
-        publishMapObstruction(
-          "map-footer",
-          "bottom",
-          window.innerHeight - footer.getBoundingClientRect().top,
-        );
+      publishMapFooterCenterCovered(centerCovered());
+      publishMapFooterBox({ docked, height: footerHeight });
+      // The only publisher of the footer's extent. On the map it must not be
+      // the footer's rendered box: while the footer follows the sheet by a
+      // scroll-driven animation (lib/sheetFollow), a scroll listener reads that
+      // box as of the previous frame, and a sheet hiding leaves the last such
+      // reading in place. Over a sheet the top is known exactly; without one
+      // the untransformed layout box is current. Docked, the footer scrolls
+      // with the sheet natively and never animates, so its box is.
+      if (footer) {
+        const footerTop = docked
+          ? footer.getBoundingClientRect().top
+          : surface
+            ? mapBottom - footerHeight
+            : layoutTop(footer);
+        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", window.innerHeight - footerTop);
+      }
       setPlacement((previous) =>
         previous.docked === docked && previous.mapBudget === mapBudget
           ? previous
@@ -93,6 +123,8 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
     const unsubscribeObstructions = subscribeMapObstructions(update);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     if (footer) observer?.observe(footer);
+    // The footer's sidebar shift is a `left` transition; re-measure where it lands.
+    footer?.addEventListener("transitionend", update);
     window.addEventListener("resize", update);
     window.visualViewport?.addEventListener("resize", update);
     window.visualViewport?.addEventListener("scroll", update);
@@ -100,12 +132,14 @@ export function useMapFooterSurface(footer: HTMLElement | null, mobile: boolean)
       unsubscribe();
       unsubscribeObstructions();
       observer?.disconnect();
+      footer?.removeEventListener("transitionend", update);
       window.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("scroll", update);
       owner?.removeAttribute("data-map-footer-owned");
       owner?.style.removeProperty("--omx-footer-keyboard-avoidance");
+      publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
     };
-  }, [container, home, footer, mobile]);
+  }, [container, home, footer, mobile, centerCovered]);
   return { container, setHome, ...placement };
 }

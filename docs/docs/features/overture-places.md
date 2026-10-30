@@ -1,255 +1,110 @@
 ---
 title: Overture Places
-description: Regional Overture Places snapshots for additional POIs, enrichment, stable identity, and source attribution.
+description: Additional locally hosted places, source identity, and map publication limits.
 sidebar_position: 3
 ---
 
 # Overture Places
 
-OpenMapX can use [Overture Maps Places](https://docs.overturemaps.org/guides/places/)
-as a second, locally hosted POI source alongside OpenStreetMap. It does more
-than enrich OSM records: a place present only in Overture is returned as its own
-search result and opens as a complete place card with a stable GERS identifier.
+An instance can add a local Overture Places snapshot alongside OpenStreetMap.
+It can supply additional category-search results and fill gaps in place details.
+An Overture-only result has its own place card and GERS identifier; a matched
+OpenStreetMap result keeps its OSM identity.
 
-The integration is optional. Without it, category search continues to use OSM
-through Overpass. Activating it has two layers: enable the data lifecycle with
-`OVERTURE_ENABLED=true`, then enable `poi-overture` for search and
-`knowledge-overture` for place-card enrichment in **Admin → Integrations**.
-These runtime integrations are independent, so an operator may enable either or
-both. With both enabled, OpenMapX queries both sources, matches records that
-describe the same real-world place, and keeps unmatched Overture records as
-coverage gap-fill.
+The feature is optional and disabled by default for search and enrichment.
+Without it, the standard POI search can continue through OpenStreetMap and
+Overpass. Check each result's source credits to see what supplied it.
 
 ## Imported fields
 
-The regional snapshot stores GERS identity, geometry, Overture's
-`basic_category` and `taxonomy` hierarchy, multilingual names, addresses,
-contacts, brands, confidence, operating status, release, and property-level
-source records. Opening hours are not an Overture Places field and are never
-inferred from `operating_status`; OSM opening hours remain authoritative.
+Available fields include names, coordinates, categories, addresses, contacts,
+brands, confidence, operating status, release, and source records. Opening hours
+are not supplied by the Overture Places import. An operating status of `open`
+does not establish that a business is open at the current time.
 
-Category matching follows Overture's published hierarchy. OpenMapX maintains
-only a small bridge between its broad UI categories and broad Overture concepts;
-it does not copy or freeze Overture's thousands of leaf categories. New leaf
-categories work automatically when their upstream hierarchy reaches a supported
-broad concept.
+Category matching uses the imported taxonomy and supported broad OpenMapX
+categories. Unsupported categories or missing attributes can leave places out
+of filtered searches.
 
 ## Identity, fusion, and quality
 
-An Overture-only result uses `overture:<GERS ID>` as its primary identity. A
-matched OSM result keeps its `osm:` identity and also carries the GERS ID.
-Precomputed OSM↔GERS links are preferred; remaining candidates are matched
-conservatively using distance, normalized name, category, address, phone,
-website, and Wikidata evidence. OSM wins overlapping fields and Overture fills
-gaps.
+OpenMapX uses accepted OSM/GERS links and conservative matching to combine
+records for the same place. OSM takes precedence for overlapping fields;
+Overture can fill missing fields. Unmatched Overture records remain separate.
+Matching can still miss duplicates or inherit incorrect source data.
 
-Candidates are selected nearest the map center, then by confidence and field
-completeness. The combined result is deterministically reranked, conservative
-same-business duplicates are removed, and the response is capped at 50 places.
+Search results are bounded and ranked. They do not list every place in the
+installed dataset. A stable identifier helps recognize a record; it does not
+verify its address, category, or current operating status.
 
 ## Nearby places during normal browsing
 
-The built-in `overlay-ambient-places` integration shows named places on the map
-automatically, without starting a category search and without a Layers entry or
-legend. The integration ID keeps its historical `overlay-` prefix so existing
-operator configuration still applies. An administrator first builds the existing
-OSM search index; an Overture snapshot is optional, but a populated Overture
-source must have completed its link rebuild. In **Admin → Services → Data
-workflows → Nearby places**, choose **Planet**, **Germany** or **Custom region**. Germany
-requires prepared `europe/germany` OSM and optional Overture snapshots; regional
-sources are rejected for a country publication. The national publisher processes
-2,000 source rows per keyset batch, checks PostGIS disk headroom and activates one
-validated country generation. The active map remains available during the build.
-Planet requires prepared `planet` sources and the complete OSM ambient source
-format (version 2). It commits bounded pages into an indexed, unpublished
-generation and records durable checkpoints. An interrupted build can be resumed
-with the same sources and policy, or discarded without changing the active map.
-Selecting the preset does not download or prepare sources; follow the
-[global deployment runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment).
+An operator can separately publish a nearby-place snapshot for ordinary map
+browsing. It can use named OSM places with optional Overture augmentation.
+Enabling Overture search does not itself publish these map labels.
 
-The custom form defaults to Aachen (`5.9,50.65,6.3,50.95`) and accepts small boxes
-anywhere within Web Mercator coverage. The box may span at most 0.5 degrees in each
-direction, with at most 100,000 input rows per source and 100,000 final places.
-Linked OSM counterparts across the boundary count toward the OSM input cap and
-retain their closure/tenant policy and authoritative location. A pair whose OSM
-location is outside the box is omitted. Coverage follows the installed snapshot
-without political-border clipping. Format 2 retains all named objects in the
-existing OSM POI category allowlist, including those without aliases, codes or
-acronyms. It does not add lexical search terms for those objects. Rebuild an older
-OSM index to obtain that coverage; older regional generations remain readable.
+Published destinations appear automatically, without a Layers switch. Essential
+destinations can appear from zoom 13, everyday businesses from 15, other places
+from 16, and mapped non-ground tenants from 18. Ranking and label collisions
+limit what appears. Select a label to open its place details.
 
-Named essential destinations start at zoom 13, everyday businesses at 15 and
-other places at 16. Non-ground OSM tenants wait until 18. Explicitly closed,
-disused, demolished or private OSM records are omitted. Overture records require
-known `open` status and confidence of at least 0.5. Missing confidence/status
-is omitted rather than guessed. Labels use a supplied German/English name and
-fall back to the source name; names are capped at 120 Unicode characters. No
-hours, ratings or popularity are inferred. Missing OSM fields may be filled by
-an accepted Overture match; unmatched Overture records fill coverage gaps.
-Accepted OSM↔GERS links retain the OSM primary ID across tiles, search and place
-cards, even when the OSM record is outside the ambient candidate set.
+The publisher excludes specified closed, disused, demolished, or private OSM
+records. Overture candidates need known `open` status and confidence of at least
+0.5. These rules reduce unsuitable labels; they do not certify that every shown
+business is current. Coverage depends on the prepared source region and filters.
 
-The admin card reports generation, region, counts, source epoch/release,
-publication time and build errors. These facts (coverage, snapshot date and
-source epoch) are administrator information; map users see only the places and
-their credits. Country/global progress distinguishes processed
-source rows and staged places from the activated snapshot. These builds hold
-source-operation locks until publication finishes, so schedule them after source
-preparation and budget retained versions, temporary writes and transaction logs.
-A snapshot date describes the local data
-publication, not a recent verification of every business. Source/publication
-age above 90 days disables discovery. Coverage is partial: filters, missing
-source data, ranking caps and label collisions can all omit places.
-
-Publishing stages a complete immutable generation and activates it in one
-transaction. A failed or interrupted build retains the active generation.
-**Disable** removes it from discovery; **Roll back** switches to the predecessor.
-Neither requires another rebuild. A competing mutation receives `409` until
-publication finishes. Clients refresh discovery
-every minute and retain a fresh last-known generation during a temporary API
-failure, but only while the same page keeps talking to the same API origin; a
-reload or a different API origin discovers again. A reply that reports no
-publication, a disabled one or one older than 90 days removes the places. Already cached tile URLs remain valid for their seven-day cache lease;
-disable is therefore a discovery change, not immediate revocation of cached data.
-At most eight generations are retained. Cache protection renews when an active
-generation is replaced or rolled back, even if the original publication is old;
-publication refuses to evict an unexpired generation just to make room.
-
-The online path uses bounded PostGIS MVT reads behind the existing API. Regional
-PMTiles remain a possible offline/export delivery option, not an offline feature
-of this overlay. [Publication and serving decisions](../developer/ambient-places-publication.md)
-explain the comparison, limits, tests and rollback model.
+Discovery stops showing a disabled publication or one whose publication or input
+snapshots are older than 90 days.
+A fresh last-known publication can survive a temporary discovery failure on the
+same page and API origin. Cached tiles have a separate seven-day lease, so
+operator disablement does not immediately revoke copies already downloaded.
 
 ## Releases and regional refreshes
 
-OpenMapX discovers the current release from Overture's official STAC catalog
-and skips a release already installed. The pull follows the release → Places →
-place hierarchy and uses the exact immutable Parquet assets declared by STAC;
-it does not construct a wildcard storage path. STAC item extents first remove
-global partitions that cannot intersect the configured Geofabrik region, then
-DuckDB applies the regional bounding box and projects only the fields OpenMapX
-uses.
+Operators enable the data lifecycle with `OVERTURE_ENABLED=true`, prepare the
+chosen source region, and enable `poi-overture` and/or `knowledge-overture` under
+**Admin → Integrations**. The two runtime integrations are independent.
 
-Before publishing the local snapshot, the job checks the nested ingest schema,
-row and ID integrity, Point geometry, theme/type identity, and contributor
-coverage. It writes a release contract beside the Parquet file containing the
-resolved STAC items, source row counts, region bounds, projected columns,
-observed rows, contributors, and file size. Ingest requires that contract and
-checks its row and contributor counts again in the staging schema before the
-atomic swap. A standalone or stale Parquet file therefore cannot be labeled as
-a different release. Optional OSM↔GERS links are rebuilt when the matching
-regional OSM PBF exists. A failed pull or ingest cannot partially update the
-live places table; the regional database does not use global changelog data.
+A refresh stages and checks an immutable release before replacing the active
+Places snapshot. Link rebuilding is a separate resumable workflow; an incomplete
+rebuild does not establish readiness for nearby-place publication. Failed work
+preserves the prior published data at the relevant boundary.
 
-Places publication and link rebuilding are independent lifecycles. Each Places
-release starts with a durable `pending` link state. The rebuild records
-`extract`, `score`, `assign`, `publish`, and `complete` phases, keyset and
-component cursors, source fingerprint, heartbeats, attempt counts, separate
-emitted-geometry and unique-POI counts, and per-phase durations in PostGIS. A
-failed or interrupted attempt leaves the Places release active. Recovery is
-attempted once at data-manager startup and every 15 minutes thereafter. A retry resumes its saved phase: completed OSM
-extraction is not repeated, scoring continues after its last committed keyset
-cursor, and assignment continues after its last completed graph component. If
-the local PBF fingerprint changes—even after a previously completed run—the
-state safely restarts from extraction. Across Overture releases, an unchanged
-OSM table and its fingerprint are moved into the new release in constant time,
-so only Overture-dependent scoring and assignment repeat.
+The admin panel offers these operations under **Services → Data workflows →
+Overture Places**. **Full sync** runs the complete refresh. **Resume links**
+continues the installed release's durable rebuild; **Restart links from scratch**
+discards its resumable workspace while preserving published Places. Both show a
+server preview before confirmation. **Advanced recovery** exposes download,
+ingest and OSM extraction separately. Ingest uses the newest completed local
+partition for the selected region; it does not discover a newer upstream release.
+The worker rechecks installed Places, the region's OSM PBF and conflicting work
+under the shared Overture lease before execution. Follow the retained job in
+Activity; acceptance does not establish publication readiness.
 
-The rebuild is designed for country-scale inputs. OSM GeoJSON sequences are
-parsed directly into fixed-size Postgres batches and published with an atomic
-table swap. Matching reads OSM with keyset pagination, fetches only indexed
-ring-1 H3 cells from Overture, and materializes accepted edges in a durable
-working table. A lightweight endpoint pass labels the graph's disconnected
-components. Full scored rows are then read in bounded component groups, while
-each component independently enters the exact cardinality-first assignment
-solver. This preserves the region-wide optimum without loading or sorting the
-country-wide scored graph as one object. The completely assigned next-link
-snapshot is durable and replaces the live link table in one transaction, so a
-failed attempt can never expose a partial link set. A PostgreSQL advisory lock
-serializes schema swaps, OSM snapshot publication, and link rebuilding across
-data-manager processes. Temporary filtered PBFs are removed after extraction.
-Capacity checks measure the host `/data` filesystem before a pull and the
-PostgreSQL container's actual data filesystem before staging or conflation.
-Each reserves estimated working space plus a safety margin and fails with an
-actionable byte estimate instead of filling either filesystem.
-
-The staged Places snapshot is checked against release-pinned, human-reviewed
-category cases before activation. After link assignment, the final fused
-OSM-authoritative plus Overture-augmenting response is checked again before
-publication. The corpus covers cafés, restaurants, supermarkets, pharmacies,
-hotels, and fuel across urban, rural, German, and cross-border locations,
-including known upstream category mistakes and duplicates.
-Planet imports run every existing labeled regional case. Those cases do not
-establish matching quality in unrepresented parts of the world; operators must
-review representative local samples before a global rollout.
-
-After a complete ingest, fused quality check, and link publication, OpenMapX
-retains the active local release snapshot and one predecessor by default. Older
-release directories are pruned whether publication completed in the original
-sync or an independent retry; incomplete refreshes never trigger pruning.
-Durable finalization markers prevent completed retries from repeatedly
-truncating work tables or rescanning release directories.
-
-Run the complete workflow manually with:
-
-```sh
-pnpm openmapx data overture-sync europe/germany/berlin
-```
-
-Resume the installed release's saved rebuild phase with:
-
-```sh
-pnpm openmapx data overture-conflate europe/germany/berlin
-```
-
-Discard saved progress and deliberately restart from OSM extraction with:
-
-```sh
-pnpm openmapx data overture-conflate europe/germany/berlin --restart
-```
-
-The admin panel offers the same controls under **Services → Data workflows →
-Overture Places**. **Full sync** remains the usual workflow. **Resume links** and
-**Restart links from scratch** show a server preview before confirmation;
-restart discards the selected resumable workspace, preserving published Places.
-**Advanced recovery** exposes download, ingest and OSM extraction individually.
-Ingest selects the newest completed local partition for the selected region,
-without discovering a newer upstream release. Extraction and restart require
-that region's installed Places and OSM PBF. The panel shows missing prerequisites
-and disables conflicting actions while the shared Overture lease is held.
-Workers check these inputs again under the same lease when they execute.
-
-Inspect the installed release, phase, cursors, counts, timings, heartbeat age,
-and last error with:
-
-```sh
-pnpm openmapx data overture-status
-```
+Use [Preparing data](../install/preparing-data.md) for source preparation and the
+[publication reference](../developer/ambient-places-publication.md) for generation
+activation, status, capacity, restart, rollback, and cache behavior. Review
+representative local samples before publishing a larger region. Existing
+quality fixtures do not establish matching quality everywhere.
 
 ## Provenance, licensing, and privacy
 
-Every Overture result retains its upstream `sources` entries: dataset, property
-path, record ID, update time, reported license, and Overture release. The result
-list and place panel show attribution only for sources that actually contributed
-returned records.
+Records retain source dataset, property, record, license, update, and release
+information where supplied. The UI credits sources that contributed returned
+records. Overture Places has multiple contributor licenses; importing a local
+copy does not remove their attribution obligations. Follow the recorded source
+terms and [Overture's attribution reference](https://docs.overturemaps.org/attribution/).
 
-Places is multi-license. Most current contributors use
-CDLA-Permissive-2.0, AllThePlaces uses CC0-1.0, and Foursquare records use
-Apache-2.0. OpenMapX preserves Foursquare's copyright notice and records its
-transformation date. See [Overture attribution and licensing](https://docs.overturemaps.org/attribution/)
-for the authoritative current list.
-
-Searches run against local PostGIS. User viewports and place details are not
-sent to Overture or its contributors at request time.
+Overture search and details use local PostGIS data. Those requests do not send
+the user's viewport to Overture or its contributors. Other enabled geocoders,
+photos, knowledge providers, or external links can still contact their own
+sources. Check the instance's privacy information.
 
 ## Global source preparation
 
-`planet` is supported alongside Geofabrik extract paths. Overture selects every Places asset from one verified STAC release, with at most eight concurrent catalog requests; it does not fetch a Geofabrik polygon for the world. OSM uses the existing planet PBF download. Prepare matching `planet` OSM and Overture snapshots before publishing global ambient places.
-
-DuckDB defaults to 2 GiB buffer-manager memory, four threads and 32 GiB spill allowance. Set `OVERTURE_DUCKDB_MEMORY_MB`, `OVERTURE_DUCKDB_THREADS` and `OVERTURE_DUCKDB_TEMP_MB` to positive integer limits for the preparation host. Memory outside DuckDB's buffer manager still counts toward container RSS; reserve RAM and scratch storage accordingly. Each DuckDB process spills in an isolated directory under the persistent data volume and removes it after exit. First planet pull admission uses selected STAC row counts at 512 bytes per row as a working allowance, not a measured final dataset size.
-
-Planet osmium exports use `dense_file_array` for node locations. `OSMIUM_PLANET_INDEX_ESTIMATE_BYTES` defaults to 128 GiB and admission requires that allowance plus 5 GiB free on the extraction volume. The index is removed after completion/failure. Area assembly still needs substantial RAM, and filtered PBFs need additional disk; use a properly sized preparation host.
-
-Global conflation keeps connected-component labels and propagation proposals in PostgreSQL rather than a planet-wide Node map. Candidate pages and component reads are capped at 50,000 edges, and the exact assignment solver admits at most 512 nodes per side of a component. Oversized neighborhoods or components fail with an operator-visible error while preserving published links; they are never truncated or independently matched in overlapping shards. Investigate source anomalies before retrying.
-
-Planet ambient publication uses the same validated source release and accepted links, with durable bounded checkpoints and generation-partitioned storage. See the [global deployment runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment) for preparation order, exact source identity requirements, capacity and recovery.
+Planet preparation and publication require matching planet sources, substantial
+RAM and scratch space, bounded extraction and matching work, and completed link
+publication. Selecting **Planet** in the nearby-place form does not download or
+prepare those inputs. Follow the
+[global deployment runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment)
+before attempting it. Regional source data cannot establish global coverage.

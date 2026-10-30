@@ -40,6 +40,7 @@ it("reserves measured controls and following banner content even when the photo 
         bottomHeader,
         isMobile,
         sheetClearance: 96,
+        speedLimitRidesSheet: false,
         sheetOccupiedHeight: 96,
         mobilePanelPending: false,
       }),
@@ -96,6 +97,7 @@ it("reserves the measured mobile sheet even when no speed badge is rendered", ()
         bottomHeader: null,
         isMobile: true,
         sheetClearance: 120,
+        speedLimitRidesSheet: false,
         sheetOccupiedHeight: occupied,
         mobilePanelPending: pending,
       }),
@@ -109,4 +111,43 @@ it("reserves the measured mobile sheet even when no speed badge is rendered", ()
   expect(result.current).toBe(0);
   rerender({ pending: false, occupied: 120 });
   expect(result.current).toBe(558);
+});
+
+it("reserves the sheet clearance above a speed badge that rides the sheet by translation", () => {
+  const shell = document.createElement("div");
+  const banner = document.createElement("div");
+  const junction = document.createElement("div");
+  const bottom = document.createElement("div");
+  const speedLimit = document.createElement("div");
+  const layout = installMeasuredLayout((el) => {
+    if (el === shell) return new DOMRect(0, 0, 390, 844);
+    if (el === junction) return new DOMRect(0, 150, 358, 500);
+    if (el === banner) return new DOMRect(0, 0, 390, 650);
+    if (el === bottom) return new DOMRect(0, 1000, 390, 10);
+    if (el === speedLimit) return new DOMRect(0, 0, 64, 64);
+    return new DOMRect();
+  });
+  restore = layout.restore;
+  const { result, rerender } = renderHook(
+    (speedLimitRidesSheet: boolean) =>
+      useJunctionPreviewBudget({
+        shell,
+        banner,
+        junction,
+        bottom,
+        speedLimit,
+        bottomHeader: null,
+        isMobile: true,
+        sheetClearance: 120,
+        speedLimitRidesSheet,
+        sheetOccupiedHeight: 120,
+        mobilePanelPending: false,
+      }),
+    { initialProps: false },
+  );
+  // A margin badge has no 120px margin in this layout, so the clearance alone counts.
+  expect(result.current).toBe(844 - 120 - 150);
+  // Translated, it stands on the sheet: its own 64px sit above the clearance.
+  rerender(true);
+  expect(result.current).toBe(844 - (64 + 120) - 150);
 });

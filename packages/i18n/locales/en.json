@@ -273,7 +273,23 @@
     "showLess": "Show less",
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Search results",
-    "detailsPanelAriaLabel": "Place details"
+    "detailsPanelAriaLabel": "Place details",
+    "dataModified": "data modified"
+  },
+  "timePicker": {
+    "select": "Select time",
+    "enter": "Enter time",
+    "hour": "Hour",
+    "minute": "Minute",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "open": "Choose time, {time}",
+    "choose": "Choose time",
+    "toKeyboard": "Switch to text input",
+    "toDial": "Switch to clock",
+    "ok": "OK",
+    "date": "Date",
+    "time": "Time"
   },
   "search": {
     "scrollCategoriesLeft": "Scroll categories left",
@@ -577,29 +593,10 @@
       "other": "Other"
     },
     "panel": {
-      "type": "Type",
-      "effects": "Effects",
-      "direction": "Direction",
-      "roads": "Roads affected",
-      "validity": "Status",
-      "startsAt": "Starts at",
-      "description": "Details",
-      "sourceRecord": "Source record",
-      "sourceRecordCount": "{count, plural, one {# source record} other {# source records}}",
-      "sourceDetails": "Source details ({count, plural, one {# record} other {# records}})",
-      "relatedRecords": "{headline} ({count} related records)",
       "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}",
-      "source": "Source",
-      "license": "Licence",
-      "updatedAt": "Source updated (UTC)",
-      "checkedAt": "Last checked (UTC)",
-      "freshness": "Freshness",
-      "interpretation": "Interpretation",
-      "report": "Report",
-      "binding": "Road binding",
-      "routing": "Route effect",
-      "routingCandidate": "Eligible; application depends on the route",
-      "routingDisplayOnly": "Shown on map; not applied to routing"
+      "updated": "Updated {time}",
+      "showMore": "Show more",
+      "showLess": "Show less"
     },
     "binding": {
       "exact": "Exact",
@@ -627,15 +624,7 @@
       "location_not_exact": "its location is not precise enough"
     },
     "direction": {
-      "positive": "Increasing road reference",
-      "negative": "Decreasing road reference",
       "both": "Both directions",
-      "unknown": "Direction unknown",
-      "geometry": {
-        "positive": "In the direction the affected road is drawn",
-        "negative": "Against the direction the affected road is drawn"
-      },
-      "oneWay": "One direction only (not identified)",
       "loop": {
         "inner": "Inner loop",
         "outer": "Outer loop"
@@ -772,26 +761,32 @@
       "cancelled": "Cancelled",
       "unknown": "Unknown status"
     },
-    "endedReason": {
-      "source_ended": "ended by the source",
-      "withdrawn_from_feed": "withdrawn from the feed",
-      "expired": "expired",
-      "superseded": "superseded",
-      "cancelled": "cancelled",
-      "stale": "no longer confirmed"
-    },
     "compliance": {
       "advisory": "advisory"
     },
-    "interpretation": {
-      "partial": "Some rules could not be fully interpreted; they are shown but not used for routing"
-    },
     "freshness": {
-      "stale": "Source data may be outdated",
-      "needsRefresh": "Needs refresh"
+      "stale": "This information may be out of date",
+      "needsRefresh": "Couldn't refresh; this information may be out of date"
     },
     "report": {
       "unconfirmed": "Unconfirmed user report"
+    },
+    "impact": {
+      "closed": "{scope} closed"
+    },
+    "impactLevel": {
+      "none": "No impact",
+      "minor": "Minor impact",
+      "moderate": "Moderate impact",
+      "major": "Major impact",
+      "critical": "Severe impact"
+    },
+    "when": {
+      "until": "Until {date}",
+      "expectedUntil": "Expected until {date}",
+      "since": "Since {date}",
+      "starts": "Starts {date}",
+      "range": "{start} – {end}"
     }
   },
   "trafficFlow": {
@@ -1053,6 +1048,8 @@
     "bikesSupported": "Bicycles allowed",
     "bikesNotSupported": "Bicycles not allowed",
     "wheelchairSupported": "Wheelchair accessible",
+    "wheelchairUnconfirmed": "Wheelchair accessibility not confirmed",
+    "wheelchairUnconfirmedLegs": "Wheelchair accessibility not confirmed for {count, plural, one {1 leg} other {# legs}}",
     "wheelchairNotSupported": "Not wheelchair accessible",
     "returnAnyStation": "Return at a station",
     "returnSameStation": "Return to the pickup station",
@@ -2038,10 +2035,10 @@
       }
     },
     "mangroveSectionTitle": "<m>Mangrove Reviews</m> account",
-    "mangroveSectionIntro": "Your reviews are signed with a cryptographic keypair. You can import an existing Mangrove Reviews account to use it here, or export yours to back it up.",
+    "mangroveSectionIntro": "Your browser signs reviews with this encrypted local key. Import an existing compatible key or keep a private backup of yours.",
     "mangroveIdentity": "Current identity",
     "mangroveIdentityNone": "No keypair yet",
-    "mangroveImportCta": "Sign in with existing account",
+    "mangroveImportCta": "Import an existing private key",
     "mangroveExportCta": "Show my keypair",
     "mangroveRegenerateCta": "Start fresh",
     "mangroveImportTitle": "Sign in to existing Mangrove Reviews account",
@@ -2064,20 +2061,17 @@
     "mangroveRegenerateFailed": "Could not generate a new keypair.",
     "mangroveSetupPrompt": "You haven't set up your Mangrove Reviews keypair yet. Choose how you want to protect your signing key.",
     "mangroveSetupStart": "Set up",
-    "mangroveSetupTitle": "Protect your Mangrove Reviews keypair",
-    "mangroveSetupIntro": "Your reviews are signed with a cryptographic keypair. Choose how the private key should be protected — this decision is independent of your OpenMapX sign-in.",
+    "mangroveSetupTitle": "Protect your local review key",
+    "mangroveSetupIntro": "Local signing uses a key you control. Choose a passphrase or add a passkey to unlock it. This is separate from your OpenMapX sign-in.",
     "mangrovePassphraseDifferenceTitle": "This passphrase is not your account password",
-    "mangrovePassphraseDifferenceBody": "Your OpenMapX sign-in (email, passkey, or OAuth provider) is separate from this Mangrove passphrase. Server admins can never see the Mangrove passphrase, which is what keeps your signing key private even if our database leaks.",
+    "mangrovePassphraseDifferenceBody": "Your OpenMapX sign-in is separate from this review-key passphrase. The passphrase is used in your browser and is not sent to the server.",
     "mangroveModePassphraseTitle": "Passphrase",
     "mangroveModePassphraseSubtitle": "Encrypt your keypair with a passphrase you'll remember. You'll enter it before signing a review (with a short grace period).",
     "mangroveModePassphraseWebAuthnTitle": "Passphrase + Passkey",
     "mangroveModePassphraseWebAuthnSubtitle": "Recommended. Unlock with your device's biometric (Face ID, Touch ID, Windows Hello, security key). Passphrase remains as a backup.",
-    "mangroveModeUnencryptedTitle": "No encryption",
-    "mangroveModeUnencryptedSubtitle": "Your keypair is stored in cleartext on the server. Lowest friction, but anyone with database access can sign reviews as you. Not recommended.",
     "mangroveWebAuthnUnavailable": "Your browser or device does not support WebAuthn PRF. Use passphrase-only for now.",
     "mangroveSetupPassphraseTitle": "Choose a passphrase",
     "mangroveSetupPassphraseWebAuthnTitle": "Set a passphrase and register a passkey",
-    "mangroveSetupUnencryptedConfirmTitle": "Confirm unencrypted setup",
     "mangroveLossWarningTitle": "Losing your passphrase means losing control of this keypair",
     "mangroveLossWarningBody": "There is no password reset. If you forget the passphrase and you have no registered passkey, you can no longer edit or delete reviews signed with this keypair — they stay public but immutable. You can always start over with a fresh keypair.",
     "mangrovePassphraseLabel": "Mangrove passphrase",
@@ -2090,14 +2084,7 @@
     "mangroveWebAuthnStepBody": "After you continue, your browser will prompt you to approve a passkey ceremony (Face ID, Touch ID, or security key). The passkey's PRF output derives a key that encrypts your Mangrove keypair. The passkey itself is stored on your device.",
     "mangroveSetupContinue": "Create keypair",
     "mangroveSetupFailed": "Setup failed.",
-    "mangroveUnencryptedWarningTitle": "Server can impersonate you",
-    "mangroveUnencryptedWarningBody": "Without encryption, anyone with database access (admins, attackers after a leak) can sign reviews using your identity or delete your existing reviews. We recommend a passphrase.",
-    "mangroveUnencryptedAck": "Pick this only if friction concerns outweigh security for you — for example, a personal development instance.",
-    "mangroveUnencryptedProceed": "I accept — proceed without encryption",
     "mangroveEncryptedBadge": "Encrypted — server only sees ciphertext",
-    "mangroveUnencryptedBadge": "Not encrypted — server sees the signing key",
-    "mangroveUnencryptedBadgeAlertTitle": "Your keypair is stored in cleartext",
-    "mangroveUnencryptedBadgeAlertBody": "Add encryption (passphrase or passkey) to prevent server-side access. Use \"Start fresh\" below to switch modes.",
     "mangroveUnlockMethods": "Unlock methods",
     "mangroveWrapPassphrase": "Passphrase",
     "mangroveWrapPasskey": "Passkey",
@@ -2242,7 +2229,30 @@
         "refused": "Declined",
         "closed": "Closed"
       }
-    }
+    },
+    "mangroveConnectTitle": "Connect to Mangrove",
+    "mangroveConnectIntro": "Use the same review identity across devices and participating apps. Your Mangrove login is separate from your OpenMapX sign-in.",
+    "mangroveSignerUnavailable": "Shared signing is not configured or is unavailable on this instance. You can use an encrypted local review key instead.",
+    "mangroveConnectFailed": "Could not connect to Mangrove. Please try again.",
+    "mangroveLoginPasskey": "Continue with a passkey",
+    "mangroveLoginOsm": "Continue with OpenStreetMap",
+    "mangroveLoginBluesky": "Continue with Bluesky",
+    "mangroveBlueskyHandle": "Bluesky handle (optional)",
+    "mangroveBlueskyHandleHelp": "For accounts outside bsky.social, enter your handle.",
+    "mangroveSignerCustody": "Mangrove keeps your review key and signs reviews on your behalf. Login takes you to Mangrove and your chosen provider.",
+    "mangroveUseLocal": "Advanced: use an encrypted local key",
+    "mangroveLocalExplanation": "Sign in your browser with a key you control. Keep a passphrase or passkey and a private backup.",
+    "mangroveConnectedAs": "Connected to Mangrove as {name}",
+    "mangroveDisconnect": "Disconnect",
+    "mangroveManageAccount": "Manage Mangrove account",
+    "mangroveReconnect": "Reconnect to Mangrove",
+    "mangroveConnectionExpired": "Your Mangrove session expired. Reconnect to continue with the same identity.",
+    "mangroveSwitchSigner": "Use shared Mangrove signing",
+    "mangroveCallbackPending": "Connecting your review identity…",
+    "mangroveCallbackFailed": "This Mangrove login could not be verified. Start the connection again from OpenMapX.",
+    "mangroveReturn": "Return to OpenMapX",
+    "mangroveSharedIntro": "Connect to Mangrove to write reviews with the same identity across apps and devices.",
+    "mangroveLocalTitle": "Encrypted local review key"
   },
   "auth": {
     "signIn": "Sign in",
@@ -2454,6 +2464,9 @@
     "appearance": "Appearance",
     "touchZoomButtons": "Zoom buttons",
     "touchZoomButtonsHint": "Show + and − buttons on the map. Without them, pinch or double-tap to zoom.",
+    "mapSection": "Map",
+    "rememberMapView": "Remember map view",
+    "rememberMapViewHint": "Reopen the map where you left it. The last view is saved on this device only; turning this off deletes it.",
     "languageAndRegion": "Language & region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Voice guidance timing",
@@ -3381,7 +3394,7 @@
     "ohTimeKindPoint": "Point in time",
     "ohStartTime": "Opens",
     "ohEndTime": "Closes",
-    "ohPointTypeClock": "Clock (HH:MM)",
+    "ohPointTypeClock": "Clock time",
     "ohPointTypeSolar": "Solar event",
     "ohSolarDawn": "Dawn",
     "ohSolarSunrise": "Sunrise",
@@ -3598,6 +3611,7 @@
     "delete": "Delete",
     "deleteWarning": "Deleting this vehicle also clears where it is parked.",
     "save": "Save",
+    "saveFailed": "Could not save the vehicle. Your changes are still here. Try again.",
     "cancel": "Cancel",
     "name": "Name",
     "kind": "Type",

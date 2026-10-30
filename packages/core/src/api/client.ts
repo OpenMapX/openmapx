@@ -356,7 +356,11 @@ export class ApiClient {
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });
-      return await consume(response, controller.signal);
+      const result = await consume(response, controller.signal);
+      // Consumption may finish in a continuation after caller cancellation.
+      // Never publish that result after the effective lifetime has ended.
+      controller.signal.throwIfAborted();
+      return result;
     } catch (error) {
       if (response) discardBody(response);
       if (controller.signal.aborted) {

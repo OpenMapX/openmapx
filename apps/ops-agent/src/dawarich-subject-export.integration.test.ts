@@ -23,7 +23,7 @@ import { parseDawarichTar } from "../../api/src/privacy/dawarich-source-part.js"
 const runExactImage = process.env.OPENMAPX_RUN_DAWARICH_EXPORT_TESTS === "1";
 const IMAGE = `freikin/dawarich@${DAWARICH_SUPPORTED_IMAGE_DIGEST}`;
 const DATABASE_IMAGE =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7";
 const DATABASE_CONTAINER = `openmapx-dawarich-export-test-${randomBytes(8).toString("hex")}`;
 const DATABASE_PASSWORD = "openmapx-isolated-export-fixture";
 const DATABASE_READY_TIMEOUT_MS = 45_000;
@@ -343,6 +343,22 @@ VALUES (1,1,1,'Subject unplanned place',TIMESTAMP '${at}',TIMESTAMP '${at}'),
 INSERT INTO point_sources (id,digest,tracker_id,topic,created_at,updated_at)
 VALUES (1,'subject-source-digest','subject-dimension-device','subject/topic',TIMESTAMP '${at}',TIMESTAMP '${at}');
 UPDATE points SET source_id=1, tracker_id=NULL, topic=NULL WHERE id=1000;
+INSERT INTO geofence_events (id,user_id,place_id,place_name,event_type,source,synthetic,occurred_at,received_at,lonlat,accuracy_m,device_id,metadata,created_at,updated_at)
+VALUES (1,1,1,'Subject geofence place',0,0,false,TIMESTAMP '${at}',TIMESTAMP '${at}',ST_GeogFromText('POINT(13.4 52.5)'),12,'subject-geofence-device',${sql('{"note":"Subject geofence metadata","auth_token":"GEOFENCE_SECRET"}')}::jsonb,TIMESTAMP '${at}',TIMESTAMP '${at}'),
+       (2,2,2,'FOREIGN_SENTINEL',1,1,false,TIMESTAMP '${at}',TIMESTAMP '${at}',ST_GeogFromText('POINT(1 1)'),5,'FOREIGN_SENTINEL','{}'::jsonb,TIMESTAMP '${at}',TIMESTAMP '${at}');
+INSERT INTO webhooks (id,user_id,name,url,secret,event_types,place_ids,active,consecutive_failures,created_at,updated_at)
+VALUES (1,1,'Subject webhook','https://hooks.subject.test/api/webhook/WEBHOOK_PATH_TOKEN?token=WEBHOOK_QUERY_TOKEN','WEBHOOK_SIGNING_SECRET','{0,1}','{1}',true,0,TIMESTAMP '${at}',TIMESTAMP '${at}'),
+       (2,2,'FOREIGN_SENTINEL','https://foreign.test/FOREIGN_SENTINEL','FOREIGN_SECRET','{0}','{}',true,0,TIMESTAMP '${at}',TIMESTAMP '${at}'),
+       (3,1,'Malformed webhook','https://user:pa@WEBHOOK_SPLIT_TOKEN@hooks.subject.test/x','WEBHOOK_SIGNING_SECRET','{0}','{}',false,0,TIMESTAMP '${at}',TIMESTAMP '${at}');
+INSERT INTO webhook_deliveries (id,webhook_id,geofence_event_id,status,attempt_count,response_status,response_body,error_message,delivered_at,created_at,updated_at)
+VALUES (1,1,1,1,1,200,'DELIVERY_RESPONSE_SECRET','DELIVERY_ERROR_SECRET',TIMESTAMP '${at}',TIMESTAMP '${at}',TIMESTAMP '${at}'),
+       (2,2,2,2,3,500,'FOREIGN_SENTINEL','FOREIGN_SENTINEL',NULL,TIMESTAMP '${at}',TIMESTAMP '${at}');
+INSERT INTO legacy_area_place_mappings (id,area_id,place_id,created_at,updated_at)
+VALUES (1,1,1,TIMESTAMP '${at}',TIMESTAMP '${at}'), (2,2,2,TIMESTAMP '${at}',TIMESTAMP '${at}');
+INSERT INTO point_revisions (id,user_id,month,revision)
+VALUES (9001,1,DATE '2025-06-01','11111111-1111-4111-8111-111111111111'), (9002,2,DATE '2025-06-01','22222222-2222-4222-8222-222222222222');
+INSERT INTO track_revisions (id,user_id,month,revision)
+VALUES (9001,1,DATE '2025-06-01','33333333-3333-4333-8333-333333333333'), (9002,2,DATE '2025-06-01','44444444-4444-4444-8444-444444444444');
 COMMIT;
 `;
 }
@@ -453,6 +469,12 @@ describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
         "route-videos",
         "service-settings",
         "trip-sources",
+        "geofence-events",
+        "webhooks",
+        "webhook-deliveries",
+        "legacy-area-place-mappings",
+        "point-revisions",
+        "track-revisions",
         "planned-days",
         "planned-day-notes",
         "planned-reservations",
@@ -498,9 +520,67 @@ describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
       expect(plaintext).not.toContain("SERVICE_CREDENTIAL_SECRET");
       expect(plaintext).not.toContain("TRIP_API_KEY_SECRET");
       expect(plaintext).not.toContain("TRIP_SELECTION_SECRET");
+      expect(plaintext).toContain("Subject geofence place");
+      expect(plaintext).toContain("subject-geofence-device");
+      expect(plaintext).toContain("11111111-1111-4111-8111-111111111111");
+      expect(plaintext).toContain("33333333-3333-4333-8333-333333333333");
+      for (const secret of [
+        "GEOFENCE_SECRET",
+        "WEBHOOK_PATH_TOKEN",
+        "WEBHOOK_QUERY_TOKEN",
+        "WEBHOOK_SPLIT_TOKEN",
+        "WEBHOOK_SIGNING_SECRET",
+        "DELIVERY_RESPONSE_SECRET",
+        "DELIVERY_ERROR_SECRET",
+        "22222222-2222-4222-8222-222222222222",
+        "44444444-4444-4444-8444-444444444444",
+      ]) {
+        expect(plaintext, secret).not.toContain(secret);
+      }
+      const webhookRows = entries
+        .find((entry) => entry.id === "webhooks")
+        ?.content.toString("utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(webhookRows).toHaveLength(2);
+      expect(webhookRows?.[0]?.url).toBe("https://hooks.subject.test");
+      expect(webhookRows?.[1]?.url).toBeNull();
+      const geofenceRows = entries
+        .find((entry) => entry.id === "geofence-events")
+        ?.content.toString("utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(geofenceRows).toHaveLength(1);
+      expect(geofenceRows?.[0]).toMatchObject({
+        event_type: "enter",
+        source: "native_app",
+        lonlat: [13.4, 52.5],
+      });
       expect(plaintext).not.toContain("aaaaaaaa-0000-4000-8000-000000000001");
       expect(plaintext).not.toContain("bbbbbbbb-0000-4000-8000-000000000002");
       expect(plaintext).not.toContain("other-family-member@example.test");
+
+      // An owner column without a constraint is invisible to the FK graph; the
+      // reviewed table inventory must still refuse the unreviewed relation.
+      await runPsql(
+        database,
+        "CREATE TABLE openmapx_unreviewed_owner (id bigserial PRIMARY KEY, user_id bigint);",
+      );
+      const refused = await command(
+        "docker",
+        imageArgs(database, password, storageDirectory, [
+          "ruby",
+          "/opt/openmapx/openmapx-subject-export.rb",
+        ]),
+        { input: request },
+      );
+      expect(refused.code).not.toBe(0);
+      expect(refused.stdout.length).toBe(0);
+      expect(refused.stderr.toString("utf8")).toContain(
+        "openmapx_subject_export:unsupported_schema",
+      );
     } finally {
       await command("docker", ["rm", "--force", "--volumes", DATABASE_CONTAINER]);
       if (existsSync(storageDirectory)) rmSync(storageDirectory, { recursive: true, force: true });

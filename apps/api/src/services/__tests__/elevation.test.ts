@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openmapx/core", () => ({
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core")>()),
   encodePolyline: vi.fn(() => "encoded_string"),
 }));
 

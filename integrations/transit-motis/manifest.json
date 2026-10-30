@@ -64,6 +64,10 @@
       }
     }
   },
+  "endpointConfigKeys": {
+    "motis": "endpoint",
+    "transitous": "transitousUrl"
+  },
   "backend": {
     "routes": false
   },
@@ -71,8 +75,12 @@
     {
       "name": "MOTIS self-hosted",
       "type": "ping",
-      "urlTemplate": "${endpoint}/api/v1/geocode?text=test",
-      "requiredConfigKeys": ["endpoint"]
+      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
+    },
+    {
+      "name": "Transitous",
+      "type": "http",
+      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
     }
   ],
   "dataSources": [

@@ -15,6 +15,7 @@ import type { LngLat, WaypointSchedule } from "@openmapx/core";
 import { timeZoneAt, tzOffsetLabel } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Matches the wall-clock shape the routing API accepts. */
@@ -151,11 +152,9 @@ export function WaypointScheduleDialog({
 
         {kind !== "none" && (
           <Box>
-            <Box
-              component="input"
-              type="datetime-local"
+            <DateTimeField
               data-testid="schedule-time-input"
-              aria-label={
+              label={
                 kind === "departAfter"
                   ? t("scheduleDepartAfter")
                   : kind === "arriveBy"
@@ -164,24 +163,8 @@ export function WaypointScheduleDialog({
               }
               aria-describedby="schedule-zone-hint"
               value={wallClock}
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                setWallClock(event.target.value)
-              }
-              sx={{
-                border: "1px solid",
-                borderColor: timeError ? "error.main" : "divider",
-                borderRadius: "8px",
-                px: 1.5,
-                py: 0.75,
-                fontSize: "0.875rem",
-                fontFamily: "inherit",
-                color: "text.primary",
-                bgcolor: "background.paper",
-                outline: "none",
-                "&:focus": { borderColor: BRAND },
-                width: "100%",
-                boxSizing: "border-box",
-              }}
+              onChange={setWallClock}
+              error={Boolean(timeError)}
             />
             {timeError && (
               <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>

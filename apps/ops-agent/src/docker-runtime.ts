@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
@@ -38,6 +38,14 @@ const containedProcessFailures = new WeakSet<object>();
 export function isContainedProcessFailure(error: unknown): boolean {
   return typeof error === "object" && error !== null && containedProcessFailures.has(error);
 }
+
+import { openAnchoredDirectory } from "./anchored-directory";
+
+const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
+const TRAFFIC_GENERATIONS_MANIFEST = "traffic-generations.json";
+// Valhalla's watchdog withdraws the manifest here at an uncoordinated start and
+// restores it once the tiles it then serves still hash to its generation.
+const TRAFFIC_GENERATIONS_UNVERIFIED = "traffic-generations.unverified.json";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
@@ -88,6 +96,8 @@ export interface DockerRuntimeOptions {
   dataMountOwner?: { uid: number; gid: number };
   /** Host-side data root shared with data-manager and Valhalla. */
   trafficDataRoot?: string;
+  /** Descriptor anchor for writes under the data root; see anchored-directory.ts. */
+  descriptorAnchorRoot?: string | null;
 }
 
 export interface ContainedProcessOptions {
@@ -95,6 +105,8 @@ export interface ContainedProcessOptions {
   timeout: number;
   maxBuffer: number;
   killGraceMs?: number;
+  /** The child's environment; the agent's own when omitted. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface StreamingProcessOptions {
@@ -232,7 +244,7 @@ export function runContainedProcess(
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: childEnvironment(),
+      env: { ...childEnvironment(), ...options.env },
     });
     const group = monitorPosixProcessGroup(child, {
       killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
@@ -410,30 +422,21 @@ export function runContainedLogProcess(
 }
 
 function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
-  if (!stdout.trim()) return { services: [] };
+  let entries: services.ComposePsEntry[];
   try {
-    const parsed = JSON.parse(stdout) as unknown;
-    const values = Array.isArray(parsed) ? parsed : [parsed];
-    return {
-      services: values.slice(0, 256).map((value) => {
-        const item = value as Record<string, unknown>;
-        const rawState = String(item.State ?? "unknown").toLowerCase();
-        const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
-          ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
-          : "unknown";
-        const rawHealth =
-          item.Health === undefined || item.Health === ""
-            ? "none"
-            : String(item.Health).toLowerCase();
-        const health = ["healthy", "unhealthy", "starting", "none"].includes(rawHealth)
-          ? (rawHealth as "healthy" | "unhealthy" | "starting" | "none")
-          : ("unknown" as const);
-        return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state, health };
-      }),
-    };
+    entries = services.parseComposePsJson(stdout);
   } catch {
     throw new Error("Contained process failed");
   }
+  return {
+    services: entries.slice(0, 256).map((item) => {
+      const rawState = String(item.State ?? "unknown").toLowerCase();
+      const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
+        ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
+        : "unknown";
+      return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
+    }),
+  };
 }
 
 export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
@@ -572,7 +575,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
                 },
               },
             });
-          const store = join(options.stack.infraDir, ".ops-agent-releases");
+          const store = services.releaseStatePaths(options.stack.infraDir).store;
           await mkdir(store, { mode: 0o700, recursive: true });
           const release = await services.acquireReleaseStoreLock(store);
           try {
@@ -900,12 +903,17 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   runtime["valhalla.traffic.inspect"] = async (_operation, context) => {
     if (options.trafficDataRoot) {
       const sharedDir = join(options.trafficDataRoot, "valhalla", "osm-pbf");
-      if (existsSync(join(sharedDir, ".traffic-maintenance.json"))) {
+      // Maintenance, or the watchdog re-checking a withdrawn manifest, settles
+      // the generation; a rebuild requested meanwhile would only stop serving.
+      if (
+        existsSync(join(sharedDir, TRAFFIC_MAINTENANCE_FENCE)) ||
+        existsSync(join(sharedDir, TRAFFIC_GENERATIONS_UNVERIFIED))
+      ) {
         return { state: "unknown" as const };
       }
       try {
         const value = JSON.parse(
-          await readFile(join(sharedDir, "traffic-generations.json"), "utf8"),
+          await readFile(join(sharedDir, TRAFFIC_GENERATIONS_MANIFEST), "utf8"),
         ) as Record<string, unknown>;
         const generation = value.graphGeneration;
         if (
@@ -943,9 +951,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     assertTrafficForward(context);
     const dataRoot = options.trafficDataRoot;
     if (!dataRoot) throw new Error("Valhalla traffic maintenance data root is not configured");
-    const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-    const fencePath = join(sharedDir, ".traffic-maintenance.json");
-    const generationsPath = join(sharedDir, "traffic-generations.json");
     const writerLockPath = join(dataRoot, "traffic", "live-state.json.lock");
     const operationId = context.claim.fingerprint;
     const startedAt = new Date().toISOString();
@@ -965,21 +970,33 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     if (stopped.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
 
     assertTrafficForward(context);
-    await mkdir(sharedDir, { recursive: true });
-    assertTrafficForward(context);
-    await writeFile(
-      fencePath,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        operationId,
-        plan: operation.plan,
-        ...(operation.preparedGeneration
-          ? { preparedGeneration: operation.preparedGeneration }
-          : {}),
-        startedAt,
-      })}\n`,
-      { encoding: "utf8", flag: "wx" },
-    );
+    // data-manager can rewrite everything under the data root, so the agent
+    // writes this directory only through descriptors opened without
+    // following a symlink, never by a path it re-resolves.
+    const shared = openAnchoredDirectory(dataRoot, ["valhalla", "osm-pbf"], {
+      create: true,
+      ...(options.descriptorAnchorRoot !== undefined
+        ? { descriptorAnchorRoot: options.descriptorAnchorRoot }
+        : {}),
+    });
+    try {
+      shared.createFile(
+        TRAFFIC_MAINTENANCE_FENCE,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          operationId,
+          plan: operation.plan,
+          ...(operation.preparedGeneration
+            ? { preparedGeneration: operation.preparedGeneration }
+            : {}),
+          startedAt,
+        })}\n`,
+        0o644,
+      );
+    } catch (error) {
+      shared.close();
+      throw error;
+    }
 
     try {
       const writerDeadline = Date.now() + 15_000;
@@ -1053,11 +1070,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         waysToEdgesGeneration: generation,
         completedAt: new Date().toISOString(),
       };
-      const temporaryManifest = `${generationsPath}.${operationId}.tmp`;
       assertTrafficForward(context);
-      await writeFile(temporaryManifest, `${JSON.stringify(manifest)}\n`, "utf8");
-      assertTrafficForward(context);
-      await rename(temporaryManifest, generationsPath);
+      shared.replaceFile(TRAFFIC_GENERATIONS_MANIFEST, `${JSON.stringify(manifest)}\n`, 0o644);
 
       assertTrafficForward(context);
       await run(["start", VALHALLA_CONTAINER], context.signal, 30_000);
@@ -1074,7 +1088,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       }
 
       assertTrafficForward(context);
-      await rm(fencePath, { force: true });
+      shared.removeFile(TRAFFIC_MAINTENANCE_FENCE);
       return {
         changed: true,
         graphGeneration: generation,
@@ -1116,6 +1130,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         );
       }
       throw error;
+    } finally {
+      shared.close();
     }
   };
 

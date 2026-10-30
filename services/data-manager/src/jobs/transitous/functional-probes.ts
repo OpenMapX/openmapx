@@ -8,8 +8,8 @@ import type {
   RentalsResponse,
   StopsResponse,
 } from "@motis-project/motis-client";
+import type { TransitousLock } from "@openmapx/transitous-core";
 import { MOTIS_VERSION } from "@openmapx/transitous-core";
-import type { TransitousLock } from "../../transitous-lock.js";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { dataWorkerDeadline, dataWorkerSignal } from "../execution/worker-scope.js";
 import { CAPABILITY_SNAPSHOT_FILENAME, type MotisCandidateManifest } from "./candidate.js";

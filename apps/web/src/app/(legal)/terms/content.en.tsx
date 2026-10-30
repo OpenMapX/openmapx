@@ -50,7 +50,7 @@ export default function TermsContent({
           mb: 4,
         }}
       >
-        Last updated: October 18, 2026
+        Last updated: October 28, 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>
@@ -375,8 +375,9 @@ export default function TermsContent({
           <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
             Mangrove Open Reviews Standard
           </Link>
-          . Reviews you submit through OpenMapX are signed in your browser and published to the
-          Mangrove network. The following terms apply specifically to review content you create.
+          . Reviews you submit through OpenMapX are signed by the shared Mangrove signer or, if you
+          choose encrypted local signing, in your browser, and published to the Mangrove network.
+          The following terms apply specifically to review content you create.
         </Typography>
         <ul>
           <li>
@@ -442,12 +443,13 @@ export default function TermsContent({
           </li>
           <li>
             <Typography>
-              <strong>Signing key responsibility.</strong> You are responsible for safeguarding your
-              review passphrase and any registered passkeys. Anyone who holds these can sign reviews
-              in your name. If you opt in to the unencrypted keypair mode, you additionally accept
-              that the operator technically has access to your signing key. Lost passphrases and
-              passkeys cannot be recovered; you may regenerate a new keypair, but existing reviews
-              will remain linked to the old public key.
+              <strong>Signing identity responsibility.</strong> With shared signing, Mangrove holds
+              the private key and signs in your name. Protect the login and recovery methods for
+              that separate Mangrove account and manage them at Mangrove. With advanced encrypted
+              local signing, protect your review passphrase, passkeys and private-key backups;
+              anyone holding a usable key can sign in your name. OpenMapX cannot recover a local key
+              after you lose all unlock methods and backups. Creating a new key does not transfer
+              existing reviews from the old public key. Plaintext local-key storage is not offered.
             </Typography>
           </li>
         </ul>

@@ -36,7 +36,6 @@ interface LineDetailProps {
   onBack: () => void;
   /** Requires `currentStop` to be provided — no-op without it. */
   onSelectStop?: (stop: TransitStop) => void;
-  clearSearchBar?: boolean;
 }
 
 export function LineDetail({
@@ -46,7 +45,6 @@ export function LineDetail({
   currentStop,
   onBack,
   onSelectStop,
-  clearSearchBar = false,
 }: LineDetailProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
@@ -101,7 +99,7 @@ export function LineDetail({
   return (
     <Box>
       {/* Header */}
-      <PanelDetailHeader onBack={onBack} clearSearchBar={clearSearchBar}>
+      <PanelDetailHeader onBack={onBack}>
         {routeLoading && !routeHint ? (
           <Skeleton width={120} height={28} />
         ) : route ? (

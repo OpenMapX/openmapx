@@ -15,14 +15,11 @@ import {
 import type { VisibleAttribution } from "@openmapx/core/attribution";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
-import {
-  type AttributionLogo,
-  type AttributionSurface,
-  DISPLAY_LICENSE_SCOPES,
-  formatLicensing,
-} from "@openmapx/mobility-core/licensing";
+import type { AttributionLogo, AttributionSurface } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { type JSX, useState } from "react";
+import { creditHref, creditLabel, dedupeCreditsForDisplay } from "@/lib/attributionCredits";
+import { useAttributionLabels } from "@/lib/attributionLabels";
 import { AttributionDetails } from "./AttributionDetails";
 import { AttributionNotices } from "./AttributionNotices";
 import { useGroupedAttributionDetails } from "./attributionGroupContext";
@@ -70,51 +67,6 @@ export interface AttributionStripProps {
   color?: string;
 }
 
-/** The external credit URL when safe to follow, or the in-app licenses anchor. */
-function chipHref(attr: Attribution): { href: string; external: boolean } {
-  const external = safeHref(attr.url);
-  if (external) return { href: external, external: true };
-  return { href: `/licenses#source-${encodeURIComponent(attr.sourceId)}`, external: false };
-}
-
-/**
- * Longest license that still reads as a chip suffix. Identifiers and short
- * labels ("CC-BY-4.0", "NLOD 2.0", "U.S. Public Domain") fit; qualified
- * descriptions ("Mixed (per upstream GTFS/GBFS feed; mostly open data)") move
- * to the tooltip instead of stretching the chip across the panel.
- */
-const MAX_CHIP_LICENSE_LENGTH = 24;
-
-function license(attr: Attribution): string | undefined {
-  return attr.licensing
-    ? formatLicensing(attr.licensing, { scopes: DISPLAY_LICENSE_SCOPES }) || undefined
-    : undefined;
-}
-
-function chipLicense(attr: Attribution): string | undefined {
-  const text = license(attr);
-  return text && text.length <= MAX_CHIP_LICENSE_LENGTH ? text : undefined;
-}
-
-function displayLabel(attr: Attribution): string {
-  const text = chipLicense(attr);
-  return text ? `${attr.name} · ${text}` : attr.name;
-}
-
-/** Collapse identical displayed receipts, preserving every distinct required notice. */
-function dedupeForDisplay(attributions: Attribution[]): Attribution[] {
-  const seen = new Set<string>();
-  return attributions.filter((receipt) => {
-    if (!receipt?.sourceId) return false;
-    // Multiple feeds can credit the same agency. Their full credit, links and
-    // license must match before one presentation can discharge both receipts.
-    const key = contributorKey({ ...receipt, sourceId: "" });
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 /**
  * Canonical content/image credits. Mandatory notices and approved branding are
  * always adjacent; maxVisible limits only optional provenance chips. Complete
@@ -134,12 +86,13 @@ export function AttributionStrip({
   color,
 }: AttributionStripProps): JSX.Element | null {
   const tc = useTranslations("common");
+  const labels = useAttributionLabels();
   const [expanded, setExpanded] = useState(false);
-  const items = dedupeForDisplay(attributions ?? []);
+  const items = dedupeCreditsForDisplay(attributions ?? []);
 
   const isPanelHeader = variant === "panel-header";
   const isPlain = variant === "plain";
-  const presentations = items.map((attr) => buildAttributionPresentation(attr, surface));
+  const presentations = items.map((attr) => buildAttributionPresentation(attr, surface, labels));
   const group = presentations.length
     ? projectAttributionPresentations(presentations)
     : { details: [], visible: [] };
@@ -166,7 +119,7 @@ export function AttributionStrip({
     if (presentations[index]?.visibleHtml) continue;
     // Full receipts remain in group.details; identical optional source labels
     // need only one link even when their software grants or capture notes differ.
-    const key = JSON.stringify([displayLabel(attr), safeHref(attr.url)]);
+    const key = JSON.stringify([creditLabel(attr), safeHref(attr.url)]);
     if (!optional.has(key)) optional.set(key, attr);
   }
   const eligible = [...optional.values()];
@@ -235,8 +188,8 @@ export function AttributionStrip({
       )}
       {visibleItems.map(({ attr, notice, key }, idx) => {
         const mandatory = notice !== undefined;
-        const labelText = attr ? displayLabel(attr) : "";
-        const link = attr ? chipHref(attr) : undefined;
+        const labelText = attr ? creditLabel(attr) : "";
+        const link = attr ? creditHref(attr) : undefined;
         const tooltip = (
           <Box
             component="span"

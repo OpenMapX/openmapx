@@ -193,6 +193,23 @@ export async function applyTrustedConfigurationWithEvidence(
           signal: options.signal ?? ctx.signal,
         });
         if (
+          receipt.application.outcome === "not_committed" &&
+          receipt.application.reason === "failed"
+        ) {
+          const problem = await readConfigurationFailure(candidate.revisionId, options);
+          if (problem) {
+            receipt.application = { ...receipt.application, problem };
+            await ctx.checkpoint({
+              ...ctx.checkpointResult,
+              configuration: receipt.application,
+              _configurationOutcomes: {
+                ...(ctx.checkpointResult?._configurationOutcomes as Record<string, unknown>),
+                [options.operationKey]: receipt.application,
+              },
+            });
+          }
+        }
+        if (
           !candidateState.record.maintenanceId &&
           candidateState.record.apiFollowUp === "service-apply" &&
           completeTrustedConfigurationApply(receipt.application)
@@ -301,6 +318,28 @@ export async function applyTrustedConfigurationSnapshot(options: {
     options.payload,
     options.expectedCurrentRevisionId,
   );
+}
+
+/** Why the agent did not commit `revisionId`, when the operator can act on it; null otherwise or unknown. */
+async function readConfigurationFailure(
+  revisionId: string,
+  options: ApplyTrustedConfigurationOptions,
+): Promise<string | null> {
+  if (!configurationGenerationRevisionSchema.safeParse(revisionId).success) return null;
+  try {
+    const { problem } = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "configuration.failure.inspect", attemptedRevisionId: revisionId },
+      createDurableOpsKey(
+        "trusted-config.failure.inspect",
+        `${options.operationKey}\0${revisionId}`,
+      ),
+      { signal: options.signal },
+    );
+    return problem;
+  } catch {
+    return null;
+  }
 }
 
 async function applySnapshot(

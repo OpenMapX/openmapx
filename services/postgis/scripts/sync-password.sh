@@ -93,12 +93,26 @@ run_initialization_command() {
 # for the cache estimate. Postgres's own defaults (128MB, 4GB) ignore the
 # limit, and a buffer pool that small sends a busy database to disk for
 # every page. Without a limit the defaults stand: the host is shared.
+# POSTGIS_SHARED_BUFFERS replaces the quarter, for a write-heavy database
+# whose changing pages outgrow it; POSTGIS_WORK_MEM sets the memory a sort
+# or hash may use before it spills to temporary files.
+for size in "${POSTGIS_SHARED_BUFFERS:-}" "${POSTGIS_WORK_MEM:-}"; do
+  if [ -n "$size" ] && [[ ! "$size" =~ ^[1-9][0-9]*(kB|MB|GB)$ ]]; then
+    echo "[openmapx-postgis] memory sizes must be a whole number of kB, MB or GB" >&2
+    exit 1
+  fi
+done
 if [ "${1:-}" = "postgres" ]; then
   limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)
   host_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
   if [[ "$limit" =~ ^[0-9]+$ ]] && [ $((limit / 1024)) -lt "$host_kb" ]; then
     mb=$((limit / 1024 / 1024))
-    set -- "$@" -c "shared_buffers=$((mb / 4))MB" -c "effective_cache_size=$((mb * 3 / 4))MB"
+    set -- "$@" -c "shared_buffers=${POSTGIS_SHARED_BUFFERS:-$((mb / 4))MB}" -c "effective_cache_size=$((mb * 3 / 4))MB"
+  elif [ -n "${POSTGIS_SHARED_BUFFERS:-}" ]; then
+    set -- "$@" -c "shared_buffers=$POSTGIS_SHARED_BUFFERS"
+  fi
+  if [ -n "${POSTGIS_WORK_MEM:-}" ]; then
+    set -- "$@" -c "work_mem=$POSTGIS_WORK_MEM"
   fi
 fi
 

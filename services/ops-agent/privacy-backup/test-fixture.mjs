@@ -19,9 +19,9 @@ const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-fixture-"));
 chmodSync(root, 0o755);
 const databaseContainer = `openmapx-privacy-backup-${randomBytes(8).toString("hex")}`;
 const databaseImage =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7";
 const dawarichImage =
-  "freikin/dawarich@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498";
+  "freikin/dawarich@sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304";
 const databasePassword = "isolated-backup-fixture";
 const outputFlag = process.argv.indexOf("--output");
 const retainedOutput = outputFlag >= 0 ? process.argv[outputFlag + 1] : undefined;
@@ -90,7 +90,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       services: [
         {
           id: "dawarich-postgis",
-          version: "1.15.3",
+          version: "1.19.0",
           volumes: [
             {
               name: "database",
@@ -104,11 +104,11 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.15.3",
+          version: "1.19.0",
           image: "freikin/dawarich",
-          imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
-          upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
-          schemaContract: "dawarich-1.15.3",
+          imageDigest: "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
+          upstreamCommit: "752641768f37fdc07d5a23e0559fa7c5ff8fae0f",
+          schemaContract: "dawarich-1.19.0",
         },
       },
     }),
@@ -128,7 +128,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dumpName,
-          schemaContract: "dawarich-1.15.3",
+          schemaContract: "dawarich-1.19.0",
         },
       ],
     })}\n`,
@@ -291,6 +291,22 @@ INSERT INTO tracks (id,user_id,start_at,end_at,original_path,distance,duration,a
 VALUES (1,7,'2026-01-01','2026-01-01',ST_GeomFromText('LINESTRING(13.4 52.5,13.5 52.6)',4326),100,60,6,'2026-01-01','2026-01-01');
 INSERT INTO notes (id,user_id,title,body,noted_at,lonlat,created_at,updated_at)
 VALUES (1,7,'Subject note','Subject note body','2026-01-01',ST_SetSRID(ST_MakePoint(13.45,52.55),4326)::geography,'2026-01-01','2026-01-01');
+INSERT INTO places (id,user_id,name,latitude,longitude,created_at,updated_at)
+VALUES (1,7,'Subject place',52.5,13.4,'2026-01-01','2026-01-01'),(2,8,'FOREIGN_ROW_SENTINEL',1,2,'2026-01-01','2026-01-01');
+INSERT INTO geofence_events (id,user_id,place_id,place_name,event_type,source,synthetic,occurred_at,received_at,lonlat,device_id,metadata,created_at,updated_at)
+VALUES (1,7,1,'Subject geofence place',1,2,false,'2026-01-01','2026-01-01',ST_GeogFromText('POINT(13.4 52.5)'),'subject-geofence-device','{"auth_token":"GEOFENCE_SECRET_SENTINEL"}','2026-01-01','2026-01-01'),
+       (2,8,2,'FOREIGN_ROW_SENTINEL',0,0,false,'2026-01-01','2026-01-01',ST_GeogFromText('POINT(1 1)'),'FOREIGN_ROW_SENTINEL','{}','2026-01-01','2026-01-01');
+INSERT INTO webhooks (id,user_id,name,url,secret,event_types,place_ids,active,consecutive_failures,created_at,updated_at)
+VALUES (1,7,'Subject webhook','https://user:WEBHOOK_USERINFO_SENTINEL@hooks.subject.test:8443/api/webhook/WEBHOOK_PATH_SENTINEL?token=WEBHOOK_QUERY_SENTINEL','WEBHOOK_SECRET_SENTINEL','{0,1}','{1}',true,0,'2026-01-01','2026-01-01'),
+       (2,8,'FOREIGN_ROW_SENTINEL','https://foreign.test/FOREIGN_ROW_SENTINEL','WEBHOOK_SECRET_SENTINEL','{0}','{}',true,0,'2026-01-01','2026-01-01'),
+       (3,7,'Malformed webhook','https://user:pa@WEBHOOK_SPLIT_SENTINEL@hooks.subject.test/x','WEBHOOK_SECRET_SENTINEL','{0}','{}',false,0,'2026-01-01','2026-01-01');
+INSERT INTO webhook_deliveries (id,webhook_id,geofence_event_id,status,attempt_count,response_status,response_body,error_message,created_at,updated_at)
+VALUES (1,1,1,3,2,502,'DELIVERY_RESPONSE_SENTINEL','DELIVERY_ERROR_SENTINEL','2026-01-01','2026-01-01'),
+       (2,2,2,1,1,200,'FOREIGN_ROW_SENTINEL','FOREIGN_ROW_SENTINEL','2026-01-01','2026-01-01');
+INSERT INTO legacy_area_place_mappings (id,area_id,place_id,created_at,updated_at)
+VALUES (1,1,1,'2026-01-01','2026-01-01'),(2,2,2,'2026-01-01','2026-01-01');
+INSERT INTO point_revisions (id,user_id,month,revision)
+VALUES (9001,7,'2025-06-01','11111111-1111-4111-8111-111111111111'),(9002,8,'2025-06-01','22222222-2222-4222-8222-222222222222');
 INSERT INTO active_storage_blobs (id,key,filename,content_type,byte_size,checksum,service_name,created_at)
 VALUES (1,'${attachmentKey}','subject.txt','text/plain',${attachmentBytes.length},'fixture','local','2026-01-01'),
        (2,'${routeVideoKey}','subject.mp4','video/mp4',${routeVideoBytes.length},'fixture','local','2026-01-01');
@@ -342,7 +358,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
         },
         {
           id: "dawarich-postgis",
-          version: "1.15.3",
+          version: "1.19.0",
           volumes: [
             {
               name: "database",
@@ -355,7 +371,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
         },
         {
           id: "dawarich-app",
-          version: "1.15.3",
+          version: "1.19.0",
           volumes: [
             {
               name: "openmapx-dawarich-storage",
@@ -369,11 +385,11 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.15.3",
+          version: "1.19.0",
           image: "freikin/dawarich",
-          imageDigest: "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
-          upstreamCommit: "e32b70701b2467b862d4b5bc27ac428999997c1b",
-          schemaContract: "dawarich-1.15.3",
+          imageDigest: "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
+          upstreamCommit: "752641768f37fdc07d5a23e0559fa7c5ff8fae0f",
+          schemaContract: "dawarich-1.19.0",
         },
       },
     }),
@@ -394,13 +410,13 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dawarichFile,
-          schemaContract: "dawarich-1.15.3",
+          schemaContract: "dawarich-1.19.0",
         },
         {
           family: "dawarich-storage",
           serviceId: "dawarich-app",
           file: storageFile,
-          schemaContract: "dawarich-storage-1.15.3",
+          schemaContract: "dawarich-storage-1.19.0",
         },
       ],
     })}\n`,
@@ -485,6 +501,32 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
   );
   if (plannedStop.name !== "Subject planned stop")
     throw new Error("collector omitted the Dawarich planned-itinerary graph");
+  const jsonl = (name) =>
+    spawnSync("tar", ["-xOf", tar, `dawarich/${name}.jsonl`])
+      .stdout.toString()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  const [geofence] = jsonl("geofence-events");
+  const [webhook, malformedWebhook] = jsonl("webhooks");
+  const [delivery] = jsonl("webhook-deliveries");
+  const revision = jsonl("point-revisions").find(
+    (row) => row.revision === "11111111-1111-4111-8111-111111111111",
+  );
+  if (
+    geofence?.event_type !== "leave" ||
+    geofence.source !== "owntracks_native" ||
+    JSON.stringify(geofence.lonlat) !== "[13.4,52.5]" ||
+    webhook?.url !== "https://hooks.subject.test:8443" ||
+    malformedWebhook?.url !== null ||
+    delivery?.status !== "retrying" ||
+    "response_body" in delivery ||
+    !revision ||
+    jsonl("legacy-area-place-mappings").length !== 1
+  )
+    throw new Error(
+      `collector mis-projected the 1.19 geofence/webhook relations: ${JSON.stringify({ geofence, webhook, delivery, revision })}`,
+    );
   if (!run.stdout.includes(routeVideoBytes))
     throw new Error("collector omitted the Dawarich route-video attachment");
   const dawarichManifest = JSON.parse(
@@ -493,8 +535,8 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
   const pointRelation = dawarichManifest.schemaRelations?.find((row) => row.entry === "Point");
   if (
     dawarichManifest.schemaFingerprint !==
-      "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09" ||
-    dawarichManifest.schemaRelations?.length !== 39 ||
+      "d728906287ec3c4f3f38a80c2c4fe6ce77cc40f03b56a5ba0e89b811dd6e631a" ||
+    dawarichManifest.schemaRelations?.length !== 45 ||
     !pointRelation?.columns.includes("lonlat") ||
     pointRelation.columns.includes("lon")
   )
@@ -514,6 +556,15 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
     "SERVICE_CREDENTIAL_SECRET",
     "TRIP_API_KEY_SECRET",
     "TRIP_SELECTION_SECRET",
+    "GEOFENCE_SECRET_SENTINEL",
+    "WEBHOOK_USERINFO_SENTINEL",
+    "WEBHOOK_PATH_SENTINEL",
+    "WEBHOOK_QUERY_SENTINEL",
+    "WEBHOOK_SPLIT_SENTINEL",
+    "WEBHOOK_SECRET_SENTINEL",
+    "DELIVERY_RESPONSE_SENTINEL",
+    "DELIVERY_ERROR_SENTINEL",
+    "22222222-2222-4222-8222-222222222222",
   ]) {
     if (run.stdout.includes(Buffer.from(sentinel))) throw new Error(`collector leaked ${sentinel}`);
   }

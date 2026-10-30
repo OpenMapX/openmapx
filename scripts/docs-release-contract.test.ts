@@ -91,7 +91,7 @@ esac
     }
     expect(workflow).toContain('exit-code: "1"');
     expect(workflow).toContain('ignore-unfixed: "true"');
-    expect(workflow.match(/version: v0\.75\.0/g)).toHaveLength(2);
+    expect(workflow.match(/version: v0\.76\.1/g)).toHaveLength(2);
   });
   it.each(["ok", "type-error", "build-error"])(
     "fails the shared Docker recipe on %s",
@@ -172,10 +172,17 @@ esac
         .match(/if: >-\n([\s\S]*?)\n {8}run:/)?.[1] ?? "";
     expect(condition).not.toBe("");
     const needs = Object.fromEntries(
-      ["lint", "types", "test-node", "test-web", "mobile", "database", "build"].map((job) => [
-        job,
-        { result: "success" },
-      ]),
+      [
+        "lint",
+        "types",
+        "test-node",
+        "test-linux-user",
+        "test-agent-mounts",
+        "test-web",
+        "mobile",
+        "database",
+        "build",
+      ].map((job) => [job, { result: "success" }]),
     );
     expect(
       runInNewContext(

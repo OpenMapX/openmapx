@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@/test";
+import { enterDateTime } from "@/test/dateTimeField";
 
 vi.mock("next-intl", async () =>
   (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
@@ -461,9 +462,10 @@ describe("DirectionsPanelContent", () => {
     const departAtTab = screen.getByText("directions.departAt");
     fireEvent.click(departAtTab);
 
-    const dtInput = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-    expect(dtInput).not.toBeNull();
-    fireEvent.change(dtInput, { target: { value: "2026-07-04T09:30" } });
+    await enterDateTime(
+      screen.getByRole("group", { name: "directions.departAt" }),
+      "2026-07-04T09:30",
+    );
 
     await waitFor(() => {
       const arg = lastArg<DirectionsCallArgs>(useDirectionsMock);
@@ -473,8 +475,10 @@ describe("DirectionsPanelContent", () => {
 
     const arriveByTab = screen.getByText("directions.arriveBy");
     fireEvent.click(arriveByTab);
-    const dtInput2 = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-    fireEvent.change(dtInput2, { target: { value: "2026-07-04T18:00" } });
+    await enterDateTime(
+      screen.getByRole("group", { name: "directions.arriveBy" }),
+      "2026-07-04T18:00",
+    );
 
     await waitFor(() => {
       const arg = lastArg<DirectionsCallArgs>(useDirectionsMock);

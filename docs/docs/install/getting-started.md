@@ -1,347 +1,231 @@
 ---
 title: Getting started
-description: A step-by-step walkthrough from a fresh clone to a running OpenMapX stack with Docker Compose.
+description: Deploy the OpenMapX application, create the first administrator, and add a regional backend.
 sidebar_position: 2
 ---
 
 # Getting started
 
-This page takes you from a fresh clone of the monorepo to a running OpenMapX
-stack. It's a happy-path walkthrough: you'll bring up the lightweight core, hand
-the data-manager some source data, and start the app — all driven by the
-`openmapx` CLI.
+These steps deploy OpenMapX on one Linux host using release images and generated
+Docker Compose configuration. Complete the [requirements](./requirements.md)
+first. Run commands from the repository root as the deployment owner, with
+access to the local Docker daemon.
 
-Everything runs as Docker containers, and there is no hand-maintained compose
-file. You enable the [services](../overview/how-it-works.md) you want, render a
-compose file from their manifests, and bring the stack up. The
-deeper reference pages — [Managing services](./managing-services.md) and
-[Preparing data](./preparing-data.md) — go further than this walkthrough does;
-come here first, then follow those when you need the detail.
-
-Before you start, make sure your host meets the [requirements](./requirements.md):
-a 64-bit Linux host with Docker Engine, the Compose v2 plugin, Node.js 24+, and
-`pnpm`. The CLI runs the TypeScript sources directly — there's no build step.
-
-:::note[`docker compose`, not `docker-compose`]
-OpenMapX uses Compose v2, which ships as the `docker compose` subcommand of the
-Docker CLI. The standalone v1 `docker-compose` binary is not supported.
-:::
+The first deployment starts the default application services. Optional engines
+can be added after you have signed in and checked the application.
 
 ## 1. Clone and install
 
-Clone the repository and install the workspace once. `pnpm install` sets up the
-monorepo and the `openmapx` CLI; you never install anything globally.
-
 ```bash
-umask 022
 git clone https://github.com/OpenMapX/openmapx.git
 cd openmapx
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
-From here on, every command is run as `pnpm openmapx <command>` from the repo
-root.
-
-The `ops-agent` refuses to start on a checkout that other users could modify,
-so its directories must not be group- or world-writable. Hosts whose default
-umask is `002` (common on Debian and Ubuntu for regular users) create exactly
-that; keep `umask 022` in the shell you clone, pull, and run the CLI from.
+Use the Node.js and pnpm versions declared in `package.json`. Only the
+deployment owner's account may write the checkout; see
+[requirements](./requirements.md).
 
 ## 2. Configure your environment
 
-A Docker deployment reads exactly one environment file: `infra/docker/.env`.
-Docker Compose loads it automatically, and the `openmapx` CLI loads it too, so
-the same values reach both the rendered stack and the CLI. Copy the example to
-get started:
-
 ```bash
 cp infra/docker/.env.example infra/docker/.env
+chmod 600 infra/docker/.env
 ```
 
-Open `infra/docker/.env` and set, at minimum, the values the stack refuses to
-start without. Do this before the first render or start. The generated compose
-file references several of these with the `${VAR:?}` form, so a missing one
-fails the boot loudly rather than shipping an insecure default. That Compose
-syntax checks only that input is non-empty. OpenMapX separately rejects known
-placeholders; requires at least 24 characters for the database password and 32
-for the Better Auth and data-manager secrets; and rejects a database password
-that matches its username:
+Edit the file before rendering. Supply these values:
 
-```bash
-# Public domain + TLS (Traefik / Let's Encrypt)
-DOMAIN=openmapx.example.com
-ACME_EMAIL=admin@example.com
+| Setting                      | Value to provide                                       |
+| ---------------------------- | ------------------------------------------------------ |
+| `DOMAIN`                     | Public hostname pointing to this host                  |
+| `ACME_EMAIL`                 | Certificate contact email                              |
+| `POSTGRES_PASSWORD`          | Unique database password, at least 24 characters       |
+| `BETTER_AUTH_SECRET`         | Unique signing secret, at least 32 characters          |
+| `OPENMAPX_SECRETS_KEY`       | 32 random bytes encoded as 64 hexadecimal characters   |
+| `DATA_MANAGER_AUTH_TOKEN`    | Unique internal token, at least 32 characters          |
+| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Unique token for CLI loopback admin requests           |
+| `OPENMAPX_HOST_DIR`          | Absolute checkout path, as printed by `pwd`            |
+| `DOCKER_GID`                 | Socket group ID from `stat -c %g /var/run/docker.sock` |
+| `TRANSITOUS_COUNTRIES`       | Explicit country codes, for example `de`               |
 
-# Database — generate with: openssl rand -hex 32
-POSTGRES_PASSWORD=
+Generate a separate value for each secret with `openssl rand -hex 32`. The
+renderer rejects known placeholders and weak database/application secrets.
+Do not reuse the database username as its password.
 
-# Auth secrets
-BETTER_AUTH_SECRET=        # npx @better-auth/cli@latest secret
-OPENMAPX_SECRETS_KEY=      # openssl rand -hex 32
+`UID` and `GID` name the deployment's user: the stack's own containers
+(`app-api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)
+run as `UID:GID` and own the files they write. Leave them unset: the first
+render writes them into `infra/docker/.env` from the checkout's owner. Only a
+render on the host writes them; the operations agent and the admin panel read
+them and never change `.env`. Set them
+only to run the stack as another account, and run renders as that account; a
+render refuses to run as any other uid, and refuses a checkout root owns. A
+root-only Docker credentials directory will not be readable by that user;
+configure `OPENMAPX_DOCKER_CONFIG_DIR` accordingly if needed.
 
-# Internal service auth — generate each with: openssl rand -hex 32
-DATA_MANAGER_AUTH_TOKEN=   # app-api ↔ data-manager
-OPENMAPX_LOCAL_ADMIN_TOKEN= # CLI ↔ loopback admin
+The default regional transit policy requires countries or an explicit feed
+allow-list at data-manager startup, even without MOTIS. Setting countries does
+not enable a transit engine. For a first deployment without local transit, set
+`TRANSITOUS_SYNC_CRON=disabled` to avoid scheduled preparation until you configure
+it; see [Transit engines](../guides/transit-engines.md).
 
-# Host wiring (Linux)
-OPENMAPX_HOST_DIR=         # absolute path of this checkout — run `pwd` here
-DOCKER_GID=                # docker-socket group id — `stat -c %g /var/run/docker.sock`
+Point DNS at the host and allow TCP 80 and 443 through the firewall for bundled
+Traefik and its ACME HTTP challenge. UDP 443 enables HTTP/3. If another proxy
+already owns these ports, configure the
+[external proxy](./managing-services.md#behind-an-existing-reverse-proxy) first.
+Do not publish a nonworking IPv6 address.
 
-# Transit scope — the data-manager will not start without it, even when no
-# transit engine is enabled: an empty list never means "the whole planet"
-TRANSITOUS_COUNTRIES=de
-```
-
-`OPENMAPX_HOST_DIR` and `DOCKER_GID` let the private `ops-agent` broker container
-drive Docker on the host, so the CLI's lifecycle and data commands work from
-inside the stack while keeping privileged Docker authority isolated from `app-api`
-and `data-manager`. The `.env.example` file documents how to generate each secret
-inline.
-
-The CLI performs the database-password check before any Docker command, and
-the API and data-manager repeat it whenever they bootstrap in production. A
-rejection names the failed policy rule without echoing the password or database
-URL. Generate a fresh value for each deployment; do not copy a credential from
-documentation or another environment.
-
-Everything else — map-tile keys, traffic and street-imagery tokens, OAuth login,
-per-integration credentials — is optional at boot and mostly managed from the
-admin panel after the stack is up. For the full reference, see
-[Configuration](./configuration.md).
-
-:::tip[Tile provider]
-The default `NEXT_PUBLIC_STYLE_PROVIDER=openmapx` renders the bundled OpenMapX
-house style. Enabled `tileserver` or explicit self-hosted tile URLs always take priority.
-Otherwise, `auto` uses MapTiler when a key is configured and keyless OpenFreeMap
-when it is not. Choose the hosted provider in **Admin → Settings → Map** or via
-`BASEMAP_PROVIDER=auto|openfreemap|maptiler`; the environment overrides admin.
-Geocoding and satellite key requirements are separate.
-:::
+See [Configuration](./configuration.md) for optional settings and provider keys.
+The CLI loads `.env` into its process; it does not export those values to your
+shell. Use a literal hostname in shell examples such as `curl`.
 
 ## 3. Enable a minimal set of services
 
-OpenMapX separates an always-on core from the optional, heavier backend engines.
-If you do nothing, the default selection is just the core:
-
-- `traefik` and `well-known` (reverse proxy + passkey/well-known files)
-- `app-api` and `app-web` (the Fastify API and the Next.js frontend)
-- `postgis` and `redis` (database + cache)
-- `data-manager` (owns the `/data` tree and downloads source data)
-- `ops-agent` (private typed broker executing host Docker operations)
-- `transitous-runner` (automated GTFS schedule updates)
-
-That core renders maps and serves the app, but self-hosted search, routing, and
-transit come from the optional engines you opt into. For a first boot, a small
-self-hosted stack is a good target — a lightweight geocoder and a regional
-router:
-
-```bash
-pnpm openmapx services enable photon osrm
-```
-
-This persists your choice to `infra/docker/service-selection.json`; the renderer
-expands each root into its dependencies automatically, so you only list the
-engines you actually want. You can confirm what's effectively selected with:
+Inspect the default selection:
 
 ```bash
 pnpm openmapx services selected
 ```
 
-To skip the heavy engines entirely and run the core against hosted endpoints
-instead, just don't enable anything here — the default core selection is enough
-to bring the app up. See [Managing services](./managing-services.md) for the full
-list of engines, presets, and how capability bindings work.
+It includes API, web, PostGIS, Valkey, proxy, well-known files, data-manager,
+ops-agent, and the private Transitous runner. Leave it at this selection for the
+first boot. Hosted feature providers may need credentials after startup; the
+default geocoding chain uses MapTiler.
+
+For optional engines later, use `services enable <id>`. The command retains the
+existing roots and adds dependencies. A manually supplied selection replaces
+the defaults, so do not copy a file containing only optional engines.
 
 ## 4. Render the compose stack
 
-Generate the compose file from your enabled service manifests:
-
 ```bash
+pnpm openmapx compose release
+pnpm openmapx compose release --status
 pnpm openmapx compose render
 ```
 
-This reads `infra/docker/.env` (so it picks up `DOMAIN` automatically) and
-writes a configuration generation, gitignored, that
-`infra/docker/.trusted-config-current` points at. It holds:
+Select the release first: render takes the services' files from the selected
+release, not from the checkout, and refuses while the checkout's built-in
+services differ from that release's. Render creates platform secret files and a configuration generation under
+`infra/docker/state/ops-agent/configuration/generations/`. The
+`infra/docker/state/ops-agent/configuration/current` pointer selects the generated Compose
+file and hardlink plan. Keep these deployment files; do not edit generated YAML.
 
-- `docker-compose.generated.yml` — the actual compose file
-- `docker-compose.generated.hardlinks.json` — the plan that maps downloaded
-  source files to per-service consumer paths
-
-The admin panel applies changes the same way, so both always run the same stack.
-
-Re-render any time `.env`, the service selection, or a manifest changes — the
-output is deterministic. Many CLI commands (`services start`, `data link`,
-`compose up`) re-render for you, so you rarely run this by hand after the first
-time.
+Release resolution writes `infra/docker/state/ops-agent/releases/docker-compose.release.yml`, pinning the
+complete application image set. If the registry cannot be reached, restore
+access before continuing. `--status` reports the local selection; it does not
+inspect running containers. See [Upgrading](./upgrading.md) for channel and pin
+changes.
 
 ## 5. Bring up the infrastructure first
 
-Start the database, cache, proxy, API, and data-manager before anything else.
-The data-manager needs its `/data` volume mounted before you can ask it to
-download anything, and it waits for the database schema, which `app-api`
-creates when it boots:
-
 ```bash
 pnpm openmapx services start postgis redis traefik app-api data-manager
+pnpm openmapx services status
+curl --fail --silent --show-error http://localhost:4000/status
 ```
 
-`app-api` and `data-manager` are release images, so this first start also
-resolves the aggregate release (`ghcr.io/openmapx/release-manifest:main`)
-into `infra/docker/docker-compose.release.yml`. The CLI refuses to start them
-without that pin; if the registry is unreachable, fix access and run
-`pnpm openmapx compose release`.
+The command starts declared dependencies, including ops-agent and the private
+runner. Data-manager needs the database schema that API startup migrates.
+Its status response should include `"ok": true` and `"dataDir": "/data"`.
+Use `DATA_MANAGER_HOST_PORT` if you moved its loopback port.
 
-Confirm the data-manager is healthy:
+If startup fails, inspect the affected service:
 
 ```bash
-curl -s http://localhost:4000/status
+pnpm openmapx services logs ops-agent --tail 100
+pnpm openmapx services logs app-api --tail 100
+pnpm openmapx services logs data-manager --tail 100
 ```
 
-You should see a small JSON object reporting `"ok": true` and `"dataDir":
-"/data"`. If the call fails, give the container a few seconds to finish starting
-and try again.
+Correct missing secrets, socket access, checkout permissions, or transit scope
+before retrying. If you configured an external proxy, omit `traefik` from the
+start command because it is excluded from that selection.
 
 ## 6. Download source data
 
-The data-manager does the actual fetching; the CLI is a thin client over its
-HTTP API. Download an OSM extract for the region you care about — regions follow
-the [Geofabrik](https://download.geofabrik.de/) layout (`europe/germany`,
-`north-america/us`, `planet`, …):
+Source downloads are needed only for local engines. For a regional OSRM router:
 
 ```bash
+pnpm openmapx services enable osrm
 pnpm openmapx data download osm europe/germany
 ```
 
-Then download the glyph tree used by self-hosted tiles and offline packages:
+Set `OPENMAPX_REGION=europe/germany` to reuse this default in later download and
+build commands. The source is stored under `infra/docker/data/osm/`.
 
-```bash
-pnpm openmapx data download fonts
-```
-
-The web app already contains the OpenMapX styles and sprites; this command does
-not download a second style bundle.
-
-If you're running a transit engine, also pull GTFS feeds (via the
-community-curated Transitous catalog), filtered to the countries you want:
-
-```bash
-pnpm openmapx data sync --countries de,at,ch
-```
-
-Inspect what's been downloaded at any time:
-
-```bash
-pnpm openmapx data status
-```
-
-:::tip[Set a default region once]
-Set `OPENMAPX_REGION=europe/germany` in `infra/docker/.env` and you can drop the
-positional region from `data download osm` (and the build commands below). A
-region passed on the command line still wins for that one run.
-:::
-
-[Preparing data](./preparing-data.md) covers custom feed lists, per-feed API
-keys, and how the hardlink sharing works under the hood.
+Hosted-only deployments can skip this step. TileServer GL and offline packages
+also need `data download fonts`; transit preparation has additional prerequisites
+in [Preparing data](./preparing-data.md).
 
 ## 7. Build prepared artifacts
 
-Some engines need an explicit build step that turns the downloaded OSM/GTFS data
-into the graph or index they serve from. For the regional router we enabled
-above (`osrm`), run its build — Photon downloads a prebuilt index on first start,
-so it needs no build here:
+For the optional OSRM router:
 
 ```bash
 pnpm openmapx services build osrm --region europe/germany
 ```
 
-`--region` is optional; without it the build falls back to a service-specific
-env default, then `OPENMAPX_REGION`, and finally the single OSM extract on disk
-if there's exactly one. Other buildable engines (`motis`, `otp`, `tileserver`,
-`pelias`) follow the same pattern. To build every selected buildable service in
-one pass:
+This prepares the graph, renders configuration, and links its output. An existing
+OSRM consumer must be stopped before rebuilding. The build refuses planet input.
 
-```bash
-pnpm openmapx services build-all --region europe/germany
-```
-
-Heavier engines that aren't in this list (Valhalla, Nominatim, Overpass) build
-their indexes from the OSM extract on first container start instead — that
-happens automatically when the stack comes up, and it can take hours at large
-scale.
+Use explicit service IDs. `services build-all` builds **every installed buildable
+service**, including unselected engines. It is not a shortcut for building only
+the small stack chosen here.
 
 ## 8. Apply the hardlink plan
-
-Link the downloaded source files into each consuming service's data directory.
-The data-manager creates filesystem hardlinks, so every consumer sees its own
-copy at zero extra disk cost:
 
 ```bash
 pnpm openmapx data link
 ```
 
-This re-renders the compose plan first (so the links match your current service
-selection) and then applies it. `build` and `build-all` run this step for you,
-but it's worth knowing as its own command for when you refresh data without
-rebuilding.
+This renders and applies producer-to-consumer hardlinks under
+`infra/docker/data/`. Build and start commands also apply them. Producer and
+consumer directories must share a filesystem; derived indexes still occupy
+additional disk space.
 
 ## 9. Bring up the full stack
 
-Finally, start everything:
-
 ```bash
 pnpm openmapx compose up
+pnpm openmapx services status
 ```
 
-This re-renders, applies the hardlink plan, resolves the aggregate app release
-(`ghcr.io/openmapx/release-manifest:main`) into
-`infra/docker/docker-compose.release.yml` if that overlay does not exist yet,
-and runs `docker compose up -d` for the whole enabled selection. The overlay
-pins the core app images as one coherent set; without it the CLI refuses to
-start them. If the registry is unreachable, restore access and run
-`pnpm openmapx compose release` (the manual procedure in
-[Upgrading](./upgrading.md#4-resolve-the-complete-release-and-replace-containers)
-produces the same file). Prepared services start from the artifacts you built
-in step 7; any heavy engine builds its internal index from the OSM extract on
-first start, which is slow at continent or planet scale.
+This starts all services in the current selection, retaining the release overlay.
+If you added a first-import engine such as Nominatim or Valhalla, expect a long
+preparation period and monitor its logs. Start heavy engines individually if
+concurrent imports would exceed the host's capacity.
 
-Watch progress with:
-
-```bash
-pnpm openmapx services status            # container state for every service
-pnpm openmapx services logs <id> --follow # tail one service's logs
-```
-
-:::tip[Bring heavy engines up one at a time]
-On modest hardware, starting several heavy indexers at once can saturate CPU,
-disk, and RAM. The indexers are independent, so it's usually better to start one,
-wait for it to finish its initial build (CPU and disk I/O quiet down, and
-`services status` reports it healthy), and only then start the next. See
-[Managing services](./managing-services.md) for a staggered-startup order.
-:::
+Open `https://your-domain`. Confirm the application loads with a valid
+certificate. Certificate failures usually require checking DNS, inbound port 80,
+proxy routing, and Traefik logs.
 
 ## 10. Create your first admin user
 
-Open `https://your-domain` in a browser and sign up through the web UI. Traefik
-obtains a Let's Encrypt certificate automatically on the first request, once your
-domain's DNS points at the host. Then promote your account to admin from the repo
-root:
+Sign up in the web application, then promote that account:
 
 ```bash
 pnpm openmapx users promote you@example.com
 ```
 
-That account now has access to `/admin`, where you manage integrations, service
-config, capability bindings, data workflows, and the rest of the operations
-surface.
+If email is not configured and sign-in is waiting for verification, verify your
+bootstrap account from the host:
+
+```bash
+pnpm openmapx users verify you@example.com
+```
+
+Sign in and open `/admin`. Configure email delivery for later users. Choose your
+geocoding provider, provider credentials, and other integrations there. The
+bundled style uses keyless OpenFreeMap vectors when no local tiles or MapTiler
+key is configured; satellite imagery and other features have separate needs.
+
+Verify a search and route within your prepared coverage. A healthy container
+alone does not establish that the data or provider configuration works.
 
 ## Where to go next
 
-- **[Configuration](./configuration.md)** — the full `infra/docker/.env`
-  reference, including the optional keys this walkthrough skipped.
-- **[Managing services](./managing-services.md)** — the engine catalog, presets,
-  capability bindings, and staggered startup for heavy backends.
-- **[Preparing data](./preparing-data.md)** — custom GTFS feeds, per-feed API
-  keys, region selection, and how hardlink sharing works.
-- **[Upgrading](./upgrading.md)** — pulling new code and images, and refreshing
-  source data.
+- [Configuration](./configuration.md) for secrets, host wiring, and overrides.
+- [Managing services](./managing-services.md) for selection and lifecycle commands.
+- [Preparing data](./preparing-data.md) for engine-specific preparation.
+- [Upgrading](./upgrading.md) for backups, image selection, and recovery.

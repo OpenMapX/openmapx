@@ -1,7 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { agentStatePaths } from "./agent-state";
+import { loadRecordedCommunityServices } from "./community-repository-records";
+import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { findServiceManifestDirs } from "./manifest-discovery";
 import { validateServiceManifest } from "./manifest-schema";
+import { readBuiltInServices } from "./release-authority-inventory";
 import type { LoadedService, ServiceManifest } from "./types";
 
 export interface ServiceRegistryOptions {
@@ -9,9 +13,18 @@ export interface ServiceRegistryOptions {
   servicesDir?: string;
   communityDir?: string;
   /**
+   * Built-in services supplied by the caller instead of scanning
+   * `servicesDir`. Code running from the ops-agent's runtime bundle (the agent
+   * and the fixed CLI it runs) defaults to the release's embedded manifests,
+   * so the checkout's `services/*` never decide which built-ins exist or what
+   * they run.
+   */
+  builtInServices?: readonly LoadedService[];
+  /**
    * Community services supplied by the caller instead of scanning
-   * `communityDir`. The app-api container has no host checkout, so it reads
-   * them from the operations agent, which owns `services/.community`. Each
+   * `communityDir` (or, from the ops-agent bundle, reading the agent's
+   * repository records). The app-api container has no host checkout, so it reads
+   * them from the operations agent, which owns the community store. Each
    * must already have passed the community manifest rules.
    */
   communityServices?: readonly LoadedService[];
@@ -30,18 +43,50 @@ export class ServiceRegistry {
   async load(): Promise<void> {
     this.services = [];
     const servicesDir = this.opts.servicesDir ?? join(this.opts.rootDir, "services");
-    const communityDir = this.opts.communityDir ?? join(servicesDir, ".community");
+    const communityDir =
+      this.opts.communityDir ??
+      agentStatePaths(join(this.opts.rootDir, "infra", "docker")).community;
     const warnings = this.opts.warnings ?? [];
 
-    if (existsSync(servicesDir)) {
+    const builtInServices = this.opts.builtInServices ?? this.embeddedBuiltInServices();
+    if (builtInServices) {
+      for (const service of builtInServices) this.addBuiltInService(service, warnings);
+    } else if (existsSync(servicesDir)) {
       this.scanBuiltInDir(servicesDir, warnings);
     }
     if (this.opts.communityServices) {
       for (const service of this.opts.communityServices)
         this.addCommunityService(service, warnings);
+    } else if (embeddedBuiltInServiceManifests()) {
+      // The ops-agent bundle (the agent and its fixed CLI) loads only the
+      // community manifests the agent recorded when it installed them, by
+      // digest, never whatever else sits in the checkout.
+      for (const { service } of loadRecordedCommunityServices(this.opts.rootDir)) {
+        this.addCommunityService(service, warnings);
+      }
     } else if (existsSync(communityDir)) {
       this.scanCommunityDir(communityDir, warnings);
     }
+  }
+
+  private embeddedBuiltInServices(): readonly LoadedService[] | null {
+    const source = embeddedBuiltInServiceManifests();
+    return source ? readBuiltInServices(this.opts.rootDir, { source }).services : null;
+  }
+
+  private addBuiltInService(service: LoadedService, warnings: string[]): void {
+    if (this.services.some((existing) => existing.manifest.id === service.manifest.id)) {
+      warnings.push(
+        `Duplicate service id "${service.manifest.id}" at ${service.directory} — keeping first`,
+      );
+      return;
+    }
+    this.services.push({
+      manifest: structuredClone(service.manifest),
+      directory: service.directory,
+      isBuiltIn: true,
+      enabled: this.opts.enabledIds ? this.opts.enabledIds.has(service.manifest.id) : true,
+    });
   }
 
   private addCommunityService(service: LoadedService, warnings: string[]): void {

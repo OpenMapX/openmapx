@@ -2,7 +2,6 @@
  * This module never resolves, writes or repairs an overlay. */
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 import { JSON_SCHEMA, load } from "js-yaml";
 import { canonicalJson } from "../ops/canonical-json";
@@ -14,6 +13,11 @@ import {
   type ReleaseComposeSelection,
   releaseChannel,
 } from "./release-manifest";
+import {
+  assertReleaseStateDirectory,
+  releaseStateFileProblem,
+  releaseStatePaths,
+} from "./release-state";
 export function configurationImageReference(composeYaml: string, serviceId: string) {
   const document = load(composeYaml, { schema: JSON_SCHEMA }) as {
     services?: Record<string, { image?: unknown }>;
@@ -46,12 +50,13 @@ export function validateExistingReleaseSelection(
 export function readServiceReleaseImageSelection(infraDir: string, serviceId: string) {
   const managed = (RELEASE_PINNED_SERVICE_IDS as readonly string[]).includes(serviceId),
     channel = releaseChannel(),
-    path = join(infraDir, "docker-compose.release.yml");
+    path = releaseStatePaths(infraDir).overlay;
   let fd: number | undefined;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    assertReleaseStateDirectory(releaseStatePaths(infraDir).directory);
     const before = fstatSync(fd);
-    if (!before.isFile() || before.nlink !== 1 || before.size > 128 * 1024)
+    if (releaseStateFileProblem(before, 128 * 1024) !== null)
       throw Error("Release selection unavailable");
     const raw = readFileSync(fd),
       after = fstatSync(fd),

@@ -23,10 +23,9 @@ import { RouteBadge } from "./RouteBadge";
 interface TripDetailViewProps {
   departure: MergedDeparture;
   onBack: () => void;
-  clearSearchBar?: boolean;
 }
 
-export function TripDetailView({ departure, onBack, clearSearchBar = false }: TripDetailViewProps) {
+export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
   const fmt = useDateTimeFormat();
@@ -51,7 +50,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
   return (
     <Box>
       {/* Header */}
-      <PanelDetailHeader onBack={onBack} clearSearchBar={clearSearchBar}>
+      <PanelDetailHeader onBack={onBack}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
             <RouteBadge

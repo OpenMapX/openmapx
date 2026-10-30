@@ -1,3 +1,8 @@
+---
+title: Contribution process
+description: Report issues, complete triage, prepare implementation work, and submit a pull request.
+---
+
 # Contribution process
 
 Report what you observed or what should become possible. You do not need to know
@@ -31,7 +36,6 @@ No area assignment or label quota is required.
 | ------------------ | ----------------------------------------------------------------------------------------------- |
 | `needs-triage`     | An open issue awaits initial maintainer review. Removing it means reviewed, not scheduled.      |
 | `needs-info`       | A specific unanswered question is linked in the issue. The maintainer removes it when answered. |
-| `blocked`          | A named, linked prerequisite prevents progress. The maintainer tracks its resolution.           |
 | `dependencies`     | Dependency updates or dependency maintenance.                                                   |
 | `documentation`    | Documentation content, tooling or workspace dependencies.                                       |
 | `integration`      | A new or changed provider, source or backend integration.                                       |
@@ -43,18 +47,23 @@ No area assignment or label quota is required.
 The definitions are versioned in
 [`.github/labels.json`](https://github.com/OpenMapX/openmapx/blob/main/.github/labels.json).
 Maintainers own classification and these action labels. An arbitrary comment does
-not resolve an information request or blocker. Add a new label only when there is
+not resolve an information request. Add a new label only when there is
 a clear queue/filter consumer; review the taxonomy periodically.
 
-New and reopened issues enter `needs-triage`. Closure removes `needs-triage`,
-`needs-info` and `blocked`, while retaining the questions, dependency links and
-closure reason in the record. The issue-lifecycle workflow re-reads current state
+Record a prerequisite as a GitHub issue dependency ("blocked by"), not a label.
+The issue then shows which issue blocks it, and `is:blocked` finds blocked issues.
+A prerequisite outside GitHub, such as an upstream release, gets its own tracking
+issue so it can be linked.
+
+New and reopened issues enter `needs-triage`. Closure removes `needs-triage` and
+`needs-info`, while retaining the questions, dependency links and closure reason
+in the record. The issue-lifecycle workflow re-reads current state
 and makes retries harmless; a later human triage decision takes precedence over
 an old reopen event. GitHub does not offer an atomic state-and-label update, so
 concurrent transitions are rechecked and repeated changes fail visibly for retry.
-If reopening overlaps removal of `needs-info` or `blocked`, the workflow fails with
-the affected issue and labels. Check the issue history before restoring them;
-automatically restoring them could undo a later human decision.
+If reopening overlaps removal of `needs-info`, the workflow fails with the
+affected issue and label. Check the issue history before restoring it;
+automatically restoring it could undo a later human decision.
 
 A monthly and manually triggered drift report lists closed workflow labels,
 missing/legacy label definitions and missing issue types. It does not repair
@@ -72,10 +81,11 @@ fields and options: Priority **Urgent / High / Medium / Low**, Effort **High /
 Medium / Low**. Leave uncertain estimates unset. Start date and Target date are
 optional internal planning fields.
 
-The target is public Priority/Effort and internal dates. Existing field visibility
-and historical labels are being migrated separately after consumer updates and
-per-item preservation review; this document does not claim that migration is complete.
-Preserve native field IDs, options and history. Do not create parallel priority labels
+The policy is public Priority/Effort and internal dates. Before changing field
+visibility or migrating historical labels, read back the actual organization
+fields and affected items. Repository source does not establish that hosted
+configuration or migration is complete. Preserve native field IDs, options and
+history. Do not create parallel priority labels
 or duplicate Project fields. Field visibility applies across the organization, so
 review other repositories and existing values before changing it.
 
@@ -104,8 +114,11 @@ image paths in the body so they are rewritten to hosted URLs. Local paths and
 expiring CI artifacts are not delivered evidence. Partial uploads may still create
 or update the PR; inspect it before retrying. See
 [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#descriptions-and-visual-evidence)
-for commands and the current verification/release-information policy. This process
-uses conditional package Changesets and important product fragments. Deliberate package batches use the separate manual [package release workflow](./package-releases.md); merging a source or version PR does not publish a release.
+for commands and the current verification/release-information policy. Consumer-facing public-package changes need Changesets; important product
+changes need [release fragments](https://github.com/OpenMapX/openmapx/blob/main/release-notes/README.md).
+A change can need both. Deliberate package batches use the manual
+[package release workflow](./package-releases.md); merging a source or version
+PR does not publish a release.
 
 AI assistance and authorized coding agents follow the same standards. The submitter
 owns understanding, accuracy, verification and follow-up. No mandatory AI footer,

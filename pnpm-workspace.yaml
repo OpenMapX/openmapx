@@ -33,6 +33,9 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+# Install this exact security patch immediately; retain the age gate elsewhere.
+minimumReleaseAgeExclude:
+  - "node-forge@1.4.2"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
@@ -43,6 +46,7 @@ updateConfig:
 
 overrides:
   "@hey-api/client-fetch": "workspace:*"
+  "node-forge@1": "^1.4.2" # CVE-2026-85393; includes the PEM Buffer regression fix.
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
   # Include sharp 0.35.5's librsvg fix (GHSA-wq5f-xc86-pv6w) as well as
@@ -56,12 +60,19 @@ overrides:
   "source-map-js@1": "^1.2.2" # CVE-2026-93749
   # Updating vue brings its exact-version renderer/compiler dependencies along.
   "vue@3": "^3.5.42" # GHSA-g2v6-rqmx-r4w6
+  # Serwist pins zod 4.6.5, and zod 3 has no patched release. The Expo CLI,
+  # the only zod 3 consumer, uses schema APIs that zod 4 keeps.
+  "zod": "^4.6.7" # GHSA-mrhx-c7xc-m3w5
   "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
   # Force every 7.x consumer onto the security-fixed request stack. Scalar's
-  # parser still declares an older compatible 7.x range.
-  "undici@7": ">=7.29.1"
+  # parser and the AI SDK still declare older compatible 7.x ranges; this
+  # override resolves them to 8.x, so it also excludes the 8.x releases before
+  # the same fix.
+  "undici@7": ">=7.30.1 <8.0.0 || >=8.12.3" # GHSA-xjj6-f33q-929c
+  # jsdom and testcontainers lock the 8.x release before the fix.
+  "undici@8": "^8.12.3" # GHSA-xjj6-f33q-929c
   # Serwist pins 4.28.6 directly; 4.28.7+ fixes its unbounded query cache and
   # custom-stats prototype write. Keep the workspace on the current 4.x line.
   "browserslist": ">=4.29.0"
@@ -69,6 +80,10 @@ overrides:
   # expansion DoS (CVE-2026-102276, CVE-2026-102278).
   "brace-expansion@1": "^1.1.21"
   "brace-expansion@5": "^5.0.12"
+  # The OTP SDK generator's plugins still declare @graphql-tools/utils 11, which
+  # has no release with the fixes for GHSA-7mx3-vvmw-hjmv and GHSA-c4qx-w738-7hr3.
+  # The 12.x line keeps the helpers they use; `pnpm check-otp` proves identical output.
+  "@graphql-tools/utils@11": "^12.1.0"
   # Keep ajv's fast-uri dependency off the vulnerable 4.1.1 release.
   "fast-uri": ">=4.1.2"
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
@@ -78,7 +93,7 @@ overrides:
   "js-yaml": "^5.2.1"
   # Orval pins this maintained v4 release, including the merge/omap DoS fixes.
   # Keep this exception scoped to dev-only code generation, not runtime parsers.
-  "orval@8.43.0>js-yaml": "4.3.2"
+  "orval@8.45.0>js-yaml": "4.3.2"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install

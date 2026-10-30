@@ -5,6 +5,7 @@
   "description": "Reverse proxy and TLS termination via Let's Encrypt.",
   "license": "MIT",
   "quality": "built-in",
+  "privateNetworks": ["dawarich-ingress"],
   "homepage": "https://traefik.io/",
   "subjectData": {
     "storesPersonalData": false,
@@ -14,8 +15,8 @@
   },
   "container": {
     "image": "traefik",
-    "tag": "v3.7.14",
-    "digest": "sha256:575fa15b135078fe5e50aa847987d96dbddd7b093c172429618404df73f3fa7c",
+    "tag": "v3.7.16",
+    "digest": "sha256:1336e85aaed293bd63d005086e0dd013b04078b26aaeb1c18b26a2f928af7e65",
     "expose": [80, 443],
     "environment": {
       "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL": "${ACME_EMAIL:-admin@example.com}"
@@ -34,14 +35,15 @@
   ],
   "bindMounts": [
     {
-      "source": "config/traefik.yml",
+      "source": "@infra:state/ops-agent/configuration/current/traefik/traefik.yml",
       "target": "/etc/traefik/traefik.yml",
       "readOnly": true
     },
     {
-      "source": "config/dynamic",
+      "source": "@infra:state/ops-agent/traefik/dynamic",
       "target": "/etc/traefik/dynamic",
-      "readOnly": true
+      "readOnly": true,
+      "optional": true
     }
   ],
   "exposure": {

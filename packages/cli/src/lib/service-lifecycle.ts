@@ -98,6 +98,7 @@ export async function runCliServiceLifecycle(options: {
   const { dockerComposeStream, dockerCompose } = await import("./docker");
   const { readGeneratedHardlinkPlan } = await import("./hardlinks");
   const release = await import("./release");
+  const { refuseAgentSwitchOrExit } = await import("./agent-layout");
   const paths = repoPaths();
   assertCliDeploymentSecrets();
   mkdirSync(join(paths.infraDir, "data"), { recursive: true });
@@ -270,8 +271,10 @@ export async function runCliServiceLifecycle(options: {
               ownership = verified;
               const current = services.currentConfigurationGeneration(paths.infraDir);
               if (current !== expected) throw Error("Lifecycle configuration revision conflict");
-              const directory = join(paths.infraDir, ".ops-agent-releases");
-              mkdirSync(directory, { mode: 0o700, recursive: true });
+              const releasePaths = services.releaseStatePaths(paths.infraDir);
+              services.ensureReleaseStateDirectory(releasePaths.directory);
+              services.ensureReleaseStateDirectory(releasePaths.store);
+              const directory = releasePaths.store;
               const lock = await services.acquireReleaseStoreLock(
                 directory,
                 {},
@@ -339,6 +342,7 @@ export async function runCliServiceLifecycle(options: {
     async validatePins(selected) {
       if (release.touchesReleasePinnedServices(selected)) {
         const overlay = await release.ensureReleaseOverlay();
+        if (overlay.status === "held") throw new ServiceLifecycleCommandError(1, overlay.reason);
         if (overlay.status === "unpinned")
           throw new ServiceLifecycleCommandError(1, "Release selection unavailable");
       }
@@ -411,6 +415,7 @@ export async function runCliServiceLifecycle(options: {
       if (services.currentConfigurationGeneration(paths.infraDir) !== receipt?.finalRevisionId)
         throw Error("Lifecycle generation changed before recreation");
       await assertNativeCreation();
+      await refuseAgentSwitchOrExit(noDeps ? [...selected] : "all");
       const code = await dockerComposeStream([
         "up",
         "-d",
@@ -432,6 +437,7 @@ export async function runCliServiceLifecycle(options: {
         if (services.currentConfigurationGeneration(paths.infraDir) !== receipt?.finalRevisionId)
           throw Error("Lifecycle generation changed before Start");
         await assertNativeCreation();
+        await refuseAgentSwitchOrExit([...ids]);
         const code = await dockerComposeStream([
           "up",
           "-d",

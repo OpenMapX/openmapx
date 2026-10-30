@@ -1,6 +1,6 @@
 {
-  "id": "d549466e-6409-4b63-9307-604353bbbf8c",
-  "prevId": "ea53844f-257b-4be6-aefc-34ee5145df6c",
+  "id": "365a7ebf-cbba-47c8-b460-0070852ecc65",
+  "prevId": "7ac76e19-9f3d-4975-ba2d-02ec7b5b008f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -567,105 +567,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_policy_application": {
-      "name": "auth_policy_application",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_digest": {
-          "name": "intent_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_policy_state": {
-      "name": "auth_policy_state",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "activation_version": {
-          "name": "activation_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settings": {
-          "name": "settings",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activated_by": {
-          "name": "activated_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activated_at": {
-          "name": "activated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "auth_policy_singleton": {
-          "name": "auth_policy_singleton",
-          "value": "\"auth_policy_state\".\"id\"=1 AND \"auth_policy_state\".\"activation_version\"=1"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.capability_binding": {
@@ -1792,150 +1693,14 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
-        },
-        "execution_version": {
-          "name": "execution_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "operation_key": {
-          "name": "operation_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "operation_fingerprint": {
-          "name": "operation_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_fingerprint": {
-          "name": "execution_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "admitted_at": {
-          "name": "admitted_at",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deadline_at": {
-          "name": "deadline_at",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "requested_deadline_at": {
-          "name": "requested_deadline_at",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_parent": {
-          "name": "execution_parent",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_input": {
-          "name": "execution_input",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_state": {
-          "name": "execution_state",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_children": {
-          "name": "execution_children",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "ownership_version": {
-          "name": "ownership_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         }
       },
-      "indexes": {
-        "data_manager_jobs_execution_key_uq": {
-          "name": "data_manager_jobs_execution_key_uq",
-          "columns": [
-            {
-              "expression": "operation_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"data_manager\".\"jobs\".\"operation_key\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "data_manager_jobs_configuration_maintenance_uq": {
-          "name": "data_manager_jobs_configuration_maintenance_uq",
-          "columns": [
-            {
-              "expression": "(\"metadata\"->'configurationMaintenance'->'receipt'->>'maintenanceId')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"data_manager\".\"jobs\".\"kind\" = 'configuration-maintenance'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "data_manager_jobs_configuration_guard_uq": {
-          "name": "data_manager_jobs_configuration_guard_uq",
-          "columns": [
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"data_manager\".\"jobs\".\"kind\" = 'configuration-maintenance' AND coalesce(\"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance'->>'guardState','recovery_required') <> 'settled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "data_manager_jobs_execution_bounds": {
-          "name": "data_manager_jobs_execution_bounds",
-          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND jsonb_typeof(\"data_manager\".\"jobs\".\"execution_children\") = 'array' AND jsonb_array_length(\"data_manager\".\"jobs\".\"execution_children\") <= 32 AND octet_length(\"data_manager\".\"jobs\".\"execution_children\"::text) <= 131072"
-        },
-        "data_manager_jobs_execution_shape": {
-          "name": "data_manager_jobs_execution_shape",
-          "value": "\"data_manager\".\"jobs\".\"execution_version\" IS NULL OR coalesce((\"data_manager\".\"jobs\".\"execution_version\" = 2 AND \"data_manager\".\"jobs\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"jobs\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"admitted_at\" >= 0 AND \"data_manager\".\"jobs\".\"deadline_at\" > \"data_manager\".\"jobs\".\"admitted_at\" AND \"data_manager\".\"jobs\".\"execution_input\" IS NOT NULL AND \"data_manager\".\"jobs\".\"execution_state\" IS NOT NULL), false)"
-        },
-        "data_manager_jobs_configuration_guard_shape": {
-          "name": "data_manager_jobs_configuration_guard_shape",
-          "value": "\"data_manager\".\"jobs\".\"kind\" <> 'configuration-maintenance' OR coalesce((jsonb_typeof(\"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance') = 'object' AND \"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance'->>'version' = '1' AND \"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance'->>'guardState' IN ('preparing','prepared','settling','settled','recovery_required') AND jsonb_typeof(\"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance'->'receipt') = 'object' AND octet_length((\"data_manager\".\"jobs\".\"metadata\"->'configurationMaintenance')::text) <= 65536), false)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "data_manager.offline_package_artifact_references": {
@@ -4780,6 +4545,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "last_transaction_id": {
+          "name": "last_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -5174,8 +4945,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "encryption_mode": {
-          "name": "encryption_mode",
+        "revision": {
+          "name": "revision",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -5185,12 +4956,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "private_jwk": {
-          "name": "private_jwk",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "passphrase_ciphertext": {
           "name": "passphrase_ciphertext",

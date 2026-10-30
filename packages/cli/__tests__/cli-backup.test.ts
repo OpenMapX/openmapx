@@ -13,9 +13,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { appendErasureRequest, initializeErasureJournal } from "@openmapx/core/erasure-journal";
+import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -30,6 +31,7 @@ import {
   isCompatiblePlatformVersion,
   isValidBackupName,
   listBackups,
+  listRunningServices,
   preflightRestore,
   pruneExpiredBackups,
   readBackupManifest,
@@ -834,7 +836,7 @@ describe("discoverBackupableServices", () => {
     expect(targets).toEqual([
       {
         id: "dawarich-app",
-        version: "1.15.3",
+        version: "1.19.0",
         volumes: [
           {
             serviceId: "dawarich-app",
@@ -1004,12 +1006,12 @@ describe("discoverBackupableServices", () => {
       id: "tileserver",
       volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
-    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
-    writeFileSync(
-      join(tmp, "infra", "docker", "service-selection.json"),
-      JSON.stringify({ selected: ["postgis", "tileserver"] }),
-      "utf-8",
-    );
+    const selection = coreServices.serviceSelectionPath(join(tmp, "infra", "docker"));
+    mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });
+    writeFileSync(selection, JSON.stringify({ selected: ["postgis", "tileserver"] }), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
 
     const out = await discoverBackupableServices({ rootDir: tmp });
 
@@ -1507,6 +1509,41 @@ describe("listBackups", () => {
 
   it("returns a placeholder string when no backups exist", () => {
     expect(formatBackupsTable([])).toBe("(no backups)");
+  });
+});
+
+describe("listRunningServices", () => {
+  // Real `docker compose ps --format json` output; see the README beside it.
+  const captured = (name: string) =>
+    readFileSync(
+      new URL(`../../core/src/services/__tests__/__fixtures__/compose-ps/${name}`, import.meta.url),
+      "utf8",
+    );
+  const running = (stdout: string) => {
+    vi.mocked(execa).mockResolvedValueOnce({ exitCode: 0, stdout, stderr: "" } as never);
+    return listRunningServices({ composeArgs: ["compose"], cwd: tmp });
+  };
+
+  it.each([["compose-5.6.1.stdout"], ["compose-2.20.3.stdout"]])(
+    "reads the services Compose printed in %s",
+    async (name) => {
+      await expect(running(captured(name))).resolves.toEqual(
+        new Set(["crashloop", "web", "worker"]),
+      );
+    },
+  );
+
+  it.each([["compose-5.6.1-empty.stdout"], ["compose-2.20.3-empty.stdout"]])(
+    "reads the empty stack in %s as nothing running",
+    async (name) => {
+      await expect(running(captured(name))).resolves.toEqual(new Set());
+    },
+  );
+
+  it("refuses output it cannot read instead of reporting nothing running", async () => {
+    await expect(running('{"Service":"timeline"}\nnot json\n')).rejects.toThrow(
+      /line 2 is not JSON/,
+    );
   });
 });
 

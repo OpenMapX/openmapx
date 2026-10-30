@@ -6,13 +6,10 @@ sidebar_position: 1
 
 # Architecture
 
-OpenMapX is a self-hosted map application assembled from two plugin systems —
-**services** (backend daemons) and **integrations** (application features) —
-that a compose renderer wires into a running stack. The
-[overview](../overview/how-it-works.md) introduces that model; this page goes
-underneath it: how the repository is laid out, how the containers fit together
-at runtime, and how mobility data flows through three deliberately separated
-layers before it reaches a browser.
+OpenMapX has two plugin systems: services run backend daemons, and integrations
+provide application features. The Compose renderer selects and connects their
+containers. This page describes the repository, runtime boundaries, capability
+resolution, and mobility data flow.
 
 If you are new to the project, read [How it works](../overview/how-it-works.md)
 first. If you operate a deployment, [Managing services](../install/managing-services.md)
@@ -27,78 +24,99 @@ adding a user-data field, cache, processor, or privacy claim.
 ## The monorepo
 
 The repository is a [Turborepo](https://turborepo.com/) workspace driven by pnpm.
-`pnpm-workspace.yaml` enrolls four globs — `apps/*`, `packages/*`,
-`integrations/*`, and `services/data-manager` — and `turbo.json` orchestrates the
-`build`, `dev`, `check-types`, and `test` pipelines across them. Node 24+ is
-required.
+`pnpm-workspace.yaml` includes `apps/*`, `packages/*`, `integrations/*`,
+and `services/data-manager`. `turbo.json` orchestrates build, development, start,
+and type-check tasks. Portable tests run through the root Vitest configuration;
+the native mobile app has separate Jest/native checks. The Node and pnpm versions are pinned in `.nvmrc` and the root
+`package.json`.
 
 ```
 openmapx/
 ├── apps/
 │   ├── web/                  Next.js 16 frontend (MapLibre GL JS, MUI 9)
 │   ├── api/                  Fastify 5 BFF + integration host + admin API
-│   └── ops-agent/            private typed operations broker
+│   ├── ops-agent/            private typed operations broker
+│   ├── transitous-runner/    isolated Transitous preparation runner
+│   └── mobile/               Expo native host for the map and navigation
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
-├── custom_integrations/      community integrations (gitignored)
 ├── services/                 built-in service plugins (service.json each)
-│   ├── data-manager/         the one service that ships its own source
+│   ├── data-manager/         data preparation, publication and supervision
 │   └── ops-agent/            private deployment manifest for the operations broker
-├── infra/docker/             generated compose + hardlink plan (gitignored)
+├── infra/docker/             generated output + operator configuration/state
 └── docs/                     this documentation site
 ```
 
-Two directories hold _generated output only_. `infra/docker/` is written by
-`pnpm openmapx compose render` and never edited by hand — there is no
-hand-maintained `docker-compose.yml`. `custom_integrations/` and the community
-service tree under `services/.community/` are populated at runtime from Git URLs;
-the operations agent owns the community service tree.
+The CLI writes generated Compose files, release overlays, and hardlink plans
+under `infra/docker/`. That directory also contains operator input and durable
+state, including `.env`, service selection, secrets, and data; it is not a
+throwaway build directory. Do not hand-edit generated Compose output.
+
+Installed declarative integration artifacts and community service repositories
+live in the operations agent's state, in
+`infra/docker/state/ops-agent/custom-integrations/` and
+`infra/docker/state/ops-agent/community/`; `app-api` mounts the first read-only
+at `/app/custom_integrations`. Built-in integrations run trusted host code; installed
+community integrations cannot load arbitrary JavaScript into the API or web
+process. Their executable behavior belongs in separate service containers.
 
 ### Applications
 
-| App              | Stack                                                                                   | Responsibility                                                                                                                                                                                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`       | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
-| `apps/api`       | Fastify 5                                                                               | The backend-for-frontend (BFF) gateway. It is _also_ the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs.                                   |
-| `apps/ops-agent` | Fastify 5                                                                               | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment.                                                                                              |
+| App              | Stack                                                                                   | Responsibility                                                                                                                                                                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`       | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state.   |
+| `apps/api`       | Fastify 5                                                                               | The backend-for-frontend (BFF) gateway. It is _also_ the integration host: it discovers and configures integrations, runs trusted built-ins, hosts declarative community artifacts, resolves service requirements, enforces admin access, and runs background jobs. |
+| `apps/ops-agent` | Fastify 5                                                                               | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment.                                                                                                |
 
-The browser never talks to backend engines directly. The web app calls
-`apps/api`, and `apps/api` reaches the engines over the private Docker network.
-This indirection is what lets the same frontend front a Valhalla or an OSRM
-router without a code change.
+The web app calls the API for routing and other provider operations. The API
+reaches bound engines over the Docker network or uses configured external
+providers. Browser map resources can also use public tile/proxy routes shown
+below; backend engines do not need public host ports.
+
+The Expo app in `apps/mobile` hosts the web map and native navigation/location
+services. `apps/transitous-runner` performs isolated preparation work. See the
+[mobile architecture](./mobile-architecture.md) and
+[transit integrations](./transit-integrations.md) for their separate execution boundaries.
 
 ### Key packages
 
-Shared code lives in `packages/*`. Both applications consume these as
-source-only workspace packages (most expose `main: ./src/index.ts` and are
-transpiled by Next.js rather than pre-built), so a change in a package is picked
-up without a separate build step.
+Shared code lives in `packages/*`. Many packages expose TypeScript source.
+Development hosts load or transpile that source; deployment builds may bundle
+it. Check each package's exports and scripts before assuming it has a separate
+build output. Server code should use focused server-safe entry points instead
+of barrels that also export React hooks.
 
 | Package                                                                                                                                                                                                                                                              | Owns                                                                                                                                                                                                                                                                                                     |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@openmapx/core`                                                                                                                                                                                                                                                     | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, the strict ops-agent contract/client, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
-| `@openmapx/integration-framework`                                                                                                                                                                                                                                    | The manifest schema, registry, loader, the `IntegrationContext` runtime type, and the **typed provider contracts** (one per domain — `TransitProvider`, `RealtimeProvider`, `MobilityDataSourceProvider`, `GeocodingProvider`, `RoutingProvider`, `WeatherProvider`, and more).                          |
+| `@openmapx/integration-framework`                                                                                                                                                                                                                                    | The manifest schema, registry, loader, the `IntegrationContext` runtime type, and the **typed provider contracts** (one per domain: `TransitProvider`, `RealtimeProvider`, `MobilityDataSourceProvider`, `GeocodingProvider`, `RoutingProvider`, `WeatherProvider`, and more).                           |
 | `@openmapx/mobility-formats`                                                                                                                                                                                                                                         | Pure, stateless parsers over raw bytes: GTFS, GTFS-RT, GBFS, GOFS, SIRI, OJP, CSV. No I/O, no policy.                                                                                                                                                                                                    |
 | `@openmapx/mobility-formats-tomp`                                                                                                                                                                                                                                    | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats.                                                                                                                                                             |
-| `@openmapx/mobility-core`                                                                                                                                                                                                                                            | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client.                                                                                                                                    |
+| `@openmapx/mobility-core`                                                                                                                                                                                                                                            | The canonical mobility model: one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client.                                                                                                                                     |
 | `@openmapx/db-schema`                                                                                                                                                                                                                                                | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health).                                                                                                                                                                           |
-| `@openmapx/cli`                                                                                                                                                                                                                                                      | The `openmapx` operator command line — services, compose, data, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks.                                                                                                                                                       |
+| `@openmapx/cli`                                                                                                                                                                                                                                                      | The `openmapx` operator command line: services, compose, data, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks.                                                                                                                                                        |
 | `@openmapx/i18n`                                                                                                                                                                                                                                                     | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups).                                                                                                                        |
 | `@openmapx/presets`                                                                                                                                                                                                                                                  | OSM preset matching and category chips, built on iD's tagging schema.                                                                                                                                                                                                                                    |
 | `@openmapx/ev-charge-planner`                                                                                                                                                                                                                                        | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates.                                                                                                                                           |
 | `@openmapx/extension-cli`                                                                                                                                                                                                                                            | Community-extension manifest/service scaffolding, validation, and declarative packaging. Executable behavior belongs in an isolated service container.                                                                                                                                                   |
 | `@openmapx/openconditions-contrib-client`                                                                                                                                                                                                                            | Browser-side device keys, structural validation and RFC 8785/ES256 signing of OpenConditions situation and observation claims, and signed votes on records for crowd reports.                                                                                                                            |
 | `@openmapx/transitous-core`                                                                                                                                                                                                                                          | Shared Transitous catalog normalization and feed-selection logic used by the CLI, API, and data pipeline.                                                                                                                                                                                                |
-| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and the workspace fetch runtime used by generated API clients.                       |
+| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities: stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and the workspace fetch runtime used by generated API clients.                        |
 
 ## Runtime topology
 
-A deployment is a set of Docker containers on one private network. The
+A deployment connects selected Docker containers through the generated network
+configuration. Community services have a separate network boundary and receive
+only the access declared by reviewed service contracts. The
 [overview diagram](../overview/how-it-works.md#a-deployment-at-a-glance) shows
 the shape; here is what each tier is actually doing.
 
+<div className="docs-diagram" style={{"--diagram-min-width": "118rem"}} tabIndex={0} role="region" aria-label="Runtime topology diagram">
+
 ```mermaid
 graph TD
+    accTitle: Runtime topology
+    accDescr: Traefik routes requests to application services. The API uses integration registries, domain orchestrators, local engines and infrastructure; typed operations isolate host authority in the ops-agent.
     Internet((Internet)) -->|443| Traefik["traefik · TLS termination"]
 
     Traefik -->|/| Web["app-web · Next.js"]
@@ -140,17 +158,17 @@ graph TD
     DM -.->|OSM · fonts · promoted MOTIS datasets| Engines
 ```
 
-**The reverse proxy.** [Traefik](https://traefik.io/) terminates TLS and is the
-only container with a public surface. Every other container is reachable _only_
-on the internal `openmapx` Docker network, addressed by service id
-(`http://valhalla:8002`, `http://nominatim:8080`). A service becomes
-externally reachable only if its manifest opts in — either with a Traefik route
-(`exposure.proxy`) or a host-port binding (`exposure.hostPorts`, which defaults
-to loopback). Routing precedence is path-based: `app-web` claims `/` at the
-lowest priority so that more specific prefixes — `/api`, `/tiles`, `/martin`,
-`/.well-known` — win.
+</div>
 
-**The always-on core.** A handful of services are selected by default —
+Traefik terminates TLS for the bundled proxy deployment. An operator can
+configure an external proxy instead. Containers address bound services by
+service ID, for example `http://valhalla:8002`. A manifest can expose a proxy
+route through `exposure.proxy` or bind a host port through `exposure.hostPorts`
+(loopback by default). Inspect those declarations when reviewing network access.
+`app-web` claims `/` at the lowest proxy priority; more specific routes such as
+`/api`, `/tiles`, `/martin`, and `/.well-known` take precedence.
+
+**The always-on core.** A handful of services are selected by default:
 `traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, `data-manager`,
 and `ops-agent`. Everything heavy (routing engines, geocoders, transit engines,
 the Overpass server, tile servers) is opt-in: you add it to the _selection_ and
@@ -168,29 +186,55 @@ bounded structured audit fields. It is reachable solely on the private
 `openmapx` network.
 
 `ops-agent` is the sole owner of the Docker socket and trusted repository write
-mounts, including the community service checkouts under `services/.community/`. `app-api` and `data-manager` submit typed operations instead of receiving
-that host authority themselves. A process cannot recreate its own container, so
+mounts, including its stores of community service checkouts and installed
+integrations. `app-api` and `data-manager` submit typed operations instead of receiving
+that host authority themselves. The agent's own state (job journal, self-update
+handoff record, trusted-configuration queue and privacy-extraction scratch) lives
+in `infra/docker/state/ops-agent/`, outside the data directory data-manager
+mounts; `app-api` mounts only the queue and, read-only, the integration store,
+and `pnpm check-ops-authority` keeps it that way. `app-api` reads the release and active Transitous pins through the
+read-only `transitousPin.inspect` operation. The proposal and every change stay
+`data-manager`'s operations, which the admin panel's bump goes through. The built-in service manifests the agent and its
+fixed CLI render come from the agent's own image, not from the host checkout.
+A process cannot recreate its own container, so
 to update itself the agent starts a short-lived helper container from its own
-image. The helper has only the socket and checkout mounts, no network and no
-capabilities. It replaces the agent container, verifies the new agent and exits. Traefik consumes generated configuration rather
+image. The helper has only the socket and the agent's own mounts at the
+checkout's path, no network and no capabilities. It replaces the agent
+container from the applied generation, verifies the new agent and exits.
+
+The agent works under two mount layouts, both at the same host paths, because
+Compose's bind sources must resolve the same inside and outside it. Its
+manifest mounts only `infra/docker` read-only (for `.env`, through the
+directory so an editor's atomic save is seen, and the overrides) and
+`infra/docker/state`, `data`, `secrets` and `backups` read-write. Everything
+the agent needs comes from its image and its state. Until a render on the
+host has found nothing missing for that, the renderer gives the agent the
+whole checkout in their place, the layout of earlier releases; only a host
+render moves it, and every render by the agent keeps the layout it runs with
+(`packages/core/src/services/agent-mounts.ts`). It tells the layouts apart by one test, whether the
+checkout's `services` directory is there, and logs which it has when it
+starts. Without the checkout, a one-time step only a checkout allows (the
+import of service file edits, the copy of the stores and of the Transitous
+API keys) is refused or waits, and says that `pnpm openmapx compose render`
+on the host does it. It is never recorded as done. CI runs the agent's image
+under both layouts (`test (ops-agent image, both mount layouts)`). Traefik consumes generated configuration rather
 than discovering containers through the Docker socket, so there is no duplicate
 host-control path outside the broker.
 
-**`app-api` as integration host.** This is the architectural center. The Fastify
-process is one container, but it wears several hats at once:
+`app-api` runs the integration host alongside core routes, service discovery,
+and asynchronous jobs:
 
-- Static routes registered directly on Fastify — `/health`, `/api/places`,
+- Static routes registered directly on Fastify: `/health`, `/api/places`,
   `/api/isochrone`, `/api/tiles/*`, `/api/admin/*`, and so on.
 - The **integration host**, which loads every trusted built-in integration's `setup(ctx)` and
   exposes their HTTP routes through a single dispatcher (more on this below).
 - The **service registry**, which validates `service.json` manifests and answers
   "what's installed, what does it provide, what URL is it on."
-- The **job runner**, which executes long operations off the request path —
-  `service.start` / `stop` / `restart`, data downloads and refreshes, community
-  store installs — and reports progress the admin UI can poll.
+- The job runner executes service lifecycle operations, data preparation, and
+  community installs off the request path. The admin UI polls its progress.
 
-A global `onRequest` hook applies tiered, IP-keyed rate limits before any route
-runs, and admin routes carry a `requireAdmin` preHandler on top. Fastify trusts
+A global `onRequest` hook applies tiered, IP-keyed rate limits. Admin route
+scopes also enforce administrator authorization through their runtime guards. Fastify trusts
 forwarding headers only when the socket peer belongs to an explicitly configured
 proxy IP/CIDR range, so limiters and the audit log see the real client IP without
 accepting headers from a directly connected client. The loopback admin
@@ -200,23 +244,27 @@ short-circuit deliberately reads the raw socket address, so a forged
 **The data plane behind the engines.** The `data-manager` service owns the
 `/data` tree. It downloads OSM extracts and map glyphs, and runs the
 transactional Transitous/operator-source pipeline that imports candidate static
-schedules into an inactive MOTIS slot. MOTIS is the only compiled static
-schedule runtime. The data-manager promotes a complete candidate only after its
+schedules into an inactive MOTIS slot. OTP remains a separately configured
+regional transit alternative with its own graph build. The data-manager
+promotes a complete MOTIS candidate only after its
 functional probes pass, so requested and active source state may differ and a
 failed job preserves the prior live dataset. Shared artifacts are _hardlinked_
-into consumer directories so several engines can use one multi-gigabyte file at
-zero disk cost. The compose renderer plans those links from each service's
+into consumer directories so several engines can use one multi-gigabyte file without another full copy on the same filesystem. The compose renderer plans those links from each service's
 `consumes:`/`produces:` declarations; `data-manager` applies the plan. See
 [Managing services](../install/managing-services.md) for the operator workflow.
 
 ## The capability model
 
 Services and integrations never name each other directly when they can avoid it.
-Instead they meet through **capabilities** — free-form strings like
+Instead they meet through **capabilities**: free-form strings like
 `routing-engine`, `geocoder`, `transit-engine`, `tile-server`, `osm-query`.
+
+<div className="docs-diagram" style={{"--diagram-min-width": "72rem"}} tabIndex={0} role="region" aria-label="Capability binding diagram">
 
 ```mermaid
 graph LR
+    accTitle: Capability binding
+    accDescr: The routing integration requires a routing-engine capability. An operator binding selects Valhalla or OSRM as the service that supplies it.
     subgraph I["Integration (requires)"]
       R["routing orchestrator<br/>requires: capability routing-engine"]
     end
@@ -230,6 +278,8 @@ graph LR
     B -.->|or| O
 ```
 
+</div>
+
 - A **service** declares what it offers with `provides: [...]`.
 - An **integration** declares what it needs with `requires: [...]`, either by
   capability (`{ "capability": "geocoder" }`) or by a specific service id
@@ -241,17 +291,16 @@ graph LR
   integration's own public-API fallback (for example, the routing orchestrator
   reaches the public Valhalla endpoint when no local router is bound).
 
-This indirection is the project's central design choice. Swapping Valhalla for
-OSRM, or Photon for Pelias, is a deployment decision an administrator makes — not
-a code change a developer ships.
+Operators select a service that implements the required capability without
+changing the consumer. Provider-specific capability limits and configuration
+still apply.
 
 ### Domains and orchestrators
 
-Every integration registers into one or more **domains** — `geocoding`,
+Every integration registers into one or more **domains**: `geocoding`,
 `routing`, `transit`, `live-transit`, `data-source`, `poi-search`, `search-suggestions`, `photos`,
 `reviews`, `weather`, `knowledge`, `map-overlay`, `street-level-imagery`,
-`road-conditions`, `gtfs-catalog`. Each domain has
-a dedicated **orchestrator integration** (`integrations/geocoding/`,
+`road-conditions`, `gtfs-catalog`. Domains with multiple providers use an **orchestrator integration** (`integrations/geocoding/`,
 `integrations/routing/`, `integrations/transit/`, and so on) that owns the
 domain's public API routes and a registry of providers. Provider integrations
 declare a dependency on their orchestrator, so the host's topological sort always
@@ -262,7 +311,7 @@ domain: geocoding and weather run a **fallback chain** (first non-empty wins);
 data-source, photos, reviews, and poi-search **merge everything**; transit
 **fans out and deduplicates** across providers matched by coverage box and
 prefix; map overlays are **independent layers**. The transit orchestrator is the
-most involved — it routes id-bearing requests by provider prefix (`bvg:`, `mo:`,
+most involved: it routes id-bearing requests by provider prefix (`bvg:`, `mo:`,
 `g-<slug>:`), waterfalls trip-planning by priority, fans stops and alerts out in
 parallel, and deduplicates overlapping results.
 
@@ -300,56 +349,68 @@ a Wikidata SPARQL endpoint (CC0) instead of a PBF.
 When `apps/api` boots, the host runs the same sequence it re-runs on every hot
 reload:
 
+<div className="docs-diagram" style={{"--diagram-min-width": "84rem"}} tabIndex={0} role="region" aria-label="Integration host lifecycle diagram">
+
 ```mermaid
 graph LR
+    accTitle: Integration host lifecycle
+    accDescr: The host discovers and validates manifests, sorts dependencies, resolves configuration and services, calls setup, and seeds health state.
     D[Discover] --> V[Validate] --> T[Topological sort] --> C[Resolve config]
     C --> Rq[Resolve requires] --> Su["setup(ctx)"] --> H[Seed health]
 ```
 
-1. **Discover** — scan `integrations/` and `custom_integrations/` for
-   `manifest.json`.
-2. **Validate** — the Zod manifest schema plus business rules; a failing
-   manifest is skipped with a warning, never crashing the host.
-3. **Topological sort** — order by each manifest's `dependencies:` so
+</div>
+
+1. Discover: scan `integrations/` and the installed integrations (mounted at
+   `custom_integrations/`) for `manifest.json`.
+2. Validate: apply the manifest schema and business rules. Invalid manifests
+   are skipped with a warning. Required host configuration can still fail
+   startup, including a missing `OPENMAPX_SECRETS_KEY` for discovered
+   integrations that declare vault-backed secrets.
+3. Topological sort: order by each manifest's `dependencies:` so
    orchestrators load before their providers.
-4. **Resolve config** — a five-layer cascade, highest wins: environment variable
+4. Resolve config: a five-layer cascade, highest wins: environment variable
    → local `config.json` → encrypted vault → database (admin UI) → schema
    default.
-5. **Resolve `requires:`** — match each integration's requirements against the
+5. Resolve `requires:`: match each integration's requirements against the
    service registry and the capability bindings.
-6. **`setup(ctx)`** — call every enabled built-in integration with a rich
+6. `setup(ctx)`: call every enabled built-in integration with a rich
    `IntegrationContext`. Through `ctx`, an integration registers providers
    (`ctx.registerTransitProvider`, `ctx.registerMobilityDataSource`,
    `ctx.registerProvider(domain, …)` for the rest), mounts HTTP routes
    (`ctx.registerRoute`), and reaches its cache, logger, secrets, and bound
    services.
-7. **Seed health** — an initial health sweep runs ~5 s after startup and repeats
+7. Seed health: an initial health sweep runs ~5 s after startup and repeats
    every 60 s, populating the per-integration health the admin panel surfaces.
 
 Integration HTTP routes are not registered as individual Fastify routes. They go
-into one in-memory table that a single catch-all dispatcher consults, so
-`POST /api/integrations/reload` can genuinely replace the routing table without
-restarting the process — re-discovering manifests, re-resolving bindings, and
-re-running `setup()` live.
+into one in-memory table that a single catch-all dispatcher consults, so a host reload can replace that table, rediscover manifests, resolve
+bindings, and rerun setup without restarting the API.
+`POST /api/integrations/reload` is registered only outside production;
+production administration uses the authenticated integration lifecycle operations.
 
 :::note[Production vs. development reload]
-In development the host mtime-busts backend module URLs so in-place edits reload.
-In production, Node's ESM loader caches modules permanently, so updating an
-already-loaded community integration requires
-`pnpm openmapx services restart app-api`. Brand-new installs reload without a
-restart.
+The host adds the backend entry file's mtime and size to its import URL in both
+development and production. A changed entry can reload; unchanged entries reuse
+Node's cached module. This does not invalidate unchanged URLs for transitive
+imports. Restart `app-api` after changing already-loaded built-in code when a
+reload cannot replace the complete module graph. Installed declarative artifacts
+have their own reload lifecycle and do not execute a `setup()` module in the host.
 :::
 
 ## The mobility data plane
 
-Transit, shared-mobility, parking, fuel, and EV-charging are data-heavy domains
-with messy upstream formats and strict attribution obligations. Rather than let
-each provider improvise, OpenMapX routes all of it through three packages, in a
-fixed order. The separation is the point: each layer has one job, and nothing
-below it knows about anything above it.
+Transit, shared mobility, parking, fuel, and EV charging use shared parsers,
+canonical models, and typed provider contracts. Parsers
+decode bytes; models define results and policy; integrations acquire and serve
+evidence. Keep I/O and provider policy out of the parser layer.
+
+<div className="docs-diagram" style={{"--diagram-min-width": "24rem"}} tabIndex={0} role="region" aria-label="Mobility data flow diagram">
 
 ```mermaid
 graph TD
+    accTitle: Mobility data flow
+    accDescr: Raw feed bytes enter pure format parsers, then canonical mobility models, then typed integration providers, and finally domain orchestrators, API and web views.
     Bytes[/"raw bytes from a feed or API"/] --> F
     subgraph F["1 · @openmapx/mobility-formats"]
       F1["pure parsers: GTFS · GTFS-RT · GBFS · GOFS<br/>SIRI · OJP · CSV<br/>no I/O · no policy"]
@@ -365,16 +426,18 @@ graph TD
     INT -->|merged result| Orc["domain orchestrator → API → web"]
 ```
 
-**Layer 1 — formats (`@openmapx/mobility-formats`).** Stateless functions over
+</div>
+
+**Layer 1: formats (`@openmapx/mobility-formats`).** Stateless functions over
 bytes. `parseGtfsRealtime(bytes)` returns a typed feed message;
 `parseSiri(xml)` decodes the envelope and a `siri-transit` companion normalizes
-it toward the canonical model. No network, no caching, no policy — pure
-`bytes → typed rows`, which makes this layer trivially testable and reusable by
-request-path providers and off-request validation pipelines. TOMP lives in the
+it toward the canonical model. These functions perform no network I/O or caching
+and apply no provider policy. Request-path providers and offline validators can
+reuse the same byte-to-row decoding. TOMP lives in the
 sibling `mobility-formats-tomp` package only because its OpenAPI codegen pulls in
 heavy dependencies that shouldn't ride along with the lean parsers.
 
-**Layer 2 — canonical model (`@openmapx/mobility-core`).** One TypeScript type
+**Layer 2: canonical model (`@openmapx/mobility-core`).** One TypeScript type
 per domain entity (transit, shared-mobility, parking, fuel, EV-charging), one
 `Attribution` shape, one `Freshness` envelope, and one wrapper that every
 provider returns:
@@ -388,16 +451,17 @@ interface MobilityResult<T> {
 ```
 
 Because `Attribution` and `Freshness` are defined once, the orchestrator can
-merge attributions from many providers — deduplicated, precedence preserved, so
-the primary contributor renders first — and the UI's attribution strip is always
-correct without per-provider special-casing. The TTL and dedup _policy_ (cache
+merge and deduplicate provider attributions while preserving contributor
+precedence. The UI renders retained sources through shared attribution helpers.
+Providers must still capture the correct receipts, and views must project only
+the items and fields they display. The TTL and dedup _policy_ (cache
 lifetimes per data class, dedup radii, name-similarity thresholds) lives in one
 `policy.ts`, so cache and deduplication behavior is consistent across every
 mobility domain rather than reinvented per integration. This layer also carries
 the GBFS client and station resolver that shared-mobility providers build on.
 
-**Layer 3 — providers (`integrations/*`).** A concrete provider implements one
-of the typed contracts in `@openmapx/integration-framework/src/contracts/` —
+**Layer 3: providers (`integrations/*`).** A concrete provider implements one
+of the typed contracts in `@openmapx/integration-framework/src/contracts/`:
 `TransitProvider` (stops, departures, planning, alerts, with a capability bitmap
 so the orchestrator dispatches by declared capability rather than reflection),
 `RealtimeProvider` (vehicle positions, trip updates, situation feeds), or
@@ -409,21 +473,18 @@ capability, coverage, and current health.
 
 ### Why split it this way
 
-A naive design would have each transit provider parse its own GTFS, define its
-own stop type, and stamp its own attribution. That collapses three concerns —
-_decoding_, _modeling_, and _sourcing_ — into every provider, and they drift.
-The three-layer split forces them apart: a parser bug is fixed once; the
-canonical model means a stop from MOTIS and a stop from a HAFAS endpoint are the
-same shape; and attribution plus freshness are structural, not optional. Adding a
-new transit source is then small — implement one contract, lean on the existing
-parsers and model — which is what keeps the long tail of regional providers
-maintainable.
+A shared parser fixes decoding for all consumers. Canonical models let
+orchestrators combine providers without redefining each entity. Required
+attribution and freshness fields keep those obligations at the provider boundary.
+A new mobility provider should implement the existing contract and reuse the
+shared parsers and model.
 
 The same `MobilityResult<T>` discipline does **not** extend to the non-mobility
 domains (geocoding, routing, weather, reviews, photos, knowledge), which still
-use ad-hoc provider shapes registered through `ctx.registerProvider(domain, …)` —
-there is no comparable canonical cross-domain model for them yet, and the merge
-logic lives entirely in each orchestrator.
+have domain-specific provider contracts registered through
+`ctx.registerProvider(domain, …)`. Their orchestrators own the merge semantics.
+Air quality has a separate canonical evidence/standards model in
+`@openmapx/air-quality`; see the [provider guide](./air-quality-integrations.md).
 
 ### Bulk datasets live in OpenConditions
 
@@ -437,11 +498,11 @@ shape as every other source.
 
 ## Where to go next
 
-- **[Integration system](./integration-system.md)** — the manifest, the
+- [Integration system](./integration-system.md): the manifest, the
   `IntegrationContext`, domains, and config resolution in depth.
-- **[Service manifest](./service-manifest.md)** — the `service.json` schema,
+- [Service manifest](./service-manifest.md): the `service.json` schema,
   capabilities, exposure, and data sharing.
-- **[Writing an integration](./writing-an-integration.md)** — build a provider
+- [Writing an integration](./writing-an-integration.md): build a provider
   end to end.
-- **[CLI reference](./cli-reference.md)** — every `openmapx` command.
-- **[Development setup](./development-setup.md)** — run the stack locally.
+- [CLI reference](./cli-reference.md): every `openmapx` command.
+- [Development setup](./development-setup.md): run the stack locally.

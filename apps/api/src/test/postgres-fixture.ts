@@ -11,7 +11,7 @@ import * as schema from "../db/schema";
 /** Never consumes DATABASE_URL: all migrations and requests use a disposable database. */
 export async function createMigratedPostgresFixture(options: { throughMigration?: number } = {}) {
   const container = await new PostgreSqlContainer(
-    "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8",
+    "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
   )
     .withDatabase("openmapx_test")
     .withUsername("postgres")

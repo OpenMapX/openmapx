@@ -9,5 +9,5 @@ export function PlacePanelContent() {
 
   if (!place) return null;
 
-  return <PlaceDetailContent place={place} isLoading={isLoading} clearSearchBar />;
+  return <PlaceDetailContent place={place} isLoading={isLoading} />;
 }

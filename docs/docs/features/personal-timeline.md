@@ -6,7 +6,7 @@ sidebar_position: 18
 
 # Personal timeline
 
-Personal Timeline adds an opt-in **Your timeline** view to OpenMapX. It reads one
+Open **Your timeline** from the main menu after connecting Dawarich. It reads one
 day at a time from [Dawarich](https://dawarich.app/) and presents visits,
 journeys, summary values, bounds, and available track geometry on the OpenMapX
 map. OpenMapX does not track, import, edit, or delete locations through this
@@ -26,8 +26,8 @@ Google Takeout imports, see [Self-hosting location history (Dawarich)](../guides
 2. Choose **External instance**.
 3. Enter the instance's public HTTPS origin, for example
    `https://timeline.example.org`. Paths, credentials, query strings, fragments,
-   plain HTTP, and private-network targets are rejected unless the OpenMapX
-   operator explicitly allowlists that private hostname.
+   and plain HTTP are rejected. Private-network targets additionally require an
+   explicit operator allowlist for that hostname.
 4. In Dawarich, open **Account settings** at `/users/edit`, create or copy your
    personal API key, and paste it into OpenMapX.
 5. Select **Connect**. OpenMapX checks the current-user, settings, and timeline
@@ -51,7 +51,7 @@ The two credentials have different jobs:
   email. Dawarich maintains a separate browser session; signing out of OpenMapX
   is not single logout.
 - The personal Dawarich API key authorizes OpenMapX's server-side, read-only API
-  calls. Dawarich 1.15.3 does not let the OIDC browser session or Better Auth
+  calls. Dawarich 1.19.0 does not let the OIDC browser session or Better Auth
   token replace this key.
 
 If a pre-existing Dawarich account has the same email, Dawarich requires its
@@ -112,14 +112,6 @@ deletes data held by Dawarich. Use the direct Dawarich account settings and the
 instance operator's deletion/export processes for that data. A managed service
 disable preserves volumes; purge is a separate, explicitly confirmed operator
 operation.
-
-## Future authorization
-
-The manual API-key step is a versioned v1 boundary. If a future supported
-Dawarich release exposes OAuth/JWT authorization for these read endpoints,
-OpenMapX can add a deliberate migration and reauthorization flow. It will not
-infer API authorization from a browser session or silently change existing
-credentials.
 
 Operators should also read [Self-hosting location history (Dawarich)](../guides/dawarich.md)
 for provisioning, DNS/TLS, health, backup, restore, release, and purge controls.

@@ -1,7 +1,34 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
+export {
+  type AgentMountLayout,
+  generationAgentMountLayout,
+  runningAgentMountLayout,
+} from "./agent-mounts";
+export {
+  type AgentStatePaths,
+  agentStatePaths,
+  legacyAgentStatePaths,
+  prepareAgentStateDirectories,
+} from "./agent-state";
+export {
+  AGENT_STORES_NOT_COPIED,
+  type AgentStoreCopyReport,
+  type AgentStoresMigration,
+  agentStoresLeftBehind,
+  describeAgentStoresMigration,
+  legacyAgentStorePaths,
+  prepareAgentStores,
+  readAgentStoresMigration,
+} from "./agent-stores";
 export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
 export { backupRetentionExpiry } from "./backup-retention";
 export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
+export {
+  type BuiltInManifestSource,
+  type BuiltInServiceManifestSource,
+  checkoutBuiltInIntegrationManifests,
+  checkoutBuiltInServiceManifests,
+} from "./built-in-service-source";
 export {
   type CapabilityCheck,
   type CapabilityKind,
@@ -12,7 +39,37 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export {
+  type CheckoutDifference,
+  checkoutDifferencesFromRelease,
+  describeCheckoutDifferences,
+} from "./checkout-differences";
+export {
+  CheckoutRequiredError,
+  checkoutMounted,
+  checkoutMountedAt,
+  describeMountLayout,
+} from "./checkout-layout";
 export { communityServiceManifestProblems } from "./community-manifest";
+export {
+  COMMUNITY_RECORD_VERSION,
+  type CommunityRepositoryPending,
+  type CommunityRepositoryRecord,
+  type CommunityRepositoryRecovery,
+  type CommunityRepositorySource,
+  CommunityServiceRecordsError,
+  communityRecordFileName,
+  communityRecordRepository,
+  type LoadRecordedCommunityServicesOptions,
+  loadRecordedCommunityServices,
+  manifestSha256,
+  parseCommunityRepositoryRecord,
+  type RecordedManifest,
+  readCommunityRepositoryRecord,
+  type VerifiedCommunityService,
+  verifyRecordedRepository,
+} from "./community-repository-records";
+export { type ComposePsEntry, ComposePsFormatError, parseComposePsJson } from "./compose-ps";
 export {
   type ComposeServiceSnippet,
   GENERATED_SECRETS_DIRNAME,
@@ -30,6 +87,7 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  appliedServiceFile,
   assertConfigurationGenerationWriter,
   type CommitConfigurationOptions,
   type CommittedConfiguration,
@@ -39,9 +97,11 @@ export {
   commitConfigurationGeneration,
   configurationGenerationComposeFile,
   configurationGenerationWriterCommit,
+  configurationMigrationPending,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
+  migrateLegacyServiceSelection,
   type RenderConfigurationOptions,
   readAppliedComposeServiceIds,
   readAppliedConfiguration,
@@ -55,9 +115,18 @@ export {
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
 export {
+  acquireConfigurationOwnership,
+  legacyConfigurationWriterActive,
+  retireLegacyConfigurationWriter,
+} from "./configuration-ownership";
+export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
 } from "./configuration-schema";
+export {
+  type ContainerBindMounts,
+  readContainerBindMounts,
+} from "./container-mounts";
 export { coordinatorPullReferenceIdentity } from "./coordinator-pull-reference";
 export {
   composeCreationDependencyIds,
@@ -76,16 +145,25 @@ export {
   validateDataManagerBaseUrl,
 } from "./data-manager/transport";
 export {
+  assertDeploymentEnvironmentFile,
+  CONFIGURATION_DIRECTORY,
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
   configurationGenerationBasePath,
   currentConfigurationFile,
   type DesiredSelection,
   type DesiredSelectionSource,
+  deploymentEnvironmentFileProblem,
+  deploymentUserEnvironmentProblem,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
+  LEGACY_CONFIGURATION_GENERATIONS,
+  LEGACY_CURRENT_CONFIGURATION,
+  LEGACY_SERVICE_SELECTION_FILE,
   loadIntegrationSchemas,
+  ownedStateFilePresent,
   readDesiredSelection,
+  readOwnedStateFile,
   readServiceSelectionFile,
   SERVICE_SELECTION_FILE,
   STACK_PROJECT,
@@ -95,11 +173,27 @@ export {
   writeServiceSelectionFile,
 } from "./deployment";
 export {
+  assertRunningAsDeploymentUser,
+  checkoutOwner,
+  type DeploymentUser,
+  DeploymentUserError,
+  ensureDeploymentUser,
+  missingDeploymentUserProblem,
+  readDeploymentUser,
+  readDeploymentUserAssignments,
+} from "./deployment-user";
+export {
+  embeddedBuiltInIntegrationManifests,
+  embeddedBuiltInServiceManifests,
+} from "./embedded-built-in-services";
+export {
+  canonicalExtensionLocator,
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
   type ExtensionManifest,
   type ExtensionServiceComponent,
   extensionComponentSummary,
+  extensionLocatorSchema,
   extensionManifestSchema,
   type VerifiedCatalogEntry,
   validateExtensionManifest,
@@ -110,6 +204,25 @@ export {
   imageStagePlatform,
   immutableImageStageReference,
 } from "./image-stage";
+export {
+  acceptedManifestDigests,
+  INTEGRATION_RECORD_VERSION,
+  type IntegrationFileDigest,
+  type IntegrationInstallation,
+  type IntegrationPending,
+  type IntegrationRecord,
+  type IntegrationRecordsReading,
+  type IntegrationSource,
+  integrationRecordPath,
+  integrationRecordsDirectory,
+  integrationUploadsDirectory,
+  MAX_RECORDED_FILES,
+  MAX_TOTAL_RECORDED_FILES,
+  parseIntegrationRecord,
+  readIntegrationRecords,
+  safeRelativePath,
+  sha256Hex,
+} from "./integration-records";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
   isSafePostgresIdentifier,
@@ -132,11 +245,13 @@ export {
 export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
+  type BuiltInServiceReadOptions,
+  builtInServiceManifestSource,
   captureReleaseServiceAuthority,
   RELEASE_BUILT_IN_SERVICE_IDS,
   RELEASE_NEVER_MANAGE_SERVICE_IDS,
   type ReleaseServiceAuthorityCapture,
-  type ReleaseServiceAuthorityCaptureHooks,
+  readBuiltInServices,
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
 export {
@@ -178,6 +293,49 @@ export {
 } from "./release-manifest";
 export { clearReleaseComposeSelection } from "./release-selection-clear";
 export {
+  parseReleaseServiceFiles,
+  type ReleaseServiceFile,
+  type ReleaseServiceFiles,
+  readEmbeddedReleaseServiceFiles,
+  releaseServiceFiles,
+  renderedEmbeddedReleaseServiceFiles,
+  ServiceFileError,
+  serializeReleaseServiceFiles,
+  serviceFileReferences,
+} from "./release-service-files";
+export {
+  assertReleaseStateDirectory,
+  ensureReleaseStateDirectories,
+  ensureReleaseStateDirectory,
+  legacyReleaseStatePaths,
+  parseReleasePointer,
+  parseReleaseSelectionReceipts,
+  RELEASE_ID_PATTERN,
+  RELEASE_MANIFEST_FILE_PATTERN,
+  RELEASE_OVERLAY_FILE,
+  RELEASE_STATE_DIRECTORY,
+  RELEASE_STORE_LIMITS,
+  RELEASE_STORE_POINTER_FILES,
+  type ReleasePointer,
+  type ReleaseSelectionReceipts,
+  type ReleaseStateOptions,
+  type ReleaseStatePaths,
+  readReleaseOverlay,
+  readReleaseOverlayFile,
+  readReleaseStateFile,
+  releaseEvidenceReference,
+  releaseStateFileProblem,
+  releaseStatePaths,
+} from "./release-state";
+export {
+  type LegacyReleaseStateMigration,
+  type LegacyReleaseStateMigrationOptions,
+  legacyReleaseStatePending,
+  migrateLegacyReleaseState,
+  releaseSelectionHold,
+  supersedeLegacyReleaseOverlay,
+} from "./release-state-migration";
+export {
   acquireReleaseStoreLock,
   acquireStoreLock,
   RELEASE_STORE_LOCK_NAME,
@@ -216,7 +374,28 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
+export {
+  type CheckoutPosition,
+  checkoutPositionFromHistory,
+  describeDeferredServiceFileImport,
+  describeServiceFileImport,
+  describeWaitingTraefikEdits,
+  importCheckoutServiceFiles,
+  planServiceFileImport,
+  type ServiceFileImport,
+  type ServiceFileImportPlan,
+  serviceFilesImported,
+  waitingTraefikEdits,
+} from "./service-file-import";
+export { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
+export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
 export * from "./service-lifecycle-receipt";
+export { readServiceOverrides, staleOverrides } from "./service-overrides";
+export {
+  LEGACY_TRAEFIK_MOUNT_NOTICE,
+  legacyTraefikDynamicDirectory,
+  TRAEFIK_ROUTES_FILE,
+} from "./traefik-files";
 export {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,
@@ -224,4 +403,18 @@ export {
   type TraefikDynamicConfiguration,
   type TraefikRenderContext,
 } from "./traefik-renderer";
+export {
+  TrustedAuthorityFilesystem,
+  type TrustedAuthorityKind,
+  type TrustedAuthorityReadHooks,
+} from "./trusted-authority-filesystem";
+export {
+  assertTrustedIntegrationDirectory,
+  type IntegrationAuthorityProblem,
+  type LoadTrustedIntegrationSchemasOptions,
+  loadTrustedIntegrationAuthority,
+  loadTrustedIntegrationSchemas,
+  MAX_INTEGRATION_MANIFEST_BYTES,
+  type TrustedIntegrationAuthority,
+} from "./trusted-integration-schemas";
 export * from "./types";

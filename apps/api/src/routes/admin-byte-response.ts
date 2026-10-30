@@ -1,13 +1,13 @@
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
-import type { AdminResponseContract } from "@openmapx/core/api-contracts";
+import type { ApiResponseContract } from "@openmapx/core/api-contracts";
 import type { FastifyReply } from "fastify";
 
-const contracts = new WeakMap<FastifyReply, Record<number, AdminResponseContract>>();
+const contracts = new WeakMap<FastifyReply, Record<number, ApiResponseContract>>();
 const sending = new WeakSet<FastifyReply>();
 export function bindAdminByteResponse(
   reply: FastifyReply,
-  responses: Record<number, AdminResponseContract>,
+  responses: Record<number, ApiResponseContract>,
 ): void {
   contracts.set(reply, responses);
 }

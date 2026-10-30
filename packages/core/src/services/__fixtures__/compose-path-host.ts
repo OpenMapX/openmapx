@@ -1,3 +1,4 @@
+import { ensureReleaseStateDirectories } from "../release-state";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -71,11 +72,12 @@ export async function composePathHost() {
   const stack = {
     infraDir,
     composePath: currentConfigurationFile(infraDir, GENERATED_COMPOSE_FILE),
-    composeReleasePath: join(infraDir, "docker-compose.release.yml"),
+    composeReleasePath: ensureReleaseStateDirectories(infraDir).overlay,
   };
   writeFileSync(
     stack.composeReleasePath,
-    "services:\n  alpha:\n    image: example/alpha:release\n    volumes:\n      - ../overlay-public.txt:/overlay-public:ro\n",
+    "services:\n  alpha:\n    image: example/alpha:release\n    volumes:\n      - ../../../../overlay-public.txt:/overlay-public:ro\n",
+    { mode: 0o600 },
   );
   const dockerConfig = join(root, "docker-config");
   mkdirSync(join(dockerConfig, "cli-plugins"), { recursive: true });

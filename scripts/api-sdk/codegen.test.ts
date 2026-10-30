@@ -193,6 +193,77 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     `,
     );
   }
+  if (virtual.has(resolve(base, "src/api/generated/saved/saved-places.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/saved/saved-consumer.typecheck.ts"),
+      `
+      import { createSavedList, updateSavedList, exportSavedList, createSavedPlace } from "./saved-places.generated";
+      async function savedConsumer() {
+        const result = await createSavedList({name: "Trip"});
+        if (result.status === 200) {
+          const id: string = result.data.id;
+          // @ts-expect-error A creation receipt is not a full saved-list read record.
+          result.data.createdAt;
+        }
+        await updateSavedList("list", {icon: null});
+        const exported = await exportSavedList("list", {format: "gpx"});
+        if (exported.status === 200) { const blob: Blob = exported.data; }
+        await createSavedPlace("list", {name: "Place", lat: 52, lng: 13, fieldContributors: {name: [{sourceId: "x", name: "X"}] as const}});
+        // @ts-expect-error The export selector is closed.
+        exportSavedList("list", {format: "csv"});
+      }
+    `,
+    );
+  }
+  if (virtual.has(resolve(base, "src/api/generated/garage/garage.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/garage/garage-consumer.typecheck.ts"),
+      `
+      import { createGarageVehicle, listGarageVehicles, updateGarageVehicle, updateGarageParking, saveGarageParking } from "./garage.generated";
+      async function garageConsumer() {
+        const created = await createGarageVehicle({ name: "Car", kind: "car", powertrain: "petrol" });
+        if (created.status === 200) {
+          const id: string = created.data.id;
+          // @ts-expect-error A creation receipt has no persisted timestamp.
+          created.data.createdAt;
+          // @ts-expect-error Owning account IDs are not public records.
+          created.data.userId;
+        }
+        const read = await listGarageVehicles();
+        if (read.status === 200) { const at: string = read.data.vehicles[0].createdAt; }
+        await updateGarageVehicle("car / café", { isDefault: false });
+        await saveGarageParking({ lat: 52, lng: 13, source: "manual" });
+        await updateGarageParking("parked", { expiresAt: null });
+        // @ts-expect-error Coordinates are numeric JSON fields.
+        saveGarageParking({ lat: "52", lng: 13, source: "manual" });
+        // @ts-expect-error PATCH cannot silently reassign a parked position.
+        updateGarageParking("parked", { vehicleId: "other" });
+      }
+    `,
+    );
+  }
+  if (virtual.has(resolve(base, "src/api/generated/sharing/sharing.generated.ts"))) {
+    virtual.set(
+      resolve(base, "src/api/generated/sharing/sharing-consumer.typecheck.ts"),
+      `
+      import { createShare, resolvePublicShare, rotateShareToken, revokeShare, listOwnerShares } from "./sharing.generated";
+      async function sharingConsumer() {
+        const created = await createShare({ targetType: "list", targetId: "list", mode: "live" });
+        if (created.status === 201) { const token: string = created.data.token;
+          // @ts-expect-error Token hashes are never wire fields.
+          created.data.share.tokenHash;
+        }
+        const resolved = await resolvePublicShare("A".repeat(43));
+        if (resolved.status === 200 && resolved.data.type === "list") { const lat: number = resolved.data.places[0].lat; }
+        await listOwnerShares(); await rotateShareToken("share / café"); await revokeShare("share");
+        // @ts-expect-error List creation requires a mode.
+        createShare({ targetType: "list", targetId: "list" });
+        // @ts-expect-error Coordinates are numeric.
+        createShare({ targetType: "route", route: {mode: "walking", waypoints: [{lat: "52", lng: 13}, {lat: 53, lng: 14}]} });
+      }
+    `,
+    );
+  }
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host),
     read = host.readFile.bind(host),
@@ -208,7 +279,21 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       ? ts.createSourceFile(path, virtual.get(path), language, true)
       : source(path, language, ...rest);
   return ts
-    .getPreEmitDiagnostics(ts.createProgram([filename], options, host))
+    .getPreEmitDiagnostics(
+      ts.createProgram(
+        [
+          filename,
+          ...Array.from(virtual.keys()).filter(
+            (file) =>
+              file.endsWith("/saved-consumer.typecheck.ts") ||
+              file.endsWith("/garage-consumer.typecheck.ts") ||
+              file.endsWith("/sharing-consumer.typecheck.ts"),
+          ),
+        ],
+        options,
+        host,
+      ),
+    )
     .map((diagnostic: { messageText: unknown }) =>
       ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
     );
@@ -480,7 +565,11 @@ describe("SDK artifact gate", () => {
     expect(bindings).toContain('bindAdminOperation("getApiDataManagerTransitState")');
     expect(bindings).not.toContain("/api/");
     const metadata = first.filter(
-      (file: { filename: string }) => !file.filename.startsWith("admin/"),
+      (file: { filename: string }) =>
+        !file.filename.startsWith("admin/") &&
+        !file.filename.startsWith("saved/") &&
+        !file.filename.startsWith("garage/") &&
+        !file.filename.startsWith("sharing/"),
     );
     expect(metadata).toHaveLength(6);
     for (const file of metadata)

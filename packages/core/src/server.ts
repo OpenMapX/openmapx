@@ -48,6 +48,14 @@ export {
 } from "./posix-process-group";
 // Repo path resolution (shared by CLI + apps/api runtime code)
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
+export {
+  RollingStreamBudget,
+  type RollingStreamBudgetAdmission,
+  type RollingStreamBudgetLease,
+  type RollingStreamBudgetOptions,
+  type RollingStreamBudgetRejection,
+  type RollingStreamBudgetRejectionReason,
+} from "./rolling-stream-budget";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
 export type { DataManagerCoverageEvidencePage } from "./services/data-manager/contracts";

@@ -37,7 +37,8 @@ const opsClient = {};
 
 vi.mock("@openmapx/core/server", () => ({
   repoPaths: () => ({
-    composePath: "/repo/.trusted-config-current/docker-compose.generated.yml",
+    composePath:
+      "/repo/infra/docker/state/ops-agent/configuration/current/docker-compose.generated.yml",
   }),
 }));
 
@@ -50,6 +51,7 @@ vi.mock("../../utils/audit-log", () => ({
 }));
 vi.mock("../../utils/rate-limit", () => ({
   systemMaintenanceLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
+  systemUpdateCheckLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock("../../services/ops-client", () => ({
   createApiOpsClient: () => opsClient,

@@ -114,24 +114,6 @@ function resolveDateTime(departureTime?: string): { date: string; time: string }
   };
 }
 
-/**
- * The self-hosted MOTIS endpoint, if the deployment has one: the co-deployed
- * service, the integration's `endpoint` config, or `MOTIS_URL`. Undefined
- * without one; transit then runs on Transitous directly (see cloud.ts).
- */
-export function resolveLocalMotisUrl(
-  serviceUrl: unknown,
-  configuredEndpoint: unknown,
-  environmentUrl: unknown,
-): string | undefined {
-  return [serviceUrl, configuredEndpoint, environmentUrl]
-    .find(
-      (candidate): candidate is string =>
-        typeof candidate === "string" && candidate.trim().length > 0,
-    )
-    ?.trim();
-}
-
 async function planWithInstance(
   instance: MotisInstance,
   params: TripPlanRequest,

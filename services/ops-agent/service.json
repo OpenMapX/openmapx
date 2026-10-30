@@ -15,7 +15,7 @@
     "image": "ghcr.io/openmapx/ops-agent",
     "tag": "main",
     "expose": [4300],
-    "user": "${UID:-1000}:${GID:-1000}",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "environment": {
       "HOME": "/home/node",
       "HOST": "0.0.0.0",
@@ -56,12 +56,12 @@
   },
   "bindMounts": [
     {
-      "source": "@infra:data/ops-agent/trusted-config",
+      "source": "@infra:state/ops-agent/trusted-config",
       "target": "/var/lib/openmapx/trusted-config",
       "readOnly": false
     },
     {
-      "source": "@infra:data/privacy-extraction",
+      "source": "@infra:state/ops-agent/privacy-extraction",
       "target": "/var/lib/openmapx/privacy-extraction",
       "readOnly": false
     },
@@ -86,8 +86,28 @@
       "readOnly": false
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}",
-      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker",
+      "readOnly": true
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
       "readOnly": false
     },
     {

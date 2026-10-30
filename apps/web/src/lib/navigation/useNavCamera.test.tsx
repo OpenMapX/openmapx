@@ -25,6 +25,7 @@ vi.mock("maplibre-gl", () => {
   const markers: unknown[] = [];
   class FakeMarker {
     element: HTMLElement;
+    options: Record<string, unknown>;
     map: unknown = null;
     lngLat: [number, number] = [0, 0];
     rotation = 0;
@@ -36,6 +37,7 @@ vi.mock("maplibre-gl", () => {
 
     constructor(options: { element: HTMLElement }) {
       this.element = options.element;
+      this.options = options;
       markers.push(this);
     }
 
@@ -83,6 +85,7 @@ import { CAMERA_ZOOM_EPSILON } from "./navCameraScheduler";
 import { useNavCamera } from "./useNavCamera";
 
 interface MarkerRecord {
+  options: Record<string, unknown>;
   map: unknown;
   lngLat: [number, number];
   rotation: number;
@@ -727,6 +730,13 @@ describe("useNavCamera lifecycle", () => {
     frames.flush(60, FRAME_MS);
 
     expect(markerTest.markers[0]?.addToCount ?? 0).toBe(0);
+  });
+
+  it("positions the puck at subpixel precision so it can't flicker against the camera", async () => {
+    // MapLibre otherwise rounds a marker to whole pixels on every update except
+    // `move`, so a puck centred on a half pixel alternates between neighbours.
+    const { marker } = await mountNavCamera();
+    expect(marker().options.subpixelPositioning).toBe(true);
   });
 
   it("fades the puck element while coasting", async () => {

@@ -204,6 +204,15 @@
       },
       "additionalProperties": {}
     },
+    "endpointConfigKeys": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "healthCheck": {
       "anyOf": [
         {
@@ -284,6 +293,11 @@
           }
         }
       ]
+    },
+    "healthCheckIntervalMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "maximum": 9007199254740991
     },
     "quality": {
       "type": "string",

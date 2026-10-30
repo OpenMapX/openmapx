@@ -137,7 +137,8 @@ describe("release atomic replacement", () => {
           fs.constants.O_CREAT |
             fs.constants.O_EXCL |
             fs.constants.O_WRONLY |
-            fs.constants.O_NOFOLLOW,
+            fs.constants.O_NOFOLLOW |
+            fs.constants.O_NONBLOCK,
         );
         expect(mode).toBe(0o600);
         if (kind === "file") real.writeFileSync(file, "foreign");
@@ -243,7 +244,10 @@ describe("release directory syncing", () => {
     fsyncDirectory(root);
     expect(fs.openSync).toHaveBeenCalledWith(
       root,
-      fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+      fs.constants.O_RDONLY |
+        fs.constants.O_DIRECTORY |
+        fs.constants.O_NOFOLLOW |
+        fs.constants.O_NONBLOCK,
     );
     const link = join(root, "link");
     real.symlinkSync(root, link);

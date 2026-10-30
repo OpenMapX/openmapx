@@ -232,6 +232,7 @@ describe("alerts", () => {
         declarations: [{ text: "LicenseRef-OD-HR" }],
       },
       attributionText: DGU,
+      modified: true,
     };
     expect(croatia!.contributors).toContainEqual(credit);
     expect(croatia!.attributions).toContainEqual(credit);

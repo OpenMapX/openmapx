@@ -324,8 +324,9 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
         }).toString(),
       });
     const wrongVerifier = await exchange(code ?? "", `${verifier}-wrong`);
-    expect(wrongVerifier.statusCode, wrongVerifier.body).toBe(401);
-    expect(wrongVerifier.json()).toMatchObject({ error: "invalid_request" });
+    // RFC 7636 section 4.6: a verifier that does not match is an invalid grant.
+    expect(wrongVerifier.statusCode, wrongVerifier.body).toBe(400);
+    expect(wrongVerifier.json()).toMatchObject({ error: "invalid_grant" });
     expect(
       await fixture.db
         .select()

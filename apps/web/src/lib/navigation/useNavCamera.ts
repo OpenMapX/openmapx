@@ -259,6 +259,10 @@ export function useNavCamera(): void {
           element: el,
           anchor: "center",
           rotationAlignment: "map",
+          // The follow camera centres the puck, often on a half pixel. MapLibre's
+          // default whole-pixel rounding would flip it between neighbouring pixels
+          // on every sub-pixel GPS drift, so it would tremble even at a standstill.
+          subpixelPositioning: true,
         }).setLngLat([0, 0]);
         // The puck can arrive long after the loop started (or after it went back
         // to sleep waiting for one): wake the frame that will attach it.

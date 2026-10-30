@@ -14,6 +14,11 @@ export const installedIntegration = pgTable(
     // Extension id that owns this integration (installed as part of a bundle).
     // The standalone integration store skips update/remove of managed rows.
     managedByExtension: text("managed_by_extension"),
+    // The operations agent's install transaction this row records. Writing it
+    // commits the install; recovery commits a pending agent transaction only
+    // when it matches. Null for rows written before the agent installed
+    // integrations.
+    lastTransactionId: text("last_transaction_id"),
   },
   (table) => [index("installedIntegration_sourceType_idx").on(table.sourceType)],
 );

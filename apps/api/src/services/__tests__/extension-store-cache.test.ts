@@ -52,14 +52,15 @@ const empty = JSON.stringify({ entries: [], killSwitch: { removed: [], critical:
 async function atomic(_script: string, count: number, ...args: string[]) {
   expect(count).toBe(2);
   const [sources, catalog, sourcePresent, observedSource, ...rest] = args;
-  expect(_script).toBe(rest.length === 1 ? EDIT_EXTENSION_SOURCES : PUBLISH_EXTENSION_CATALOG);
   const matches = (key: string, present: string, value: string) =>
     present === "0" ? !ports.values.has(key) : ports.values.get(key) === value;
   if (!matches(sources, sourcePresent, observedSource)) return 0;
   if (rest.length === 1) {
+    expect(_script).toBe(EDIT_EXTENSION_SOURCES);
     ports.values.delete(catalog);
     ports.values.set(sources, rest[0]);
   } else {
+    expect(_script).toBe(PUBLISH_EXTENSION_CATALOG);
     const [catalogPresent, observedCatalog, next] = rest;
     if (!matches(catalog, catalogPresent, observedCatalog)) return 0;
     ports.values.set(catalog, next);
@@ -77,6 +78,79 @@ beforeEach(() => {
 });
 
 describe("extension source and catalog coherence", () => {
+  it.each([
+    "http://catalog.example.test/catalog.json",
+    "https://catalog.example.test/catalog.json?token=secret",
+  ])("rejects an unsafe configured default source before acquisition: %s", async (url) => {
+    vi.stubEnv("EXTENSION_CATALOG_URL", url);
+    vi.resetModules();
+    try {
+      const isolated = await import("../extension-store");
+      await expect(isolated.getExtensionCatalog(true)).rejects.toBeDefined();
+      expect(ports.fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
+  it("normalizes partial catalog components without losing metadata or requiring a version", async () => {
+    ports.values.set(sourceKey, JSON.stringify([source]));
+    const manifest = "https://MANIFEST.example.test:443/releases/../extension.json";
+    const canonicalManifest = "https://manifest.example.test/extension.json";
+    const emptyManifest = "https://manifest.example.test/empty.json";
+    const item = {
+      id: "partial",
+      name: "Partial",
+      manifest,
+      integrations: [
+        {
+          id: "partial",
+          artifact: "https://ARTIFACTS.example.test:443/releases/../partial.tgz",
+          sha256: "a".repeat(64),
+          metadata: { retained: [1, false, null] },
+        },
+      ],
+      services: [
+        {
+          service: "partial-service",
+          repo: "https://github.com/openmapx/example.git",
+          metadata: { retained: true },
+        },
+      ],
+    };
+    const emptyItem = {
+      id: "empty-components",
+      name: "Empty components",
+      manifest: emptyManifest,
+      services: [],
+      integrations: [],
+      metadata: { retained: "empty" },
+    };
+    ports.fetch.mockImplementation(async (url: string) => {
+      if (url === extraUrl) return [item, emptyItem];
+      if (url === canonicalManifest) return { version: "2.0.0" };
+      if (url === emptyManifest) return { version: "3.0.0" };
+      throw new Error("unexpected fixture URL");
+    });
+
+    await expect(getExtensionCatalog(true)).resolves.toEqual([
+      {
+        ...item,
+        manifest: canonicalManifest,
+        version: "2.0.0",
+        integrations: [
+          {
+            ...item.integrations[0],
+            artifact: "https://artifacts.example.test/partial.tgz",
+          },
+        ],
+        trust: "community",
+      },
+      { ...emptyItem, version: "3.0.0", trust: "community" },
+    ]);
+  });
+
   it("add then ordinary read includes the added source instead of the old cache", async () => {
     ports.values.set(catalogKey, old);
     await addExtensionSource(extraUrl, "Extra");

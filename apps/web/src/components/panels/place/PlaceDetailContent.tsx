@@ -30,6 +30,7 @@ import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDetailChrome } from "../DetailShell";
+import { useSearchBarClearance } from "../searchBarClearance";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
 import { useMobileSheet, useSheetSentinel } from "../sheet/sheetState";
 import { LineDetail } from "../transit/LineDetail";
@@ -52,8 +53,6 @@ interface Props {
   place: Place;
   isLoading: boolean;
   onClose?: () => void;
-  /** Add top padding to the header to clear the floating search bar. True for the full sidebar. */
-  clearSearchBar?: boolean;
 }
 
 // Pinned mobile-sheet header shown once the sheet is fully expanded. Only the
@@ -97,10 +96,11 @@ export function PlaceDetailContent(props: Props) {
   return <PlaceDetailContentInner key={selectionRevision} {...props} />;
 }
 
-function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = false }: Props) {
+function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const locale = useLocale();
+  const searchBarClearance = useSearchBarClearance();
   const { detent, isExpanded, inSheet } = useMobileSheet();
   const { ref: chipsRef, passed: chipsScrolledAway } = useSheetSentinel();
   const { ref: titleRef, passed: titleScrolledAway } = useSheetSentinel();
@@ -243,13 +243,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
 
   // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
-    return (
-      <TripDetailView
-        departure={activeTripDep}
-        onBack={() => setActiveTripDep(null)}
-        clearSearchBar={clearSearchBar}
-      />
-    );
+    return <TripDetailView departure={activeTripDep} onBack={() => setActiveTripDep(null)} />;
   }
 
   if (selectedRoute) {
@@ -259,7 +253,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         routeHint={selectedRoute}
         place={place}
         onBack={() => setSelectedRoute(null)}
-        clearSearchBar={clearSearchBar}
       />
     );
   }
@@ -270,7 +263,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         stopId={activeStopBoard.stopId}
         title={activeStopBoard.title}
         onBack={() => setActiveStopBoard(null)}
-        clearSearchBar={clearSearchBar}
         onDepartureClick={(dep) => setActiveTripDep(dep)}
       />
     );
@@ -284,7 +276,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
           setShowDepartures(false);
           setDeparturesModeFilter(null);
         }}
-        clearSearchBar={clearSearchBar}
         modeFilter={departuresModeFilter}
         onDepartureClick={(dep) => setActiveTripDep(dep)}
       />
@@ -301,7 +292,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             alignItems: "flex-start",
             justifyContent: "space-between",
             px: 2,
-            pt: clearSearchBar ? { xs: 2, sm: "72px" } : 2,
+            pt: searchBarClearance ?? 2,
             pb: 1,
           }}
         >
@@ -375,7 +366,6 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         <PlacePhotoHero
           photos={viableHeroPhotos}
           placeName={place.name}
-          clearSearchBar={clearSearchBar}
           onClose={onClose}
           onViewPhotos={() => setGalleryOpen(true)}
           onPhotoError={(url) =>
@@ -404,7 +394,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         data-omx-peek
         sx={{
           px: 2,
-          pt: clearSearchBar && !showHero ? { xs: 2, sm: "72px" } : 2,
+          pt: (!showHero && searchBarClearance) || 2,
           // In a sheet the action row is the last thing in here and brings its
           // own padding on both sides; adding more below would leave the icons
           // sitting closer to the title above them than to the tabs below.
@@ -419,7 +409,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
             aria-label={tc("close")}
             sx={{
               position: "absolute",
-              top: clearSearchBar ? { xs: 8, sm: "72px" } : 8,
+              top: searchBarClearance ?? 8,
               right: 8,
               bgcolor: "background.paper",
               borderRadius: "50%",
@@ -529,7 +519,8 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         onChange={(_, v: number) => setTab(v)}
         sx={(theme) => ({
           position: "sticky",
-          top: 0,
+          // Stick below the floating search bar, not behind it.
+          top: searchBarClearance ?? 0,
           // Light mode: tabs flush with the panel body (#fff on #fff) —
           // separation is handled by the bottom border below.
           // Dark mode: both the SidebarShell rail AND the floating

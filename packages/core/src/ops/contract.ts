@@ -1,3 +1,7 @@
+import {
+  canonicalExtensionLocator,
+  extensionLocatorSchema,
+} from "@openmapx/extension-contracts/extension";
 import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 import {
   catalogProposalInputSchema,
@@ -117,6 +121,7 @@ export const OPS_OPERATION_KINDS = [
   "configurationMaintenance.settle",
   "configurationHandoff.prepare",
   "configurationHandoff.inspect",
+  "configuration.failure.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
@@ -157,6 +162,12 @@ export const OPS_OPERATION_KINDS = [
   "serviceRepository.settle",
   "serviceRepository.remove",
   "communityServices.inspect",
+  "catalogIntegration.inspect",
+  "catalogIntegration.publish",
+  "catalogIntegration.settle",
+  "catalogIntegration.remove",
+  "catalogIntegration.adopt",
+  "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
   "serviceConfig.apply",
@@ -194,6 +205,7 @@ export const OPS_OPERATION_KINDS = [
   "transitousLock.propose",
   "transitousLock.approve",
   "gbfsCatalogLock.inspect",
+  "transitousPin.inspect",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
@@ -272,6 +284,7 @@ export const OPS_KIND_POLICIES = {
   "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
   "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
   "configurationHandoff.inspect": sync("api", 15_000, 65536),
+  "configuration.failure.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "stack.stop": asyncEffect("api", 5 * 60_000),
@@ -313,6 +326,12 @@ export const OPS_KIND_POLICIES = {
   "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
   "serviceRepository.remove": asyncEffect("api", 5 * 60_000),
   "communityServices.inspect": sync("api", 15_000, 1024 * 1024),
+  "catalogIntegration.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
+  "catalogIntegration.publish": asyncEffect("api", 10 * 60_000),
+  "catalogIntegration.settle": asyncEffect("api", 5 * 60_000),
+  "catalogIntegration.remove": asyncEffect("api", 5 * 60_000),
+  "catalogIntegration.adopt": asyncEffect("api", 10 * 60_000),
+  "installedIntegrations.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
@@ -350,6 +369,8 @@ export const OPS_KIND_POLICIES = {
   "transitousLock.propose": sync("data-manager", 30_000),
   "transitousLock.approve": asyncEffect("data-manager", 120_000, 4096),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
+  // Read-only, for the admin panel: the pins, never a proposal or a change.
+  "transitousPin.inspect": sync("api", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 /** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
@@ -390,8 +411,8 @@ const transitousSubmodulesSchema = z.record(
 );
 const actorLabelSchema = z.string().min(1).max(128);
 
-// Community service repositories. The ops-agent owns their checkouts under
-// `services/.community/<repository>`, where the repository id is the first 16
+// Community service repositories. The ops-agent owns their checkouts in its
+// community store, as `<repository>`, where the repository id is the first 16
 // hex digits of the SHA-256 of the canonical URL.
 const repositoryIdSchema = z.string().regex(/^[a-f0-9]{16}$/);
 const gitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -419,6 +440,25 @@ const repositoryRecoverySchema = z.strictObject({
 // A service manifest as read from a checkout. Its receiver validates it with
 // the service manifest rules; the result size limit bounds it here.
 const serviceManifestObjectSchema = z.record(z.string().max(256), z.unknown());
+
+// Installed integrations. The ops-agent owns `<integration store>/<id>` and
+// records the SHA-256 of every file it installed there.
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const integrationTransactionIdSchema = z.string().regex(/^itx1_[a-f0-9]{24}$/);
+// An HTTPS artifact pinned by its SHA-256, or an archive the operator staged
+// in the agent's state directory, named by its SHA-256.
+export const integrationSourceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("artifact"),
+    url: extensionLocatorSchema.transform(canonicalExtensionLocator),
+    sha256: sha256Schema,
+  }),
+  z.strictObject({ kind: z.literal("upload"), sha256: sha256Schema }),
+]);
+const integrationFileSchema = z.strictObject({
+  path: z.string().min(1).max(1_024),
+  sha256: sha256Schema,
+});
 const transitousLockRecordSchema = z.strictObject({
   ref: transitousRefSchema,
   submodules: transitousSubmodulesSchema,
@@ -473,6 +513,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("configuration.hardlinks.inspect"),
     revisionId: configurationGenerationRevisionSchema,
+  }),
+  // Why a configuration apply was not committed, when the operator can act
+  // on it (an override render may not use), as one line for the admin panel.
+  // A separate operation, so the apply result itself stays as before.
+  z.strictObject({
+    kind: z.literal("configuration.failure.inspect"),
+    attemptedRevisionId: configurationGenerationRevisionSchema,
   }),
   z.strictObject({
     kind: z.literal("stack.start"),
@@ -601,6 +648,43 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     extensionId: serviceIdSchema,
   }),
   kindOnly("communityServices.inspect"),
+  // Fetches an integration archive into staging, validates it and discards it.
+  // Validation problems are part of the result, not a failure.
+  z.strictObject({
+    kind: z.literal("catalogIntegration.inspect"),
+    source: integrationSourceSchema,
+  }),
+  // Installs the archive as `<integration store>/<integrationId>`. The previous
+  // copy is kept until the transaction is settled. Without `extensionId` the
+  // operator installs it (the host CLI). The owner is bookkeeping, not a
+  // boundary: app-api and the fixed CLI share the `api` principal.
+  z.strictObject({
+    kind: z.literal("catalogIntegration.publish"),
+    integrationId: serviceIdSchema,
+    source: integrationSourceSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("catalogIntegration.settle"),
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+  }),
+  z.strictObject({
+    kind: z.literal("catalogIntegration.remove"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+  }),
+  // Records an integration installed before the agent kept records, but only
+  // when its files match `source` fetched again; anything else needs a
+  // reinstall. Without a source nothing can be verified.
+  z.strictObject({
+    kind: z.literal("catalogIntegration.adopt"),
+    integrationId: serviceIdSchema,
+    extensionId: serviceIdSchema.optional(),
+    source: integrationSourceSchema.optional(),
+  }),
+  kindOnly("installedIntegrations.inspect"),
   serviceSelectionApplyOperationSchema,
   kindOnly("serviceSelection.inspect"),
   serviceConfigApplyOperationSchema,
@@ -668,6 +752,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
+  kindOnly("transitousPin.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 export type TrustedConfigurationApplyOperation = Extract<
@@ -1077,6 +1162,10 @@ export const OPS_RESULT_SCHEMAS = {
   "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
   "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
+  "configuration.failure.inspect": z.strictObject({
+    attemptedRevisionId: configurationGenerationRevisionSchema,
+    problem: z.string().min(1).max(4_096).nullable(),
+  }),
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
     platform: platformConfigurationSchema.optional(),
@@ -1274,6 +1363,48 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "catalogIntegration.inspect": z.strictObject({
+    integrationId: serviceIdSchema.nullable(),
+    valid: z.boolean(),
+    problems: z.array(z.string().max(1_024)).max(64),
+    manifest: serviceManifestObjectSchema.nullable(),
+  }),
+  "catalogIntegration.publish": z.strictObject({
+    integrationId: serviceIdSchema,
+    transactionId: integrationTransactionIdSchema,
+    manifestSha256: sha256Schema,
+  }),
+  "catalogIntegration.settle": z.strictObject({
+    integrationId: serviceIdSchema,
+    outcome: z.enum(["commit", "rollback"]),
+    changed: z.boolean(),
+  }),
+  "catalogIntegration.remove": z.strictObject({
+    integrationId: serviceIdSchema,
+    removed: z.boolean(),
+  }),
+  "catalogIntegration.adopt": z.strictObject({
+    integrationId: serviceIdSchema,
+    status: z.enum(["recorded", "needs_reinstall"]),
+    reason: z.string().max(1_024).nullable(),
+  }),
+  "installedIntegrations.inspect": z.strictObject({
+    integrations: z
+      .array(
+        z.strictObject({
+          integrationId: serviceIdSchema,
+          extensionId: serviceIdSchema.nullable(),
+          status: z.enum(["ok", "needs_reinstall"]),
+          reason: z.string().max(1_024).nullable(),
+          source: integrationSourceSchema.nullable(),
+          files: z.array(integrationFileSchema).max(128),
+          pending: z.strictObject({ transactionId: integrationTransactionIdSchema }).nullable(),
+        }),
+      )
+      .max(256),
+    // Directories in the integration store the agent holds no record of.
+    unrecorded: z.array(serviceIdSchema).max(256),
+  }),
   "serviceSelection.apply": revision,
   "serviceSelection.inspect": z.strictObject({
     source: z.enum(["env", "file", "default"]),
@@ -1371,6 +1502,12 @@ export const OPS_RESULT_SCHEMAS = {
     proposed: z.literal(true),
   }),
   "transitousLock.approve": pairedPinApprovalResultSchema,
+  "transitousPin.inspect": z.strictObject({
+    /** The pin the release ships. */
+    release: transitousLockRecordSchema,
+    /** The pin in effect: the release's, or one approved over it. */
+    active: transitousLockRecordSchema,
+  }),
   "gbfsCatalogLock.inspect": z.strictObject({
     commit: z.string().regex(/^[0-9a-f]{40}$/),
     url: z.string().min(1).max(2_048),
@@ -1649,7 +1786,7 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("preparedRunId" in operation) return operation.preparedRunId;
   if ("candidateId" in operation && operation.candidateId) return operation.candidateId;
   if ("repository" in operation) return operation.repository;
-  if ("extensionId" in operation) return operation.extensionId;
+  if ("extensionId" in operation && operation.extensionId) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;
   if ("regionId" in operation && operation.regionId) return operation.regionId;
   if ("dataTypeId" in operation) return operation.dataTypeId;

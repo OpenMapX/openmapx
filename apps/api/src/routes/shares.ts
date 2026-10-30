@@ -1,4 +1,4 @@
-import { BIKE_HILL_PREFERENCES, BIKE_PROFILES } from "@openmapx/core";
+import { sharingPublicSchema } from "@openmapx/core/api-contracts";
 import { httpError } from "@openmapx/integration-framework";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -9,12 +9,10 @@ import {
   hashShareToken,
   isExpired,
   listSnapshotFrom,
-  MAX_EXPIRES_IN_DAYS,
   MAX_SHARES_PER_USER,
   MAX_SNAPSHOT_PLACES,
   parseStoredListSnapshot,
   routeShareLabel,
-  SHARE_TOKEN_PATTERN,
   toOwnerShare,
   toPublicListShare,
   toPublicRouteShare,
@@ -23,6 +21,7 @@ import {
 import { shareMintLimit, shareResolveLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
+import { registerSharingRoute } from "./sharing-contract";
 
 /** Test hook: drop limiter buckets so injected requests never hit a stale 429. */
 export function resetShareRateLimitsForTests(): void {
@@ -35,19 +34,13 @@ const DAY_MS = 86_400_000;
 export const sharesRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
-  fastify.get("/shares/:token", {
-    schema: {
-      params: {
-        type: "object",
-        required: ["token"],
-        properties: { token: { type: "string", pattern: SHARE_TOKEN_PATTERN } },
-      },
-    },
-    preHandler: shareResolveLimit.preHandler(),
-    handler: async (req, reply) => {
+  registerSharingRoute(
+    fastify,
+    "resolvePublicShare",
+    async (req, reply) => {
       // Revocation and expiry must be immediate everywhere — never cacheable.
       reply.header("Cache-Control", "no-store");
-      const { token } = req.params as { token: string };
+      const { token } = req.params;
       const rows = await db
         .select()
         .from(shareLink)
@@ -57,17 +50,22 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
       // Uniform failure: unknown, expired, dangling, and corrupt all read the same.
       const gone = () => httpError(404, "Share link not found");
       if (!share || isExpired(share, new Date())) throw gone();
+      const sendPublic = (value: unknown) => {
+        const parsed = sharingPublicSchema.safeParse(value);
+        if (!parsed.success) throw gone();
+        return reply.send(parsed.data);
+      };
 
       if (share.targetType === "route") {
         const route = validateRouteShare(share.snapshot);
         if (!route) throw gone();
-        return reply.send(toPublicRouteShare(route));
+        return sendPublic(toPublicRouteShare(route));
       }
 
       if (share.mode === "snapshot") {
         const snap = parseStoredListSnapshot(share.snapshot);
         if (!snap) throw gone();
-        return reply.send(toPublicListShare("snapshot", snap));
+        return sendPublic(toPublicListShare("snapshot", snap));
       }
 
       const lists = await db
@@ -83,9 +81,12 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         .where(eq(savedPlace.listId, list.id))
         .orderBy(savedPlace.sortOrder)
         .limit(MAX_SNAPSHOT_PLACES);
-      return reply.send(toPublicListShare("live", listSnapshotFrom(list, places)));
+      const snap = listSnapshotFrom(list, places);
+      if (!snap) throw gone();
+      return sendPublic(toPublicListShare("live", snap));
     },
-  });
+    { preHandler: shareResolveLimit.preHandler() },
+  );
 
   await fastify.register(async (authenticated) => {
     declareRouteAuth(authenticated, "session");
@@ -96,61 +97,12 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
     });
     authenticated.addHook("preHandler", requireAuthHook);
 
-    authenticated.post("/shares", {
-      schema: {
-        body: {
-          type: "object",
-          required: ["targetType"],
-          properties: {
-            targetType: { type: "string", enum: ["list", "route"] },
-            targetId: { type: "string", maxLength: 100 },
-            mode: { type: "string", enum: ["live", "snapshot"] },
-            expiresInDays: { type: "integer", minimum: 1, maximum: MAX_EXPIRES_IN_DAYS },
-            route: {
-              type: "object",
-              required: ["waypoints", "mode"],
-              properties: {
-                mode: {
-                  type: "string",
-                  enum: ["driving", "walking", "cycling", "motorcycle"],
-                },
-                avoidHighways: { type: "boolean" },
-                avoidTolls: { type: "boolean" },
-                avoidFerries: { type: "boolean" },
-                bikeProfile: { type: "string", enum: [...BIKE_PROFILES] },
-                bikeHillPreference: { type: "string", enum: [...BIKE_HILL_PREFERENCES] },
-                bikePreferQuietRoads: { type: "boolean" },
-                bikePreferSmoothSurfaces: { type: "boolean" },
-                bikeSpeedKmh: { type: "number", minimum: 5, maximum: 60 },
-                waypoints: {
-                  type: "array",
-                  minItems: 2,
-                  maxItems: 10,
-                  items: {
-                    type: "object",
-                    required: ["lat", "lng"],
-                    properties: {
-                      lat: { type: "number", minimum: -90, maximum: 90 },
-                      lng: { type: "number", minimum: -180, maximum: 180 },
-                      label: { type: "string", maxLength: 200 },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      preHandler: shareMintLimit.preHandler(),
-      handler: async (req, reply) => {
+    registerSharingRoute(
+      authenticated,
+      "createShare",
+      async (req, reply) => {
         const userId = getUserId(req);
-        const body = req.body as {
-          targetType: "list" | "route";
-          targetId?: string;
-          mode?: "live" | "snapshot";
-          expiresInDays?: number;
-          route?: unknown;
-        };
+        const body = req.body;
 
         const result = await db.transaction(async (tx) => {
           // Lock the owner even when no shares exist; serialize count and insert
@@ -183,7 +135,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
               .limit(1);
             const list = lists[0];
             if (!list) throw httpError(404, "List not found");
-            let snapshot: ReturnType<typeof listSnapshotFrom> | null = null;
+            let snapshot: ReturnType<typeof listSnapshotFrom> = null;
             if (body.mode === "snapshot") {
               const places = await tx
                 .select()
@@ -198,6 +150,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
                 );
               }
               snapshot = listSnapshotFrom(list, places);
+              if (!snapshot) throw httpError(400, "Invalid list snapshot");
             }
             row = {
               id,
@@ -248,9 +201,10 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         });
         return reply.status(201).send(result);
       },
-    });
+      { preHandler: shareMintLimit.preHandler() },
+    );
 
-    authenticated.get("/shares", async (req, _reply) => {
+    registerSharingRoute(authenticated, "listOwnerShares", async (req, _reply) => {
       const userId = getUserId(req);
       const rows = await db
         .select()
@@ -260,18 +214,12 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
       return { shares: rows.map(toOwnerShare) };
     });
 
-    authenticated.post("/shares/:id/rotate", {
-      schema: {
-        params: {
-          type: "object",
-          required: ["id"],
-          properties: { id: { type: "string", maxLength: 100 } },
-        },
-      },
-      preHandler: shareMintLimit.preHandler(),
-      handler: async (req, reply) => {
+    registerSharingRoute(
+      authenticated,
+      "rotateShareToken",
+      async (req, reply) => {
         const userId = getUserId(req);
-        const { id } = req.params as { id: string };
+        const { id } = req.params;
         const token = generateShareToken();
         const updated = await db
           .update(shareLink)
@@ -281,26 +229,18 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         if (updated.length === 0) throw httpError(404, "Share link not found");
         return reply.send({ token });
       },
-    });
+      { preHandler: shareMintLimit.preHandler() },
+    );
 
-    authenticated.delete("/shares/:id", {
-      schema: {
-        params: {
-          type: "object",
-          required: ["id"],
-          properties: { id: { type: "string", maxLength: 100 } },
-        },
-      },
-      handler: async (req, reply) => {
-        const userId = getUserId(req);
-        const { id } = req.params as { id: string };
-        const deleted = await db
-          .delete(shareLink)
-          .where(and(eq(shareLink.id, id), eq(shareLink.userId, userId)))
-          .returning({ id: shareLink.id });
-        if (deleted.length === 0) throw httpError(404, "Share link not found");
-        return reply.send({ ok: true });
-      },
+    registerSharingRoute(authenticated, "revokeShare", async (req, reply) => {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      const deleted = await db
+        .delete(shareLink)
+        .where(and(eq(shareLink.id, id), eq(shareLink.userId, userId)))
+        .returning({ id: shareLink.id });
+      if (deleted.length === 0) throw httpError(404, "Share link not found");
+      return reply.send({ ok: true });
     });
   });
 };

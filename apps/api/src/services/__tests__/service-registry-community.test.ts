@@ -16,7 +16,7 @@ let originalAgentUrl: string | undefined;
 function communityService(id: string, repository: string) {
   return {
     repository,
-    directory: `/srv/openmapx/services/.community/${repository}/${id}`,
+    directory: `/srv/openmapx/infra/docker/state/ops-agent/community/${repository}/${id}`,
     manifest: {
       id,
       name: id,
@@ -134,9 +134,18 @@ describe("community services in the API registry", () => {
     );
   });
 
-  it("scans the checkout instead when no operations agent is configured", async () => {
+  it("scans the agent's community store itself when no operations agent is configured", async () => {
     delete process.env.OPS_AGENT_URL;
-    const directory = join(tmp, "services", ".community", "1".repeat(16), "svc-local");
+    const directory = join(
+      tmp,
+      "infra",
+      "docker",
+      "state",
+      "ops-agent",
+      "community",
+      "1".repeat(16),
+      "svc-local",
+    );
     mkdirSync(directory, { recursive: true });
     writeFileSync(
       join(directory, "service.json"),

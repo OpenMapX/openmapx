@@ -1,18 +1,23 @@
 import {
   chmodSync,
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   type OpsOperation,
   opsOperationFingerprint,
@@ -97,31 +102,46 @@ function claim(
 
 /** The operator's selection, as `services enable` or the admin panel leaves it. */
 function select(infraDir: string, roots: string[]): void {
-  writeFileSync(join(infraDir, "service-selection.json"), JSON.stringify({ selected: roots }));
+  const path = services.serviceSelectionPath(infraDir);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify({ selected: roots }), { mode: 0o600 });
 }
+
+const deploymentUserEnv = `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`;
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-trusted-runtime-"));
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
+  // The whole checkout is mounted, as this release's manifest has it.
+  mkdirSync(join(root, "services"), { recursive: true });
+  // The deployment's user, which only a host render writes into .env.
+  writeFileSync(join(infraDir, ".env"), deploymentUserEnv, { mode: 0o600 });
   select(infraDir, ["alpha"]);
-  const current = join(infraDir, ".trusted-config-current");
+  const current = join(infraDir, services.CURRENT_CONFIGURATION);
   return {
     root,
     infraDir,
     current,
+    generations: join(infraDir, services.CONFIGURATION_GENERATIONS),
     compose: join(current, "docker-compose.generated.yml"),
     selection: join(current, "service-selection.json"),
     hardlinks: join(current, "docker-compose.generated.hardlinks.json"),
   };
 }
 
+/** Point the current pointer at a generation, with the link text the writer uses. */
+function pointCurrentAt(paths: ReturnType<typeof fixture>, revision: string): void {
+  mkdirSync(dirname(paths.current), { recursive: true, mode: 0o700 });
+  symlinkSync(join(relative(dirname(paths.current), paths.generations), revision), paths.current);
+}
+
 async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Promise<void> {
   const oldRevision = `cfg1_${"o".repeat(43)}`;
-  const oldGeneration = join(paths.infraDir, ".trusted-config-generations", oldRevision);
+  const oldGeneration = join(paths.generations, oldRevision);
   mkdirSync(oldGeneration, { recursive: true, mode: 0o700 });
-  chmodSync(join(paths.infraDir, ".trusted-config-generations"), 0o700);
+  chmodSync(paths.generations, 0o700);
   chmodSync(oldGeneration, 0o700);
   for (const name of [
     "docker-compose.generated.yml",
@@ -129,8 +149,7 @@ async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Pro
     "docker-compose.generated.hardlinks.json",
   ])
     writeFileSync(join(oldGeneration, name), "sentinel", { mode: 0o600 });
-  const { symlinkSync } = await import("node:fs");
-  symlinkSync(join(".trusted-config-generations", oldRevision), paths.current);
+  pointCurrentAt(paths, oldRevision);
 }
 
 describe("ops-agent trusted configuration runtime", () => {
@@ -173,9 +192,9 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     expect(JSON.parse(readFileSync(paths.selection, "utf8"))).toEqual({ selected: ["alpha"] });
     // The new selection is the operator's from now on, for the CLI too.
-    expect(
-      JSON.parse(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")),
-    ).toEqual({ selected: ["alpha"] });
+    expect(JSON.parse(readFileSync(services.serviceSelectionPath(paths.infraDir), "utf8"))).toEqual(
+      { selected: ["alpha"] },
+    );
     expect(readFileSync(paths.compose, "utf8")).toContain("alpha:");
     expect(readFileSync(paths.compose, "utf8")).not.toContain(secretValue);
     expect(JSON.parse(readFileSync(paths.hardlinks, "utf8"))).toEqual([]);
@@ -791,7 +810,7 @@ describe("ops-agent trusted configuration runtime", () => {
 
   it("rejects a dangling trusted-current pointer instead of authorizing baked selection", async () => {
     const paths = fixture();
-    symlinkSync(join(".trusted-config-generations", `cfg1_${"d".repeat(43)}`), paths.current);
+    pointCurrentAt(paths, `cfg1_${"d".repeat(43)}`);
 
     await expect(initializeTrustedConfigurationRuntime(paths.infraDir)).rejects.toThrow(
       "Trusted configuration apply failed",
@@ -945,7 +964,7 @@ describe("ops-agent trusted configuration runtime", () => {
 
   it("retains unobserved generations and prunes after complete cleanup acquisition", async () => {
     const paths = fixture();
-    const generations = join(paths.infraDir, ".trusted-config-generations");
+    const generations = paths.generations;
     mkdirSync(generations, { recursive: true, mode: 0o700 });
     chmodSync(generations, 0o700);
     for (let index = 0; index < 17; index += 1) {
@@ -1034,7 +1053,7 @@ describe("ops-agent trusted configuration runtime", () => {
         claim: claim(operation, payload({ selectedRoots: ["beta"], integrationConfigs: [] })),
       }),
     ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
-    expect(readFileSync(join(paths.infraDir, "service-selection.json"), "utf8")).toContain("alpha");
+    expect(readFileSync(services.serviceSelectionPath(paths.infraDir), "utf8")).toContain("alpha");
     expect(existsSync(paths.current)).toBe(false);
     await expect(
       dispatchOpsOperation(
@@ -1067,9 +1086,9 @@ describe("ops-agent trusted configuration runtime", () => {
     ];
 
     function applied(paths: ReturnType<typeof fixture>): void {
-      const generation = join(paths.infraDir, ".trusted-config-generations", revisionId);
+      const generation = join(paths.generations, revisionId);
       mkdirSync(generation, { recursive: true, mode: 0o700 });
-      chmodSync(join(paths.infraDir, ".trusted-config-generations"), 0o700);
+      chmodSync(paths.generations, 0o700);
       writeFileSync(join(generation, "docker-compose.generated.yml"), "services: {}\n", {
         mode: 0o600,
       });
@@ -1081,7 +1100,7 @@ describe("ops-agent trusted configuration runtime", () => {
         JSON.stringify(plan),
         { mode: 0o600 },
       );
-      symlinkSync(join(".trusted-config-generations", revisionId), paths.current);
+      pointCurrentAt(paths, revisionId);
     }
 
     const inspect = (paths: ReturnType<typeof fixture>, inspectRevision: string) => {
@@ -1122,4 +1141,183 @@ describe("ops-agent trusted configuration runtime", () => {
       );
     });
   });
+
+  it("does not commit with an override it may not use, and says why for the admin panel", async () => {
+    const paths = fixture();
+    // A built-in that mounts a file of the release.
+    const directory = join(paths.root, "services", "alpha");
+    mkdirSync(join(directory, "config"), { recursive: true });
+    writeFileSync(join(directory, "config", "alpha.yml"), "release: true\n");
+    const alpha: services.LoadedService = {
+      ...service("alpha"),
+      manifest: {
+        ...service("alpha").manifest,
+        bindMounts: [{ source: "config/alpha.yml", target: "/etc/alpha.yml" }],
+      },
+      directory,
+    };
+    const override = join(paths.infraDir, "overrides", "services", "alpha", "config", "alpha.yml");
+    mkdirSync(dirname(override), { recursive: true, mode: 0o755 });
+    writeFileSync(override, "users: ['op:$2y$05$secret-hash']\n");
+    chmodSync(override, 0o664);
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [alpha],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const apply = async (revisionId: string) => {
+      const operation = {
+        ...(await configurationSource(runtime, paths.infraDir)),
+        expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+        kind: "stack.render" as const,
+        revisionId,
+      };
+      return dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation),
+      });
+    };
+    const failure = (attemptedRevisionId: string) => {
+      const operation = { kind: "configuration.failure.inspect" as const, attemptedRevisionId };
+      return dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(operation),
+          operation,
+          source: "registry",
+          capability: { revisionId: attemptedRevisionId, values: {} },
+        },
+      });
+    };
+    try {
+      const refused = `cfg1_${"r".repeat(43)}`;
+      await expect(apply(refused)).resolves.toMatchObject({
+        outcome: "not_committed",
+        reason: "failed",
+      });
+      const problem =
+        "infra/docker/overrides/services/alpha/config/alpha.yml can't be used: group or others may write it. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
+      await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+      expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
+      expect(stderr.mock.calls.flat().join("")).not.toContain("secret-hash");
+      expect(services.currentConfigurationGeneration(paths.infraDir)).toBeNull();
+
+      chmodSync(override, 0o644);
+      stderr.mockClear();
+      const applied = `cfg1_${"a".repeat(43)}`;
+      await expect(apply(applied)).resolves.toMatchObject({ outcome: "committed" });
+      await expect(failure(applied)).resolves.toEqual({
+        attemptedRevisionId: applied,
+        problem: null,
+      });
+      // The override in use is information in the agent's log: no ⚠.
+      expect(stderr.mock.calls.flat().map(String)).toContainEqual(
+        "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): alpha/config/alpha.yml.\n",
+      );
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it("never changes .env, and refuses a commit without UID or GID, naming the host render", async () => {
+    const paths = fixture();
+    const env = join(paths.infraDir, ".env");
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [service("alpha")],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const apply = async (revisionId: string) => {
+      const operation = {
+        ...(await configurationSource(runtime, paths.infraDir)),
+        expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+        kind: "stack.render" as const,
+        revisionId,
+      };
+      return dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: claim(operation),
+      });
+    };
+    const failure = (attemptedRevisionId: string) => {
+      const operation = { kind: "configuration.failure.inspect" as const, attemptedRevisionId };
+      return dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(operation),
+          operation,
+          source: "registry",
+          capability: { revisionId: attemptedRevisionId, values: {} },
+        },
+      });
+    };
+    // An old mtime, so a write in the same instant would still show.
+    const written = (contents: string) => {
+      writeFileSync(env, contents, { mode: 0o600 });
+      utimesSync(env, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+      return envFileState(env);
+    };
+    try {
+      const present = written(`DOMAIN=maps.example.test\n${deploymentUserEnv}`);
+      const committed = `cfg1_${"a".repeat(43)}`;
+      await expect(apply(committed)).resolves.toMatchObject({ outcome: "committed" });
+      expect(envFileState(env)).toEqual(present);
+
+      for (const [contents, missing] of [
+        ["DOMAIN=maps.example.test\n# UID=1000\n", "UID or GID"],
+        [`DOMAIN=maps.example.test\nUID=${process.geteuid?.() ?? 0}\n`, "GID"],
+      ] as const) {
+        const before = written(contents);
+        const refused = `cfg1_${(missing === "GID" ? "g" : "r").repeat(43)}`;
+        await expect(apply(refused)).resolves.toMatchObject({
+          outcome: "not_committed",
+          reason: "failed",
+        });
+        const problem = `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`;
+        await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+        expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
+        expect(envFileState(env)).toEqual(before);
+        expect(services.currentConfigurationGeneration(paths.infraDir)).toBe(committed);
+      }
+
+      // Nor is a missing one created.
+      rmSync(env);
+      const absent = `cfg1_${"m".repeat(43)}`;
+      await expect(apply(absent)).resolves.toMatchObject({ outcome: "not_committed" });
+      expect(existsSync(env)).toBe(false);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
 });
+
+/**
+ * What a write to `.env` would change: its bytes, its inode, its mtime and its
+ * mode, read through one descriptor rather than a second lookup by path.
+ */
+function envFileState(path: string) {
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stats = fstatSync(descriptor, { bigint: true });
+    return {
+      bytes: readFileSync(descriptor, "utf8"),
+      ino: stats.ino,
+      mtimeNs: stats.mtimeNs,
+      mode: stats.mode,
+    };
+  } finally {
+    closeSync(descriptor);
+  }
+}

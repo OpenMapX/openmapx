@@ -7,9 +7,25 @@ export {
 export type { Attribution } from "./attribution";
 export { parseContributors, parseFieldContributors } from "./contributors";
 export type { ExtensionManifest } from "./extension";
-export { extensionManifestSchema, validateExtensionManifest } from "./extension";
-export type { IntegrationDataSource, IntegrationManifest } from "./integration";
-export { integrationManifestSchema, validateDataSource, validateManifest } from "./integration";
+export {
+  canonicalExtensionLocator,
+  extensionLocatorSchema,
+  extensionManifestSchema,
+  validateExtensionManifest,
+} from "./extension";
+export type {
+  IntegrationDataSource,
+  IntegrationManifest,
+  PlatformEndpointId,
+} from "./integration";
+export {
+  ENDPOINT_URL_TEMPLATE,
+  integrationManifestSchema,
+  isPlatformEndpointId,
+  PLATFORM_ENDPOINT_IDS,
+  validateDataSource,
+  validateManifest,
+} from "./integration";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export type { ManifestProvenance, ServiceManifest } from "./service";
 export { serviceManifestSchema, validateServiceManifest } from "./service";

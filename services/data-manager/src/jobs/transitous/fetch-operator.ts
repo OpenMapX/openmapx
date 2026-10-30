@@ -115,7 +115,7 @@ export const run: StageFn = async (ctx) => {
         artifacts: { failed: allFailures },
       };
     }
-    finalizeTransitSourceManifest(ctx);
+    await finalizeTransitSourceManifest(ctx);
     return {
       stage: "fetch-operator",
       status: operatorFeeds.length === 0 ? "skipped" : "ok",

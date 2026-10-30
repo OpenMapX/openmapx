@@ -1,6 +1,8 @@
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { OpsAgentHandoffPhase } from "@openmapx/core/ops";
 import { atomicWrite } from "@openmapx/core/release-files";
+import { services as coreServices } from "@openmapx/core/server";
 import { strictReadFile } from "./durable-files";
 import {
   type AgentReleasePins,
@@ -49,10 +51,16 @@ export interface AgentHandoffRecord {
   reason?: string;
   /** Set once a release application has used this handoff's previous overlay. */
   consumed?: boolean;
+  /**
+   * Set on a handoff imported from an earlier release's state location. Its
+   * helper keeps recording there, so this agent settles it once that helper
+   * has exited.
+   */
+  importedFromLegacy?: boolean;
 }
 
 export function agentHandoffPath(rootDir: string): string {
-  return join(rootDir, "infra", "docker", "data", "ops-agent", "agent-handoff.json");
+  return coreServices.agentStatePaths(join(rootDir, "infra", "docker")).handoff;
 }
 
 export function isTerminalHandoff(phase: AgentHandoffPhase): boolean {
@@ -77,7 +85,8 @@ function parseRecord(raw: string): AgentHandoffRecord {
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string" ||
     !(value.reason === undefined || typeof value.reason === "string") ||
-    !(value.consumed === undefined || typeof value.consumed === "boolean")
+    !(value.consumed === undefined || typeof value.consumed === "boolean") ||
+    !(value.importedFromLegacy === undefined || typeof value.importedFromLegacy === "boolean")
   ) {
     throw new Error("Agent handoff record rejected");
   }
@@ -91,7 +100,7 @@ export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
 export function readAgentHandoffFromInfra(infraDir: string): AgentHandoffRecord | null {
   return readAgentHandoffFile(join(infraDir, "data", "ops-agent", "agent-handoff.json"));
 }
-function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
+export function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
   let raw: string;
   try {
     raw = strictReadFile(path, MAX_HANDOFF_BYTES);
@@ -107,7 +116,9 @@ export function writeAgentHandoff(rootDir: string, record: AgentHandoffRecord): 
   if (Buffer.byteLength(contents, "utf8") > MAX_HANDOFF_BYTES) {
     throw new Error("Agent handoff record is too large");
   }
-  atomicWrite(agentHandoffPath(rootDir), contents);
+  const path = agentHandoffPath(rootDir);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  atomicWrite(path, contents);
 }
 
 export function advanceAgentHandoff(
@@ -134,8 +145,22 @@ export interface AgentContainerFacts {
   /** Variable names only: `docker run --env NAME` copies each value from the agent. */
   envNames: string[];
   dockerSocketSource: string;
-  rootSource: string;
+  /**
+   * The agent's bind mounts at or under `rootDir`, outermost first: the whole
+   * checkout, or `infra/docker` with its runtime directories. The helper gets
+   * the same, so it sees what the agent sees in either layout.
+   */
+  rootMounts: AgentRootMount[];
 }
+
+interface AgentRootMount {
+  source: string;
+  target: string;
+  readOnly: boolean;
+}
+
+/** More would be no layout this release mounts. */
+const MAX_ROOT_MOUNTS = 16;
 
 function parseJson(output: string): unknown {
   return JSON.parse(output.trim()) as unknown;
@@ -176,22 +201,52 @@ export async function inspectAgentContainer(
   ) {
     throw new Error("Operations agent container rejected");
   }
+  const entries = mounts as Array<{
+    Type?: unknown;
+    Source?: unknown;
+    Destination?: unknown;
+    RW?: unknown;
+  }>;
+  const path = (value: unknown): value is string =>
+    typeof value === "string" && /^\/[^,\n\r]*$/.test(value);
   const source = (destination: string): string => {
-    const mount = (mounts as Array<{ Source?: unknown; Destination?: unknown }>).find(
-      (entry) => entry.Destination === destination,
-    );
-    if (typeof mount?.Source !== "string" || !/^\/[^,\n\r]*$/.test(mount.Source)) {
-      throw new Error("Operations agent container rejected");
-    }
+    const mount = entries.find((entry) => entry.Destination === destination);
+    if (!path(mount?.Source)) throw new Error("Operations agent container rejected");
     return mount.Source;
   };
+  const rootMounts = entries
+    .filter(
+      (entry) =>
+        typeof entry.Destination === "string" &&
+        (entry.Destination === rootDir || entry.Destination.startsWith(`${rootDir}/`)),
+    )
+    .map((entry) => {
+      if (entry.Type !== "bind" || !path(entry.Source) || !path(entry.Destination)) {
+        throw new Error("Operations agent container rejected");
+      }
+      return { source: entry.Source, target: entry.Destination, readOnly: entry.RW !== true };
+    })
+    .sort((left, right) => left.target.length - right.target.length);
+  // The helper reads and writes the agent's state, and Compose reads .env:
+  // one writable mount must hold the state directory, and one hold .env.
+  const covering = (target: string) =>
+    rootMounts.filter((mount) => target === mount.target || target.startsWith(`${mount.target}/`));
+  const state = join(rootDir, "infra", "docker", "state");
+  if (
+    rootMounts.length === 0 ||
+    rootMounts.length > MAX_ROOT_MOUNTS ||
+    covering(state).at(-1)?.readOnly !== false ||
+    covering(join(rootDir, "infra", "docker", ".env")).length === 0
+  ) {
+    throw new Error("Operations agent container rejected");
+  }
   return {
     imageId,
     user,
     groups: groups ?? [],
     envNames,
     dockerSocketSource: source("/var/run/docker.sock"),
-    rootSource: source(rootDir),
+    rootMounts,
   };
 }
 
@@ -205,7 +260,18 @@ export function agentHandoffRunArgs(
   rootDir: string,
   handoffId: string,
 ): string[] {
-  if (!HANDOFF_ID.test(handoffId) || !/^\/[^,\n\r]*$/.test(rootDir)) {
+  const path = /^\/[^,\n\r]*$/;
+  if (
+    !HANDOFF_ID.test(handoffId) ||
+    !path.test(rootDir) ||
+    facts.rootMounts.length === 0 ||
+    facts.rootMounts.some(
+      (mount) =>
+        !path.test(mount.source) ||
+        !path.test(mount.target) ||
+        (mount.target !== rootDir && !mount.target.startsWith(`${rootDir}/`)),
+    )
+  ) {
     throw new Error("Agent handoff rejected");
   }
   // The helper runs Compose with the agent's environment, like the agent's own
@@ -222,6 +288,13 @@ export function agentHandoffRunArgs(
         "OPENMAPX_PARENT_EXECUTION",
       ].includes(name),
   );
+  const hostSource = (target: string): string => {
+    const mount = facts.rootMounts
+      .filter((entry) => target === entry.target || target.startsWith(`${entry.target}/`))
+      .at(-1);
+    if (!mount) throw new Error("Agent handoff control mounts unavailable");
+    return `${mount.source}${target.slice(mount.target.length)}`;
+  };
   return [
     "run",
     "--detach",
@@ -248,20 +321,22 @@ export function agentHandoffRunArgs(
     "256",
     "--mount",
     `type=bind,source=${facts.dockerSocketSource},target=/var/run/docker.sock`,
-    "--mount",
-    `type=bind,source=${facts.rootSource},target=${rootDir}`,
+    ...facts.rootMounts.flatMap((mount) => [
+      "--mount",
+      `type=bind,source=${mount.source},target=${mount.target}${mount.readOnly ? ",readonly" : ""}`,
+    ]),
     ...["ops-agent", "data-manager", "host-cli"].flatMap((role) => [
       "--mount",
-      `type=bind,source=${facts.rootSource}/infra/docker/control-private/hidden-key,target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
+      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/hidden-key"))},target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
     ]),
     ...["data-manager", "host-cli"].flatMap((role) => [
       "--mount",
-      `type=bind,source=${facts.rootSource}/infra/docker/control-private/empty,target=${rootDir}/infra/docker/control-private/${role},readonly`,
+      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/empty"))},target=${rootDir}/infra/docker/control-private/${role},readonly`,
     ]),
     "--mount",
-    `type=bind,source=${facts.rootSource}/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private`,
+    `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/ops-agent"))},target=/var/lib/openmapx/control-private`,
     "--mount",
-    `type=bind,source=${facts.rootSource}/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly`,
+    `type=bind,source=${hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json"))},target=/run/secrets/openmapx-control-verifiers,readonly`,
     ...inherited.flatMap((name) => ["--env", name]),
     "--env",
     "DOCKER_CONFIG=/tmp/docker",
@@ -518,6 +593,17 @@ export async function reconcileAgentHandoff(options: AgentHandoffReconcileOption
   }
   if (await options.runningRelease(record)) {
     advanceAgentHandoff(options.rootDir, record, { phase: "applied" }, options.now);
+    return;
+  }
+  if (record.importedFromLegacy) {
+    // Its helper, from the earlier release, restores the previous agent and
+    // overlay itself; an imported record carries no overlay to restore.
+    advanceAgentHandoff(
+      options.rootDir,
+      record,
+      { phase: "rolled_back", reason: "The replacement helper did not keep this agent" },
+      options.now,
+    );
     return;
   }
   await options.withStoreLock(() => options.restoreOverlay(record.previousOverlay));

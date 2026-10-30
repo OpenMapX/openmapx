@@ -384,6 +384,69 @@ describe("toDataSource", () => {
     expect(toDataSource(ocSource({ domain: "ev" }))).toBeUndefined();
     expect(toDataSource(ocSource({ domain: "maritime" }))).toBeUndefined();
   });
+
+  test("reads the permissions OpenConditions states over the declared rights", () => {
+    const unchecked = ocSource({
+      rights: { ...ocSource().rights, redistribution: true, commercialUse: true },
+      permissions: {
+        display: "unknown",
+        redistribute: "unknown",
+        derive: "unknown",
+        retain: "unknown",
+        commercial: "unknown",
+      },
+    });
+    expect(toDataSource(unchecked)).toMatchObject({
+      commercialUse: "unknown",
+      redistribution: { sourceData: "unknown", derivedData: "unknown" },
+    });
+    const checked = ocSource({
+      permissions: {
+        display: "yes",
+        redistribute: "no",
+        derive: "yes",
+        retain: "yes",
+        commercial: "yes",
+      },
+    });
+    expect(toDataSource(checked)).toMatchObject({
+      commercialUse: "yes",
+      redistribution: { sourceData: "no", derivedData: "yes" },
+    });
+  });
+
+  test("an unclear display makes an otherwise commercial source grey area", () => {
+    const source = ocSource({
+      permissions: {
+        display: "unknown",
+        redistribute: "no",
+        derive: "no",
+        retain: "yes",
+        commercial: "yes",
+      },
+    });
+    expect(toDataSource(source)?.commercialUse).toBe("unknown");
+  });
+
+  test("lists no source whose display OpenConditions denies, in either scope", async () => {
+    const hidden = ocSource({
+      id: "de-hidden-fuel",
+      restricted: false,
+      permissions: {
+        display: "no",
+        redistribute: "no",
+        derive: "no",
+        retain: "no",
+        commercial: "no",
+      },
+    });
+    const http = fakeHttpClient(() => listOf(NDW, hidden));
+    const ctx = createMockIntegrationContext({ id: "openconditions", http });
+    const sync = startSourceSync(ctx, createOpenConditionsClient(OPERATOR, http)!);
+    await sync.first;
+    sync.stop();
+    expect(ctx.registered.dataSourceLists[0]!.map((d) => d.sourceId)).toEqual(["nl-ndw-events"]);
+  });
 });
 
 describe("startSourceSync", () => {

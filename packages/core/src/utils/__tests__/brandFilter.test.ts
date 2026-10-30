@@ -58,7 +58,7 @@ describe("commonsLogoUrl", () => {
 });
 
 describe("gapFillBranding", () => {
-  const catalogued = { name: "Catalogued Brand", logoFile: "Catalogued Brand Logo.svg" };
+  const catalogued = { qid: "Q1", name: "Catalogued Brand", logoFile: "Catalogued Brand Logo.svg" };
   const resolvableTags = { "brand:wikidata": "Q1" };
 
   it("never overwrites an existing logoUrl, even when the tags resolve a catalog brand", () => {
@@ -75,6 +75,9 @@ describe("gapFillBranding", () => {
     expect(gapFillBranding(existing, resolvableTags, resolveBrand)).toEqual({
       name: "Feed's Own Name",
       color: "#ff0000",
+      catalogueLogo: { qid: "Q1", file: catalogued.logoFile },
+      contributors: [],
+      fieldContributors: { name: [], color: [], "catalogueLogo.qid": [], "catalogueLogo.file": [] },
     });
   });
 
@@ -84,7 +87,8 @@ describe("gapFillBranding", () => {
     expect(gapFillBranding(undefined, resolvableTags, resolveBrand)).toEqual({
       name: catalogued.name,
       contributors: [],
-      fieldContributors: { name: [] },
+      fieldContributors: { name: [], "catalogueLogo.qid": [], "catalogueLogo.file": [] },
+      catalogueLogo: { qid: "Q1", file: catalogued.logoFile },
     });
   });
 
@@ -95,21 +99,26 @@ describe("gapFillBranding", () => {
   });
 });
 
-it("captures the selected catalogue name receipt while excluding hidden logo evidence", () => {
+it("captures label and file selection independently without uncredited image bytes", () => {
   const name = { sourceId: "wikidata", name: "Actual label supplier" };
   const logo = { sourceId: "hidden-logo", name: "Hidden filename" };
   const branding = gapFillBranding(undefined, {}, () => ({
+    qid: "Q1",
     name: "Catalogue supplied brand",
     logoFile: "Logo.svg",
     contributors: [name, logo],
-    fieldContributors: { name: [name], logoFile: [logo] },
+    fieldContributors: { qid: [name], name: [name], logoFile: [logo] },
   }));
   expect(branding).toMatchObject({
     name: "Catalogue supplied brand",
-    contributors: [name],
-    fieldContributors: { name: [name] },
+    contributors: [name, logo],
+    fieldContributors: {
+      name: [name],
+      "catalogueLogo.qid": [name],
+      "catalogueLogo.file": [logo],
+    },
   });
-  expect(branding?.contributors).not.toContainEqual(logo);
+  expect(branding?.logoUrl).toBeUndefined();
 });
 
 it("preserves a place label while projecting the catalogue's selected logo field only", async () => {
@@ -138,4 +147,31 @@ it("preserves a place label while projecting the catalogue's selected logo field
   expect(row.fieldContributors?.name).toEqual([placeCredit]);
   expect(row.fieldContributors?.logoFile).toEqual([fileHint]);
   expect(row.contributors).not.toContainEqual(hidden);
+});
+
+it("carries a captured catalogue logo reference without manufacturing image URLs", () => {
+  const label = { sourceId: "label", name: "Catalogue label" };
+  const file = { sourceId: "selection", name: "Selected file" };
+  const branding = gapFillBranding({ name: "Feed label" }, {}, () => ({
+    qid: "Q1",
+    name: "Catalogue label",
+    logoFile: "Logo.svg",
+    fieldContributors: { qid: [label], name: [label], logoFile: [file] },
+  }));
+  expect(branding).toMatchObject({
+    name: "Feed label",
+    catalogueLogo: { qid: "Q1", file: "Logo.svg" },
+    fieldContributors: { "catalogueLogo.qid": [label], "catalogueLogo.file": [file] },
+  });
+  expect(branding?.logoUrl).toBeUndefined();
+});
+
+it("preserves an existing captured file selection and supplied image without relabelling", () => {
+  const resolve = vi.fn(() => ({ qid: "Q2", name: "Other catalogue", logoFile: "Other.svg" }));
+  for (const existing of [
+    { name: "Supplied", catalogueLogo: { qid: "Q1", file: "Captured.svg" } },
+    { name: "Supplied", imageUrl: "https://feed.test/image.png" },
+  ])
+    expect(gapFillBranding(existing, {}, resolve)).toBe(existing);
+  expect(resolve).not.toHaveBeenCalled();
 });

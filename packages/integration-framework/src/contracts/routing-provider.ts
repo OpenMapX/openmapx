@@ -66,6 +66,12 @@ export interface RoutingProvider {
    */
   readonly supportsExclusions?: boolean;
   /**
+   * Whether route and optimize requests honour `RoutingOptions.directedExclusions`,
+   * excluding only travel in the given heading at each point. The orchestrator
+   * routes a request carrying them only through providers that declare this.
+   */
+  readonly supportsDirectedExclusions?: boolean;
+  /**
    * Per-semantic temporal support, read by the schedule planner. Providers that
    * omit it are interpreted through `supportsTimeAware` by
    * `resolveTemporalCapabilities`, so an existing provider keeps working.

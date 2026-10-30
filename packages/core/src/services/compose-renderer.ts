@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
+import { type AgentMountLayout, agentBindMounts } from "./agent-mounts";
 import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
 import { resolveConsumesDependencies } from "./consumes-dependencies";
 import { STACK_PROJECT } from "./deployment";
@@ -60,6 +62,46 @@ function communityNetworkName(serviceId: string): string {
     throw new Error(`Community service "${serviceId}" produces an overlong network name`);
   }
   return name;
+}
+
+const PRIVATE_NETWORK_PREFIX = "openmapx-private-";
+
+function privateNetworkName(name: string): string {
+  return `${PRIVATE_NETWORK_PREFIX}${name}`;
+}
+
+/**
+ * The private networks a built-in joins. A bridge (a service that stays on
+ * `openmapx`) joins only while an enabled bundle member, one that left
+ * `openmapx`, declares the network, so a default install without that bundle
+ * renders no stray network.
+ */
+function joinedPrivateNetworks(service: LoadedService, allServices: LoadedService[]): string[] {
+  const m = service.manifest;
+  return (m.privateNetworks ?? [])
+    .filter(
+      (name) =>
+        m.platformNetwork === false ||
+        allServices.some(
+          (other) =>
+            other.isBuiltIn &&
+            other.enabled &&
+            other.manifest.platformNetwork === false &&
+            other.manifest.privateNetworks?.includes(name),
+        ),
+    )
+    .map(privateNetworkName);
+}
+
+/**
+ * A stable IPv6 ULA /64 per private network, inside the `openmapx` network's
+ * fd4d:5058::/48 but never its fd4d:5058::/64, so members keep the same
+ * dual-stack egress as the shared network without daemon address pools.
+ */
+function privateNetworkSubnet(network: string): string {
+  const digest = createHash("sha256").update(network).digest();
+  const block = digest.readUInt16BE(0) || 1;
+  return `fd4d:5058:0:${block.toString(16)}::/64`;
 }
 
 function assertUniqueCommunityNetworkNames(services: LoadedService[]): void {
@@ -166,6 +208,11 @@ export interface RenderContext {
   platformValues?: import("./platform-configuration").PlatformValues;
   domain?: string;
   /**
+   * How the operations agent's container mounts the checkout's path (see
+   * agent-mounts.ts). Absent, its manifest's mounts render as declared.
+   */
+  agentMountLayout?: AgentMountLayout;
+  /**
    * Per-consumer-entry mount paths keyed by the same `<type>` / `<type>/<instance>`
    * key shape used in the producer index. The renderer wires this up
    * automatically; callers don't usually pass it.
@@ -254,6 +301,13 @@ export interface RenderContext {
    * Traefik regardless of the environment.
    */
   externalProxyNetwork?: string | null;
+  /**
+   * Where a generation keeps the files built-in services mount from a service
+   * directory: the host path of `path` of `serviceId` in its service-file
+   * tree, or undefined for one it doesn't hold, which is mounted from the
+   * service's directory as before.
+   */
+  serviceFileSource?: (serviceId: string, path: string) => string | undefined;
 }
 
 function externalProxyNetwork(ctx: RenderContext): string | undefined {
@@ -306,6 +360,8 @@ function toComposePath(absolute: string, composeOutDir: string | undefined): str
 interface ResolvedBindSource {
   src: string;
   absoluteHostPath: string | null;
+  /** Render writes it with the generation: a service-file tree or a writable copy. */
+  written?: boolean;
 }
 
 function resolveBindSource(
@@ -314,7 +370,22 @@ function resolveBindSource(
   allServices: LoadedService[],
   composeOutDir: string | undefined,
   infraDir: string | undefined,
+  serviceFileSource?: RenderContext["serviceFileSource"],
 ): ResolvedBindSource {
+  // A file the container rewrites is mounted from its writable copy, which
+  // render seeds from the release's file.
+  if (bm.writableCopy && service.isBuiltIn) {
+    return {
+      ...resolveBindSource(
+        { ...bm, source: bm.writableCopy, writableCopy: undefined },
+        service,
+        allServices,
+        composeOutDir,
+        infraDir,
+      ),
+      written: true,
+    };
+  }
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
@@ -367,13 +438,24 @@ function resolveBindSource(
         `bindMount source "${bm.source}" on service "${service.manifest.id}": @service:<slug> is only allowed to reference built-in services (target "${slug}" is "${target.manifest.quality}")`,
       );
     }
-    const absolute = resolve(target.directory, relPath);
-    return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+    const copy = serviceFileSource?.(slug, relPath);
+    const absolute = copy ?? resolve(target.directory, relPath);
+    return {
+      src: toComposePath(absolute, composeOutDir),
+      absoluteHostPath: absolute,
+      written: copy !== undefined,
+    };
   }
 
-  // Plain relative path — resolved against the consuming service's own dir.
-  const absolute = resolve(service.directory, bm.source);
-  return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
+  // Plain relative path — the release's copy in the generation's tree, or
+  // (outside a generation) the consuming service's own directory.
+  const copy = service.isBuiltIn ? serviceFileSource?.(service.manifest.id, bm.source) : undefined;
+  const absolute = copy ?? resolve(service.directory, bm.source);
+  return {
+    src: toComposePath(absolute, composeOutDir),
+    absoluteHostPath: absolute,
+    written: copy !== undefined,
+  };
 }
 
 export interface ComposeServiceSnippet {
@@ -675,10 +757,13 @@ export function renderServiceSnippet(
     snippet.networks = c.networkAliases?.length
       ? { [network]: { aliases: [...c.networkAliases] } }
       : [network];
-  } else if (communityNetworkAccess?.length) {
-    const networks = ["openmapx"];
+  } else {
     const allServices = ctx.allServices ?? [service];
-    for (const targetId of communityNetworkAccess) {
+    const networks = [
+      ...(m.platformNetwork === false ? [] : ["openmapx"]),
+      ...joinedPrivateNetworks(service, allServices),
+    ];
+    for (const targetId of communityNetworkAccess ?? []) {
       const target = allServices.find((candidate) => candidate.manifest.id === targetId);
       if (target?.isBuiltIn) {
         throw new Error(
@@ -692,19 +777,20 @@ export function renderServiceSnippet(
       if (!target || !target.enabled) continue;
       networks.push(communityNetworkName(targetId));
     }
-    snippet.networks = c.networkAliases?.length
-      ? Object.fromEntries([
-          ["openmapx", { aliases: [...c.networkAliases] }],
-          ...networks.slice(1).map((network) => [network, {}]),
-        ])
-      : networks;
-  } else if (c.networkAliases?.length) {
     // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
-    // Other containers on the openmapx network can address this service via
-    // any listed alias in addition to the service id.
-    snippet.networks = { openmapx: { aliases: [...c.networkAliases] } };
-  } else {
-    snippet.networks = ["openmapx"];
+    // Aliases go on the service's home network: `openmapx`, or its private
+    // networks when it stays off the shared one.
+    const aliasNetworks = networks.includes("openmapx")
+      ? ["openmapx"]
+      : networks.filter((network) => network.startsWith(PRIVATE_NETWORK_PREFIX));
+    snippet.networks = c.networkAliases?.length
+      ? Object.fromEntries(
+          networks.map((network) => [
+            network,
+            aliasNetworks.includes(network) ? { aliases: [...(c.networkAliases ?? [])] } : {},
+          ]),
+        )
+      : networks;
   }
 
   // Behind an operator-run proxy, a routed first-party service also joins that
@@ -729,13 +815,14 @@ export function renderServiceSnippet(
     }
   }
   const exists = ctx.existsSync ?? existsSync;
-  for (const bm of m.bindMounts ?? []) {
+  for (const bm of agentBindMounts(service, ctx.agentMountLayout)) {
     const resolved = resolveBindSource(
       bm,
       service,
       ctx.allServices ?? [service],
       ctx.composeOutDir,
       ctx.infraDir,
+      ctx.serviceFileSource,
     );
     // `optional: true` + resolvable host path + path missing → skip the mount
     // and surface an advisory. If the host path can't be resolved (only true
@@ -747,6 +834,22 @@ export function renderServiceSnippet(
       );
       continue;
     }
+    // Outside a generation's service-file trees, a built-in mounts its files
+    // from its directory. When that lacks one, Docker would create an empty
+    // root-owned directory in its place.
+    if (
+      service.isBuiltIn &&
+      !resolved.written &&
+      resolved.absoluteHostPath &&
+      !isAbsolute(bm.source) &&
+      !bm.source.startsWith(INFRA_BIND_PREFIX) &&
+      !SPECIAL_BIND_SOURCE_PATHS[bm.source] &&
+      !exists(resolved.absoluteHostPath)
+    ) {
+      ctx.warnings?.push(
+        `service "${m.id}": bind-mount source ${bm.source} is not present at ${resolved.absoluteHostPath}; update the checkout to the selected release`,
+      );
+    }
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);
@@ -757,6 +860,7 @@ export function renderServiceSnippet(
     if (
       !readOnly &&
       resolved.absoluteHostPath &&
+      !bm.writableCopy &&
       bm.source.startsWith(`${INFRA_BIND_PREFIX}data/`)
     ) {
       ctx.bindDirSink?.push(resolved.absoluteHostPath);
@@ -1071,6 +1175,29 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       .filter((service) => service.enabled && !service.isBuiltIn)
       .map((service) => [communityNetworkName(service.manifest.id), { driver: "bridge" }]),
   );
+  const privateNetworks: Record<string, unknown> = {};
+  const privateSubnetOwners = new Map<string, string>();
+  for (const snippet of Object.values(composeServices)) {
+    const joined = Array.isArray(snippet.networks)
+      ? snippet.networks
+      : Object.keys(snippet.networks ?? {});
+    for (const network of joined) {
+      if (!network.startsWith(PRIVATE_NETWORK_PREFIX) || network in privateNetworks) continue;
+      const subnet = privateNetworkSubnet(network);
+      const existing = privateSubnetOwners.get(subnet);
+      if (existing) {
+        throw new Error(
+          `Private networks "${existing}" and "${network}" derive the same IPv6 subnet ${subnet}`,
+        );
+      }
+      privateSubnetOwners.set(subnet, network);
+      privateNetworks[network] = {
+        driver: "bridge",
+        enable_ipv6: true,
+        ipam: { config: [{ subnet }] },
+      };
+    }
+  }
   const proxyNetwork = externalProxyNetwork(ctx);
   const joinsProxyNetwork = Object.values(composeServices).some(
     (snippet) =>
@@ -1100,6 +1227,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         enable_ipv6: true,
         ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
       },
+      ...privateNetworks,
       ...communityNetworks,
       ...externalNetworks,
     },

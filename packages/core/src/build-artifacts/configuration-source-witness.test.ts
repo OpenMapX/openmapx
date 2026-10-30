@@ -9,6 +9,7 @@ import {
   parseReleaseComposeSelection,
   TRANSITOUS_TOOLS_IMAGE_ENV,
 } from "../services/release-manifest";
+import { ensureReleaseStateDirectories } from "../services/release-state";
 import type { LoadedService } from "../services/types";
 import {
   configurationHostFields,
@@ -65,7 +66,7 @@ it("retains the original private release selection instead of accepting a change
       },
       "x-openmapx-release": { release: "public-release-fixture", images: pins },
     };
-    const path = join(root, "docker-compose.release.yml");
+    const path = ensureReleaseStateDirectories(root).overlay;
     writeFileSync(path, JSON.stringify(document), { mode: 0o600 });
     expect(parseReleaseComposeSelection(JSON.stringify(document)).release).toBe(
       "public-release-fixture",

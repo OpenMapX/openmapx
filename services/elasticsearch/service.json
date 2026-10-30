@@ -14,14 +14,14 @@
   "container": {
     "image": "elasticsearch",
     "tag": "8.19.23",
-    "digest": "sha256:8b1751877c984f3e4f59bafb15fc890e01969a744255fd5f6860c060b62cff36",
+    "digest": "sha256:ef5cafd961d7e273f13fed8def82e63c5ae0491106b5eecb5a69aa12d64f089b",
     "expose": [9200],
     "environment": {
       "discovery.type": "single-node",
       "ES_JAVA_OPTS": "-Xms2g -Xmx2g",
       "xpack.security.enabled": "false"
     },
-    "user": "${UID:-1000}:0",
+    "user": "${UID:?UID must be set, run pnpm openmapx compose render}:0",
     "memory": "4g",
     "restart": "unless-stopped",
     "healthcheck": {

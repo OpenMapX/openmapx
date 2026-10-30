@@ -25,6 +25,7 @@ import {
   type MapLayerGroup,
   type SlottedLayer,
 } from "@/integration-api/map/mapLayerGroup";
+import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
@@ -278,17 +279,11 @@ export function RouteLayer() {
           : theme.palette.divider;
         if (element instanceof HTMLButtonElement) {
           element.type = "button";
-          element.addEventListener("click", (event) => {
-            if (getMapClickOwner(event)) return;
-            event.stopPropagation();
-            setActiveRouteIndex(routeIndex);
-          });
-          element.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.stopPropagation();
-            setActiveRouteIndex(routeIndex);
-          });
+          bindMapMarkerActivation(element, { onActivate: () => setActiveRouteIndex(routeIndex) });
+        } else {
+          // The selected route's pill has nothing to do, but a tap on it is
+          // still not a tap on the map below.
+          bindMapMarkerActivation(element);
         }
         elements.set(routeIndex, element);
         pillReceipts.current.set(

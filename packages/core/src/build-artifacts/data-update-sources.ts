@@ -9,11 +9,17 @@ import {
   readdirSync,
   readFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { serviceSelectionPath } from "../services/deployment";
+import { releaseStatePaths } from "../services/release-state";
 export function dataUpdateSourcesDigest(infraDir: string): string {
   const hash = createHash("sha256");
-  for (const name of [".env", "service-selection.json", "docker-compose.release.yml"]) {
+  for (const name of [
+    ".env",
+    relative(infraDir, serviceSelectionPath(infraDir)),
+    relative(infraDir, releaseStatePaths(infraDir).overlay),
+  ]) {
     hash.update(name);
     let fd: number | undefined;
     try {

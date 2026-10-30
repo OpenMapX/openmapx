@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -32,6 +40,15 @@ describe("ops release authority reader", () => {
       else linkSync(target, path);
     } else writeFileSync(path, "123456");
     expect(() => strictReadFile(path, 5)).toThrow(/authority rejected/);
+  });
+  it("with an owner, rejects a file of another uid or one its group or others can write", () => {
+    writeFileSync(path, "state", { mode: 0o600 });
+    const owner = process.geteuid?.() ?? 0;
+    expect(strictReadFile(path, 5, { owner })).toBe("state");
+    expect(() => strictReadFile(path, 5, { owner: owner + 1 })).toThrow(/authority rejected/);
+    chmodSync(path, 0o620);
+    expect(() => strictReadFile(path, 5, { owner })).toThrow(/authority rejected/);
+    expect(strictReadFile(path, 5)).toBe("state");
   });
   it("rejects invalid UTF-8 instead of substituting replacement characters", () => {
     writeFileSync(path, Buffer.from([0xff]));

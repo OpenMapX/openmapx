@@ -1,15 +1,15 @@
 import type { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { GbfsCatalogLock, TransitousLock } from "@openmapx/core/catalog-pins/types";
 import { transitBumpResultSchema } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
-import { diffCatalogFeeds, resolveGbfsCatalogCandidate } from "@openmapx/transitous-core";
-import type { Command } from "commander";
-import type { GbfsCatalogLock } from "../../../../services/data-manager/src/gbfs-catalog-lock";
 import {
+  diffCatalogFeeds,
   parseRefShaPair,
-  type TransitousLock,
-} from "../../../../services/data-manager/src/transitous-lock";
+  resolveGbfsCatalogCandidate,
+} from "@openmapx/transitous-core";
+import type { Command } from "commander";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { log } from "../lib/output";
@@ -132,7 +132,7 @@ export function registerTransitousCommands(program: Command): void {
 
   transitous
     .command("show")
-    .description("Print the current Transitous lockfile contents")
+    .description("Print the active paired Transitous/GBFS pin generation")
     .action(() => {
       const paths = repoPaths();
       const pins = readCatalogPinSet(paths.root);

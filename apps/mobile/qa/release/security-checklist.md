@@ -1,7 +1,9 @@
 # Security checklist
 
-Everything here is something an attacker would try, phrased as a thing to do
-rather than a property to believe.
+Run against the actual candidate and frozen web build. Record source, versions,
+artifact hash and each observed outcome. Navigation/auth cases require a composed
+dispatcher; current `src/App.tsx` does not supply one. Source assertions and mock
+bridge tests do not establish binary or deployed-browser behavior.
 
 ## The bridge
 
@@ -11,7 +13,8 @@ rather than a property to believe.
 - [ ] Send the same message id twice. Expect the second to be refused.
 - [ ] Send a payload above the message ceiling. Expect refusal before parsing.
 - [ ] Send `{"__proto__": {...}}`. Expect refusal, and no polluted prototype.
-- [ ] Send a v2 command to a v1 shell. Expect a capability error, not a hang.
+- [ ] Send a command outside negotiated v3. Expect `protocol-mismatch`; advertise
+      non-overlapping ranges and expect no negotiated channel.
 - [ ] Address the bridge from an iframe. Expect no channel at all.
 
 ## The origin

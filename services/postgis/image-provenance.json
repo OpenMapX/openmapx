@@ -1,13 +1,13 @@
 {
   "image": "ghcr.io/baosystems/postgis",
   "tag": "18-3.6",
-  "verifiedAt": "2026-10-11",
-  "indexDigest": "sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8",
+  "verifiedAt": "2026-10-29",
+  "indexDigest": "sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
   "architectures": {
-    "linux/amd64": "sha256:710551e3e00789cab637f11aba26fbdee501f9bead2c8775309eb5f2ff2eefa2",
-    "linux/arm64": "sha256:91bb3d493c904e264c795730cb79e1f681551d9193a985e00fd5ca44e3766031"
+    "linux/amd64": "sha256:62d73b8e8d5fc992e64e6c5e6c234f75e9f9edf6e23f2a28ab0f783a67bff151",
+    "linux/arm64": "sha256:7111f5daf533ec8842f2dc9bca7f6c34598e2b1351f7896e0451b824a0ae2ac3"
   },
-  "ociCreated": "2026-10-06T05:29:21.366027207Z",
+  "ociCreated": "2026-10-27T05:28:34.556992796Z",
   "source": "https://github.com/baosystems/docker-postgis",
   "sourceRevision": "7f34aca7765a43924e2e94a45331ca260ad60d99",
   "baseImage": "docker.io/postgis/postgis:18-3.6",

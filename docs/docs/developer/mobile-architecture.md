@@ -1,198 +1,164 @@
 ---
-title: Mobile architecture — authority, protocol, and trust boundaries
-description: How the OpenMapX installed app and the web UI divide responsibility, what crosses the bridge, how authentication works, and what is deliberately not guaranteed.
+title: Mobile architecture
+description: Installed-shell capabilities, navigation authority, bridge messages and trust boundaries.
 sidebar_position: 9
 ---
 
 # Mobile architecture
 
-The installed OpenMapX app is a native shell around the real web UI. That
-sentence hides the only question that matters: when the app is running, who is
-actually doing the navigating?
+The installed app renders the web UI in a React Native WebView at a fixed origin.
+The shell restricts navigation and exposes a versioned bridge. Native navigation
+processors, persistence, audio and recovery components exist, but the foreground
+app does not yet connect them to bridge commands.
 
-The answer is native, always — and everything below follows from making that
-answer unambiguous rather than approximate.
+`apps/mobile/src/App.tsx` calls `createShellBridge` without a dispatcher or
+capability providers. The handshake therefore reports ground navigation, transit
+navigation, background location, local notifications and speech as unavailable.
+Commands other than event acknowledgements receive `unsupported-capability`.
+Do not describe this composition as a working background-navigation release.
 
 ## Why there is a split at all
 
-A browser cannot keep guiding somebody with the screen off. Background tabs are
-throttled, geolocation watches stop, speech is suspended, and the page may be
-discarded entirely. None of that is a bug to work around; it is what a browser is
-for.
+Native navigation components are intended to own work that must continue when
+the WebView is suspended: location delivery, progress, cues, alerts and durable
+session state. The web UI owns rendering, search, route planning and place details.
 
-So the parts of navigation that must survive a locked screen — the location
-stream, progress along the route, voice cues, the get-off alert, the durable
-session — live natively. The parts that are a map application — search, route
-planning, place details, everything the user actually looks at — stay in the web
-UI, which is the same code the website runs.
-
-The failure this design exists to prevent is both halves doing the same job.
-Two location watches produce two answers to "where am I". Two voice owners talk
-over each other. Two durable session records disagree the first time one crashes.
+A browser or PWA uses browser navigation facilities. Inside the installed shell,
+the web runtime selects native authority before the handshake and disables its
+browser engine. Missing native composition does not enable a browser fallback.
+This avoids competing location streams, speech and session records, but currently
+leaves installed navigation unavailable.
 
 ## The authority matrix
 
-| Concern                             | Ordinary browser / PWA    | Installed shell                         |
-| ----------------------------------- | ------------------------- | --------------------------------------- |
-| Location stream                     | Browser geolocation watch | Native, exclusively                     |
-| One-off "where am I"                | `navigator.geolocation`   | Native `location.request` (protocol v2) |
-| Route progress, off-route, coasting | Browser engine            | Native processor                        |
-| Reroute / replan decisions          | Browser                   | Native                                  |
-| Voice cues                          | `SpeechSynthesis`         | Native TTS                              |
-| Get-off alert                       | Web notification + tone   | Native scheduled alert                  |
-| Wake lock                           | Screen Wake Lock API      | Native                                  |
-| Durable session                     | IndexedDB                 | Native SQLite                           |
-| Transit live refresh                | Browser polling           | Native, single token consumer           |
-| Community frontend bundles          | Never executed            | Never executed                          |
-| Microphone / voice search           | Available                 | Never offered                           |
-| Rendering, search, planning         | Web                       | Web                                     |
+| Concern                                                               | Browser or PWA                            | Installed shell                                                         |
+| --------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
+| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                  |
+| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                        |
+| Ground and transit navigation                                         | Browser engine                            | Native authority selected; capability currently false                   |
+| Background location, local alerts and speech                          | Subject to browser limits                 | Capability currently false                                              |
+| Durable native session                                                | Not used                                  | SQLite components and recovery exist; session commands are not composed |
+| One-shot location, settings, authentication and deep-link commands    | Browser flows                             | Protocol vocabulary exists; dispatch is not composed                    |
+| Community frontend bundles                                            | Disabled                                  | Disabled                                                                |
+| Microphone input                                                      | Subject to browser support and permission | Disabled                                                                |
 
-The shell's presence is announced by an immutable descriptor injected before any
-page script runs. Shell-only restrictions are decided from that descriptor alone,
-not from the handshake. Community runtime code is disabled at the platform level
-in every browser environment until it has a real isolation boundary.
-
-There are exactly two authorities, `browser` and `native`. `negotiating`,
-`incompatible` and `error` are all native states. None of them is permission to
-start a browser engine inside an installed app.
+The immutable descriptor is injected before page scripts run. Shell restrictions
+use that descriptor, so they apply during negotiation, incompatibility and errors.
+`MobileRuntimeProvider.tsx` is the web authority boundary;
+`createShellBridge.ts` supplies the current capability report.
 
 ## The bridge protocol
 
-Versioned and negotiated, because the web app deploys independently of the store
-binary and the two will routinely disagree.
-
-- **v1** — session lifecycle, snapshots, navigation events.
-- **v2** — additive: one-shot foreground location, OS settings, deep links,
-  system authentication.
-
-A v2 message is never sent to a v1 shell. The client refuses it locally, so an
-old-but-working binary reports "this app version cannot do that" rather than
-looking like a broken bridge.
+Both sides currently support protocol **v3 only**. The constants in
+`packages/core/src/navigation/mobileProtocol.ts` and the release descriptor in
+`apps/mobile/release/version.json` agree on `min: 3, max: 3`. A non-overlapping
+range leaves navigation disabled and requires an update. Protocol negotiation
+alone does not establish that a command is implemented.
 
 ### Rollout order
 
-1. Deploy a web app that supports both versions.
-2. Ship the native release that adds the new version.
-3. Later, deploy a web app that uses the new capability.
-
-At no point is a lockstep store review and web deployment required. For a
-breaking schema change the same sequence runs in reverse, with an overlap window
-in which both are accepted.
+Before changing the protocol, identify the actually deployed shell and web
+versions. Define and test their overlap, deploy a compatible web build, then ship
+the native build and enable the new capability. The current first-candidate
+configuration has no older version in its compatibility matrix.
 
 ### What crosses, and what does not
 
-Everything is a strict schema with explicit bounds. The bridge carries no cookie,
-no session token, no OAuth token, no password, no TOTP secret, no passkey
-assertion, no arbitrary URL, no arbitrary JavaScript, and no arbitrary text to
-speak or display.
+The bridge carries bounded commands, route and itinerary data, snapshots and
+correlated results. The message ceiling is 8 MiB, with aggregate limits of
+100,000 coordinates, 10,000 steps and 512 legs. The receiver checks origin,
+document nonce, message bounds, schemas, duplicates and negotiated protocol before
+dispatch. Some route fields deliberately preserve engine-specific extras; the
+whole payload still has a byte limit.
 
-Snapshots are monotonic. A full snapshot is authoritative at any revision — a
-reload legitimately produces one from wherever the session had reached. A delta
-applies only to the exact revision it was computed from, on the same session and
-the same route; anything else asks for a full snapshot instead. A missed update
-is a moment of staleness, and an invented one is a puck on the wrong road.
+It has no arbitrary JavaScript, SQL, file access, native method invocation or
+free-form speech command. Session cookies, passwords, TOTP secrets and passkey
+assertions do not belong in bridge messages. The authentication contract does
+allow a single-use callback code, state and PKCE verifier in `auth.result`; the
+page needs them to redeem the handoff. Keep these out of persistence, diagnostics
+and URLs that should contain only a challenge.
+
+A full snapshot can rehydrate the page at the current revision. A delta applies
+only to its matching session, route and base revision; a gap requests a full
+snapshot. The snapshot reducer and tests implement this contract independently
+of the unfinished foreground composition.
 
 ## Fixed origin
 
-The web origin is compiled into the binary. A deep link cannot change it — not
-by host, not by port, not by percent-encoding, not by a userinfo segment that
-makes one host look like another. Links are canonicalised to an allowlisted
-intent (a map query, or "show the running trip") and anything else is discarded
-rather than corrected.
+`config/mobileConfig.ts` validates the origin at build time. Release origins must
+use HTTPS and pass its public-host checks. The official application identifier
+`org.openmapx.app` is restricted to `https://openmapx.com` for both web and API.
+There is no runtime server selector.
 
-Self-hosters change the origin at build time and produce their own signed build
-with their own application id, scheme, and link associations. There is no runtime
-server switcher, because a server switcher is an origin switcher.
+`App.tsx` applies a navigation allowlist, App-Bound Domains on iOS, disabled
+WebView geolocation and denied media capture. Deep-link parsing reduces accepted
+links to a map query or an active-navigation intent; parser support does not
+establish end-to-end OS link delivery in the current app.
+
+Self-hosted distributions need their own application identifier, scheme, signing,
+associations, origin and trademark-compliant name.
 
 ## Authentication
 
-Authentication is web-owned. The app never holds a session.
-
-Email, password, email OTP, verification and TOTP run in the WebView, on the real
-origin. They work fine embedded and moving them elsewhere would hand the user off
-for the most common case.
-
-OAuth and passkeys do not run in the WebView, because they cannot: providers
-increasingly refuse embedded user agents outright, and platform authenticators
-are not exposed to a WebView at all. Those operations open the system browser,
-per [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252).
+Email/password, verification, email OTP and TOTP use the web UI and its session
+cookie. The system-browser handoff components support sign-in, provider linking
+and passkey setup, but `App.tsx` does not currently dispatch `auth.open` to them.
+Successful helper tests therefore do not establish installed OAuth or passkey
+sign-in.
 
 ### The handoff, and its threat model
 
-The shell generates a 256-bit PKCE verifier and a per-attempt state, in memory,
-and opens `https://<compiled origin>/mobile-auth` with only the S256 challenge,
-the state, and the purpose. The user signs in on a real page with a real URL bar.
-The page then asks the server to issue an opaque callback code, and redirects to
-`openmapx://auth/callback` with that code and the state.
+`SystemAuthSession.ts` generates a 32-byte PKCE verifier and a per-attempt state in
+memory. It opens `/mobile-auth` on the compiled origin with the S256 challenge,
+state and purpose. The callback uses the compiled scheme's `auth/callback` path
+and contains a code and state. Development builds use a suffixed scheme such as
+`openmapx-dev`.
 
-What each attacker gets:
+The server stores a hash of the callback code. Codes expire after two minutes and
+are consumed atomically; a well-formed but incorrect verifier also consumes the
+attempt. The exchange uses
+uniform rejection responses. An intercepted code cannot be redeemed without its
+verifier; concurrent redemptions cannot both succeed.
 
-- **Another app that registered the same scheme and intercepted the callback.**
-  It has the code and no verifier, so it cannot redeem. This is what PKCE is for.
-- **Anyone reading the URL** — browser history, an OS intent log, a shoulder.
-  The URL carries a code, never a token; the code is single-use and expires in
-  two minutes.
-- **Anyone who reads the database.** The callback code is stored hashed and the
-  verifier is never stored, so a dump yields nothing redeemable.
-- **Anyone probing the exchange endpoint.** Every rejection returns the same
-  status and body, so no response distinguishes "no such code" from "wrong
-  verifier" from "already used". A wrong verifier also consumes the attempt, so
-  a live code cannot be ground against.
-- **Two racing redemptions.** Consumption is one conditional `UPDATE`; the loser
-  matches nothing. There is no read-then-write window.
+The page receives the code, state and verifier through the bounded result,
+exchanges them for a Better Auth one-time token, then verifies that token to set
+the WebView cookie. Attempts remain in memory and are not retried after an
+ambiguous exchange. Native session storage and diagnostic exports must exclude
+the handoff material.
 
-The exchange returns a Better Auth one-time token, which the WebView immediately
-verifies — and that verification, not the exchange, is what sets the WebView's
-session cookie. Nothing is retried: an ambiguous exchange means signing in again,
-which is cheap, rather than storing a maybe-consumed credential.
-
-On installed iOS there is no third-party primary sign-in at all; OSM and
-Mapillary are link/unlink operations on an account the user already has.
+The web sign-in policy removes third-party primary sign-in on installed iOS;
+OpenStreetMap and Mapillary are account-linking operations there. Test the
+complete composed flow before making store claims.
 
 ## Content Security Policy
 
-Production `script-src` has no `unsafe-inline` and no `unsafe-eval`. The policy
-carries a per-request nonce set in `apps/web/src/proxy.ts`; a nonce written into
-a static header would be a shared secret an attacker simply reads off the
-response.
+`apps/web/src/proxy.ts` supplies a per-request script nonce. The production
+`script-src` excludes `unsafe-inline` and `unsafe-eval`; `strict-dynamic` allows
+scripts loaded by trusted scripts. Inline styles remain allowed for runtime
+styling. Image and connection origins remain broad enough for configured map and
+data providers. These directives do not replace the bridge's document checks.
 
-Two directives are deliberately not tightened:
-
-- `style-src` keeps `unsafe-inline`, because MUI's emotion runtime and MapLibre
-  both write style elements at runtime. Inline style cannot execute, so this is
-  a bounded exception rather than a hole.
-- `connect-src` and `img-src` stay broad, because tiles and data services live on
-  origins an operator configures at runtime and enumerating them would break
-  self-hosting. This widens nothing the bridge relies on: the shell checks the
-  document origin itself, and a permissive `connect-src` gives a page no ability
-  to talk to the shell.
-
-Verified against a local production build with a real browser: every script on
-the page carries the nonce, the nonce differs per request, and an injected inline
-event handler and a foreign frame are both blocked with explicit violation
-reports. Note that `strict-dynamic` intentionally lets already-trusted script
-create further script — the threat model is parser-inserted markup, which is what
-XSS produces.
+Inspect the served production headers and rendered page when changing CSP.
+Source and policy tests alone do not prove a deployed browser enforced it.
 
 ## What is guaranteed offline, and what is not
 
-**Guaranteed.** A navigation session that started while online continues through
-total network loss. The route and its captured transit stop lists are already on
-the device, progress is computed locally, cues are spoken locally, and the alert
-is already scheduled. Killing or crashing the WebView does not stop it.
+Captured-route processing and storage tests exercise progress without network
+access, with external location, audio and networking ports replaced by test
+implementations. They do not establish installed background guidance because the
+foreground command composition is missing. A complete OS callback blackout also
+prevents real-time processing; foreground coasting does not create a background
+wake source.
 
-**Not guaranteed.** A cold start with no cached page does not show the map. The
-web UI is served remotely; the service worker caches opportunistically, and an
-opportunistic cache is not a promise. In that state the app says so honestly and
-still offers control of the running session through native UI.
-
-That distinction is deliberate and is not a limitation to be quietly engineered
-around. Promising an offline cold start would mean shipping the UI in the binary,
-which would mean the app and the website diverging at every deploy.
+The remotely served UI has no guaranteed offline cold start. If no cached page is
+available, native loading and recovery UI must remain usable. Physical-device
+qualification must cover suspension, renderer loss, audio, alerts and recovery
+before offline navigation claims are published.
 
 ## What is not here
 
-No Median or comparable wrapper service. No EAS or any paid cloud build. No
-analytics. No remote push. No over-the-air native update channel. `ios/` and
-`android/` are generated build output, regenerated from `app.config.ts` and the
-config plugins, and are never committed.
+There is no EAS build configuration, hosted wrapper, remote push or native OTA
+update channel in the release design. `ios/` and `android/` are ignored generated
+projects. Change committed configuration, plugins or local modules, then
+regenerate them. See [Mobile feasibility](./mobile-feasibility.md) for evidence
+limits and [Mobile release](./mobile-release.md) for release blockers.

@@ -15,6 +15,7 @@ import {
 } from "@openmapx/core";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
+import { rightsPolicyOf } from "./traffic-application.js";
 
 export interface ClosureExclusions {
   points: LngLat[];
@@ -307,6 +308,9 @@ export async function activeClosuresForBbox(
   const settled = await Promise.allSettled(providers.map((p) => p.getEvents(bbox, {})));
 
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+  // Only an authoritative policy may admit unclear or non-commercial rights.
+  const policy = await ctx.getRoadConditionsPolicySnapshot?.().catch(() => undefined);
+  const rightsPolicy = rightsPolicyOf(policy?.authoritative ? policy : undefined);
   const points: LngLat[] = [];
   const polygons: LngLat[][] = [];
   const localAccessLines: LngLat[][] = [];
@@ -345,6 +349,7 @@ export async function activeClosuresForBbox(
           sharedTrafficApplied: false,
           allowLegacyGeometry: true,
           disallowedSources: disallowed,
+          rightsPolicy,
         });
         for (const reason of routeDecision.reasons) assessmentReasons.add(reason);
         if (routeDecision.validUntil) {
@@ -362,6 +367,7 @@ export async function activeClosuresForBbox(
               mode,
               sharedTrafficApplied: true,
               disallowedSources: disallowed,
+              rightsPolicy,
             }).disposition === "shared-traffic"
           ) {
             const geometry = effectGeometry(event, effect);

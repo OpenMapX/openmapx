@@ -22,10 +22,7 @@ type Issue = {
   type?: { name: string } | null;
 };
 type Event = { id: number; event: string; label?: { name: string }; actor?: { type: string } };
-function fixture(
-  state = "closed",
-  names = ["needs-triage", "needs-info", "blocked", "integration"],
-) {
+function fixture(state = "closed", names = ["needs-triage", "needs-info", "integration"]) {
   const issue: Issue = {
     number: 42,
     state,
@@ -103,7 +100,7 @@ describe("issue lifecycle housekeeping", () => {
   it("does not strip labels when an old close event arrives after reopening", async () => {
     const f = fixture("open");
     await f.run("closed");
-    expect(names(f.issue)).toEqual(["blocked", "integration", "needs-info", "needs-triage"]);
+    expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
   });
   it("cleans current closed state when an old reopen event arrives", async () => {
     const f = fixture();
@@ -134,13 +131,11 @@ describe("issue lifecycle housekeeping", () => {
       f.issue.state = "open";
     });
     await f.run();
-    expect(names(f.issue)).toEqual(["blocked", "integration", "needs-info", "needs-triage"]);
+    expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
   });
   it.each([
-    ["needs-info", ["needs-info", "blocked"]],
-    ["blocked", ["blocked", "integration"]],
-    ["needs-info", ["needs-triage", "needs-info", "blocked"]],
-    ["blocked", ["needs-triage", "needs-info", "blocked"]],
+    ["needs-info", ["needs-info", "integration"]],
+    ["needs-info", ["needs-triage", "needs-info"]],
   ])(
     "reports an ambiguous reopen during removal of %s instead of claiming success",
     async (target, labels) => {
@@ -156,14 +151,14 @@ describe("issue lifecycle housekeeping", () => {
     },
   );
   it("does not overwrite later human label decisions when reporting a reopen race", async () => {
-    const f = fixture("closed", ["needs-info", "blocked"]);
+    const f = fixture("closed", ["needs-info", "integration"]);
     f.onRemove(() => {
       f.issue.state = "open";
       f.issue.labels = [{ name: "needs-info" }, { name: "help wanted" }];
       f.events.push({
         id: 3,
         event: "unlabeled",
-        label: { name: "blocked" },
+        label: { name: "integration" },
         actor: { type: "User" },
       });
     });
@@ -195,7 +190,7 @@ describe("issue lifecycle housekeeping", () => {
   it.each(["commented", "labeled"])("ignores unrelated %s actions", async (action) => {
     const f = fixture();
     await f.run(action);
-    expect(names(f.issue)).toHaveLength(4);
+    expect(names(f.issue)).toHaveLength(3);
   });
   it("ignores PR payloads and non-issue events before any API access", async () => {
     const f = fixture();
@@ -209,7 +204,7 @@ describe("issue lifecycle housekeeping", () => {
     const f = fixture();
     f.issue.pull_request = {};
     await f.run();
-    expect(names(f.issue)).toHaveLength(4);
+    expect(names(f.issue)).toHaveLength(3);
   });
   it("tolerates a raced missing label only after confirming its absence", async () => {
     const f = fixture();
@@ -228,7 +223,7 @@ describe("issue lifecycle housekeeping", () => {
         throw Object.assign(new Error("API failure"), { status });
       };
       await expect(f.run()).rejects.toThrow("API failure");
-      expect(names(f.issue)).toHaveLength(4);
+      expect(names(f.issue)).toHaveLength(3);
     },
   );
   it("fails visibly on repeated concurrent changes rather than retrying forever", async () => {
@@ -401,7 +396,7 @@ describe("contribution policy consumers", () => {
         "--input-type=module",
         "-e",
         `
-      const issue = { state: 'closed', labels: ['needs-triage', 'needs-info', 'blocked', 'integration'].map(name => ({name})) };
+      const issue = { state: 'closed', labels: ['needs-triage', 'needs-info', 'integration'].map(name => ({name})) };
       const github = { rest: { issues: {
         get: async () => ({data: structuredClone(issue)}),
         removeLabel: async ({name}) => { issue.labels = issue.labels.filter(label => label.name !== name); }

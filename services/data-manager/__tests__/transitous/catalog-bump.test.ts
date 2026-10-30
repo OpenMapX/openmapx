@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TransitousLock } from "@openmapx/transitous-core";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CatalogBumpError,
@@ -9,7 +10,6 @@ import {
   lockFromCandidate,
   resolveCatalogBumpCandidate,
 } from "../../src/jobs/transitous/catalog-bump.js";
-import type { TransitousLock } from "../../src/transitous-lock.js";
 
 const SHA_A = "a".repeat(40);
 const SHA_ATLAS = "b".repeat(40);

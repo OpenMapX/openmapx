@@ -30,6 +30,7 @@ import {
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
 import { useJunctionPreviewBudget } from "@/lib/navigation/useJunctionPreviewBudget";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
+import { useSheetFollowTrack } from "@/lib/sheetFollow";
 import { ArrivalCard } from "./ArrivalCard";
 import { ARRIVAL_WAYPOINT_MATCH_TOLERANCE_METERS } from "./arrivalHandoffState";
 import { FasterRouteBanner } from "./FasterRouteBanner";
@@ -104,6 +105,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
   // and LegendHost lift the map's own bottom-anchored chrome.
   const vh = useWindowHeight();
   const sheetClearance = useMobilePanelClearance(vh);
+  const followTrack = useSheetFollowTrack();
   const sheetOccupiedHeight = useMobilePanelOccupiedHeight();
   const junctionAvailableHeight = useJunctionPreviewBudget({
     shell: shellEl,
@@ -114,6 +116,8 @@ export function GroundNavigationChrome({ coverage }: Props) {
     bottomHeader: bottomHeaderEl,
     isMobile,
     sheetClearance,
+    // Matches NavSpeedLimitSlot: the badge rides a driving sheet by translation.
+    speedLimitRidesSheet: isMobile && followTrack !== null,
     sheetOccupiedHeight,
     mobilePanelPending: isMobile && !!route && sheetOccupiedHeight === 0,
   });

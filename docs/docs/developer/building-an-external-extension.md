@@ -1,33 +1,41 @@
 ---
 title: Building an external extension
-description: A from-scratch guide to building an OpenMapX integration and/or companion service in your own repository, using OpenConditions as the worked example.
+description: "Scaffold, validate and package a declarative integration and companion service outside the OpenMapX repository."
 sidebar_position: 6
 ---
 
 # Building an external extension
 
-This guide is for authors who want to ship an OpenMapX integration in their **own
-repository** — not as a built-in inside the OpenMapX monorepo. OpenConditions
-(`openconditions/openconditions`) is the running example for the companion
-service: a Fastify daemon that owns road-condition data and serves it over HTTP.
-Its OpenMapX client is not part of the extension. A community artifact cannot run
-backend code in app-api, so OpenMapX reads OpenConditions through its reviewed
-built-in `openconditions` integration, configured with `OPENCONDITIONS_URL`. The
-integration steps below use a hypothetical declarative `conditions` integration
-published from `<owner>/<repo>`.
+Use this guide to publish a declarative integration artifact, a containerized
+service, or an extension bundle containing both from your own repository.
+Installed artifacts cannot execute backend or presentation JavaScript in
+OpenMapX. A new provider or UI requires an existing host protocol or a reviewed
+built-in adapter.
 
-If you are developing a built-in integration inside the monorepo instead, start
-with [Writing an integration](./writing-an-integration.md) — the paths and
-tooling differ.
+The examples use a hypothetical `conditions` integration and `conditions-ingest`
+service. OpenConditions illustrates the service/adapter boundary: its service
+runs separately, while the reviewed built-in `openconditions` integration reads
+it using `OPENCONDITIONS_URL`. Installing arbitrary service metadata does not
+create that bridge.
+
+For in-tree TypeScript development, use [Writing an integration](./writing-an-integration.md).
+
+Before starting, prepare:
+
+- Node matching the CLI's engine requirement (currently Node 24 or later).
+- An independent authoring directory and the matching standalone CLI version.
+- A disposable OpenMapX host for installation testing, with separate Docker
+  ports and data from any existing deployment.
+- A documented host adapter or protocol if the service must expose data to the app.
 
 ## Overview
 
 An **external extension** is one or both of:
 
-- An **integration** — a manifest plus optional presentation assets. Community
-  artifacts are declarative/frontend-only; app-api rejects backend entry points
-  instead of importing them with control-plane authority.
-- A **companion service** — a separately containerized daemon described by a
+- An **integration**: a manifest plus optional presentation assets. Community
+  artifacts contain declarative metadata, localized strings and safe static
+  assets. Both backend entry points and presentation scripts are rejected.
+- A **companion service**: a separately containerized daemon described by a
   `service.json`, managed by the OpenMapX compose renderer, and registered in the
   host's service registry. Services do their own Postgres schema migrations and
   supply data that integrations consume.
@@ -40,13 +48,16 @@ The two dependency directions to keep in mind:
    validate, package, and assemble the component manifest. Runtime code
    stays in the service container.
 
-The CLI is licensed under Apache-2.0 and designed for use outside this repository. The CLI and `@openmapx/extension-contracts` are being qualified for their first public release. Until publication, use the exact locally built CLI tarball; registry installation commands below apply to published versions.
+The standalone CLI and `@openmapx/extension-contracts` are Apache-2.0 authoring
+tools. Use a published version that is available in your registry, or build an
+exact candidate tarball from the host checkout. Package version fields alone do
+not establish publication or compatibility with a deployed host.
 
 ## Set up your repo
 
 ### Keep the integration artifact declarative
 
-No runtime SDK is needed for an installable integration artifact. It contains a
+An installable integration artifact needs no runtime SDK. It contains a
 manifest, localized strings, and optional safe static assets such as an SVG
 preview. App-api does not import community server modules, and the web app does
 not execute community scripts. Put all executable behavior in the companion
@@ -254,26 +265,26 @@ and creates the archive.
 
 #### What the archive contains
 
-Packaging copies an explicit allowlist into a fresh staging area — it never
+Packaging copies an explicit allowlist into a fresh staging area: it never
 archives your source directory. Anything not on this list simply is not
 collected, so a stray `.env`, key, or scratch file next to a declared file
 cannot reach a release:
 
-| Included                                                       | Limit                   |
-| -------------------------------------------------------------- | ----------------------- |
-| `manifest.json` (after schema validation)                      | —                       |
-| `openmapx-artifact.json` (generated)                           | —                       |
-| `dist/licenses.json` (generated)                               | —                       |
-| `strings/<locale>.json` matching `[a-z0-9-]{2,35}`             | 100 files, 256 KiB each |
-| The exact manifest-referenced SVG preview                      | 64 KiB                  |
-| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt` | 1 MiB each              |
+| Included                                                           | Limit                   |
+| ------------------------------------------------------------------ | ----------------------- |
+| `manifest.json` (after schema validation)                          | 128 KiB                 |
+| `openmapx-artifact.json` (generated)                               | :                       |
+| `dist/licenses.json` (generated when dependency notices are found) | :                       |
+| `strings/<locale>.json` matching `[a-z0-9-]{2,35}`                 | 100 files, 256 KiB each |
+| The exact manifest-referenced SVG preview                          | 64 KiB                  |
+| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt`     | 1 MiB each              |
 
 Everything else is excluded: source and tests, source maps, `package.json`,
 lockfiles, dotfiles and `.env*`, VCS data, `node_modules/`, caches, unreferenced
 `assets/`, symlinks, hard links, sockets, and devices.
 
 Packaging never writes into your source tree, and two builds from the same
-source produce byte-identical archives.
+source and resolved dependency-notice inputs produce byte-identical archives.
 
 Preview the exact contents before publishing:
 
@@ -325,14 +336,18 @@ pnpm openmapx integrations install \
   --artifact --sha256 <hash>
 ```
 
-The installer downloads, verifies the mandatory checksum, extracts into a staging area,
-rejects runtime entry points, validates the manifest and artifact contract, and atomically swaps the result
-into `custom_integrations/conditions/`. The bundled files persist there across
-upgrades until you remove the integration.
+The operations agent downloads the artifact, verifies the mandatory checksum,
+extracts it into a staging area, rejects runtime entry points and links,
+validates the manifest and artifact contract, and atomically swaps the result
+into `conditions/` in its integration store
+(`infra/docker/state/ops-agent/custom-integrations/`), recording the SHA-256 of
+every file. The bundled files persist there across upgrades until you remove the
+integration. The agent loads only integrations it installed this way, so copy
+files into the store by hand and they are ignored.
 
 For distribution, wrap the artifact in an [`extension.json`](#bundle-it-as-an-extension)
 so an operator installs it from the **Extensions** store (or
-`pnpm openmapx ext install <extension.json-url>`) — that's the recommended path,
+`pnpm openmapx ext install <extension.json-url>`): that's the recommended path,
 and it's required once your extension also ships a companion service. The operator
 CLI previews before queuing an install. For host ports, first inspect
 `pnpm openmapx ext preview <extension.json-url>` and deliberately pass its exact
@@ -342,7 +357,7 @@ snapshot changes, request limits and queued-job handling.
 
 ### Reload `app-api`
 
-Community artifacts are declarative/frontend-only. Backend
+Community artifacts are declarative-only. Backend
 JavaScript is rejected because app-api is a privileged control plane process,
 not a sandbox; backend behavior must live in the companion
 service described below. After a manual CLI install, restart the API so the new
@@ -396,7 +411,7 @@ pnpm openmapx users verify your-test-email@example.org
 pnpm openmapx users promote your-test-email@example.org
 ```
 
-Sign out and back in after promotion. Keep `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` unset for this recipe so the API and installer both use the checkout's `custom_integrations/` directory.
+Sign out and back in after promotion. Keep `OPENMAPX_CUSTOM_INTEGRATIONS_DIR` unset for this recipe so the host-run API reads the operations agent's integration store, `infra/docker/state/ops-agent/custom-integrations/`, where the installer puts the integration.
 
 ### Install and repeat the authoring loop
 
@@ -443,7 +458,7 @@ Verify configuration forwarding, actual service readiness and displayed data, re
 ## Add a companion service
 
 An integration that needs its own database, daemon, or ingest loop ships a
-**companion service** — a separately containerized process the compose renderer
+**companion service**: a separately containerized process the compose renderer
 manages alongside the rest of the stack.
 
 ### Scaffold the service
@@ -453,7 +468,8 @@ openmapx-ext scaffold service conditions-ingest --out ./services/conditions-inge
 ```
 
 This creates `services/conditions-ingest/service.json` with the `id` substituted,
-ready to fill in.
+ready to fill in. Replace the image, health port, schema name and capabilities
+with your service's actual values before validation.
 
 ### Declare `ownsSchema`
 
@@ -463,13 +479,13 @@ A service that creates and migrates its own Postgres schema declares it in
 ```json
 {
   "id": "conditions-ingest",
-  "name": "OpenConditions ingest",
+  "name": "Conditions ingest",
   "version": "1.0.0",
   "quality": "community",
   "ownsSchema": "conditions",
   "container": {
-    "image": "ghcr.io/openconditions/openconditions",
-    "tag": "latest",
+    "image": "ghcr.io/your-org/conditions-ingest",
+    "tag": "1.0.0",
     "expose": [4000],
     "healthcheck": {
       "type": "http",
@@ -485,14 +501,20 @@ A service that creates and migrates its own Postgres schema declares it in
 }
 ```
 
+Before installation, add the actual `container.digest` (`sha256:<64 lowercase
+hex digits>`) of your published image. The portable service validator accepts a
+manifest without it, but host admission rejects an unpinned community image.
+Use the digest produced by your build/publish workflow; the illustrative image
+above is not a deployable artifact.
+
 `ownsSchema` must be a valid lowercase Postgres identifier
-(`[a-z_][a-z0-9_]*`). The platform applies no migration and grants nothing —
+(`[a-z_][a-z0-9_]*`). The platform applies no migration and grants nothing,
 it is entirely your service's responsibility.
 
 ### Migrate idempotently on boot
 
 Your service must create and evolve its schema during container startup, before
-it begins serving traffic. The blessed pattern is idempotent DDL:
+it begins serving traffic. For an initial schema, use idempotent DDL:
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS conditions;
@@ -510,22 +532,26 @@ CREATE INDEX IF NOT EXISTS conditions_observations_geometry_idx
 ```
 
 Run these statements in your service's startup code before the HTTP listener
-binds. A `CREATE … IF NOT EXISTS` approach lets you add columns in later versions
-by appending `ALTER TABLE … ADD COLUMN IF NOT EXISTS` statements — each
-migration step stays idempotent.
+binds. Later versions need ordered migrations for changes such as types, constraints
+and data backfills. Use a migration ledger and appropriate locking;
+`CREATE TABLE IF NOT EXISTS` alone does not upgrade an existing table.
 
-Each service owns exactly one schema. Cross-schema writes by a community service
-are not permitted.
+Each service declares one owned schema. Cross-schema writes by a community
+service are outside the contract. `ownsSchema` creates no database role, grants
+or network access. Community services run on isolated networks and cannot reach
+platform Postgres by default. Provision an explicit reviewed database connection
+and a restricted role before using this SQL. The OpenConditions network bridge
+is a specific built-in exception, not a capability every extension receives.
 
 ### How the service gets installed
 
 A service ships in an extension bundle (next section). When the operator installs
 the bundle, the orchestrator clones your service repo at the pinned ref into the
 host's service registry, enables the service, renders compose, and starts the
-container — all in one step. The renderer creates the service's named volumes
-first, then your boot migration runs, so the Postgres schema is ready before the
-API accepts traffic. There is no separate "register a service repo" step — the
-bundle is the unit of installation.
+container within one queued job. Named volumes provide persistence where declared. Your service must gate its
+own readiness on completed migrations; Compose startup alone does not prove
+that its schema or the consuming API is ready. The bundle is the unit of installation; no separate service-repository
+registration is needed.
 
 ## Wire them together
 
@@ -540,8 +566,10 @@ Version and document that boundary alongside the bundle.
 
 ### Bundle it as an extension
 
-A coupled extension is distributed as one `extension.json` that pins every part —
-the integration artifact by SHA-256, the service repo by Git ref. Emit it with
+A coupled extension uses one `extension.json` to identify the integration
+artifact by SHA-256 and each service repository by ref. A tag or branch can
+move between previews; use a commit SHA for reproducible publication. An omitted
+ref resolves to HEAD at installation. The host records the resolved commit. Emit it with
 the authoring CLI:
 
 ```sh
@@ -563,11 +591,12 @@ The input can include `config` and `readiness`. Do not combine `--input` with me
 
 Publish `extension.json` at an HTTPS URL after the artifacts and service revision it references are available. Catalog verification binds the exact manifest bytes to a SHA-256 pin; a moving URL or catalog inclusion alone does not establish verified trust. Updates to verified content require reviewed pins for the new version. Direct-URL installs remain community trust. See [Community extensions](../administration/community-extensions.md) for the current catalog and update rules.
 
+Manifest, integration-artifact, service-repository, and custom-catalog URLs must use HTTPS and must not contain a username, password, query, or fragment. Put authentication in a reviewed runtime credential flow instead of a signed or credential-bearing acquisition URL; OpenMapX persists extension provenance and does not support request-only secrets for extension downloads. Service repositories are also limited to the supported public Git hosts and default HTTPS port. The authoring CLI applies the same locator contract when validating or emitting a bundle.
+
 ### End-to-end install
 
-The operator installs the whole bundle in one action — the orchestrator pins and
-starts the service, installs the integration, and reloads the API atomically
-(rolling back on failure):
+The operator queues one installation job for the bundle. It installs the
+components, applies configuration, starts services and reloads integrations:
 
 ```sh
 pnpm openmapx ext preview https://example.com/extension.json
@@ -576,10 +605,16 @@ pnpm openmapx ext install https://example.com/extension.json --host-port-confirm
 # Without host ports, omit the confirmation option. Catalog IDs also work.
 ```
 
+A queued response is acceptance only. Inspect Activity for the terminal result.
+The installer records rollback/recovery state, but installation is not a single
+atomic transaction across files, configuration, containers, application state
+and service-owned database migrations. Failed or unknown host application can
+require reconciliation. Design migrations and test recovery accordingly.
+
 For the operator, updating is `pnpm openmapx ext update <id>` (or the **Update**
 action in the admin panel, offered once the store sees your newer release); it
-re-pins every part together so the coupled service, integration, and shared
-schema stay version-consistent. Something installed directly by URL (not via a
+applies the new component set as one job. The companion service remains
+responsible for schema compatibility and migration recovery. Something installed directly by URL (not via a
 catalog) is updated by re-running `pnpm openmapx ext install <newer extension.json url>`.
 For a catalog update with host ports, run `pnpm openmapx ext preview <id>` first,
 review the current commit, bindings, source trust and full security rating, then
@@ -601,23 +636,29 @@ those commands obtain another fresh preview and exit on 429 without retrying.
 ## Caveats
 
 **Runtime isolation.** Integration artifacts are declarative-only and require a
-SHA-256 pin. Executable extension behavior runs in the separately sandboxed
-service component; app-api, data-manager, and the same-origin web page do not
-execute community integration modules.
+SHA-256 pin. Executable behavior runs in a separate service container subject to
+the [community service restrictions](./service-manifest.md#quality-tiers).
+App-api, data-manager and the same-origin web page do not execute community
+integration modules. Network isolation still permits outbound internet traffic
+and any explicitly reviewed built-in bridge connections.
 
 **Platform-version compatibility.** The host rejects an integration whose
 declared protocol major differs from the host, or whose required minor exceeds the host’s minor. Use exactly `major.minor`; legacy range strings such as `>=1.0.0` must be corrected to `1.0`. Pin a `platform` field in your
 `manifest.json` and test against each OpenMapX release before publishing a new
 artifact.
 
-**Bundle persistence.** Installed integration bundles live under
-`custom_integrations/<id>/` on the host. This directory is a bind-mount that
-survives container restarts; removing the integration with
-`pnpm openmapx integrations remove <id>` deletes it cleanly.
+**Bundle persistence.** Installed integration bundles live in
+`infra/docker/state/ops-agent/custom-integrations/<id>/` on the host, which
+app-api bind-mounts read-only; they survive container restarts; removing the integration with
+`pnpm openmapx integrations remove <id>` deletes the integration artifact. For a
+bundle managed by the Extensions store, use `pnpm openmapx ext remove <id>` so
+component ownership and installed-extension bookkeeping are updated together.
+Neither command is a schema rollback for the companion service.
 
-**Service secrets.** Non-sensitive service settings are supplied via environment
-variables in `infra/docker/.env` — document which ones your service reads in the
-manifest's `envVars` array so they appear in the admin UI. Sensitive credentials
+**Service secrets.** Declare operator-facing non-sensitive settings in `configSchema`;
+the renderer forwards resolved values into the service environment. `envVars`
+documents expectations but does not pass the deployment `.env` into a community
+container. Community Compose interpolation is disabled. Sensitive credentials
 should instead be declared as `configSchema` properties marked
 `"x-openmapx-secret": true`: the admin panel's credential vault encrypts them and
 the renderer mounts each as a file-based Docker `secret`, which your service reads
@@ -626,13 +667,13 @@ through the matching `<KEY>_FILE` environment variable. See
 
 ## See also
 
-- **[Service manifest](./service-manifest.md)** — the full `service.json` schema:
+- **[Service manifest](./service-manifest.md)**: the full `service.json` schema:
   `ownsSchema`, `provides`, `consumes`, `volumes`, `bindMounts`, quality tiers,
   and security constraints.
-- **[Community extensions](../administration/community-extensions.md)** — the
+- **[Community extensions](../administration/community-extensions.md)**: the
   operator's view: installing, updating, removing, catalog sources, and the trust
   model.
-- **[Integration system](./integration-system.md)** — the manifest schema, the
+- **[Integration system](./integration-system.md)**: the manifest schema, the
   built-in `IntegrationContext` surface, community restrictions, and the
   loader-to-host lifecycle in depth.
 

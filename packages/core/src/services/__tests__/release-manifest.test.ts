@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
+import { CURRENT_CONFIGURATION } from "../deployment";
 import {
   canonicalReleaseManifest,
   parseReleaseComposeSelection,
@@ -21,6 +22,9 @@ import {
   transitousToolsImageFromReleaseCompose,
   writeReleaseComposeArtifacts,
 } from "../release-manifest";
+import { releaseStatePaths } from "../release-state";
+
+const INFRA = "/srv/openmapx/infra/docker";
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const manifest: ReleaseManifest = {
@@ -65,7 +69,7 @@ describe("shared release manifest", () => {
     };
     const parsed = parseReleaseManifest(JSON.stringify(mixed));
     expect(parsed).toEqual(mixed);
-    const overlay = renderReleaseCompose(parsed);
+    const overlay = renderReleaseCompose(parsed, INFRA);
     expect(overlay).toContain(`image: ${manifest.images.api}`);
     expect(overlay).toContain(`image: ${manifest.images["ops-agent"]}`);
   });
@@ -94,7 +98,7 @@ describe("shared release manifest", () => {
   });
 
   it("round-trips the transitous-tools pin through the rendered overlay", () => {
-    const overlay = renderReleaseCompose(manifest);
+    const overlay = renderReleaseCompose(manifest, INFRA);
     expect(transitousToolsImageFromReleaseCompose(overlay)).toBe(
       manifest.images["transitous-tools"],
     );
@@ -140,7 +144,7 @@ describe("shared release manifest", () => {
   });
 
   it("renders the exact collector pin and validation evidence for the API and ops agent", () => {
-    const overlay = load(renderReleaseCompose(manifest)) as {
+    const overlay = load(renderReleaseCompose(manifest, INFRA)) as {
       services: Record<string, { environment?: Record<string, string>; configs?: unknown[] }>;
       configs: Record<string, { file: string }>;
     };
@@ -163,21 +167,30 @@ describe("shared release manifest", () => {
     ]);
     expect(overlay.configs["privacy-release-validation"]).toEqual({
       // Compose resolves an overlay's paths against the first file's directory,
-      // the configuration generation; the evidence sits beside the overlay.
-      file: "../.release-evidence/privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
+      // the configuration pointer; the evidence sits beside the overlay.
+      file: "../../releases/evidence/privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
     });
   });
 
   it("publishes content-addressed evidence before an atomic release overlay", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     try {
-      const overlayPath = join(root, "docker-compose.release.yml");
-      const result = writeReleaseComposeArtifacts(manifest, overlayPath);
+      const overlayPath = join(
+        root,
+        "state",
+        "ops-agent",
+        "releases",
+        "docker-compose.release.yml",
+      );
+      const result = writeReleaseComposeArtifacts(manifest, root);
       expect(result).toEqual({
         overlayPath,
         evidencePath: join(
           root,
-          ".release-evidence",
+          "state",
+          "ops-agent",
+          "releases",
+          "evidence",
           "privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
         ),
       });
@@ -185,8 +198,9 @@ describe("shared release manifest", () => {
         manifest.privacyReleaseValidation,
       );
       expect(lstatSync(result.evidencePath).mode & 0o777).toBe(0o444);
-      expect(lstatSync(join(root, ".release-evidence")).mode & 0o777).toBe(0o700);
-      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(manifest));
+      expect(lstatSync(releaseStatePaths(root).evidence).mode & 0o777).toBe(0o700);
+      expect(lstatSync(releaseStatePaths(root).directory).mode & 0o777).toBe(0o700);
+      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(manifest, root));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -196,10 +210,7 @@ describe("shared release manifest", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     const previousUmask = process.umask(0o077);
     try {
-      const result = writeReleaseComposeArtifacts(
-        manifest,
-        join(root, "docker-compose.release.yml"),
-      );
+      const result = writeReleaseComposeArtifacts(manifest, root);
       expect(lstatSync(result.evidencePath).mode & 0o777).toBe(0o444);
     } finally {
       process.umask(previousUmask);
@@ -212,8 +223,8 @@ describe("shared release manifest", () => {
     (kind) => {
       const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
       try {
-        const overlayPath = join(root, "docker-compose.release.yml");
-        const active = writeReleaseComposeArtifacts(manifest, overlayPath);
+        const overlayPath = releaseStatePaths(root).overlay;
+        const active = writeReleaseComposeArtifacts(manifest, root);
         const activeOverlay = readFileSync(overlayPath, "utf8");
         const activeEvidence = readFileSync(active.evidencePath, "utf8");
         const next = {
@@ -224,12 +235,12 @@ describe("shared release manifest", () => {
             validatedAt: "2026-09-06T12:00:00.000Z",
           },
         };
-        const nextCompose = load(renderReleaseCompose(next)) as {
+        const nextCompose = load(renderReleaseCompose(next, root)) as {
           configs: { "privacy-release-validation": { file: string } };
         };
         const nextEvidencePath = join(
           root,
-          ".trusted-config-current",
+          CURRENT_CONFIGURATION,
           nextCompose.configs["privacy-release-validation"].file,
         );
         if (kind === "corrupt") {
@@ -239,7 +250,7 @@ describe("shared release manifest", () => {
           symlinkSync(active.evidencePath, nextEvidencePath);
         }
 
-        expect(() => writeReleaseComposeArtifacts(next, overlayPath)).toThrow(
+        expect(() => writeReleaseComposeArtifacts(next, root)).toThrow(
           /validation evidence is unsafe/,
         );
         expect(readFileSync(overlayPath, "utf8")).toBe(activeOverlay);
@@ -253,8 +264,8 @@ describe("shared release manifest", () => {
   it("retains prior evidence so the exact previous overlay still resolves after a switch", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     try {
-      const overlayPath = join(root, "docker-compose.release.yml");
-      const first = writeReleaseComposeArtifacts(manifest, overlayPath);
+      const overlayPath = releaseStatePaths(root).overlay;
+      const first = writeReleaseComposeArtifacts(manifest, root);
       const firstOverlay = readFileSync(overlayPath, "utf8");
       const next = {
         ...manifest,
@@ -264,7 +275,7 @@ describe("shared release manifest", () => {
           validatedAt: "2026-09-06T12:00:00.000Z",
         },
       };
-      const second = writeReleaseComposeArtifacts(next, overlayPath);
+      const second = writeReleaseComposeArtifacts(next, root);
       expect(second.evidencePath).not.toBe(first.evidencePath);
       expect(JSON.parse(readFileSync(first.evidencePath, "utf8"))).toEqual(
         manifest.privacyReleaseValidation,
@@ -278,14 +289,14 @@ describe("shared release manifest", () => {
       };
       const oldEvidencePath = join(
         root,
-        ".trusted-config-current",
+        CURRENT_CONFIGURATION,
         oldCompose.configs["privacy-release-validation"].file,
       );
       expect(oldEvidencePath).toBe(first.evidencePath);
       expect(JSON.parse(readFileSync(oldEvidencePath, "utf8"))).toEqual(
         manifest.privacyReleaseValidation,
       );
-      expect(firstOverlay).toBe(renderReleaseCompose(manifest));
+      expect(firstOverlay).toBe(renderReleaseCompose(manifest, root));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -341,7 +352,7 @@ describe("release lockfile image contract and selection", () => {
   it("round trips selected identity and seven images, including quoted release IDs", () => {
     const selected = { ...manifest, release: "release-test" };
     const images = manifest.images;
-    const rendered = renderReleaseCompose(selected);
+    const rendered = renderReleaseCompose(selected, INFRA);
     expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
     expect(rendered).not.toContain("ghcr.io/openmapx/docs");
   });
@@ -362,7 +373,7 @@ describe("release lockfile image contract and selection", () => {
 });
 
 it("does not attribute a modified service pin to stale release metadata", () => {
-  const rendered = renderReleaseCompose(manifest).replace(
+  const rendered = renderReleaseCompose(manifest, INFRA).replace(
     `image: ${manifest.images.api}`,
     `image: ghcr.io/openmapx/api@${digest("0")}`,
   );
@@ -374,7 +385,7 @@ it("does not attribute a modified service pin to stale release metadata", () => 
 it.each(["app-api", "ops-agent"])(
   "reports unknown helper selection when %s disagrees with its mirrored pin",
   (serviceId) => {
-    const rendered = load(renderReleaseCompose(manifest)) as {
+    const rendered = load(renderReleaseCompose(manifest, INFRA)) as {
       services: Record<string, { environment: Record<string, string> }>;
     };
     rendered.services[serviceId].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE =
@@ -388,7 +399,7 @@ it.each(["app-api", "ops-agent"])(
 );
 
 it("does not claim a complete release when a mirrored helper pin is absent", () => {
-  const rendered = load(renderReleaseCompose(manifest)) as {
+  const rendered = load(renderReleaseCompose(manifest, INFRA)) as {
     services: Record<string, { environment: Record<string, string> }>;
   };
   delete rendered.services["app-api"].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE;

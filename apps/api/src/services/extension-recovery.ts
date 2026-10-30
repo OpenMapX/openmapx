@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { findRepoRoot } from "@openmapx/core/server";
+import { isIntegrationHostInitialized, reloadIntegrations } from "../integration-host";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { renderAndPersistCompose } from "./admin-ops";
+import { recoverAgentIntegrations } from "./agent-integrations";
 import {
   reconcileCommunityRepositoryTransactions,
   type ServiceRuntimeRecovery,
 } from "./community-repositories";
+import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 import { openRuntimeRecoveryAuthority } from "./runtime-recovery-authority";
 import { mergeRuntimeRecovery, type RuntimeRecoveryRecord } from "./runtime-recovery-journal";
@@ -28,11 +32,44 @@ export function withExtensionChangeLock<T>(work: () => Promise<T>): Promise<T> {
 
 /**
  * Finish what an interrupted extension change left behind: settle its pending
- * repository transactions in the operations agent, restore the service
- * selection it changed, and repair the service runtimes it touched. The caller
- * holds the extension change lock.
+ * integration and repository transactions in the operations agent, have the
+ * agent adopt integrations earlier releases installed, restore the service
+ * selection the change touched, and repair the service runtimes it touched.
+ * The caller holds the extension change lock.
  */
-export async function recoverInterruptedExtensionChanges(signal?: AbortSignal): Promise<void> {
+/**
+ * Adopt the integrations earlier releases installed, which the agent holds no
+ * record of, then reload the integration host if any was recorded. Startup
+ * runs this in the background once the API listens: each adoption downloads
+ * the extension's archive again. The caller holds the extension change lock.
+ */
+export async function adoptUnrecordedIntegrations(signal?: AbortSignal): Promise<void> {
+  const integrations = await recoverAgentIntegrations({ signal });
+  if (integrations.adopted.length > 0 && isIntegrationHostInitialized()) {
+    await reloadIntegrations();
+  }
+}
+
+export async function recoverInterruptedExtensionChanges(
+  signal?: AbortSignal,
+  options: { adoptIntegrations?: boolean; ctx?: JobContext } = {},
+): Promise<void> {
+  const integrations = await recoverAgentIntegrations({
+    signal,
+    adopt: options.adoptIntegrations ?? true,
+    ctx: options.ctx,
+  });
+  if (
+    (integrations.rolledBack.length > 0 || integrations.adopted.length > 0) &&
+    // At startup the host loads what the agent now reports by itself.
+    isIntegrationHostInitialized()
+  ) {
+    await reloadIntegrations().catch((error) => {
+      console.warn(
+        `[extension-recovery] Integrations could not be reloaded after recovery: ${(error as Error).message}`,
+      );
+    });
+  }
   const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(findRepoRoot());
   const serviceRecovery: ServiceRuntimeRecovery = await reconcileCommunityRepositoryTransactions({
     signal,
@@ -91,4 +128,31 @@ export async function recoverInterruptedExtensionChanges(signal?: AbortSignal): 
       });
     },
   });
+}
+
+const LEGACY_INSTALL_JOURNAL = /^\.extension-install-journal-[a-f0-9]{24}\.json$/;
+
+/**
+ * Earlier releases journaled integration installs in `custom_integrations`
+ * themselves. The operations agent now owns that directory, and recovery has
+ * it verify every integration such a change left behind by adoption, so a
+ * leftover journal is only reported. Never throws.
+ */
+export function warnAboutLegacyInstallJournals(
+  customIntegrationsDir: string,
+  warn: (message: string) => void,
+): void {
+  let journals: string[];
+  try {
+    journals = readdirSync(customIntegrationsDir).filter((name) =>
+      LEGACY_INSTALL_JOURNAL.test(name),
+    );
+  } catch {
+    return;
+  }
+  if (journals.length === 0) return;
+  warn(
+    `Found ${journals.length} extension install journal(s) from an earlier release in ${customIntegrationsDir} (${journals.join(", ")}). ` +
+      "Recovery requires the original publication and administrative job identity; startup observation does not settle these journals or authorize deleting them.",
+  );
 }

@@ -13,6 +13,7 @@ export interface RoutingProviderFixture {
   getMatrix?: RoutingProvider["getMatrix"];
   priority?: number;
   supportsExclusions?: boolean;
+  supportsDirectedExclusions?: boolean;
   supportsTimeAware?: boolean;
 }
 
@@ -92,6 +93,7 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
                   supportedModes: ["driving", "walking", "cycling"] as TravelMode[],
                   priority: fixture.priority,
                   supportsExclusions: fixture.supportsExclusions,
+                  supportsDirectedExclusions: fixture.supportsDirectedExclusions,
                   supportsTimeAware: fixture.supportsTimeAware,
                   getRoute: fixture.getRoute,
                   ...(fixture.optimizeRoute ? { optimizeRoute: fixture.optimizeRoute } : {}),

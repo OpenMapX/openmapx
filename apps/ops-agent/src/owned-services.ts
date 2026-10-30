@@ -614,7 +614,7 @@ export function createOwnedServiceResolver(options: {
           configFiles.length > 2 ||
           new Set(configFiles).size !== configFiles.length ||
           (configFiles[1] !== undefined &&
-            (configFiles[1] !== join(infra, "docker-compose.release.yml") ||
+            (configFiles[1] !== services.releaseStatePaths(infra).overlay ||
               configFiles[1] !== canonical(options.stack.composeReleasePath)))
         )
           continue;
@@ -645,7 +645,7 @@ export function createOwnedServiceResolver(options: {
         const key = JSON.stringify(configFiles);
         let configuration = configurations.get(key);
         if (!configuration) {
-          const releasePath = join(infra, "docker-compose.release.yml");
+          const releasePath = services.releaseStatePaths(infra).overlay;
           const args = services.stackComposeArgs(
             { infraDir: infra, composePath: first, composeReleasePath: releasePath },
             (path) => (path === releasePath ? configFiles.includes(releasePath) : existsSync(path)),

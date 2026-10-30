@@ -20,8 +20,8 @@ vi.mock("@openmapx/core", async () => {
   return {
     ...actual,
     useBrandDetail: () => mockUseBrandDetail(),
-    useBrandLogoAttribution: (qid: string | null, hasLogo: boolean) =>
-      mockUseBrandLogoAttribution(qid, hasLogo),
+    useBrandLogoAttribution: (qid: string | null, logoFile: string | undefined) =>
+      mockUseBrandLogoAttribution(qid, logoFile),
   };
 });
 
@@ -156,6 +156,7 @@ describe("BrandHeaderCard", () => {
 
     renderCard();
 
+    expect(mockUseBrandLogoAttribution).toHaveBeenCalledWith("Q41171", "Aldi Nord Logo.svg");
     expect(screen.getByRole("img", { name: "Aldi" }).parentElement?.textContent).toBe("");
     expect(screen.getByText("Jane Doe")).toBeInTheDocument();
     expect(screen.getByText("CC-BY-SA-4.0")).toBeInTheDocument();
@@ -185,7 +186,7 @@ describe("BrandHeaderCard", () => {
 
     renderCard();
 
-    expect(mockUseBrandLogoAttribution).toHaveBeenCalledWith("Q41171", false);
+    expect(mockUseBrandLogoAttribution).toHaveBeenCalledWith("Q41171", undefined);
   });
 });
 

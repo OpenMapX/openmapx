@@ -8,11 +8,12 @@ describe("engine-owned traffic watchdog", () => {
     const directory = fileURLToPath(new URL(".", import.meta.url));
     expect(() =>
       execFileSync("python3", ["-B", "-m", "unittest", "discover", "-s", directory], {
-        timeout: 20_000,
+        timeout: 60_000,
         stdio: "pipe",
       }),
     ).not.toThrow();
-  });
+    // Two cases start a real engine supervisor, each through its 2 s poll.
+  }, 60_000);
   it("runs as the engine entrypoint and shares only the traffic state directory", () => {
     const service = JSON.parse(readFileSync(new URL("../service.json", import.meta.url), "utf8"));
     expect(service.container.entrypoint).toEqual(["python3", "/opt/openmapx/traffic-watchdog.py"]);

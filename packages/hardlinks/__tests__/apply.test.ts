@@ -11,7 +11,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appliedHardlinkEntries, applyHardlinkPlan, DEFAULT_SENTINEL_DIR } from "../src/index.js";
+import {
+  appliedHardlinkEntries,
+  applyHardlinkPlan,
+  DEFAULT_SENTINEL_DIR,
+  hardlinkPlanHasWork,
+} from "../src/index.js";
 
 describe("applyHardlinkPlan", () => {
   let root: string;
@@ -407,5 +412,50 @@ describe("applyHardlinkPlan", () => {
 
   it("finds no applied entries before any plan was applied", () => {
     expect(appliedHardlinkEntries(root)).toEqual([]);
+  });
+});
+
+describe("hardlinkPlanHasWork", () => {
+  let root: string;
+  const plan = [
+    {
+      source: "data/osm",
+      target: "data/valhalla/osm-pbf",
+      consumerService: "valhalla",
+      dataType: "osm-pbf",
+    },
+  ];
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "openmapx-hl-work-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("has none before any producer wrote data or any plan was applied", () => {
+    expect(hardlinkPlanHasWork(plan, { rootDir: root })).toBe(false);
+    expect(hardlinkPlanHasWork([], { rootDir: root })).toBe(false);
+  });
+
+  it("has work once a producer source exists", () => {
+    mkdirSync(join(root, "osm"));
+    expect(hardlinkPlanHasWork(plan, { rootDir: root })).toBe(true);
+  });
+
+  it("has work while a sentinel records links a prune could remove", () => {
+    mkdirSync(join(root, "osm"));
+    writeFileSync(join(root, "osm", "region.osm.pbf"), "pbf");
+    applyHardlinkPlan(plan, { rootDir: root });
+    rmSync(join(root, "osm"), { recursive: true });
+    expect(hardlinkPlanHasWork(plan, { rootDir: root })).toBe(true);
+    expect(hardlinkPlanHasWork([], { rootDir: root })).toBe(true);
+  });
+
+  it("only reads", () => {
+    hardlinkPlanHasWork(plan, { rootDir: root });
+    expect(existsSync(join(root, DEFAULT_SENTINEL_DIR))).toBe(false);
+    expect(existsSync(join(root, "valhalla"))).toBe(false);
   });
 });

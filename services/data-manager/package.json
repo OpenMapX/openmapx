@@ -15,33 +15,33 @@
   "dependencies": {
     "@fastify/rate-limit": "11.2.1",
     "@mapbox/glyph-pbf-composite": "0.0.3",
-    "@motis-project/motis-client": "2.11.3",
+    "@motis-project/motis-client": "2.11.4",
     "@openmapx/cli": "workspace:*",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",
     "@openmapx/hardlinks": "workspace:*",
     "@openmapx/motis-feed-proxy-config": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
-    "croner": "^10.0.1",
+    "croner": "^11.0.0",
     "drizzle-orm": "^0.45.4",
-    "execa": "^10.1.0",
+    "execa": "^10.2.1",
     "fastify": "^5.12.7",
     "h3-js": "^4.5.0",
+    "p-map": "7.1.1",
     "pino": "^10.4.0",
     "postgres": "^3.4.9",
-    "undici": "^8.11.2",
-    "p-map": "7.1.1",
-    "zod": "^4.6.5"
+    "undici": "^8.12.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@fastify/swagger": "9.9.2",
     "@mapbox/vector-tile": "3.0.0",
     "@openmapx/integration-framework": "workspace:^",
-    "@testcontainers/postgresql": "^12.2.0",
-    "@types/node": "^26.6.5",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/node": "^26.6.6",
     "pbf": "5.1.2",
     "tsx": "4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3",
-    "@fastify/swagger": "9.9.2"
+    "vitest": "^5.0.5"
   }
 }

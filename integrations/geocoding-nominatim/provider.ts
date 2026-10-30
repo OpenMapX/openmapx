@@ -22,11 +22,12 @@ import {
 } from "@openmapx/core";
 
 // Populated by setup(ctx); see setNominatimUrl.
-let NOMINATIM_URL = "https://nominatim.openstreetmap.org";
+const DEFAULT_NOMINATIM_URL = "https://nominatim.openstreetmap.org";
+let NOMINATIM_URL = DEFAULT_NOMINATIM_URL;
 
-/** Update the Nominatim base URL (called from setup() when service registry resolves it). */
-export function setNominatimUrl(url: string): void {
-  NOMINATIM_URL = url;
+/** The instance to query; undefined restores the default. */
+export function setNominatimUrl(url: string | undefined): void {
+  NOMINATIM_URL = url ?? DEFAULT_NOMINATIM_URL;
 }
 
 interface NominatimResult {

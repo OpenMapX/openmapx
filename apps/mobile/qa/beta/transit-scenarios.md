@@ -1,8 +1,12 @@
-# Transit navigation — scenarios that need a physical device
+# Transit navigation: scenarios that need a physical device
 
-Everything here is **unverified**. Automated traces prove the engine, the token
-discipline, the persistence and the effect ordering. None of them prove what a
-phone does in a tunnel, in a pocket, on a platform in the rain.
+<a id="transit-navigation--scenarios-that-need-a-physical-device"></a>
+
+All physical cases remain unverified in committed evidence. First compose the
+foreground dispatcher: `src/App.tsx` currently advertises transit navigation as
+unavailable. Qualify the candidate locally before beta upload. Automated traces
+exercise engine, token, persistence and ordering contracts with external ports
+replaced; they do not establish physical delivery.
 
 A scenario becomes verified only when a named volunteer reports it from a
 physical device against an exact beta artifact, with the device, OS version and
@@ -10,10 +14,12 @@ build recorded. Nothing here may be marked verified from a simulator run, an
 emulator screenshot or a code review.
 
 **Sanitisation rule for reports:** no trip ids, no stop names, no times precise
-enough to identify a service, no coordinates. Record the _shape_ — "leg 2, ride,
-six stops, twelve-minute gap" — and the outcome.
+enough to identify a service, no coordinates. Record route shape, such as "leg 2, ride, six stops, twelve-minute gap", and
+the outcome.
 
 ## What the automated suite already settles
+
+These are deterministic test contracts, not completed installed-app acceptance.
 
 - one committed revision per tick, and revisions strictly increasing;
 - a leg index that never moves backwards;
@@ -38,19 +44,19 @@ six stops, twelve-minute gap" — and the outcome.
 
 ## Alighting alert
 
-This is the case that matters most: missing a stop is the transit failure a
-rider cannot quickly recover from.
+Test alert delivery and cancellation separately, including actual notification
+permissions and platform power settings.
 
-| #   | Scenario                                                | Expected                                                 | Status     |
-| --- | ------------------------------------------------------- | -------------------------------------------------------- | ---------- |
-| A-1 | Alert fires with the phone locked and the app suspended | Delivered within the requested window                    | unverified |
-| A-2 | Live delay shifts the alighting time                    | One rescheduled alert, not two                           | unverified |
-| A-3 | Alert after a force-stop                                | Still delivered — the OS holds it, not this app          | unverified |
-| A-4 | Stop navigation before the alert is due                 | No alert fires                                           | unverified |
-| A-5 | Replan while an alert is scheduled                      | Old alert cancelled before a new one is scheduled        | unverified |
-| A-6 | Notification permission declined                        | Navigation runs; the page reports the backup unavailable | unverified |
-| A-7 | Alert alongside a spoken cue for the same moment        | Not experienced as a double announcement                 | unverified |
-| A-8 | Do Not Disturb / focus mode                             | Behaviour recorded per platform; not assumed             | unverified |
+| #   | Scenario                                                | Expected                                                                         | Status     |
+| --- | ------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------- |
+| A-1 | Alert fires with the phone locked and the app suspended | Delivered within the requested window                                            | unverified |
+| A-2 | Live delay shifts the alighting time                    | One rescheduled alert, not two                                                   | unverified |
+| A-3 | Alert after a force-stop                                | Record whether the OS retains/delivers it; force-stop survival is not guaranteed | unverified |
+| A-4 | Stop navigation before the alert is due                 | No alert fires                                                                   | unverified |
+| A-5 | Replan while an alert is scheduled                      | Old alert cancelled before a new one is scheduled                                | unverified |
+| A-6 | Notification permission declined                        | Navigation runs; the page reports the backup unavailable                         | unverified |
+| A-7 | Alert alongside a spoken cue for the same moment        | Not experienced as a double announcement                                         | unverified |
+| A-8 | Do Not Disturb / focus mode                             | Behaviour recorded per platform; not assumed                                     | unverified |
 
 ## Live data and replanning
 
@@ -93,6 +99,6 @@ the app knows which underground station the rider is at without a position fix.
 
 A duplicate token consumption, a duplicate cue or notification, a leg regression
 or jump, an alert surviving a stop or replan, a captured itinerary lost while
-offline, or a mutation after stop — any of these blocks public release. If the
+offline, or a mutation after stop blocks public release. If the
 failure is specific to the location driver rather than to transit logic, it feeds
 the same driver-qualification decision as the ground scenarios.

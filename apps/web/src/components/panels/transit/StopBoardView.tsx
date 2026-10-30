@@ -14,6 +14,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useNow } from "@/lib/useNow";
+import { useSearchBarClearance } from "../searchBarClearance";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 import { TransitQueryNotice } from "./TransitDataStatus";
@@ -22,7 +23,6 @@ interface StopBoardViewProps {
   stopId: string;
   title: string;
   onBack: () => void;
-  clearSearchBar?: boolean;
   onDepartureClick: (departure: MergedDeparture) => void;
 }
 
@@ -36,16 +36,11 @@ function toMergedDeparture(departure: Departure): MergedDeparture {
   };
 }
 
-export function StopBoardView({
-  stopId,
-  title,
-  onBack,
-  clearSearchBar = false,
-  onDepartureClick,
-}: StopBoardViewProps) {
+export function StopBoardView({ stopId, title, onBack, onDepartureClick }: StopBoardViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
   const now = useNow(30_000);
+  const searchBarClearance = useSearchBarClearance();
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
   const departuresQuery = useDepartures(stopId);
   const { data: departures, isLoading: departuresLoading } = departuresQuery;
@@ -86,7 +81,7 @@ export function StopBoardView({
           gap: 1,
           px: 1,
           pb: 1,
-          pt: clearSearchBar ? { xs: 1, sm: "72px" } : 1,
+          pt: searchBarClearance ?? 1,
           flexShrink: 0,
           position: { xs: "sticky", sm: "static" },
           top: { xs: 0, sm: "auto" },

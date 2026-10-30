@@ -60,6 +60,7 @@ export type {
   CurrentStandard,
   EvVehicleSpec,
 } from "./ev";
+export { CONNECTOR_STANDARDS } from "./ev";
 export type {
   CabinClass,
   FlightProviderCapabilities,
@@ -101,6 +102,7 @@ export type {
   JunctionLookupResult,
   JunctionSchematic,
   JunctionWay,
+  LaneDestinations,
   OsmLaneTags,
 } from "./junction";
 export type { NeighborhoodCard, NeighborhoodsResponse } from "./neighborhood";
@@ -231,6 +233,7 @@ export {
   ROAD_CONDITION_SEVERITY_LABELS,
 } from "./roadConditions";
 export type {
+  DirectedExclusion,
   DirectionsResult,
   EvChargeStop,
   EvDirectionsRequest,

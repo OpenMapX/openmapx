@@ -205,7 +205,7 @@ export async function runConfigurationHandoffApplication(input: {
           stack.infraDir,
           async () => {
             const lock = await services.acquireReleaseStoreLock(
-              join(stack.infraDir, ".ops-agent-releases"),
+              services.releaseStatePaths(stack.infraDir).store,
             );
             try {
               assertArtifactTargetLeaseForward(state.lease);
@@ -277,7 +277,7 @@ export async function runConfigurationHandoffApplication(input: {
         stack.infraDir,
         async () => {
           const lock = await services.acquireReleaseStoreLock(
-            join(stack.infraDir, ".ops-agent-releases"),
+            services.releaseStatePaths(stack.infraDir).store,
           );
           try {
             assertArtifactTargetLeaseForward(state.lease);
@@ -301,12 +301,12 @@ export async function runConfigurationHandoffApplication(input: {
               release: { ...current.release!, publication: "attempted" },
               updatedAt: Date.now(),
             });
-            services.writeReleaseComposeArtifacts(checked.manifest, stack.composeReleasePath);
+            services.writeReleaseComposeArtifacts(checked.manifest, stack.infraDir);
             const published = readConfigurationHandoffReleaseOverlay(stack.infraDir);
             if (
               !published ||
               Buffer.from(published.bytes, "base64").toString("utf8") !==
-                services.renderReleaseCompose(checked.manifest)
+                services.renderReleaseCompose(checked.manifest, stack.infraDir)
             )
               throw Error("Original release overlay publication incomplete");
             save({
@@ -381,7 +381,7 @@ export async function runConfigurationHandoffApplication(input: {
         stack.infraDir,
         async () => {
           const release = await services.acquireReleaseStoreLock(
-            join(stack.infraDir, ".ops-agent-releases"),
+            services.releaseStatePaths(stack.infraDir).store,
           );
           try {
             assertArtifactTargetLeaseForward(state.lease);
@@ -491,7 +491,7 @@ export async function runConfigurationHandoffApplication(input: {
         stack.infraDir,
         async () => {
           const lock = await services.acquireReleaseStoreLock(
-            join(stack.infraDir, ".ops-agent-releases"),
+            services.releaseStatePaths(stack.infraDir).store,
           );
           try {
             assertArtifactTargetLeaseForward(state.lease);
@@ -519,7 +519,10 @@ export async function runConfigurationHandoffApplication(input: {
               release: { ...current.release!, statePublication: "attempted" },
               updatedAt: Date.now(),
             });
-            atomicWrite(join(stack.infraDir, ".ops-agent-releases", "current.json"), bytes);
+            atomicWrite(
+              join(services.releaseStatePaths(stack.infraDir).store, "current.json"),
+              bytes,
+            );
             const published = readConfigurationHandoffReleaseState(stack.infraDir);
             if (!published || Buffer.from(published.bytes, "base64").toString("utf8") !== bytes)
               throw Error("Original release state publication incomplete");

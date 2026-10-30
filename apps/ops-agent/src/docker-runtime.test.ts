@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1458,6 +1461,98 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       }
     });
 
+    it.each(["descriptor", "path"] as const)(
+      "never follows a symlink data-manager planted beside the generations manifest (%s)",
+      async (mode) => {
+        if (mode === "descriptor" && process.platform !== "linux") return;
+        const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-planted-"));
+        const dataRoot = join(root, "data");
+        const shared = join(dataRoot, "valhalla", "osm-pbf");
+        mkdirSync(shared, { recursive: true });
+        const sentinel = join(root, "sentinel");
+        writeFileSync(sentinel, "untouched");
+        // The temporary name the agent used to write, and the manifest itself.
+        symlinkSync(sentinel, join(shared, `traffic-generations.json.${"f".repeat(64)}.tmp`));
+        symlinkSync(sentinel, join(shared, "traffic-generations.json"));
+        const generation = "a".repeat(64);
+        try {
+          const runtime = createDockerRuntime({
+            stack: {
+              infraDir: "/trusted",
+              composePath: "/trusted/compose.yml",
+              composeReleasePath: "/trusted/release.yml",
+            },
+            fileExists: () => false,
+            trafficDataRoot: dataRoot,
+            descriptorAnchorRoot: mode === "descriptor" ? "/proc/self/fd" : null,
+            execFile: async (_file, args) => {
+              if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
+                return { stdout: "false\n", stderr: "" };
+              }
+              if (args[0] === "inspect" && args.includes("{{.Image}}")) {
+                return { stdout: `sha256:${"c".repeat(64)}\n`, stderr: "" };
+              }
+              if (args[0] === "inspect" && args.includes("{{.State.Health.Status}}")) {
+                return { stdout: "healthy\n", stderr: "" };
+              }
+              if (args[0] === "run") {
+                return { stdout: `OPENMAPX_GRAPH_GENERATION=${generation}\n`, stderr: "" };
+              }
+              return { stdout: "", stderr: "" };
+            },
+          });
+          await expect(
+            dispatchOpsOperation(
+              runtime,
+              { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
+              context(),
+            ),
+          ).resolves.toMatchObject({ changed: true, graphGeneration: generation });
+          expect(readFileSync(sentinel, "utf8")).toBe("untouched");
+          expect(lstatSync(join(shared, "traffic-generations.json")).isFile()).toBe(true);
+          expect(
+            JSON.parse(readFileSync(join(shared, "traffic-generations.json"), "utf8")),
+          ).toMatchObject({ graphGeneration: generation });
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it("refuses to maintain through a data directory replaced by a symlink", async () => {
+      const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-swapped-"));
+      const dataRoot = join(root, "data");
+      const outside = join(root, "outside");
+      mkdirSync(join(outside, "osm-pbf"), { recursive: true });
+      mkdirSync(dataRoot);
+      symlinkSync(outside, join(dataRoot, "valhalla"));
+      try {
+        const runtime = createDockerRuntime({
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
+          trafficDataRoot: dataRoot,
+          execFile: async (_file, args) =>
+            args[0] === "inspect" && args.includes("{{.State.Running}}")
+              ? { stdout: "false\n", stderr: "" }
+              : { stdout: "", stderr: "" },
+        });
+        await expect(
+          dispatchOpsOperation(
+            runtime,
+            { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
+            context(),
+          ),
+        ).rejects.toThrow();
+        expect(readdirSync(join(outside, "osm-pbf"))).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
     it("leaves serving stopped and the durable fence present when maintenance fails", async () => {
       const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-maintenance-fail-"));
       const calls: string[][] = [];
@@ -1635,6 +1730,34 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       rmSync(dataRoot, { recursive: true, force: true });
     });
 
+    it("reports a manifest the watchdog is re-checking as inconclusive, not as a rebuild", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-unverified-"));
+      const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
+      mkdirSync(sharedDir, { recursive: true });
+      const calls: string[][] = [];
+      const runtime = createDockerRuntime({
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
+        trafficDataRoot: dataRoot,
+        execFile: async (_file, args) => {
+          calls.push([...args]);
+          return { stdout: "100\n", stderr: "" };
+        },
+      });
+      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}");
+
+      await expect(
+        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
+      ).resolves.toEqual({ state: "unknown" });
+      expect(calls).toEqual([]);
+
+      rmSync(dataRoot, { recursive: true, force: true });
+    });
+
     it("produces way_edges.txt on the shared mount and hands it to the data owner", async () => {
       const calls: string[][] = [];
       const timeouts: number[] = [];
@@ -1711,6 +1834,80 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
   });
 
+  describe("stack.status", () => {
+    const stackStatus = (stdout: string) =>
+      dispatchOpsOperation(
+        createDockerRuntime({
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
+          execFile: async (_file, args) => {
+            expect(args).toEqual([
+              "compose",
+              "-f",
+              "/trusted/compose.yml",
+              "ps",
+              "--format",
+              "json",
+            ]);
+            return { stdout, stderr: "" };
+          },
+        }),
+        { kind: "stack.status" },
+        context(),
+      );
+    // Real `docker compose ps --format json` output; see the README beside it.
+    const captured = (name: string) =>
+      readFileSync(
+        new URL(
+          `../../../packages/core/src/services/__tests__/__fixtures__/compose-ps/${name}`,
+          import.meta.url,
+        ),
+        "utf8",
+      );
+
+    it.each([["compose-5.6.1.stdout"], ["compose-2.21.0.stdout"], ["compose-2.20.3.stdout"]])(
+      "reports every service in %s",
+      async (name) => {
+        await expect(stackStatus(captured(name))).resolves.toEqual({
+          services: [
+            { serviceId: "crashloop", state: "restarting" },
+            { serviceId: "web", state: "running" },
+            { serviceId: "worker", state: "paused" },
+          ],
+        });
+      },
+    );
+
+    it.each([["compose-5.6.1-empty.stdout"], ["compose-2.20.3-empty.stdout"]])(
+      "reports no services for the empty stack in %s",
+      async (name) => {
+        await expect(stackStatus(captured(name))).resolves.toEqual({ services: [] });
+      },
+    );
+
+    it("keeps the first 256 services", async () => {
+      const lines = Array.from(
+        { length: 300 },
+        (_, index) => `{"Service":"service-${index}","State":"running"}`,
+      );
+      const result = await stackStatus(`${lines.join("\n")}\n`);
+      expect(result.services).toHaveLength(256);
+      expect(result.services.at(-1)).toEqual({ serviceId: "service-255", state: "running" });
+    });
+
+    it.each([
+      ['{"Service":"web","State":"running"}\nnot json\n'],
+      ['[\n  {"Service":"web","State":"running"}\n]\n'],
+      ['"web"\n'],
+    ])("refuses output that is not Compose's: %j", async (stdout) => {
+      await expect(stackStatus(stdout)).rejects.toThrow("Contained process failed");
+    });
+  });
+
   it("inspects only the fixed Dawarich services and provisioning marker", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
@@ -1724,13 +1921,16 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       execFile: async (_file, args) => {
         calls.push([...args]);
         if (args.includes("ps")) {
+          // One object per line, as Compose 2.21 and later print it.
           return {
-            stdout: JSON.stringify([
+            stdout: [
               { Service: "dawarich-app", State: "running" },
               { Service: "dawarich-sidekiq", State: "running" },
               { Service: "dawarich-postgis", State: "running" },
               { Service: "dawarich-redis", State: "running" },
-            ]),
+            ]
+              .map((entry) => `${JSON.stringify(entry)}\n`)
+              .join(""),
             stderr: "",
           };
         }

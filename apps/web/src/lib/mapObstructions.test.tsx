@@ -6,6 +6,7 @@ import {
   publishMapObstruction,
   subscribeMapObstructions,
   useMapObstruction,
+  useMapObstructionExtent,
   useMapObstructionInsets,
   useMeasuredMapObstruction,
 } from "./mapObstructions";
@@ -55,6 +56,23 @@ describe("map obstruction registry", () => {
     publishMapObstruction("b", "left", 100);
     expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();
+  });
+
+  it("reads one registration even while another holds the edge's maximum", () => {
+    const { result } = renderHook(() => useMapObstructionExtent("a"));
+    expect(result.current).toBe(0);
+    act(() => {
+      publishMapObstruction("b", "bottom", 500);
+      publishMapObstruction("a", "bottom", 300);
+    });
+    expect(result.current).toBe(300);
+    // The maximum stays 500, so insets subscribers hear nothing; this read must.
+    act(() => publishMapObstruction("a", "bottom", 240));
+    expect(getMapObstructionInsets().bottom).toBe(500);
+    expect(result.current).toBe(240);
+    act(() => publishMapObstruction("a", "bottom", null));
+    expect(result.current).toBe(0);
+    act(() => publishMapObstruction("b", "bottom", null));
   });
 
   it("registers through the declarative hook and removes on unmount", () => {

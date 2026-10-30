@@ -157,6 +157,14 @@ export interface ServiceBindMount {
    * unknown until stack-up time. Rejected by the manifest schema.
    */
   optional?: boolean;
+  /**
+   * For a file the container itself rewrites: the `@infra:data/<rel-path>`
+   * of its writable copy. Render seeds the copy from the release's file (or
+   * the operator's override) and mounts the copy instead, re-seeding it only
+   * when that seed changes. Such a file is never imported as an override.
+   * Built-in services only, on a writable mount of their own file.
+   */
+  writableCopy?: string;
 }
 
 export interface ServiceContainer {
@@ -317,6 +325,10 @@ export interface ServiceManifest {
   selectionDependencies?: string[];
   /** Audited first-party bridge access to explicitly named community networks. */
   communityNetworkAccess?: string[];
+  /** Audited first-party private networks (`openmapx-private-<name>`) the service joins. */
+  privateNetworks?: string[];
+  /** First-party only: `false` keeps the service off the shared `openmapx` network. */
+  platformNetwork?: boolean;
 
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;

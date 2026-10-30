@@ -27,13 +27,27 @@ degrees. Latitude span is limited to 20 degrees.
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `south`, `north` | `-90` through `90`; span at most 20°                                                   |
 | `west`, `east`   | `-180` through `180`; unwrapped span at most 30°                                       |
-| `zoom`           | Optional integer `0`–`22`; defaults to `0`                                             |
+| `zoom`           | Optional integer `0` to `22`; defaults to `0`                                          |
 | `pollutant`      | Optional: `pm25`, `pm10`, `o3`, `no2`, `so2`, `co`, `nh3`, or `no`; defaults to `pm25` |
-| `limit`          | Optional integer `1`–`500`; defaults to `500`                                          |
+| `limit`          | Optional integer `1` to `500`; defaults to `500`                                       |
 | `cursor`         | Optional opaque continuation token, at most 2,048 characters                           |
 
 Every scalar query key may occur only once. Invalid or repeated input returns
 HTTP 400 `INVALID_QUERY`.
+
+For example, request a Berlin viewport from a local API:
+
+```bash
+curl --get http://localhost:3001/api/integrations/air-quality/stations \
+  --data-urlencode south=52.4 --data-urlencode west=13.2 \
+  --data-urlencode north=52.6 --data-urlencode east=13.6 \
+  --data-urlencode zoom=10 --data-urlencode pollutant=pm25
+```
+
+A successful response can contain no features when providers are unavailable,
+excluded by policy, or have no qualifying evidence. Inspect `meta` before
+treating that as missing source coverage. Follow `nextCursor` with the same
+query parameters until it is null.
 
 ## GeoJSON response
 
@@ -94,7 +108,7 @@ the replacement request. Retained GeoJSON must be replayed after MapLibre style
 replacement, while detach must remove sources, layers, handlers, popup state,
 attribution, and pending requests.
 
-The public overlay/deep-link ID remains `air-quality`. The canonical manifest is
+The public overlay/deep-link ID is `air-quality`. The canonical manifest is
 the sole frontend owner; provider integrations, including
 `overlay-air-quality`, may register backend evidence but must not register a
 second layer, legend, or store.

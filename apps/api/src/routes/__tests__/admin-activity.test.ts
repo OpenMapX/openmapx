@@ -308,6 +308,7 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
         auth: unexpectedTier,
         tile: unexpectedTier,
         expensive: unexpectedTier,
+        integrationIngress: unexpectedTier,
         status: unexpectedTier,
         public: limiter.preHandler(),
       }),

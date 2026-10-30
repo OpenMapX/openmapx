@@ -4,7 +4,6 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import KeyIcon from "@mui/icons-material/Key";
-import LockOpenIcon from "@mui/icons-material/LockOpen";
 import LoginIcon from "@mui/icons-material/Login";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
@@ -32,8 +31,8 @@ import {
   useFullScreenOnMobile,
 } from "@/integration-api/runtime/useFullScreenOnMobile";
 
-type Mode = "unencrypted" | "passphrase" | "passphrase+webauthn";
-type Step = "chooseMode" | "importJwk" | "configure" | "confirmUnencrypted";
+type Mode = "passphrase" | "passphrase+webauthn";
+type Step = "chooseMode" | "importJwk" | "configure";
 
 interface Props {
   open: boolean;
@@ -120,8 +119,7 @@ export function MangroveSetupWizard({
   function pickMode(next: Mode) {
     setMode(next);
     setError(null);
-    if (next === "unencrypted") setStep("confirmUnencrypted");
-    else setStep("configure");
+    setStep("configure");
   }
 
   async function handleImportConfirm() {
@@ -148,9 +146,7 @@ export function MangroveSetupWizard({
   async function handleSubmit() {
     setError(null);
     try {
-      if (mode === "unencrypted") {
-        await setup.mutateAsync({ mode: "unencrypted", importJwk: effectiveImportJwk });
-      } else if (mode === "passphrase") {
+      if (mode === "passphrase") {
         if (passphrase.length < 8) {
           setError(t("mangrovePassphraseTooShort"));
           return;
@@ -208,11 +204,9 @@ export function MangroveSetupWizard({
           ? t("mangroveSetupTitle")
           : step === "importJwk"
             ? t("mangroveImportTitle")
-            : step === "confirmUnencrypted"
-              ? t("mangroveSetupUnencryptedConfirmTitle")
-              : mode === "passphrase+webauthn"
-                ? t("mangroveSetupPassphraseWebAuthnTitle")
-                : t("mangroveSetupPassphraseTitle")}
+            : mode === "passphrase+webauthn"
+              ? t("mangroveSetupPassphraseWebAuthnTitle")
+              : t("mangroveSetupPassphraseTitle")}
       </DialogTitle>
       <DialogContent dividers>
         {step === "chooseMode" && (
@@ -288,13 +282,6 @@ export function MangroveSetupWizard({
                 disabledHint={!webauthnAvailable ? t("mangroveWebAuthnUnavailable") : undefined}
                 onClick={() => pickMode("passphrase+webauthn")}
               />
-              <ModeCard
-                icon={<LockOpenIcon />}
-                title={t("mangroveModeUnencryptedTitle")}
-                subtitle={t("mangroveModeUnencryptedSubtitle")}
-                warning
-                onClick={() => pickMode("unencrypted")}
-              />
             </Stack>
           </>
         )}
@@ -368,24 +355,6 @@ export function MangroveSetupWizard({
             {error && <Alert severity="error">{error}</Alert>}
           </Stack>
         )}
-
-        {step === "confirmUnencrypted" && (
-          <Stack spacing={2}>
-            <Alert severity="error" icon={<WarningAmberIcon />}>
-              <AlertTitle>{t("mangroveUnencryptedWarningTitle")}</AlertTitle>
-              {t("mangroveUnencryptedWarningBody")}
-            </Alert>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {t("mangroveUnencryptedAck")}
-            </Typography>
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
-        )}
       </DialogContent>
       <DialogActions>
         {step !== "chooseMode" ? (
@@ -424,17 +393,6 @@ export function MangroveSetupWizard({
             }
           >
             {t("mangroveSetupContinue")}
-          </Button>
-        )}
-        {step === "confirmUnencrypted" && (
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={handleSubmit}
-            disabled={setup.isPending}
-            startIcon={setup.isPending ? <CircularProgress size={16} /> : null}
-          >
-            {t("mangroveUnencryptedProceed")}
           </Button>
         )}
       </DialogActions>

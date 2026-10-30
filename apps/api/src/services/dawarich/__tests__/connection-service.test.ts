@@ -1,4 +1,4 @@
-import type { ConnectPersonalTimelineRequest } from "@openmapx/core";
+import { type ConnectPersonalTimelineRequest, timelineConnectionViewSchema } from "@openmapx/core";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { user } from "../../../db/auth-schema.js";
@@ -338,6 +338,7 @@ describe("TimelineConnectionService", () => {
       timeZone: "Etc/UTC",
       distanceUnit: "km",
     });
+    expect(timelineConnectionViewSchema.parse(view)).toEqual(view);
     expect(JSON.stringify(view)).not.toMatch(/top-secret|encrypted|cipher|encryption/i);
     expect(audits).toEqual([
       expect.objectContaining({
@@ -739,6 +740,7 @@ describe("TimelineConnectionService", () => {
     const service = new TimelineConnectionService({ store });
 
     const view = await service.getConnectionView(USER_ID);
+    expect(timelineConnectionViewSchema.parse(view)).toEqual(view);
     expect(view.connection).toMatchObject({ displayName: "Old timeline" });
     expect(JSON.stringify(view)).not.toMatch(/old-ciphertext|stored-key|encryption|encrypted/i);
     const credential = await service.decryptConnectionCredential(USER_ID);

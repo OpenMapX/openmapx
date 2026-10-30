@@ -29,9 +29,12 @@
       }
     }
   },
+  "endpointConfigKeys": {
+    "photon": "endpoint"
+  },
   "healthCheck": {
     "type": "http",
-    "url": "https://photon.komoot.io/api?q=test&limit=1"
+    "urlTemplate": "${endpoint:photon}/api?q=test&limit=1"
   },
   "quality": "built-in",
   "category": "Geocoding",

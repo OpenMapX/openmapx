@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
+import { services as coreServices } from "@openmapx/core/server";
 import { Command } from "commander";
 import { registerBackupCommands } from "./commands/backup";
 import { registerCacheCommands } from "./commands/cache";
@@ -9,11 +10,11 @@ import { registerExtCommands } from "./commands/ext";
 import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerServicesCommands } from "./commands/services";
 import { registerTransitousCommands } from "./commands/transitous-bump";
-import { registerTransportApisPinCommands } from "./commands/transport-apis-pin";
 import { registerUsersCommands } from "./commands/users";
 import { fixedCliCommandExitCode } from "./lib/control-context";
 import { assertCliExecutionAvailable, withCliExecutionDeadline } from "./lib/execution-deadline";
 import { loadInfraEnv } from "./lib/infra-env";
+import { log } from "./lib/output";
 
 // Mirror Docker Compose's behaviour: auto-load infra/docker/.env so that
 // `--domain` and `SERVICE_<ID>_<KEY>` overrides resolve consistently between
@@ -37,7 +38,6 @@ registerBackupCommands(program);
 registerUsersCommands(program);
 registerCheckCommand(program);
 registerCacheCommands(program);
-registerTransportApisPinCommands(program);
 registerTransitousCommands(program);
 
 try {
@@ -47,10 +47,15 @@ try {
     await program.parseAsync(process.argv);
   });
 } catch (error) {
-  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION)
-    throw error;
-  // The control context has already retained its actual disposition and closed
-  // local handles. Avoid forwarding exception paths/stacks to public job logs.
-  process.stderr.write("Fixed CLI command failed; inspect the original operation status.\n");
-  process.exitCode = fixedCliCommandExitCode(error) ?? 1;
+  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION) {
+    if (error instanceof coreServices.CommunityServiceRecordsError) {
+      log.err(error.message);
+      process.exitCode = 1;
+    } else throw error;
+  } else {
+    // The control context has already retained its actual disposition and closed
+    // local handles. Avoid forwarding exception paths/stacks to public job logs.
+    process.stderr.write("Fixed CLI command failed; inspect the original operation status.\n");
+    process.exitCode = fixedCliCommandExitCode(error) ?? 1;
+  }
 }

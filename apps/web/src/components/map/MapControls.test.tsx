@@ -31,6 +31,14 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMapOptional: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
+const follow = vi.hoisted(() => ({
+  track: null as import("@/lib/sheetFollow").SheetFollowTrack | null,
+}));
+vi.mock("@/lib/sheetFollow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sheetFollow")>()),
+  useSheetFollowTrack: () => follow.track,
+}));
+
 const compute = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/streetGrid", async () => ({
   ...(await vi.importActual<typeof import("@/lib/streetGrid")>("@/lib/streetGrid")),
@@ -255,6 +263,66 @@ describe("MapControls align to streets", () => {
       expect(screen.getByLabelText("map.zoomInAriaLabel")).toBeTruthy();
     } finally {
       rect.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
+    }
+  });
+});
+
+describe("MapControls sheet following", () => {
+  it("moves with the sheet's published height instead of easing after it", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 30 });
+    render(<MapControls />);
+    const stack = document.querySelector<HTMLElement>("[data-map-controls-columns]");
+    expect(stack).not.toBeNull();
+    expect(getComputedStyle(stack as HTMLElement).transition).toBe("");
+  });
+
+  it("rides a driving sheet's top edge on the compositor, 12px above it", () => {
+    follow.track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
+    try {
+      compute.mockReturnValue({ status: "ok", bearing: 30 });
+      render(<MapControls />);
+      const style = getComputedStyle(
+        document.querySelector<HTMLElement>("[data-map-controls-columns]") as HTMLElement,
+      );
+      expect(style.bottom).toBe("calc(12px + var(--omx-safe-bottom))");
+      expect(style.animationName).toBe("omx-sheet-follow");
+      expect(style.getPropertyValue("animation-range")).toBe("4px 444px");
+    } finally {
+      follow.track = null;
+    }
+  });
+
+  it("stops the two-column grid below top chrome while riding a driving sheet", () => {
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 400 });
+    follow.track = { scrollStart: 4, cap: 440, lift: 0, floor: 0 };
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.matches("button, [role='button']")
+          ? new DOMRect(0, 0, 36, 60)
+          : new DOMRect(0, 0, 0, 0);
+      });
+    try {
+      compute.mockReturnValue({ status: "ok", bearing: 30 });
+      act(() => publishMapObstruction("controls-test-filter", "top", 100));
+      render(<MapControls />);
+      const stack = document.querySelector<HTMLElement>(
+        "[data-map-controls-columns]",
+      ) as HTMLElement;
+      // A 400px viewport cannot fit the column above a 48px base, so it pairs up.
+      expect(stack.dataset.mapControlsColumns).toBe("2");
+      const rows = Math.ceil(stack.querySelectorAll("button, [role='button']").length / 2);
+      const grid = rows * 60 + (rows - 1) * 8;
+      const style = getComputedStyle(stack);
+      const [start, end] = style.getPropertyValue("animation-range").split(" ").map(parseFloat);
+      // It rises from 12px to the grid's ceiling, 400 - (100 + 12) - grid.
+      expect(style.bottom).toBe("calc(12px + var(--omx-safe-bottom))");
+      expect(end - start).toBe(400 - 112 - grid - 12);
+    } finally {
+      rect.mockRestore();
+      follow.track = null;
       Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
     }
   });

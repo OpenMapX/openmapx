@@ -7,6 +7,6 @@
   "dependencies": {
     "@openmapx/air-quality": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }
