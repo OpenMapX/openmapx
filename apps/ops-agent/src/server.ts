@@ -99,6 +99,7 @@ import { ArtifactTransferError } from "./artifact-transfer/errors";
 import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
+import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
 import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
 import {
   configurationMaintenanceAdmissionState,
@@ -1057,9 +1058,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       [...jobsById.values()].filter(
         (other) =>
           other.operationId !== job.operationId &&
-          (other.state === "queued" ||
-            other.state === "running" ||
-            other.state === "termination_pending"),
+          configurationHandoffBlocksReplacement(other.operation.kind, other.state),
       ).length + (options.artifactTransfers?.activeStreams ?? 0),
     ...(job.operation.kind === "services.buildAll"
       ? {

@@ -37,6 +37,7 @@ interface State {
     "previewFingerprint" | "expectedCurrentRevisionId" | "confirmations" | "proof"
   >;
   preview: AdminPlatformPreview;
+  sourceSnapshot: ConfigurationSourcesInspection;
   expectedDesiredRowVersion: string | null;
   handoffId: string;
   authorization?: ReturnType<typeof encrypt>;
@@ -94,6 +95,7 @@ export function retainedPlatformConfigurationIntent(writer: AdministrativeConfig
     { preview } = state;
   return {
     version: 1 as const,
+    sourceSnapshot: structuredClone(state.sourceSnapshot),
     handoffId: state.handoffId,
     previewId: preview.previewId,
     previewFingerprint: preview.previewFingerprint,
@@ -106,6 +108,9 @@ export function retainedPlatformConfigurationIntent(writer: AdministrativeConfig
     confirmations: { ...state.input.confirmations },
     ...(state.authorization ? { authorization: { ...state.authorization } } : {}),
   };
+}
+export function retainedPlatformConfigurationSource(writer: AdministrativeConfigurationWriter) {
+  return stateFor(writer).sourceSnapshot;
 }
 export function assertPlatformConfigurationSource(
   writer: AdministrativeConfigurationWriter,
@@ -146,6 +151,8 @@ export async function preparePlatformConfigurationChange(
     preview = immutable(retained.preview);
   if (
     retained.consumedByJobId ||
+    !retained.sourceSnapshot ||
+    retained.desiredRowVersion === undefined ||
     preview.expectedCurrentRevisionId !== input.expectedCurrentRevisionId ||
     preview.authPolicyRevision !== (await loadAuthPolicy(owner.connection)).revision ||
     Object.entries(preview.requiredConfirmation).some(
@@ -171,6 +178,8 @@ export async function preparePlatformConfigurationChange(
     .select({ version: sql<string>`xmin::text` })
     .from(systemSettings)
     .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+  if ((desired?.version ?? null) !== retained.desiredRowVersion)
+    throw new PlatformPreviewConflict("Platform desired state changed; create a new preview");
   const { version: _version, ...patch } = preview.configuration;
   const overlay: ProspectiveConfigurationOverlay = immutable({
     purpose: "platform",
@@ -302,6 +311,7 @@ export async function preparePlatformConfigurationChange(
       ...(proof ? { proof } : {}),
     },
     preview,
+    sourceSnapshot: immutable(retained.sourceSnapshot!),
     expectedDesiredRowVersion: desired?.version ?? null,
     handoffId: randomUUID(),
     overlay,

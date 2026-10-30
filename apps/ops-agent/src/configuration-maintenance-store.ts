@@ -53,6 +53,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   type ArtifactTargetLease,
   adoptArtifactTargetLease,
+  assertArtifactTargetLeaseExecution,
   assertConfigurationMaintenanceRootClosure,
   assertFixedConfigurationMaintenancePlan,
   bindControlChildPhase,
@@ -127,6 +128,7 @@ import {
   type OpsOperation,
   opsOperationFingerprint,
   opsResourceId,
+  protectedConfigurationServiceIdSchema,
   type RetainedParentExecution,
   type TrustedConfigurationQueueLock,
   type VerifiedParentExecution,
@@ -870,6 +872,57 @@ export async function assertOwnedMaintenanceRecreateRuntime(
   const source = sources.get(runtime);
   if (!source) throw Error("Actual original source required");
   return inspectOriginalOwnerServices(source, root, context.signal);
+}
+/** Exact fixed handoff source from its actual borrowed child and signed
+ * maintenance owner. No ordinary lifecycle operation can call this adapter. */
+export async function assertOwnedMaintenanceHandoffRuntime(
+  runtime: OpsRuntime,
+  operation: Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>,
+  context: import("./runtime").OpsExecutionContext,
+) {
+  if (!context.controlAuthority || !context.artifactLease)
+    throw Error("Actual original borrowed maintenance handoff required");
+  assertArtifactTargetLeaseExecution(context.artifactLease, context.execution);
+  const child = executionAuthorityState(context.controlAuthority),
+    observed = verifyControl(
+      child.installation.installation.publicKey,
+      domain,
+      readPrivateRecord(
+        child.installation,
+        "configuration-maintenance",
+        `${operation.maintenanceId}.json`,
+      ),
+      ownerSchema,
+    ),
+    root = restoreAdmittedControlExecution(child.installation.installation, observed.plan.prepare),
+    owner = readOwnedConfigurationMaintenance(root),
+    step = owner.plan.steps.find(
+      (value) =>
+        value.operationKey === child.execution.operationKey &&
+        value.operationFingerprint === child.execution.operationFingerprint,
+    );
+  if (
+    !step ||
+    step.phase !== "maintenance-handoff" ||
+    !owner.plan.handoff ||
+    !owner.plan.nestedHandoff ||
+    !child.origin ||
+    canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
+    canonicalJson(step.operation) !== canonicalJson(operation) ||
+    child.kind !== operation.kind ||
+    canonicalJson(child.reservations) !== canonicalJson([owner.plan.nestedHandoff])
+  )
+    throw Error("Original frozen handoff source changed");
+  await verifyFrozenMaintenanceFollowUpSource(
+    runtime,
+    root,
+    step.ordinal,
+    context.signal,
+    "maintenance-handoff",
+  );
+  const source = sources.get(runtime);
+  if (!source) throw Error("Actual original source required");
+  return { root, owner, source };
 }
 /** Retention capture for the exact already-authorized borrowed generation child.
  * No caller snapshot or maintenance UUID alone can select OLD ownership. */
@@ -3571,6 +3624,7 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
 
 // The actual admission/inspection producer and its private consumer share ONE nominal owner.
 interface Source {
+  rootDir?: string;
   infraDir: string;
   candidateSource?: ConfigurationCandidateSource;
   stack: services.StackPaths;
@@ -3984,6 +4038,21 @@ export async function verifyFrozenMaintenanceRecreateSource(
   ordinal: number,
   signal: AbortSignal,
 ): Promise<void> {
+  return verifyFrozenMaintenanceFollowUpSource(
+    runtime,
+    authority,
+    ordinal,
+    signal,
+    "maintenance-recreate",
+  );
+}
+async function verifyFrozenMaintenanceFollowUpSource(
+  runtime: OpsRuntime,
+  authority: VerifiedExecutionAuthority,
+  ordinal: number,
+  signal: AbortSignal,
+  expectedPhase: "maintenance-recreate" | "maintenance-handoff",
+): Promise<void> {
   const source = sources.get(runtime),
     owner = readOwnedConfigurationMaintenance(authority),
     state = executionAuthorityState(authority),
@@ -3991,9 +4060,12 @@ export async function verifyFrozenMaintenanceRecreateSource(
   if (
     !source ||
     !step ||
-    step.phase !== "maintenance-recreate" ||
-    (step.operation.kind !== "service.recreate" &&
+    step.phase !== expectedPhase ||
+    (expectedPhase === "maintenance-recreate" &&
+      step.operation.kind !== "service.recreate" &&
       step.operation.kind !== "service.recreateIsolated") ||
+    (expectedPhase === "maintenance-handoff" &&
+      step.operation.kind !== "configurationHandoff.prepare") ||
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||
     !owner.apiControls.decide?.receiptDelivery ||
@@ -4907,13 +4979,29 @@ export async function prepareConfigurationMaintenanceAdmission(
     ].includes(original.kind)
   )
     throw Error("Original candidate/parent maintenance binding conflict");
-  const recreateServiceIds =
-    candidate.record.apiFollowUp === "service-apply" || candidate.record.privateCoordinatorLifecycle
+  const platform = candidate.record.privatePlatformIntent;
+  if (
+    platform &&
+    (candidate.record.apiFollowUp !== "platform-apply" ||
+      original.kind !== "stack.render" ||
+      platform.sourceRevision !== input.operation.expectedSourceRevision ||
+      platform.expectedCurrentRevisionId !== input.operation.expectedCurrentRevisionId ||
+      canonicalJson(platform.configuration) !== canonicalJson(candidate.payload.platform) ||
+      canonicalJson(platform.affectedServiceIds) !==
+        canonicalJson(candidate.record.affectedServiceIds))
+  )
+    throw Error("Original platform candidate binding conflict");
+  const recreateServiceIds = platform
+    ? candidate.record.affectedServiceIds.filter(
+        (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
+      )
+    : candidate.record.apiFollowUp === "service-apply" ||
+        candidate.record.privateCoordinatorLifecycle
       ? candidate.record.affectedServiceIds
       : [];
   if (
-    input.operation.followUp === "platform-apply" ||
-    (recreateServiceIds.length ? "service-apply" : "render-only") !== input.operation.followUp
+    (platform ? "platform-apply" : recreateServiceIds.length ? "service-apply" : "render-only") !==
+    input.operation.followUp
   )
     throw Error("Configuration maintenance continuation unavailable");
   const authority = await source.loadAuthority();
@@ -5139,6 +5227,28 @@ export async function prepareConfigurationMaintenanceAdmission(
       }),
     )
     .digest("hex");
+  const protectedIds = platform
+    ? platform.affectedServiceIds.filter(
+        (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
+      )
+    : [];
+  const handoff =
+    platform && protectedIds.length
+      ? {
+          handoffId: platform.handoffId,
+          previewFingerprint: platform.previewFingerprint,
+          serviceIds: protectedIds,
+          expectedImageIdentities: Object.fromEntries(
+            protectedIds.map((id) => {
+              const old = originalContainers.find((value) => value.serviceId === id);
+              if (!old || old.state !== "running")
+                throw Error("Original protected target unavailable");
+              return [id, old.provenance.imageId];
+            }),
+          ),
+          mode: { kind: "configuration" as const },
+        }
+      : undefined;
   const frozen = buildFixedConfigurationMaintenancePlan({
     installationId: input.installation.installationId,
     prepare: input.execution,
@@ -5153,6 +5263,7 @@ export async function prepareConfigurationMaintenanceAdmission(
     hardlinkPlan: { plan, prune: true },
     serviceIds,
     recreateServiceIds,
+    ...(handoff ? { handoff } : {}),
     ...(coordinatorImage ? { coordinatorImage } : {}),
   });
   assertProspectiveConfigurationMaintenanceBudget({

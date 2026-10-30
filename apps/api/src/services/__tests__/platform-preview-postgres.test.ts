@@ -210,8 +210,23 @@ dbDescribe("durable exact platform preview", () => {
       changes: original.configuration,
       services: [],
     });
+    const [priorDesired] = await fixture.db
+      .select({ version: sql<string>`xmin::text` })
+      .from(systemSettings)
+      .where(eq(systemSettings.key, "platformConfiguration"));
     await retainPlatformPreview(
-      { actorId, operationKey: randomUUID(), requestFingerprint: "a".repeat(64), preview: bound },
+      {
+        actorId,
+        operationKey: randomUUID(),
+        requestFingerprint: "a".repeat(64),
+        preview: bound,
+        sourceSnapshot: {
+          revisionId: bound.expectedCurrentRevisionId,
+          sourceRevision: bound.sourceRevision,
+          services: [],
+        },
+        desiredRowVersion: priorDesired?.version ?? null,
+      },
       fixture.db,
     );
     const clock = new Date(),

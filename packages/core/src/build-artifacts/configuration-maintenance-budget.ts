@@ -2,6 +2,7 @@
  * expressions never become a signed witness, authority handle or publication. */
 import { dirname, join } from "node:path";
 import { canonicalJson } from "../ops/canonical-json";
+import { protectedConfigurationServiceIdSchema } from "../ops/configuration-handoff-records";
 import { configurationMaintenancePrepareSchema } from "../ops/configuration-maintenance";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation-records";
 import type { OpsOperation } from "../ops/contract";
@@ -81,6 +82,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
         (value) => !["configuration-fence", "configuration-fence-settle"].includes(value.phase),
       ),
       ...(plan.nestedHardlinks ? [plan.nestedHardlinks] : []),
+      ...(plan.nestedHandoff ? [plan.nestedHandoff] : []),
     ],
     children = reservations.map((value) => ({
       planIndex: value.ordinal > 31 ? 31 : value.ordinal,
@@ -95,14 +97,15 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       effectSettlementDigest: hash,
       publication: "not_started",
     })),
-    recreates = new Set(
-      plan.steps.flatMap((value) =>
+    recreates = new Set([
+      ...(plan.handoff?.serviceIds ?? []),
+      ...plan.steps.flatMap((value) =>
         value.operation.kind === "service.recreate" ||
         value.operation.kind === "service.recreateIsolated"
           ? [value.operation.serviceId]
           : [],
       ),
-    ),
+    ]),
     futureBase = join(
       rendered.context.infraDir!,
       ".trusted-config-generations",
@@ -285,7 +288,9 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
     ownerBytes = ownerBaseBytes + inspectionBytes + finalBytes + 2 * 8192 + stepBytes + 8192,
     noGuardOwnerBytes = ownerBaseBytes + 32768,
     receiptBytes = bytes(receipt),
-    phaseBytes = (plan.reservations.length + (plan.nestedHardlinks ? 1 : 0)) * 8192;
+    phaseBytes =
+      (plan.reservations.length + (plan.nestedHardlinks ? 1 : 0) + (plan.nestedHandoff ? 1 : 0)) *
+      8192;
   if (
     inspectionBytes > 65536 ||
     Math.max(ownerBytes, noGuardOwnerBytes) > 131072 ||
@@ -322,10 +327,31 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
   const apply = record.operation as Parameters<
     typeof buildFixedConfigurationMaintenancePlan
   >[0]["apply"];
-  const recreateServiceIds =
-    record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+  const platform = record.privatePlatformIntent;
+  const protectedIds = platform
+    ? record.affectedServiceIds.filter(
+        (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
+      )
+    : [];
+  const recreateServiceIds = platform
+    ? record.affectedServiceIds.filter(
+        (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
+      )
+    : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
       ? record.affectedServiceIds
       : [];
+  const handoff =
+    platform && protectedIds.length
+      ? {
+          handoffId: platform.handoffId,
+          previewFingerprint: platform.previewFingerprint,
+          serviceIds: protectedIds,
+          expectedImageIdentities: Object.fromEntries(
+            protectedIds.map((id) => [id, `sha256:${hash}`]),
+          ),
+          mode: { kind: "configuration" as const },
+        }
+      : undefined;
   const operation = configurationMaintenancePrepareSchema.parse({
     kind: "configurationMaintenance.prepare",
     maintenanceId: record.maintenanceId,
@@ -336,7 +362,11 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     revisionId: apply.revisionId,
     expectedSourceRevision: record.expectedSourceRevision,
     coordinatorMode: apply.coordinatorMode,
-    followUp: recreateServiceIds.length ? "service-apply" : "render-only",
+    followUp: platform
+      ? "platform-apply"
+      : recreateServiceIds.length
+        ? "service-apply"
+        : "render-only",
   });
   const parent: RetainedParentExecution = {
     issuer: "api",
@@ -387,6 +417,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     hardlinkPlan: { plan: rendered.rendered.hardlinkPlan, prune: true },
     serviceIds,
     recreateServiceIds,
+    ...(handoff ? { handoff } : {}),
     ...(input.coordinatorImage
       ? { coordinatorImage: { ...input.coordinatorImage, imageId: `sha256:${hash}` } }
       : {}),

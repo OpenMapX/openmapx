@@ -34,6 +34,7 @@ import {
   opsOperationSchema,
   type PreparedConfigurationRecord,
   parseControlRootOperationKey,
+  protectedConfigurationServiceIdSchema,
   readOpsTokenFile,
   sealTrustedConfigurationSnapshot,
   type TrustedConfigurationPayload,
@@ -126,6 +127,7 @@ import {
   assertPlatformConfigurationOverlay,
   assertPlatformConfigurationSource,
   retainedPlatformConfigurationIntent,
+  retainedPlatformConfigurationSource,
 } from "./platform-configuration-participant";
 import { encrypt } from "./secrets";
 import { resolveServiceConfigWithSourcesStrict } from "./service-config-resolver";
@@ -3097,12 +3099,14 @@ export async function prepareProspectiveConfiguration(input: {
     throw Error("Fixed unchanged coordinator render required");
   const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
   const publisher = publisherOptions(token);
-  const source = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "configuration.sources.inspect" },
-    createDurableOpsKey("configuration.sources.inspect", input.operationKey),
-    { signal: input.signal },
-  );
+  const source = platformIntent
+    ? retainedPlatformConfigurationSource(writer)
+    : await executeAndWait(
+        createApiOpsClient(),
+        { kind: "configuration.sources.inspect" },
+        createDurableOpsKey("configuration.sources.inspect", input.operationKey),
+        { signal: input.signal },
+      );
   if (source.revisionId !== input.expectedCurrentRevisionId)
     throw Error("Configuration revision conflict");
   let cleanupOperationKey: string | undefined;
@@ -3492,11 +3496,20 @@ function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown)
   if (!record.maintenanceId || !record.prepareOperationKey) return;
   const projection = readProjection(result),
     keys = new Set<string>([record.prepareOperationKey]);
-  const recreate =
-    record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+  const platform = record.privatePlatformIntent;
+  const recreate = platform
+    ? record.affectedServiceIds.filter(
+        (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
+      )
+    : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
       ? record.affectedServiceIds
       : [];
-  const count = 1 + (state.preview?.entries ? 1 : 0) + recreate.length;
+  const handoff =
+    !!platform &&
+    record.affectedServiceIds.some(
+      (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
+    );
+  const count = 1 + (state.preview?.entries ? 1 : 0) + recreate.length + (handoff ? 1 : 0);
   if (count > 32) throw Error("Prospective maintenance effect capacity exceeded");
   keys.add(controlChildOperationKey(record.prepareOperationKey, "configuration-commit", 0));
   let ordinal = 1;
@@ -3507,6 +3520,10 @@ function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown)
   for (const _service of recreate)
     keys.add(
       controlChildOperationKey(record.prepareOperationKey, "maintenance-recreate", ordinal++),
+    );
+  if (handoff)
+    keys.add(
+      controlChildOperationKey(record.prepareOperationKey, "maintenance-handoff", ordinal++),
     );
   if (
     record.coordinatorPrerequisite &&
@@ -3898,7 +3915,8 @@ async function verifyCurrentPreview(
     preview.previewDigest !== state.preview?.previewDigest ||
     (state.overlay.coordinatorMode === "require-running" &&
       (preview.entries ||
-        (state.record.maintenanceId && state.record.apiFollowUp === "service-apply")) &&
+        (state.record.maintenanceId &&
+          (state.record.apiFollowUp === "service-apply" || state.record.privatePlatformIntent))) &&
       preview.coordinatorState !== "running")
   )
     rejectUnissuedCandidate(candidate, "Configuration preview changed");
@@ -5435,8 +5453,9 @@ export async function prepareConfigurationMaintenance(
     revisionId: candidate.revisionId,
     expectedSourceRevision: record.expectedSourceRevision,
     coordinatorMode: source.overlay.coordinatorMode,
-    followUp:
-      record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+    followUp: record.privatePlatformIntent
+      ? "platform-apply"
+      : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
         ? "service-apply"
         : "render-only",
   });

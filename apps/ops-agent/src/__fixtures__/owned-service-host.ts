@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -89,14 +89,14 @@ export async function ownedServiceHost(options: { environment?:Record<string,Rec
     services: loaded,
     input: {
       domain: "example.test",
-      selectedRoots: [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])],
+      selectedRoots: options.selectedRoots ?? [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])],
       serviceConfigs: [],
       integrationConfigs: [],
       serviceSecrets: [],
     },
     ownedServiceGenerations: [],
   });
-  services.writeServiceSelectionFile(infraDir, [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])]);
+  services.writeServiceSelectionFile(infraDir, options.selectedRoots ?? [...(withCoordinator ? ["data-manager", "motis"] : ["motis"]),...(options.extraServiceIds??[])]);
   const composePath = services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE);
   const firstCompose = realpathSync(composePath);
   const stack = {
@@ -124,6 +124,7 @@ export async function ownedServiceHost(options: { environment?:Record<string,Rec
   let runtimeSecretBytes: Record<string, string> = {};
   const calls: string[][] = [];
   const actualComposeConfig = options.actualComposeConfig;
+  const configurationHelperVersion=options.configurationHelperVersion;
   let creatingProcess:
     | ((args: readonly string[], signal: AbortSignal) => Promise<void>)
     | undefined;
@@ -133,7 +134,20 @@ export async function ownedServiceHost(options: { environment?:Record<string,Rec
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
     let stdout = "";
-    if (args[0] === "container" && args[1] === "ls") {
+    if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
+      const selected=rows.find(row=>row.Id===args[4]);
+      if(!selected)throw Error("Named helper prerequisite container unavailable");
+      const format=args[3];
+      if(format==="{{.Image}}")stdout=selected.Image;
+      else if(format==="{{.Config.User}}")stdout=`${process.getuid?.()??0}:${process.getgid?.()??0}`;
+      else if(format==="{{json .HostConfig.GroupAdd}}")stdout="[]";
+      else if(format?.includes("range .Config.Env"))stdout="HOME\nPATH\n";
+      else if(format==="{{json .Mounts}}")stdout=JSON.stringify([{Destination:"/var/run/docker.sock",Source:"/var/run/docker.sock"},{Destination:root,Source:root}]);
+      else throw Error("Unexpected fixed helper prerequisite format");
+    } else if(configurationHelperVersion!==undefined && args[0]==="image" && args[1]==="inspect" && args[3]?.includes("openmapx.configuration-handoff.version")) {
+      if(args.at(-1)!==imageId)throw Error("Unexpected old helper image");
+      stdout=configurationHelperVersion;
+    } else if (args[0] === "container" && args[1] === "ls") {
       stdout = rawListing ?? rows.map((r) => r.Id).join("\n");
       const pending = inventoryProcess;
       inventoryProcess = undefined;

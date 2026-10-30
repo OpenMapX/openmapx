@@ -125,6 +125,8 @@ export async function commitPlatformConfigurationIntent(
     preview = retained.preview;
   if (
     retained.consumedByJobId ||
+    (retained.desiredRowVersion !== undefined &&
+      retained.desiredRowVersion !== input.expectedDesiredRowVersion) ||
     preview.sourceRevision !== input.sourceRevision ||
     preview.expectedCurrentRevisionId !== input.expectedCurrentRevisionId ||
     preview.authPolicyRevision !== input.expectedAuthPolicyRevision ||

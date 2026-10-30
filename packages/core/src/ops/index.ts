@@ -9,6 +9,7 @@ export {
   configurationHandoffInspectionSchema,
   configurationHandoffIntentSchema,
   configurationHandoffPrepareOperationSchema,
+  protectedConfigurationServiceIdSchema,
 } from "./configuration-handoff-records";
 export * from "./configuration-maintenance";
 export * from "./configuration-maintenance-control-validation";

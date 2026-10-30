@@ -1,7 +1,11 @@
 /** Original preview rows are immutable; a request retry cannot extend its TTL. */
 import { createHash } from "node:crypto";
 import { adminPlatformPreviewSchema } from "@openmapx/core/api-contracts";
-import { canonicalJson } from "@openmapx/core/ops";
+import {
+  type ConfigurationSourcesInspection,
+  canonicalJson,
+  configurationSourcesInspectionSchema,
+} from "@openmapx/core/ops";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthDatabase } from "../account/auth-database";
@@ -10,6 +14,15 @@ import { platformConfigurationPreview as table } from "../db/schema";
 import { preservationAllowsDeletion, withPreservationRetentionLock } from "../privacy/preservation";
 
 const TTL = 600_000;
+const storedPreviewSchema = z.strictObject({
+  version: z.literal(1),
+  preview: adminPlatformPreviewSchema,
+  sourceSnapshot: configurationSourcesInspectionSchema,
+  desiredRowVersion: z
+    .string()
+    .regex(/^\d{1,10}$/)
+    .nullable(),
+});
 export class PlatformPreviewConflict extends Error {
   constructor(message = "Platform preview unavailable or changed") {
     super(message);
@@ -17,7 +30,16 @@ export class PlatformPreviewConflict extends Error {
 }
 function decode(row: typeof table.$inferSelect) {
   try {
-    const preview = adminPlatformPreviewSchema.parse(row.preview);
+    const envelope = storedPreviewSchema.safeParse(row.preview);
+    const preview = envelope.success
+      ? envelope.data.preview
+      : adminPlatformPreviewSchema.parse(row.preview);
+    if (
+      envelope.success &&
+      (envelope.data.sourceSnapshot.sourceRevision !== preview.sourceRevision ||
+        envelope.data.sourceSnapshot.revisionId !== preview.expectedCurrentRevisionId)
+    )
+      throw Error();
     const { previewFingerprint, ...intent } = preview;
     const digest = createHash("sha256")
       .update("openmapx-platform-preview-v1\0")
@@ -36,6 +58,8 @@ function decode(row: typeof table.$inferSelect) {
       throw Error();
     return {
       preview,
+      sourceSnapshot: envelope.success ? envelope.data.sourceSnapshot : undefined,
+      desiredRowVersion: envelope.success ? envelope.data.desiredRowVersion : undefined,
       expiresAt: row.expiresAt.toISOString(),
       consumedByJobId: row.consumedByJobId,
     };
@@ -49,6 +73,8 @@ export async function retainPlatformPreview(
     operationKey: string;
     requestFingerprint: string;
     preview: unknown;
+    sourceSnapshot?: ConfigurationSourcesInspection;
+    desiredRowVersion?: string | null;
     now?: Date;
   },
   database: typeof db = db,
@@ -92,6 +118,25 @@ export async function retainPlatformPreview(
     const capacity = await tx.select({ id: table.id }).from(table).limit(4096);
     if (capacity.length >= 4096)
       throw new PlatformPreviewConflict("Platform preview capacity unavailable");
+    const stored = input.sourceSnapshot
+      ? storedPreviewSchema.parse({
+          version: 1,
+          preview,
+          sourceSnapshot: input.sourceSnapshot,
+          desiredRowVersion: input.desiredRowVersion,
+        })
+      : preview;
+    if (
+      input.sourceSnapshot &&
+      (input.sourceSnapshot.sourceRevision !== preview.sourceRevision ||
+        input.sourceSnapshot.revisionId !== preview.expectedCurrentRevisionId)
+    )
+      throw new PlatformPreviewConflict();
+    const [size] = await tx.execute<{ bytes: number }>(
+      sql`select octet_length(${JSON.stringify(stored)}::jsonb::text) as bytes`,
+    );
+    if (!size || size.bytes > 131072)
+      throw new PlatformPreviewConflict("Platform preview capacity unavailable");
     const [row] = await tx
       .insert(table)
       .values({
@@ -103,7 +148,7 @@ export async function retainPlatformPreview(
         authPolicyRevision: preview.authPolicyRevision,
         sourceRevision: preview.sourceRevision,
         expectedCurrentRevisionId: preview.expectedCurrentRevisionId,
-        preview,
+        preview: stored,
         createdAt: now,
         expiresAt: new Date(now.getTime() + TTL),
       })

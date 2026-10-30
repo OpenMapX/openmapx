@@ -192,12 +192,15 @@ export async function createProductionOpsRuntime(
     integrationSchemas: initial.integrationSchemas,
     loadAuthority: options.loadAuthority,
     infraDir: options.stack.infraDir,
+    rootDir: options.rootDir,
+    execFile: options.docker?.execFile ?? runContainedProcess,
     ownedServices: owned,
     candidateSource: options.candidateSource,
   });
   installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned, lifecycle);
   installConfigurationHardlinksRuntime(runtime, { infraDir: options.stack.infraDir });
   registerConfigurationMaintenanceSource(runtime, {
+    rootDir: options.rootDir,
     infraDir: options.stack.infraDir,
     candidateSource: options.candidateSource,
     stack: options.stack,

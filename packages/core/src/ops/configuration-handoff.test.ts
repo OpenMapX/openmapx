@@ -77,6 +77,11 @@ it("bounds private platform intent without admitting plaintext recovery credenti
     sourceRevision: operation().maintenanceId,
     expectedCurrentRevisionId: operation().expectedCurrentRevisionId,
     expectedDesiredRowVersion: null,
+    sourceSnapshot: {
+      revisionId: operation().expectedCurrentRevisionId,
+      sourceRevision: operation().maintenanceId,
+      services: [],
+    },
     configuration: { version: 1, domain: { source: "host" } },
     affectedServiceIds: ["app-api"],
     confirmations: {

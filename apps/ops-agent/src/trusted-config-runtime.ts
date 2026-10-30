@@ -27,14 +27,17 @@ import {
   type ConfigurationCandidateSource,
   readConfigurationCandidate,
 } from "./configuration-candidate-source";
+import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-runtime";
 import {
   assertStagedCoordinatorConfigurationWrite,
   inspectOwnedMaintenanceGenerationRuntime,
 } from "./configuration-maintenance-store";
 import { configurationPolicyRevision } from "./configured-resource-authority";
+import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsExecutionContext, OpsRuntime, OpsTrustedClaim } from "./runtime";
+import { OpsHostUpdateRequiredError } from "./runtime";
 import { renderCoordinatorCandidate } from "./service-pull-runtime";
 
 const FAILED = "Trusted configuration apply failed";
@@ -57,6 +60,8 @@ export interface TrustedConfigurationRuntimeOptions {
   integrationSchemas: ReadonlyMap<string, Record<string, unknown>>;
   loadAuthority?: () => Promise<TrustedConfigurationAuthoritySnapshot>;
   infraDir: string;
+  rootDir?: string;
+  execFile?: NonNullable<DockerRuntimeOptions["execFile"]>;
   ownedServices?: OwnedServiceResolver;
   candidateSource?: ConfigurationCandidateSource;
   /** The process environment, read for the operator's selection override. */
@@ -383,6 +388,31 @@ export function installTrustedConfigurationRuntime(
         : undefined;
     if (candidate.record.maintenanceId) {
       if (!options.ownedServices) throw Error("Actual maintenance ownership inventory unavailable");
+      const originalContainers = await options.ownedServices.inspectOwnedServices(context.signal);
+      if (
+        candidate.record.privatePlatformIntent &&
+        candidate.record.affectedServiceIds.some((id) =>
+          ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"].includes(id),
+        )
+      ) {
+        const agent = originalContainers.find((value) => value.serviceId === "ops-agent");
+        if (!options.rootDir || !options.execFile || !agent || agent.state !== "running")
+          throw new OpsHostUpdateRequiredError();
+        await inspectConfigurationHandoffPrerequisite({
+          rootDir: options.rootDir,
+          containerId: agent.containerId,
+          imageId: agent.provenance.imageId,
+          signal: context.signal,
+          runDocker: async (args, command) =>
+            (
+              await options.execFile!("docker", args, {
+                signal: command.signal,
+                timeout: 15000,
+                maxBuffer: 65536,
+              })
+            ).stdout,
+        });
+      }
       assertProspectiveConfigurationMaintenancePreludeBudget({
         installationId: installation.installationId,
         record: candidate.record,
@@ -391,14 +421,18 @@ export function installTrustedConfigurationRuntime(
         currentServiceIds: [
           ...(coreServices.readAppliedServiceIds(options.infraDir, services) ?? []),
         ],
-        originalContainers: await options.ownedServices.inspectOwnedServices(context.signal),
+        originalContainers,
         rendered,
         ...(prospectiveCoordinatorImage ? { coordinatorImage: prospectiveCoordinatorImage } : {}),
       });
     }
     if (plan.length > 256) throw Error("Configuration preview budget exceeded");
     let coordinatorState: ConfigurationHardlinksPreview["coordinatorState"] = "not_required";
-    if (plan.length || candidate.record.privateCoordinatorLifecycle) {
+    if (
+      plan.length ||
+      candidate.record.privateCoordinatorLifecycle ||
+      candidate.record.privatePlatformIntent
+    ) {
       const dm = rendered.resolved.enabled.find(
         (service) => service.manifest.id === "data-manager",
       );

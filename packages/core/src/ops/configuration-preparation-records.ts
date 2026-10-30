@@ -45,6 +45,7 @@ export type ConfigurationHardlinksPreview = z.infer<typeof configurationHardlink
 export const platformConfigurationIntentSchema = z
   .strictObject({
     version: z.literal(1),
+    sourceSnapshot: configurationSourcesInspectionSchema,
     handoffId: z.uuid(),
     previewId: z.uuid(),
     previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -75,7 +76,7 @@ export const platformConfigurationIntentSchema = z
       })
       .optional(),
   })
-  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 32768);
+  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 196608);
 export type PlatformConfigurationIntentRecord = z.infer<typeof platformConfigurationIntentSchema>;
 
 export const preparedConfigurationRecordSchema = z.strictObject({
