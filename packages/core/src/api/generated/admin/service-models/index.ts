@@ -173,6 +173,7 @@ export * from "./getAdminPlatformConfiguration200ConfigurationDefaultRegion";
 export * from "./getAdminPlatformConfiguration200ConfigurationDomain";
 export * from "./getAdminPlatformConfiguration200ConfigurationReleaseSelector";
 export * from "./getAdminPlatformConfiguration200ConfigurationVersion";
+export * from "./getAdminPlatformConfiguration200PendingItem";
 export * from "./getAdminPlatformConfiguration200Sources";
 export * from "./getAdminPlatformConfiguration200SourcesAcmeEmail";
 export * from "./getAdminPlatformConfiguration200SourcesBackupRetentionDays";

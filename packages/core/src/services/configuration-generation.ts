@@ -57,6 +57,7 @@ import {
   platformConfigurationSchema,
   resolvePlatformConfiguration,
 } from "./platform-configuration";
+import { normalizeReleaseSelection } from "./release-selection";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
 import type { LoadedService } from "./types";
@@ -754,6 +755,25 @@ export function readAppliedPlatformConfiguration(
   return resolved.platform === undefined
     ? undefined
     : platformConfigurationSchema.parse(resolved.platform);
+}
+
+/** Resolve each invocation against the currently applied non-secret projection. */
+export function readAppliedPlatformValues(
+  infraDir: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  return resolvePlatformConfiguration({ saved: readAppliedPlatformConfiguration(infraDir), env })
+    .values;
+}
+
+export function readAppliedReleaseSelection(
+  infraDir: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  return normalizeReleaseSelection(
+    readAppliedPlatformValues(infraDir, env).releaseSelector,
+    env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY,
+  );
 }
 
 /** Call under writer ownership so the pointer and its projections are one observation.

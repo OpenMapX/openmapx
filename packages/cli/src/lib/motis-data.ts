@@ -68,7 +68,7 @@ export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
  */
 export function resolveTransitousToolsImage(rootDir?: string): string {
   const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
-  const selection = coreServices.releaseSelection();
+  const selection = coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir);
   const overlayPath = repoPaths(rootDir).composeReleasePath;
   if (existsSync(overlayPath)) {
     const selected = coreServices.parseReleaseComposeSelection(readFileSync(overlayPath, "utf8"));
@@ -249,11 +249,17 @@ async function ensureTransitousToolsImage(
       await runner("docker", ["pull", image], { cwd: rootDir, stdio: "inherit" });
       return;
     } catch (error) {
-      if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+      if (
+        image.includes("@sha256:") ||
+        coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir).kind !== "local"
+      )
         throw error;
     }
   }
-  if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+  if (
+    image.includes("@sha256:") ||
+    coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir).kind !== "local"
+  )
     throw new Error("Refusing to build a replacement for a release-selected helper image");
   const contextDir = join(rootDir, "services", "motis", "tools", "transitous");
   await runner("docker", ["build", "-t", image, contextDir], { cwd: rootDir, stdio: "inherit" });

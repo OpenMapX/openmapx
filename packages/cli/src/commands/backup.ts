@@ -581,7 +581,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   const name = opts.name ?? defaultBackupName();
   assertValidBackupName(name);
   // Validate policy before creating files or stopping services.
-  const retentionDays = configuredBackupRetentionDays();
+  const retentionDays = configuredBackupRetentionDays(opts.rootDir);
 
   const backupDir = resolveBackupDir(opts.rootDir, name);
 
@@ -980,13 +980,8 @@ export function pruneExpiredBackups(opts: PruneExpiredBackupsOptions): PruneExpi
   return { deleted, retained };
 }
 
-function configuredBackupRetentionDays(): number {
-  const raw = process.env.BACKUP_RETENTION_DAYS?.trim() || "30";
-  const days = Number(raw);
-  if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
-    throw new Error("BACKUP_RETENTION_DAYS must be an integer between 1 and 36500");
-  }
-  return days;
+function configuredBackupRetentionDays(rootDir?: string): number {
+  return coreServices.readAppliedPlatformValues(repoPaths(rootDir).infraDir).backupRetentionDays;
 }
 
 function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
@@ -1048,7 +1043,7 @@ export function validateRestoreDataProtection(
   opts: { rootDir?: string; retentionDays?: number; now?: Date } = {},
 ): void {
   if (!containsOpenMapXDatabase(manifest)) return;
-  const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays();
+  const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays(opts.rootDir);
   if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }

@@ -73,12 +73,18 @@ export const adminPlatformApplyInputSchema = z.strictObject({
   domainProofToken: z.uuid().optional(),
 });
 export type AdminPlatformPreview = z.infer<typeof adminPlatformPreviewSchema>;
-export const adminPlatformConfigurationSchema = adminPlatformPreviewSchema.pick({
-  expectedCurrentRevisionId: true,
-  configuration: true,
-  values: true,
-  sources: true,
-});
+export const adminPlatformConfigurationSchema = adminPlatformPreviewSchema
+  .pick({
+    expectedCurrentRevisionId: true,
+    configuration: true,
+    values: true,
+    sources: true,
+  })
+  .extend({
+    pending: z
+      .array(z.strictObject({ jobId: z.uuid(), status: z.string().min(1).max(32) }))
+      .max(16),
+  });
 export const adminPlatformPreviewRetainedSchema = z.strictObject({
   preview: adminPlatformPreviewSchema,
   expiresAt: z.iso.datetime({ offset: true }),

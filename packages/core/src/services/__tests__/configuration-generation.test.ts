@@ -386,3 +386,40 @@ it("keeps host-owned Compose interpolation equivalent to legacy generations", ()
   });
   expect(after.rendered.composeYaml).toBe(before.rendered.composeYaml);
 });
+
+it("applied selector and retention follow the current generation and explicit return to host", async () => {
+  const { infraDir } = checkout();
+  const { readAppliedPlatformValues, readAppliedReleaseSelection } = await import(
+    "../configuration-generation"
+  );
+  const env = { OPENMAPX_RELEASE: "main", BACKUP_RETENTION_DAYS: "30" };
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({
+      platform: {
+        version: 1,
+        releaseSelector: { source: "database", value: "preview" },
+        backupRetentionDays: { source: "database", value: 60 },
+      },
+    }),
+  });
+  expect(readAppliedReleaseSelection(infraDir, env)).toMatchObject({ kind: "preview" });
+  expect(readAppliedPlatformValues(infraDir, env).backupRetentionDays).toBe(60);
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({
+      platform: {
+        version: 1,
+        releaseSelector: { source: "host" },
+        backupRetentionDays: { source: "host" },
+      },
+    }),
+  });
+  expect(readAppliedReleaseSelection(infraDir, env)).toMatchObject({ kind: "main" });
+  expect(
+    readAppliedPlatformValues(infraDir, { ...env, BACKUP_RETENTION_DAYS: "45" })
+      .backupRetentionDays,
+  ).toBe(45);
+});

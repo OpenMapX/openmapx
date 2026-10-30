@@ -1508,6 +1508,35 @@ describe("restore data-protection preflight", () => {
     };
   }
 
+  it("uses applied retention for restore and observes return to host on the next call", async () => {
+    const { services } = await import("@openmapx/core/server"),
+      infraDir = join(tmp, "infra", "docker");
+    const input = {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    process.env.BACKUP_RETENTION_DAYS = "30";
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, backupRetentionDays: { source: "database", value: 60 } },
+      },
+    });
+    const manifest = protectedManifest("2026-07-01T00:00:00.000Z"),
+      opts = { rootDir: tmp, now: new Date("2026-08-01T00:00:00.000Z") };
+    expect(() => validateRestoreDataProtection(manifest, opts)).not.toThrow();
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: { ...input, platform: { version: 1, backupRetentionDays: { source: "host" } } },
+    });
+    expect(() => validateRestoreDataProtection(manifest, opts)).toThrow(/retention policy/);
+  });
   it("accepts an in-policy OpenMapX backup covered by the external journal", () => {
     const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
     mkdirSync(join(journalPath, ".."), { recursive: true });

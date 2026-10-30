@@ -5,11 +5,13 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import {
@@ -733,6 +735,21 @@ describe("administrative diagnostics runtime", () => {
   });
 });
 
+async function appliedInspectionFixture(rootDir: string) {
+  const infraDir = join(rootDir, "infra", "docker");
+  await coreServices.commitConfigurationGeneration({
+    infraDir,
+    services: [],
+    input: {
+      domain: "localhost",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+  });
+}
+
 describe("administrative release runtime", () => {
   it("stores immutable canonical release IDs with exact-content idempotency and bounded pre-reads", async () => {
     const rootDir = temporaryRoot();
@@ -1255,7 +1272,7 @@ describe("administrative release runtime", () => {
     const rootDir = temporaryRoot();
     const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
     mkdirSync(releaseDirectory, { mode: 0o700 });
-    mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
+    await appliedInspectionFixture(rootDir);
     writeFileSync(
       join(rootDir, "infra", "docker", ".trusted-config-current", "docker-compose.generated.yml"),
       "services:{}\n",
@@ -1329,14 +1346,14 @@ describe("administrative release runtime", () => {
   });
 
   describe("system inspection fails closed on unusable observations", () => {
-    function systemFixture(
+    async function systemFixture(
       compose: "file" | "directory" | "missing",
       runDocker: (args: readonly string[]) => Promise<string>,
     ) {
       const rootDir = temporaryRoot();
       const releaseDirectory = join(rootDir, "infra", "docker", ".ops-agent-releases");
       mkdirSync(releaseDirectory, { mode: 0o700 });
-      mkdirSync(join(rootDir, "infra", "docker", ".trusted-config-current"), { recursive: true });
+      await appliedInspectionFixture(rootDir);
       const composePath = join(
         rootDir,
         "infra",
@@ -1344,8 +1361,9 @@ describe("administrative release runtime", () => {
         ".trusted-config-current",
         "docker-compose.generated.yml",
       );
-      if (compose === "file") writeFileSync(composePath, "services:{}\n");
-      if (compose === "directory") mkdirSync(composePath);
+      rmSync(composePath);
+      if (compose === "file") writeFileSync(composePath, "services:{}\n", { mode: 0o600 });
+      if (compose === "directory") mkdirSync(composePath, { mode: 0o700 });
       const releaseId = "release-123";
       writeFileSync(
         join(releaseDirectory, `${releaseId}.json`),
@@ -1380,7 +1398,7 @@ describe("administrative release runtime", () => {
     });
 
     it("reports unknown rather than stopped when a per-service observation throws", async () => {
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) return "";
@@ -1418,7 +1436,7 @@ describe("administrative release runtime", () => {
         "transitous-runner": "f",
       };
       const calls: string[][] = [];
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         calls.push([...args]);
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
@@ -1449,7 +1467,7 @@ describe("administrative release runtime", () => {
     });
 
     it("rejects a non-file Compose path instead of reporting it ready", async () => {
-      const effects = systemFixture("directory", async (args) => {
+      const effects = await systemFixture("directory", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         return "";
@@ -1461,7 +1479,7 @@ describe("administrative release runtime", () => {
     });
 
     it("rejects a Compose document the Compose boundary cannot parse", async () => {
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) throw new Error("invalid compose project");

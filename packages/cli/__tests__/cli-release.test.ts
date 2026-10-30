@@ -427,3 +427,45 @@ it("rejects a malformed existing overlay without replacing it or reaching the re
   expect(readFileSync(path, "utf8")).toBe("services: {}\n");
   expect(docker).not.toHaveBeenCalled();
 });
+
+it("uses the applied UI selector on each invocation without changing process environment", async () => {
+  const { services } = await import("@openmapx/core/server");
+  temp = mkdtempSync(join(tmpdir(), "omx-applied-release-"));
+  const infraDir = join(temp, "infra", "docker");
+  mkdirSync(infraDir, { recursive: true });
+  const input = {
+    domain: "maps.example.test",
+    selectedRoots: [],
+    serviceConfigs: [],
+    integrationConfigs: [],
+    serviceSecrets: [],
+  };
+  vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
+  vi.stubEnv("OPENMAPX_RELEASE", "local");
+  try {
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, releaseSelector: { source: "database", value: "local" } },
+      },
+    });
+    const docker = fakeDocker();
+    await expect(ensureReleaseOverlay({ docker })).resolves.toEqual({ status: "disabled" });
+    expect(docker).not.toHaveBeenCalled();
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, releaseSelector: { source: "database", value: "main" } },
+      },
+    });
+    await resolveReleaseManifest(docker);
+    expect(docker).toHaveBeenCalledWith(["pull", "ghcr.io/openmapx/release-manifest:main"]);
+    expect(process.env.OPENMAPX_RELEASE).toBe("local");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

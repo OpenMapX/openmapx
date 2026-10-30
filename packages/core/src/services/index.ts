@@ -42,6 +42,8 @@ export {
   type RenderConfigurationOptions,
   readAppliedConfiguration,
   readAppliedPlatformConfiguration,
+  readAppliedPlatformValues,
+  readAppliedReleaseSelection,
   readAppliedServiceIds,
   readAppliedTransitCredentialsRevision,
   renderConfiguration,

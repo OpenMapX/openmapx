@@ -231,14 +231,18 @@ async function main(): Promise<void> {
         store: artifactTransfers,
       });
     const releaseEffects = productionReleaseEffects(runtime);
-    const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
-    if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
-      throw new Error("Invalid BACKUP_RETENTION_DAYS");
-    }
-    const runBackupRetention = () =>
-      void pruneBackupRetention(config.rootDir, retentionDays, administrativeCli).catch(() => {
-        process.stderr.write("Scheduled backup retention failed\n");
-      });
+    const runBackupRetention = () => {
+      void Promise.resolve()
+        .then(() => {
+          const retentionDays = services.readAppliedPlatformValues(
+            paths.infraDir,
+          ).backupRetentionDays;
+          return pruneBackupRetention(config.rootDir, retentionDays, administrativeCli);
+        })
+        .catch(() => {
+          process.stderr.write("Scheduled backup retention failed\n");
+        });
+    };
     const policyAuthority = async () => {
       const authority = await authorityLoader();
       const resources = loadConfiguredResourceAuthority();

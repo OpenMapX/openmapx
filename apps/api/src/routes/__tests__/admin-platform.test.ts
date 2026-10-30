@@ -54,6 +54,7 @@ beforeEach(async () => {
     configuration: { version: 1 },
     values: preview.values,
     sources: preview.sources,
+    pending: [],
   });
   mocks.preview.mockResolvedValue({
     preview,

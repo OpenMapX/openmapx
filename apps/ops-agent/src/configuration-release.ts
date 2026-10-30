@@ -24,7 +24,7 @@ export function readCheckedConfigurationRelease(
   input: { releaseId: string; manifestDigest: string },
 ) {
   const selected = selectionSchema.parse(input),
-    channel = services.releaseSelection();
+    channel = services.readAppliedReleaseSelection(infraDir);
   if (channel.kind === "local") throw new services.ReleaseChannelDisabledError();
   const infra = new AnchoredDirectory(infraDir);
   try {

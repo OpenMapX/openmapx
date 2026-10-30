@@ -6,8 +6,9 @@ sidebar_position: 2
 
 # Services administration
 
-Everything you can do to a backend service from the command line, you can also
-do from the admin panel — in a browser, behind the same login. The admin pages
+Manage supported backend service operations from the admin panel in a browser,
+behind the same login. Operation availability follows the current instance and
+service ownership; initial installation and offline recovery require host access. The admin pages
 under `/admin/services` are a window onto the service registry: they list what's
 installed, show each service's manifest and live container status, let you edit
 config and stream logs, preview the compose file the renderer would write, and
@@ -411,3 +412,5 @@ Consumer references: [Ollama environment parser](https://github.com/ollama/ollam
 and [logger](https://github.com/rtuszik/photon-docker/blob/2.4.0/src/utils/logger.py),
 [Nominatim import styles](https://nominatim.org/release-docs/latest/customize/Import-Styles/),
 and [Valhalla scripted image](https://github.com/valhalla/valhalla/blob/master/docker/README.md).
+
+Platform-wide settings use the reviewed [Platform configuration](./platform-configuration.md) workflow.

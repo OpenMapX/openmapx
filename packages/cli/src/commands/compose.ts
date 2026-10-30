@@ -196,8 +196,8 @@ export function rotateRedisPasswordForRepo(
 
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
   assertCliExecutionAvailable();
-  coreServices.releaseSelection();
   const paths = repoPaths(opts.rootDir);
+  coreServices.readAppliedReleaseSelection(paths.infraDir);
   assertCliDeploymentSecrets();
   if (!existsSync("/run/secrets/openmapx-control-verifiers"))
     await provisionControlInstallation(paths.infraDir);

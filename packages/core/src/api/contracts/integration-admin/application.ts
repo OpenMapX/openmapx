@@ -1,5 +1,5 @@
 import z from "zod/v4";
-import { configurationApplyResultSchema } from "../../../ops/contract";
+import { configurationApplyResultSchema } from "../../../ops/configuration-result-records";
 /** Live host evidence, independent of the desired database binding. */
 export const integrationRuntimeEvidenceSchema = z.strictObject({
   generationId: z.uuid(),

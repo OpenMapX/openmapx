@@ -964,7 +964,9 @@ export function createDefaultReleaseEffects(
   };
   const readState = () => readReleasePointer(paths.state, true);
   const configurationIdentity = () =>
-    releaseDigest(JSON.stringify(coreServices.releaseSelection()));
+    releaseDigest(
+      JSON.stringify(coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"))),
+    );
   const selectionReceipts = (): Record<
     string,
     { configuration: string; ociDigest: string; digest: string }
@@ -1003,7 +1005,7 @@ export function createDefaultReleaseEffects(
         "Checked release is unavailable, changed or belongs to another configuration; check again",
       );
     coreServices.validateResolvedSelection(
-      coreServices.releaseSelection(),
+      coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker")),
       manifest,
       receipt.ociDigest,
     );
@@ -1018,7 +1020,8 @@ export function createDefaultReleaseEffects(
     const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
     const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
     return {
-      configuredSelector: process.env.OPENMAPX_RELEASE ?? "main",
+      configuredSelector: coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
+        .releaseSelector,
       ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
       ...(current?.product ? { currentVersion: current.product.version } : {}),
       ...(availableReleaseId ? { availableReleaseId } : {}),
@@ -1311,7 +1314,7 @@ export function createDefaultReleaseEffects(
     validateCandidate,
     resolve: async (context) => {
       manifestNames();
-      const selection = coreServices.releaseSelection();
+      const selection = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
       if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
       const image = selection.manifestImage;
       const pulled = await runDocker(["pull", image], context);

@@ -3,10 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { adminPlatformPreviewInputSchema } from "@openmapx/core/api-contracts";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { loadAuthPolicy } from "../account/auth-policy";
 import { db } from "../db";
-import { systemSettings } from "../db/schema";
+import { adminJob, platformConfigurationPreview, systemSettings } from "../db/schema";
 import { withAdministrativeConfigurationRead } from "./administrative-configuration-writer-owner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { PLATFORM_CONFIGURATION_SETTING } from "./platform-configuration";
@@ -26,11 +26,27 @@ export async function inspectPlatformConfiguration() {
     saved: current.platform,
     env: process.env,
   });
+  const pending = await db
+    .select({ jobId: adminJob.id, status: adminJob.status })
+    .from(platformConfigurationPreview)
+    .innerJoin(
+      adminJob,
+      eq(adminJob.id, sql`${platformConfigurationPreview.consumedByJobId}::text`),
+    )
+    .where(
+      and(
+        isNotNull(platformConfigurationPreview.consumedByJobId),
+        isNull(platformConfigurationPreview.retiredAt),
+      ),
+    )
+    .orderBy(desc(platformConfigurationPreview.createdAt))
+    .limit(16);
   return {
     expectedCurrentRevisionId: current.revisionId,
     configuration: current.platform ?? { version: 1 as const },
     values: effective.values,
     sources: effective.sources,
+    pending,
   };
 }
 export async function previewPlatformConfiguration(input: {

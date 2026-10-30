@@ -3,7 +3,7 @@ import {
   integrationManifestSchema,
 } from "@openmapx/extension-contracts/integration";
 import z from "zod/v4";
-import { configurationApplyResultSchema } from "../../../ops/contract";
+import { configurationApplyResultSchema } from "../../../ops/configuration-result-records";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
 import { configurationOwnershipSchema } from "../configuration-ownership";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";

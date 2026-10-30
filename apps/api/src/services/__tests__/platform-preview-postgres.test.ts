@@ -214,6 +214,37 @@ dbDescribe("durable exact platform preview", () => {
         row.kind,
       ).toHaveLength(row.kind === "closed" ? 0 : 1);
   });
+  it("reconnects to original unretired platform jobs without returning private preview bodies", async () => {
+    const actorId = await actor(),
+      value = preview(actorId),
+      jobId = randomUUID();
+    await retainPlatformPreview(
+      { actorId, operationKey: randomUUID(), requestFingerprint: "a".repeat(64), preview: value },
+      fixture.db,
+    );
+    await fixture.db.insert(adminJob).values({
+      id: jobId,
+      type: "platform.apply",
+      createdBy: actorId,
+      status: "running",
+      payload: { private: "must-not-leak" },
+    });
+    await fixture.db
+      .update(platformConfigurationPreview)
+      .set({ consumedByJobId: jobId, consumedAt: new Date() })
+      .where(eq(platformConfigurationPreview.id, value.previewId));
+    const { inspectPlatformConfiguration } = await import("../platform-configuration-view");
+    const current = await inspectPlatformConfiguration();
+    expect(current.pending).toContainEqual({ jobId, status: "running" });
+    expect(JSON.stringify(current)).not.toContain("must-not-leak");
+    await fixture.db
+      .update(platformConfigurationPreview)
+      .set({ retiredAt: new Date() })
+      .where(eq(platformConfigurationPreview.id, value.previewId));
+    expect((await inspectPlatformConfiguration()).pending.map((job) => job.jobId)).not.toContain(
+      jobId,
+    );
+  });
   it("honors an actor-bound privacy preservation hold when unused previews expire", async () => {
     const actorId = await actor(),
       value = preview(actorId),

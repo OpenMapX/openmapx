@@ -24,11 +24,15 @@ const {
   RELEASE_SELECTOR_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
-  releaseChannel,
   writeReleaseComposeArtifacts,
 } = coreServices;
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
+
+function appliedReleaseChannel() {
+  const selector = coreServices.readAppliedPlatformValues(repoPaths().infraDir).releaseSelector;
+  return coreServices.releaseChannel(selector, process.env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY);
+}
 
 export type ReleaseDockerRunner = (
   args: string[],
@@ -53,7 +57,7 @@ function expectOk(result: { exitCode: number; stderr: string }, what: string): v
 export async function resolveReleaseManifest(
   docker: ReleaseDockerRunner = defaultDocker,
 ): Promise<ReleaseManifest> {
-  const channel = releaseChannel();
+  const channel = appliedReleaseChannel();
   if (channel.kind === "disabled") {
     throw new Error(`release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
   }
@@ -133,7 +137,7 @@ export async function ensureReleaseOverlay(
   }
   // An operator running local images opts out once instead of paying a
   // failed registry pull (and a warning) on every start.
-  if (releaseChannel().kind === "disabled") return { status: "disabled" };
+  if (appliedReleaseChannel().kind === "disabled") return { status: "disabled" };
   try {
     const manifest = await resolveReleaseManifest(opts.docker);
     writeReleaseOverlay(manifest, path);
@@ -161,7 +165,7 @@ function readSelection(path: string): coreServices.ReleaseComposeSelection | nul
 /** Read-only local status; an existing overlay still applies when resolution is disabled. */
 export function releaseStatusLines(path = repoPaths().composeReleasePath): string[] {
   const selected = readSelection(path);
-  const disabled = releaseChannel().kind === "disabled";
+  const disabled = appliedReleaseChannel().kind === "disabled";
   if (!selected)
     return [
       disabled
@@ -169,7 +173,7 @@ export function releaseStatusLines(path = repoPaths().composeReleasePath): strin
         : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
     ];
   return [
-    `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; existing pins remain selected until explicit reselection.`,
+    `Configured selection: ${coreServices.readAppliedPlatformValues(repoPaths().infraDir).releaseSelector}; existing pins remain selected until explicit reselection.`,
     ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
     `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
     ...coreServices.RELEASE_IMAGE_NAMES.map(
