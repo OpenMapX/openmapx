@@ -8,9 +8,11 @@ import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
   isBuildingStyleLayer,
+  readLastMapView,
   useMapStore,
   useNavigationStore,
   useSettingsStore,
+  writeLastMapView,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -138,7 +140,12 @@ export function MapCanvas() {
     // Read initial viewport values once at mount — not reactive dependencies.
     // Adding center/zoom/bearing/pitch to the dep array would cause the map to
     // be destroyed and re-created every time the user pans or zooms.
-    const { center, zoom, bearing, pitch } = useMapStore.getState();
+    const { bearing, pitch, ...storeView } = useMapStore.getState();
+    // A view the page was opened on (a shared link, a reload) wins; otherwise
+    // reopen where the map was last left, unless the user switched that off.
+    const linkedView = new URLSearchParams(window.location.search).has("map");
+    const lastView = linkedView ? null : readLastMapView();
+    const { center, zoom } = lastView ?? storeView;
 
     const attempt = retryKey;
     let destroyed = false;
@@ -247,6 +254,7 @@ export function MapCanvas() {
         setZoom(map.getZoom());
         setBearing(map.getBearing());
         setPitch(map.getPitch());
+        writeLastMapView({ center, zoom: map.getZoom() });
       });
 
       mapRef.current = map;
@@ -344,11 +352,11 @@ export function MapCanvas() {
     // If location permission is already granted, move to the user's location
     // (zoom 14) and show the marker when it arrives — without prompting. Opening
     // the map is not a moment to spend somebody's one permission prompt.
-    // A view the page opened on (a shared link, a reload) or a move the user
-    // made while the fix was on its way wins: the fix then only places the
-    // marker. A slow fix used to pull a linked view, and what was being
-    // searched there, over to the user's own town.
-    let cameraTaken = new URLSearchParams(window.location.search).has("map");
+    // A view the page opened on (a shared link, a reload, the view the map was
+    // last left on) or a move the user made while the fix was on its way wins:
+    // the fix then only places the marker. A slow fix used to pull a linked
+    // view, and what was being searched there, over to the user's own town.
+    let cameraTaken = linkedView || lastView !== null;
     const recenter = (lngLat: LngLat) =>
       void mapInitialization.then((map) => {
         if (!isActive() || attemptFailed || !map || mapRef.current !== map) return;

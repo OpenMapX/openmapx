@@ -19,6 +19,11 @@ export {
   type ImportedGeometry,
   useImportedGeometryStore,
 } from "./importedGeometryStore";
+export {
+  type LastMapView,
+  readLastMapView,
+  writeLastMapView,
+} from "./lastMapView";
 export type { MapLayer } from "./layerStore";
 export { useLayerStore } from "./layerStore";
 export { useMapClickStore } from "./mapClickStore";

@@ -15,6 +15,16 @@ compass to return to north. During ground navigation, your position appears
 below the center of the visible map so you can see more of the road ahead.
 **Overview** frames the whole route and returns to a flat, north-up view.
 
+## Reopening the map
+
+OpenMapX reopens the map where you last left it, at the same position and zoom.
+A shared link or a reload opens on the view in its address instead. When the
+last view is restored, your current location only places the location marker
+and does not move the map. The last view is saved in this browser only. Turn off
+**Remember map view** in Settings to open on your location (when location access
+is already granted) or the world view instead; turning it off deletes the saved
+view.
+
 ## Align to streets
 
 Zoom in to at least level 13, then use the grid button in the map controls to

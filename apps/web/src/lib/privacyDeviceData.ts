@@ -37,6 +37,7 @@ const PREFERENCE_KEYS = [
   "openmapx:voiceName",
   "openmapx:mapNorthUp",
   "openmapx:touchZoomButtons",
+  "openmapx:rememberMapView",
   "openmapx:globeView",
   "openmapx:roadConditions",
   "openmapx-haptics-enabled",

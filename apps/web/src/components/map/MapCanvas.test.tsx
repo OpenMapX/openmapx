@@ -235,7 +235,12 @@ vi.mock("maplibre-gl", () => {
   };
 });
 
-import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  configureStorage,
+  useMapStore,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
@@ -802,6 +807,93 @@ describe("MapCanvas", () => {
     act(() => moveEnd({}));
 
     expect(useMapStore.getState().center).toEqual([1.5, 2.5]);
+  });
+
+  describe("the view the map was last left on", () => {
+    function useMemoryStorage(entries: Record<string, string> = {}) {
+      const values = new Map(Object.entries(entries));
+      configureStorage({
+        getString: (key) => values.get(key) ?? null,
+        setString: (key, value) => {
+          values.set(key, value);
+        },
+        remove: (key) => {
+          values.delete(key);
+        },
+      });
+      return values;
+    }
+    const saved = JSON.stringify({ center: [13.405, 52.52], zoom: 15 });
+
+    afterEach(() => {
+      useMemoryStorage();
+      window.history.replaceState(null, "", "/");
+    });
+
+    it("saves the camera position on every move", async () => {
+      const values = useMemoryStorage();
+      const { moveEnd } = await renderWithMoveEnd();
+
+      act(() => moveEnd({}));
+
+      expect(JSON.parse(values.get("openmapx:lastMapView") ?? "null")).toEqual({
+        center: [1.5, 2.5],
+        zoom: 12,
+      });
+    });
+
+    it("opens on the saved view and keeps it when a location fix arrives", async () => {
+      maplibreTest.reset();
+      useMemoryStorage({ "openmapx:lastMapView": saved });
+      useMapStore.setState({ center: [0, 20], userLocation: null, zoom: 2 });
+      let positionSuccess: PositionCallback | undefined;
+      vi.stubGlobal("navigator", {
+        ...navigator,
+        geolocation: {
+          getCurrentPosition: vi.fn((...args: unknown[]) => {
+            positionSuccess = args[0] as PositionCallback;
+          }),
+        },
+        permissions: { query: vi.fn().mockResolvedValue({ state: "granted" }) },
+      });
+
+      render(<MapCanvas />);
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      expect(maplibreTest.options[0]).toMatchObject({ center: [13.405, 52.52], zoom: 15 });
+      expect(useMapStore.getState()).toMatchObject({ center: [13.405, 52.52], zoom: 15 });
+
+      await waitFor(() => expect(positionSuccess).toBeDefined());
+      act(() => {
+        positionSuccess?.({ coords: { latitude: 50.78, longitude: 6.08 } } as GeolocationPosition);
+      });
+      await waitFor(() => expect(useMapStore.getState().userLocation).toEqual([6.08, 50.78]));
+      expect(maplibreTest.instances[0]?.jumpTo).not.toHaveBeenCalled();
+    });
+
+    it("lets a linked view win over the saved one", async () => {
+      maplibreTest.reset();
+      useMemoryStorage({ "openmapx:lastMapView": saved });
+      window.history.replaceState(null, "", "/?map=48.137,11.575,12,0,0");
+      useMapStore.setState({ center: [11.575, 48.137], userLocation: null, zoom: 12 });
+      vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+      render(<MapCanvas />);
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      expect(maplibreTest.options[0]).toMatchObject({ center: [11.575, 48.137], zoom: 12 });
+    });
+
+    it("neither restores nor saves a view when remembering is switched off", async () => {
+      const values = useMemoryStorage({
+        "openmapx:lastMapView": saved,
+        "openmapx:rememberMapView": "false",
+      });
+      const { moveEnd } = await renderWithMoveEnd();
+      expect(maplibreTest.options[0]).toMatchObject({ center: [0, 20], zoom: 2 });
+
+      act(() => moveEnd({}));
+
+      expect(values.get("openmapx:lastMapView")).toBe(saved);
+    });
   });
 });
 
