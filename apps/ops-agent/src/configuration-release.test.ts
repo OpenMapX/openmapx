@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
@@ -248,5 +256,63 @@ it.each([false, true])(
     writeFileSync(join(directory, `${releaseId}.json`), raw, { mode: 0o600 });
     // Original lock is released on either return path; no cleanup/admission is needed.
     expect(await run()).toMatchObject({ releaseId, manifestDigest });
+  },
+);
+
+it.each(["transaction", "active-handoff", "consumed-handoff"])(
+  "preserves legacy release recovery sources during guarded preflight: %s",
+  async (kind) => {
+    const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
+    const { writeAgentHandoff, agentHandoffPath } = await import("./agent-handoff");
+    const checkout = join(root, "legacy-checkout"),
+      infraDir = join(checkout, "infra/docker"),
+      store = join(infraDir, ".ops-agent-releases");
+    mkdirSync(store, { recursive: true, mode: 0o700 });
+    writeFileSync(join(store, `${releaseId}.json`), raw, { mode: 0o600 });
+    let legacy: string;
+    if (kind === "transaction") {
+      legacy = join(store, "transaction.json");
+      writeFileSync(legacy, JSON.stringify({ version: 1, phase: "prepared" }), { mode: 0o600 });
+    } else {
+      mkdirSync(join(infraDir, "data/ops-agent"), { recursive: true, mode: 0o700 });
+      writeAgentHandoff(checkout, {
+        version: 1,
+        handoffId: "legacy-handoff-01",
+        releaseId,
+        digest: manifestDigest,
+        phase: kind === "consumed-handoff" ? "applied" : "launched",
+        consumed: kind === "consumed-handoff",
+        previousOverlay: null,
+        createdAt: "2026-10-30T00:00:00Z",
+        updatedAt: "2026-10-30T00:00:00Z",
+      });
+      legacy = agentHandoffPath(checkout);
+    }
+    const before = readFileSync(legacy);
+    const execFile = vi.fn(async (_file: string, args: readonly string[]) => ({
+      stdout:
+        args[0] === "info"
+          ? "linux/amd64"
+          : JSON.stringify({
+              schemaVersion: 2,
+              config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
+              layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
+            }),
+      stderr: "",
+    }));
+    const run = () =>
+      preflightConfigurationRelease({
+        infraDir,
+        selection: { releaseId, manifestDigest },
+        execFile,
+        signal: new AbortController().signal,
+      });
+    if (kind === "consumed-handoff")
+      expect(await run()).toMatchObject({ releaseId, manifestDigest });
+    else {
+      await expect(run()).rejects.toThrow(/legacy/i);
+      expect(execFile).not.toHaveBeenCalled();
+    }
+    expect(readFileSync(legacy)).toEqual(before);
   },
 );

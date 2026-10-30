@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { z } from "zod";
+import { readAgentHandoffFromInfra } from "./agent-handoff";
 
 const selectionSchema = z.strictObject({
   releaseId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
@@ -29,6 +30,21 @@ export function readCheckedConfigurationRelease(
   try {
     const directory = infra.directory(".ops-agent-releases", false, true);
     try {
+      // The legacy entrypoint has no owned handoff source for this new root.
+      // Preserve its journal; never reinterpret startup cleanup as authority.
+      try {
+        directory.read("transaction.json", 128 * 1024);
+        throw Error("Legacy release transaction requires recovery");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+          throw Error("Legacy release transaction requires recovery");
+      }
+      const legacy = readAgentHandoffFromInfra(infraDir);
+      if (
+        legacy &&
+        !(legacy.consumed === true && ["applied", "rolled_back"].includes(legacy.phase))
+      )
+        throw Error("Legacy release handoff requires recovery");
       const raw = directory.read(`${selected.releaseId}.json`, 32 * 1024).toString("utf8"),
         manifest = services.parseReleaseManifest(raw, channel.imagePrefix),
         canonical = services.canonicalReleaseManifest(manifest),

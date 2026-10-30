@@ -85,9 +85,16 @@ function parseRecord(raw: string): AgentHandoffRecord {
 }
 
 export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
+  return readAgentHandoffFile(agentHandoffPath(rootDir));
+}
+/** Existing legacy journal data, read without startup mutation or repair. */
+export function readAgentHandoffFromInfra(infraDir: string): AgentHandoffRecord | null {
+  return readAgentHandoffFile(join(infraDir, "data", "ops-agent", "agent-handoff.json"));
+}
+function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
   let raw: string;
   try {
-    raw = strictReadFile(agentHandoffPath(rootDir), MAX_HANDOFF_BYTES);
+    raw = strictReadFile(path, MAX_HANDOFF_BYTES);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new Error("Agent handoff record rejected");
