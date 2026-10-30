@@ -164,7 +164,7 @@ describe("Compose generated consumers", () => {
   });
 });
 describe("generated log sessions", () => {
-  it("decodes split UTF8/newlines, flushes EOF residual and keeps last 500 nonempty lines", async () => {
+  it("decodes split UTF8/newlines, preserves blank output and keeps the last1000 lines", async () => {
     const encoder = new TextEncoder();
     const bytes = encoder.encode("α\n\nline\nlast😀");
     const stream = new ReadableStream<Uint8Array>({
@@ -179,25 +179,26 @@ describe("generated log sessions", () => {
       return new Response(stream, { headers: { "content-type": "text/plain" } });
     });
     const view = mount(logs());
-    expect(await screen.findByText("3 lines")).toBeInTheDocument();
-    expect(document.querySelector("pre")?.textContent).toBe("α\nline\nlast😀");
+    expect(await screen.findByText("4 lines")).toBeInTheDocument();
+    expect(document.querySelector("pre")?.textContent).toBe("α\n\nline\nlast😀");
     expect(stream.locked).toBe(false);
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("http://admin.test/api/admin/services/service%20%2Fone/logs");
+    expect(new URL(calls[0].url).pathname).toBe("/api/admin/services/service%20%2Fone/logs");
+    expect(new URL(calls[0].url).searchParams.get("lines")).toBe("200");
     expect(new Headers(calls[0].init.headers).get("idempotency-key")).toBeTruthy();
     vi.stubGlobal(
       "fetch",
       async () =>
-        new Response(Array.from({ length: 505 }, (_, i) => `line-${i}\n\n`).join(""), {
+        new Response(Array.from({ length: 1005 }, (_, i) => `line-${i}\n`).join(""), {
           headers: { "content-type": "text/plain" },
         }),
     );
     view.replace(logs("large"));
-    await screen.findByText("500 lines");
+    await screen.findByText("1000 lines");
     const lines = document.querySelector("pre")?.textContent?.split("\n");
-    expect(lines).toHaveLength(500);
+    expect(lines).toHaveLength(1000);
     expect(lines?.[0]).toBe("line-5");
-    expect(lines?.at(-1)).toBe("line-504");
+    expect(lines?.at(-1)).toBe("line-1004");
   });
   it.each(["origin", "service", "close", "unmount"])(
     "aborts stalled observation on %s and clears replacement content",
@@ -236,7 +237,7 @@ describe("generated log sessions", () => {
       expect(stream.locked).toBe(false);
       if (kind === "origin" || kind === "service") {
         expect(document.querySelector("pre")?.textContent).toBe("");
-        expect(screen.getByText("streaming")).toBeInTheDocument();
+        expect(screen.getByText("following")).toBeInTheDocument();
       }
     },
   );
@@ -253,7 +254,7 @@ describe("generated log sessions", () => {
     await act(async () => {
       old.resolve(Response.json({ error: "old error" }, { status: 404 }));
     });
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
     expect(screen.queryByText(/old error/)).not.toBeInTheDocument();
     expect(new Headers(calls[1].headers).get("idempotency-key")).not.toBe(
       new Headers(calls[0].headers).get("idempotency-key"),
@@ -295,7 +296,7 @@ describe("generated log sessions", () => {
       await vi.advanceTimersByTimeAsync(30_001);
     });
     expect(signal?.aborted).toBe(false);
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
     view.unmount();
     await act(async () => {});
     expect(canceled).toBe(true);
@@ -590,7 +591,7 @@ describe("additional ownership and safe feedback", () => {
     expect(canceled).toBe(true);
     expect(stream.locked).toBe(false);
     expect(document.querySelector("pre")?.textContent).toBe("");
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
   });
   it("close aborts immediately, clears content, and reopening allocates one new key", async () => {
     const calls: RequestInit[] = [];
@@ -611,7 +612,7 @@ describe("additional ownership and safe feedback", () => {
     });
     const view = mount(logs());
     await screen.findByText("current-log");
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "Close service logs" }));
     await act(async () => {});
     expect(calls[0].signal?.aborted).toBe(true);
     expect(canceled).toBe(1);
@@ -667,4 +668,46 @@ it("retains newer rotation feedback when an older provision settles with unchang
   });
   expect(screen.getByText(/persisted managed OAuth client is duplicated/)).toBeInTheDocument();
   expect(screen.queryByText(/database password copies conflict/)).not.toBeInTheDocument();
+});
+
+it("owns query changes, pause/resume and snapshot reload with distinct logical read identities", async () => {
+  const calls: { url: URL; init: RequestInit }[] = [];
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    const parsed = new URL(url);
+    calls.push({ url: parsed, init });
+    if (parsed.searchParams.get("follow") === "false")
+      return new Response("snapshot-log\n", { headers: { "content-type": "text/plain" } });
+    return new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("live-log\n"));
+        },
+      }),
+      { headers: { "content-type": "text/plain" } },
+    );
+  });
+  mount(logs());
+  await screen.findByText("live-log");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Tail lines" }));
+  fireEvent.click(await screen.findByRole("option", { name: "500" }));
+  await waitFor(() => expect(calls).toHaveLength(2));
+  expect(calls[0].init.signal?.aborted).toBe(true);
+  expect(calls[1].url.searchParams.get("lines")).toBe("500");
+  expect(new Headers(calls[1].init.headers).get("idempotency-key")).not.toBe(
+    new Headers(calls[0].init.headers).get("idempotency-key"),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  expect(calls[1].init.signal?.aborted).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+  await waitFor(() => expect(calls).toHaveLength(3));
+  expect(new Headers(calls[2].init.headers).get("idempotency-key")).not.toBe(
+    new Headers(calls[1].init.headers).get("idempotency-key"),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Log mode" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Snapshot" }));
+  expect(await screen.findByText("Snapshot complete.")).toBeInTheDocument();
+  expect(screen.getByText("snapshot-log")).toBeInTheDocument();
+  expect(calls[2].init.signal?.aborted).toBe(true);
+  expect(calls[3].url.searchParams.get("follow")).toBe("false");
+  expect(calls[3].url.searchParams.has("maxDurationSeconds")).toBe(false);
 });

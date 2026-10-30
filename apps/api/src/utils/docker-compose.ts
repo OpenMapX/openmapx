@@ -17,6 +17,7 @@ export interface PsEntry {
 
 interface OpsDependencies {
   client?: ApiOpsClient;
+  signal?: AbortSignal;
 }
 
 interface AsyncOpsDependencies extends OpsDependencies {
@@ -156,7 +157,7 @@ export async function dockerComposeLogSnapshot(
 ): Promise<OpsResultFor<"service.logs">> {
   const submitted = await client(dependencies).execute(
     { kind: "service.logs", serviceId, tail },
-    {},
+    dependencies.signal ? { signal: dependencies.signal } : {},
   );
   if (submitted.execution !== "sync") throw new ApiOpsError("runtime");
   return submitted.value;
@@ -165,7 +166,7 @@ export async function dockerComposeLogSnapshot(
 export async function dockerComposeLogs(
   serviceId: string,
   out: ServerResponse,
-  options: AsyncOpsDependencies & { tail: number; maxDurationSeconds?: number },
+  options: AsyncOpsDependencies & { tail: number; follow?: boolean; maxDurationSeconds?: number },
 ): Promise<void> {
   if (!options.operationKey) throw new ApiOpsError("validation");
   if (out.destroyed || out.writableEnded || options.signal?.aborted) return;
@@ -173,8 +174,19 @@ export async function dockerComposeLogs(
   const abort = () => controller.abort();
   out.once("close", abort);
   options.signal?.addEventListener("abort", abort, { once: true });
+  const opsClient = client(options);
   try {
-    const opsClient = client(options);
+    if (options.follow === false) {
+      const snapshot = await dockerComposeLogSnapshot(serviceId, options.tail, {
+        client: opsClient,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted && !out.destroyed) {
+        for (const line of snapshot.lines) out.write(`${line}\n`);
+        if (snapshot.truncated) out.write("Log snapshot truncated.\n");
+      }
+      return;
+    }
     const submitted = await submitOpsOperationWithRecovery(
       opsClient,
       {
@@ -189,7 +201,7 @@ export async function dockerComposeLogs(
     if (submitted.execution !== "async") throw new ApiOpsError("runtime");
     if (controller.signal.aborted || out.destroyed || out.writableEnded) {
       await opsClient
-        .cancel(submitted.operationId, { signal: AbortSignal.timeout(2_000) })
+        .cancel(submitted.operationId, { signal: AbortSignal.timeout(2000) })
         .catch(() => undefined);
       return;
     }

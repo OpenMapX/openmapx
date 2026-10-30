@@ -149,10 +149,16 @@ the panel relates to environment variables — see
 
 ### Logs
 
-Opening the Logs tab (or the **Logs** button) slides out a drawer that streams
-the service's container logs live, tailing the most recent lines. It's the same
-output as the equivalent `services logs` CLI command, in the browser — handy for
-watching a build finish or diagnosing a service that won't come up.
+Opening the Logs tab (or the **Logs** button) shows the service's container
+output. Choose the last **100, 200, 500, or 1000 lines**, then use **Snapshot**
+for a completed read or **Follow** for live output. Follow duration ranges from
+30 seconds to 15 minutes. Pause stops the current reader; Resume and Reconnect
+start a fresh read with the selected options. Closing the drawer stops its reader.
+
+The browser retains at most **1000 lines and 256 KiB**, including an incomplete
+line, and reports when earlier output is discarded. Snapshot output also has a
+server byte limit. Credential redaction applies to both modes. A reader reaching
+its duration or ending does not mean the service failed; reconnect to read more.
 
 ### Manifest
 

@@ -472,28 +472,19 @@ describe("GET /admin/services/:id/logs", () => {
     expect(mockDockerComposeLogs).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["abc", 200],
-    ["99999", 1000],
-    ["-5", 1],
-  ])("clamps lines=%s to a safe tail value", async (lines, tail) => {
-    mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
-
-    await app.inject({
-      method: "GET",
-      url: `/admin/services/motis/logs?lines=${lines}`,
-      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
-    });
-
-    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
-      "motis",
-      expect.anything(),
-      expect.objectContaining({
-        tail,
-        operationKey: expect.stringMatching(/^opk1_[A-Za-z0-9_-]{43}$/),
-      }),
-    );
-  });
+  it.each(["abc", "99999", "-5"])(
+    "rejects invalid lines=%s before starting a log reader",
+    async (lines) => {
+      mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
+      const response = await app.inject({
+        method: "GET",
+        url: `/admin/services/motis/logs?lines=${lines}`,
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+    },
+  );
 
   it("uses one key for the same admin intent so a changed log payload conflicts at the agent", async () => {
     mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
@@ -1182,4 +1173,41 @@ describe("service presets and option boundaries", () => {
     expect(result.statusCode).toBe(400);
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
+});
+
+it.each([
+  "lines=0",
+  "lines=1001",
+  "lines=-1",
+  "lines=1.5",
+  "follow=maybe",
+  "maxDurationSeconds=0",
+  "maxDurationSeconds=901",
+  "extra=true",
+])("rejects malformed log query %s before stream admission", async (query) => {
+  mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
+  const result = await app.inject({
+    url: `/admin/services/motis/logs?${query}`,
+    headers: { "idempotency-key": "log-query-check-001" },
+  });
+  expect(result.statusCode).toBe(400);
+  expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+});
+it("forwards exact snapshot and duration options through the registered log route", async () => {
+  mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
+  const result = await app.inject({
+    url: "/admin/services/motis/logs?lines=500&follow=false&maxDurationSeconds=30",
+    headers: { "idempotency-key": "log-query-snapshot-001" },
+  });
+  expect(result.statusCode).toBe(200);
+  expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+    "motis",
+    expect.anything(),
+    expect.objectContaining({
+      tail: 500,
+      follow: false,
+      maxDurationSeconds: 30,
+      operationKey: expect.any(String),
+    }),
+  );
 });

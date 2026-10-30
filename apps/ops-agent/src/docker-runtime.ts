@@ -673,13 +673,41 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       ["logs", `--tail=${operation.tail}`, target.containerId],
       context.signal,
     );
-    const rawLines = `${result.stdout}\n${result.stderr}`.split(/\r?\n/).filter(Boolean);
-    const selected = rawLines.slice(0, operation.tail);
-    const lines = selected.map((line) => truncateUtf8(line));
+    // Use the existing incremental credential framing before exposing a snapshot.
+    // A fixed ring keeps the latest requested messages without an unbounded list.
+    const retained: string[] = [];
+    let cursor = 0,
+      count = 0;
+    const output = createBoundedProcessOutput({
+      redact: safeProcessDiagnostic,
+      onLine: (_stream, message) => {
+        if (retained.length < operation.tail) retained.push(message);
+        else {
+          retained[cursor] = message;
+          cursor = (cursor + 1) % operation.tail;
+        }
+        count++;
+      },
+    });
+    output.write("stdout", Buffer.from(result.stdout));
+    output.write("stderr", Buffer.from(result.stderr));
+    const diagnostics = output.end();
+    const ordered =
+      count <= operation.tail
+        ? retained
+        : [...retained.slice(cursor), ...retained.slice(0, cursor)];
+    // JSON escaping can expand otherwise bounded lines; bound the actual wire bytes.
+    let bytes = 32,
+      first = ordered.length;
+    for (let index = ordered.length - 1; index >= 0; index--) {
+      const size = Buffer.byteLength(JSON.stringify(ordered[index]), "utf8") + 1;
+      if (bytes + size > MAX_OUTPUT_BYTES) break;
+      bytes += size;
+      first = index;
+    }
     return {
-      lines,
-      truncated:
-        rawLines.length > operation.tail || lines.some((line, index) => line !== selected[index]),
+      lines: ordered.slice(first),
+      truncated: diagnostics.truncated || count > operation.tail || first > 0,
     };
   };
   runtime["service.logs.follow"] = async (operation, context) => {

@@ -1785,6 +1785,37 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     ]);
   });
 
+  it.each(["credentials", "encoded-budget"])(
+    "bounds snapshot %s through the production adapter",
+    async (kind) => {
+      const stdout =
+        kind === "credentials"
+          ? "Authorization: Be\rar\rer\rsnapshot-secret-value\nready\n"
+          : Array.from({ length: 1000 }, () => `newest-${'"'.repeat(900)}\n`).join("");
+      expect(Buffer.byteLength(stdout)).toBeLessThan(1024 * 1024);
+      const runtime = createDockerRuntime({
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
+        ownedServices,
+        execFile: async () => ({ stdout, stderr: "" }),
+      });
+      const result = await dispatchOpsOperation(
+        runtime,
+        { kind: "service.logs", serviceId: "redis", tail: 1000 },
+        context(),
+      );
+      expect(JSON.stringify(result)).not.toContain("snapshot-secret-value");
+      expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(1024 * 1024);
+      expect(result.lines.length).toBeLessThanOrEqual(1000);
+      if (kind === "credentials") expect(result.lines).toContain("ready");
+      else expect(result.truncated).toBe(true);
+    },
+  );
+
   it("bounds snapshot log lines in UTF-8 bytes and reports truncation", async () => {
     const runtime = createDockerRuntime({
       stack: {

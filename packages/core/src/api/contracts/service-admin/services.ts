@@ -205,9 +205,14 @@ export const adminServicesCheckedSchema = z.strictObject({
   statuses: z.array(z.strictObject({ service: z.string(), state: adminServiceStatusSchema })),
   checkedAt: adminTimestampSchema,
 });
-// Producer retains its existing numeric conversion/clamping policy for lines.
-export const adminServiceLogsQuerySchema = z.object({
-  lines: z.union([z.string(), z.number()]).optional(),
+export const adminServiceLogsQuerySchema = z.strictObject({
+  lines: z
+    .union([z.number().int().min(1).max(1000), z.string().regex(/^(?:[1-9]\d{0,2}|1000)$/)])
+    .optional(),
+  follow: z.union([z.boolean(), z.enum(["true", "false"])]).optional(),
+  maxDurationSeconds: z
+    .union([z.number().int().min(1).max(900), z.string().regex(/^(?:[1-9]\d?|[1-8]\d{2}|900)$/)])
+    .optional(),
 });
 
 export type AdminServiceManifest = z.infer<typeof adminServiceManifestSchema>;

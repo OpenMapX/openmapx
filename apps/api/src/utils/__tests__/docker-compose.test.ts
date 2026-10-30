@@ -269,3 +269,78 @@ describe("typed Compose facade", () => {
 });
 
 import { EventEmitter } from "node:events";
+
+it("uses only the synchronous typed snapshot for follow:false", async () => {
+  const out = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    write: vi.fn(),
+    end: vi.fn(),
+  });
+  const execute = vi.fn().mockResolvedValue({
+    execution: "sync",
+    kind: "service.logs",
+    value: { lines: ["one", "two"], truncated: true },
+  }) as ApiOpsClient["execute"];
+  const api = clientWithExecute(execute);
+  await dockerComposeLogs("app-api", out as never, {
+    client: api,
+    tail: 200,
+    follow: false,
+    operationKey: "opk1_snapshotOnly000000",
+  });
+  expect(execute).toHaveBeenCalledWith(
+    { kind: "service.logs", serviceId: "app-api", tail: 200 },
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(api.events).not.toHaveBeenCalled();
+  expect(api.cancel).not.toHaveBeenCalled();
+  expect(out.write).toHaveBeenCalledWith("Log snapshot truncated.\n");
+  expect(out.end).toHaveBeenCalledOnce();
+});
+it("cancels only its admitted log reader when the active HTTP observer closes", async () => {
+  const out = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    write: vi.fn(),
+    end: vi.fn(),
+  });
+  const execute = vi.fn().mockResolvedValue({
+    execution: "async",
+    kind: "service.logs.follow",
+    operationId: "job1_ownedLogReader0000",
+    operationKey: "opk1_ownedLogReader0000",
+    state: "running",
+  }) as ApiOpsClient["execute"];
+  let entered!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const api = clientWithExecute(execute);
+  api.cancel = vi.fn().mockResolvedValue({});
+  api.events = vi.fn(async (_id, options) => {
+    entered();
+    return new Promise((_resolve, reject) =>
+      options?.signal?.addEventListener(
+        "abort",
+        () => reject(new DOMException("Aborted", "AbortError")),
+        { once: true },
+      ),
+    );
+  }) as ApiOpsClient["events"];
+  const observing = dockerComposeLogs("redis", out as never, {
+    client: api,
+    tail: 100,
+    maxDurationSeconds: 30,
+    operationKey: "opk1_ownedLogReader0000",
+  });
+  await ready;
+  out.destroyed = true;
+  out.emit("close");
+  await observing;
+  expect(api.cancel).toHaveBeenCalledOnce();
+  expect(api.cancel).toHaveBeenCalledWith("job1_ownedLogReader0000", {
+    signal: expect.any(AbortSignal),
+  });
+  expect(execute).toHaveBeenCalledOnce();
+});

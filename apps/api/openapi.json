@@ -66908,13 +66908,57 @@
         "parameters": [
           {
             "schema": {
-              "type": [
-                "string",
-                "number"
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(?:[1-9]\\d{0,2}|1000)$"
+                }
               ]
             },
             "in": "query",
             "name": "lines",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "follow",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 900
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(?:[1-9]\\d?|[1-8]\\d{2}|900)$"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "maxDurationSeconds",
             "required": false
           },
           {

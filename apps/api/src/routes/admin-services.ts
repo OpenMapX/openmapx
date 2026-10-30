@@ -771,12 +771,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         action: "service.logs.read",
         request: req,
       });
-      // `--tail` is a docker-compose argv element: clamp to a whole number in
-      // range so a non-numeric or negative `lines` can never reach it.
-      const requested = Number(req.query.lines ?? 200);
-      const tail = Number.isFinite(requested)
-        ? Math.min(Math.max(Math.trunc(requested), 1), 1000)
-        : 200;
+      const tail = Number(req.query.lines ?? 200);
+      const follow = req.query.follow !== false && req.query.follow !== "false";
+      const maxDurationSeconds = Number(req.query.maxDurationSeconds ?? 900);
       // Hijack bypasses Fastify header flushing; set the actual raw response.
       reply.raw.setHeader("Content-Type", "text/plain; charset=utf-8");
       reply.hijack();
@@ -784,6 +781,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       // agent operation; the API no longer spawns a Docker log process.
       await dockerComposeLogs(req.params.id, reply.raw, {
         tail,
+        follow,
+        maxDurationSeconds,
         operationKey,
       });
       return reply;
