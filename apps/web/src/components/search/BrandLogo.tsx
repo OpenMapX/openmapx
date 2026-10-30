@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrandSummary } from "@openmapx/core";
-import { isDisplayablePhoto, proxyImageUrl, useBrandLogoAttribution } from "@openmapx/core";
+import { proxyImageUrl, useBrandLogoAttribution } from "@openmapx/core";
 import { contributorsForField } from "@openmapx/mobility-core/contributors";
 import { type ReactNode, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -28,10 +28,8 @@ interface BrandLogoProps {
  */
 export function BrandLogo({ brand, size = 20, children, render }: BrandLogoProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const { data: photo } = useBrandLogoAttribution(brand.qid, Boolean(brand.logoFile));
-  const validPhoto =
-    photo && photo.logoFile === brand.logoFile && isDisplayablePhoto(photo) ? photo : undefined;
-  const url = validPhoto ? proxyImageUrl(validPhoto.thumbnailUrl ?? validPhoto.url) : null;
+  const { data: photo } = useBrandLogoAttribution(brand.qid, brand.logoFile);
+  const url = photo ? proxyImageUrl(photo.thumbnailUrl ?? photo.url) : null;
 
   const showPhoto = url && failedUrl !== url;
   const visual = showPhoto ? (
@@ -60,10 +58,10 @@ export function BrandLogo({ brand, size = 20, children, render }: BrandLogoProps
     visual
   );
   const credits =
-    showPhoto && validPhoto ? (
+    showPhoto && photo ? (
       <>
         <span style={{ fontSize: 9, whiteSpace: "normal", minWidth: 0, overflowWrap: "anywhere" }}>
-          <PhotoAttribution photo={validPhoto} color="currentColor" />
+          <PhotoAttribution photo={photo} color="currentColor" />
         </span>
         {contributorsForField(brand, "logoFile").length > 0 && (
           <AttributionStrip

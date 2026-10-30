@@ -14,7 +14,10 @@ import { BrandLogo } from "../BrandLogo";
 const logo = vi.hoisted(() => ({ data: undefined as unknown }));
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  useBrandLogoAttribution: () => logo,
+  useBrandLogoAttribution: (_qid: string, file: string | undefined) => ({
+    data:
+      (logo.data as { logoFile?: string } | undefined)?.logoFile === file ? logo.data : undefined,
+  }),
 }));
 const credited = {
   logoFile: "Aldi logo.svg",

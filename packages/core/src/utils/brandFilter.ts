@@ -92,23 +92,35 @@ export function gapFillBranding(
   osmTags: Record<string, string> | undefined,
   resolveBrand: (
     osmTags: Record<string, string> | undefined,
-  ) => Pick<BrandSummary, "name" | "logoFile" | "contributors" | "fieldContributors"> | undefined,
+  ) =>
+    | Pick<BrandSummary, "qid" | "name" | "logoFile" | "contributors" | "fieldContributors">
+    | undefined,
 ): DataSourceBranding | undefined {
-  if (existing?.logoUrl) return existing;
+  // A feed's supplied image remains authoritative. Never borrow a different
+  // catalogue image when it fails, or relabel its ownership.
+  if (existing?.logoUrl || existing?.imageUrl || existing?.catalogueLogo) return existing;
   const catalogued = resolveBrand(osmTags);
   if (!catalogued) return existing;
-  if (existing?.name !== undefined) return existing;
   const fieldContributors = {
     ...Object.fromEntries(
       Object.keys(existing ?? {})
         .filter((field) => !["contributors", "fieldContributors"].includes(field))
         .flatMap((field) => Object.entries(captureFieldContributors(existing ?? {}, field))),
     ),
-    ...captureFieldContributors(catalogued, "name"),
+    ...(existing?.name === undefined ? captureFieldContributors(catalogued, "name") : {}),
+    ...(catalogued.logoFile
+      ? {
+          ...captureFieldContributors(catalogued, "qid", "catalogueLogo.qid"),
+          ...captureFieldContributors(catalogued, "logoFile", "catalogueLogo.file"),
+        }
+      : {}),
   };
   return {
     ...existing,
-    name: catalogued.name,
+    name: existing?.name ?? catalogued.name,
+    ...(catalogued.logoFile
+      ? { catalogueLogo: { qid: catalogued.qid, file: catalogued.logoFile } }
+      : {}),
     fieldContributors,
     contributors: contributorsForFields(fieldContributors, Object.keys(fieldContributors)),
   };

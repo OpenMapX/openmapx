@@ -11,6 +11,8 @@ export interface DataSourceBranding extends ContributingRecord {
   fieldContributors?: FieldContributors;
   name?: string;
   legalName?: string;
+  /** Captured catalogue selection, resolved to credited file metadata before display. */
+  catalogueLogo?: { qid: string; file: string };
   logoUrl?: string;
   logoUrlDark?: string;
   color?: string;

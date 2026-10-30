@@ -2,10 +2,17 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { type DataSourceBranding, isDisplayablePhoto, proxyImageUrl } from "@openmapx/core";
+import {
+  type BrandLogoAttribution,
+  type DataSourceBranding,
+  isDisplayablePhoto,
+  proxyImageUrl,
+  useBrandLogoAttribution,
+} from "@openmapx/core";
 import { contributorsForRecordFields } from "@openmapx/mobility-core/contributors";
 import { type ReactNode, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { PhotoAttribution } from "../place/PhotoAttribution";
 
 interface Props {
   branding?: DataSourceBranding;
@@ -23,20 +30,39 @@ function fallbackInitial(branding?: DataSourceBranding, fallbackName?: string): 
   return value.trim().charAt(0).toUpperCase() || "?";
 }
 
-export function BrandMark({
+/** Only catalogue-backed marks acquire file metadata; feed/synthetic marks need no query. */
+export function BrandMark(props: Props) {
+  const logo = props.branding?.catalogueLogo;
+  return logo && !props.branding?.logoUrl && !props.branding?.imageUrl ? (
+    <CatalogueBrandMark {...props} logo={logo} />
+  ) : (
+    <ResolvedBrandMark {...props} />
+  );
+}
+
+function CatalogueBrandMark({
+  logo,
+  ...props
+}: Props & { logo: NonNullable<DataSourceBranding["catalogueLogo"]> }) {
+  const { data: photo } = useBrandLogoAttribution(logo.qid, logo.file);
+  return <ResolvedBrandMark {...props} photo={photo} />;
+}
+
+function ResolvedBrandMark({
   branding,
   fallbackName,
   size = 28,
   children,
   fallbackMark,
   renderRow,
-}: Props) {
-  const rawImageUrl = branding?.logoUrl ?? branding?.imageUrl;
+  photo,
+}: Props & { photo?: BrandLogoAttribution }) {
+  const rawImageUrl = photo?.thumbnailUrl ?? photo?.url ?? branding?.logoUrl ?? branding?.imageUrl;
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const imageUrl =
     rawImageUrl &&
     failedImageUrl !== rawImageUrl &&
-    isDisplayablePhoto({ url: rawImageUrl, source: "branding" })
+    isDisplayablePhoto(photo ?? { url: rawImageUrl, source: "branding" })
       ? proxyImageUrl(rawImageUrl)
       : null;
   const radius = size <= 24 ? 1.25 : 1.5;
@@ -50,7 +76,11 @@ export function BrandMark({
   const credits = contributorsForRecordFields(branding ?? {}, [
     ...(selectedName ? [selectedName] : []),
     ...(branding?.color ? ["color"] : []),
-    ...(imageUrl ? [branding?.logoUrl ? "logoUrl" : "imageUrl"] : []),
+    ...(imageUrl
+      ? photo
+        ? ["catalogueLogo.qid", "catalogueLogo.file"]
+        : [branding?.logoUrl ? "logoUrl" : "imageUrl"]
+      : []),
   ]);
   const mark =
     imageUrl && rawImageUrl ? (
@@ -103,12 +133,21 @@ export function BrandMark({
       ))
     );
   const notice =
-    credits.length > 0 ? (
-      <AttributionStrip
-        attributions={credits}
-        variant="plain"
-        provenanceDisplay={children ? "details" : "chips"}
-      />
+    credits.length > 0 || (photo && imageUrl) ? (
+      <>
+        {photo && imageUrl && (
+          <Box sx={{ color: "text.secondary", fontSize: "0.6875rem", minWidth: 0 }}>
+            <PhotoAttribution photo={photo} compact color="inherit" />
+          </Box>
+        )}
+        {credits.length > 0 && (
+          <AttributionStrip
+            attributions={credits}
+            variant="plain"
+            provenanceDisplay={children ? "details" : "chips"}
+          />
+        )}
+      </>
     ) : null;
   if (!children)
     return (

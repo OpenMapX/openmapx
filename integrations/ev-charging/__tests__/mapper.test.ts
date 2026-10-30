@@ -267,6 +267,10 @@ describe("mapChargingSiteToResult", () => {
 
     expect(result.operator).toBe("EWE Go");
     expect(result.branding?.logoUrl).toBeUndefined();
+    expect(result.branding?.catalogueLogo).toEqual({
+      qid: expect.stringMatching(/^Q\d+$/),
+      file: expect.any(String),
+    });
     expect(
       mapChargingSiteToResult(makeSite({ operator: { name: "EWE Go" }, country: "FR" })).branding,
     ).toBeUndefined();

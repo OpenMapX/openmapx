@@ -6,7 +6,7 @@ import type { BrandDetail } from "../types/brand";
 import type { PlacePhoto } from "../types/place";
 import { isDisplayablePhoto } from "../utils/commons-metadata";
 
-/** Author + licence for the one Commons logo a brand header card renders at size. */
+/** Author + licence for one Commons logo displayed in a header, list or detail. */
 export interface BrandLogoAttribution extends PlacePhoto {
   logoFile: string;
 }
@@ -71,23 +71,23 @@ export function useBrandLogos(qids: string[]): Map<string, BrandDetail | undefin
 
 /**
  * Author + licence for one brand's displayed Commons logo, resolved lazily
- * and non-blocking: the caller (the brand header card) paints name and
- * description immediately from the store, and this fills in attribution
- * once it resolves. Degrades silently — `enabled: false` when there's no
+ * and non-blocking: callers paint the name/fallback immediately and display
+ * only the captured selected file once its matching metadata resolves. Degrades silently — `enabled: false` when there's no
  * logo to attribute, and the query itself never throws into the UI since
  * callers only read `data`, never `error`.
  */
-export function useBrandLogoAttribution(qid: string | null, hasLogo: boolean) {
+export function useBrandLogoAttribution(qid: string | null, logoFile: string | undefined) {
   return useQuery<BrandLogoAttribution, Error, BrandLogoAttribution | undefined>({
-    queryKey: ["brand-logo-attribution-v3", qid] as const,
+    queryKey: ["brand-logo-attribution-v4", qid, logoFile] as const,
     queryFn: () =>
       apiClient.get<BrandLogoAttribution>(
         `${API_ENDPOINTS.brandLogoAttribution}/${qid}/logo-attribution`,
         { fileMetadata: "3" },
       ),
-    enabled: Boolean(qid) && hasLogo,
+    enabled: Boolean(qid && /^Q\d{1,12}$/.test(qid) && logoFile),
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
-    select: (photo) => (isDisplayablePhoto(photo) ? photo : undefined),
+    select: (photo) =>
+      photo.logoFile === logoFile && isDisplayablePhoto(photo) ? photo : undefined,
   });
 }
