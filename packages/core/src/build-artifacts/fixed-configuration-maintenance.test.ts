@@ -179,6 +179,136 @@ it("retains the frozen coordinator image in the cross-role graph used to reconst
   expect(rebuilt.steps).toEqual(plan.steps);
 });
 
+it("freezes a checked release snapshot in the original helper graph without a pre-pull recreate", async () => {
+  const source = input(),
+    { serviceId: _serviceId, ...ordinary } = source.apply as Extract<
+      typeof source.apply,
+      { kind: "vault.apply" }
+    >,
+    apply = { ...ordinary, kind: "stack.render" as const },
+    operation = {
+      ...source.operation,
+      followUp: "platform-apply" as const,
+      applyOperationFingerprint: opsOperationFingerprint(apply),
+    },
+    operationFingerprint = opsOperationFingerprint(operation),
+    prepare = {
+      ...source.prepare,
+      operationFingerprint,
+      fingerprint: executionFingerprint({
+        kind: operation.kind,
+        operationFingerprint,
+        deadlineAt: source.prepare.deadlineAt,
+        parent: source.apiParent,
+      }),
+    };
+  const manifest = parseReleaseManifest(
+    JSON.stringify({
+      schemaVersion: 1,
+      release: "checked-release-01",
+      images: Object.fromEntries(
+        RELEASE_IMAGE_NAMES.map((name) => [
+          name,
+          `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`,
+        ]),
+      ),
+      privacyReleaseValidation: {
+        version: 1,
+        sourceBuildFingerprint: "a".repeat(64),
+        validatedAt: "2026-10-30T00:00:00Z",
+        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
+      },
+    }),
+  );
+  const canonicalManifest = canonicalReleaseManifest(manifest),
+    manifestDigest = createHash("sha256").update(canonicalManifest).digest("hex"),
+    release = {
+      version: 1 as const,
+      releaseId: manifest.release,
+      manifestDigest,
+      canonicalManifest,
+      imagePrefix: "ghcr.io/openmapx",
+      serviceImages: {
+        "app-api": manifest.images.api,
+        "app-web": manifest.images.web,
+        "data-manager": manifest.images["data-manager"],
+        "ops-agent": manifest.images["ops-agent"],
+        "transitous-runner": manifest.images["transitous-runner"],
+      },
+      downloads: {
+        version: 1 as const,
+        platform: "linux/amd64" as const,
+        declaredBytes: 7 * 512,
+        images: RELEASE_IMAGE_NAMES.map((image) => ({
+          image,
+          reference: manifest.images[image],
+          platformManifestDigest: `sha256:${"4".repeat(64)}`,
+          configDigest: `sha256:${"5".repeat(64)}`,
+          declaredBytes: 512,
+        })),
+      },
+    },
+    handoff = {
+      handoffId: "77777777-7777-4777-8777-777777777777",
+      previewFingerprint: "e".repeat(64),
+      serviceIds: ["app-api", "ops-agent"],
+      expectedImageIdentities: {
+        "app-api": `sha256:${"1".repeat(64)}`,
+        "ops-agent": `sha256:${"2".repeat(64)}`,
+      },
+      mode: { kind: "release" as const, releaseId: manifest.release, manifestDigest },
+    },
+    args = {
+      ...source,
+      operation,
+      prepare,
+      apply,
+      serviceIds: ["app-api", "data-manager", "motis", "ops-agent"],
+      recreateServiceIds: [],
+      handoff,
+      release,
+    };
+  const plan = buildFixedConfigurationMaintenancePlan(args);
+  expect(plan).toHaveProperty("release", release);
+  expect(plan.steps.map((step) => step.phase)).toEqual([
+    "configuration-commit",
+    "maintenance-hardlinks",
+    "maintenance-handoff",
+  ]);
+  expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
+  const { configurationMaintenanceForwardGraphSchema } = await import(
+    "./configuration-maintenance-forward-records"
+  );
+  const { kind: _kind, ...binding } = operation;
+  if (source.apiParent.issuer !== "api") throw Error("API graph required");
+  const graph = configurationMaintenanceForwardGraphSchema.parse({
+    version: 1,
+    binding,
+    prepare,
+    apiJobId: source.apiParent.apiJobId,
+    parentOperationKey: source.apiParent.operationKey,
+    parentFingerprint: source.apiParent.fingerprint,
+    parentDeadlineAt: source.apiParent.deadlineAt,
+    planDigest: plan.planDigest,
+    serviceIds: plan.serviceIds,
+    steps: plan.steps,
+    handoff: plan.handoff,
+    release: plan.release,
+  });
+  expect(graph.release).toEqual(release);
+  const { release: _release, ...missing } = args;
+  expect(() => buildFixedConfigurationMaintenancePlan(missing)).toThrow();
+  expect(() =>
+    buildFixedConfigurationMaintenancePlan({ ...args, recreateServiceIds: ["data-manager"] }),
+  ).toThrow();
+  expect(() =>
+    buildFixedConfigurationMaintenancePlan({
+      ...args,
+      handoff: { ...handoff, mode: { kind: "configuration" } },
+    }),
+  ).toThrow();
+});
+
 it("freezes protected handoff after the original generation and ordinary children", async () => {
   const source = input();
   const { serviceId: _serviceId, ...ordinary } = source.apply as Extract<
@@ -272,3 +402,10 @@ it("freezes protected handoff after the original generation and ordinary childre
   changed.handoff!.expectedImageIdentities["app-api"] = `sha256:${"3".repeat(64)}`;
   expect(() => assertFixedConfigurationMaintenancePlan(changed, source.installationId)).toThrow();
 });
+
+import { createHash } from "node:crypto";
+import {
+  canonicalReleaseManifest,
+  parseReleaseManifest,
+  RELEASE_IMAGE_NAMES,
+} from "../services/release-manifest";

@@ -1,5 +1,6 @@
 /** Bounded public registry metadata. These records never supply host authority. */
 import { z } from "zod";
+import { configurationHandoffModeSchema } from "./configuration-handoff-records";
 export const CONFIGURATION_RELEASE_IMAGE_NAMES = [
   "api",
   "web",
@@ -41,3 +42,18 @@ export const configurationReleaseDownloadsSchema = z
       context.addIssue({ code: "custom", message: "Inconsistent release download metadata" });
   });
 export type ConfigurationReleaseDownloads = z.infer<typeof configurationReleaseDownloadsSchema>;
+export const configurationReleaseSelectionSchema = configurationHandoffModeSchema.options[1].omit({
+  kind: true,
+});
+export const configurationReleaseServiceImagesSchema = z.strictObject({
+  "app-api": configurationReleaseDownloadSchema.shape.reference,
+  "app-web": configurationReleaseDownloadSchema.shape.reference,
+  "data-manager": configurationReleaseDownloadSchema.shape.reference,
+  "ops-agent": configurationReleaseDownloadSchema.shape.reference,
+  "transitous-runner": configurationReleaseDownloadSchema.shape.reference,
+});
+export const configurationReleaseForwardSchema = configurationReleaseSelectionSchema.extend({
+  version: z.literal(1),
+  serviceImages: configurationReleaseServiceImagesSchema,
+  downloads: configurationReleaseDownloadsSchema,
+});

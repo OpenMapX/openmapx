@@ -3084,6 +3084,7 @@ export function publishConfigurationMaintenanceForwardWitness(
       planDigest: receipt.planDigest,
       ...(owner.plan.coordinatorImage ? { coordinatorImage: owner.plan.coordinatorImage } : {}),
       ...(owner.plan.handoff ? { handoff: owner.plan.handoff } : {}),
+      ...(owner.plan.release ? { release: owner.plan.release } : {}),
       serviceIds: receipt.serviceIds,
       steps: receipt.steps,
     });
@@ -3282,6 +3283,7 @@ export function verifyConfigurationMaintenanceGenerationWitness(
       sourceAuthorityRevision: "not-shared",
       previewDigest: "0".repeat(64),
       ...(graph.coordinatorImage ? { coordinatorImage: graph.coordinatorImage } : {}),
+      ...(graph.release ? { release: graph.release } : {}),
       ...(graph.handoff ? { handoff: graph.handoff } : {}),
       hardlinkPlan: request.plan,
       serviceIds: root.serviceIds,

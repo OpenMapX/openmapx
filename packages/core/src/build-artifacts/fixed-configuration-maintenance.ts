@@ -30,6 +30,10 @@ import {
 import { generationHardlinksPlanSchema } from "../services/data-manager/contracts/executions";
 import { deriveConfigurationFenceSettlementId } from "./configuration-fence-settlement-records";
 import {
+  type ConfigurationReleaseSnapshot,
+  configurationReleaseSnapshotSchema,
+} from "./configuration-release-snapshot";
+import {
   type ControlChildReservation,
   controlChildOperationKey,
   controlChildReservationSchema,
@@ -61,6 +65,7 @@ export const fixedConfigurationMaintenancePlanSchema = z.strictObject({
   previewDigest: digest,
   coordinatorImage: coordinatorImageSchema.optional(),
   handoff: configurationHandoffIntentSchema.optional(),
+  release: configurationReleaseSnapshotSchema.optional(),
   nestedHandoff: z.lazy(() => controlChildReservationSchema).optional(),
   serviceIds: ids,
   planDigest: digest,
@@ -139,6 +144,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
   recreateServiceIds: readonly string[];
   coordinatorImage?: z.infer<typeof coordinatorImageSchema>;
   handoff?: ConfigurationHandoffIntent;
+  release?: ConfigurationReleaseSnapshot;
 }): FixedConfigurationMaintenancePlan {
   const prepare = executionRefSchema.parse(input.prepare),
     operation = configurationMaintenancePrepareSchema.parse(input.operation),
@@ -183,6 +189,21 @@ export function buildFixedConfigurationMaintenancePlan(input: {
     throw Error("Fixed maintenance candidate binding conflict");
   const recreates = [...new Set(input.recreateServiceIds)].sort();
   const handoff = input.handoff ? configurationHandoffIntentSchema.parse(input.handoff) : undefined;
+  const release = input.release
+    ? configurationReleaseSnapshotSchema.parse(input.release)
+    : undefined;
+  if (
+    (handoff?.mode.kind === "release") !== (release !== undefined) ||
+    (release &&
+      (!handoff ||
+        handoff.mode.kind !== "release" ||
+        input.coordinatorImage ||
+        recreates.length !== 0 ||
+        handoff.mode.releaseId !== release.releaseId ||
+        handoff.mode.manifestDigest !== release.manifestDigest ||
+        handoff.serviceIds.some((id) => !Object.hasOwn(release.serviceImages, id))))
+  )
+    throw Error("Fixed checked release handoff conflict");
   if (
     handoff &&
     (operation.followUp !== "platform-apply" ||
@@ -261,6 +282,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
         serviceIds,
         ...(input.coordinatorImage ? { coordinatorImage: input.coordinatorImage } : {}),
         ...(handoff ? { handoff } : {}),
+        ...(release ? { release } : {}),
         steps: intents.map((step, ordinal) => ({ ...step, ordinal, serviceIds })),
       }),
     )
@@ -374,6 +396,7 @@ export function buildFixedConfigurationMaintenancePlan(input: {
       previewDigest: input.previewDigest,
       ...(input.coordinatorImage ? { coordinatorImage: input.coordinatorImage } : {}),
       ...(handoff ? { handoff, nestedHandoff } : {}),
+      ...(release ? { release } : {}),
       serviceIds,
       planDigest,
       hardlinkPlan,
@@ -419,6 +442,7 @@ export function assertFixedConfigurationMaintenancePlan(
     previewDigest: plan.previewDigest,
     ...(plan.coordinatorImage ? { coordinatorImage: plan.coordinatorImage } : {}),
     ...(plan.handoff ? { handoff: plan.handoff } : {}),
+    ...(plan.release ? { release: plan.release } : {}),
     hardlinkPlan: plan.hardlinkPlan,
     serviceIds: plan.serviceIds,
     recreateServiceIds,
