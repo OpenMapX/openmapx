@@ -348,7 +348,8 @@ VALUES (1,1,1,'Subject geofence place',0,0,false,TIMESTAMP '${at}',TIMESTAMP '${
        (2,2,2,'FOREIGN_SENTINEL',1,1,false,TIMESTAMP '${at}',TIMESTAMP '${at}',ST_GeogFromText('POINT(1 1)'),5,'FOREIGN_SENTINEL','{}'::jsonb,TIMESTAMP '${at}',TIMESTAMP '${at}');
 INSERT INTO webhooks (id,user_id,name,url,secret,event_types,place_ids,active,consecutive_failures,created_at,updated_at)
 VALUES (1,1,'Subject webhook','https://hooks.subject.test/api/webhook/WEBHOOK_PATH_TOKEN?token=WEBHOOK_QUERY_TOKEN','WEBHOOK_SIGNING_SECRET','{0,1}','{1}',true,0,TIMESTAMP '${at}',TIMESTAMP '${at}'),
-       (2,2,'FOREIGN_SENTINEL','https://foreign.test/FOREIGN_SENTINEL','FOREIGN_SECRET','{0}','{}',true,0,TIMESTAMP '${at}',TIMESTAMP '${at}');
+       (2,2,'FOREIGN_SENTINEL','https://foreign.test/FOREIGN_SENTINEL','FOREIGN_SECRET','{0}','{}',true,0,TIMESTAMP '${at}',TIMESTAMP '${at}'),
+       (3,1,'Malformed webhook','https://user:pa@WEBHOOK_SPLIT_TOKEN@hooks.subject.test/x','WEBHOOK_SIGNING_SECRET','{0}','{}',false,0,TIMESTAMP '${at}',TIMESTAMP '${at}');
 INSERT INTO webhook_deliveries (id,webhook_id,geofence_event_id,status,attempt_count,response_status,response_body,error_message,delivered_at,created_at,updated_at)
 VALUES (1,1,1,1,1,200,'DELIVERY_RESPONSE_SECRET','DELIVERY_ERROR_SECRET',TIMESTAMP '${at}',TIMESTAMP '${at}',TIMESTAMP '${at}'),
        (2,2,2,2,3,500,'FOREIGN_SENTINEL','FOREIGN_SENTINEL',NULL,TIMESTAMP '${at}',TIMESTAMP '${at}');
@@ -527,6 +528,7 @@ describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
         "GEOFENCE_SECRET",
         "WEBHOOK_PATH_TOKEN",
         "WEBHOOK_QUERY_TOKEN",
+        "WEBHOOK_SPLIT_TOKEN",
         "WEBHOOK_SIGNING_SECRET",
         "DELIVERY_RESPONSE_SECRET",
         "DELIVERY_ERROR_SECRET",
@@ -541,8 +543,9 @@ describe.skipIf(!runExactImage)("managed Dawarich exact-image export", () => {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as Record<string, unknown>);
-      expect(webhookRows).toHaveLength(1);
+      expect(webhookRows).toHaveLength(2);
       expect(webhookRows?.[0]?.url).toBe("https://hooks.subject.test");
+      expect(webhookRows?.[1]?.url).toBeNull();
       const geofenceRows = entries
         .find((entry) => entry.id === "geofence-events")
         ?.content.toString("utf8")

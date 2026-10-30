@@ -298,7 +298,8 @@ VALUES (1,7,1,'Subject geofence place',1,2,false,'2026-01-01','2026-01-01',ST_Ge
        (2,8,2,'FOREIGN_ROW_SENTINEL',0,0,false,'2026-01-01','2026-01-01',ST_GeogFromText('POINT(1 1)'),'FOREIGN_ROW_SENTINEL','{}','2026-01-01','2026-01-01');
 INSERT INTO webhooks (id,user_id,name,url,secret,event_types,place_ids,active,consecutive_failures,created_at,updated_at)
 VALUES (1,7,'Subject webhook','https://user:WEBHOOK_USERINFO_SENTINEL@hooks.subject.test:8443/api/webhook/WEBHOOK_PATH_SENTINEL?token=WEBHOOK_QUERY_SENTINEL','WEBHOOK_SECRET_SENTINEL','{0,1}','{1}',true,0,'2026-01-01','2026-01-01'),
-       (2,8,'FOREIGN_ROW_SENTINEL','https://foreign.test/FOREIGN_ROW_SENTINEL','WEBHOOK_SECRET_SENTINEL','{0}','{}',true,0,'2026-01-01','2026-01-01');
+       (2,8,'FOREIGN_ROW_SENTINEL','https://foreign.test/FOREIGN_ROW_SENTINEL','WEBHOOK_SECRET_SENTINEL','{0}','{}',true,0,'2026-01-01','2026-01-01'),
+       (3,7,'Malformed webhook','https://user:pa@WEBHOOK_SPLIT_SENTINEL@hooks.subject.test/x','WEBHOOK_SECRET_SENTINEL','{0}','{}',false,0,'2026-01-01','2026-01-01');
 INSERT INTO webhook_deliveries (id,webhook_id,geofence_event_id,status,attempt_count,response_status,response_body,error_message,created_at,updated_at)
 VALUES (1,1,1,3,2,502,'DELIVERY_RESPONSE_SENTINEL','DELIVERY_ERROR_SENTINEL','2026-01-01','2026-01-01'),
        (2,2,2,1,1,200,'FOREIGN_ROW_SENTINEL','FOREIGN_ROW_SENTINEL','2026-01-01','2026-01-01');
@@ -507,7 +508,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
       .filter(Boolean)
       .map((line) => JSON.parse(line));
   const [geofence] = jsonl("geofence-events");
-  const [webhook] = jsonl("webhooks");
+  const [webhook, malformedWebhook] = jsonl("webhooks");
   const [delivery] = jsonl("webhook-deliveries");
   const revision = jsonl("point-revisions").find(
     (row) => row.revision === "11111111-1111-4111-8111-111111111111",
@@ -517,6 +518,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
     geofence.source !== "owntracks_native" ||
     JSON.stringify(geofence.lonlat) !== "[13.4,52.5]" ||
     webhook?.url !== "https://hooks.subject.test:8443" ||
+    malformedWebhook?.url !== null ||
     delivery?.status !== "retrying" ||
     "response_body" in delivery ||
     !revision ||
@@ -558,6 +560,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01'),
     "WEBHOOK_USERINFO_SENTINEL",
     "WEBHOOK_PATH_SENTINEL",
     "WEBHOOK_QUERY_SENTINEL",
+    "WEBHOOK_SPLIT_SENTINEL",
     "WEBHOOK_SECRET_SENTINEL",
     "DELIVERY_RESPONSE_SENTINEL",
     "DELIVERY_ERROR_SENTINEL",

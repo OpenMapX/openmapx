@@ -570,7 +570,7 @@ WEBHOOK_ORIGIN_SQL = (
     "(SELECT CASE WHEN o.scheme IN ('http','https') AND o.host<>'' THEN o.scheme || '://' || o.host"
     " || CASE WHEN o.port IS NULL OR (o.scheme='http' AND o.port='80') OR (o.scheme='https' AND o.port='443') THEN '' ELSE ':' || o.port END END"
     " FROM (SELECT lower(m[1]) AS scheme, m[2] AS host, m[3] AS port"
-    " FROM (SELECT regexp_match(t.url, '^([A-Za-z][A-Za-z0-9+.-]*)://(?:[^/?#@]*@)?(\\[[^]/?#]*\\]|[^:/?#]*)(?::([0-9]+))?(?:[/?#]|$)') AS m) parsed) o)"
+    " FROM (SELECT regexp_match(t.url, '^([A-Za-z][A-Za-z0-9+.-]*)://(?:[^/?#@]*@)?(\\[[0-9A-Fa-f:.]+\\]|[^]:/?#@[[:space:]]+)(?::([0-9]+))?(?:[/?#]|$)') AS m) parsed) o)"
 )
 
 DAWARICH_PLANNED = {
