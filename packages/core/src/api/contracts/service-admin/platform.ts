@@ -1,6 +1,8 @@
 /** Portable platform preview data; these schemas confer no host authority. */
 import z from "zod/v4";
 import { platformConfigurationSchema } from "../../../services/platform-configuration";
+import { adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
+import { adminServiceIdempotencyHeadersSchema } from "./common";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const revision = z
@@ -64,3 +66,40 @@ export const adminPlatformApplyInputSchema = z.strictObject({
   confirmations: adminPlatformConfirmationSchema,
 });
 export type AdminPlatformPreview = z.infer<typeof adminPlatformPreviewSchema>;
+export const adminPlatformConfigurationSchema = adminPlatformPreviewSchema.pick({
+  expectedCurrentRevisionId: true,
+  configuration: true,
+  values: true,
+  sources: true,
+});
+export const adminPlatformPreviewRetainedSchema = z.strictObject({
+  preview: adminPlatformPreviewSchema,
+  expiresAt: z.iso.datetime({ offset: true }),
+});
+export const platformAdminOperations = {
+  getAdminPlatformConfiguration: {
+    method: "GET",
+    path: "/api/admin/platform/configuration",
+    auth: "admin",
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminPlatformConfigurationSchema),
+      503: adminJson(httpErrorSchema),
+    },
+  },
+  previewAdminPlatformConfiguration: {
+    method: "POST",
+    path: "/api/admin/platform/configuration/preview",
+    auth: "admin",
+    request: {
+      headers: adminServiceIdempotencyHeadersSchema,
+      body: adminPlatformPreviewInputSchema,
+    },
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminPlatformPreviewRetainedSchema),
+      409: adminJson(httpErrorSchema),
+      503: adminJson(httpErrorSchema),
+    },
+  },
+} as const;

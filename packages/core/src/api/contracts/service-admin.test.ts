@@ -16,6 +16,14 @@ const actions = Object.fromEntries(
 );
 const at = "2026-10-21T10:00:00.000Z";
 const inventory = [
+  ["listAdminArtifactTransfers", "GET", "/artifact-transfers"],
+  ["createAdminArtifactTransfer", "POST", "/artifact-transfers"],
+  ["getAdminArtifactTransfer", "GET", "/artifact-transfers/:stageId"],
+  ["deleteAdminArtifactTransfer", "DELETE", "/artifact-transfers/:stageId"],
+  ["uploadAdminArtifactTransferContent", "PUT", "/artifact-transfers/:stageId/content"],
+  ["downloadAdminArtifactTransferContent", "GET", "/artifact-transfers/:stageId/content"],
+  ["getAdminPlatformConfiguration", "GET", "/platform/configuration"],
+  ["previewAdminPlatformConfiguration", "POST", "/platform/configuration/preview"],
   ["listAdminServices", "GET", "/services"],
   ["getAdminService", "GET", "/services/:id"],
   ["getAdminServiceConfig", "GET", "/services/:id/config"],
@@ -213,7 +221,7 @@ function response(
 }
 
 describe("canonical complete service administration contracts", () => {
-  it("binds the exact30 approved identities, methods, paths and admin auth", () => {
+  it("binds the complete approved identities, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("serviceAdminOperations");
     expect(
       Object.entries(contracts.serviceAdminOperations).map(([id, op]) => [

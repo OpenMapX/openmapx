@@ -15,6 +15,15 @@ import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 
 const connection = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
+  source: { revisionId: null as string | null, sourceRevision: "", services: [] },
+}));
+vi.mock("../ops-client", async (original) => ({
+  ...(await original<typeof import("../ops-client")>()),
+  createApiOpsClient: () => ({}),
+  executeAndWait: async (_client: unknown, operation: { kind: string }) => {
+    if (operation.kind !== "configuration.sources.inspect") throw Error("Unexpected effect");
+    return connection.source;
+  },
 }));
 vi.mock("../../db", () => ({
   get db() {
@@ -36,6 +45,7 @@ dbDescribe("durable exact platform preview", () => {
   beforeAll(async () => {
     fixture = await createMigratedPostgresFixture();
     connection.fixture = fixture;
+    connection.source.sourceRevision = randomUUID();
     vi.stubEnv("OPENMAPX_SECRETS_KEY", "41".repeat(32));
   }, 90000);
   afterAll(async () => {
@@ -66,6 +76,51 @@ dbDescribe("durable exact platform preview", () => {
       services: [],
     });
   }
+  it("constructs and retains the public preview from current typed host and database sources", async () => {
+    const actorId = await actor(),
+      operationKey = randomUUID();
+    const { inspectPlatformConfiguration, previewPlatformConfiguration } = await import(
+      "../platform-configuration-view"
+    );
+    const current = await inspectPlatformConfiguration();
+    expect(current).toMatchObject({
+      expectedCurrentRevisionId: null,
+      configuration: { version: 1 },
+    });
+    const input = {
+      actorId,
+      operationKey,
+      expectedCurrentRevisionId: null,
+      changes: {
+        version: 1 as const,
+        backupRetentionDays: { source: "database" as const, value: 14 },
+      },
+    };
+    const first = await previewPlatformConfiguration(input),
+      again = await previewPlatformConfiguration(input);
+    expect(first.preview.values.backupRetentionDays).toBe(14);
+    expect(again).toEqual(first);
+    const stored = await readPlatformPreview({
+      actorId,
+      previewFingerprint: first.preview.previewFingerprint,
+    });
+    expect(stored.sourceSnapshot).toEqual(connection.source);
+    expect(stored.desiredRowVersion).toBeNull();
+    await expect(
+      previewPlatformConfiguration({
+        ...input,
+        changes: { version: 1, backupRetentionDays: { source: "database", value: 15 } },
+      }),
+    ).rejects.toThrow();
+    expect(await fixture.db.select().from(systemSettings)).toHaveLength(0);
+    await expect(
+      previewPlatformConfiguration({
+        ...input,
+        operationKey: randomUUID(),
+        expectedCurrentRevisionId: `cfg1_${"x".repeat(43)}`,
+      }),
+    ).rejects.toThrow("Platform preview unavailable or changed");
+  });
   it("reclaims only closed previews after both retirement and job completion floors", async () => {
     const actorId = await actor(),
       created = new Date("2025-02-01T00:00:00Z"),

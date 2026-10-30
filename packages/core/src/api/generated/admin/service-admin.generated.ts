@@ -21,6 +21,7 @@ import {
   getAdminComposePreviewRequest,
   getAdminDawarichRequest,
   getAdminDeploymentRequest,
+  getAdminPlatformConfigurationRequest,
   getAdminServiceConfigRequest,
   getAdminServiceCredentialsRequest,
   getAdminServiceDataRequest,
@@ -32,6 +33,7 @@ import {
   listAdminServiceBackupsRequest,
   listAdminServicesRequest,
   previewAdminOperationRequest,
+  previewAdminPlatformConfigurationRequest,
   provisionAdminDawarichRequest,
   restoreAdminServiceBackupRequest,
   rollbackAdminSharedMobilityRequest,
@@ -172,6 +174,15 @@ import type {
   GetAdminDeployment415,
   GetAdminDeployment429,
   GetAdminDeployment500,
+  GetAdminPlatformConfiguration200,
+  GetAdminPlatformConfiguration400,
+  GetAdminPlatformConfiguration401,
+  GetAdminPlatformConfiguration403,
+  GetAdminPlatformConfiguration413,
+  GetAdminPlatformConfiguration415,
+  GetAdminPlatformConfiguration429,
+  GetAdminPlatformConfiguration500,
+  GetAdminPlatformConfiguration503,
   GetAdminService200,
   GetAdminService400,
   GetAdminService401,
@@ -275,6 +286,18 @@ import type {
   PreviewAdminOperation429,
   PreviewAdminOperation500,
   PreviewAdminOperationBody,
+  PreviewAdminPlatformConfiguration200,
+  PreviewAdminPlatformConfiguration400,
+  PreviewAdminPlatformConfiguration401,
+  PreviewAdminPlatformConfiguration403,
+  PreviewAdminPlatformConfiguration409,
+  PreviewAdminPlatformConfiguration413,
+  PreviewAdminPlatformConfiguration415,
+  PreviewAdminPlatformConfiguration429,
+  PreviewAdminPlatformConfiguration500,
+  PreviewAdminPlatformConfiguration503,
+  PreviewAdminPlatformConfigurationBody,
+  PreviewAdminPlatformConfigurationHeaders,
   ProvisionAdminDawarich200,
   ProvisionAdminDawarich400,
   ProvisionAdminDawarich401,
@@ -2140,6 +2163,199 @@ export const runAdminOperation = async (
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(runAdminOperationBody),
   });
+};
+
+export type getAdminPlatformConfigurationResponse200 = {
+  data: GetAdminPlatformConfiguration200;
+  status: 200;
+};
+
+export type getAdminPlatformConfigurationResponse400 = {
+  data: GetAdminPlatformConfiguration400;
+  status: 400;
+};
+
+export type getAdminPlatformConfigurationResponse401 = {
+  data: GetAdminPlatformConfiguration401;
+  status: 401;
+};
+
+export type getAdminPlatformConfigurationResponse403 = {
+  data: GetAdminPlatformConfiguration403;
+  status: 403;
+};
+
+export type getAdminPlatformConfigurationResponse413 = {
+  data: GetAdminPlatformConfiguration413;
+  status: 413;
+};
+
+export type getAdminPlatformConfigurationResponse415 = {
+  data: GetAdminPlatformConfiguration415;
+  status: 415;
+};
+
+export type getAdminPlatformConfigurationResponse429 = {
+  data: GetAdminPlatformConfiguration429;
+  status: 429;
+};
+
+export type getAdminPlatformConfigurationResponse500 = {
+  data: GetAdminPlatformConfiguration500;
+  status: 500;
+};
+
+export type getAdminPlatformConfigurationResponse503 = {
+  data: GetAdminPlatformConfiguration503;
+  status: 503;
+};
+
+export type getAdminPlatformConfigurationResponseSuccess =
+  getAdminPlatformConfigurationResponse200 & {
+    headers: Headers;
+  };
+export type getAdminPlatformConfigurationResponseError = (
+  | getAdminPlatformConfigurationResponse400
+  | getAdminPlatformConfigurationResponse401
+  | getAdminPlatformConfigurationResponse403
+  | getAdminPlatformConfigurationResponse413
+  | getAdminPlatformConfigurationResponse415
+  | getAdminPlatformConfigurationResponse429
+  | getAdminPlatformConfigurationResponse500
+  | getAdminPlatformConfigurationResponse503
+) & {
+  headers: Headers;
+};
+
+export type getAdminPlatformConfigurationResponse =
+  | getAdminPlatformConfigurationResponseSuccess
+  | getAdminPlatformConfigurationResponseError;
+
+export const getGetAdminPlatformConfigurationUrl = () => {
+  return `/api/admin/platform/configuration`;
+};
+
+export const getAdminPlatformConfiguration = async (
+  options?: Parameters<typeof getAdminPlatformConfigurationRequest>[1],
+): Promise<getAdminPlatformConfigurationResponse> => {
+  return getAdminPlatformConfigurationRequest<getAdminPlatformConfigurationResponse>(
+    getGetAdminPlatformConfigurationUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type previewAdminPlatformConfigurationResponse200 = {
+  data: PreviewAdminPlatformConfiguration200;
+  status: 200;
+};
+
+export type previewAdminPlatformConfigurationResponse400 = {
+  data: PreviewAdminPlatformConfiguration400;
+  status: 400;
+};
+
+export type previewAdminPlatformConfigurationResponse401 = {
+  data: PreviewAdminPlatformConfiguration401;
+  status: 401;
+};
+
+export type previewAdminPlatformConfigurationResponse403 = {
+  data: PreviewAdminPlatformConfiguration403;
+  status: 403;
+};
+
+export type previewAdminPlatformConfigurationResponse409 = {
+  data: PreviewAdminPlatformConfiguration409;
+  status: 409;
+};
+
+export type previewAdminPlatformConfigurationResponse413 = {
+  data: PreviewAdminPlatformConfiguration413;
+  status: 413;
+};
+
+export type previewAdminPlatformConfigurationResponse415 = {
+  data: PreviewAdminPlatformConfiguration415;
+  status: 415;
+};
+
+export type previewAdminPlatformConfigurationResponse429 = {
+  data: PreviewAdminPlatformConfiguration429;
+  status: 429;
+};
+
+export type previewAdminPlatformConfigurationResponse500 = {
+  data: PreviewAdminPlatformConfiguration500;
+  status: 500;
+};
+
+export type previewAdminPlatformConfigurationResponse503 = {
+  data: PreviewAdminPlatformConfiguration503;
+  status: 503;
+};
+
+export type previewAdminPlatformConfigurationResponseSuccess =
+  previewAdminPlatformConfigurationResponse200 & {
+    headers: Headers;
+  };
+export type previewAdminPlatformConfigurationResponseError = (
+  | previewAdminPlatformConfigurationResponse400
+  | previewAdminPlatformConfigurationResponse401
+  | previewAdminPlatformConfigurationResponse403
+  | previewAdminPlatformConfigurationResponse409
+  | previewAdminPlatformConfigurationResponse413
+  | previewAdminPlatformConfigurationResponse415
+  | previewAdminPlatformConfigurationResponse429
+  | previewAdminPlatformConfigurationResponse500
+  | previewAdminPlatformConfigurationResponse503
+) & {
+  headers: Headers;
+};
+
+export type previewAdminPlatformConfigurationResponse =
+  | previewAdminPlatformConfigurationResponseSuccess
+  | previewAdminPlatformConfigurationResponseError;
+
+export const getPreviewAdminPlatformConfigurationUrl = () => {
+  return `/api/admin/platform/configuration/preview`;
+};
+
+export const previewAdminPlatformConfiguration = async (
+  previewAdminPlatformConfigurationBody: PreviewAdminPlatformConfigurationBody,
+  headers: PreviewAdminPlatformConfigurationHeaders,
+  options?: Parameters<typeof previewAdminPlatformConfigurationRequest>[1],
+): Promise<previewAdminPlatformConfigurationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return previewAdminPlatformConfigurationRequest<previewAdminPlatformConfigurationResponse>(
+    getPreviewAdminPlatformConfigurationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(previewAdminPlatformConfigurationBody),
+    },
+  );
 };
 
 export type listAdminServicesResponse200 = {

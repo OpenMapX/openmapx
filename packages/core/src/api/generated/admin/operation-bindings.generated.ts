@@ -278,6 +278,13 @@ export async function getAdminOverviewRequest<T>(
 ): Promise<T> {
   return getAdminOverviewBound<T>(url, options);
 }
+const getAdminPlatformConfigurationBound = bindAdminOperation("getAdminPlatformConfiguration");
+export async function getAdminPlatformConfigurationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminPlatformConfigurationBound<T>(url, options);
+}
 const getAdminServiceBound = bindAdminOperation("getAdminService");
 export async function getAdminServiceRequest<T>(
   url: string,
@@ -706,6 +713,15 @@ export async function previewAdminOperationRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return previewAdminOperationBound<T>(url, options);
+}
+const previewAdminPlatformConfigurationBound = bindAdminOperation(
+  "previewAdminPlatformConfiguration",
+);
+export async function previewAdminPlatformConfigurationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminPlatformConfigurationBound<T>(url, options);
 }
 const previewAdminStandaloneIntegrationBound = bindAdminOperation(
   "previewAdminStandaloneIntegration",

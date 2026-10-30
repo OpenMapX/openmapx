@@ -11,6 +11,7 @@ import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
 import { adminJobEventsRoute } from "./admin-job-events";
 import { adminOperationsRoute } from "./admin-operations";
+import { adminPlatformRoute } from "./admin-platform";
 import { adminReauthenticationRoute } from "./admin-reauthentication";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
@@ -121,6 +122,7 @@ export async function registerCoreRoutes(
   await server.register(statusRoute, { prefix: "/api" });
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
+  await server.register(adminPlatformRoute, { prefix: "/api" });
   await server.register(adminArtifactTransfersRoute, { prefix: "/api" });
   await server.register(adminTransitCredentialsRoute, { prefix: "/api" });
   await server.register(adminTransitPinsRoute, { prefix: "/api" });
