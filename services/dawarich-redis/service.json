@@ -5,6 +5,8 @@
   "description": "Dedicated transient job queue and cache for the managed Dawarich timeline.",
   "license": "RSALv2 OR SSPL-1.0 OR AGPL-3.0",
   "quality": "built-in",
+  "platformNetwork": false,
+  "privateNetworks": ["dawarich"],
   "homepage": "https://redis.io/",
   "subjectData": {
     "storesPersonalData": true,

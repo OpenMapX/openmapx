@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
@@ -56,6 +57,46 @@ function communityNetworkName(serviceId: string): string {
     throw new Error(`Community service "${serviceId}" produces an overlong network name`);
   }
   return name;
+}
+
+const PRIVATE_NETWORK_PREFIX = "openmapx-private-";
+
+function privateNetworkName(name: string): string {
+  return `${PRIVATE_NETWORK_PREFIX}${name}`;
+}
+
+/**
+ * The private networks a built-in joins. A bridge (a service that stays on
+ * `openmapx`) joins only while an enabled bundle member, one that left
+ * `openmapx`, declares the network, so a default install without that bundle
+ * renders no stray network.
+ */
+function joinedPrivateNetworks(service: LoadedService, allServices: LoadedService[]): string[] {
+  const m = service.manifest;
+  return (m.privateNetworks ?? [])
+    .filter(
+      (name) =>
+        m.platformNetwork === false ||
+        allServices.some(
+          (other) =>
+            other.isBuiltIn &&
+            other.enabled &&
+            other.manifest.platformNetwork === false &&
+            other.manifest.privateNetworks?.includes(name),
+        ),
+    )
+    .map(privateNetworkName);
+}
+
+/**
+ * A stable IPv6 ULA /64 per private network, inside the `openmapx` network's
+ * fd4d:5058::/48 but never its fd4d:5058::/64, so members keep the same
+ * dual-stack egress as the shared network without daemon address pools.
+ */
+function privateNetworkSubnet(network: string): string {
+  const digest = createHash("sha256").update(network).digest();
+  const block = digest.readUInt16BE(0) || 1;
+  return `fd4d:5058:0:${block.toString(16)}::/64`;
 }
 
 function assertUniqueCommunityNetworkNames(services: LoadedService[]): void {
@@ -623,10 +664,13 @@ export function renderServiceSnippet(
     snippet.networks = c.networkAliases?.length
       ? { [network]: { aliases: [...c.networkAliases] } }
       : [network];
-  } else if (communityNetworkAccess?.length) {
-    const networks = ["openmapx"];
+  } else {
     const allServices = ctx.allServices ?? [service];
-    for (const targetId of communityNetworkAccess) {
+    const networks = [
+      ...(m.platformNetwork === false ? [] : ["openmapx"]),
+      ...joinedPrivateNetworks(service, allServices),
+    ];
+    for (const targetId of communityNetworkAccess ?? []) {
       const target = allServices.find((candidate) => candidate.manifest.id === targetId);
       if (target?.isBuiltIn) {
         throw new Error(
@@ -640,19 +684,20 @@ export function renderServiceSnippet(
       if (!target || !target.enabled) continue;
       networks.push(communityNetworkName(targetId));
     }
-    snippet.networks = c.networkAliases?.length
-      ? Object.fromEntries([
-          ["openmapx", { aliases: [...c.networkAliases] }],
-          ...networks.slice(1).map((network) => [network, {}]),
-        ])
-      : networks;
-  } else if (c.networkAliases?.length) {
     // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
-    // Other containers on the openmapx network can address this service via
-    // any listed alias in addition to the service id.
-    snippet.networks = { openmapx: { aliases: [...c.networkAliases] } };
-  } else {
-    snippet.networks = ["openmapx"];
+    // Aliases go on the service's home network: `openmapx`, or its private
+    // networks when it stays off the shared one.
+    const aliasNetworks = networks.includes("openmapx")
+      ? ["openmapx"]
+      : networks.filter((network) => network.startsWith(PRIVATE_NETWORK_PREFIX));
+    snippet.networks = c.networkAliases?.length
+      ? Object.fromEntries(
+          networks.map((network) => [
+            network,
+            aliasNetworks.includes(network) ? { aliases: [...(c.networkAliases ?? [])] } : {},
+          ]),
+        )
+      : networks;
   }
 
   // Behind an operator-run proxy, a routed first-party service also joins that
@@ -1036,6 +1081,29 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       .filter((service) => service.enabled && !service.isBuiltIn)
       .map((service) => [communityNetworkName(service.manifest.id), { driver: "bridge" }]),
   );
+  const privateNetworks: Record<string, unknown> = {};
+  const privateSubnetOwners = new Map<string, string>();
+  for (const snippet of Object.values(composeServices)) {
+    const joined = Array.isArray(snippet.networks)
+      ? snippet.networks
+      : Object.keys(snippet.networks ?? {});
+    for (const network of joined) {
+      if (!network.startsWith(PRIVATE_NETWORK_PREFIX) || network in privateNetworks) continue;
+      const subnet = privateNetworkSubnet(network);
+      const existing = privateSubnetOwners.get(subnet);
+      if (existing) {
+        throw new Error(
+          `Private networks "${existing}" and "${network}" derive the same IPv6 subnet ${subnet}`,
+        );
+      }
+      privateSubnetOwners.set(subnet, network);
+      privateNetworks[network] = {
+        driver: "bridge",
+        enable_ipv6: true,
+        ipam: { config: [{ subnet }] },
+      };
+    }
+  }
   const proxyNetwork = externalProxyNetwork(ctx);
   const joinsProxyNetwork = Object.values(composeServices).some(
     (snippet) =>
@@ -1065,6 +1133,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         enable_ipv6: true,
         ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
       },
+      ...privateNetworks,
       ...communityNetworks,
       ...externalNetworks,
     },

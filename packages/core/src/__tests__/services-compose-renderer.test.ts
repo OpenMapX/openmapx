@@ -315,6 +315,70 @@ describe("renderServiceSnippet", () => {
     expect(() => renderCompose([bridge, svc("redis")], {})).toThrow(/redis.*built-in/);
   });
 
+  it("keeps a private bundle off openmapx and bridges only its declared peers", () => {
+    const bundle = { platformNetwork: false, privateNetworks: ["bundle"] };
+    const { composeYaml } = renderCompose(
+      [
+        svc("bundle-web", {
+          platformNetwork: false,
+          privateNetworks: ["bundle", "bundle-ingress"],
+        }),
+        svc("bundle-worker", bundle),
+        svc("bundle-db", {
+          ...bundle,
+          container: { image: "t/db", tag: "1", networkAliases: ["db"] },
+        }),
+        svc("gateway", { privateNetworks: ["bundle-ingress"] }),
+        svc("redis"),
+      ],
+      {},
+    );
+    const doc = parseYaml(composeYaml) as {
+      services: Record<string, { networks: unknown }>;
+      networks: Record<string, { enable_ipv6?: boolean; ipam?: { config: { subnet: string }[] } }>;
+    };
+
+    expect(doc.services["bundle-web"].networks).toEqual([
+      "openmapx-private-bundle",
+      "openmapx-private-bundle-ingress",
+    ]);
+    expect(doc.services["bundle-worker"].networks).toEqual(["openmapx-private-bundle"]);
+    expect(doc.services["bundle-db"].networks).toEqual({
+      "openmapx-private-bundle": { aliases: ["db"] },
+    });
+    expect(doc.services.gateway.networks).toEqual(["openmapx", "openmapx-private-bundle-ingress"]);
+    expect(doc.services.redis.networks).toEqual(["openmapx"]);
+    const bundleNet = doc.networks["openmapx-private-bundle"];
+    const ingressNet = doc.networks["openmapx-private-bundle-ingress"];
+    expect(bundleNet?.enable_ipv6).toBe(true);
+    expect(bundleNet?.ipam?.config[0]?.subnet).toMatch(/^fd4d:5058:0:[0-9a-f]{1,4}::\/64$/);
+    expect(bundleNet?.ipam?.config[0]?.subnet).not.toBe(ingressNet?.ipam?.config[0]?.subnet);
+  });
+
+  it("joins a bridge to a private network only while another enabled member declares it", () => {
+    const gateway = svc("gateway", { privateNetworks: ["bundle-ingress"] });
+    const disabledWeb = {
+      ...svc("bundle-web", { platformNetwork: false, privateNetworks: ["bundle-ingress"] }),
+      enabled: false,
+    };
+    const doc = parseYaml(renderCompose([gateway, disabledWeb], {}).composeYaml) as {
+      services: Record<string, { networks: unknown }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services.gateway.networks).toEqual(["openmapx"]);
+    expect(doc.networks).not.toHaveProperty("openmapx-private-bundle-ingress");
+  });
+
+  it("rejects private networks on a community service and a bundle member without one", () => {
+    expect(() =>
+      renderServiceSnippet(communitySvc("community-bundle", { privateNetworks: ["bundle"] }), {}),
+    ).toThrow(/private_network_forbidden/);
+    expect(() => renderServiceSnippet(svc("orphan", { platformNetwork: false }), {})).toThrow(
+      /requires at least one privateNetworks/,
+    );
+  });
+
   it("fails closed when different community ids normalize to the same network", () => {
     expect(() =>
       renderCompose([communitySvc("weather.feed"), communitySvc("weather-feed")], {}),

@@ -5,6 +5,8 @@
   "description": "Dedicated PostgreSQL 17 and PostGIS 3.5 database for the managed Dawarich timeline.",
   "license": "PostgreSQL",
   "quality": "built-in",
+  "platformNetwork": false,
+  "privateNetworks": ["dawarich"],
   "homepage": "https://github.com/baosystems/docker-postgis",
   "subjectData": {
     "storesPersonalData": true,

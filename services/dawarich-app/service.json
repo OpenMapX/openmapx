@@ -5,6 +5,8 @@
   "description": "Managed multi-user Dawarich web application with OpenMapX OIDC sign-in.",
   "license": "AGPL-3.0",
   "quality": "built-in",
+  "platformNetwork": false,
+  "privateNetworks": ["dawarich", "dawarich-ingress"],
   "homepage": "https://dawarich.app/",
   "documentation": "https://dawarich.app/docs/self-hosting/",
   "subjectData": {

@@ -14,6 +14,8 @@ const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
 const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+// A DNS-label-shaped name; the renderer prefixes it to `openmapx-private-<name>`.
+const PRIVATE_NETWORK_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const CONFIG_PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** PostgreSQL role/database names passed as individual docker-compose argv values. */
 export const POSTGRES_IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
@@ -473,6 +475,12 @@ export const serviceManifestSchema = z.object({
     .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
     .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
     .optional(),
+  privateNetworks: z
+    .array(z.string().regex(PRIVATE_NETWORK_REGEX, "must be a private network name"))
+    .min(1)
+    .refine((names) => new Set(names).size === names.length, "must not contain duplicates")
+    .optional(),
+  platformNetwork: z.boolean().optional(),
 
   configSchema: configSchema.optional(),
   envVars: z.array(envVarSchema).optional(),

@@ -44313,6 +44313,17 @@
                             "pattern": "^[a-z0-9][a-z0-9-]*$"
                           }
                         },
+                        "privateNetworks": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$"
+                          }
+                        },
+                        "platformNetwork": {
+                          "type": "boolean"
+                        },
                         "configSchema": {
                           "type": "object",
                           "properties": {

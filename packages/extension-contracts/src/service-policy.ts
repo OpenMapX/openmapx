@@ -57,6 +57,25 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
       "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
     );
   }
+  if (
+    !hostPrivilegesAllowed &&
+    (m.privateNetworks !== undefined || m.platformNetwork !== undefined)
+  ) {
+    errors.push(
+      "private_network_forbidden: privateNetworks and platformNetwork are reserved for audited first-party services",
+    );
+  }
+  if (m.platformNetwork === false && !m.privateNetworks?.length) {
+    errors.push("platformNetwork: false requires at least one privateNetworks entry");
+  }
+  if (
+    m.container.networkMode === "host" &&
+    (m.privateNetworks !== undefined || m.platformNetwork !== undefined)
+  ) {
+    errors.push(
+      "container.networkMode: 'host' cannot be combined with privateNetworks or platformNetwork",
+    );
+  }
   if (!hostPrivilegesAllowed && m.container.privileged) {
     errors.push("container.privileged is not allowed for community services");
   }
