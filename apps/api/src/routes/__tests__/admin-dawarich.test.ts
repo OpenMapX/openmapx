@@ -19,8 +19,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-app",
-        version: "1.15.3",
-        container: { image: "freikin/dawarich", tag: "1.15.3" },
+        version: "1.19.0",
+        container: { image: "freikin/dawarich", tag: "1.19.0" },
       },
     },
   ],
@@ -29,8 +29,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-sidekiq",
-        version: "1.15.3",
-        container: { image: "freikin/dawarich", tag: "1.15.3" },
+        version: "1.19.0",
+        container: { image: "freikin/dawarich", tag: "1.19.0" },
       },
     },
   ],
@@ -49,8 +49,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-redis",
-        version: "7.4",
-        container: { image: "redis", tag: "7.4-alpine" },
+        version: "8.10",
+        container: { image: "redis", tag: "8.10-alpine" },
       },
     },
   ],

@@ -371,7 +371,7 @@ export function createPrivacyBackupExtractionRuntime(options: PrivacyBackupRunti
             input.serviceId === "postgis"
               ? "openmapx-v1"
               : input.serviceId === "dawarich-app"
-                ? "dawarich-storage-1.15.3"
+                ? "dawarich-storage-1.19.0"
                 : verified.manifest.privacySourceProvenance?.managedDawarich?.schemaContract,
         }));
       if (sources.length < 1 || sources.some((source) => !source.schemaContract))

@@ -735,7 +735,7 @@ describe("discoverBackupableServices", () => {
     expect(targets).toEqual([
       {
         id: "dawarich-app",
-        version: "1.15.3",
+        version: "1.19.0",
         volumes: [
           {
             serviceId: "dawarich-app",

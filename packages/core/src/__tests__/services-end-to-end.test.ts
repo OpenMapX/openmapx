@@ -340,11 +340,13 @@ describe.skipIf(!manifestsPresent)(
 
         const app = registry.get("dawarich-app")?.manifest;
         const worker = registry.get("dawarich-sidekiq")?.manifest;
-        expect(registry.get("dawarich-redis")?.manifest.license).toBe("RSALv2 OR SSPL-1.0");
-        expect(app?.version).toBe("1.15.3");
+        expect(registry.get("dawarich-redis")?.manifest.license).toBe(
+          "RSALv2 OR SSPL-1.0 OR AGPL-3.0",
+        );
+        expect(app?.version).toBe("1.19.0");
         expect(app?.container).toMatchObject({
           image: "freikin/dawarich",
-          tag: "1.15.3",
+          tag: "1.19.0",
           expose: [3000],
           entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
           command: ["bin/rails", "server", "-p", "3000", "-b", "::"],
@@ -483,10 +485,10 @@ describe.skipIf(!manifestsPresent)(
           },
         ]);
 
-        expect(worker?.version).toBe("1.15.3");
+        expect(worker?.version).toBe("1.19.0");
         expect(worker?.container).toMatchObject({
           image: "freikin/dawarich",
-          tag: "1.15.3",
+          tag: "1.19.0",
           entrypoint: ["/usr/local/bin/openmapx-entrypoint.sh"],
           command: ["sidekiq"],
           memory: "2g",
@@ -564,13 +566,13 @@ describe.skipIf(!manifestsPresent)(
           "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
         );
         expect(compose.services["dawarich-redis"]?.image).toBe(
-          "redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+          "redis:8.10-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537",
         );
         expect(compose.services["dawarich-app"]?.image).toBe(
-          "freikin/dawarich:1.15.3@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+          "freikin/dawarich:1.19.0@sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
         );
         expect(compose.services["dawarich-sidekiq"]?.image).toBe(
-          "freikin/dawarich:1.15.3@sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498",
+          "freikin/dawarich:1.19.0@sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
         );
         expect(compose.services["dawarich-postgis"]?.ports).toBeUndefined();
         expect(compose.services["dawarich-redis"]?.ports).toBeUndefined();

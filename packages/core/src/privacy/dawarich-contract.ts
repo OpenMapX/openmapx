@@ -1,17 +1,17 @@
 import z from "zod/v4";
 
 /** The only managed Dawarich runtime accepted by the controller. */
-export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.15.3" as const;
+export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.19.0" as const;
 export const DAWARICH_SUPPORTED_IMAGE_DIGEST =
-  "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498" as const;
-export const DAWARICH_SUPPORTED_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b" as const;
+  "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304" as const;
+export const DAWARICH_SUPPORTED_COMMIT = "752641768f37fdc07d5a23e0559fa7c5ff8fae0f" as const;
 export const DAWARICH_PROTOCOL_VERSION = 1 as const;
 export const DAWARICH_TAR_MEDIA_TYPE = "application/vnd.openmapx.dawarich-subject-tar.v1" as const;
-/** SHA-256 of the reviewed 1.15.3 ownership/schema projection.  The Ruby
+/** SHA-256 of the reviewed 1.19.0 ownership/schema projection.  The Ruby
  * collector emits this value only after validating the live Rails schema;
  * accepting a different digest would make a changed source look complete. */
 export const DAWARICH_EXPECTED_SCHEMA_FINGERPRINT =
-  "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09" as const;
+  "d728906287ec3c4f3f38a80c2c4fe6ce77cc40f03b56a5ba0e89b811dd6e631a" as const;
 
 const subjectId = z
   .string()
@@ -84,6 +84,12 @@ export const DAWARICH_SOURCE_ENTRY_IDS = [
   "route-videos",
   "service-settings",
   "trip-sources",
+  "geofence-events",
+  "webhooks",
+  "webhook-deliveries",
+  "legacy-area-place-mappings",
+  "point-revisions",
+  "track-revisions",
   "planned-days",
   "planned-day-notes",
   "planned-reservations",
@@ -138,6 +144,12 @@ export const DAWARICH_SOURCE_PATHS: Readonly<Record<DawarichSourceEntryId, strin
     "route-videos": "dawarich/route-videos.jsonl",
     "service-settings": "dawarich/service-settings.jsonl",
     "trip-sources": "dawarich/trip-sources.jsonl",
+    "geofence-events": "dawarich/geofence-events.jsonl",
+    webhooks: "dawarich/webhooks.jsonl",
+    "webhook-deliveries": "dawarich/webhook-deliveries.jsonl",
+    "legacy-area-place-mappings": "dawarich/legacy-area-place-mappings.jsonl",
+    "point-revisions": "dawarich/point-revisions.jsonl",
+    "track-revisions": "dawarich/track-revisions.jsonl",
     "planned-days": "dawarich/planned-days.jsonl",
     "planned-day-notes": "dawarich/planned-day-notes.jsonl",
     "planned-reservations": "dawarich/planned-reservations.jsonl",

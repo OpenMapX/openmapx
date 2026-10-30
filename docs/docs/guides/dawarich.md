@@ -45,10 +45,10 @@ the separate Dawarich browser session.
 
 | Service            | Role                                | Default memory ceiling |
 | ------------------ | ----------------------------------- | ---------------------- |
-| `dawarich-app`     | Dawarich 1.15.3 web app             | 4 GiB                  |
+| `dawarich-app`     | Dawarich 1.19.0 web app             | 4 GiB                  |
 | `dawarich-sidekiq` | Background worker, concurrency 3    | 2 GiB                  |
 | `dawarich-postgis` | Dedicated PostgreSQL 18/PostGIS 3.6 | 2 GiB                  |
-| `dawarich-redis`   | Dedicated Redis 7.4 queue/cache     | 512 MiB                |
+| `dawarich-redis`   | Dedicated Redis 8.10 queue/cache    | 512 MiB                |
 
 The app and worker use the same digest-pinned Dawarich image. Their database,
 Redis, credentials, cookies, and volumes are separate from the OpenMapX platform
@@ -253,7 +253,7 @@ available. Wait before retrying rather than repeatedly reconnecting the same key
 | `TIMELINE_PLAN_RESTRICTED`      | Check whether the source account permits the required API access.                     |
 | `TIMELINE_RATE_LIMITED`         | Wait for the retry interval.                                                          |
 | `TIMELINE_UPSTREAM_UNAVAILABLE` | Inspect container/network health and source availability.                             |
-| `TIMELINE_RESPONSE_INVALID`     | Check API compatibility with the managed 1.15.3 baseline and bounded response limits. |
+| `TIMELINE_RESPONSE_INVALID`     | Check API compatibility with the managed 1.19.0 baseline and bounded response limits. |
 
 ```bash
 pnpm openmapx services status dawarich-app

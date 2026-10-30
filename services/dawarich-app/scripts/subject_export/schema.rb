@@ -1,13 +1,13 @@
 # Frozen compatibility tuple for the audited managed-Dawarich collector.
 module OpenMapxSubjectExport
-  IMAGE = "freikin/dawarich:1.15.3".freeze
-  IMAGE_DIGEST = "sha256:589e3606b11b61c3fa2d9661832cb73645a9b93a9cc7d807a071e2bc6c584498".freeze
-  UPSTREAM_COMMIT = "e32b70701b2467b862d4b5bc27ac428999997c1b".freeze
-  EXPECTED_SCHEMA_FINGERPRINT = "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09".freeze
+  IMAGE = "freikin/dawarich:1.19.0".freeze
+  IMAGE_DIGEST = "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304".freeze
+  UPSTREAM_COMMIT = "752641768f37fdc07d5a23e0559fa7c5ff8fae0f".freeze
+  EXPECTED_SCHEMA_FINGERPRINT = "d728906287ec3c4f3f38a80c2c4fe6ce77cc40f03b56a5ba0e89b811dd6e631a".freeze
   MAX_INPUT_BYTES = 16 * 1024
   MAX_ENTRY_BYTES = 256 * 1024 * 1024
   MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
-  # This is the reviewed ownership surface for 1.15.3. It intentionally
+  # This is the reviewed ownership surface for 1.19.0. It intentionally
   # contains the columns needed by the collector rather than permitting a
   # reflection-based `select *`; a missing column or ownership FK makes the
   # source unavailable until the tuple is audited again.
@@ -50,7 +50,13 @@ module OpenMapxSubjectExport
     "PlannedAccommodation" => %w[id trip_id name address latitude longitude starts_on ends_on check_in_at check_out_at notes created_at updated_at],
     "PlannedTraveller" => %w[id trip_id name owner created_at updated_at],
     "PlannedUnplannedPlace" => %w[id trip_id name address latitude longitude starts_at ends_at duration_minutes position category notes transport_mode created_at updated_at],
-    "PointSource" => %w[id digest tracker_id topic ssid bssid connection trigger battery_status inrids in_regions created_at updated_at]
+    "PointSource" => %w[id digest tracker_id topic ssid bssid connection trigger battery_status inrids in_regions created_at updated_at],
+    "GeofenceEvent" => %w[id user_id place_id event_type occurred_at lonlat device_id created_at updated_at],
+    "Webhook" => %w[id user_id name url secret event_types place_ids created_at updated_at],
+    "WebhookDelivery" => %w[id webhook_id geofence_event_id status response_body error_message created_at updated_at],
+    "LegacyAreaPlaceMapping" => %w[id area_id place_id created_at updated_at],
+    "PointRevision" => %w[id user_id month revision],
+    "TrackRevision" => %w[id user_id month revision]
   }.freeze
 
   REQUIRED_FOREIGN_KEYS = {
@@ -69,10 +75,15 @@ module OpenMapxSubjectExport
     "PlannedDay" => %w[trip_id], "PlannedDayNote" => %w[planned_day_id],
     "PlannedReservation" => %w[planned_day_id trip_id], "PlannedStop" => %w[planned_day_id],
     "PlannedAccommodation" => %w[trip_id], "PlannedTraveller" => %w[trip_id],
-    "PlannedUnplannedPlace" => %w[trip_id]
+    "PlannedUnplannedPlace" => %w[trip_id],
+    "GeofenceEvent" => %w[user_id], "Webhook" => %w[user_id],
+    "WebhookDelivery" => %w[webhook_id], "LegacyAreaPlaceMapping" => %w[area_id],
+    # Revision counters carry user_id without a database constraint; the table
+    # inventory below is what makes such an unconstrained relation reviewable.
+    "PointRevision" => %w[user_id], "TrackRevision" => %w[user_id]
   }.freeze
 
-  # Generated from the reviewed 1.15.3 migration graph.  This inventory is
+  # Generated from the reviewed 1.19.0 migration graph.  This inventory is
   # intentionally wider than the direct user-owned relations above: a
   # polymorphic attachment or a visit/point edge can make a record reachable
   # from a subject-owned row even when the FK does not point directly at
@@ -94,6 +105,10 @@ module OpenMapxSubjectExport
     family_memberships.family_id->families.id
     family_memberships.user_id->users.id
     flights.user_id->users.id
+    geofence_events.place_id->places.id
+    geofence_events.user_id->users.id
+    legacy_area_place_mappings.area_id->areas.id
+    legacy_area_place_mappings.place_id->places.id
     notes.user_id->users.id
     notifications.user_id->users.id
     pending_imports.claimed_by_user_id->users.id
@@ -128,7 +143,28 @@ module OpenMapxSubjectExport
     visits.area_id->areas.id
     visits.place_id->places.id
     visits.user_id->users.id
+    webhook_deliveries.geofence_event_id->geofence_events.id
+    webhook_deliveries.webhook_id->webhooks.id
+    webhooks.user_id->users.id
   ].freeze
+  # Every table the reviewed release creates, including reference and
+  # framework tables.  A foreign-key graph cannot reveal a new table whose
+  # owner column is unconstrained (as the revision counters are), so the
+  # complete inventory must match before any relation is opened.
+  EXPECTED_TABLES = %w[
+    achievement_progresses achievement_unlock_events action_text_rich_texts
+    active_storage_attachments active_storage_blobs active_storage_variant_records
+    ar_internal_metadata areas countries data_migrations digests disputed_areas exports families
+    family_invitations family_location_requests family_memberships flights flipper_features
+    flipper_gates geofence_events imports instance_settings legacy_area_place_mappings notes
+    notifications pending_imports place_visits places planned_accommodations planned_day_notes
+    planned_days planned_reservations planned_stops planned_travellers planned_unplanned_places
+    point_revisions point_sources points points_raw_data_archives posters regions route_videos
+    schema_migrations service_settings shared_links spatial_ref_sys stats taggings tags
+    track_revisions track_segments tracks trip_sources trips user_achievements users visits
+    webhook_deliveries webhooks
+  ].freeze
+
   ENTRY_PATHS = {
     "source-manifest" => "dawarich/source-manifest.json",
     "account" => "dawarich/account.json",
@@ -158,6 +194,12 @@ module OpenMapxSubjectExport
     "route-videos" => "dawarich/route-videos.jsonl",
     "service-settings" => "dawarich/service-settings.jsonl",
     "trip-sources" => "dawarich/trip-sources.jsonl",
+    "geofence-events" => "dawarich/geofence-events.jsonl",
+    "webhooks" => "dawarich/webhooks.jsonl",
+    "webhook-deliveries" => "dawarich/webhook-deliveries.jsonl",
+    "legacy-area-place-mappings" => "dawarich/legacy-area-place-mappings.jsonl",
+    "point-revisions" => "dawarich/point-revisions.jsonl",
+    "track-revisions" => "dawarich/track-revisions.jsonl",
     "planned-days" => "dawarich/planned-days.jsonl",
     "planned-day-notes" => "dawarich/planned-day-notes.jsonl",
     "planned-reservations" => "dawarich/planned-reservations.jsonl",

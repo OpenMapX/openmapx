@@ -6,8 +6,8 @@ user API-key connection, tracking clients, and the day viewer. This file records
 maintenance and release checks for the managed bundle; it is not evidence that
 a particular deployment passed them.
 
-The current manifests select Dawarich 1.15.3 for app and worker, dedicated
-PostgreSQL 18/PostGIS 3.6, and dedicated Redis 7.4. Their combined memory ceilings
+The current manifests select Dawarich 1.19.0 for app and worker, dedicated
+PostgreSQL 18/PostGIS 3.6, and dedicated Redis 8.10. Their combined memory ceilings
 are 8.5 GiB before OpenMapX and host overhead. App, worker, and data images are
 digest pinned. Database and Redis have no host-published ports.
 
@@ -166,9 +166,9 @@ fresh runtime evidence.
 Before changing image pins, inspect the candidate indexes:
 
 ```bash
-docker buildx imagetools inspect freikin/dawarich:1.15.3
+docker buildx imagetools inspect freikin/dawarich:1.19.0
 docker buildx imagetools inspect ghcr.io/baosystems/postgis:18-3.6
-docker buildx imagetools inspect redis:7.4-alpine
+docker buildx imagetools inspect redis:8.10-alpine
 ```
 
 These inspect mutable tags, while the managed manifests run pinned digests.
@@ -217,7 +217,37 @@ Do not change the bundle to `latest`. Read the target release notes and
 5. Apply in a maintenance window and verify logs, health, sign-in, and a day read.
 
 The current compatibility baseline is
-[Dawarich 1.15.3](https://github.com/Freika/dawarich/releases/tag/1.15.3).
+[Dawarich 1.19.0](https://github.com/Freika/dawarich/releases/tag/1.19.0).
+
+### From 1.15.3 to 1.19.0
+
+Dawarich 1.18 and 1.19 ask for a database backup before updating, because the
+first start runs migrations that cannot be rolled back and then long background
+jobs: Areas become Places, tracks from the last 12 months are repaired, flight
+months and digests are recalculated, and visits are detected again across each
+user's whole history. Keep the worker running until those jobs finish. On a small
+server, `SKIP_VISITS_FLEET_REDETECT=1` defers the full-history visit detection,
+which a user can start later from Visits → Re-run detection on full history.
+
+The bundle keeps its separate Sidekiq worker. Dawarich 1.17 can run jobs inside
+the web process, but only when `SIDEKIQ_EMBEDDED=true`, which the managed app
+does not set, so jobs never run twice. Redis 8.10 reads the data Redis 7.4 saved,
+so queued jobs survive the update.
+
+The privacy collectors accept only the 1.19.0 schema. A backup taken on 1.15.3
+records the `dawarich-1.15.3` contract, and the backup subject export refuses it.
+
+## Geofencing webhooks and network reach
+
+Dawarich 1.18 lets each user send geofence arrival and departure events to a
+webhook URL. The managed app runs with `SELF_HOSTED=true`, in which Dawarich
+accepts private addresses and Docker service names, as it already does for the
+Immich and PhotoPrism integration URLs; it blocks only cloud-metadata, multicast
+and reserved ranges. Dawarich containers share the `openmapx` Docker network, so
+a Dawarich user can make the worker send a signed POST with a fixed JSON body to
+another OpenMapX service and read its status code and error message. Dawarich
+stores, but does not show, the response body. Review this before onboarding users
+you would not give that reach, and keep internal endpoints authenticated.
 
 ## Disable and purge
 

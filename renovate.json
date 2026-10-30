@@ -11,7 +11,7 @@
       "description": "Dawarich is coupled to the audited privacy-export schema and ownership graph",
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["freikin/dawarich"],
-      "allowedVersions": "1.15.3"
+      "allowedVersions": "1.19.0"
     },
     {
       "description": "Pelias is validated against the Elasticsearch 8.19 compatibility line",
@@ -20,10 +20,10 @@
       "allowedVersions": "/^8\\.19\\./"
     },
     {
-      "description": "Managed Dawarich follows its upstream Redis 7.4 deployment contract",
+      "description": "Managed Dawarich follows its upstream Redis 8 deployment contract",
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["redis"],
-      "allowedVersions": "/^7\\.4(?:[.-]|$)/"
+      "allowedVersions": "/^8\\./"
     }
   ],
   "customManagers": [
