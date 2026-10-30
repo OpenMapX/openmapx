@@ -36,7 +36,6 @@ No area assignment or label quota is required.
 | ------------------ | ----------------------------------------------------------------------------------------------- |
 | `needs-triage`     | An open issue awaits initial maintainer review. Removing it means reviewed, not scheduled.      |
 | `needs-info`       | A specific unanswered question is linked in the issue. The maintainer removes it when answered. |
-| `blocked`          | A named, linked prerequisite prevents progress. The maintainer tracks its resolution.           |
 | `dependencies`     | Dependency updates or dependency maintenance.                                                   |
 | `documentation`    | Documentation content, tooling or workspace dependencies.                                       |
 | `integration`      | A new or changed provider, source or backend integration.                                       |
@@ -48,18 +47,23 @@ No area assignment or label quota is required.
 The definitions are versioned in
 [`.github/labels.json`](https://github.com/OpenMapX/openmapx/blob/main/.github/labels.json).
 Maintainers own classification and these action labels. An arbitrary comment does
-not resolve an information request or blocker. Add a new label only when there is
+not resolve an information request. Add a new label only when there is
 a clear queue/filter consumer; review the taxonomy periodically.
 
-New and reopened issues enter `needs-triage`. Closure removes `needs-triage`,
-`needs-info` and `blocked`, while retaining the questions, dependency links and
-closure reason in the record. The issue-lifecycle workflow re-reads current state
+Record a prerequisite as a GitHub issue dependency ("blocked by"), not a label.
+The issue then shows which issue blocks it, and `is:blocked` finds blocked issues.
+A prerequisite outside GitHub, such as an upstream release, gets its own tracking
+issue so it can be linked.
+
+New and reopened issues enter `needs-triage`. Closure removes `needs-triage` and
+`needs-info`, while retaining the questions, dependency links and closure reason
+in the record. The issue-lifecycle workflow re-reads current state
 and makes retries harmless; a later human triage decision takes precedence over
 an old reopen event. GitHub does not offer an atomic state-and-label update, so
 concurrent transitions are rechecked and repeated changes fail visibly for retry.
-If reopening overlaps removal of `needs-info` or `blocked`, the workflow fails with
-the affected issue and labels. Check the issue history before restoring them;
-automatically restoring them could undo a later human decision.
+If reopening overlaps removal of `needs-info`, the workflow fails with the
+affected issue and label. Check the issue history before restoring it;
+automatically restoring it could undo a later human decision.
 
 A monthly and manually triggered drift report lists closed workflow labels,
 missing/legacy label definitions and missing issue types. It does not repair
