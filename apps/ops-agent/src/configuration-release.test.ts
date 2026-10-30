@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readCheckedConfigurationRelease } from "./configuration-release";
+import { inspectConfigurationReleaseDownloads } from "./configuration-release-downloads";
 
 let root: string, directory: string, raw: string, manifestDigest: string;
 const releaseId = "checked-release-01";
@@ -96,3 +98,107 @@ it.each(["foreign", "tag", "oversized", "privacy", "local"])(
     ).toThrow();
   },
 );
+it.each(["single", "indexed"])(
+  "preflights declared OCI bytes and platform without pulling images: %s",
+  async (kind) => {
+    expect(CONFIGURATION_RELEASE_IMAGE_NAMES).toEqual(services.RELEASE_IMAGE_NAMES);
+    const release = readCheckedConfigurationRelease(root, { releaseId, manifestDigest });
+    const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
+      let stdout: string;
+      if (args[0] === "info") stdout = "linux/x86_64";
+      else if (args[0] === "manifest" && args[1] === "inspect") {
+        const reference = args[2]!;
+        stdout = JSON.stringify(
+          kind === "indexed" && reference.endsWith(`@sha256:${"a".repeat(64)}`)
+            ? {
+                schemaVersion: 2,
+                manifests: [
+                  {
+                    digest: `sha256:${"b".repeat(64)}`,
+                    size: 512,
+                    platform: { os: "linux", architecture: "amd64" },
+                  },
+                ],
+              }
+            : {
+                schemaVersion: 2,
+                config: { size: 256, digest: `sha256:${"c".repeat(64)}` },
+                layers: [{ size: 1024, digest: `sha256:${"d".repeat(64)}` }],
+              },
+        );
+      } else throw Error("Unexpected Docker mutation during preflight");
+      return { stdout, stderr: "" };
+    });
+    const result = await inspectConfigurationReleaseDownloads({
+      release,
+      execFile,
+      signal: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ version: 1, platform: "linux/amd64", declaredBytes: 7 * 1280 });
+    expect(result.images).toHaveLength(7);
+    expect(result.images[0]).toMatchObject({
+      image: "api",
+      reference: release.manifest.images.api,
+      platformManifestDigest: `sha256:${(kind === "indexed" ? "b" : "a").repeat(64)}`,
+      configDigest: `sha256:${"c".repeat(64)}`,
+    });
+    expect(
+      execFile.mock.calls.every(
+        ([file, args]) => file === "docker" && ["info", "manifest"].includes(args[0]!),
+      ),
+    ).toBe(true);
+  },
+);
+it.each([
+  "platform",
+  "unavailable-index",
+  "ambiguous",
+  "oversized-image",
+  "oversized-total",
+  "malformed",
+  "aborted",
+  "too-much-output",
+])("refuses unsafe download preflight without a pull: %s", async (kind) => {
+  const release = readCheckedConfigurationRelease(root, { releaseId, manifestDigest }),
+    controller = new AbortController();
+  if (kind === "aborted") controller.abort(Error("Synthetic observation canceled"));
+  const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
+    if (args[0] === "info")
+      return { stdout: kind === "platform" ? "windows/amd64" : "linux/amd64", stderr: "" };
+    if (args[0] !== "manifest" || args[1] !== "inspect") throw Error("Unexpected mutation");
+    let value: unknown = {
+      schemaVersion: 2,
+      config: { size: 256, digest: `sha256:${"c".repeat(64)}` },
+      layers: [
+        {
+          size:
+            kind === "oversized-image"
+              ? 8 * 1024 ** 3 + 1
+              : kind === "oversized-total"
+                ? 5 * 1024 ** 3
+                : 1024,
+          digest: `sha256:${"d".repeat(64)}`,
+        },
+      ],
+      ...(kind === "too-much-output" ? { annotations: { value: "x".repeat(1024 * 1024) } } : {}),
+    };
+    if (kind === "malformed") value = { schemaVersion: 2, layers: [] };
+    if (kind === "ambiguous" || kind === "unavailable-index")
+      value = {
+        schemaVersion: 2,
+        manifests: Array.from({ length: kind === "ambiguous" ? 2 : 1 }, () => ({
+          size: 512,
+          digest: `sha256:${"b".repeat(64)}`,
+          platform: { os: "linux", architecture: kind === "unavailable-index" ? "arm64" : "amd64" },
+        })),
+      };
+    return { stdout: JSON.stringify(value), stderr: "" };
+  });
+  await expect(
+    inspectConfigurationReleaseDownloads({ release, execFile, signal: controller.signal }),
+  ).rejects.toThrow();
+  expect(execFile.mock.calls.every(([, args]) => ["info", "manifest"].includes(args[0]!))).toBe(
+    true,
+  );
+  if (kind === "aborted") expect(execFile).not.toHaveBeenCalled();
+});

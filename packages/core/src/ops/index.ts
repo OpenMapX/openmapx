@@ -14,6 +14,7 @@ export {
 export * from "./configuration-maintenance";
 export * from "./configuration-maintenance-control-validation";
 export * from "./configuration-preparation";
+export * from "./configuration-release-downloads";
 export * from "./contract";
 export * from "./control-retention-receipt";
 export * from "./control-root-key";
