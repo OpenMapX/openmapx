@@ -171,5 +171,11 @@
         ]
       }
     }
+  ],
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
   ]
 }

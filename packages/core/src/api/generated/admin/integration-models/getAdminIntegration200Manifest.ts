@@ -3,6 +3,7 @@
 import type { GetAdminIntegration200ManifestBackend } from "./getAdminIntegration200ManifestBackend";
 import type { GetAdminIntegration200ManifestConfigSchema } from "./getAdminIntegration200ManifestConfigSchema";
 import type { GetAdminIntegration200ManifestDataSourcesItem } from "./getAdminIntegration200ManifestDataSourcesItem";
+import type { GetAdminIntegration200ManifestEndpointConfigKeys } from "./getAdminIntegration200ManifestEndpointConfigKeys";
 import type { GetAdminIntegration200ManifestFrontend } from "./getAdminIntegration200ManifestFrontend";
 import type { GetAdminIntegration200ManifestHealthCheck } from "./getAdminIntegration200ManifestHealthCheck";
 import type { GetAdminIntegration200ManifestInfrastructure } from "./getAdminIntegration200ManifestInfrastructure";
@@ -27,6 +28,7 @@ export type GetAdminIntegration200Manifest = {
   frontend?: GetAdminIntegration200ManifestFrontend;
   backend?: GetAdminIntegration200ManifestBackend;
   configSchema?: GetAdminIntegration200ManifestConfigSchema;
+  endpointConfigKeys?: GetAdminIntegration200ManifestEndpointConfigKeys;
   healthCheck?: GetAdminIntegration200ManifestHealthCheck;
   /**
    * @minimum 60000

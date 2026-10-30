@@ -1,15 +1,17 @@
 import { createConnection } from "node:net";
 import {
   ENDPOINT_URL_TEMPLATE,
-  isHealthCheckEndpointId,
-  platformEndpointServiceId,
-  resolvePlatformEndpoint,
+  isPlatformEndpointId,
   USER_AGENT,
   urlCredentialsAsBasicAuth,
   validatePublicUrl,
 } from "@openmapx/core";
 import { resolvePublicConnectionAddresses, safeFetchStatus } from "@openmapx/core/server";
-import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
+import {
+  type LoadedIntegration,
+  resolveIntegrationPlatformEndpoint,
+  toIntegrationMeta,
+} from "@openmapx/integration-framework";
 import { getSecretFields } from "../utils/validate-config-body";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
@@ -134,7 +136,10 @@ function secretRedactor(integration: LoadedIntegration): (text: string) => strin
 /** The endpoint a probe resolved: its origin, and the operator's credentials for it. */
 interface ProbeEndpoint {
   origin: string;
-  /** The self-hosted or operator instance, which may be internal. */
+  /**
+   * The self-hosted service, the integration's URL setting or the operator's
+   * instance: the deployment's choice, which may be internal.
+   */
   trusted: boolean;
   authorization?: string;
   secrets: string[];
@@ -327,8 +332,13 @@ async function executeSingleHealthCheck(
         endpointMisuse = "an endpoint placeholder may not appear in a header";
         return "";
       }
-      const endpoint = isHealthCheckEndpointId(endpointId)
-        ? resolvePlatformEndpoint(endpointId, serviceUrl(platformEndpointServiceId(endpointId)))
+      // The instance the integration's own queries use (`ctx.resolvePlatformEndpoint`).
+      const endpoint = isPlatformEndpointId(endpointId)
+        ? resolveIntegrationPlatformEndpoint(
+            integration,
+            (serviceId) => integration.resolvedServices?.[serviceId],
+            endpointId,
+          )
         : null;
       if (!endpoint) {
         unsatisfiedEndpoint = unsatisfiedEndpoint ?? endpointId;
@@ -462,9 +472,10 @@ async function executeSingleHealthCheck(
 
   // SSRF guard: a manifest-controlled health-check URL must not target an
   // internal/loopback/link-local host. Registered `service:` hosts and the
-  // self-hosted or operator instance an `endpoint:` names are exempt (they
-  // are the deployment's own choice and may be internal); everything else
-  // (manifest-literal, ${config}-derived or a public default) is validated. Comparing the FINAL host against the set
+  // instance an `endpoint:` resolves (self-hosted service, integration URL
+  // setting or operator URL) are exempt: they are the deployment's own choice
+  // and may be internal. Everything else (manifest-literal, ${config}-derived
+  // or a public default) is validated. Comparing the FINAL host against the set
   // of service-substituted hosts prevents smuggling an internal IP past the
   // guard by also referencing a service elsewhere in the template.
   let hostExempt = false;

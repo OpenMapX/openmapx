@@ -48,6 +48,7 @@ import type { StreetLevelProvider } from "../contracts/street-level-imagery-prov
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
+import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
 
 export interface FakeMobilityHttpRequest {
   kind: "json" | "text";
@@ -469,6 +470,12 @@ export function createMockIntegrationContext(
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
     getRequiredService: () => null,
+    resolvePlatformEndpoint: (endpointId) =>
+      resolveIntegrationPlatformEndpoint(
+        { manifest: ctx.manifest, config: ctx.config },
+        (serviceId) => ctx.getRequiredService(serviceId),
+        endpointId,
+      ),
   };
   return ctx;
 }

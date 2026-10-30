@@ -16,11 +16,12 @@ import {
 } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPeliasUrl.
-let PELIAS_URL = "http://localhost:4300";
+const DEFAULT_PELIAS_URL = "http://localhost:4300";
+let PELIAS_URL = DEFAULT_PELIAS_URL;
 
-/** Update the Pelias base URL (called from setup() when service registry resolves it). */
-export function setPeliasUrl(url: string): void {
-  PELIAS_URL = url;
+/** The instance to query; undefined restores the default. */
+export function setPeliasUrl(url: string | undefined): void {
+  PELIAS_URL = url ?? DEFAULT_PELIAS_URL;
 }
 
 interface PeliasGeometry {

@@ -11,8 +11,6 @@ import { searchNextbike } from "./providers/nextbike-client.js";
 import { createBikeSharingProvider } from "./providers/provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  const motis = ctx.getRequiredService("motis");
-  const nominatim = ctx.getRequiredService("nominatim");
   const resolveContributors = createSharedMobilityContributorResolver(
     ctx.manifest.dataSources ?? [],
   );
@@ -20,8 +18,10 @@ export function setup(ctx: IntegrationContext): void {
     resolveContributors,
     cache: ctx.cache,
     transport: mobilityHttpTransport,
-    motisUrl: motis?.url,
-    nominatimUrl: nominatim?.url,
+    // The instances the deployment uses, as their health checks probe them.
+    motisUrl: ctx.resolvePlatformEndpoint("motis")?.url,
+    nominatimUrl: ctx.resolvePlatformEndpoint("nominatim")?.url,
+    transitousUrl: ctx.resolvePlatformEndpoint("transitous")?.url,
     onDecision(category, decision) {
       ctx.metricsRecorder?.recordProviderCall(
         {

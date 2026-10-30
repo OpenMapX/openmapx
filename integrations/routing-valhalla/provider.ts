@@ -26,14 +26,14 @@ import {
   type LngLat as ValhallaLngLat,
 } from "./valhalla-exclusions.js";
 
-// Populated by setup(ctx): service-registry URL → ctx.config.endpoint
-// (INTEGRATION_ROUTING_VALHALLA_ENDPOINT) → hardcoded fallback.
-let VALHALLA_URL = "https://api.stadiamaps.com";
+// Populated by setup(ctx) from ctx.resolvePlatformEndpoint("valhalla").
+const DEFAULT_VALHALLA_URL = "https://api.stadiamaps.com";
+let VALHALLA_URL = DEFAULT_VALHALLA_URL;
 let VALHALLA_API_KEY: string | undefined;
 
-/** Update the Valhalla base URL (called from setup() when service registry resolves it). */
-export function setValhallaUrl(url: string): void {
-  VALHALLA_URL = url;
+/** The instance to query; undefined restores the default. */
+export function setValhallaUrl(url: string | undefined): void {
+  VALHALLA_URL = url ?? DEFAULT_VALHALLA_URL;
 }
 
 /** Set the API key appended to requests (e.g. Stadia Maps); undefined for key-less instances. */

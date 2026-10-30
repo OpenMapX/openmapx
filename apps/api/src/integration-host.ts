@@ -19,6 +19,7 @@ import {
   PLATFORM_VERSION,
   type RouteHandler,
   type RouteOptions,
+  resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
   validateDataSource,
   validateManifest,
@@ -659,6 +660,13 @@ function buildIntegrationContext(args: {
       : undefined,
     getRequiredService(key: string) {
       return requiresMap.get(key) ?? null;
+    },
+    resolvePlatformEndpoint(endpointId) {
+      return resolveIntegrationPlatformEndpoint(
+        { manifest, config },
+        (serviceId) => requiresMap.get(serviceId),
+        endpointId,
+      );
     },
     registerTransitProvider(provider) {
       const existing = providers.get("transit") ?? [];

@@ -568,11 +568,28 @@ describe("integration-health ${endpoint:...} placeholders", () => {
     vi.restoreAllMocks();
   });
 
-  function manifestIntegration(id: string): LoadedIntegration {
+  function manifestIntegration(
+    id: string,
+    services: Record<string, string> = {},
+    config: Record<string, unknown> = {},
+  ): LoadedIntegration {
     const manifest = JSON.parse(
       readFileSync(resolve(REPO_ROOT, `integrations/${id}/manifest.json`), "utf8"),
     );
-    return { ...makeIntegration(manifest.healthCheck), id, manifest, isBuiltIn: true };
+    return {
+      ...makeIntegration(manifest.healthCheck),
+      id,
+      manifest,
+      config,
+      isBuiltIn: true,
+      // The integration's own resolved requirements, as the host records them.
+      resolvedServices: Object.fromEntries(
+        Object.entries(services).map(([serviceId, url]) => [
+          serviceId,
+          { serviceId, url, enabled: true },
+        ]),
+      ),
+    };
   }
 
   it.each([
@@ -629,9 +646,10 @@ describe("integration-health ${endpoint:...} placeholders", () => {
     ["overlay-hiking", "overlay-hiking:OpenStreetMap Overpass"],
   ])("%s probes the self-hosted Overpass when it is enabled", async (id, statusId) => {
     vi.stubEnv("OVERPASS_URL", "https://overpass.example.org");
-    serviceUrls.set("overpass", "http://overpass:80");
 
-    const statuses = await executeIntegrationHealthCheck(manifestIntegration(id));
+    const statuses = await executeIntegrationHealthCheck(
+      manifestIntegration(id, { overpass: "http://overpass:80" }),
+    );
 
     expect(statuses.find((status) => status.id === statusId)).toMatchObject({
       status: "up",
@@ -644,6 +662,123 @@ describe("integration-health ${endpoint:...} placeholders", () => {
     expect(fetchSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain(
       "https://overpass-api.de/api/status",
     );
+  });
+
+  it.each([
+    {
+      id: "geocoding-nominatim",
+      statusId: "geocoding-nominatim",
+      services: { nominatim: "http://nominatim:8080" },
+      probe: "http://nominatim:8080/status",
+      trustedHost: "nominatim",
+    },
+    {
+      id: "geocoding-nominatim",
+      statusId: "geocoding-nominatim",
+      config: { endpoint: "http://nominatim.lan:8080" },
+      probe: "http://nominatim.lan:8080/status",
+      trustedHost: "nominatim.lan",
+    },
+    {
+      id: "geocoding-photon",
+      statusId: "geocoding-photon",
+      env: { PHOTON_URL: "https://photon.example.org" },
+      probe: "https://photon.example.org/api?q=test&limit=1",
+      trustedHost: "photon.example.org",
+    },
+    {
+      id: "geocoding-photon",
+      statusId: "geocoding-photon",
+      probe: "https://photon.komoot.io/api?q=test&limit=1",
+    },
+    {
+      id: "routing-osrm",
+      statusId: "routing-osrm",
+      env: { OSRM_URL: "https://osrm.example.org/" },
+      probe:
+        "https://osrm.example.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false",
+      trustedHost: "osrm.example.org",
+    },
+    {
+      id: "routing-valhalla",
+      statusId: "routing-valhalla:Valhalla",
+      config: { endpoint: "http://valhalla.lan:8002" },
+      probe: "http://valhalla.lan:8002/status",
+      trustedHost: "valhalla.lan",
+    },
+    {
+      id: "transit-motis",
+      statusId: "transit-motis:MOTIS self-hosted",
+      config: { endpoint: "http://motis.lan:8080" },
+      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      trustedHost: "motis.lan",
+    },
+    {
+      id: "transit-motis",
+      statusId: "transit-motis:Transitous",
+      config: { transitousUrl: "https://transitous.example.org" },
+      probe: "https://transitous.example.org/api/v1/geocode?text=test",
+      trustedHost: "transitous.example.org",
+    },
+    {
+      id: "live-transit-motis",
+      statusId: "live-transit-motis:MOTIS self-hosted",
+      services: { motis: "http://motis:8080" },
+      config: { endpoint: "http://motis.lan:8080" },
+      probe: "http://motis:8080/api/v1/geocode?text=test",
+      trustedHost: "motis",
+    },
+    {
+      id: "geocoding-motis",
+      statusId: "geocoding-motis:Transitous",
+      probe: "https://api.transitous.org/api/v1/geocode?text=test",
+    },
+    {
+      id: "bike-sharing",
+      statusId: "bike-sharing:MOTIS self-hosted",
+      env: { MOTIS_URL: "http://motis.lan:8080" },
+      probe: "http://motis.lan:8080/api/v1/geocode?text=test",
+      trustedHost: "motis.lan",
+    },
+  ])(
+    "$statusId probes $probe",
+    async ({ id, statusId, services, config, env, probe, trustedHost }) => {
+      for (const name of [
+        "NOMINATIM_URL",
+        "PHOTON_URL",
+        "OSRM_URL",
+        "VALHALLA_URL",
+        "MOTIS_URL",
+        "TRANSITOUS_URL",
+      ]) {
+        vi.stubEnv(name, (env as Record<string, string> | undefined)?.[name] ?? "");
+      }
+
+      const statuses = await executeIntegrationHealthCheck(
+        manifestIntegration(id, services as Record<string, string> | undefined, config),
+      );
+
+      expect(statuses.find((status) => status.id === statusId)).toMatchObject({ status: "up" });
+      expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+        probe,
+        expect.objectContaining({ allowPrivateHosts: trustedHost ? [trustedHost] : [] }),
+      );
+    },
+  );
+
+  it.each([
+    ["geocoding-pelias", "geocoding-pelias", "pelias endpoint not configured"],
+    ["transit-motis", "transit-motis:MOTIS self-hosted", "motis endpoint not configured"],
+  ])("%s reports no instance as unconfigured", async (id, statusId, url) => {
+    vi.stubEnv("PELIAS_URL", "");
+    vi.stubEnv("MOTIS_URL", "");
+
+    const statuses = await executeIntegrationHealthCheck(manifestIntegration(id));
+
+    expect(statuses.find((status) => status.id === statusId)).toMatchObject({
+      status: "unconfigured",
+      url,
+    });
   });
 
   it("probes an operator's private instance, sending its URL credentials as Basic auth", async () => {
@@ -691,13 +826,13 @@ describe("integration-health ${endpoint:...} placeholders", () => {
   it("reports an endpoint id it does not know as unconfigured, without a request", async () => {
     const [status] = await executeIntegrationHealthCheck({
       // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
-      ...makeIntegration({ type: "http", urlTemplate: "${endpoint:nominatim}/status" }),
+      ...makeIntegration({ type: "http", urlTemplate: "${endpoint:geoserver}/status" }),
       isBuiltIn: true,
     });
 
     expect(status).toMatchObject({
       status: "unconfigured",
-      url: "nominatim endpoint not configured",
+      url: "geoserver endpoint not configured",
     });
     expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
   });

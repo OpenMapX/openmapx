@@ -20,7 +20,7 @@ export function setOverpassContributorResolver(
 
 /** The instance queries go to, resolved as `${endpoint:overpass}` health checks resolve it. */
 function currentOverpassEndpoint(): ResolvedPlatformEndpoint {
-  const endpoint = resolvePlatformEndpoint("overpass", selfHostedOverpassUrl);
+  const endpoint = resolvePlatformEndpoint("overpass", { selfHostedUrl: selfHostedOverpassUrl });
   if (!endpoint) throw new Error("Overpass has a public default endpoint");
   return endpoint;
 }

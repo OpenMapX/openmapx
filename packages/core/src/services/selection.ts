@@ -1,3 +1,4 @@
+import { PLATFORM_ENDPOINTS } from "../utils/platform-endpoints";
 import { readExternalProxyNetwork } from "./external-proxy";
 import type { LoadedService, ServiceConsumes, ServiceProduces } from "./types";
 
@@ -119,32 +120,17 @@ export function formatServiceIdList(ids: Iterable<string>): string {
 }
 
 /**
- * Map of service id → env var name for backends that the API reaches via
- * `process.env` rather than through the live service-registry `serviceUrl()`.
- *
- * - `overpass`: `packages/core/src/utils/overpass/client.ts` reads
- *   `process.env.OVERPASS_URL` directly (module-level initialisation).
- * - `nominatim`: `packages/mobility-core/nominatim.ts` reads
- *   `process.env.NOMINATIM_URL` at module load time.
- * - `motis`: `packages/mobility-core/motis-rentals.ts` reads
- *   `process.env.MOTIS_URL` at module load time for the local-MOTIS rentals
- *   instance. (The `apps/api` motis manager additionally consults
- *   `serviceUrl("motis")` at runtime, so this entry mainly fixes the rentals
- *   client.)
- *
- * All other built-in backends (valhalla, osrm, pelias, photon, otp) are
- * resolved at runtime through the live service registry (`serviceUrl()`), so
- * their manifest env-var defaults are never consulted while those services
- * are enabled. `transitous` is a public API only — there is no in-cluster
- * service to point at — so its URL stays as the manifest default.
- *
- * When a service is co-deployed its Docker-internal address replaces the
- * manifest default (public API), unless the operator's env names one.
+ * Self-hosted platform endpoints (`PLATFORM_ENDPOINTS`) whose operator URL the
+ * API reads from the environment: when the service is co-deployed, render
+ * points that variable at its Docker-internal address unless the operator's
+ * env names one. Integrations resolve the self-hosted service first anyway
+ * (`resolvePlatformEndpoint`); the variable covers clients that only read the
+ * environment.
  */
 const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPort: number }> = [
-  { serviceId: "overpass", envVar: "OVERPASS_URL", internalPort: 80 },
-  { serviceId: "nominatim", envVar: "NOMINATIM_URL", internalPort: 8080 },
-  { serviceId: "motis", envVar: "MOTIS_URL", internalPort: 8080 },
+  { serviceId: "overpass", envVar: PLATFORM_ENDPOINTS.overpass.envVar, internalPort: 80 },
+  { serviceId: "nominatim", envVar: PLATFORM_ENDPOINTS.nominatim.envVar, internalPort: 8080 },
+  { serviceId: "motis", envVar: PLATFORM_ENDPOINTS.motis.envVar, internalPort: 8080 },
 ];
 
 /**

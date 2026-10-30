@@ -55,12 +55,11 @@ export function setup(ctx: IntegrationContext): void {
     memCache.clear();
     unsubscribe?.();
   });
-  const nominatim = ctx.getRequiredService("nominatim");
   const overpass = ctx.getRequiredService("overpass");
   ctx.onActivate(() => {
     active = true;
     clearPlaceLookupCaches(cacheAvailable);
-    setPlaceLookupNominatimUrl((ctx.config.nominatimUrl as string | undefined) ?? nominatim?.url);
+    setPlaceLookupNominatimUrl(ctx.resolvePlatformEndpoint("nominatim")?.url);
     if (overpass?.url) setOverpassUrl(overpass.url);
   });
 

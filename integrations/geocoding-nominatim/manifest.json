@@ -32,9 +32,12 @@
       }
     }
   },
+  "endpointConfigKeys": {
+    "nominatim": "endpoint"
+  },
   "healthCheck": {
     "type": "http",
-    "url": "https://nominatim.openstreetmap.org/status"
+    "urlTemplate": "${endpoint:nominatim}/status"
   },
   "quality": "built-in",
   "category": "Geocoding",

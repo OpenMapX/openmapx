@@ -41,17 +41,20 @@
       }
     }
   },
+  "endpointConfigKeys": {
+    "motis": "endpoint",
+    "transitous": "transitousUrl"
+  },
   "healthCheck": [
     {
       "name": "Transitous",
       "type": "http",
-      "url": "https://api.transitous.org/api/v1/geocode?text=test"
+      "urlTemplate": "${endpoint:transitous}/api/v1/geocode?text=test"
     },
     {
       "name": "MOTIS self-hosted",
       "type": "ping",
-      "urlTemplate": "${service:motis}",
-      "url": "http://localhost:8081"
+      "urlTemplate": "${endpoint:motis}/api/v1/geocode?text=test"
     }
   ],
   "quality": "built-in",

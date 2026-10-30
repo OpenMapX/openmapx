@@ -204,6 +204,15 @@
       },
       "additionalProperties": {}
     },
+    "endpointConfigKeys": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "healthCheck": {
       "anyOf": [
         {
