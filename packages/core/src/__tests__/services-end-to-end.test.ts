@@ -518,6 +518,44 @@ describe.skipIf(!manifestsPresent)(
         );
       });
 
+      it("keeps every Dawarich container off openmapx and lets only Traefik and app-api reach the app", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+        const render = (dawarich: boolean) => {
+          const services = registry.list().map((service) => ({
+            ...service,
+            enabled: service.manifest.id.startsWith("dawarich-")
+              ? dawarich
+              : ["traefik", "app-api", "postgis", "redis"].includes(service.manifest.id),
+          }));
+          return parseYaml(renderCompose(services, { domain: "example.com" }).composeYaml) as {
+            services: Record<string, { networks: string[] }>;
+            networks: Record<string, unknown>;
+          };
+        };
+
+        const doc = render(true);
+        expect(doc.services["dawarich-app"]?.networks).toEqual([
+          "openmapx-private-dawarich",
+          "openmapx-private-dawarich-ingress",
+        ]);
+        for (const id of ["dawarich-sidekiq", "dawarich-postgis", "dawarich-redis"]) {
+          expect(doc.services[id]?.networks).toEqual(["openmapx-private-dawarich"]);
+        }
+        for (const id of ["traefik", "app-api"]) {
+          expect(doc.services[id]?.networks).toContain("openmapx-private-dawarich-ingress");
+          expect(doc.services[id]?.networks).not.toContain("openmapx-private-dawarich");
+        }
+        for (const id of ["postgis", "redis"]) {
+          expect(doc.services[id]?.networks).toEqual(["openmapx"]);
+        }
+
+        const withoutDawarich = render(false);
+        expect(withoutDawarich.services.traefik?.networks).toEqual(["openmapx"]);
+        expect(withoutDawarich.services["app-api"]?.networks).toEqual(["openmapx"]);
+        expect(Object.keys(withoutDawarich.networks)).toEqual(["openmapx"]);
+      });
+
       it("renders the pinned private data services, shared app data, file-only secrets and host-only TLS route", async () => {
         const registry = new ServiceRegistry({ rootDir: repoRoot });
         await registry.load();

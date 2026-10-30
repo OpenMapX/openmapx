@@ -143,6 +143,8 @@ The top-level descriptive fields.
 | `quality`                | enum         |   yes    | `built-in`, `community-verified`, or `community`. Display/catalog label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)).                                                                                                                                      |
 | `platform`               | string       |    no    | Descriptive service field. Extension bundle and integration manifests enforce the separate `major.minor` protocol requirement; this service schema accepts a string.                                                                                                                                          |
 | `communityNetworkAccess` | service id[] |    no    | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
+| `privateNetworks`        | name[]       |    no    | Audited first-party capability only. Names reviewed private networks (`openmapx-private-<name>`) the service joins, so a multi-container bundle can keep its traffic off `openmapx`. See [Private bundle networks](#private-bundle-networks).                                                                 |
+| `platformNetwork`        | boolean      |    no    | Audited first-party capability only. `false` keeps the service off `openmapx`; it then needs at least one `privateNetworks` entry. Defaults to joining `openmapx`.                                                                                                                                            |
 
 ## `container`
 
@@ -218,6 +220,40 @@ exception are accepted, not accidental:
 If multiple community containers need to discover each other, define an
 explicit reviewed multi-component service bundle instead of widening
 platform-network access.
+
+### Private bundle networks
+
+A first-party bundle whose containers act on user-supplied URLs can leave the
+shared network. Members declare `"platformNetwork": false` and the private
+networks they share, for example `"privateNetworks": ["dawarich"]`. The
+renderer attaches them only to `openmapx-private-<name>` networks, so they
+cannot resolve or connect to `openmapx` peers. They keep outbound internet
+access through those bridges. Each private network is dual-stack like
+`openmapx`, with a stable IPv6 /64 derived from its name inside
+`fd4d:5058::/48`.
+
+A built-in that stays on `openmapx` and lists the same private network is a
+bridge: Traefik routes to a bundle's web container this way, and app-api calls
+it. A bridge joins the network only while an enabled member that left
+`openmapx` declares it. A default install without the bundle therefore renders
+no extra network. As with community bridges, the network carries traffic both
+ways: bundle containers on it can open connections to the bridge. Give that
+network only the members that must be reachable, and keep workers on a
+separate private network without bridges.
+
+The managed Dawarich bundle is the shipped example:
+
+| Network                             | Members                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `openmapx-private-dawarich`         | `dawarich-app`, `dawarich-sidekiq`, `dawarich-postgis`, `dawarich-redis` |
+| `openmapx-private-dawarich-ingress` | `dawarich-app`, plus the bridges `traefik` and `app-api`                 |
+
+The worker, which delivers geofencing webhooks and runs photo imports, can
+reach only its own database, Redis, the web app and the internet. The web app,
+whose photo-thumbnail proxy fetches a user-configured URL and returns the
+response body, can additionally reach Traefik's entrypoints and app-api. On
+app-api that includes the unauthenticated `/api/internal/metrics` counters,
+which Traefik otherwise denies publicly.
 
 ### `container.healthcheck`
 
@@ -707,6 +743,7 @@ The schema enforces, among other rules:
 - First-party `exposure.proxy.enabled: true` requires at least one `container.expose` port; community services cannot enable the platform proxy.
 - Duplicate `(type, instance)` pairs in `produces` are rejected.
 - `communityNetworkAccess` is first-party-only and names community service ids (uninstalled or disabled targets are skipped); community services never join `openmapx`, including when a manifest is handed directly to the renderer.
+- `privateNetworks` and `platformNetwork` are first-party-only and cannot be combined with host networking. Private network names are DNS-label-shaped; `platformNetwork: false` requires at least one private network.
 - Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation in Compose command, entrypoint, environment, and exec health-check fields. Their volume names and network aliases are isolated from platform-owned names.
 
 Capability and data-type strings that are neither well-known nor namespaced

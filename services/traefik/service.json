@@ -5,6 +5,7 @@
   "description": "Reverse proxy and TLS termination via Let's Encrypt.",
   "license": "MIT",
   "quality": "built-in",
+  "privateNetworks": ["dawarich-ingress"],
   "homepage": "https://traefik.io/",
   "subjectData": {
     "storesPersonalData": false,

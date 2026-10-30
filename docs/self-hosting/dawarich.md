@@ -237,17 +237,47 @@ so queued jobs survive the update.
 The privacy collectors accept only the 1.19.0 schema. A backup taken on 1.15.3
 records the `dawarich-1.15.3` contract, and the backup subject export refuses it.
 
-## Geofencing webhooks and network reach
+The same update moves the four Dawarich containers off the `openmapx` network
+(see [Network isolation](#network-isolation-and-user-supplied-urls)). Compose
+recreates them and adds Traefik and app-api to the ingress network; volumes
+are untouched. If you added your own service that calls `dawarich-app` or the
+Dawarich database by name over `openmapx`, it can no longer reach them.
 
-Dawarich 1.18 lets each user send geofence arrival and departure events to a
-webhook URL. The managed app runs with `SELF_HOSTED=true`, in which Dawarich
-accepts private addresses and Docker service names, as it already does for the
-Immich and PhotoPrism integration URLs; it blocks only cloud-metadata, multicast
-and reserved ranges. Dawarich containers share the `openmapx` Docker network, so
-a Dawarich user can make the worker send a signed POST with a fixed JSON body to
-another OpenMapX service and read its status code and error message. Dawarich
-stores, but does not show, the response body. Review this before onboarding users
-you would not give that reach, and keep internal endpoints authenticated.
+## Network isolation and user-supplied URLs
+
+Dawarich fetches several URLs its users choose. Since 1.18 the worker sends
+geofence arrival and departure events to each user's webhook. The worker also
+runs the Immich and PhotoPrism imports, and the web app proxies their photo
+thumbnails. The managed app runs with `SELF_HOSTED=true`. Dawarich then accepts
+private addresses and Docker service names and blocks only cloud-metadata,
+multicast and reserved ranges.
+
+The managed containers therefore never join the shared `openmapx` network.
+They use two private networks:
+
+| Network                             | Members                                           | Why                                          |
+| ----------------------------------- | ------------------------------------------------- | -------------------------------------------- |
+| `openmapx-private-dawarich`         | app, worker, `dawarich-postgis`, `dawarich-redis` | The bundle's own traffic and internet access |
+| `openmapx-private-dawarich-ingress` | app, `traefik`, `app-api`                         | Public routing and OpenMapX's timeline reads |
+
+So a Dawarich user cannot point a webhook or photo URL at OpenMapX's database,
+Redis, data manager, ops agent or other platform services. Those names don't
+resolve from the Dawarich containers, and Docker drops traffic to their
+addresses. Outbound internet access is unchanged.
+
+Two kinds of reach remain:
+
+- **Inside the bundle.** A webhook can target the bundle's own Postgres, Redis
+  or web app. Postgres requires the bundle's password. Redis drops connections
+  that look like HTTP, and the web app checks each request's credentials.
+- **From the web app to Traefik and app-api.** Traefik serves only its public
+  entrypoints. On app-api, the thumbnail proxy could fetch an unauthenticated
+  route and show its body to the user. Besides the public API, that means the
+  `/api/internal/metrics` counters, which contain no personal data.
+
+If you replace the bundled proxy with your own (`OPENMAPX_PROXY_NETWORK`), the
+web app also joins that proxy's network. Keep that network free of services
+you would not expose to Dawarich users.
 
 ## Disable and purge
 

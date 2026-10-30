@@ -5,6 +5,8 @@
   "description": "Background job worker for the managed multi-user Dawarich timeline.",
   "license": "AGPL-3.0",
   "quality": "built-in",
+  "platformNetwork": false,
+  "privateNetworks": ["dawarich"],
   "homepage": "https://dawarich.app/",
   "documentation": "https://dawarich.app/docs/self-hosting/",
   "subjectData": {

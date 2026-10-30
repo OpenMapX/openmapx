@@ -325,6 +325,10 @@ export interface ServiceManifest {
   selectionDependencies?: string[];
   /** Audited first-party bridge access to explicitly named community networks. */
   communityNetworkAccess?: string[];
+  /** Audited first-party private networks (`openmapx-private-<name>`) the service joins. */
+  privateNetworks?: string[];
+  /** First-party only: `false` keeps the service off the shared `openmapx` network. */
+  platformNetwork?: boolean;
 
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;
