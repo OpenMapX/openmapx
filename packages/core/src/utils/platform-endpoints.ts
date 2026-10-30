@@ -50,7 +50,9 @@ export function resolvePlatformEndpoint(
 ): ResolvedPlatformEndpoint | null {
   const definition = PLATFORM_ENDPOINTS[id];
   const base = (url: string) => {
-    const trimmed = url.trim().replace(/\/+$/, "");
+    let trimmed = url.trim();
+    // A loop, not /\/+$/: that regex is quadratic on a long run of slashes.
+    while (trimmed.endsWith("/")) trimmed = trimmed.slice(0, -1);
     const suffix = definition.routeSuffix;
     return suffix && trimmed.endsWith(suffix) ? trimmed.slice(0, -suffix.length) : trimmed;
   };
