@@ -202,3 +202,51 @@ it.each([
   );
   if (kind === "aborted") expect(execFile).not.toHaveBeenCalled();
 });
+
+// The checked preflight joins the real private cache/lock to registry reads;
+// this is not a target grant, pull or release runtime acceptance test.
+it.each([false, true])(
+  "binds one checked preflight snapshot and rejects metadata-time source drift: %s",
+  async (drift) => {
+    const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
+    let changed = false;
+    const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
+      if (args[0] === "info") return { stdout: "linux/amd64", stderr: "" };
+      expect(args.slice(0, 2)).toEqual(["manifest", "inspect"]);
+      if (drift && !changed) {
+        changed = true;
+        writeFileSync(join(directory, `${releaseId}.json`), `${raw}\n`, { mode: 0o600 });
+      }
+      return {
+        stdout: JSON.stringify({
+          schemaVersion: 2,
+          config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
+          layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
+        }),
+        stderr: "",
+      };
+    });
+    const run = () =>
+      preflightConfigurationRelease({
+        infraDir: root,
+        selection: { releaseId, manifestDigest },
+        execFile,
+        signal: new AbortController().signal,
+      });
+    if (drift) await expect(run()).rejects.toThrow("Checked configuration release changed");
+    else
+      expect(await run()).toMatchObject({
+        releaseId,
+        manifestDigest,
+        canonicalManifest: raw,
+        imagePrefix: "ghcr.io/openmapx",
+        downloads: { declaredBytes: 7 * 96 },
+      });
+    expect(
+      execFile.mock.calls.every(([, args]) => args[0] === "info" || args[0] === "manifest"),
+    ).toBe(true);
+    writeFileSync(join(directory, `${releaseId}.json`), raw, { mode: 0o600 });
+    // Original lock is released on either return path; no cleanup/admission is needed.
+    expect(await run()).toMatchObject({ releaseId, manifestDigest });
+  },
+);

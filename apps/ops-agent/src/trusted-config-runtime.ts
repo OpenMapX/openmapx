@@ -33,8 +33,9 @@ import {
   assertStagedCoordinatorConfigurationWrite,
   inspectOwnedMaintenanceGenerationRuntime,
 } from "./configuration-maintenance-store";
+import { preflightConfigurationRelease } from "./configuration-release-preflight";
 import { configurationPolicyRevision } from "./configured-resource-authority";
-import type { DockerRuntimeOptions } from "./docker-runtime";
+import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
 import type { OwnedServiceResolver } from "./owned-services";
 import type { OpsExecutionContext, OpsRuntime, OpsTrustedClaim } from "./runtime";
 import { OpsHostUpdateRequiredError } from "./runtime";
@@ -413,7 +414,17 @@ export function installTrustedConfigurationRuntime(
             ).stdout,
         });
       }
+      const releaseSelection = candidate.record.privatePlatformIntent?.release;
+      const release = releaseSelection
+        ? await preflightConfigurationRelease({
+            infraDir: options.infraDir,
+            selection: releaseSelection,
+            execFile: options.execFile ?? runContainedProcess,
+            signal: context.signal,
+          })
+        : undefined;
       assertProspectiveConfigurationMaintenancePreludeBudget({
+        ...(release ? { release } : {}),
         installationId: installation.installationId,
         record: candidate.record,
         sourceAuthorityRevision: authority?.revisionId ?? "registry-v1",

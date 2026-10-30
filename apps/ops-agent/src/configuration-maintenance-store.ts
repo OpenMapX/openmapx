@@ -33,6 +33,7 @@ import {
   configurationDataManagerTransport,
 } from "./configuration-hardlinks-runtime";
 import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
+import { preflightConfigurationRelease } from "./configuration-release-preflight";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OpsJobJournal } from "./journal";
 import {
@@ -5123,14 +5124,24 @@ export async function prepareConfigurationMaintenanceAdmission(
         canonicalJson(candidate.record.affectedServiceIds))
   )
     throw Error("Original platform candidate binding conflict");
-  const recreateServiceIds = platform
-    ? candidate.record.affectedServiceIds.filter(
-        (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
-      )
-    : candidate.record.apiFollowUp === "service-apply" ||
-        candidate.record.privateCoordinatorLifecycle
-      ? candidate.record.affectedServiceIds
-      : [];
+  const release = platform?.release
+    ? await preflightConfigurationRelease({
+        infraDir: source.infraDir,
+        selection: platform.release,
+        execFile: source.execFile,
+        signal: input.signal,
+      })
+    : undefined;
+  const recreateServiceIds = release
+    ? []
+    : platform
+      ? candidate.record.affectedServiceIds.filter(
+          (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
+        )
+      : candidate.record.apiFollowUp === "service-apply" ||
+          candidate.record.privateCoordinatorLifecycle
+        ? candidate.record.affectedServiceIds
+        : [];
   if (
     (platform ? "platform-apply" : recreateServiceIds.length ? "service-apply" : "render-only") !==
     input.operation.followUp
@@ -5359,11 +5370,21 @@ export async function prepareConfigurationMaintenanceAdmission(
       }),
     )
     .digest("hex");
-  const protectedIds = platform
-    ? platform.affectedServiceIds.filter(
-        (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
-      )
-    : [];
+  if (release) {
+    const targets = rendered.resolved.enabled
+      .map((entry) => entry.manifest.id)
+      .filter((id) => Object.hasOwn(release.serviceImages, id))
+      .sort();
+    if (canonicalJson(targets) !== canonicalJson(platform!.affectedServiceIds))
+      throw Error("Exact enabled checked release targets required");
+  }
+  const protectedIds = release
+    ? platform!.affectedServiceIds
+    : platform
+      ? platform.affectedServiceIds.filter(
+          (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
+        )
+      : [];
   const handoff =
     platform && protectedIds.length
       ? {
@@ -5378,7 +5399,13 @@ export async function prepareConfigurationMaintenanceAdmission(
               return [id, old.provenance.imageId];
             }),
           ),
-          mode: { kind: "configuration" as const },
+          mode: release
+            ? {
+                kind: "release" as const,
+                releaseId: release.releaseId,
+                manifestDigest: release.manifestDigest,
+              }
+            : { kind: "configuration" as const },
         }
       : undefined;
   const frozen = buildFixedConfigurationMaintenancePlan({
@@ -5396,6 +5423,7 @@ export async function prepareConfigurationMaintenanceAdmission(
     serviceIds,
     recreateServiceIds,
     ...(handoff ? { handoff } : {}),
+    ...(release ? { release } : {}),
     ...(coordinatorImage ? { coordinatorImage } : {}),
   });
   assertProspectiveConfigurationMaintenanceBudget({

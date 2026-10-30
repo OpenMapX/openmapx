@@ -73,6 +73,8 @@ function ownerFor(child: ConfigurationHandoffChild) {
     owner.final ||
     owner.inspection ||
     !owner.guardSource ||
+    (intent.release !== undefined) !== (owner.plan.release !== undefined) ||
+    (intent.release && canonicalJson(intent.release) !== canonicalJson(owner.plan.release)) ||
     owner.receipt.dmFence?.state !== "prepared" ||
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||

@@ -318,6 +318,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
   currentServiceIds: readonly string[];
   originalContainers: ConfigurationMaintenanceOwnerRecord["originalContainers"];
   rendered: ReturnType<typeof renderConfiguration>;
+  release?: FixedConfigurationMaintenancePlan["release"];
   coordinatorImage?: Omit<
     NonNullable<FixedConfigurationMaintenancePlan["coordinatorImage"]>,
     "imageId"
@@ -329,18 +330,30 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     typeof buildFixedConfigurationMaintenancePlan
   >[0]["apply"];
   const platform = record.privatePlatformIntent;
-  const protectedIds = platform
-    ? record.affectedServiceIds.filter(
-        (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
-      )
-    : [];
-  const recreateServiceIds = platform
-    ? record.affectedServiceIds.filter(
-        (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
-      )
-    : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
-      ? record.affectedServiceIds
+  if (
+    !!platform?.release !== !!input.release ||
+    (platform?.release &&
+      input.release &&
+      (platform.release.releaseId !== input.release.releaseId ||
+        platform.release.manifestDigest !== input.release.manifestDigest))
+  )
+    throw Error("Original checked release preflight required");
+  const protectedIds = platform?.release
+    ? record.affectedServiceIds
+    : platform
+      ? record.affectedServiceIds.filter(
+          (id) => protectedConfigurationServiceIdSchema.safeParse(id).success,
+        )
       : [];
+  const recreateServiceIds = platform?.release
+    ? []
+    : platform
+      ? record.affectedServiceIds.filter(
+          (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
+        )
+      : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+        ? record.affectedServiceIds
+        : [];
   const handoff =
     platform && protectedIds.length
       ? {
@@ -350,7 +363,9 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
           expectedImageIdentities: Object.fromEntries(
             protectedIds.map((id) => [id, `sha256:${hash}`]),
           ),
-          mode: { kind: "configuration" as const },
+          mode: platform.release
+            ? { kind: "release" as const, ...platform.release }
+            : { kind: "configuration" as const },
         }
       : undefined;
   const operation = configurationMaintenancePrepareSchema.parse({
@@ -419,6 +434,7 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     serviceIds,
     recreateServiceIds,
     ...(handoff ? { handoff } : {}),
+    ...(input.release ? { release: input.release } : {}),
     ...(input.coordinatorImage
       ? { coordinatorImage: { ...input.coordinatorImage, imageId: `sha256:${hash}` } }
       : {}),

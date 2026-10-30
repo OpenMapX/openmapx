@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { configurationHandoffPrepareOperationSchema } from "../ops/configuration-handoff-records";
 import { executionRefSchema } from "../ops/execution-ref";
+import { configurationReleaseSnapshotSchema } from "./configuration-release-snapshot";
 import { controlOriginSchema } from "./control-records";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/),
@@ -48,8 +49,26 @@ export const configurationHandoffIntentRecordSchema = z
     assertion: z.string().min(1).max(4096),
     helperContainerName: z.string().regex(/^openmapx-configuration-handoff-[a-f0-9-]{36}$/),
     preparedAt: time,
+    release: configurationReleaseSnapshotSchema.optional(),
   })
-  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536);
+  .refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 65536)
+  .superRefine((value, context) => {
+    const { mode } = value.operation;
+    if (
+      (mode.kind === "release") !== (value.release !== undefined) ||
+      (mode.kind === "release" &&
+        value.release &&
+        (mode.releaseId !== value.release.releaseId ||
+          mode.manifestDigest !== value.release.manifestDigest ||
+          value.operation.serviceIds.some(
+            (id) => !Object.hasOwn(value.release!.serviceImages, id),
+          )))
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Original checked release handoff snapshot required",
+      });
+  });
 export const configurationHandoffProgressSchema = z
   .strictObject({
     version: z.literal(1),

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import { protectedConfigurationReconcileIdsSchema } from "./configuration-handoff-records";
+import { configurationReleaseSelectionSchema } from "./configuration-release-downloads";
 import { coordinatorLifecycleMetadataSchema } from "./coordinator-lifecycle-records";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
@@ -59,6 +60,7 @@ export const platformConfigurationIntentSchema = z
       .max(256)
       .refine((ids) => ids.every((v, i) => i === 0 || ids[i - 1]! < v)),
     reconcileServiceIds: protectedConfigurationReconcileIdsSchema.optional(),
+    release: configurationReleaseSelectionSchema.optional(),
     expectedDesiredRowVersion: z
       .string()
       .regex(/^\d{1,10}$/)

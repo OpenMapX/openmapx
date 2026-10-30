@@ -246,6 +246,7 @@ export async function prepareConfigurationHandoffLaunch(
     delegationId: observed.delegationId,
     assertion: attempt.assertion,
     helperContainerName: `openmapx-configuration-handoff-${operation.handoffId}`,
+    ...(owned.owner.plan.release ? { release: owned.owner.plan.release } : {}),
     preparedAt: Date.now(),
   });
   writePrivateRecord(
