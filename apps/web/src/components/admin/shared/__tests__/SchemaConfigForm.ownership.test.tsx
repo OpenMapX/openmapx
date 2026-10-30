@@ -25,3 +25,24 @@ it("locks config.json winners and never sends them in a save alongside an editab
   expect(save).toHaveBeenCalledWith({ region: "new" });
   expect(await screen.findByText(/Controlled by the host config file/i)).toBeInTheDocument();
 });
+
+it("shows legacy host memory units and false booleans honestly in locked controls", () => {
+  render(
+    <SchemaConfigForm
+      schema={{
+        properties: {
+          OPENMAPX_MEMORY_MIB: { type: "integer", title: "Container memory" },
+          ENABLED: { type: "boolean", title: "Optional feature" },
+        },
+      }}
+      resolvedConfig={{
+        OPENMAPX_MEMORY_MIB: { value: "16g", source: "env" },
+        ENABLED: { value: "False", source: "env" },
+      }}
+      onSave={async () => {}}
+    />,
+  );
+  expect(screen.getByDisplayValue("16g")).toBeDisabled();
+  expect(screen.getByRole("switch")).not.toBeChecked();
+  expect(screen.getByRole("switch")).toBeDisabled();
+});

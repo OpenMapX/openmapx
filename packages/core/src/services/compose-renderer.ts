@@ -532,6 +532,23 @@ export function renderServiceSnippet(
 
   if (c.command !== undefined) snippet.command = c.command;
   if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
+  // This one audited command slot publishes TileJSON URLs. Do not leave a
+  // stale host DOMAIN reference after platform domain adoption, and do not
+  // evaluate arbitrary command templates.
+  if (
+    service.isBuiltIn &&
+    m.id === "tileserver" &&
+    ctx.platform?.domain?.source === "database" &&
+    ctx.platformValues &&
+    Array.isArray(snippet.command)
+  ) {
+    const command = [...snippet.command];
+    const position = command.indexOf("--public_url");
+    if (position < 0 || command[position + 1] !== "https://${DOMAIN:-localhost}/tiles/")
+      throw Error("Tileserver public origin slot changed; review platform rendering");
+    command[position + 1] = `https://${ctx.platformValues.domain}/tiles/`;
+    snippet.command = command;
+  }
   // Env files are deployment files under the infra root (built-in services
   // only), so a generation directory resolves them back to it.
   if (c.envFile?.length) {

@@ -358,6 +358,13 @@
       "when": 1793275863684,
       "tag": "0050_admin_legacy_integration_adoption",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793319100728,
+      "tag": "0051_platform_configuration_preview",
+      "breakpoints": true
     }
   ]
 }

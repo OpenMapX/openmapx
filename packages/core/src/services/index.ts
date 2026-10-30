@@ -114,6 +114,10 @@ export {
   platformConfigurationSchema,
   resolvePlatformConfiguration,
 } from "./platform-configuration";
+export {
+  buildPlatformConfigurationPreview,
+  type PlatformConfigurationPreview,
+} from "./platform-preview";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   captureReleaseServiceAuthority,

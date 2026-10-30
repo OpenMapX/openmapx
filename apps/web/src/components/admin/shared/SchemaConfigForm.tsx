@@ -371,7 +371,11 @@ export function SchemaConfigForm({
                 control={
                   <Switch
                     size="small"
-                    checked={Boolean(displayValue)}
+                    checked={
+                      typeof displayValue === "string"
+                        ? ["true", "1"].includes(displayValue.toLowerCase())
+                        : Boolean(displayValue)
+                    }
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [field.key]: e.target.checked }))
                     }
@@ -432,7 +436,7 @@ export function SchemaConfigForm({
                 }}
                 disabled={isEnvOverridden || saving}
                 type={
-                  field.type === "number" || field.type === "integer"
+                  !isEnvOverridden && (field.type === "number" || field.type === "integer")
                     ? "number"
                     : field.format === "url"
                       ? "url"

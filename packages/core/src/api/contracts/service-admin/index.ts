@@ -416,3 +416,5 @@ export const serviceAdminOperations = {
   },
 } as const satisfies Record<string, AdminOperation>;
 export type ServiceAdminOperationId = keyof typeof serviceAdminOperations;
+
+export * from "./platform";
