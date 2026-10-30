@@ -3,6 +3,7 @@
 import type { PreviewAdminPlatformConfiguration200PreviewConfiguration } from "./previewAdminPlatformConfiguration200PreviewConfiguration";
 import type { PreviewAdminPlatformConfiguration200PreviewOriginConsumers } from "./previewAdminPlatformConfiguration200PreviewOriginConsumers";
 import type { PreviewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem } from "./previewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem";
+import type { PreviewAdminPlatformConfiguration200PreviewRelease } from "./previewAdminPlatformConfiguration200PreviewRelease";
 import type { PreviewAdminPlatformConfiguration200PreviewRequiredConfirmation } from "./previewAdminPlatformConfiguration200PreviewRequiredConfirmation";
 import type { PreviewAdminPlatformConfiguration200PreviewSources } from "./previewAdminPlatformConfiguration200PreviewSources";
 import type { PreviewAdminPlatformConfiguration200PreviewValues } from "./previewAdminPlatformConfiguration200PreviewValues";
@@ -36,6 +37,7 @@ export type PreviewAdminPlatformConfiguration200Preview = {
    * @maxItems 6
    */
   reconcileServiceIds?: PreviewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem[];
+  release?: PreviewAdminPlatformConfiguration200PreviewRelease;
   /** @maxLength 2048 */
   oldOrigin: string;
   /** @maxLength 2048 */

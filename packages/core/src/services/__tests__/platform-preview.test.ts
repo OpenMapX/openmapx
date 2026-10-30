@@ -63,6 +63,28 @@ describe("platform configuration preview", () => {
       }),
     ).toThrow();
   });
+  it("freezes a separate checked-release selection and only enabled release targets", () => {
+    const base = { ...input(), changes: { version: 1 as const } };
+    const release = { releaseId: "checked-release-01", manifestDigest: "b".repeat(64) };
+    const request = { ...base, release };
+    const preview = buildPlatformConfigurationPreview(request);
+    expect(preview).toHaveProperty("release", release);
+    expect(preview.affectedServiceIds).toEqual(["app-api", "app-web", "data-manager", "ops-agent"]);
+    expect(preview.requiredConfirmation.domain).toBe(false);
+    expect(preview.previewFingerprint).not.toBe(
+      buildPlatformConfigurationPreview(base).previewFingerprint,
+    );
+    expect(
+      buildPlatformConfigurationPreview({
+        ...request,
+        release: { ...release, releaseId: "checked-release-02" },
+      }).previewFingerprint,
+    ).not.toBe(preview.previewFingerprint);
+    expect(() => buildPlatformConfigurationPreview({ ...input(), release })).toThrow();
+    expect(() =>
+      buildPlatformConfigurationPreview({ ...request, reconcileServiceIds: ["ops-agent"] }),
+    ).toThrow();
+  });
   it("shows exact public origin consumers and requires domain recovery confirmation", () => {
     const source = input();
     const preview = buildPlatformConfigurationPreview(source);

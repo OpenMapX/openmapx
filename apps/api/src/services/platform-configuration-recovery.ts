@@ -41,6 +41,7 @@ export async function assertSavedPlatformConfiguration(
     canonicalJson(p.affectedServiceIds) !== canonicalJson(intent.affectedServiceIds) ||
     canonicalJson(p.reconcileServiceIds ?? null) !==
       canonicalJson(intent.reconcileServiceIds ?? null) ||
+    canonicalJson(p.release ?? null) !== canonicalJson(intent.release ?? null) ||
     canonicalJson(retained.sourceSnapshot) !== canonicalJson(intent.sourceSnapshot) ||
     retained.desiredRowVersion !== intent.expectedDesiredRowVersion ||
     Object.entries(p.requiredConfirmation).some(

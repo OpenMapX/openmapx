@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import z from "zod/v4";
 import { canonicalJson } from "../ops/canonical-json";
 import { protectedConfigurationReconcileIdsSchema } from "../ops/configuration-handoff-records";
+import {
+  configurationReleaseSelectionSchema,
+  configurationReleaseServiceImagesSchema,
+} from "../ops/configuration-release-downloads";
 import { resolveProxyHost } from "./compose-renderer";
 import {
   type PlatformConfiguration,
@@ -35,6 +39,7 @@ export function buildPlatformConfigurationPreview(input: {
   services: readonly LoadedService[];
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
   reconcileServiceIds?: readonly string[];
+  release?: { releaseId: string; manifestDigest: string };
 }) {
   const currentRevisionId = revision.parse(input.currentRevisionId);
   if (revision.parse(input.expectedCurrentRevisionId) !== currentRevisionId)
@@ -65,6 +70,16 @@ export function buildPlatformConfigurationPreview(input: {
     ...changes,
     version: 1,
   });
+  const release =
+    input.release === undefined
+      ? undefined
+      : configurationReleaseSelectionSchema.parse(input.release);
+  if (
+    release &&
+    (reconcileServiceIds ||
+      canonicalJson(configuration) !== canonicalJson({ version: 1, ...input.currentPlatform }))
+  )
+    throw Error("Apply platform settings separately from a checked release");
   const before = resolvePlatformConfiguration({ saved: input.currentPlatform, env: input.env });
   const after = resolvePlatformConfiguration({ saved: configuration, env: input.env });
   const changedFields = (Object.keys(variables) as (keyof typeof variables)[]).filter(
@@ -75,6 +90,7 @@ export function buildPlatformConfigurationPreview(input: {
     .filter((service) => {
       if (!service.isBuiltIn || !service.enabled) return false;
       const m = service.manifest;
+      if (release) return Object.hasOwn(configurationReleaseServiceImagesSchema.shape, m.id);
       if (reconcileServiceIds?.includes(m.id as (typeof reconcileServiceIds)[number])) return true;
       const consumer = JSON.stringify({
         environment: m.container.environment,
@@ -139,6 +155,7 @@ export function buildPlatformConfigurationPreview(input: {
     sources: after.sources,
     affectedServiceIds,
     ...(reconcileServiceIds ? { reconcileServiceIds } : {}),
+    ...(release ? { release } : {}),
     oldOrigin,
     newOrigin,
     originConsumers,

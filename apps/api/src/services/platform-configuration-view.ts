@@ -39,11 +39,13 @@ export async function previewPlatformConfiguration(input: {
   expectedCurrentRevisionId: string | null;
   changes: services.PlatformConfiguration;
   reconcileServiceIds?: readonly string[];
+  release?: { releaseId: string; manifestDigest: string };
 }) {
   const parsed = adminPlatformPreviewInputSchema.parse({
       expectedCurrentRevisionId: input.expectedCurrentRevisionId,
       changes: input.changes,
       ...(input.reconcileServiceIds ? { reconcileServiceIds: input.reconcileServiceIds } : {}),
+      ...(input.release ? { release: input.release } : {}),
     }),
     current = await source();
   if (parsed.expectedCurrentRevisionId !== current.revisionId) throw new PlatformPreviewConflict();
@@ -74,6 +76,7 @@ export async function previewPlatformConfiguration(input: {
       currentPlatform: current.platform,
       changes: parsed.changes,
       ...(parsed.reconcileServiceIds ? { reconcileServiceIds: parsed.reconcileServiceIds } : {}),
+      ...(parsed.release ? { release: parsed.release } : {}),
       env: read.env,
       services: read.services,
       resolvedServiceConfigs: resolved.values,

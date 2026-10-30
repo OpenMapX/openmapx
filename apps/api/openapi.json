@@ -51241,6 +51241,26 @@
                         "ops-agent"
                       ]
                     }
+                  },
+                  "release": {
+                    "type": "object",
+                    "properties": {
+                      "releaseId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                      },
+                      "manifestDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "releaseId",
+                      "manifestDigest"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -51631,6 +51651,26 @@
                               "ops-agent"
                             ]
                           }
+                        },
+                        "release": {
+                          "type": "object",
+                          "properties": {
+                            "releaseId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                            },
+                            "manifestDigest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "releaseId",
+                            "manifestDigest"
+                          ],
+                          "additionalProperties": false
                         },
                         "oldOrigin": {
                           "type": "string",

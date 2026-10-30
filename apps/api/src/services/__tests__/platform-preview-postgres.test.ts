@@ -76,6 +76,25 @@ dbDescribe("durable exact platform preview", () => {
       services: [],
     });
   }
+  it("retains the exact checked-release preview without writing desired configuration", async () => {
+    const actorId = await actor();
+    const { previewPlatformConfiguration } = await import("../platform-configuration-view");
+    const input = {
+      actorId,
+      operationKey: randomUUID(),
+      expectedCurrentRevisionId: null,
+      changes: { version: 1 as const },
+      release: { releaseId: "checked-release-01", manifestDigest: "b".repeat(64) },
+    };
+    const result = await previewPlatformConfiguration(input);
+    expect(result.preview).toHaveProperty("release", input.release);
+    const stored = await readPlatformPreview({
+      actorId,
+      previewFingerprint: result.preview.previewFingerprint,
+    });
+    expect(stored.preview).toHaveProperty("release", input.release);
+    expect(await fixture.db.select().from(systemSettings)).toHaveLength(0);
+  });
   it("constructs and retains the public preview from current typed host and database sources", async () => {
     const actorId = await actor(),
       operationKey = randomUUID();

@@ -214,3 +214,34 @@ it("reports a changed retained mutation as a conflict without exposing internal 
   expect(result.statusCode).toBe(409);
   expect(result.body).not.toContain("private internal");
 });
+
+it("transports a checked-release preview identity without accepting caller image or path authority", async () => {
+  const release = { releaseId: "checked-release-01", manifestDigest: "b".repeat(64) };
+  mocks.preview.mockResolvedValueOnce({
+    preview: { ...preview, release },
+    expiresAt: new Date(Date.now() + 600000).toISOString(),
+  });
+  const result = unwrapAdminResponse(
+    await previewAdminPlatformConfiguration(
+      { ...request, release },
+      { "idempotency-key": "platform-release-preview-01" },
+      { client },
+    ),
+  );
+  expect(result.preview).toHaveProperty("release", release);
+  expect(mocks.preview).toHaveBeenCalledWith(
+    expect.objectContaining({ actorId: "test-admin-id", release }),
+  );
+  mocks.preview.mockClear();
+  const invalid = await app.inject({
+    method: "POST",
+    url: "/api/admin/platform/configuration/preview",
+    headers: { "idempotency-key": "platform-release-preview-02" },
+    payload: {
+      ...request,
+      release: { ...release, images: { "ops-agent": "foreign:latest" }, path: "/host/file" },
+    },
+  });
+  expect(invalid.statusCode).toBe(400);
+  expect(mocks.preview).not.toHaveBeenCalled();
+});

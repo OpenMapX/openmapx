@@ -108,6 +108,7 @@ export function retainedPlatformConfigurationIntent(writer: AdministrativeConfig
     ...(preview.reconcileServiceIds
       ? { reconcileServiceIds: [...preview.reconcileServiceIds] }
       : {}),
+    ...(preview.release ? { release: { ...preview.release } } : {}),
     expectedDesiredRowVersion: state.expectedDesiredRowVersion,
     confirmations: { ...state.input.confirmations },
     ...(state.authorization ? { authorization: { ...state.authorization } } : {}),
@@ -137,6 +138,7 @@ export function assertPlatformConfigurationSource(
     currentPlatform: source.platform,
     changes: p.configuration,
     ...(p.reconcileServiceIds ? { reconcileServiceIds: p.reconcileServiceIds } : {}),
+    ...(p.release ? { release: p.release } : {}),
     ...input,
   });
   if (rebuilt.previewFingerprint !== p.previewFingerprint) throw new PlatformPreviewConflict();
@@ -317,6 +319,7 @@ export async function preparePlatformConfigurationChange(
           revisionId: candidate.revisionId,
           expectedAuthPolicyRevision: preview.authPolicyRevision,
           sourceRevision: preview.sourceRevision,
+          ...(preview.release ? { release: { ...preview.release } } : {}),
           expectedDesiredRowVersion: state.expectedDesiredRowVersion,
           ...state.input,
         },

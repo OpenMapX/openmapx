@@ -483,6 +483,7 @@ export * from "./previewAdminPlatformConfiguration200PreviewConfigurationRelease
 export * from "./previewAdminPlatformConfiguration200PreviewConfigurationVersion";
 export * from "./previewAdminPlatformConfiguration200PreviewOriginConsumers";
 export * from "./previewAdminPlatformConfiguration200PreviewReconcileServiceIdsItem";
+export * from "./previewAdminPlatformConfiguration200PreviewRelease";
 export * from "./previewAdminPlatformConfiguration200PreviewRequiredConfirmation";
 export * from "./previewAdminPlatformConfiguration200PreviewSources";
 export * from "./previewAdminPlatformConfiguration200PreviewSourcesAcmeEmail";
@@ -510,6 +511,7 @@ export * from "./previewAdminPlatformConfigurationBodyChangesDomain";
 export * from "./previewAdminPlatformConfigurationBodyChangesReleaseSelector";
 export * from "./previewAdminPlatformConfigurationBodyChangesVersion";
 export * from "./previewAdminPlatformConfigurationBodyReconcileServiceIdsItem";
+export * from "./previewAdminPlatformConfigurationBodyRelease";
 export * from "./previewAdminPlatformConfigurationHeaders";
 export * from "./provisionAdminDawarich200";
 export * from "./provisionAdminDawarich200OauthClient";

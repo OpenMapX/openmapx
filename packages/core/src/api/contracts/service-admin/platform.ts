@@ -1,6 +1,7 @@
 /** Portable platform preview data; these schemas confer no host authority. */
 import z from "zod/v4";
 import { protectedConfigurationReconcileIdsSchema } from "../../../ops/configuration-handoff-records";
+import { configurationReleaseSelectionSchema } from "../../../ops/configuration-release-downloads";
 import { platformConfigurationSchema } from "../../../services/platform-configuration";
 import { adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import { adminServiceIdempotencyHeadersSchema } from "./common";
@@ -16,6 +17,7 @@ export const adminPlatformPreviewInputSchema = z.strictObject({
   expectedCurrentRevisionId: revision,
   changes: platformConfigurationSchema,
   reconcileServiceIds: protectedConfigurationReconcileIdsSchema.optional(),
+  release: configurationReleaseSelectionSchema.optional(),
 });
 export const adminPlatformConfirmationSchema = z.strictObject({
   domain: z.boolean(),
@@ -48,6 +50,7 @@ export const adminPlatformPreviewSchema = z.strictObject({
   }),
   affectedServiceIds: z.array(z.string().min(1).max(64)).max(256),
   reconcileServiceIds: protectedConfigurationReconcileIdsSchema.optional(),
+  release: configurationReleaseSelectionSchema.optional(),
   oldOrigin: url,
   newOrigin: url,
   originConsumers: z.strictObject({
