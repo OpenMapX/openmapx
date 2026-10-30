@@ -11,7 +11,8 @@ export type RetainedMaintenanceJobType =
   | "service.images.pull"
   | "backup.prune"
   | "compose.render"
-  | "artifact.validate";
+  | "artifact.validate"
+  | "artifact.import";
 export class MaintenanceRequestConflict extends Error {}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,
@@ -72,4 +73,37 @@ export async function retainMaintenanceJob(
     });
     return id;
   });
+}
+
+/** Replay observes the original request before checking mutable stage state.
+ * The retained row's actor/body digest still has to match exactly. */
+export async function lookupMaintenanceJob(
+  type: RetainedMaintenanceJobType,
+  payload: Record<string, unknown>,
+  actorId: string,
+  key: string,
+): Promise<string | null> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
+    throw new MaintenanceRequestConflict("Invalid mutation key");
+  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+    digest = createHmac("sha256", token)
+      .update("openmapx-maintenance-request-v1\0")
+      .update(canonicalJson({ type, payload, actorId }))
+      .digest("hex");
+  const rows = await db
+    .select()
+    .from(adminJob)
+    .where(
+      and(
+        sql`${adminJob.payload}->'_maintenanceRequest'->>'actorId' = ${actorId}`,
+        sql`${adminJob.payload}->'_maintenanceRequest'->>'key' = ${key}`,
+      ),
+    )
+    .limit(2);
+  if (!rows.length) return null;
+  const old = rows[0],
+    request = (old?.payload as { _maintenanceRequest?: { digest?: string } })?._maintenanceRequest;
+  if (rows.length !== 1 || old?.type !== type || request?.digest !== digest)
+    throw new MaintenanceRequestConflict("Mutation key belongs to another maintenance request");
+  return old.id;
 }

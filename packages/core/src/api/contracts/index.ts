@@ -5,5 +5,6 @@ export * from "./configuration-ownership";
 export * from "./data-manager-admin/index";
 export * from "./extension-admin/index";
 export * from "./integration-admin/index";
+export * from "./privacy-admin/index";
 export * from "./runtime-metadata";
 export * from "./service-admin/index";

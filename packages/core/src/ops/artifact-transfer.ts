@@ -89,7 +89,64 @@ export const claimTransferStageSchema = inspectTransferStageSchema.extend({
   expectedSha256: digest,
   inspection: stageInspectionBindingSchema.optional(),
 });
+export const artifactImportPreviewSchema = z.strictObject({
+  stageId: z.uuid(),
+  sha256: digest,
+  serviceId: z.string().min(1).max(64),
+  region: z.string().max(4096).nullable(),
+  bytes: count,
+  requiredFreeBytes: count,
+  requiredCredentials: z.array(z.string().min(1).max(4096)).max(10000),
+  runtimeImageMismatches: z
+    .array(
+      z.strictObject({
+        service: z.string().max(64),
+        bundle: z.string().max(4096),
+        local: z.string().max(4096),
+      }),
+    )
+    .max(256),
+  runningConsumers: z.array(z.string().max(64)).max(256),
+  blockers: z.array(z.string().max(512)).max(32),
+  fingerprint: digest,
+  currentRevisionId: z
+    .string()
+    .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
+    .nullable(),
+  expiresAt: z.iso.datetime(),
+});
+export const artifactPublicationResultSchema = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("committed"),
+    artifactFingerprint: digest,
+    serviceId: z.string().max(64),
+    followUp: z.enum(["complete", "failed"]),
+    cleanupFailed: z.boolean(),
+  }),
+  z.strictObject({
+    outcome: z.literal("not_committed"),
+    reason: z.enum(["conflict", "busy", "invalid", "failed"]),
+    cleanupFailed: z.boolean(),
+  }),
+]);
+export const artifactImportOperationSchema = z.strictObject({
+  kind: z.literal("artifactTransfer.import"),
+  stageId: z.uuid(),
+  ownerId: owner,
+  expectedSha256: digest,
+  previewFingerprint: digest,
+  expectedCurrentRevisionId: z
+    .string()
+    .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
+    .nullable(),
+});
 export const artifactTransferOperationSchemas = [
+  z.strictObject({
+    kind: z.literal("artifactTransfer.previewImport"),
+    stageId: z.uuid(),
+    ownerId: owner,
+  }),
+  artifactImportOperationSchema,
   inspectTransferStageSchema.extend({
     kind: z.literal("artifactTransfer.validate"),
     purpose: z.literal("prepared-artifact"),
@@ -117,6 +174,8 @@ export const artifactTransferOperationSchemas = [
   }),
 ] as const;
 export const artifactTransferResultSchemas = {
+  "artifactTransfer.previewImport": artifactImportPreviewSchema,
+  "artifactTransfer.import": artifactPublicationResultSchema,
   "artifactTransfer.validate": transferStageSchema,
   "artifactTransfer.create": transferStageSchema,
   "artifactTransfer.list": z.strictObject({
@@ -153,3 +212,6 @@ export function stagePurposeAllowsUse(purpose: TransferPurpose, use: StageClaimU
       ? ["validate-build", "import-build"].includes(use)
       : use === "read-migration";
 }
+
+export type ArtifactImportPreview = z.infer<typeof artifactImportPreviewSchema>;
+export type ArtifactPublicationResult = z.infer<typeof artifactPublicationResultSchema>;

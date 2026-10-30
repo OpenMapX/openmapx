@@ -66,6 +66,19 @@ const transferClaim = {
   bytes: 4,
 };
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "artifactTransfer.previewImport": {
+    kind: "artifactTransfer.previewImport",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+  },
+  "artifactTransfer.import": {
+    kind: "artifactTransfer.import",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    expectedSha256: "a".repeat(64),
+    previewFingerprint: "b".repeat(64),
+    expectedCurrentRevisionId: null,
+  },
   "configurationHandoff.prepare": {
     kind: "configurationHandoff.prepare",
     handoffId: "77777777-7777-4777-8777-777777777777",

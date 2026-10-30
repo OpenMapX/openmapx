@@ -15,6 +15,7 @@ import { type AdminOperation, assertAdminOperationContract } from "./contracts/a
 import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 import { extensionAdminOperations } from "./contracts/extension-admin";
 import { integrationAdminOperations } from "./contracts/integration-admin";
+import { privacyAdminOperations } from "./contracts/privacy-admin";
 import { serviceAdminOperations } from "./contracts/service-admin";
 import { ApiContractError } from "./sdk-transport";
 
@@ -77,6 +78,7 @@ const operations = {
   ...integrationAdminOperations,
   ...serviceAdminOperations,
   ...extensionAdminOperations,
+  ...privacyAdminOperations,
 };
 type OperationId = keyof typeof operations;
 function positive(value: number | undefined, fallback: number): number {

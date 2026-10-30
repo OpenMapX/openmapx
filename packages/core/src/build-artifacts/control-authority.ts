@@ -2067,6 +2067,13 @@ export function retainControlEffectReceipt(
         verifyDataUpdateCompletionSource(authority, actual);
       }
       const result = receipt.result as { outcome?: string };
+      // The fixed prepared publisher resolves only after complete restoration
+      // or a pre-publication refusal. Uncertain restoration throws and cannot
+      // manufacture this typed local result through the request envelope.
+      if (s.kind === "artifactTransfer.import" && result.outcome === "not_committed") {
+        outcome = "contained";
+        publication = "not_started";
+      }
       if (
         !result.outcome ||
         ["applied", "unchanged", "committed"].includes(result.outcome) ||

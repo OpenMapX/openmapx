@@ -227,6 +227,50 @@ afterEach(async () => {
 });
 
 describe("SDK artifact gate", () => {
+  it("keeps privacy generation dormant until actual privacy-admin routes adopt the family", () => {
+    const document = {
+      paths: {
+        "/fixture": {
+          get: { operationId: "fixture", tags: ["data-manager-admin"], responses: {} },
+        },
+      },
+    };
+    expect(
+      createCodegenConfig({ inputDocument: document, outputDirectory: "/tmp/sdk-config" }),
+    ).not.toHaveProperty("privacyAdmin");
+    const adopted = {
+      paths: {
+        ...document.paths,
+        "/api/admin/privacy/requests": {
+          get: {
+            operationId: "listAdminPrivacyRequests",
+            tags: ["privacy-admin"],
+            responses: {
+              200: {
+                description: "Cases",
+                content: { "application/json": { schema: { type: "object" } } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const config = createCodegenConfig({
+      inputDocument: adopted,
+      outputDirectory: "/tmp/sdk-config",
+    });
+    expect(config).toHaveProperty("privacyAdmin");
+    expect(config.privacyAdmin.output).toMatchObject({
+      target: "/tmp/sdk-config/generated/admin/privacy-admin.generated.ts",
+      schemas: "/tmp/sdk-config/generated/admin/privacy-models",
+    });
+    expect(typeof config.privacyAdmin.output.client).toBe("function");
+    expect(selectTaggedDocument(adopted, "privacy-admin").paths).toHaveProperty(
+      "/api/admin/privacy/requests",
+    );
+    expect(selectTaggedDocument(adopted, "service-admin").paths).toEqual({});
+  });
+
   it("keeps extension generation dormant until a real document adopts the tag", () => {
     const document = {
       paths: {
@@ -995,7 +1039,10 @@ describe("service administration custom-client generation", () => {
       );
       let acquire: () => Response = () =>
         new Response("services:\n  synthetic: {}\n", {
-          headers: { "content-type": "text/yaml; charset=utf-8" },
+          headers: {
+            "content-type": "text/yaml; charset=utf-8",
+            "x-openmapx-current-configuration": "none",
+          },
         });
       vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
         expect(url).toMatch(/^https:\/\/app\.example\/api\/admin\//);

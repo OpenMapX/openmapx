@@ -237,3 +237,45 @@ it("keeps uncertain replacement fenced instead of overwriting a foreign inode du
   );
   expect(readFileSync(join(f.dataRoot, ".openmapx-builds/osrm.json"), "utf8")).toBe(f.oldRecord);
 }, 60000);
+
+it("rechecks the original configuration revision inside the publication writer", async () => {
+  const mod = await api(),
+    f = await fixture(),
+    expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
+  const { commitConfigurationGeneration } = await import("../services/configuration-generation");
+  await commitConfigurationGeneration({
+    infraDir: f.root,
+    services: [],
+    input: {
+      domain: "changed.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+  });
+  expect(await mod.publishValidatedBuild({ ...f, expectedFingerprint })).toMatchObject({
+    outcome: "not_committed",
+    reason: "conflict",
+  });
+  expect(readFileSync(join(f.dataRoot, "osrm-graph/old"), "utf8")).toBe("old graph");
+}, 60000);
+
+it("rejects same-size staged mutation after hashing instead of recording the previous hash as current", async () => {
+  const mod = await api(),
+    f = await fixture(),
+    expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
+  expect(
+    await mod.publishValidatedBuild({
+      ...f,
+      expectedFingerprint,
+      beforePublication: async () => {
+        const path = join(f.stagingRoot, "osrm-graph/region.osrm"),
+          bytes = readFileSync(path);
+        writeFileSync(path, Buffer.alloc(bytes.length, 120));
+        return () => {};
+      },
+    }),
+  ).toMatchObject({ outcome: "not_committed", reason: "conflict" });
+  expect(readFileSync(join(f.dataRoot, "osrm-graph/old"), "utf8")).toBe("old graph");
+}, 60000);

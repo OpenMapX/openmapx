@@ -26,7 +26,8 @@ import {
   makeAad,
 } from "./crypto.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
-import { idempotencyFingerprint } from "./idempotency.js";
+import { findIdempotentEvent, idempotencyFingerprint } from "./idempotency.js";
+import { deriveOperatorTaskActions } from "./operator-task-actions";
 import { withPreservationRetentionLock } from "./preservation.js";
 import {
   captureReceiptSourceSnapshots,
@@ -39,6 +40,7 @@ import {
   createSubjectRequestSchema,
   eventPayloadSchema,
   identityReviewSchema,
+  isValidRequestTransition,
 } from "./request-contracts.js";
 
 /** Reviewed workflow contracts consumed by release readiness. Individual
@@ -568,6 +570,8 @@ export class PrivacyRequestService {
     reasonCode?: string;
     idempotencyKey?: string;
     capturedRegistrationIds?: readonly string[];
+    operationDigest?: string;
+    allowSameState?: boolean;
   }): Promise<typeof dataSubjectRequest.$inferSelect> {
     // Replay detection must precede transition validation.  A retry arriving
     // after the first caller reached a terminal state is still the same
@@ -584,6 +588,13 @@ export class PrivacyRequestService {
         )
         .limit(1);
       if (previous[0]) {
+        if (
+          input.operationDigest &&
+          (previous[0].eventType !== `state_${input.to}` ||
+            (previous[0].payload as Record<string, unknown>)?.operationDigest !==
+              input.operationDigest)
+        )
+          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
         const current = await this.database
           .select()
           .from(dataSubjectRequest)
@@ -592,11 +603,27 @@ export class PrivacyRequestService {
         if (current[0]) return current[0];
       }
     }
-    assertValidRequestTransition(input.from, input.to);
+    if (!(input.allowSameState && input.from === input.to))
+      assertValidRequestTransition(input.from, input.to);
     const now = this.now();
     let rows: Array<typeof dataSubjectRequest.$inferSelect>;
     try {
       rows = await this.database.transaction(async (tx) => {
+        const locked = await tx
+          .select()
+          .from(dataSubjectRequest)
+          .where(eq(dataSubjectRequest.id, input.requestId))
+          .for("update")
+          .limit(1);
+        if (input.idempotencyKey) {
+          const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
+            requestId: input.requestId,
+            idempotencyKey: input.idempotencyKey,
+            eventType: `state_${input.to}`,
+            ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
+          });
+          if (previous) return locked;
+        }
         const updated = await tx
           .update(dataSubjectRequest)
           .set({
@@ -629,7 +656,10 @@ export class PrivacyRequestService {
           requestId: input.requestId,
           eventType: `state_${input.to}`,
           ...actorPayload(input.actor),
-          payload: boundedEventPayload(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
+          payload: boundedEventPayload({
+            ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
+            ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
+          }),
           payloadVersion: 1,
           ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
           createdAt: now,
@@ -759,36 +789,65 @@ export class PrivacyRequestService {
     actorId: string;
     idempotencyKey?: string;
   }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    if (!input.reasonCode || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode))
+    if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode))
       throw new PrivacyRequestError("INVALID_EXTENSION_REASON", 400);
-    const currentRows = await this.database
-      .select()
-      .from(dataSubjectRequest)
-      .where(eq(dataSubjectRequest.id, input.requestId))
-      .limit(1);
-    const current = currentRows[0];
-    if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-    const extendedUntil = toDate(input.extendedUntil);
-    const notifiedAt = toDate(input.extensionNotifiedAt);
-    const max = addCalendarMonths(current.dueAt, 2, current.timeZone);
-    if (extendedUntil < current.dueAt || extendedUntil > max || notifiedAt > current.dueAt)
-      throw new PrivacyRequestError("INVALID_EXTENSION", 400);
-    const now = this.now();
-    if (input.idempotencyKey) {
-      const previous = await this.database
+    const extendedUntil = toDate(input.extendedUntil),
+      notifiedAt = toDate(input.extensionNotifiedAt),
+      now = this.now();
+    const operationDigest = idempotencyFingerprint({
+      version: input.version,
+      extendedUntil: extendedUntil.toISOString(),
+      extensionNotifiedAt: notifiedAt.toISOString(),
+      reasonCode: input.reasonCode,
+      actorId: input.actorId,
+    });
+    return this.database.transaction(async (tx) => {
+      const [current] = await tx
         .select()
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-          ),
-        )
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, input.requestId))
+        .for("update")
         .limit(1);
-      if (previous[0]) return current;
-    }
-    const rows = await this.database.transaction(async (tx) => {
-      const updated = await tx
+      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+      if (input.idempotencyKey) {
+        const [previous] = await tx
+          .select()
+          .from(dataSubjectRequestEvent)
+          .where(
+            and(
+              eq(dataSubjectRequestEvent.requestId, input.requestId),
+              eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
+            ),
+          )
+          .limit(1);
+        if (previous) {
+          if (
+            previous.eventType !== "extended" ||
+            (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
+          )
+            throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
+          return current;
+        }
+      }
+      if (current.version !== input.version)
+        throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
+      if (
+        ["ready", "delivered", "artifact_expired", "closed", "refused", "withdrawn"].includes(
+          current.state,
+        )
+      )
+        throw new PrivacyRequestError("EXTENSION_NOT_ALLOWED", 409);
+      const originalDueAt = calculateSubjectRequestDueAt(current.receivedAt, current.timeZone);
+      const max = addCalendarMonths(originalDueAt, 2, current.timeZone);
+      if (
+        extendedUntil <= current.dueAt ||
+        extendedUntil > max ||
+        notifiedAt > originalDueAt ||
+        notifiedAt > now ||
+        notifiedAt < current.receivedAt
+      )
+        throw new PrivacyRequestError("INVALID_EXTENSION", 400);
+      const [updated] = await tx
         .update(dataSubjectRequest)
         .set({
           extension: {
@@ -797,36 +856,30 @@ export class PrivacyRequestService {
             reasonCode: input.reasonCode,
           },
           dueAt: extendedUntil,
-          version: sql`${dataSubjectRequest.version} + 1`,
+          version: sql`${dataSubjectRequest.version}+1`,
           updatedAt: now,
         })
-        .where(
-          and(
-            eq(dataSubjectRequest.id, input.requestId),
-            eq(dataSubjectRequest.version, input.version),
-          ),
-        )
+        .where(eq(dataSubjectRequest.id, input.requestId))
         .returning();
-      if (!updated[0]) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
       await tx.insert(dataSubjectRequestEvent).values({
         id: randomUUID(),
         requestId: input.requestId,
         eventType: "extended",
         ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
-        payload: boundedEventPayload({ reasonCode: input.reasonCode }),
+        payload: boundedEventPayload({ reasonCode: input.reasonCode, operationDigest }),
         payloadVersion: 1,
         ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
         createdAt: now,
       });
-      if (updated[0]?.userId) {
+      if (updated!.userId)
         await tx
           .insert(dataSubjectRequestNotification)
           .values(
             notificationValues({
               requestId: input.requestId,
-              recipientUserId: updated[0].userId,
+              recipientUserId: updated!.userId,
               template: "extension",
-              locale: updated[0].locale,
+              locale: updated!.locale,
               at: now,
             }),
           )
@@ -837,10 +890,8 @@ export class PrivacyRequestService {
               dataSubjectRequestNotification.channel,
             ],
           });
-      }
-      return updated;
+      return updated!;
     });
-    return rows[0];
   }
 
   async markTask(input: {
@@ -862,6 +913,8 @@ export class PrivacyRequestService {
     const now = this.now();
     const operationDigest = idempotencyFingerprint({
       taskId: input.taskId,
+      actorId: input.actorId ?? null,
+      requestVersion: input.requestVersion ?? null,
       status: input.status,
       reasonCode: input.reasonCode ?? null,
       redactionCode: input.redactionCode ?? null,
@@ -900,6 +953,46 @@ export class PrivacyRequestService {
         // decision.  System collectors may omit this field because their
         // durable task claim is the concurrency boundary.
         if (input.requestVersion !== undefined) {
+          const [current] = await tx
+            .select()
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.id, input.requestId))
+            .for("update")
+            .limit(1);
+          const [task] = await tx
+            .select()
+            .from(dataSubjectRequestTask)
+            .where(
+              and(
+                eq(dataSubjectRequestTask.id, input.taskId),
+                eq(dataSubjectRequestTask.requestId, input.requestId),
+              ),
+            )
+            .for("update")
+            .limit(1);
+          if (!task) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
+          if (input.idempotencyKey) {
+            const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
+              requestId: input.requestId,
+              idempotencyKey: input.idempotencyKey,
+              eventType: `task_${input.status}`,
+              operationDigest,
+            });
+            if (previous) return [{ id: task.id }];
+          }
+          const allowed = deriveOperatorTaskActions(
+            current ?? { state: "missing" },
+            task,
+            this.catalogue,
+          );
+          if (
+            !allowed.actions.includes(
+              input.status as import("./operator-task-actions").TaskDecisionStatus,
+            )
+          )
+            throw new PrivacyRequestError("TASK_DECISION_NOT_ALLOWED", 409);
+          if (input.status === "complete" && input.recordCount === undefined)
+            throw new PrivacyRequestError("TASK_RECORD_COUNT_REQUIRED", 400);
           const requestChanged = await tx
             .update(dataSubjectRequest)
             .set({ version: sql`${dataSubjectRequest.version} + 1`, updatedAt: now })
@@ -1004,86 +1097,97 @@ export class PrivacyRequestService {
   }): Promise<typeof dataSubjectRequest.$inferSelect> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(input.idempotencyKey))
       throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    const previous = await this.database
-      .select({ id: dataSubjectRequestEvent.id })
-      .from(dataSubjectRequestEvent)
-      .where(
-        and(
-          eq(dataSubjectRequestEvent.requestId, input.requestId),
-          eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (previous[0]) {
-      const current = await this.database
+    const operationDigest = idempotencyFingerprint({
+        taskId: input.taskId,
+        version: input.version,
+        assignedTo: input.assignedTo,
+        actorId: input.actorId,
+      }),
+      now = this.now();
+    return this.database.transaction(async (tx) => {
+      const [current] = await tx
         .select()
         .from(dataSubjectRequest)
         .where(eq(dataSubjectRequest.id, input.requestId))
+        .for("update")
         .limit(1);
-      if (current[0]) return current[0];
-    }
-    const now = this.now();
-    try {
-      const rows = await this.database.transaction(async (tx) => {
-        const task = await tx
-          .select({ id: dataSubjectRequestTask.id })
-          .from(dataSubjectRequestTask)
-          .where(
-            and(
-              eq(dataSubjectRequestTask.id, input.taskId),
-              eq(dataSubjectRequestTask.requestId, input.requestId),
-            ),
-          )
-          .limit(1);
-        if (!task[0]) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
-        const updated = await tx
-          .update(dataSubjectRequest)
-          .set({ version: sql`${dataSubjectRequest.version} + 1`, updatedAt: now })
-          .where(
-            and(
-              eq(dataSubjectRequest.id, input.requestId),
-              eq(dataSubjectRequest.version, input.version),
-            ),
-          )
-          .returning();
-        if (!updated[0]) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-        await tx
-          .update(dataSubjectRequestTask)
-          .set({ assignedTo: input.assignedTo, updatedAt: now })
-          .where(
-            and(
-              eq(dataSubjectRequestTask.id, input.taskId),
-              eq(dataSubjectRequestTask.requestId, input.requestId),
-            ),
-          );
-        await tx.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
-          requestId: input.requestId,
-          eventType: "task_assigned",
-          ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
-          payload: boundedEventPayload({
-            taskId: input.taskId,
-            assigned: input.assignedTo !== null,
-          }),
-          payloadVersion: 1,
-          idempotencyKey: input.idempotencyKey,
-          createdAt: now,
-        });
-        return updated;
-      });
-      if (!rows[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      return rows[0];
-    } catch (error) {
-      if (String(error).toLowerCase().includes("idempotency")) {
-        const current = await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, input.requestId))
-          .limit(1);
-        if (current[0]) return current[0];
+      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+      const [previous] = await tx
+        .select()
+        .from(dataSubjectRequestEvent)
+        .where(
+          and(
+            eq(dataSubjectRequestEvent.requestId, input.requestId),
+            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (previous) {
+        if (
+          previous.eventType !== "task_assigned" ||
+          (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
+        )
+          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
+        return current;
       }
-      throw error;
-    }
+      if (current.version !== input.version)
+        throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
+      if (
+        ![
+          "preserving",
+          "collecting",
+          "pending_processor",
+          "operator_review",
+          "clarification_needed",
+        ].includes(current.state)
+      )
+        throw new PrivacyRequestError("TASK_ASSIGNMENT_NOT_ALLOWED", 409);
+      if (input.assignedTo) {
+        const [assignee] = await tx
+          .select({ role: user.role, banned: user.banned, banExpires: user.banExpires })
+          .from(user)
+          .where(eq(user.id, input.assignedTo))
+          .for("share")
+          .limit(1);
+        if (
+          !assignee ||
+          !["admin", "privacy_admin"].includes(assignee.role ?? "") ||
+          (assignee.banned && (!assignee.banExpires || assignee.banExpires > now))
+        )
+          throw new PrivacyRequestError("ASSIGNEE_NOT_AUTHORIZED", 409);
+      }
+      const [task] = await tx
+        .update(dataSubjectRequestTask)
+        .set({ assignedTo: input.assignedTo, updatedAt: now })
+        .where(
+          and(
+            eq(dataSubjectRequestTask.id, input.taskId),
+            eq(dataSubjectRequestTask.requestId, input.requestId),
+          ),
+        )
+        .returning({ id: dataSubjectRequestTask.id });
+      if (!task) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
+      const [updated] = await tx
+        .update(dataSubjectRequest)
+        .set({ version: sql`${dataSubjectRequest.version}+1`, updatedAt: now })
+        .where(eq(dataSubjectRequest.id, input.requestId))
+        .returning();
+      await tx.insert(dataSubjectRequestEvent).values({
+        id: randomUUID(),
+        requestId: input.requestId,
+        eventType: "task_assigned",
+        ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
+        payload: boundedEventPayload({
+          taskId: input.taskId,
+          assigned: input.assignedTo !== null,
+          operationDigest,
+        }),
+        payloadVersion: 1,
+        idempotencyKey: input.idempotencyKey,
+        createdAt: now,
+      });
+      return updated!;
+    });
   }
 
   /** Prove an assisted subject through a real, newly created authenticated
@@ -1283,6 +1387,8 @@ export class PrivacyRequestService {
       input.party === "subject" ? "subject_identity_reviewed" : "representative_reviewed";
     const operationDigest = idempotencyFingerprint({
       party: input.party,
+      actorId: input.actorId,
+      version: input.version,
       outcome: input.outcome,
       method: input.method ?? null,
       reasonableDoubtCode: input.reasonableDoubtCode ?? null,
@@ -1293,6 +1399,11 @@ export class PrivacyRequestService {
     });
     let shouldEnqueue = false;
     const row = await this.database.transaction(async (tx) => {
+      await tx
+        .select({ id: dataSubjectRequest.id })
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, input.requestId))
+        .for("update");
       const duplicate = await tx
         .select({
           eventType: dataSubjectRequestEvent.eventType,
@@ -1363,6 +1474,7 @@ export class PrivacyRequestService {
               eq(dataSubjectRequestAttachment.id, attachmentId),
               eq(dataSubjectRequestAttachment.requestId, input.requestId),
               sql`${dataSubjectRequestAttachment.deletedAt} is null`,
+              sql`${dataSubjectRequestAttachment.expiresAt} > ${now.toISOString()}`,
             ),
           )
           .limit(1);
@@ -1483,14 +1595,20 @@ export class PrivacyRequestService {
       throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
     if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode))
       throw new PrivacyRequestError("INVALID_REASON", 400);
-    const current = await this.database
+    const [current] = await this.database
       .select()
       .from(dataSubjectRequest)
       .where(eq(dataSubjectRequest.id, input.requestId))
       .limit(1);
-    if (!current[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-    const previous = await this.database
-      .select({ id: dataSubjectRequestEvent.id })
+    if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+    const operationDigest = idempotencyFingerprint({
+      version: input.version,
+      decision: input.decision,
+      reasonCode: input.reasonCode,
+      actorId: input.actorId,
+    });
+    const [previous] = await this.database
+      .select()
       .from(dataSubjectRequestEvent)
       .where(
         and(
@@ -1499,61 +1617,31 @@ export class PrivacyRequestService {
         ),
       )
       .limit(1);
-    if (previous[0]) return current[0];
-    if (input.decision === "refused") {
-      return this.transition({
-        requestId: input.requestId,
-        from: current[0].state,
-        to: "refused",
-        version: input.version,
-        actor: { kind: "privacy_admin", id: input.actorId },
-        reasonCode: input.reasonCode,
-        idempotencyKey: input.idempotencyKey,
-      });
+    if (previous) {
+      if (
+        previous.eventType !== `state_${input.decision}` ||
+        (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
+      )
+        throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
+      return current;
     }
-    const target =
-      input.decision === "operator_review" ? "operator_review" : "clarification_needed";
-    if (current[0].state === target) {
-      try {
-        const rows = await this.database.transaction(async (tx) => {
-          await tx.insert(dataSubjectRequestEvent).values({
-            id: randomUUID(),
-            requestId: input.requestId,
-            eventType: `decision_${input.decision}`,
-            ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
-            payload: boundedEventPayload({ reasonCode: input.reasonCode }),
-            payloadVersion: 1,
-            idempotencyKey: input.idempotencyKey,
-            createdAt: this.now(),
-          });
-          return tx
-            .select()
-            .from(dataSubjectRequest)
-            .where(eq(dataSubjectRequest.id, input.requestId))
-            .limit(1);
-        });
-        if (!rows[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-        return rows[0];
-      } catch (error) {
-        if (String(error).toLowerCase().includes("idempotency")) {
-          const latest = await this.database
-            .select()
-            .from(dataSubjectRequest)
-            .where(eq(dataSubjectRequest.id, input.requestId))
-            .limit(1);
-          if (latest[0]) return latest[0];
-        }
-        throw error;
-      }
-    }
+    if (["refused", "withdrawn", "closed", "delivered", "artifact_expired"].includes(current.state))
+      throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
+    if (
+      current.state !== input.decision &&
+      !isValidRequestTransition(current.state, input.decision)
+    )
+      throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
     return this.transition({
       requestId: input.requestId,
-      from: current[0].state,
-      to: target,
+      from: current.state,
+      to: input.decision,
       version: input.version,
       actor: { kind: "privacy_admin", id: input.actorId },
       reasonCode: input.reasonCode,
       idempotencyKey: input.idempotencyKey,
+      operationDigest,
+      allowSameState: true,
     });
   }
 

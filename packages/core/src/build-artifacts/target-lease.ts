@@ -1327,6 +1327,7 @@ export function verifyFiniteControlEdge(
       "data.link",
       "configuration.hardlinks.apply",
       "data.update",
+      "artifactTransfer.import",
     ].includes(kind)
   )
     return [];

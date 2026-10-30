@@ -47,6 +47,21 @@ export async function adminArtifactTransfersRoute(app: FastifyInstance): Promise
   const broker = () => new AdminArtifactTransfers();
   const owner = (request: Parameters<typeof getAdminSession>[0]) =>
     getAdminSession(request).user.id;
+  register(app, "previewAdminArtifactImport", (req) =>
+    broker().previewImport(owner(req), req.params.stageId),
+  );
+  register(app, "importAdminArtifactTransfer", async (req, reply) =>
+    reply
+      .code(202)
+      .send(
+        await broker().importPrepared(
+          owner(req),
+          req.params.stageId,
+          String(req.headers["idempotency-key"]),
+          req.body,
+        ),
+      ),
+  );
   register(app, "validateAdminArtifactTransfer", async (req, reply) =>
     reply
       .code(202)

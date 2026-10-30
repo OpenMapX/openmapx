@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import type { OpsResultFor } from "@openmapx/core/ops";
+import { privacyCaseDecisionSchema, privacyCaseExtensionSchema } from "@openmapx/core/privacy";
 import { envString } from "@openmapx/core/server-env";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -14,7 +16,9 @@ import {
   dataSubjectRequestEvent,
   dataSubjectRequestIdentity,
   dataSubjectRequestTask,
+  user,
 } from "../db/schema.js";
+import { privacyCaseProjection as projection } from "../privacy/admin-projections";
 import {
   artifactResultFromRow,
   attachmentContentDisposition,
@@ -24,14 +28,8 @@ import {
   startArtifactStream,
 } from "../privacy/artifact-download.js";
 import type { EncryptedBlobStore } from "../privacy/artifact-storage.js";
-import {
-  ATTACHMENT_MAX_BYTES,
-  attachmentMediaTypeSchema,
-  attachmentMetadataSchema,
-  attachmentPurposeSchema,
-  createEncryptedAttachment,
-  listAttachmentsForRequest,
-} from "../privacy/attachments.js";
+import { mutateCaseAttachment } from "../privacy/attachment-review";
+import { ATTACHMENT_MAX_BYTES, listAttachmentsForRequest } from "../privacy/attachments.js";
 import {
   acceptBackupWarnings,
   BackupOmissionReviewError,
@@ -43,6 +41,7 @@ import {
   buildBackupInventory,
   deriveBackupReviewDecision,
 } from "../privacy/backup-review.js";
+import { SUBJECT_DATA_CATALOGUE } from "../privacy/catalogue";
 import { loadMasterKeyRingAsync } from "../privacy/crypto.js";
 import { recordSuccessfulArtifactDelivery } from "../privacy/delivery.js";
 import {
@@ -54,9 +53,11 @@ import { generatePrivacyExport } from "../privacy/generation.js";
 import {
   findIdempotentEvent,
   idempotencyFingerprint,
+  PrivacyIdempotencyError,
   recordIdempotentEvent,
 } from "../privacy/idempotency.js";
 import type { PrivacyOperationsHealth } from "../privacy/operations-monitor.js";
+import { deriveOperatorTaskActions } from "../privacy/operator-task-actions";
 import {
   approvalSchema,
   assertApprovalSeparation,
@@ -64,6 +65,7 @@ import {
   type ReadinessImplementationCapabilities,
   type ReadinessReleaseContractChecks,
 } from "../privacy/readiness.js";
+import { isAssuranceSufficient } from "../privacy/reauthentication";
 import { PrivacyReauthenticationService } from "../privacy/reauthentication.js";
 import type { ReceiptPreservationDependencies } from "../privacy/receipt-snapshot.js";
 import { IMPLEMENTED_PRIVACY_RELEASE_CAPABILITIES } from "../privacy/release-capabilities.js";
@@ -89,6 +91,8 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../serv
 import { sendMail } from "../utils/email.js";
 import { getPrivacyAdminSession, requirePrivacyAdmin } from "../utils/require-privacy-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { sendAdminByteResponse } from "./admin-byte-response";
+import { registerPrivacyAdminRoute } from "./privacy-admin-contract";
 import {
   clearReauthCookie,
   genericReauthFailure,
@@ -113,35 +117,17 @@ export interface PrivacyAdminRouteOptions {
   receiptPreservation?: ReceiptPreservationDependencies;
 }
 const code = (error: unknown) =>
-  error instanceof PrivacyRequestError ? error.code : "PRIVACY_SERVICE_UNAVAILABLE";
-const status = (error: unknown) => (error instanceof PrivacyRequestError ? error.statusCode : 503);
+  error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError
+    ? error.code
+    : "PRIVACY_SERVICE_UNAVAILABLE";
+const status = (error: unknown) =>
+  error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError
+    ? error.statusCode
+    : 503;
 // JSON/base64 adds roughly 4/3 overhead to an encrypted supplement. Keep the
 // route-specific parser limit just above the decoded attachment bound rather
 // than raising the body limit for every API endpoint.
 const ATTACHMENT_BODY_LIMIT = Math.ceil((ATTACHMENT_MAX_BYTES * 4) / 3) + 16 * 1024;
-function projection(row: Record<string, unknown>) {
-  return {
-    id: row.id,
-    kind: row.kind,
-    channel: row.channel,
-    state: row.state,
-    userId: row.userId,
-    locale: row.locale,
-    timeZone: row.timeZone,
-    receivedAt: row.receivedAt,
-    registeredAt: row.registeredAt,
-    dueAt: row.dueAt,
-    extension: row.extension,
-    identityState: row.identityState,
-    locatorType: row.locatorType,
-    accountState: row.accountState,
-    refusalCode: row.refusalCode,
-    deliveryState: row.deliveryState,
-    version: row.version,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
 
 function eventProjection(row: {
   eventType: string;
@@ -238,6 +224,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
   fastify,
   options,
 ) => {
+  fastify.addHook("onRoute", (route) => {
+    if (route.url.endsWith("/attachments") && route.method === "POST")
+      route.bodyLimit = ATTACHMENT_BODY_LIMIT;
+  });
   declareRouteAuth(fastify, "privacy_admin");
   fastify.addHook("preHandler", async (request) => {
     request.privacyAdminSession = await requirePrivacyAdmin(request);
@@ -343,7 +333,58 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     return isAssistedDeliveryAuthorized(identities, channel);
   };
 
-  fastify.get("/privacy/admin/queue", async (_request, reply) => {
+  registerPrivacyAdminRoute<{ Querystring: { limit: number; cursor?: string } }>(
+    fastify,
+    "listPrivacyAdminOperators",
+    async (request, reply) => {
+      let cursor: string | undefined;
+      if (request.query.cursor) {
+        try {
+          cursor = Buffer.from(request.query.cursor, "base64url").toString("utf8");
+          if (
+            !cursor ||
+            cursor.length > 256 ||
+            Buffer.from(cursor).toString("base64url") !== request.query.cursor
+          )
+            throw Error();
+        } catch {
+          return reply.status(400).send({ code: "INVALID_OPERATOR_CURSOR" });
+        }
+      }
+      const operators = await database
+        .select({ id: user.id, name: user.name })
+        .from(user)
+        .where(
+          and(
+            sql`${user.role} in ('admin','privacy_admin')`,
+            sql`(${user.banned} is not true or ${user.banExpires} <= now())`,
+            cursor ? sql`${user.id} > ${cursor}` : sql`true`,
+            sql`${user.id} <> 'loopback'`,
+          ),
+        )
+        .orderBy(asc(user.id))
+        .limit(request.query.limit + 1);
+      const more = operators.length > request.query.limit;
+      const page = operators.slice(0, request.query.limit);
+      return reply.send({
+        operators: page,
+        nextCursor: more ? Buffer.from(page.at(-1)!.id).toString("base64url") : null,
+      });
+    },
+  );
+  registerPrivacyAdminRoute<{ Params: { requestId: string } }>(
+    fastify,
+    "listPrivacyAdminBackupReviews",
+    async (request, reply) => {
+      const reviews = await database
+        .select()
+        .from(dataSubjectRequestBackupReview)
+        .where(eq(dataSubjectRequestBackupReview.requestId, request.params.requestId))
+        .orderBy(asc(dataSubjectRequestBackupReview.reviewedAt));
+      return reply.send({ reviews });
+    },
+  );
+  registerPrivacyAdminRoute(fastify, "listPrivacyAdminQueue", async (_request, reply) => {
     const rows = await database
       .select()
       .from(dataSubjectRequest)
@@ -354,7 +395,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     });
   });
 
-  fastify.get("/privacy/admin/backups", async (request, reply) => {
+  registerPrivacyAdminRoute(fastify, "listPrivacyAdminBackups", async (request, reply) => {
     try {
       const actor = getPrivacyAdminSession(request).user.id;
       const inventory = await loadTrustedBackupInventory(actor);
@@ -381,7 +422,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     }
   });
 
-  fastify.get("/privacy/admin/readiness", async (_request, reply) => {
+  registerPrivacyAdminRoute(fastify, "getPrivacyAdminReadiness", async (_request, reply) => {
     try {
       return reply.send(await readiness());
     } catch {
@@ -389,8 +430,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     }
   });
 
-  fastify.get<{ Params: { requestId: string } }>(
-    "/privacy/admin/requests/:requestId",
+  registerPrivacyAdminRoute<{ Params: { requestId: string } }>(
+    fastify,
+    "getPrivacyAdminCase",
     async (request, reply) => {
       const rows = await database
         .select()
@@ -453,9 +495,94 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         })
         .from(dataExportArtifact)
         .where(eq(dataExportArtifact.requestId, request.params.requestId));
+      let releaseReady = false;
+      try {
+        releaseReady = (await readiness()).ready;
+      } catch {
+        /* Failed readiness never grants a capability. */
+      }
+      const row = rows[0];
+      const active = !["withdrawn", "refused", "closed", "delivered", "artifact_expired"].includes(
+        row.state,
+      );
+      const taskDecision = tasks.some(
+        (task) => deriveOperatorTaskActions(row, task, SUBJECT_DATA_CATALOGUE).actions.length > 0,
+      );
+      const delivery = ["ready", "delivered"].includes(row.state);
+      const backupRequired = tasks.some(
+        (task) =>
+          task.registrationId === "backup-retained-copies" &&
+          task.required === 1 &&
+          task.status !== "not_applicable",
+      );
+      const backupReviews = backupRequired
+        ? await database
+            .select({ decision: dataSubjectRequestBackupReview.decision })
+            .from(dataSubjectRequestBackupReview)
+            .where(eq(dataSubjectRequestBackupReview.requestId, request.params.requestId))
+        : [];
+      const backupReady =
+        !backupRequired ||
+        (backupReviews.length > 0 &&
+          backupReviews.every((review) => review.decision !== "unavailable"));
+      const supplementRequired = tasks.some(
+        (task) =>
+          task.registrationId === "off-host-processor-sources" &&
+          task.required === 1 &&
+          task.status !== "not_applicable",
+      );
+      const supplementReady =
+        !supplementRequired ||
+        attachments.some(
+          (attachment) =>
+            ["operator_supplement", "processor_response"].includes(attachment.purpose) &&
+            ["approved", "redacted"].includes(attachment.rightsReviewState) &&
+            attachment.expiresAt.getTime() > Date.now(),
+        );
+      const generate =
+        backupReady &&
+        supplementReady &&
+        releaseReady &&
+        row.identityState === "verified" &&
+        ["collecting", "pending_processor", "operator_review"].includes(row.state) &&
+        tasks.length > 0 &&
+        tasks.every(
+          (task) => task.required === 0 || ["complete", "not_applicable"].includes(task.status),
+        );
+      const capabilities = {
+        identityReview: ["identity_pending", "clarification_needed", "preserving"].includes(
+          row.state,
+        ),
+        taskDecision,
+        taskAssignment: [
+          "preserving",
+          "collecting",
+          "pending_processor",
+          "operator_review",
+          "clarification_needed",
+        ].includes(row.state),
+        extendDeadline: active && row.state !== "ready",
+        caseDecision: active,
+        attachmentWrite: active,
+        backupReview: active,
+        generate,
+        assistedDelivery: delivery && isAssistedDeliveryAuthorized(identities, "assisted"),
+        representativeDelivery:
+          delivery && isAssistedDeliveryAuthorized(identities, "representative"),
+        reasons: {
+          ...(!generate
+            ? { generate: !releaseReady ? "privacy-release-not-ready" : "case-sources-not-ready" }
+            : {}),
+          ...(!active ? { case: "case-not-active" } : {}),
+        },
+      };
       return reply.send({
         request: projection(rows[0] as unknown as Record<string, unknown>),
-        tasks,
+        capabilities,
+        tasks: tasks.map((task) => ({
+          ...task,
+          actions: deriveOperatorTaskActions(row, task, SUBJECT_DATA_CATALOGUE).actions,
+        })),
         events,
         identities,
         attachments,
@@ -464,28 +591,33 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Body: unknown }>("/privacy/admin/requests", async (request, reply) => {
-    try {
-      const actor = getPrivacyAdminSession(request);
-      const idempotencyKey = requireMutationKey(request);
-      const body = createSubjectRequestSchema.parse({
-        ...((request.body as Record<string, unknown>) ?? {}),
-        channel: (request.body as Record<string, unknown>)?.channel ?? "email",
-        actorUserId: actor.user.id,
-        actorSessionId: actor.session.id,
-        idempotencyKey,
-      });
-      const row = await serviceForRequest().create(body);
-      return reply
-        .status(202)
-        .send({ request: projection(row as unknown as Record<string, unknown>) });
-    } catch (error) {
-      return reply.status(status(error)).send({ code: code(error) });
-    }
-  });
+  registerPrivacyAdminRoute<{ Body: unknown }>(
+    fastify,
+    "createPrivacyAdminCase",
+    async (request, reply) => {
+      try {
+        const actor = getPrivacyAdminSession(request);
+        const idempotencyKey = requireMutationKey(request);
+        const body = createSubjectRequestSchema.parse({
+          ...((request.body as Record<string, unknown>) ?? {}),
+          channel: (request.body as Record<string, unknown>)?.channel ?? "email",
+          actorUserId: actor.user.id,
+          actorSessionId: actor.session.id,
+          idempotencyKey,
+        });
+        const row = await serviceForRequest().create(body);
+        return reply
+          .status(202)
+          .send({ request: projection(row as unknown as Record<string, unknown>) });
+      } catch (error) {
+        return reply.status(status(error)).send({ code: code(error) });
+      }
+    },
+  );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/identity",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "reviewPrivacyAdminIdentity",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -509,16 +641,19 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/identity/email-challenges",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "issuePrivacyAdminEmailChallenge",
     async (request, reply) => {
       try {
-        requireMutationKey(request);
+        const idempotencyKey = requireMutationKey(request);
         const parsed = emailIdentityChallengeIssueSchema.parse(request.body);
         const challengeService = await emailChallengeForRequest();
         const challenge = await challengeService.issue({
           requestId: request.params.requestId,
           party: parsed.party,
+          actorId: getPrivacyAdminSession(request).user.id,
+          idempotencyKey,
         });
         const delivery = await challengeService.dispatchPending({
           sender: options.sendIdentityChallenge ?? sendMail,
@@ -540,24 +675,27 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
                 : 409;
           return reply.status(statusCode).send({ code: error.code });
         }
-        if (error instanceof PrivacyRequestError)
+        if (error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError)
           return reply.status(error.statusCode).send({ code: error.code });
         return reply.status(400).send({ code: "CHALLENGE_INVALID" });
       }
     },
   );
 
-  fastify.post<{ Params: { requestId: string; challengeId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/identity/email-challenges/:challengeId/complete",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; challengeId: string }; Body: unknown }>(
+    fastify,
+    "completePrivacyAdminEmailChallenge",
     async (request, reply) => {
       try {
-        requireMutationKey(request);
+        const idempotencyKey = requireMutationKey(request);
         const parsed = emailIdentityChallengeCompleteSchema.parse(request.body);
         const result = await (await emailChallengeForRequest()).consume({
           requestId: request.params.requestId,
           challengeId: request.params.challengeId,
           party: parsed.party,
           code: parsed.code,
+          actorId: getPrivacyAdminSession(request).user.id,
+          idempotencyKey,
         });
         return reply.send(result);
       } catch (error) {
@@ -565,7 +703,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           const statusCode = error.code === "CHALLENGE_NOT_FOUND" ? 404 : 409;
           return reply.status(statusCode).send({ code: error.code });
         }
-        if (error instanceof PrivacyRequestError)
+        if (error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError)
           return reply.status(error.statusCode).send({ code: error.code });
         return reply.status(400).send({ code: "CHALLENGE_INVALID" });
       }
@@ -584,8 +722,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string; taskId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/tasks/:taskId/assignment",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; taskId: string }; Body: unknown }>(
+    fastify,
+    "assignPrivacyAdminTask",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -610,8 +749,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string; taskId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/tasks/:taskId/decision",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; taskId: string }; Body: unknown }>(
+    fastify,
+    "decidePrivacyAdminTask",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -640,8 +780,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/extension",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "extendPrivacyAdminCase",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -649,15 +790,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       } catch (error) {
         return reply.status(status(error)).send({ code: code(error) });
       }
-      const body = request.body as Record<string, unknown>;
-      const version = Number(body?.version);
-      if (
-        !Number.isSafeInteger(version) ||
-        typeof body?.extendedUntil !== "string" ||
-        typeof body?.extensionNotifiedAt !== "string" ||
-        typeof body?.reasonCode !== "string"
-      )
-        return reply.status(400).send({ code: "INVALID_EXTENSION" });
+      const parsed = privacyCaseExtensionSchema.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ code: "INVALID_EXTENSION" });
+      const body = parsed.data;
+      const version = body.version;
       try {
         const row = await serviceForRequest().recordExtension({
           requestId: request.params.requestId,
@@ -675,8 +811,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/decision",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "decidePrivacyAdminCase",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -684,14 +821,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       } catch (error) {
         return reply.status(status(error)).send({ code: code(error) });
       }
-      const body = request.body as Record<string, unknown>;
-      const version = Number(body?.version);
-      if (
-        !Number.isSafeInteger(version) ||
-        !["refused", "clarification_needed", "operator_review"].includes(String(body?.decision)) ||
-        typeof body?.reasonCode !== "string"
-      )
-        return reply.status(400).send({ code: "INVALID_DECISION" });
+      const parsed = privacyCaseDecisionSchema.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ code: "INVALID_DECISION" });
+      const body = parsed.data;
+      const version = body.version;
       try {
         const row = await serviceForRequest().recordDecision({
           requestId: request.params.requestId,
@@ -708,8 +841,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/generate",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "generatePrivacyAdminArtifact",
     async (request, reply) => {
       try {
         const idempotencyKey = requireMutationKey(request);
@@ -785,115 +919,44 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/attachments",
-    { bodyLimit: ATTACHMENT_BODY_LIMIT },
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "uploadPrivacyAdminAttachment",
     async (request, reply) => {
       try {
-        const idempotencyKey = requireMutationKey(request);
-        const body = request.body as Record<string, unknown>;
-        const purpose = attachmentPurposeSchema.parse(body?.purpose);
-        const mediaType = attachmentMediaTypeSchema.parse(body?.mediaType);
-        const filename = typeof body?.filename === "string" ? body.filename : "";
-        const metadata =
-          body?.metadata === undefined ? undefined : attachmentMetadataSchema.parse(body.metadata);
-        const encoded = typeof body?.contentBase64 === "string" ? body.contentBase64 : "";
-        const operationDigest = idempotencyFingerprint({
-          purpose,
-          mediaType,
-          filename,
-          metadata: metadata ?? null,
-          contentDigest: idempotencyFingerprint(encoded),
-        });
-        const previous = await findIdempotentEvent(database, {
+        const result = await mutateCaseAttachment({
+          kind: "upload",
           requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "attachment_created",
-          operationDigest,
-        });
-        if (previous) {
-          const attachmentId = eventPayloadValue(previous, "attachmentId");
-          if (!attachmentId) throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-          const replay = await database
-            .select()
-            .from(dataSubjectRequestAttachment)
-            .where(
-              and(
-                eq(dataSubjectRequestAttachment.id, attachmentId),
-                eq(dataSubjectRequestAttachment.requestId, request.params.requestId),
-                isNull(dataSubjectRequestAttachment.deletedAt),
-              ),
-            )
-            .limit(1);
-          const existing = replay[0];
-          if (!existing) throw new PrivacyRequestError("ATTACHMENT_NOT_FOUND", 404);
-          return reply.status(201).send({
-            attachment: {
-              id: existing.id,
-              purpose: existing.purpose,
-              filename: existing.filename,
-              mediaType: existing.mediaType,
-              plaintextBytes: existing.plaintextBytes,
-              expiresAt: existing.expiresAt,
-              rightsReviewState: existing.rightsReviewState,
-              metadata: existing.metadata,
-            },
-          });
-        }
-        if (!options.artifactStore)
-          return reply.status(503).send({ code: "PRIVACY_SERVICE_UNAVAILABLE" });
-        if (
-          !/^[A-Za-z0-9+/=_-]+$/.test(encoded) ||
-          encoded.length > Math.ceil((ATTACHMENT_MAX_BYTES * 4) / 3) + 16
-        )
-          return reply.status(400).send({ code: "INVALID_ATTACHMENT" });
-        const content = Buffer.from(encoded, "base64");
-        if (content.byteLength > ATTACHMENT_MAX_BYTES)
-          return reply.status(413).send({ code: "ATTACHMENT_TOO_LARGE" });
-        const row = await database
-          .select({ userId: dataSubjectRequest.userId })
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, request.params.requestId))
-          .limit(1);
-        if (!row[0]) return reply.status(404).send({ code: "NOT_FOUND" });
-        const created = await createEncryptedAttachment(
-          {
-            requestId: request.params.requestId,
-            ownerId: getPrivacyAdminSession(request).user.id,
-            purpose,
-            filename,
-            mediaType,
-            source: content,
-            expiresAt: new Date(Date.now() + 30 * 86_400_000),
-            ...(metadata ? { metadata } : {}),
-          },
-          { store: options.artifactStore, database },
-        );
-        await recordIdempotentEvent(database, {
-          requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "attachment_created",
-          actorKind: "privacy_admin",
+          body: request.body,
           actorId: getPrivacyAdminSession(request).user.id,
-          payload: { attachmentId: created.row.id },
-          operationDigest,
+          idempotencyKey: requireMutationKey(request),
+          database,
+          store: options.artifactStore,
         });
-        return reply.status(201).send({
-          attachment: {
-            id: created.row.id,
-            purpose: created.row.purpose,
-            filename: created.row.filename,
-            mediaType: created.row.mediaType,
-            plaintextBytes: created.row.plaintextBytes,
-            expiresAt: created.row.expiresAt,
-            rightsReviewState: created.row.rightsReviewState,
-            metadata: created.row.metadata,
-          },
-        });
+        return reply.status(201).send({ attachment: result!.attachment });
       } catch (error) {
-        return reply
-          .status(error instanceof PrivacyRequestError ? error.statusCode : 400)
-          .send({ code: error instanceof PrivacyRequestError ? error.code : "INVALID_ATTACHMENT" });
+        return reply.status(status(error)).send({ code: code(error) });
+      }
+    },
+  );
+  registerPrivacyAdminRoute<{ Params: { requestId: string; attachmentId: string }; Body: unknown }>(
+    fastify,
+    "reviewPrivacyAdminAttachment",
+    async (request, reply) => {
+      try {
+        return reply.send(
+          await mutateCaseAttachment({
+            kind: "review",
+            requestId: request.params.requestId,
+            attachmentId: request.params.attachmentId,
+            body: request.body,
+            actorId: getPrivacyAdminSession(request).user.id,
+            idempotencyKey: requireMutationKey(request),
+            database,
+          }),
+        );
+      } catch (error) {
+        return reply.status(status(error)).send({ code: code(error) });
       }
     },
   );
@@ -904,14 +967,16 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
    * for the acting privacy administrator is required because these files can
    * contain exceptional identity evidence or processor supplements.
    */
-  fastify.get<{ Params: { requestId: string; attachmentId: string } }>(
-    "/privacy/admin/requests/:requestId/attachments/:attachmentId/download",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; attachmentId: string } }>(
+    fastify,
+    "downloadPrivacyAdminAttachment",
     async (request, reply) => {
       if (request.headers.range) return reply.status(416).send({ code: "RANGE_NOT_SUPPORTED" });
       const actor = getPrivacyAdminSession(request);
       const assurance = await getSessionAuthAssurance(actor.session.id, database);
       if (
         !assurance ||
+        !isAssuranceSufficient(assurance.method, actor.user.twoFactorEnabled === true) ||
         assurance.userId !== actor.user.id ||
         assurance.authenticatedAt.getTime() > Date.now() ||
         Date.now() - assurance.authenticatedAt.getTime() > 10 * 60_000
@@ -973,13 +1038,38 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         );
         prepared = startArtifactStream(options.artifactStore, attachment);
         await prepared.verified;
-        // Re-check the case state after verification, immediately before
-        // authorizing the response, so a withdrawal/deletion racing the first
-        // pass cannot turn into a delivered supplement.
+        const currentActor = await requirePrivacyAdmin(request);
+        const currentAssurance = await getSessionAuthAssurance(currentActor.session.id, database);
+        if (
+          currentActor.user.id !== actor.user.id ||
+          currentActor.session.id !== actor.session.id ||
+          !currentAssurance ||
+          currentAssurance.userId !== actor.user.id ||
+          !isAssuranceSufficient(
+            currentAssurance.method,
+            currentActor.user.twoFactorEnabled === true,
+          ) ||
+          currentAssurance.authenticatedAt.getTime() > Date.now() ||
+          Date.now() - currentAssurance.authenticatedAt.getTime() > 10 * 60000
+        )
+          throw new Error("fresh assurance required");
+        // Integrity verification may overlap a delete or expiry. Re-read both
+        // the case and this exact live attachment before authorizing any bytes.
         const current = await database
           .select({ state: dataSubjectRequest.state })
           .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, request.params.requestId))
+          .innerJoin(
+            dataSubjectRequestAttachment,
+            eq(dataSubjectRequestAttachment.requestId, dataSubjectRequest.id),
+          )
+          .where(
+            and(
+              eq(dataSubjectRequest.id, request.params.requestId),
+              eq(dataSubjectRequestAttachment.id, request.params.attachmentId),
+              isNull(dataSubjectRequestAttachment.deletedAt),
+              sql`${dataSubjectRequestAttachment.expiresAt} > now()`,
+            ),
+          )
           .limit(1);
         if (!current[0] || ["withdrawn", "refused", "closed"].includes(current[0].state))
           throw new Error("attachment no longer available");
@@ -1004,7 +1094,29 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         reply.header("Pragma", "no-cache");
         reply.header("X-Content-Type-Options", "nosniff");
         reply.header("Content-Security-Policy", "default-src 'none'");
-        return reply.send(prepared.stream);
+        reply.header("Referrer-Policy", "no-referrer");
+        reply.header("X-Content-Type-Options", "nosniff");
+        const abort = new AbortController();
+        const disconnect = () => {
+          if (!reply.raw.writableFinished) abort.abort(new Error("download disconnected"));
+        };
+        reply.raw.once("close", disconnect);
+        try {
+          await sendAdminByteResponse(reply, {
+            body: Readable.toWeb(prepared.stream) as ReadableStream<Uint8Array>,
+            signal: abort.signal,
+            headers: new Headers(
+              Object.fromEntries(
+                Object.entries(reply.getHeaders())
+                  .filter(([, v]) => v !== undefined)
+                  .map(([k, v]) => [k, String(v)]),
+              ),
+            ),
+          });
+        } finally {
+          reply.raw.off("close", disconnect);
+        }
+        return reply;
       } catch {
         try {
           prepared?.deny(new Error("attachment download failed"));
@@ -1016,201 +1128,196 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.delete<{ Params: { requestId: string; attachmentId: string } }>(
-    "/privacy/admin/requests/:requestId/attachments/:attachmentId",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; attachmentId: string }; Body: unknown }>(
+    fastify,
+    "deletePrivacyAdminAttachment",
     async (request, reply) => {
       try {
-        const idempotencyKey = requireMutationKey(request);
-        const operationDigest = idempotencyFingerprint({
+        await mutateCaseAttachment({
+          kind: "delete",
           requestId: request.params.requestId,
           attachmentId: request.params.attachmentId,
-        });
-        const previous = await findIdempotentEvent(database, {
-          requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "attachment_deleted",
-          operationDigest,
-        });
-        if (previous) return reply.status(204).send();
-        const rows = await database
-          .select({
-            id: dataSubjectRequestAttachment.id,
-            storageKey: dataSubjectRequestAttachment.storageKey,
-            deletedAt: dataSubjectRequestAttachment.deletedAt,
-          })
-          .from(dataSubjectRequestAttachment)
-          .where(
-            and(
-              eq(dataSubjectRequestAttachment.id, request.params.attachmentId),
-              eq(dataSubjectRequestAttachment.requestId, request.params.requestId),
-            ),
-          )
-          .limit(1);
-        if (!rows[0]) return reply.status(404).send({ code: "NOT_FOUND" });
-        if (!rows[0].deletedAt) {
-          if (options.artifactStore) await options.artifactStore.delete(rows[0].storageKey);
-          await database
-            .update(dataSubjectRequestAttachment)
-            .set({ deletedAt: new Date() })
-            .where(eq(dataSubjectRequestAttachment.id, rows[0].id));
-        }
-        await recordIdempotentEvent(database, {
-          requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "attachment_deleted",
-          actorKind: "privacy_admin",
+          body: request.body,
           actorId: getPrivacyAdminSession(request).user.id,
-          payload: { attachmentId: rows[0].id },
-          operationDigest,
+          idempotencyKey: requireMutationKey(request),
+          database,
+          store: options.artifactStore,
         });
         return reply.status(204).send();
       } catch (error) {
-        return reply.status(error instanceof PrivacyRequestError ? error.statusCode : 503).send({
-          code: error instanceof PrivacyRequestError ? error.code : "PRIVACY_SERVICE_UNAVAILABLE",
-        });
+        return reply.status(status(error)).send({ code: code(error) });
       }
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/backup-reviews",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "createPrivacyAdminBackupReview",
     async (request, reply) => {
       try {
-        const parsed = backupReviewRequestSchema.parse(request.body);
-        const idempotencyKey = requireMutationKey(request);
-        const operationDigest = idempotencyFingerprint(parsed);
-        const previous = await findIdempotentEvent(database, {
-          requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "backup_review_recorded",
-          operationDigest,
-        });
-        if (previous) {
-          const reviewId = eventPayloadValue(previous, "reviewId");
-          if (!reviewId) throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-          const replay = await database
+        const result = await database.transaction(async (tx) => {
+          const database = tx as unknown as typeof db;
+          const [current] = await tx
             .select()
-            .from(dataSubjectRequestBackupReview)
-            .where(
-              and(
-                eq(dataSubjectRequestBackupReview.id, reviewId),
-                eq(dataSubjectRequestBackupReview.requestId, request.params.requestId),
-              ),
-            )
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.id, request.params.requestId))
+            .for("update")
             .limit(1);
-          if (!replay[0]) throw new PrivacyRequestError("BACKUP_REVIEW_NOT_FOUND", 404);
-          return reply.status(201).send({ review: replay[0] });
-        }
-        const actor = getPrivacyAdminSession(request).user.id;
-        const requests = await database
-          .select({
-            snapshotAt: dataSubjectRequest.snapshotAt,
-            receivedAt: dataSubjectRequest.receivedAt,
-          })
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, request.params.requestId))
-          .limit(1);
-        if (!requests[0]) return reply.status(404).send({ code: "NOT_FOUND" });
-        const inventory = await loadTrustedBackupInventory(actor);
-        const source = inventory.backups.find((entry) => entry.backupId === parsed.backupId);
-        if (!source) return reply.status(404).send({ code: "BACKUP_NOT_FOUND" });
-        const trusted = privacyBackupInventory(source, new Date());
-        const reviewedAt = new Date();
-        const fallback = {
-          decision: "unavailable" as const,
-          reasonCode:
-            source.corruptReason === "missing_manifest"
-              ? ("corrupt_or_unverified" as const)
-              : ("corrupt_or_unverified" as const),
-        };
-        const derived = trusted
-          ? deriveBackupReviewDecision(trusted, {
-              cutoffAt: requests[0].snapshotAt ?? requests[0].receivedAt,
-              liveSnapshotAt: requests[0].snapshotAt ?? undefined,
-              now: reviewedAt,
+          if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+          const parsed = backupReviewRequestSchema.parse(request.body);
+          const idempotencyKey = requireMutationKey(request);
+          const operationDigest = idempotencyFingerprint({
+            backupId: parsed.backupId,
+            actorId: getPrivacyAdminSession(request).user.id,
+          });
+          const previous = await findIdempotentEvent(database, {
+            requestId: request.params.requestId,
+            idempotencyKey,
+            eventType: "backup_review_recorded",
+            operationDigest,
+          });
+          if (previous) {
+            const reviewId = eventPayloadValue(previous, "reviewId");
+            if (!reviewId) throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
+            const replay = await database
+              .select()
+              .from(dataSubjectRequestBackupReview)
+              .where(
+                and(
+                  eq(dataSubjectRequestBackupReview.id, reviewId),
+                  eq(dataSubjectRequestBackupReview.requestId, request.params.requestId),
+                ),
+              )
+              .limit(1);
+            if (!replay[0]) throw new PrivacyRequestError("BACKUP_REVIEW_NOT_FOUND", 404);
+            return { review: replay[0] };
+          }
+          if (
+            ["withdrawn", "refused", "closed", "delivered", "artifact_expired"].includes(
+              current.state,
+            )
+          )
+            throw new PrivacyRequestError("BACKUP_REVIEW_NOT_ALLOWED", 409);
+          const actor = getPrivacyAdminSession(request).user.id;
+          const requests = await database
+            .select({
+              snapshotAt: dataSubjectRequest.snapshotAt,
+              receivedAt: dataSubjectRequest.receivedAt,
             })
-          : fallback;
-        const candidate = {
-          requestId: request.params.requestId,
-          backupId: source.backupId,
-          manifestDigest: trusted?.manifestDigest ?? source.manifestDigest ?? "0".repeat(64),
-          createdAt: trusted ? new Date(trusted.createdAt) : reviewedAt,
-          platformVersion: trusted?.platformVersion ?? source.platformVersion ?? "unknown",
-          decision: derived.decision,
-          reasonCode: derived.reasonCode,
-          reviewedBy: actor,
-          reviewedAt,
-        };
-        const [inserted] = await database
-          .insert(dataSubjectRequestBackupReview)
-          .values(candidate)
-          .onConflictDoNothing({
-            target: [
-              dataSubjectRequestBackupReview.requestId,
-              dataSubjectRequestBackupReview.backupId,
-            ],
-          })
-          .returning();
-        const row = inserted;
-        if (!row) {
-          const existing = await database
-            .select()
-            .from(dataSubjectRequestBackupReview)
-            .where(
-              and(
-                eq(dataSubjectRequestBackupReview.requestId, request.params.requestId),
-                eq(dataSubjectRequestBackupReview.backupId, source.backupId),
-              ),
-            )
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.id, request.params.requestId))
             .limit(1);
-          if (!existing[0]) throw new PrivacyRequestError("BACKUP_REVIEW_NOT_FOUND", 503);
-          // Reviews are evidence, not mutable cache rows. A second key may
-          // never replace the first review with a new actor, timestamp or
-          // inventory decision; the caseworker must create a new request if a
-          // fresh review is legally necessary.
-          throw new PrivacyRequestError("BACKUP_REVIEW_IMMUTABLE", 409);
-        }
-        await recordIdempotentEvent(database, {
-          requestId: request.params.requestId,
-          idempotencyKey,
-          eventType: "backup_review_recorded",
-          actorKind: "privacy_admin",
-          actorId: actor,
-          payload: { reviewId: row.id },
-          operationDigest,
+          if (!requests[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+          const inventory = await loadTrustedBackupInventory(actor);
+          const source = inventory.backups.find((entry) => entry.backupId === parsed.backupId);
+          if (!source) throw new PrivacyRequestError("BACKUP_NOT_FOUND", 404);
+          const trusted = privacyBackupInventory(source, new Date());
+          const reviewedAt = new Date();
+          const fallback = {
+            decision: "unavailable" as const,
+            reasonCode:
+              source.corruptReason === "missing_manifest"
+                ? ("corrupt_or_unverified" as const)
+                : ("corrupt_or_unverified" as const),
+          };
+          const derived = trusted
+            ? deriveBackupReviewDecision(trusted, {
+                cutoffAt: requests[0].snapshotAt ?? requests[0].receivedAt,
+                liveSnapshotAt: requests[0].snapshotAt ?? undefined,
+                now: reviewedAt,
+              })
+            : fallback;
+          const candidate = {
+            requestId: request.params.requestId,
+            backupId: source.backupId,
+            manifestDigest: trusted?.manifestDigest ?? source.manifestDigest ?? "0".repeat(64),
+            createdAt: trusted ? new Date(trusted.createdAt) : reviewedAt,
+            platformVersion: trusted?.platformVersion ?? source.platformVersion ?? "unknown",
+            decision: derived.decision,
+            reasonCode: derived.reasonCode,
+            reviewedBy: actor,
+            reviewedAt,
+          };
+          const [inserted] = await database
+            .insert(dataSubjectRequestBackupReview)
+            .values(candidate)
+            .onConflictDoNothing({
+              target: [
+                dataSubjectRequestBackupReview.requestId,
+                dataSubjectRequestBackupReview.backupId,
+              ],
+            })
+            .returning();
+          const row = inserted;
+          if (!row) {
+            const existing = await database
+              .select()
+              .from(dataSubjectRequestBackupReview)
+              .where(
+                and(
+                  eq(dataSubjectRequestBackupReview.requestId, request.params.requestId),
+                  eq(dataSubjectRequestBackupReview.backupId, source.backupId),
+                ),
+              )
+              .limit(1);
+            if (!existing[0]) throw new PrivacyRequestError("BACKUP_REVIEW_NOT_FOUND", 503);
+            // Reviews are evidence, not mutable cache rows. A second key may
+            // never replace the first review with a new actor, timestamp or
+            // inventory decision; the caseworker must create a new request if a
+            // fresh review is legally necessary.
+            throw new PrivacyRequestError("BACKUP_REVIEW_IMMUTABLE", 409);
+          }
+          await recordIdempotentEvent(database, {
+            requestId: request.params.requestId,
+            idempotencyKey,
+            eventType: "backup_review_recorded",
+            actorKind: "privacy_admin",
+            actorId: actor,
+            payload: { reviewId: row.id },
+            operationDigest,
+          });
+          return { review: row };
         });
-        return reply.status(201).send({ review: row });
+        return reply.status(201).send(result);
       } catch (error) {
         return reply.status(error instanceof PrivacyRequestError ? error.statusCode : 400).send({
-          code: error instanceof PrivacyRequestError ? error.code : "INVALID_BACKUP_REVIEW",
+          code:
+            error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError
+              ? error.code
+              : "INVALID_BACKUP_REVIEW",
         });
       }
     },
   );
 
-  fastify.get<{ Params: { requestId: string } }>(
-    "/privacy/admin/requests/:requestId/backup-omissions",
+  registerPrivacyAdminRoute<{ Params: { requestId: string } }>(
+    fastify,
+    "listPrivacyAdminBackupOmissions",
     async (request, reply) => {
       const reviews = await listBackupWarningReviews(request.params.requestId, database);
       return reply.send({ reviews });
     },
   );
 
-  fastify.post<{ Params: { requestId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/backup-omissions/accept",
+  registerPrivacyAdminRoute<{ Params: { requestId: string }; Body: unknown }>(
+    fastify,
+    "acceptPrivacyAdminBackupOmissions",
     async (request, reply) => {
       try {
         const parsed = backupOmissionAcceptanceSchema.parse(request.body);
         const idempotencyKey = requireMutationKey(request);
         const actor = getPrivacyAdminSession(request).user.id;
-        const review = await acceptBackupWarnings({
-          requestId: request.params.requestId,
-          requestVersion: parsed.requestVersion,
-          idempotencyKey,
-          actorId: actor,
-          warningsDigest: parsed.warningsDigest,
-          reasonCode: parsed.reasonCode,
-        });
+        const review = await acceptBackupWarnings(
+          {
+            requestId: request.params.requestId,
+            requestVersion: parsed.requestVersion,
+            idempotencyKey,
+            actorId: actor,
+            warningsDigest: parsed.warningsDigest,
+            reasonCode: parsed.reasonCode,
+          },
+          database,
+        );
         return reply.status(201).send({ review });
       } catch (error) {
         const expected =
@@ -1292,9 +1399,12 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       if (!row) throw new PrivacyRequestError("APPROVAL_NOT_FOUND", 503);
       return reply.status(201).send({ approval: row });
     } catch (error) {
-      return reply
-        .status(error instanceof PrivacyRequestError ? error.statusCode : 400)
-        .send({ code: error instanceof PrivacyRequestError ? error.code : "INVALID_APPROVAL" });
+      return reply.status(error instanceof PrivacyRequestError ? error.statusCode : 400).send({
+        code:
+          error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError
+            ? error.code
+            : "INVALID_APPROVAL",
+      });
     }
   });
 
@@ -1304,8 +1414,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
    * declared delivery channel/reason.  No archive bytes or recipient address
    * are accepted in this request.
    */
-  fastify.post<{ Params: { requestId: string; artifactId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/artifacts/:artifactId/reauth/start",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; artifactId: string }; Body: unknown }>(
+    fastify,
+    "startPrivacyAdminReauthentication",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -1329,17 +1440,11 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           initiatingAdminSessionId: actor.session.id,
           startingSessionId: actor.session.id,
           deliveryChannel: channel,
-        });
-        await database.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
-          requestId: parsed.data.requestId,
-          eventType: "assisted_delivery_reauth_started",
-          actorKind: "privacy_admin",
-          actorId: actor.user.id,
-          payloadVersion: 1,
-          payload: { channel, reasonCode },
-          idempotencyKey,
-          createdAt: new Date(),
+          mutation: {
+            idempotencyKey,
+            reasonCode,
+            cookie: parseReauthCookie(request.headers.cookie),
+          },
         });
         setReauthCookie(
           reply,
@@ -1349,16 +1454,19 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         return reply.send({
           challengeId: challenge.challengeId,
           expiresAt: challenge.expiresAt.toISOString(),
-          loginPath: "/auth/privacy",
+          loginPath: "/auth/privacy/admin",
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof PrivacyRequestError || error instanceof PrivacyIdempotencyError)
+          return reply.status(error.statusCode).send({ code: error.code });
         return genericReauthFailure(reply);
       }
     },
   );
 
-  fastify.post<{ Params: { requestId: string; artifactId: string }; Body: unknown }>(
-    "/privacy/admin/requests/:requestId/artifacts/:artifactId/reauth/complete",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; artifactId: string }; Body: unknown }>(
+    fastify,
+    "completePrivacyAdminReauthentication",
     async (request, reply) => {
       let idempotencyKey: string;
       try {
@@ -1387,29 +1495,47 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         return genericReauthFailure(reply);
       }
       try {
-        await new PrivacyReauthenticationService(database).complete({
-          requestId: parsed.data.requestId,
-          artifactId: parsed.data.artifactId,
-          challengeId: cookie.challengeId,
-          nonce: cookie.nonce,
-          session: {
-            id: actor.session.id,
-            userId: actor.user.id,
-            authenticatedAt: assurance.authenticatedAt,
-            method: assurance.method,
-            mfaConfigured: actor.user.twoFactorEnabled === true,
-          },
-        });
-        await database.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
-          requestId: parsed.data.requestId,
-          eventType: "assisted_delivery_reauth_completed",
-          actorKind: "privacy_admin",
-          actorId: actor.user.id,
-          payloadVersion: 1,
-          payload: {},
-          idempotencyKey,
-          createdAt: new Date(),
+        await database.transaction(async (tx) => {
+          await tx
+            .select({ id: dataSubjectRequest.id })
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.id, parsed.data.requestId))
+            .for("update");
+          const operationDigest = idempotencyFingerprint({
+            artifactId: parsed.data.artifactId,
+            challengeId: cookie.challengeId,
+            actorId: actor.user.id,
+            sessionId: actor.session.id,
+          });
+          const previous = await findIdempotentEvent(tx as unknown as typeof db, {
+            requestId: parsed.data.requestId,
+            idempotencyKey,
+            eventType: "assisted_delivery_reauth_completed",
+            operationDigest,
+          });
+          await new PrivacyReauthenticationService(tx as unknown as typeof db).complete({
+            requestId: parsed.data.requestId,
+            artifactId: parsed.data.artifactId,
+            challengeId: cookie.challengeId,
+            nonce: cookie.nonce,
+            session: {
+              id: actor.session.id,
+              userId: actor.user.id,
+              authenticatedAt: assurance.authenticatedAt,
+              method: assurance.method,
+              mfaConfigured: actor.user.twoFactorEnabled === true,
+            },
+          });
+          if (!previous)
+            await recordIdempotentEvent(tx as unknown as typeof db, {
+              requestId: parsed.data.requestId,
+              idempotencyKey,
+              eventType: "assisted_delivery_reauth_completed",
+              actorKind: "privacy_admin",
+              actorId: actor.user.id,
+              payload: { challengeId: cookie.challengeId },
+              operationDigest,
+            });
         });
         // Download consumes this cookie together with the completed challenge.
         // Keep its original expiry; completion must not extend the ceremony.
@@ -1421,8 +1547,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     },
   );
 
-  fastify.get<{ Params: { requestId: string; artifactId: string } }>(
-    "/privacy/admin/requests/:requestId/artifacts/:artifactId/download",
+  registerPrivacyAdminRoute<{ Params: { requestId: string; artifactId: string } }>(
+    fastify,
+    "downloadPrivacyAdminArtifact",
     async (request, reply) => {
       const parsed = artifactIdParamSchema.safeParse(request.params);
       if (!parsed.success || request.headers.range)
@@ -1462,6 +1589,21 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         });
         prepared = startArtifactStream(options.artifactStore, artifact);
         await prepared.verified;
+        const currentActor = await requirePrivacyAdmin(request);
+        const currentAssurance = await getSessionAuthAssurance(currentActor.session.id, database);
+        if (
+          currentActor.user.id !== actor.user.id ||
+          currentActor.session.id !== actor.session.id ||
+          !currentAssurance ||
+          currentAssurance.userId !== actor.user.id ||
+          !isAssuranceSufficient(
+            currentAssurance.method,
+            currentActor.user.twoFactorEnabled === true,
+          ) ||
+          currentAssurance.authenticatedAt.getTime() > Date.now() ||
+          Date.now() - currentAssurance.authenticatedAt.getTime() > 10 * 60000
+        )
+          throw new Error("fresh assurance required");
         const current = await database
           .select({ state: dataSubjectRequest.state })
           .from(dataSubjectRequest)
@@ -1509,7 +1651,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           ).catch((error) => request.log.error({ err: error }, "failed to record export delivery"));
         });
         clearReauthCookie(reply);
-        reply.header("Content-Type", artifactRow.mediaType || "application/zip");
+        reply.header("Content-Type", "application/octet-stream");
         reply.header("Content-Length", String(artifactRow.plaintextBytes ?? ""));
         reply.header(
           "Content-Disposition",
@@ -1518,7 +1660,29 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         reply.header("Cache-Control", "private, no-store");
         reply.header("Pragma", "no-cache");
         reply.header("Referrer-Policy", "no-referrer");
-        return reply.send(prepared.stream);
+        reply.header("Referrer-Policy", "no-referrer");
+        reply.header("X-Content-Type-Options", "nosniff");
+        const abort = new AbortController();
+        const disconnect = () => {
+          if (!reply.raw.writableFinished) abort.abort(new Error("download disconnected"));
+        };
+        reply.raw.once("close", disconnect);
+        try {
+          await sendAdminByteResponse(reply, {
+            body: Readable.toWeb(prepared.stream) as ReadableStream<Uint8Array>,
+            signal: abort.signal,
+            headers: new Headers(
+              Object.fromEntries(
+                Object.entries(reply.getHeaders())
+                  .filter(([, v]) => v !== undefined)
+                  .map(([k, v]) => [k, String(v)]),
+              ),
+            ),
+          });
+        } finally {
+          reply.raw.off("close", disconnect);
+        }
+        return reply;
       } catch {
         try {
           prepared?.deny(new Error("download failed"));

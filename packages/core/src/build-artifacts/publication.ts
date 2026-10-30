@@ -5,7 +5,10 @@ import { fsyncSync, lstatSync, mkdirSync, renameSync, rmdirSync, unlinkSync } fr
 import { dirname, relative, resolve } from "node:path";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
-import { withConfigurationGenerationWriter } from "../services/configuration-generation";
+import {
+  currentConfigurationGeneration,
+  withConfigurationGenerationWriter,
+} from "../services/configuration-generation";
 import type { ValidatedBuildBundle } from "./archive";
 import {
   beginControlEffect,
@@ -45,6 +48,10 @@ export interface ArtifactPublicationInput {
   lease: TargetLeaseAuthority;
   expectedFingerprint: string;
   signal?: AbortSignal;
+  /** Fixed local consumer's denial-only compatibility fence, acquired after
+   * payload hashing while this publisher owns the configuration writer.
+   * It grants no execution/target authority and never crosses an envelope. */
+  beforePublication?: () => Promise<() => void>;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const inode = z.strictObject({ dev: z.string(), ino: z.string() }),
@@ -53,6 +60,8 @@ const directoryEntry = z.strictObject({
   path: z.string(),
   old: inode.nullable(),
   next: inode,
+  oldMetadata: digest.nullable(),
+  nextMetadata: digest,
   backup: z.string(),
 });
 const recordEntry = z.strictObject({
@@ -60,6 +69,7 @@ const recordEntry = z.strictObject({
   old: inode.nullable(),
   next: inode.nullable(),
   digest: digest.nullable(),
+  oldDigest: digest.nullable(),
   backup: z.string(),
 });
 const journalSchema = z.strictObject({
@@ -97,7 +107,7 @@ function directoryAt(root: AnchoredDirectory, path: string, create = false) {
   let dir = root;
   try {
     for (const part of path ? path.split("/") : []) {
-      dir = dir.directory(part, create);
+      dir = dir.directory(part, create, false);
       opened.push(dir);
     }
     return {
@@ -133,6 +143,14 @@ function dirIdentity(root: AnchoredDirectory, path: string): FileIdentity | null
     throw error;
   } finally {
     p.close();
+  }
+}
+function directoryMetadata(root: AnchoredDirectory, path: string) {
+  const d = directoryAt(root, path);
+  try {
+    return inspectArtifactTree(d.dir, TREE_LIMITS).metadataDigest;
+  } finally {
+    d.close();
   }
 }
 function fileIdentity(root: AnchoredDirectory, name: string): FileIdentity | null {
@@ -221,8 +239,18 @@ function checkedOwner(input: ArtifactPublicationInput) {
     owner.installation,
     "executions",
     `${owner.execution.operationKey}.json`,
-  ) as { payload: { operation: { kind: string; stageId?: string; expectedSha256?: string } } };
+  ) as {
+    payload: {
+      operation: {
+        kind: string;
+        stageId?: string;
+        expectedSha256?: string;
+        expectedCurrentRevisionId?: string | null;
+      };
+    };
+  };
   if (
+    controlDigest(admitted) !== owner.receiptDigest ||
     admitted.payload.operation.kind !== owner.kind ||
     admitted.payload.operation.stageId !== input.stageId ||
     admitted.payload.operation.expectedSha256 !== input.bundle.archiveSha256
@@ -369,6 +397,27 @@ function restore(
     )
       throw Error("Artifact record restoration identity is uncertain");
   }
+  for (const entry of journal.directories) {
+    const old = entry.old
+      ? equal(dirIdentity(root, entry.path), entry.old)
+        ? { root, path: entry.path }
+        : { root: backups, path: entry.backup }
+      : null;
+    if (old && directoryMetadata(old.root, old.path) !== entry.oldMetadata)
+      throw Error("Artifact restoration content is uncertain");
+  }
+  for (const entry of journal.records) {
+    const old =
+      entry.old &&
+      (equal(fileIdentity(records, entry.name), entry.old)
+        ? { root: records, name: entry.name }
+        : { root: backups, name: entry.backup });
+    if (
+      old &&
+      hash(old.root.read(old.name, MAX_METADATA, false).toString("utf8")) !== entry.oldDigest
+    )
+      throw Error("Artifact record restoration content is uncertain");
+  }
   for (const entry of [...journal.directories].reverse()) {
     if (equal(dirIdentity(root, entry.path), entry.next))
       moveDirectory(root, entry.path, source, entry.path, entry.next);
@@ -414,6 +463,7 @@ export async function publishValidatedBuild(
     serviceId = input.bundle.manifest.service;
   return withConfigurationGenerationWriter(dirname(resolve(input.dataRoot)), async () => {
     const root = new AnchoredDirectory(input.dataRoot);
+    let releaseCompatibility: (() => void) | undefined;
     let source: ReturnType<typeof directoryAt> | undefined,
       backups: AnchoredDirectory | undefined,
       records: AnchoredDirectory | undefined;
@@ -478,11 +528,13 @@ export async function publishValidatedBuild(
       // Compare the exact payload set before any live path is renamed. The
       // private validation manifest and publication journal live outside these roots.
       const stagedFiles: string[] = [],
-        stagedDirectories: string[] = [];
+        stagedDirectories: string[] = [],
+        sourceMetadata = new Map<string, string>();
       for (const path of manifest.dirs) {
         const directory = directoryAt(source.dir, path);
         try {
           const tree = inspectArtifactTree(directory.dir, TREE_LIMITS);
+          sourceMetadata.set(path, tree.metadataDigest);
           stagedDirectories.push(path, ...tree.directories.map((name) => `${path}/${name}`));
           stagedFiles.push(...tree.files.map((file) => `${path}/${file.path}`));
         } finally {
@@ -500,6 +552,30 @@ export async function publishValidatedBuild(
         if (actual.sha256 !== file.sha256 || actual.sizeBytes !== file.sizeBytes)
           return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       }
+      try {
+        releaseCompatibility = await input.beforePublication?.();
+      } catch {
+        return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
+      }
+      const original = readPrivateRecord(
+        owner.installation,
+        "executions",
+        `${owner.execution.operationKey}.json`,
+      ) as { payload: { operation: { expectedCurrentRevisionId: string | null } } };
+      if (
+        currentConfigurationGeneration(dirname(resolve(input.dataRoot))) !==
+          original.payload.operation.expectedCurrentRevisionId ||
+        controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint
+      )
+        return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
+      input.signal?.throwIfAborted();
+      assertArtifactTargetLeaseExecution(input.lease, owner.execution);
+      if (
+        manifest.dirs.some(
+          (path) => directoryMetadata(source!.dir, path) !== sourceMetadata.get(path),
+        )
+      )
+        return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
       const initial = snapshot(root, serviceId);
       records = root.directory(BUILD_RECORD_DIR, true);
       mkdirSync(source.dir.name(`publication-${input.stageId}`), { mode: 0o700 });
@@ -522,12 +598,15 @@ export async function publishValidatedBuild(
         directories: initial.directories.map((dir, index) => ({
           path: dir.path,
           old: dir.id,
+          oldMetadata: dir.metadata,
+          nextMetadata: sourceMetadata.get(dir.path)!,
           next: dirIdentity(source!.dir, dir.path)!,
           backup: `directory-${index}`,
         })),
         records: initial.records.map((record, index) => ({
           name: record.name,
           old: record.id,
+          oldDigest: record.digest,
           next: null,
           digest: null,
           backup: `record-${index}`,
@@ -567,6 +646,12 @@ export async function publishValidatedBuild(
         });
         if (next.artifactFingerprint !== input.bundle.artifactFingerprint)
           throw Error("Published artifact content differs from validation");
+        if (
+          journal.directories.some(
+            (entry) => directoryMetadata(root, entry.path) !== entry.nextMetadata,
+          )
+        )
+          throw Error("Imported content changed before commit");
         const bytes = JSON.stringify(next);
         records.write(`${serviceId}.json`, bytes, false, (inode) =>
           pin(`${serviceId}.json`, inode, bytes),
@@ -593,10 +678,33 @@ export async function publishValidatedBuild(
         cleanupFailed: journal.cleanupFailed,
       };
     } finally {
-      records?.close();
-      backups?.close();
-      source?.close();
-      root.close();
+      try {
+        releaseCompatibility?.();
+      } finally {
+        records?.close();
+        backups?.close();
+        source?.close();
+        root.close();
+      }
     }
   });
+}
+
+/** Read the sole local publisher's signed, indexed commit evidence. Local consumers
+ * use this to settle a stage; public receipt IDs or result strings are insufficient. */
+export function inspectArtifactPublication(authority: VerifiedExecutionAuthority) {
+  const state = executionAuthorityState(authority);
+  if (state.kind !== "artifactTransfer.import" || !state.origin)
+    throw Error("Original import authority required");
+  const journal = readJournal({ ...state, origin: state.origin });
+  if (!journal) return null;
+  if (journal.executionDigest !== controlDigest(state.execution))
+    throw Error("Original artifact publication is unavailable");
+  return {
+    phase: journal.phase,
+    stageId: journal.stageId,
+    archiveSha256: journal.archiveSha256,
+    serviceId: journal.serviceId,
+    artifactFingerprint: journal.artifactFingerprint,
+  };
 }

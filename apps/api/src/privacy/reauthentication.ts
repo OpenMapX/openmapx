@@ -7,6 +7,8 @@ import {
   dataExportReauthentication,
   dataSubjectRequest,
 } from "../db/schema.js";
+import { findIdempotentEvent, idempotencyFingerprint, recordIdempotentEvent } from "./idempotency";
+import { PrivacyRequestError } from "./request-service";
 
 export const REAUTH_COOKIE_NAME = "__Host-openmapx-export-reauth";
 export const REAUTH_TTL_MS = 10 * 60_000;
@@ -55,6 +57,11 @@ export class PrivacyReauthenticationService {
     initiatingAdminSessionId?: string;
     startingSessionId: string;
     deliveryChannel?: ReauthenticationChannel;
+    mutation?: {
+      idempotencyKey: string;
+      reasonCode: string;
+      cookie: { challengeId: string; nonce: Buffer } | null;
+    };
   }): Promise<{ challengeId: string; nonce: Buffer; expiresAt: Date }> {
     if (
       !/^[0-9a-f-]{36}$/i.test(input.requestId) ||
@@ -110,7 +117,49 @@ export class PrivacyReauthenticationService {
       throw new Error("ARTIFACT_NOT_AVAILABLE");
     const nonce = createReauthenticationNonce();
     const challengeId = randomUUID();
-    await this.database.transaction(async (tx) => {
+    return this.database.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ state: dataSubjectRequest.state })
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, input.requestId))
+        .for("update")
+        .limit(1);
+      const operationDigest = idempotencyFingerprint({
+        artifactId: input.artifactId,
+        actorId: input.initiatingAdminUserId,
+        sessionId: input.startingSessionId,
+        channel: deliveryChannel,
+        reasonCode: input.mutation?.reasonCode,
+      });
+      if (input.mutation) {
+        const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.mutation.idempotencyKey,
+          eventType: "assisted_delivery_reauth_started",
+          operationDigest,
+        });
+        if (previous) {
+          const id = (previous.payload as Record<string, unknown>).challengeId;
+          const [retained] = await tx
+            .select()
+            .from(dataExportReauthentication)
+            .where(eq(dataExportReauthentication.id, String(id)))
+            .limit(1);
+          const cookie = input.mutation.cookie;
+          if (
+            !retained ||
+            !cookie ||
+            cookie.challengeId !== retained.id ||
+            !nonceMatchesDigest(cookie.nonce, retained.nonceDigest) ||
+            retained.expiresAt <= now ||
+            !["pending", "completed"].includes(retained.state)
+          )
+            throw new PrivacyRequestError("REAUTH_RESTART_REQUIRED", 409);
+          return { challengeId: retained.id, nonce: cookie.nonce, expiresAt: retained.expiresAt };
+        }
+      }
+      if (!current || !["ready", "delivered"].includes(current.state))
+        throw new Error("ARTIFACT_NOT_AVAILABLE");
       await tx
         .update(dataExportReauthentication)
         .set({ state: "superseded", updatedAt: now })
@@ -137,8 +186,18 @@ export class PrivacyReauthenticationService {
         createdAt: now,
         updatedAt: now,
       });
+      if (input.mutation)
+        await recordIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.mutation.idempotencyKey,
+          eventType: "assisted_delivery_reauth_started",
+          actorKind: "privacy_admin",
+          actorId: input.initiatingAdminUserId,
+          payload: { challengeId, channel: deliveryChannel, reasonCode: input.mutation.reasonCode },
+          operationDigest,
+        });
+      return { challengeId, nonce, expiresAt };
     });
-    return { challengeId, nonce, expiresAt };
   }
 
   async complete(input: {
@@ -242,6 +301,7 @@ export class PrivacyReauthenticationService {
           sql`${dataExportReauthentication.expiresAt} > ${now.toISOString()}`,
           sql`${dataExportReauthentication.nonceDigest} = ${digestReauthenticationNonce(input.nonce)}`,
           sql`exists (select 1 from data_export_artifact a join data_subject_request r on r.id = a.request_id where a.id = ${input.artifactId} and a.state = 'ready' and a.expires_at > ${now.toISOString()} and r.state in ('ready', 'delivered'))`,
+          sql`(${dataExportReauthentication.deliveryChannel} = 'self_service' or (exists (select 1 from data_subject_request_identity i where i.request_id = ${dataExportReauthentication.requestId} and i.party = 'subject' and i.state = 'verified') and (${dataExportReauthentication.deliveryChannel} = 'assisted' or exists (select 1 from data_subject_request_identity i where i.request_id = ${dataExportReauthentication.requestId} and i.party = 'representative' and i.state = 'verified' and i.authority_state = 'approved' and i.delivery_authorized = 1))))`,
         ),
       )
       .returning({ id: dataExportReauthentication.id });

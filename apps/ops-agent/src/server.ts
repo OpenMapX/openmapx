@@ -96,6 +96,10 @@ import {
 import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
 import { ArtifactTransferError } from "./artifact-transfer/errors";
+import {
+  prepareArtifactImportAdmission,
+  retainArtifactImportPlan,
+} from "./artifact-transfer/import-runtime";
 import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
@@ -1442,7 +1446,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               );
             } else if (
               (timedOut || job.state === "termination_pending") &&
-              ((job.role === "api" && job.operation.kind === "backup.prune") ||
+              ((job.role === "api" &&
+                (job.operation.kind === "backup.prune" ||
+                  (job.operation.kind === "artifactTransfer.import" &&
+                    (rawResult as { outcome?: string }).outcome === "committed"))) ||
                 (job.role === "data-manager" &&
                   [
                     "motis.primary.stop",
@@ -2585,6 +2592,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 throw error;
               }
             }
+            // Prepared compatibility checks are read-only and precede durable
+            // root admission. A stale preview creates no uncertain host owner.
+            const preparedArtifactImport =
+              job.operation.kind === "artifactTransfer.import"
+                ? await prepareArtifactImportAdmission(
+                    runtime,
+                    executionFor(job),
+                    job.operation,
+                    options.controlInstallation
+                      ? controlRegisteredServiceIds(options.controlInstallation)
+                      : [],
+                  )
+                : undefined;
             let coordinatorBaseline:
               | Awaited<ReturnType<typeof prepareCoordinatorPullBaseline>>
               | undefined;
@@ -2660,15 +2680,17 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   job.operation.kind === "data.update"
                     ? prepareDataUpdateAdmission(runtime, executionFor(job), job.operation, targets)
                     : undefined;
+                const artifactImport = preparedArtifactImport;
                 const hardlinksPlan =
-                  job.operation.kind === "configuration.hardlinks.apply"
+                  artifactImport?.hardlinks ??
+                  (job.operation.kind === "configuration.hardlinks.apply"
                     ? prepareConfigurationHardlinksAdmission(
                         runtime,
                         executionFor(job),
                         job.operation,
                         targets,
                       )
-                    : undefined;
+                    : undefined);
                 const lifecyclePlan =
                   job.operation.kind === "service.update"
                     ? prepareServiceUpdateAdmission(
@@ -2705,12 +2727,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (fixedDataPlan) retainFixedSingleDataPlan(authority, fixedDataPlan);
                 if (dataUpdatePlan) retainDataUpdatePlan(authority, dataUpdatePlan);
                 if (hardlinksPlan) retainGenerationHardlinksOwnerPlan(authority, hardlinksPlan);
+                if (artifactImport) retainArtifactImportPlan(authority, artifactImport.plan);
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
                 requireControlJournalRetention(authority);
                 controlAuthorities.set(job.operationId, authority);
                 if (
                   [
                     "configurationMaintenance.prepare",
+                    "artifactTransfer.import",
                     "stack.start",
                     "coreService.restart",
                     "service.start",

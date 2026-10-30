@@ -105,9 +105,13 @@ function validateOwner(
     planDigest: controlDigest(plan.plan),
   };
   if (
-    !["configuration.hardlinks.apply", "service.start", "service.update", "data.update"].includes(
-      s.kind,
-    ) ||
+    ![
+      "configuration.hardlinks.apply",
+      "service.start",
+      "service.update",
+      "data.update",
+      "artifactTransfer.import",
+    ].includes(s.kind) ||
     controlDigest(plan.parent) !== controlDigest(s.execution) ||
     (plan.reservation
       ? plan.reservation.operationFingerprint !== controlDigest(input) ||

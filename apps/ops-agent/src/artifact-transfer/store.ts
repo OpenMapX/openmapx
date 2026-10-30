@@ -15,11 +15,23 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import {
   AnchoredDirectory,
+  artifactFingerprint,
   executionAuthorityState,
+  inspectArtifactTargetLeaseChildSettlement,
+  lookupControlChildPhaseBinding,
+  parseBundleManifest,
+  readGenerationHardlinksOwnerPlan,
+  type ValidatedBuildBundle,
   validateBuildBundle,
 } from "@openmapx/core/build-artifacts";
 import {
+  type ArtifactFilePublicationResult,
+  inspectArtifactPublication,
+} from "@openmapx/core/build-artifacts/publication";
+import {
+  type ArtifactImportPreview,
   type ArtifactStageClaim,
+  artifactImportPreviewSchema,
   artifactStageClaimSchema,
   type ClaimTransferStage,
   type CreateTransferStage,
@@ -112,6 +124,14 @@ const metaSchema = z.strictObject({
     })
     .nullable(),
   integrationInspection: stageInspectionBindingSchema.nullable().default(null),
+  importPreview: z
+    .strictObject({
+      preview: artifactImportPreviewSchema,
+      targetFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      preparationId: z.uuid(),
+    })
+    .nullable()
+    .default(null),
   claims: z.array(integrationClaimRecordSchema).max(8).default([]),
   attempts: z
     .array(
@@ -357,6 +377,7 @@ export class ArtifactTransferStore {
           content: null,
           attempts: [],
           integrationInspection: null,
+          importPreview: null,
           claims: [],
         });
       } finally {
@@ -709,12 +730,206 @@ export class ArtifactTransferStore {
       }
     }
   }
+  /** Local, fixed prepared consumer. The descriptor-derived path never crosses HTTP. */
+  async withPreparedArtifact<T>(
+    input: { stageId: string; ownerId: string },
+    consume: (source: {
+      stage: TransferStage;
+      preparationId: string;
+      stagingRoot: string;
+      bundle: ValidatedBuildBundle;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const meta = this.lock(() => this.owned(input.stageId, input.ownerId, "prepared-artifact"));
+    if (meta.stage.state !== "claimed") this.alive(meta);
+    if (!["ready", "claimed"].includes(meta.stage.state) || !meta.stage.sha256)
+      failed(409, "Validate the prepared archive first");
+    const entry = [...meta.claims]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.claim.use === "validate-build" &&
+          entry.settlement?.outcome === "validated" &&
+          entry.preparation?.manifestDigest,
+      );
+    if (!entry?.preparation) failed(409, "Prepared validation receipt is unavailable");
+    const preparation = z
+      .strictObject({
+        version: z.literal(1),
+        directory: z.strictObject({ dev: z.string(), ino: z.string() }),
+        manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        artifactFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        archiveSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        serviceId: z.string().min(1).max(64),
+        expandedBytes: z.number().safe().int().nonnegative(),
+      })
+      .parse(entry.preparation);
+    if (
+      preparation.archiveSha256 !== meta.stage.sha256 ||
+      entry.claim.sha256 !== meta.stage.sha256 ||
+      entry.settlement?.outcome !== "validated" ||
+      entry.settlement.inspection.validationFingerprint !== preparation.artifactFingerprint
+    )
+      failed(409, "Prepared validation receipt differs");
+    const directory = this.directory(meta),
+      prepared = directory.directory(`prepared-${entry.claim.claimId}`, false, true);
+    try {
+      const bytes = prepared.read("manifest.json", this.policy.maxManifestBytes),
+        manifestDigest = createHash("sha256").update(bytes).digest("hex");
+      if (
+        manifestDigest !== entry.preparation.manifestDigest ||
+        canonicalJson({ dev: String(prepared.stat.dev), ino: String(prepared.stat.ino) }) !==
+          canonicalJson(entry.preparation.directory)
+      )
+        failed(409, "Prepared validation changed");
+      const manifest = parseBundleManifest(bytes.toString("utf8"));
+      if (
+        manifest.service !== preparation.serviceId ||
+        artifactFingerprint(manifest.files) !== preparation.artifactFingerprint
+      )
+        failed(409, "Prepared service changed");
+      // Recheck the original immutable upload as well as the extracted manifest.
+      const content = directory.fileIdentity("content"),
+        fd = openSync(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      try {
+        const stat = fstatSync(fd, { bigint: true });
+        if (
+          !meta.content ||
+          !same(content, stat) ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs
+        )
+          failed(409, "Prepared upload changed");
+      } finally {
+        closeSync(fd);
+      }
+      const result = await consume({
+        stage: meta.stage,
+        preparationId: entry.claim.claimId,
+        stagingRoot: join(this.data.path, input.stageId, `prepared-${entry.claim.claimId}`),
+        bundle: {
+          manifest,
+          manifestSha256: manifestDigest,
+          archiveSha256: meta.stage.sha256,
+          expandedBytes: Number(entry.preparation.expandedBytes),
+          artifactFingerprint: String(entry.preparation.artifactFingerprint),
+        },
+      });
+      prepared.check();
+      directory.check();
+      return result;
+    } finally {
+      prepared.close();
+      directory.close();
+    }
+  }
+  saveImportPreview(input: {
+    stageId: string;
+    ownerId: string;
+    preparationId: string;
+    targetFingerprint: string;
+    preview: ArtifactImportPreview;
+  }) {
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      this.alive(meta);
+      if (
+        meta.stage.state !== "ready" ||
+        meta.stage.sha256 !== input.preview.sha256 ||
+        input.preview.stageId !== input.stageId
+      )
+        failed(409, "Prepared preview source changed");
+      meta.importPreview = {
+        preview: artifactImportPreviewSchema.parse(input.preview),
+        targetFingerprint: input.targetFingerprint,
+        preparationId: input.preparationId,
+      };
+      this.save(meta);
+      return input.preview;
+    });
+  }
+  readImportPreview(input: {
+    stageId: string;
+    ownerId: string;
+    previewFingerprint: string;
+    expectedSha256: string;
+    expectedCurrentRevisionId: string | null;
+  }) {
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      this.alive(meta);
+      const retained = meta.importPreview;
+      if (
+        !retained ||
+        retained.preview.fingerprint !== input.previewFingerprint ||
+        retained.preview.sha256 !== input.expectedSha256 ||
+        retained.preview.currentRevisionId !== input.expectedCurrentRevisionId ||
+        Date.parse(retained.preview.expiresAt) <= this.now() ||
+        retained.preview.blockers.length
+      )
+        failed(409, "Preview is stale or blocked; refresh compatibility checks");
+      return retained;
+    });
+  }
+  async completePreparedImport(
+    context: OpsExecutionContext,
+    claim: ArtifactStageClaim,
+    result: ArtifactFilePublicationResult,
+  ) {
+    const operation = this.preparedContext(context),
+      authority = context.controlAuthority,
+      lease = context.ownedTargetLease;
+    if (operation.kind !== "artifactTransfer.import" || !authority || !lease)
+      failed(409, "Original import owner required");
+    const publication = inspectArtifactPublication(authority);
+    if (
+      !publication ||
+      publication.stageId !== operation.stageId ||
+      publication.archiveSha256 !== operation.expectedSha256 ||
+      publication.phase !== "committed" ||
+      result.outcome !== "committed" ||
+      result.artifactFingerprint !== publication.artifactFingerprint
+    )
+      failed(409, "Committed publication evidence required");
+    const plan = readGenerationHardlinksOwnerPlan(authority);
+    if (plan.reservation) {
+      const binding = lookupControlChildPhaseBinding(authority, plan.reservation),
+        settlement = binding
+          ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
+          : null;
+      if (settlement?.outcome !== "committed" || settlement.publication !== "committed")
+        failed(409, "Original hardlink child is not settled");
+    }
+    return this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, "prepared-artifact"),
+        entry = meta.claims.find((entry) => entry.claim.claimId === claim.claimId);
+      if (
+        !entry ||
+        entry.claim.use !== "import-build" ||
+        canonicalJson(entry.claim.identity) !==
+          canonicalJson({
+            executionId: context.execution.executionId,
+            operationKey: context.execution.operationKey,
+            fingerprint: context.execution.fingerprint,
+            executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+          })
+      )
+        failed(409, "Import claim changed");
+      entry.settlement = { outcome: "consumed", receiptId: context.execution.executionId };
+      meta.stage.state = "consumed";
+      this.save(meta);
+      return meta.stage;
+    });
+  }
   private preparedContext(context: OpsExecutionContext) {
     if (!context.controlAuthority) throw Error("Prepared artifact execution authority required");
     const authority = executionAuthorityState(context.controlAuthority),
       operation = context.claim.operation;
     if (
-      operation.kind !== "artifactTransfer.validate" ||
+      (operation.kind !== "artifactTransfer.validate" &&
+        operation.kind !== "artifactTransfer.import") ||
       authority.kind !== operation.kind ||
       authority.installation.installation.role !== "ops-agent" ||
       context.execution.principal !== "api" ||
@@ -1215,10 +1430,11 @@ export class ArtifactTransferStore {
     context?: OpsExecutionContext,
   ): Promise<ArtifactStageClaim> {
     if (!context) failed(409, "Artifact purpose consumer is not installed for this operation");
-    const operation =
-      context.claim.operation.kind === "artifactTransfer.validate"
-        ? this.preparedContext(context)
-        : this.integrationContext(context);
+    const operation = ["artifactTransfer.validate", "artifactTransfer.import"].includes(
+      context.claim.operation.kind,
+    )
+      ? this.preparedContext(context)
+      : this.integrationContext(context);
     this.admit();
     return this.lock(() => {
       const meta = this.owned(input.stageId, input.ownerId, input.purpose);
@@ -1230,7 +1446,7 @@ export class ArtifactTransferStore {
       };
       if (
         input.purpose !==
-          (operation.kind === "artifactTransfer.validate"
+          (["artifactTransfer.validate", "artifactTransfer.import"].includes(operation.kind)
             ? "prepared-artifact"
             : "integration-artifact") ||
         canonicalJson(input.identity) !== canonicalJson(identity)
@@ -1270,6 +1486,22 @@ export class ArtifactTransferStore {
           this.policy.maxConcurrentArchiveJobs
         )
           failed(429, "Archive validation concurrency limit exceeded");
+      } else if (operation.kind === "artifactTransfer.import") {
+        const preview = meta.importPreview;
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.stageId !== input.stageId ||
+          input.use !== "import-build" ||
+          meta.stage.state !== "ready" ||
+          !preview ||
+          preview.preview.fingerprint !== operation.previewFingerprint ||
+          preview.preview.sha256 !== operation.expectedSha256 ||
+          preview.preview.currentRevisionId !== operation.expectedCurrentRevisionId ||
+          preview.preview.blockers.length ||
+          Date.parse(preview.preview.expiresAt) <= this.now() ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Prepared import preview mismatch");
       } else if (operation.kind === "integration.inspectInstall") {
         if (
           operation.ownerId !== input.ownerId ||

@@ -138,7 +138,7 @@ export function createAdminRouteRegistrar<const R extends Registry>(
         ...(family.documentOptionalBodies && request.body?.isOptional()
           ? { adminOptionalBody: true }
           : {}),
-      } as FastifyContextConfig & { auth: "admin" | "service"; adminOptionalBody?: boolean },
+      } as FastifyContextConfig & { auth: AdminOperation["auth"]; adminOptionalBody?: boolean },
       schema: {
         operationId,
         ...(Object.values(responses).some((c) => c.kind === "bytes" && c.nativeDownload)

@@ -14,6 +14,7 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { installPreparedImportRuntime } from "./artifact-transfer/import-runtime";
 import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
 import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
 import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-transfer/store";
@@ -223,8 +224,16 @@ async function main(): Promise<void> {
             admissionsOpen: () => !replacementInProgress(),
           })
         : undefined;
-    if (artifactTransfers) installArtifactTransferRuntime(runtime, artifactTransfers);
-    else if ("reason" in transferPolicy) console.error(transferPolicy.reason);
+    if (artifactTransfers) {
+      installArtifactTransferRuntime(runtime, artifactTransfers);
+      installPreparedImportRuntime(runtime, artifactTransfers, {
+        rootDir: config.rootDir,
+        infraDir: paths.infraDir,
+        stack: paths,
+        ownedServices: productionOwnedServices(runtime),
+        loadAuthority: authorityLoader,
+      });
+    } else if ("reason" in transferPolicy) console.error(transferPolicy.reason);
     if (controlStartup.installation)
       installStandaloneIntegrationRuntime(runtime, {
         rootDir: config.rootDir,

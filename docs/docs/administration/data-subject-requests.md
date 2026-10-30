@@ -71,6 +71,50 @@ changed backup or warning set requires a new review. Unknown off-host copies,
 processor responses and generic text logs remain operator tasks. Do not use
 free-text scans to match a person.
 
+## Working a case in Privacy requests
+
+Open **Privacy requests** at `/admin/privacy` with a real full-administrator or
+privacy-administrator session. Selecting a different case clears its evidence,
+verification-code and delivery drafts. A version conflict retains your current
+draft, reloads the case, and requires another explicit confirmation.
+
+- **Identity and authority:** manual verification uses exceptional evidence,
+  a reasonable-doubt code and a live identity attachment belonging to this case.
+  Selecting an account-login or email method cannot prove identity. The subject
+  supplies account-login proof in their own session; the caseworker completes
+  the actual email-code flow. Representative authority and permission to receive
+  the response are separate decisions backed by a live authority attachment.
+- **Source tasks:** assign an active authorized operator, then record the actual
+  source outcome, reason, reviewed record count and applicable redaction code.
+  Assignment does not complete a task. Running collectors cannot be completed by
+  a caseworker; unresolved required sources still block generation.
+- **Deadlines and decisions:** inspect the original deadline and controller time
+  zone. Record the actual notification timestamp before extending a deadline.
+  Repeated extensions cannot exceed two calendar months after the original
+  deadline. Refusal requires confirmation and blocks subsequent case delivery.
+- **Evidence and supplements:** upload PDF, plain text, CSV, JSON, PNG or JPEG,
+  up to 25 MiB. Files are encrypted and begin with pending rights review. Only
+  approved processor responses or operator supplements enter exports; identity
+  and authority evidence never does. Upload a separately redacted replacement
+  with provenance and a redaction code, reject the original, then review the
+  replacement. Downloads are passive and require a recent sufficiently assured
+  login. Files are never displayed inline.
+- **Backups:** choose an inventory ID and let the server verify its immutable
+  provenance and derive the review outcome. An unavailable inventory remains an
+  error. Acknowledge only the displayed warning digest with its reason and current
+  case version; do not substitute another backup or force extraction.
+- **Assisted delivery:** confirm the artifact, delivery channel and reason, then
+  sign in again at `/auth/privacy/admin` and complete verification after returning
+  to the case. Use the explicit Download action once. The browser owns supported
+  same-origin downloads; other supported configurations use a user-selected file
+  sink with bounded streaming. An unsupported browser/client disables delivery
+  before consuming the one-use challenge. After an uncertain or interrupted
+  transfer, refresh the server status and start a new deliberate ceremony.
+
+The readiness checklist and capability hints do not grant authority. Every
+mutation and byte response checks the current server state. Independent release
+approvals remain full-administrator actions and are never created by a case form.
+
 ## Initial setup
 
 Sign in as a full administrator and open **Privacy setup** at

@@ -201,6 +201,7 @@ export {
   type GenerationHardlinksOwnerPlan,
   planGenerationHardlinksOwner,
   readGenerationHardlinksOwnerPlan,
+  readOwnedGenerationHardlinkPlan,
   retainGenerationHardlinksOwnerPlan,
 } from "./generation-hardlinks-owner";
 export * from "./manifest";

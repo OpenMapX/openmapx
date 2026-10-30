@@ -9,6 +9,15 @@ import {
   bindAdminStreamOperation,
 } from "../../admin-sdk-transport";
 
+const acceptPrivacyAdminBackupOmissionsBound = bindAdminOperation(
+  "acceptPrivacyAdminBackupOmissions",
+);
+export async function acceptPrivacyAdminBackupOmissionsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return acceptPrivacyAdminBackupOmissionsBound<T>(url, options);
+}
 const activateAdminTransitPinsBound = bindAdminOperation("activateAdminTransitPins");
 export async function activateAdminTransitPinsRequest<T>(
   url: string,
@@ -50,6 +59,13 @@ export async function applyAdminTransitCredentialsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return applyAdminTransitCredentialsBound<T>(url, options);
+}
+const assignPrivacyAdminTaskBound = bindAdminOperation("assignPrivacyAdminTask");
+export async function assignPrivacyAdminTaskRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return assignPrivacyAdminTaskBound<T>(url, options);
 }
 const cancelAdminActivityJobBound = bindAdminOperation("cancelAdminActivityJob");
 export async function cancelAdminActivityJobRequest<T>(
@@ -100,6 +116,24 @@ export async function completeAdminReauthenticationRequest<T>(
 ): Promise<T> {
   return completeAdminReauthenticationBound<T>(url, options);
 }
+const completePrivacyAdminEmailChallengeBound = bindAdminOperation(
+  "completePrivacyAdminEmailChallenge",
+);
+export async function completePrivacyAdminEmailChallengeRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return completePrivacyAdminEmailChallengeBound<T>(url, options);
+}
+const completePrivacyAdminReauthenticationBound = bindAdminOperation(
+  "completePrivacyAdminReauthentication",
+);
+export async function completePrivacyAdminReauthenticationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return completePrivacyAdminReauthenticationBound<T>(url, options);
+}
 const createAdminAccountBound = bindAdminOperation("createAdminAccount");
 export async function createAdminAccountRequest<T>(
   url: string,
@@ -120,6 +154,34 @@ export async function createAdminServiceBackupRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return createAdminServiceBackupBound<T>(url, options);
+}
+const createPrivacyAdminBackupReviewBound = bindAdminOperation("createPrivacyAdminBackupReview");
+export async function createPrivacyAdminBackupReviewRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return createPrivacyAdminBackupReviewBound<T>(url, options);
+}
+const createPrivacyAdminCaseBound = bindAdminOperation("createPrivacyAdminCase");
+export async function createPrivacyAdminCaseRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return createPrivacyAdminCaseBound<T>(url, options);
+}
+const decidePrivacyAdminCaseBound = bindAdminOperation("decidePrivacyAdminCase");
+export async function decidePrivacyAdminCaseRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return decidePrivacyAdminCaseBound<T>(url, options);
+}
+const decidePrivacyAdminTaskBound = bindAdminOperation("decidePrivacyAdminTask");
+export async function decidePrivacyAdminTaskRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return decidePrivacyAdminTaskBound<T>(url, options);
 }
 const deleteAdminArtifactTransferBound = bindAdminOperation("deleteAdminArtifactTransfer");
 export async function deleteAdminArtifactTransferRequest<T>(
@@ -167,6 +229,13 @@ export async function deleteApiDataManagerTransitSourcesSourceIdRequest<T>(
 ): Promise<T> {
   return deleteApiDataManagerTransitSourcesSourceIdBound<T>(url, options);
 }
+const deletePrivacyAdminAttachmentBound = bindAdminOperation("deletePrivacyAdminAttachment");
+export async function deletePrivacyAdminAttachmentRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return deletePrivacyAdminAttachmentBound<T>(url, options);
+}
 const disableAdminIntegrationBound = bindAdminOperation("disableAdminIntegration");
 export async function disableAdminIntegrationRequest<T>(
   url: string,
@@ -183,6 +252,22 @@ export async function downloadAdminArtifactTransferContentRequest<T>(
 ): Promise<T> {
   return downloadAdminArtifactTransferContentBound<T>(url, options);
 }
+const downloadPrivacyAdminArtifactBound = bindAdminByteOperation("downloadPrivacyAdminArtifact");
+export async function downloadPrivacyAdminArtifactRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return downloadPrivacyAdminArtifactBound<T>(url, options);
+}
+const downloadPrivacyAdminAttachmentBound = bindAdminByteOperation(
+  "downloadPrivacyAdminAttachment",
+);
+export async function downloadPrivacyAdminAttachmentRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return downloadPrivacyAdminAttachmentBound<T>(url, options);
+}
 const enableAdminIntegrationBound = bindAdminOperation("enableAdminIntegration");
 export async function enableAdminIntegrationRequest<T>(
   url: string,
@@ -196,6 +281,20 @@ export async function exportAdminIntegrationConfigsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return exportAdminIntegrationConfigsBound<T>(url, options);
+}
+const extendPrivacyAdminCaseBound = bindAdminOperation("extendPrivacyAdminCase");
+export async function extendPrivacyAdminCaseRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return extendPrivacyAdminCaseBound<T>(url, options);
+}
+const generatePrivacyAdminArtifactBound = bindAdminOperation("generatePrivacyAdminArtifact");
+export async function generatePrivacyAdminArtifactRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return generatePrivacyAdminArtifactBound<T>(url, options);
 }
 const getAdminAccountDeliveryBound = bindAdminOperation("getAdminAccountDelivery");
 export async function getAdminAccountDeliveryRequest<T>(
@@ -482,6 +581,27 @@ export async function getApiDataManagerTransitStateRequest<T>(
 ): Promise<T> {
   return getApiDataManagerTransitStateBound<T>(url, options);
 }
+const getPrivacyAdminCaseBound = bindAdminOperation("getPrivacyAdminCase");
+export async function getPrivacyAdminCaseRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getPrivacyAdminCaseBound<T>(url, options);
+}
+const getPrivacyAdminReadinessBound = bindAdminOperation("getPrivacyAdminReadiness");
+export async function getPrivacyAdminReadinessRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getPrivacyAdminReadinessBound<T>(url, options);
+}
+const importAdminArtifactTransferBound = bindAdminOperation("importAdminArtifactTransfer");
+export async function importAdminArtifactTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return importAdminArtifactTransferBound<T>(url, options);
+}
 const importAdminIntegrationConfigsBound = bindAdminOperation("importAdminIntegrationConfigs");
 export async function importAdminIntegrationConfigsRequest<T>(
   url: string,
@@ -511,6 +631,13 @@ export async function inviteAdminAccountRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return inviteAdminAccountBound<T>(url, options);
+}
+const issuePrivacyAdminEmailChallengeBound = bindAdminOperation("issuePrivacyAdminEmailChallenge");
+export async function issuePrivacyAdminEmailChallengeRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return issuePrivacyAdminEmailChallengeBound<T>(url, options);
 }
 const listAdminActivityJobsBound = bindAdminOperation("listAdminActivityJobs");
 export async function listAdminActivityJobsRequest<T>(
@@ -616,6 +743,41 @@ export async function listAdminStandaloneIntegrationsRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return listAdminStandaloneIntegrationsBound<T>(url, options);
+}
+const listPrivacyAdminBackupOmissionsBound = bindAdminOperation("listPrivacyAdminBackupOmissions");
+export async function listPrivacyAdminBackupOmissionsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listPrivacyAdminBackupOmissionsBound<T>(url, options);
+}
+const listPrivacyAdminBackupReviewsBound = bindAdminOperation("listPrivacyAdminBackupReviews");
+export async function listPrivacyAdminBackupReviewsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listPrivacyAdminBackupReviewsBound<T>(url, options);
+}
+const listPrivacyAdminBackupsBound = bindAdminOperation("listPrivacyAdminBackups");
+export async function listPrivacyAdminBackupsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listPrivacyAdminBackupsBound<T>(url, options);
+}
+const listPrivacyAdminOperatorsBound = bindAdminOperation("listPrivacyAdminOperators");
+export async function listPrivacyAdminOperatorsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listPrivacyAdminOperatorsBound<T>(url, options);
+}
+const listPrivacyAdminQueueBound = bindAdminOperation("listPrivacyAdminQueue");
+export async function listPrivacyAdminQueueRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listPrivacyAdminQueueBound<T>(url, options);
 }
 const patchAdminIntegrationConfigBound = bindAdminOperation("patchAdminIntegrationConfig");
 export async function patchAdminIntegrationConfigRequest<T>(
@@ -734,6 +896,13 @@ export async function postApiDataManagerTransitSyncPreflightRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return postApiDataManagerTransitSyncPreflightBound<T>(url, options);
+}
+const previewAdminArtifactImportBound = bindAdminOperation("previewAdminArtifactImport");
+export async function previewAdminArtifactImportRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminArtifactImportBound<T>(url, options);
 }
 const previewAdminBackupPruneBound = bindAdminOperation("previewAdminBackupPrune");
 export async function previewAdminBackupPruneRequest<T>(
@@ -867,6 +1036,20 @@ export async function restoreAdminServiceBackupRequest<T>(
 ): Promise<T> {
   return restoreAdminServiceBackupBound<T>(url, options);
 }
+const reviewPrivacyAdminAttachmentBound = bindAdminOperation("reviewPrivacyAdminAttachment");
+export async function reviewPrivacyAdminAttachmentRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return reviewPrivacyAdminAttachmentBound<T>(url, options);
+}
+const reviewPrivacyAdminIdentityBound = bindAdminOperation("reviewPrivacyAdminIdentity");
+export async function reviewPrivacyAdminIdentityRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return reviewPrivacyAdminIdentityBound<T>(url, options);
+}
 const rollbackAdminSharedMobilityBound = bindAdminOperation("rollbackAdminSharedMobility");
 export async function rollbackAdminSharedMobilityRequest<T>(
   url: string,
@@ -974,6 +1157,15 @@ export async function startAdminReauthenticationRequest<T>(
 ): Promise<T> {
   return startAdminReauthenticationBound<T>(url, options);
 }
+const startPrivacyAdminReauthenticationBound = bindAdminOperation(
+  "startPrivacyAdminReauthentication",
+);
+export async function startPrivacyAdminReauthenticationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return startPrivacyAdminReauthenticationBound<T>(url, options);
+}
 const stopAdminComposeBound = bindAdminOperation("stopAdminCompose");
 export async function stopAdminComposeRequest<T>(
   url: string,
@@ -1024,6 +1216,13 @@ export async function uploadAdminArtifactTransferContentRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return uploadAdminArtifactTransferContentBound<T>(url, options);
+}
+const uploadPrivacyAdminAttachmentBound = bindAdminOperation("uploadPrivacyAdminAttachment");
+export async function uploadPrivacyAdminAttachmentRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return uploadPrivacyAdminAttachmentBound<T>(url, options);
 }
 const validateAdminArtifactTransferBound = bindAdminOperation("validateAdminArtifactTransfer");
 export async function validateAdminArtifactTransferRequest<T>(

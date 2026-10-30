@@ -34,7 +34,8 @@
     "apps/api/src/services/standalone-integrations/install.test.ts",
     "apps/api/src/services/__tests__/platform-preview-postgres.test.ts",
     "apps/api/src/services/__tests__/platform-configuration-runtime-postgres.test.ts",
-    "apps/api/src/services/__tests__/retained-maintenance-job-postgres.test.ts"
+    "apps/api/src/services/__tests__/retained-maintenance-job-postgres.test.ts",
+    "apps/api/src/privacy/admin-workflows-postgres.test.ts"
   ],
   "ingestion": [
     "apps/api/src/services/__tests__/job-runner-postgres.test.ts",

@@ -8,6 +8,8 @@ import { createApiClient } from "@openmapx/core";
 import {
   clearAdminReleaseSelection,
   createAdminArtifactTransfer,
+  importAdminArtifactTransfer,
+  previewAdminArtifactImport,
   previewAdminBackupPrune,
   pruneAdminServiceBackups,
   pullAdminServiceImages,
@@ -91,7 +93,7 @@ dbDescribe("retained finite maintenance requests", () => {
   });
   const body = { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" };
   it("validates uploaded bundle bytes through actual SDK, queued SQL job and production agent", async () => {
-    const host = await ownedServiceHost();
+    const host = await ownedServiceHost({ extraServiceIds: ["osrm"] });
     state.services = host.loaded;
     const installation = openControlInstallation({
         infraDir: host.infraDir,
@@ -112,6 +114,17 @@ dbDescribe("retained finite maintenance requests", () => {
       capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
     });
     installArtifactTransferRuntime(host.runtime, store);
+    const { installPreparedImportRuntime } = await import(
+      "../../../../ops-agent/src/artifact-transfer/import-runtime"
+    );
+    installPreparedImportRuntime(host.runtime, store, {
+      rootDir: host.root,
+      infraDir: host.infraDir,
+      stack: host.stack,
+      loadAuthority: host.loadAuthority,
+      ownedServices: host.owned,
+      execFile: host.execFile,
+    });
     const agent = buildOpsAgentServer({
       runtime: host.runtime,
       resourceClaimer: host.claimer,
@@ -139,15 +152,24 @@ dbDescribe("retained finite maintenance requests", () => {
     vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
     const { jobRunner } = await import("../job-runner"),
-      { handlePreparedArtifactValidationJob } = await import("../admin-artifact-validation"),
+      { handlePreparedArtifactValidationJob, handlePreparedArtifactImportJob } = await import(
+        "../admin-artifact-validation"
+      ),
       { adminArtifactTransfersRoute } = await import("../../routes/admin-artifact-transfers");
     jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
+    jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
     const api = await createAdminTestApp(adminArtifactTransfersRoute, { prefix: "/api" }),
       url = await api.listen({ host: "127.0.0.1", port: 0 }),
       options = { client: createApiClient({ baseUrl: url }) };
     const source = join(host.root, "validation-source");
     mkdirSync(join(source, "osrm-graph"), { recursive: true });
-    writeFileSync(join(source, "osrm-graph/region.osrm"), "synthetic graph");
+    for (const name of [
+      "region.osrm",
+      "region.osrm.partition",
+      "region.osrm.cells",
+      "region.osrm.mldgr",
+    ])
+      writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`);
     const chunks: Buffer[] = [];
     await writeBuildBundle({
       dataRoot: source,
@@ -204,6 +226,49 @@ dbDescribe("retained finite maintenance requests", () => {
       expect(
         (await validateAdminArtifactTransfer(created.data.stageId, key, options)).data,
       ).toEqual(accepted.data);
+      const preview = await previewAdminArtifactImport(created.data.stageId, options);
+      expect(preview.status).toBe(200);
+      if (preview.status !== 200) throw Error("Import preview unavailable");
+      expect(preview.data.blockers).toEqual([]);
+      const body = {
+          expectedSha256: preview.data.sha256,
+          previewFingerprint: preview.data.fingerprint,
+          expectedCurrentRevisionId: preview.data.currentRevisionId,
+        },
+        importKey = { "idempotency-key": "actual-prepared-stage-import-001" };
+      const imported = await importAdminArtifactTransfer(
+        created.data.stageId,
+        body,
+        importKey,
+        options,
+      );
+      expect(imported.status).toBe(202);
+      if (imported.status !== 202) throw Error("Import admission unavailable");
+      await vi.waitFor(
+        async () => {
+          const [row] = await state.fixture.db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.id, imported.data.jobId));
+          expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+            "success",
+          );
+          expect(row?.result).toMatchObject({
+            operation: "import-artifact",
+            publication: { outcome: "committed", followUp: "complete" },
+          });
+        },
+        { timeout: 30000, interval: 100 },
+      );
+      expect(
+        (await importAdminArtifactTransfer(created.data.stageId, body, importKey, options)).data,
+      ).toEqual(imported.data);
+      expect(readFileSync(join(host.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(
+        "synthetic region.osrm",
+      );
+      expect(
+        journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
+      ).toHaveLength(1);
       expect(lostAdmission).toBe(true);
       expect(
         journal.records().filter((job) => job.operation.kind === "artifactTransfer.validate"),

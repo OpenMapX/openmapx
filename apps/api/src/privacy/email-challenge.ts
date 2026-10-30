@@ -16,6 +16,7 @@ import {
   type MasterKeyRing,
   makeAad,
 } from "./crypto.js";
+import { findIdempotentEvent, idempotencyFingerprint, recordIdempotentEvent } from "./idempotency";
 
 export const EMAIL_CHALLENGE_TTL_MS = 10 * 60_000;
 export const EMAIL_CHALLENGE_MAX_ATTEMPTS = 5;
@@ -178,6 +179,8 @@ export class PrivacyEmailChallengeService {
     requestId: string;
     party: "subject" | "representative";
     ttlMs?: number;
+    actorId?: string;
+    idempotencyKey?: string;
   }): Promise<{ challengeId: string; expiresAt: Date }> {
     const now = this.now();
     const ttlMs = Math.min(input.ttlMs ?? EMAIL_CHALLENGE_TTL_MS, EMAIL_CHALLENGE_TTL_MS);
@@ -185,7 +188,7 @@ export class PrivacyEmailChallengeService {
       throw new EmailChallengeError("CHALLENGE_INVALID");
     const expiresAt = new Date(now.getTime() + ttlMs);
     const challengeId = randomUUID();
-    await this.database.transaction(async (tx) => {
+    return this.database.transaction(async (tx) => {
       const [request] = await tx
         .select({
           id: dataSubjectRequest.id,
@@ -198,6 +201,37 @@ export class PrivacyEmailChallengeService {
         .where(eq(dataSubjectRequest.id, input.requestId))
         .for("update")
         .limit(1);
+      const operationDigest = idempotencyFingerprint({
+        party: input.party,
+        actorId: input.actorId ?? null,
+        ttlMs,
+      });
+      if (input.idempotencyKey) {
+        const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.idempotencyKey,
+          eventType: "identity_email_challenge_issued",
+          operationDigest,
+        });
+        if (previous) {
+          const id = (previous.payload as Record<string, unknown>).challengeId;
+          const [retained] = await tx
+            .select({
+              challengeId: dataSubjectRequestEmailChallenge.id,
+              expiresAt: dataSubjectRequestEmailChallenge.expiresAt,
+            })
+            .from(dataSubjectRequestEmailChallenge)
+            .where(
+              and(
+                eq(dataSubjectRequestEmailChallenge.id, String(id)),
+                eq(dataSubjectRequestEmailChallenge.requestId, input.requestId),
+              ),
+            )
+            .limit(1);
+          if (!retained) throw new EmailChallengeError("CHALLENGE_NOT_FOUND");
+          return retained;
+        }
+      }
       const [identity] = await tx
         .select({
           id: dataSubjectRequestIdentity.id,
@@ -324,8 +358,18 @@ export class PrivacyEmailChallengeService {
         createdAt: now,
         updatedAt: now,
       });
+      if (input.idempotencyKey)
+        await recordIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.idempotencyKey,
+          eventType: "identity_email_challenge_issued",
+          actorKind: "privacy_admin",
+          actorId: input.actorId,
+          payload: { challengeId, party: input.party },
+          operationDigest,
+        });
+      return { challengeId, expiresAt };
     });
-    return { challengeId, expiresAt };
   }
 
   async dispatchPending(input: {
@@ -540,9 +584,17 @@ export class PrivacyEmailChallengeService {
     requestId: string;
     party: "subject" | "representative";
     code: string;
+    actorId?: string;
+    idempotencyKey?: string;
   }): Promise<{ proofId: string }> {
     const now = this.now();
     const result = await this.database.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, input.requestId))
+        .for("update")
+        .limit(1);
       const [challenge] = await tx
         .select()
         .from(dataSubjectRequestEmailChallenge)
@@ -557,6 +609,29 @@ export class PrivacyEmailChallengeService {
       if (!challenge) throw new EmailChallengeError("CHALLENGE_NOT_FOUND");
       if (challenge.party !== input.party || challenge.purpose !== "identity_verification")
         throw new EmailChallengeError("CHALLENGE_INVALID");
+      const replayKey = this.keyRing.keys.get(
+        challenge.codeKeyVersion ?? this.keyRing.activeVersion,
+      );
+      if (!replayKey) throw new EmailChallengeError("CHALLENGE_INVALID");
+      const operationDigest = createHmac("sha256", replayKey)
+        .update(
+          JSON.stringify({
+            challengeId: input.challengeId,
+            party: input.party,
+            actorId: input.actorId ?? null,
+            code: input.code,
+          }),
+        )
+        .digest("hex");
+      if (input.idempotencyKey) {
+        const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.idempotencyKey,
+          eventType: "identity_email_challenge_completed",
+          operationDigest,
+        });
+        if (previous) return { proofId: challenge.identityId, shouldEnqueue: false };
+      }
       if (challenge.state === "consumed" || challenge.consumedAt)
         throw new EmailChallengeError("CHALLENGE_REPLAYED");
       if (challenge.expiresAt <= now) {
@@ -599,12 +674,6 @@ export class PrivacyEmailChallengeService {
         };
       }
 
-      const [request] = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .for("update")
-        .limit(1);
       if (!request || !["identity_pending", "clarification_needed"].includes(request.state)) {
         await tx
           .update(dataSubjectRequestEmailChallenge)
@@ -678,6 +747,16 @@ export class PrivacyEmailChallengeService {
         payload: { party: input.party, method: "verified_email_challenge" },
         createdAt: now,
       });
+      if (input.idempotencyKey)
+        await recordIdempotentEvent(tx as unknown as typeof defaultDb, {
+          requestId: input.requestId,
+          idempotencyKey: input.idempotencyKey,
+          eventType: "identity_email_challenge_completed",
+          actorKind: "privacy_admin",
+          actorId: input.actorId,
+          payload: { challengeId: challenge.id, party: input.party },
+          operationDigest,
+        });
       return { proofId: identity.id, shouldEnqueue: identityComplete };
     });
     if ("error" in result && result.error) throw new EmailChallengeError(result.error);

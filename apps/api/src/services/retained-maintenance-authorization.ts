@@ -9,6 +9,7 @@ export const MAINTENANCE_JOB_TYPES = [
   "backup.prune",
   "compose.render",
   "artifact.validate",
+  "artifact.import",
 ] as const;
 export function maintenanceJobAuthorization(
   token: string,

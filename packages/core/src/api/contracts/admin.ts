@@ -72,7 +72,7 @@ export type AdminResponseContract =
 export interface AdminOperation {
   method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
   path: `/api/${string}`;
-  auth: "service" | "admin";
+  auth: "service" | "admin" | "privacy_admin";
   request?: { body?: z.ZodType; query?: z.ZodType; params?: z.ZodType; headers?: z.ZodType };
   requestBody?: { kind: "bytes"; mediaType: "application/octet-stream" };
   responses: Record<number, AdminResponseContract>;

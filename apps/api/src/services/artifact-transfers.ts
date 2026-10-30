@@ -55,6 +55,53 @@ export class AdminArtifactTransfers {
       throw error;
     }
   }
+  previewImport(ownerId: string, stageId: string) {
+    return this.execute({ kind: "artifactTransfer.previewImport", stageId, ownerId });
+  }
+  async importPrepared(
+    ownerId: string,
+    stageId: string,
+    key: string,
+    input: {
+      expectedSha256: string;
+      previewFingerprint: string;
+      expectedCurrentRevisionId: string | null;
+    },
+  ) {
+    const payload = { stageId, ownerId, ...input };
+    const { lookupMaintenanceJob, MaintenanceRequestConflict } = await import(
+      "./retained-maintenance-job"
+    );
+    try {
+      const retained = await lookupMaintenanceJob("artifact.import", payload, ownerId, key);
+      if (retained) return { ok: true as const, jobId: retained };
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict) throw new AdminArtifactTransferError(409);
+      throw error;
+    }
+    const stage = await this.inspect(ownerId, stageId);
+    if (
+      stage.purpose !== "prepared-artifact" ||
+      stage.state !== "ready" ||
+      stage.sha256 !== input.expectedSha256
+    )
+      throw new AdminArtifactTransferError(409);
+    const { jobRunner } = await import("./job-runner");
+    try {
+      return {
+        ok: true as const,
+        jobId: await jobRunner.enqueueMaintenance(
+          "artifact.import",
+          { stageId, ownerId, ...input },
+          ownerId,
+          key,
+        ),
+      };
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict) throw new AdminArtifactTransferError(409);
+      throw error;
+    }
+  }
   list(ownerId: string, limit = 50, offset = 0) {
     return this.execute({ kind: "artifactTransfer.list", ownerId, limit, offset });
   }

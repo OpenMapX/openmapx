@@ -7,6 +7,8 @@
     "services/data-manager/src/jobs/download-fonts.ts|execa|1|unzip|data-manager-worker|data-manager.fonts-inspect",
     "services/data-manager/src/jobs/download-fonts.ts|execa|2|unzip|data-manager-worker|data-manager.fonts-extract",
     "services/data-manager/src/jobs/download-osm.ts|execa|1|curl|data-manager-worker|data-manager.osm-download",
+    "services/data-manager/src/jobs/execution/test-fixtures/dm-recovery-process.ts|runner|1|{ script: \"generate-attribution\" }|transitous-runner|transitous.fixed-runner",
+    "services/data-manager/src/jobs/execution/test-fixtures/dm-recovery-process.ts|runner|2|{ script: \"garbage-collect\" }|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/overture/duckdb.ts|execa|1|duckdb|data-manager-worker|data-manager.duckdb",
     "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|1|osmium|data-manager-worker|data-manager.overture-extract",
     "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|2|osmium|data-manager-worker|data-manager.overture-export",
@@ -23,6 +25,7 @@
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|1|git|transitous-runner|transitous.checkout-fetch",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|2|git|transitous-runner|transitous.checkout-resolve",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|3|git|transitous-runner|transitous.checkout-materialize",
+    "services/data-manager/src/jobs/transitous/script-runner.ts|runner|1|run|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/transitous/validate.ts|execa|1|unzip|transitous-runner|transitous.archive-validate",
     "services/data-manager/src/supervisor.ts|spawn|1|process.execPath|data-manager-worker|data-manager.supervise-traffic-worker"
   ],
@@ -35,9 +38,11 @@
       "artifactTransfer.claim",
       "artifactTransfer.create",
       "artifactTransfer.delete",
+      "artifactTransfer.import",
       "artifactTransfer.inspect",
       "artifactTransfer.inspectClaim",
       "artifactTransfer.list",
+      "artifactTransfer.previewImport",
       "artifactTransfer.settle",
       "artifactTransfer.validate",
       "backup.create",
@@ -425,7 +430,8 @@
         "artifactTransfer.delete",
         "artifactTransfer.claim",
         "artifactTransfer.inspectClaim",
-        "artifactTransfer.settle"
+        "artifactTransfer.settle",
+        "artifactTransfer.previewImport"
       ]
     },
     {
@@ -469,6 +475,14 @@
         "apps/ops-agent/src/backup-prune-runtime.ts#installBackupPruneRuntime"
       ],
       "typedKinds": ["backup.prune", "backup.prune.preview"]
+    },
+    {
+      "id": "api.artifact-publication",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactImportJob"
+      ],
+      "typedKinds": ["artifactTransfer.import"]
     }
   ],
   "mounts": [

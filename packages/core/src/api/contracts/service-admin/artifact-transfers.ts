@@ -1,5 +1,10 @@
 import z from "zod/v4";
-import { transferPurposeSchema, transferStageSchema } from "../../../ops/artifact-transfer";
+import {
+  artifactImportOperationSchema,
+  artifactImportPreviewSchema,
+  transferPurposeSchema,
+  transferStageSchema,
+} from "../../../ops/artifact-transfer";
 import { type AdminOperation, adminBytes, adminJson, httpErrorSchema } from "../admin";
 
 const params = z.strictObject({ stageId: z.uuid() });
@@ -39,7 +44,35 @@ const errors = {
   503: adminJson(httpErrorSchema),
   507: adminJson(httpErrorSchema),
 };
+export const adminArtifactImportInputSchema = artifactImportOperationSchema.omit({
+  kind: true,
+  stageId: true,
+  ownerId: true,
+});
 export const artifactTransferAdminOperations = {
+  previewAdminArtifactImport: {
+    method: "POST",
+    path: "/api/admin/artifact-transfers/:stageId/preview-import",
+    auth: "admin",
+    request: { params },
+    responses: { 200: adminJson(artifactImportPreviewSchema), ...errors },
+  },
+  importAdminArtifactTransfer: {
+    method: "POST",
+    path: "/api/admin/artifact-transfers/:stageId/import",
+    auth: "admin",
+    request: {
+      params,
+      body: adminArtifactImportInputSchema,
+      headers: z.object({
+        "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),
+      }),
+    },
+    responses: {
+      202: adminJson(z.strictObject({ ok: z.literal(true), jobId: z.uuid() })),
+      ...errors,
+    },
+  },
   validateAdminArtifactTransfer: {
     method: "POST",
     path: "/api/admin/artifact-transfers/:stageId/validate",

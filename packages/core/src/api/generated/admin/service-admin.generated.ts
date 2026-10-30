@@ -31,12 +31,14 @@ import {
   getAdminServiceRequest,
   getAdminServiceSelectionRequest,
   getAdminSharedMobilityRequest,
+  importAdminArtifactTransferRequest,
   listAdminArtifactTransfersRequest,
   listAdminCacheNamespacesRequest,
   listAdminOperationsRequest,
   listAdminServiceBackupsRequest,
   listAdminServicePresetsRequest,
   listAdminServicesRequest,
+  previewAdminArtifactImportRequest,
   previewAdminBackupPruneRequest,
   previewAdminOperationRequest,
   previewAdminPlatformConfigurationRequest,
@@ -280,6 +282,22 @@ import type {
   GetAdminSharedMobility415,
   GetAdminSharedMobility429,
   GetAdminSharedMobility500,
+  ImportAdminArtifactTransfer202,
+  ImportAdminArtifactTransfer400,
+  ImportAdminArtifactTransfer401,
+  ImportAdminArtifactTransfer403,
+  ImportAdminArtifactTransfer404,
+  ImportAdminArtifactTransfer409,
+  ImportAdminArtifactTransfer410,
+  ImportAdminArtifactTransfer413,
+  ImportAdminArtifactTransfer415,
+  ImportAdminArtifactTransfer422,
+  ImportAdminArtifactTransfer429,
+  ImportAdminArtifactTransfer500,
+  ImportAdminArtifactTransfer503,
+  ImportAdminArtifactTransfer507,
+  ImportAdminArtifactTransferBody,
+  ImportAdminArtifactTransferHeaders,
   ListAdminArtifactTransfers200,
   ListAdminArtifactTransfers400,
   ListAdminArtifactTransfers401,
@@ -336,6 +354,20 @@ import type {
   ListAdminServices415,
   ListAdminServices429,
   ListAdminServices500,
+  PreviewAdminArtifactImport200,
+  PreviewAdminArtifactImport400,
+  PreviewAdminArtifactImport401,
+  PreviewAdminArtifactImport403,
+  PreviewAdminArtifactImport404,
+  PreviewAdminArtifactImport409,
+  PreviewAdminArtifactImport410,
+  PreviewAdminArtifactImport413,
+  PreviewAdminArtifactImport415,
+  PreviewAdminArtifactImport422,
+  PreviewAdminArtifactImport429,
+  PreviewAdminArtifactImport500,
+  PreviewAdminArtifactImport503,
+  PreviewAdminArtifactImport507,
   PreviewAdminBackupPrune200,
   PreviewAdminBackupPrune400,
   PreviewAdminBackupPrune401,
@@ -1343,6 +1375,253 @@ export const uploadAdminArtifactTransferContent: (
 ) => ReturnType<
   typeof uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent
 > = uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent;
+
+export type importAdminArtifactTransferResponse202 = {
+  data: ImportAdminArtifactTransfer202;
+  status: 202;
+};
+
+export type importAdminArtifactTransferResponse400 = {
+  data: ImportAdminArtifactTransfer400;
+  status: 400;
+};
+
+export type importAdminArtifactTransferResponse401 = {
+  data: ImportAdminArtifactTransfer401;
+  status: 401;
+};
+
+export type importAdminArtifactTransferResponse403 = {
+  data: ImportAdminArtifactTransfer403;
+  status: 403;
+};
+
+export type importAdminArtifactTransferResponse404 = {
+  data: ImportAdminArtifactTransfer404;
+  status: 404;
+};
+
+export type importAdminArtifactTransferResponse409 = {
+  data: ImportAdminArtifactTransfer409;
+  status: 409;
+};
+
+export type importAdminArtifactTransferResponse410 = {
+  data: ImportAdminArtifactTransfer410;
+  status: 410;
+};
+
+export type importAdminArtifactTransferResponse413 = {
+  data: ImportAdminArtifactTransfer413;
+  status: 413;
+};
+
+export type importAdminArtifactTransferResponse415 = {
+  data: ImportAdminArtifactTransfer415;
+  status: 415;
+};
+
+export type importAdminArtifactTransferResponse422 = {
+  data: ImportAdminArtifactTransfer422;
+  status: 422;
+};
+
+export type importAdminArtifactTransferResponse429 = {
+  data: ImportAdminArtifactTransfer429;
+  status: 429;
+};
+
+export type importAdminArtifactTransferResponse500 = {
+  data: ImportAdminArtifactTransfer500;
+  status: 500;
+};
+
+export type importAdminArtifactTransferResponse503 = {
+  data: ImportAdminArtifactTransfer503;
+  status: 503;
+};
+
+export type importAdminArtifactTransferResponse507 = {
+  data: ImportAdminArtifactTransfer507;
+  status: 507;
+};
+
+export type importAdminArtifactTransferResponseSuccess = importAdminArtifactTransferResponse202 & {
+  headers: Headers;
+};
+export type importAdminArtifactTransferResponseError = (
+  | importAdminArtifactTransferResponse400
+  | importAdminArtifactTransferResponse401
+  | importAdminArtifactTransferResponse403
+  | importAdminArtifactTransferResponse404
+  | importAdminArtifactTransferResponse409
+  | importAdminArtifactTransferResponse410
+  | importAdminArtifactTransferResponse413
+  | importAdminArtifactTransferResponse415
+  | importAdminArtifactTransferResponse422
+  | importAdminArtifactTransferResponse429
+  | importAdminArtifactTransferResponse500
+  | importAdminArtifactTransferResponse503
+  | importAdminArtifactTransferResponse507
+) & {
+  headers: Headers;
+};
+
+export type importAdminArtifactTransferResponse =
+  | importAdminArtifactTransferResponseSuccess
+  | importAdminArtifactTransferResponseError;
+
+export const getImportAdminArtifactTransferUrl = (stageId: string) => {
+  return `/api/admin/artifact-transfers/${encodeURIComponent(String(stageId))}/import`;
+};
+
+export const importAdminArtifactTransfer = async (
+  stageId: string,
+  importAdminArtifactTransferBody: ImportAdminArtifactTransferBody,
+  headers: ImportAdminArtifactTransferHeaders,
+  options?: Parameters<typeof importAdminArtifactTransferRequest>[1],
+): Promise<importAdminArtifactTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return importAdminArtifactTransferRequest<importAdminArtifactTransferResponse>(
+    getImportAdminArtifactTransferUrl(stageId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(importAdminArtifactTransferBody),
+    },
+  );
+};
+
+export type previewAdminArtifactImportResponse200 = {
+  data: PreviewAdminArtifactImport200;
+  status: 200;
+};
+
+export type previewAdminArtifactImportResponse400 = {
+  data: PreviewAdminArtifactImport400;
+  status: 400;
+};
+
+export type previewAdminArtifactImportResponse401 = {
+  data: PreviewAdminArtifactImport401;
+  status: 401;
+};
+
+export type previewAdminArtifactImportResponse403 = {
+  data: PreviewAdminArtifactImport403;
+  status: 403;
+};
+
+export type previewAdminArtifactImportResponse404 = {
+  data: PreviewAdminArtifactImport404;
+  status: 404;
+};
+
+export type previewAdminArtifactImportResponse409 = {
+  data: PreviewAdminArtifactImport409;
+  status: 409;
+};
+
+export type previewAdminArtifactImportResponse410 = {
+  data: PreviewAdminArtifactImport410;
+  status: 410;
+};
+
+export type previewAdminArtifactImportResponse413 = {
+  data: PreviewAdminArtifactImport413;
+  status: 413;
+};
+
+export type previewAdminArtifactImportResponse415 = {
+  data: PreviewAdminArtifactImport415;
+  status: 415;
+};
+
+export type previewAdminArtifactImportResponse422 = {
+  data: PreviewAdminArtifactImport422;
+  status: 422;
+};
+
+export type previewAdminArtifactImportResponse429 = {
+  data: PreviewAdminArtifactImport429;
+  status: 429;
+};
+
+export type previewAdminArtifactImportResponse500 = {
+  data: PreviewAdminArtifactImport500;
+  status: 500;
+};
+
+export type previewAdminArtifactImportResponse503 = {
+  data: PreviewAdminArtifactImport503;
+  status: 503;
+};
+
+export type previewAdminArtifactImportResponse507 = {
+  data: PreviewAdminArtifactImport507;
+  status: 507;
+};
+
+export type previewAdminArtifactImportResponseSuccess = previewAdminArtifactImportResponse200 & {
+  headers: Headers;
+};
+export type previewAdminArtifactImportResponseError = (
+  | previewAdminArtifactImportResponse400
+  | previewAdminArtifactImportResponse401
+  | previewAdminArtifactImportResponse403
+  | previewAdminArtifactImportResponse404
+  | previewAdminArtifactImportResponse409
+  | previewAdminArtifactImportResponse410
+  | previewAdminArtifactImportResponse413
+  | previewAdminArtifactImportResponse415
+  | previewAdminArtifactImportResponse422
+  | previewAdminArtifactImportResponse429
+  | previewAdminArtifactImportResponse500
+  | previewAdminArtifactImportResponse503
+  | previewAdminArtifactImportResponse507
+) & {
+  headers: Headers;
+};
+
+export type previewAdminArtifactImportResponse =
+  | previewAdminArtifactImportResponseSuccess
+  | previewAdminArtifactImportResponseError;
+
+export const getPreviewAdminArtifactImportUrl = (stageId: string) => {
+  return `/api/admin/artifact-transfers/${encodeURIComponent(String(stageId))}/preview-import`;
+};
+
+export const previewAdminArtifactImport = async (
+  stageId: string,
+  options?: Parameters<typeof previewAdminArtifactImportRequest>[1],
+): Promise<previewAdminArtifactImportResponse> => {
+  return previewAdminArtifactImportRequest<previewAdminArtifactImportResponse>(
+    getPreviewAdminArtifactImportUrl(stageId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
 
 export type validateAdminArtifactTransferResponse202 = {
   data: ValidateAdminArtifactTransfer202;
