@@ -103,6 +103,7 @@ import {
   recoverPreparedImportFiles,
   retainArtifactImportPlan,
 } from "./artifact-transfer/import-runtime";
+import { registerArtifactTransferLifecycle } from "./artifact-transfer/lifecycle";
 import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
@@ -475,7 +476,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       apiToken: options.tokens.api,
     });
   }
-  if (options.artifactTransfers)
+  if (options.artifactTransfers) {
+    registerArtifactTransferLifecycle(app, options.artifactTransfers);
     registerArtifactTransferRoutes(app, {
       store: options.artifactTransfers,
       apiToken: options.tokens.api,
@@ -483,6 +485,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         !options.replacementInProgress?.() &&
         configurationHandoffPendingMaintenanceIds(runtime).size === 0,
     });
+  }
   const runtime = options.runtime ?? createUnavailableRuntime();
   const dispatch =
     options.dispatch ??

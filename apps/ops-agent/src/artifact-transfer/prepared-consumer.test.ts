@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -236,3 +236,43 @@ it("rejects a changed execution identity before claiming uploaded bytes", async 
     ).state,
   ).toBe("uploaded");
 }, 60000);
+
+it("deletes a settled prepared extraction and releases its reserved bytes idempotently", async () => {
+  const f = await fixture();
+  await f.store.validatePreparedArtifact(f.context());
+  const retained = join(f.root, "stages", f.stage.stageId);
+  expect(readdirSync(retained).some((name) => name.startsWith("prepared-"))).toBe(true);
+  await f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" });
+  expect(readdirSync(retained)).toEqual([]);
+  expect(await f.store.reservedBytes()).toBe(0);
+  await f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" });
+  expect(
+    await f.store.listStages({ ownerId: "fixture-admin", offset: 0, limit: 20 }),
+  ).toMatchObject({ total: 0 });
+});
+
+it("retains all prepared content and accounting when a descendant was replaced by a link", async () => {
+  const f = await fixture();
+  await f.store.validatePreparedArtifact(f.context());
+  const retained = join(f.root, "stages", f.stage.stageId);
+  const extraction = readdirSync(retained).find((name) => name.startsWith("prepared-"))!;
+  const graph = join(retained, extraction, "osrm-graph", "region.osrm");
+  rmSync(graph);
+  symlinkSync(join(f.root, "source", "osrm-graph", "region.osrm"), graph);
+  const reserved = await f.store.reservedBytes();
+  await expect(
+    f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" }),
+  ).rejects.toThrow();
+  expect(existsSync(join(retained, "content"))).toBe(true);
+  expect(existsSync(join(retained, extraction, "manifest.json"))).toBe(true);
+  expect(await f.store.reservedBytes()).toBe(reserved);
+});
+
+it("deletes a conclusively failed partial extraction without renewing its upload", async () => {
+  const f = await fixture();
+  f.setCapacity(1024);
+  await expect(f.store.validatePreparedArtifact(f.context())).rejects.toThrow(/capacity/);
+  await f.store.deleteStage({ stageId: f.stage.stageId, ownerId: "fixture-admin" });
+  expect(readdirSync(join(f.root, "stages", f.stage.stageId))).toEqual([]);
+  expect(await f.store.reservedBytes()).toBe(0);
+});

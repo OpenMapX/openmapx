@@ -73,6 +73,7 @@ import {
   standaloneOwnershipRecordSchema,
   standaloneTransactionRecordSchema,
 } from "../standalone-integration-records";
+import { inspectStageCleanup, removeStageCleanup } from "./cleanup";
 import { ArtifactTransferError } from "./errors";
 import {
   type ArtifactTransferPolicy,
@@ -415,16 +416,52 @@ export class ArtifactTransferStore {
         meta.stage.state === "claimed" ||
         meta.stage.state === "validating" ||
         meta.stage.state === "uploading" ||
+        meta.claims.some(
+          (record) => !record.settlement || record.settlement.outcome === "unknown",
+        ) ||
         this.streams.has(input.stageId)
       )
         failed(409, "Artifact stage is owned by unfinished work");
       const dir = this.directory(meta);
       try {
-        for (const name of dir.listBounded(4)) {
-          if (name !== "content") failed(409, "Unrecognized artifact stage content");
-          dir.fileIdentity(name);
-          dir.removeFile(name);
+        const roots = dir.listBounded(9);
+        for (const name of roots) {
+          if (name === "content") {
+            const current = dir.fileIdentity(name);
+            if (
+              !meta.content ||
+              current.dev !== meta.content.dev ||
+              current.ino !== meta.content.ino
+            )
+              failed(409, "Artifact cleanup content changed");
+            continue;
+          }
+          const record = meta.claims.find((entry) => name === `prepared-${entry.claim.claimId}`);
+          const original = z
+            .object({ directory: z.object({ dev: z.string(), ino: z.string() }) })
+            .safeParse(record?.preparation);
+          if (!record || record.claim.use !== "validate-build" || !original.success)
+            failed(409, "Unrecognized artifact stage content");
+          const child = dir.directory(name, false, true);
+          try {
+            if (!same(original.data.directory, child.stat))
+              failed(409, "Prepared cleanup root changed");
+          } finally {
+            child.close();
+          }
         }
+        const tree = inspectStageCleanup(dir, {
+          remaining: Math.min(
+            this.policy.maxEntries * Math.max(1, meta.claims.length) + 32,
+            Math.floor(this.policy.memoryBudgetBytes / 2048),
+          ),
+          maxDepth: this.policy.maxPathDepth + 3,
+        });
+        // Retain an authenticated cleanup intent before deletion. Failed cleanup
+        // keeps quota charged; a retry can remove only the remaining owned tree.
+        meta.stage.cleanup = "failed";
+        this.save(meta);
+        removeStageCleanup(dir, tree);
         meta.stage.cleanup = "complete";
         meta.stage.state = "expired";
         meta.reservedBytes = 0;
@@ -438,6 +475,44 @@ export class ArtifactTransferStore {
         dir.close();
       }
     });
+  }
+  /** Expiry never grants authority to terminate an owner or discard unknown
+   * work. Purpose consumers must first settle their actual retained claims. */
+  async reconcileTransferStages(input: { signal: AbortSignal }) {
+    const summary = { expired: 0, removed: 0, cleanupFailed: 0 };
+    const stages = this.lock(() =>
+      this.all().map((meta) => ({
+        stageId: meta.stage.stageId,
+        ownerId: meta.ownerId,
+        expiresAt: meta.stage.expiresAt,
+        cleanup: meta.stage.cleanup,
+      })),
+    );
+    for (const stage of stages) {
+      input.signal.throwIfAborted();
+      if (stage.cleanup === "complete" || Date.parse(stage.expiresAt) > this.now()) continue;
+      // Reacquire and revalidate immediately before each deletion. No expiry
+      // snapshot or external execution status can substitute for purpose proof.
+      const eligible = this.lock(() => {
+        const meta = this.owned(stage.stageId, stage.ownerId);
+        return (
+          !["uploading", "validating", "claimed"].includes(meta.stage.state) &&
+          !this.streams.has(stage.stageId) &&
+          meta.claims.every(
+            (record) => record.settlement && record.settlement.outcome !== "unknown",
+          )
+        );
+      });
+      if (!eligible) continue;
+      summary.expired++;
+      try {
+        await this.deleteStage(stage);
+        summary.removed++;
+      } catch {
+        summary.cleanupFailed++;
+      }
+    }
+    return summary;
   }
   private start(
     input: StreamInput,
@@ -544,6 +619,17 @@ export class ArtifactTransferStore {
         failed(422, "Artifact length does not match admitted stage");
       dir = this.directory(meta);
       fd = openSync(dir.name("content"), C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW, 0o600);
+      const opened = fstatSync(fd, { bigint: true });
+      meta.content = {
+        dev: String(opened.dev),
+        ino: String(opened.ino),
+        size: String(opened.size),
+        mtimeNs: String(opened.mtimeNs),
+        ctimeNs: String(opened.ctimeNs),
+      };
+      // The immutable upload proof is finalized only at EOF. Retain its inode
+      // now so a contained failed upload can clean only the file it created.
+      this.lock(() => this.save(meta));
       reader = input.body.getReader();
       const hash = createHash("sha256");
       let bytes = 0;

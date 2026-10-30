@@ -11,7 +11,7 @@ afterEach(async () => {
   for (const store of stores.splice(0)) store.close();
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
-async function fixture(free = 2 * 1024 ** 3) {
+async function fixture(free = 2 * 1024 ** 3, now?: () => number) {
   const root = await mkdtemp(join(tmpdir(), "openmapx-transfer-"));
   roots.push(root);
   await mkdir(join(root, "data"), { mode: 0o700 });
@@ -21,6 +21,7 @@ async function fixture(free = 2 * 1024 ** 3) {
     privateRoot: join(root, "private"),
     token: "test-api-token",
     capacity: () => ({ bytes: free, inodes: 100000 }),
+    now,
   });
   stores.push(store);
   return { root, store };
@@ -39,6 +40,59 @@ const stream = (bytes: Uint8Array) =>
       c.close();
     },
   });
+
+it("sweeps only expired unowned stages and preserves admission replay tombstones", async () => {
+  let now = Date.now();
+  const { store, root } = await fixture(undefined, () => now);
+  const request = { ...input(), declaredBytes: 4 };
+  const stage = await store.createStage(request);
+  const freshRequest = { ...input(), declaredBytes: 1 };
+  now = Date.parse(stage.expiresAt) - 1000;
+  const fresh = await store.createStage(freshRequest);
+  expect(await store.reconcileTransferStages({ signal: new AbortController().signal })).toEqual({
+    expired: 0,
+    removed: 0,
+    cleanupFailed: 0,
+  });
+  now += 1001;
+  expect(await store.reconcileTransferStages({ signal: new AbortController().signal })).toEqual({
+    expired: 1,
+    removed: 1,
+    cleanupFailed: 0,
+  });
+  expect(await store.createStage(request)).toMatchObject({
+    stageId: stage.stageId,
+    state: "expired",
+    cleanup: "complete",
+  });
+  expect((await store.getStage({ ...freshRequest, stageId: fresh.stageId })).state).toBe("created");
+  expect(await store.reservedBytes()).toBe(1);
+  expect(await readFile(join(root, "private", `${stage.stageId}.json`), "utf8")).toContain(
+    stage.stageId,
+  );
+  expect(await store.reconcileTransferStages({ signal: new AbortController().signal })).toEqual({
+    expired: 0,
+    removed: 0,
+    cleanupFailed: 0,
+  });
+});
+
+it("cleans a conclusively failed upload using its retained original content inode", async () => {
+  const { store } = await fixture();
+  const stage = await store.createStage({ ...input(), declaredBytes: 2 });
+  await expect(
+    store.upload({
+      stageId: stage.stageId,
+      ownerId,
+      purpose: stage.purpose,
+      attemptId: randomUUID(),
+      deadlineAt: Date.now() + 10000,
+      body: stream(new Uint8Array([1])),
+    }),
+  ).rejects.toMatchObject({ statusCode: 422 });
+  await store.deleteStage({ stageId: stage.stageId, ownerId });
+  expect(await store.reservedBytes()).toBe(0);
+});
 it("streams exact non-UTF8 bytes, journals digest and never calls an upload ready", async () => {
   const { store } = await fixture();
   const bytes = new Uint8Array([0, 255, 192, 128]);
