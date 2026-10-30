@@ -31,6 +31,7 @@ import {
   requireControlJournalRetention,
   reserveFeedProxyValidation,
   restoreAdmittedControlExecution,
+  restoreArtifactTargetLeaseForSettlement,
   restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
   retainConfigurationPreEffectRefusal,
@@ -97,7 +98,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { inspectConfigurationGenerationNonCommit } from "../../../packages/core/src/build-artifacts/control-authority";
 import { ArtifactTransferError } from "./artifact-transfer/errors";
 import {
+  finishRestoredPreparedImport,
   prepareArtifactImportAdmission,
+  recoverPreparedImportFiles,
   retainArtifactImportPlan,
 } from "./artifact-transfer/import-runtime";
 import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
@@ -877,10 +880,26 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             throw Error("Original writer noncommit result changed");
           originalGenerationNonCommit = true;
         }
+        const artifactNonCommit =
+          committed &&
+          job.operation.kind === "artifactTransfer.import" &&
+          (updates.result as { outcome?: string })?.outcome === "not_committed";
         if (!originalGenerationNonCommit && !unstartedConfiguration)
           retainControlEffectReceipt(authority, {
-            outcome: committed ? "committed" : validationFailure ? "contained" : "unknown",
-            publication: committed ? "committed" : validationFailure ? "not_started" : "unknown",
+            outcome: artifactNonCommit
+              ? "contained"
+              : committed
+                ? "committed"
+                : validationFailure
+                  ? "contained"
+                  : "unknown",
+            publication: artifactNonCommit
+              ? "not_started"
+              : committed
+                ? "committed"
+                : validationFailure
+                  ? "not_started"
+                  : "unknown",
             receipt: committed
               ? { kind: "ops-result", result: updates.result }
               : validationFailure
@@ -1817,6 +1836,66 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       }
     }
     for (const job of jobsById.values()) {
+      if (
+        job.operation.kind === "artifactTransfer.import" &&
+        job.state !== "succeeded" &&
+        options.controlInstallation
+      ) {
+        try {
+          const authority = restoreAdmittedControlExecution(
+              options.controlInstallation,
+              executionFor(job),
+            ),
+            lease = restoreArtifactTargetLeaseForSettlement(authority);
+          controlAuthorities.set(job.operationId, authority);
+          controlLeases.set(job.operationId, lease);
+          cancelControlExecution(authority);
+          await cancelArtifactTargetLease(lease);
+          const signal = AbortSignal.timeout(30000),
+            claim = await resourceClaimer.claim(
+              job.operation,
+              opsOperationFingerprint(job.operation),
+              signal,
+              { role: job.role, operationKey: job.operationKey },
+            );
+          if (!claim) throw Error("Original import source unavailable");
+          const context = contextFor(job, signal, claim),
+            result = await recoverPreparedImportFiles(runtime, context);
+          if (result && result.outcome === "not_committed") {
+            retainControlEffectReceipt(authority, {
+              outcome: "contained",
+              publication: "not_started",
+              receipt: { kind: "ops-result", result },
+            });
+            await settleArtifactTargetLeaseChild(
+              lease,
+              verifyControlEffectSettlement(options.controlInstallation, authority.execution),
+            );
+            await releaseArtifactTargetLease(lease);
+            await finishRestoredPreparedImport(runtime, context);
+            try {
+              await transition(job, "succeeded", {
+                result,
+                errorClass: undefined,
+                terminalAt: now().getTime(),
+              });
+              retainControlTerminalStatus(
+                options.controlInstallation,
+                authority.execution,
+                statusFor(job, 2),
+                job.terminalAt,
+              );
+              completeControlJournalExecution(authority);
+              changed = true;
+              stickyRecoveryRequired.delete(job.operationId);
+            } catch {
+              /* An older canonical terminal remains immutable; the purpose claim retains the proved restoration. */
+            }
+          }
+        } catch {
+          /* Unknown/foreign paths or the operator-owned configuration lock retain their original fences. */
+        }
+      }
       if (job.controlAdoption) {
         try {
           if (!options.controlInstallation) throw Error("Control trust unavailable");

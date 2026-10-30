@@ -16,6 +16,7 @@ import {
   signControl,
   type VerifiedExecutionAuthority,
   verifyControl,
+  verifyFamilyOwnedRecord,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -26,8 +27,10 @@ import {
 import {
   type ArtifactImportPreview,
   artifactImportPreviewSchema,
+  canonicalJson,
   type ExecutionRef,
   type OpsOperation,
+  opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { z } from "zod";
@@ -61,6 +64,19 @@ const planSchema = z.strictObject({
 type ImportPlan = z.infer<typeof planSchema>;
 const domain = "openmapx-artifact-import-owner-v1";
 const name = (a: VerifiedExecutionAuthority) => `artifact-import-${a.execution.operationKey}.json`;
+function originalImportPlan(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
+    throw Error("Original import owner required");
+  const raw = readPrivateRecord(owner.installation, "observations", name(authority), 8192);
+  verifyFamilyOwnedRecord(
+    owner.installation,
+    owner.origin,
+    { scope: "private", namespace: "observations", container: "", name: name(authority) },
+    canonicalJson(raw),
+  );
+  return verifyControl(owner.installation.installation.publicKey, domain, raw, planSchema);
+}
 const configSchema = z.object({
   services: z.record(z.string(), z.object({ image: z.string().min(1).max(4096).optional() })),
 });
@@ -236,13 +252,7 @@ export function installPreparedImportRuntime(
     const authority = context.controlAuthority,
       lease = context.ownedTargetLease;
     if (!authority || !lease) throw Error("Original import authority required");
-    const owner = executionAuthorityState(authority),
-      plan = verifyControl(
-        owner.installation.installation.publicKey,
-        domain,
-        readPrivateRecord(owner.installation, "observations", name(authority), 8192),
-        planSchema,
-      );
+    const plan = originalImportPlan(authority);
     if (
       plan.preview.fingerprint !== operation.previewFingerprint ||
       plan.preview.sha256 !== operation.expectedSha256
@@ -319,6 +329,8 @@ export function installPreparedImportRuntime(
             throw error;
           }
         },
+      }).catch(() => {
+        throw new OpsExecutionFailure("recovery_required", {});
       });
       if (result.outcome !== "committed") return result;
       // The frozen CURRENT generation already names the producer paths; importing
@@ -353,4 +365,50 @@ export function installPreparedImportRuntime(
       }
     });
   };
+}
+
+/** Settlement-only restart consumer. It never imports again or dispatches a child. */
+export async function recoverPreparedImportFiles(
+  runtime: OpsRuntime,
+  context: OpsExecutionContext,
+) {
+  const source = sources.get(runtime),
+    authority = context.controlAuthority,
+    lease = context.ownedTargetLease,
+    operation = context.claim.operation;
+  if (
+    !source ||
+    !authority ||
+    !lease ||
+    operation.kind !== "artifactTransfer.import" ||
+    opsOperationFingerprint(operation) !== authority.execution.operationFingerprint ||
+    controlDigest(context.execution) !== controlDigest(authority.execution)
+  )
+    throw Error("Original prepared import recovery source required");
+  const published = inspectArtifactPublication(authority);
+  if (!published || !["prepared", "restored"].includes(published.phase)) return null;
+  if (published.phase === "restored")
+    return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
+  const plan = originalImportPlan(authority),
+    hardlinks = readGenerationHardlinksOwnerPlan(authority);
+  if (hardlinks.reservation && lookupControlChildPhaseBinding(authority, hardlinks.reservation))
+    throw Error("Prepared import has an unexplained child attempt");
+  return source.store.withPreparedArtifact(operation, (prepared) =>
+    publishValidatedBuild({
+      ...prepared,
+      stageId: operation.stageId,
+      dataRoot: join(source.infraDir, "data"),
+      authority,
+      lease,
+      expectedFingerprint: plan.targetFingerprint,
+    }),
+  );
+}
+export async function finishRestoredPreparedImport(
+  runtime: OpsRuntime,
+  context: OpsExecutionContext,
+) {
+  const source = sources.get(runtime);
+  if (!source) throw Error("Prepared import source unavailable");
+  return source.store.releaseRestoredPreparedImport(context);
 }

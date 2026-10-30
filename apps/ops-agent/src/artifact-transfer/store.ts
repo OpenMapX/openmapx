@@ -23,9 +23,11 @@ import {
   readGenerationHardlinksOwnerPlan,
   type ValidatedBuildBundle,
   validateBuildBundle,
+  verifyRetainedArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
 import {
   type ArtifactFilePublicationResult,
+  cleanupRestoredArtifactPublication,
   inspectArtifactPublication,
 } from "@openmapx/core/build-artifacts/publication";
 import {
@@ -919,6 +921,57 @@ export class ArtifactTransferStore {
         failed(409, "Import claim changed");
       entry.settlement = { outcome: "consumed", receiptId: context.execution.executionId };
       meta.stage.state = "consumed";
+      this.save(meta);
+      return meta.stage;
+    });
+  }
+  async releaseRestoredPreparedImport(context: OpsExecutionContext) {
+    const operation = this.preparedContext(context),
+      authority = context.controlAuthority;
+    if (operation.kind !== "artifactTransfer.import" || !authority)
+      failed(409, "Original import recovery required");
+    const publication = inspectArtifactPublication(authority);
+    if (
+      !publication ||
+      publication.phase !== "restored" ||
+      publication.stageId !== operation.stageId ||
+      publication.archiveSha256 !== operation.expectedSha256
+    )
+      failed(409, "Restored original publication required");
+    verifyRetainedArtifactTargetRootRelease(authority);
+    const retained = this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (record) =>
+            record.claim.use === "import-build" &&
+            record.claim.identity.executionId === context.execution.executionId &&
+            record.claim.identity.operationKey === context.execution.operationKey &&
+            record.claim.identity.fingerprint === context.execution.fingerprint,
+        );
+      return entry?.settlement?.outcome === "released" && entry.settlement.evidence === "restored"
+        ? meta.stage
+        : null;
+    });
+    if (retained) return retained; // Historical replay cannot change a later stage owner.
+    cleanupRestoredArtifactPublication(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (record) =>
+            record.claim.use === "import-build" &&
+            record.claim.identity.executionId === context.execution.executionId &&
+            record.claim.identity.operationKey === context.execution.operationKey &&
+            record.claim.identity.fingerprint === context.execution.fingerprint &&
+            Date.parse(record.claim.identity.executionDeadlineAt) === context.execution.deadlineAt,
+        );
+      if (
+        !entry ||
+        (entry.settlement &&
+          !(entry.settlement.outcome === "released" && entry.settlement.evidence === "restored"))
+      )
+        failed(409, "Original import claim recovery differs");
+      entry.settlement = { outcome: "released", evidence: "restored" };
+      meta.stage.state = Date.parse(meta.stage.expiresAt) > this.now() ? "ready" : "expired";
       this.save(meta);
       return meta.stage;
     });

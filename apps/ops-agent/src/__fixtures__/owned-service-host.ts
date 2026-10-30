@@ -28,7 +28,7 @@ import {
 } from "../production-runtime";
 import { createTrustedConfigurationAuthorityLoader } from "../trusted-configuration-authority";
 import { createFileTrustedOpsDataSource } from "../trusted-config-source";
-import { dispatchOpsOperation } from "../runtime";
+import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
 import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
@@ -259,7 +259,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     allowedUids: [statSync(queue).uid],
     expectedGid: statSync(queue).gid,
   });
-  const claimer = createProductionRegistryResourceClaimer({
+  const createResourceClaimer = (ownerRuntime: OpsRuntime) => createProductionRegistryResourceClaimer({
     services: authority.services.map((s) => ({
       serviceId: s.manifest.id,
       enabled: s.enabled,
@@ -287,10 +287,11 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
         authorityServices.map((service) => service.selectionAuthority),
       ) ?? new Set(),
     trustedData,
-    ownedServices: productionOwnedServices(runtime),
+    ownedServices: productionOwnedServices(ownerRuntime),
     serviceMetadata: (ss) => ss.map((s) => ({ ...s, buildable: false,
       creationDependencies:services.serviceCreationDependencyIds(ss.map(value=>value.selectionAuthority),[s.serviceId]) })),
   });
+  const claimer = createResourceClaimer(runtime);
   const context = async (
     operation: OpsOperation,
     signal: AbortSignal = new AbortController().signal,
@@ -350,6 +351,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     runtime,
     repositories,
     claimer,
+    createResourceClaimer,
     row,
     calls,
     execFile,

@@ -34,6 +34,7 @@ import {
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
+  verifyRetainedArtifactTargetRootRelease,
 } from "./target-lease";
 
 export type ArtifactFilePublicationResult =
@@ -707,4 +708,46 @@ export function inspectArtifactPublication(authority: VerifiedExecutionAuthority
     serviceId: journal.serviceId,
     artifactFingerprint: journal.artifactFingerprint,
   };
+}
+
+/** Remove only the empty owned rollback directory after proved restoration and
+ * physical release. This permits a new deliberate import of the same stage. */
+export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionAuthority): void {
+  const state = executionAuthorityState(authority);
+  if (state.kind !== "artifactTransfer.import" || !state.origin)
+    throw Error("Original import authority required");
+  const journal = readJournal({ ...state, origin: state.origin });
+  if (
+    !journal ||
+    journal.phase !== "restored" ||
+    journal.executionDigest !== controlDigest(state.execution)
+  )
+    throw Error("Original restored publication required");
+  verifyRetainedArtifactTargetRootRelease(authority);
+  const root = new AnchoredDirectory(state.installation.dataRoot);
+  let source: ReturnType<typeof directoryAt> | undefined, backups: AnchoredDirectory | undefined;
+  try {
+    source = directoryAt(root, journal.stagingRelative);
+    if (!sameInode(identity(source.dir.stat), journal.stagingIdentity))
+      throw Error("Restored staging identity changed");
+    const name = `publication-${journal.stageId}`;
+    try {
+      backups = source.dir.directory(name, false, true);
+    } catch (error) {
+      if (missing(error)) return;
+      throw error;
+    }
+    if (!sameInode(identity(backups.stat), journal.backupIdentity) || backups.listBounded(1).length)
+      throw Error("Restored rollback directory is not empty and owned");
+    backups.close();
+    backups = undefined;
+    if (!equal(dirIdentity(source.dir, name), journal.backupIdentity))
+      throw Error("Restored rollback identity changed");
+    rmdirSync(source.dir.name(name));
+    fsyncSync(source.dir.fd);
+  } finally {
+    backups?.close();
+    source?.close();
+    root.close();
+  }
 }

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Writable } from "node:stream";
 import {
@@ -21,13 +22,19 @@ import { services } from "@openmapx/core/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../journal";
+import { createProductionOpsRuntime, productionOwnedServices } from "../production-runtime";
 import { buildOpsAgentServer } from "../server";
 import { installPreparedImportRuntime } from "./import-runtime";
 import { installArtifactTransferRuntime } from "./runtime";
 import { ArtifactTransferStore } from "./store";
 
+vi.mock("node:fs", async (original) => {
+  const native = await original<typeof import("node:fs")>();
+  return { ...native, renameSync: vi.fn(native.renameSync) };
+});
 const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const close of cleanups.reverse().splice(0)) await close();
 });
 async function fixture() {
@@ -175,6 +182,7 @@ async function fixture() {
   }
   return {
     ...host,
+    app,
     client,
     store,
     journal,
@@ -299,4 +307,188 @@ it("blocks a live consumer and refuses a changed configuration after preview wit
     ),
   ).rejects.toThrow();
   expect(f.calls.some((args) => args.includes("up") || args.includes("stop"))).toBe(false);
+}, 60000);
+
+it("reconciles the original prepared publication after exact foreign-inode repair and server reassembly", async () => {
+  const f = await fixture(),
+    old = join(f.infraDir, "data/osrm-graph");
+  mkdirSync(old);
+  writeFileSync(join(old, "old"), "old graph");
+  const oldInode = fs.statSync(old).ino;
+  const preview = await f.preview(),
+    operation = {
+      kind: "artifactTransfer.import" as const,
+      stageId: f.stage.stageId,
+      ownerId: "synthetic-admin",
+      expectedSha256: preview.sha256,
+      previewFingerprint: preview.fingerprint,
+      expectedCurrentRevisionId: preview.currentRevisionId,
+    };
+  const stage = join(f.infraDir, "data/.openmapx-transfers", f.stage.stageId),
+    prepared = fs.readdirSync(stage).find((name) => name.startsWith("prepared-"));
+  if (!prepared) throw Error("No original prepared source");
+  const newInode = fs.statSync(join(stage, prepared, "osrm-graph")).ino,
+    native = await vi.importActual<typeof import("node:fs")>("node:fs");
+  let replaced = false;
+  vi.mocked(fs.renameSync).mockImplementation((from, to) => {
+    if (
+      !replaced &&
+      native.statSync(from).isDirectory() &&
+      native.statSync(from).ino === newInode
+    ) {
+      replaced = true;
+      native.mkdirSync(to);
+      throw Error("Named foreign live-directory replacement");
+    }
+    return native.renameSync(from, to);
+  });
+  const deadline = Date.now() + 600000,
+    key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+    admitted = await f.client.execute(operation, {
+      operationKey: key,
+      execution: { requestedDeadlineAt: deadline },
+    });
+  if (admitted.execution !== "async") throw Error("No original import");
+  let status = await f.client.status("artifactTransfer.import", admitted.operationId);
+  await vi.waitFor(
+    async () => {
+      status = await f.client.status("artifactTransfer.import", admitted.operationId);
+      expect(status.state).toBe("failed");
+      expect(status.errorClass).toBe("recovery_required");
+    },
+    { timeout: 20000, interval: 50 },
+  );
+  expect(replaced).toBe(true);
+  expect(
+    (
+      await f.store.getStage({
+        stageId: f.stage.stageId,
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact",
+      })
+    ).state,
+  ).toBe("claimed");
+  await f.app.close();
+  vi.mocked(fs.renameSync).mockImplementation(native.renameSync);
+  // Only this test's explicitly created empty foreign node is repaired. The
+  // production recovery consumer must never overwrite an unexplained inode.
+  native.rmdirSync(old);
+  const installation = openControlInstallation({
+    infraDir: f.infraDir,
+    role: "ops-agent",
+    serviceIds: f.loaded.map((s) => s.manifest.id),
+  });
+  cleanups.push(() => closeControlInstallation(installation));
+  const runtime = await createProductionOpsRuntime({
+    rootDir: f.root,
+    stack: f.stack,
+    loadAuthority: f.loadAuthority,
+    communityRepositories: f.repositories,
+    docker: { execFile: f.execFile, fileExists: existsSync },
+  });
+  const store = new ArtifactTransferStore({
+    dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
+    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
+    token: f.token,
+    capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
+  });
+  cleanups.push(() => store.close());
+  installArtifactTransferRuntime(runtime, store);
+  installPreparedImportRuntime(runtime, store, {
+    rootDir: f.root,
+    infraDir: f.infraDir,
+    stack: f.stack,
+    loadAuthority: f.loadAuthority,
+    ownedServices: productionOwnedServices(runtime),
+    execFile: f.execFile,
+  });
+  const journal = await openOpsJobJournal(join(f.infraDir, "data/ops-agent/jobs-v1.json")),
+    app = buildOpsAgentServer({
+      runtime,
+      journal,
+      resourceClaimer: f.createResourceClaimer(runtime),
+      controlInstallation: installation,
+      artifactTransfers: store,
+      tokens: { api: f.token, "data-manager": "d".repeat(43) },
+    });
+  cleanups.push(() => app.close());
+  const freshClient = new OpsClient({
+    baseUrl: await app.listen({ host: "127.0.0.1", port: 0 }),
+    tokenFile: join(f.root, "api-token"),
+  });
+  expect(
+    (
+      await store.getStage({
+        stageId: f.stage.stageId,
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact",
+      })
+    ).state,
+  ).toBe("ready");
+  expect(fs.statSync(old).ino).toBe(oldInode);
+  expect(readFileSync(join(old, "old"), "utf8")).toBe("old graph");
+  const execution = executionRefSchema.parse({
+    executor: "ops-agent",
+    principal: "api",
+    executionId: status.operationId,
+    operationKey: status.operationKey,
+    operationFingerprint: opsOperationFingerprint(operation),
+    fingerprint: status.fingerprint,
+    deadlineAt: status.deadlineAt,
+  });
+  verifyRetainedArtifactTargetRootRelease(restoreAdmittedControlExecution(installation, execution));
+  expect(
+    journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
+  ).toHaveLength(1);
+  const nextPreview = await freshClient.execute({
+    kind: "artifactTransfer.previewImport",
+    stageId: f.stage.stageId,
+    ownerId: "synthetic-admin",
+  });
+  if (nextPreview.execution !== "sync") throw Error("No next preview");
+  expect(nextPreview.value.blockers).toEqual([]);
+  const nextDeadline = Date.now() + 600000,
+    next = await freshClient.execute(
+      {
+        kind: "artifactTransfer.import",
+        stageId: f.stage.stageId,
+        ownerId: "synthetic-admin",
+        expectedSha256: nextPreview.value.sha256,
+        previewFingerprint: nextPreview.value.fingerprint,
+        expectedCurrentRevisionId: nextPreview.value.currentRevisionId,
+      },
+      {
+        operationKey: createControlRootOperationKey({
+          notAfter: nextDeadline,
+          nonce: randomBytes(16),
+        }),
+        execution: { requestedDeadlineAt: nextDeadline },
+      },
+    );
+  if (next.execution !== "async") throw Error("No explicit new import");
+  await vi.waitFor(
+    async () => {
+      const value = await freshClient.status("artifactTransfer.import", next.operationId);
+      expect(value.state, JSON.stringify({ error: value.errorClass, result: value.result })).toBe(
+        "succeeded",
+      );
+      expect(value.result).toMatchObject({ outcome: "committed", followUp: "complete" });
+    },
+    { timeout: 20000, interval: 50 },
+  );
+  expect(
+    (
+      await store.getStage({
+        stageId: f.stage.stageId,
+        ownerId: "synthetic-admin",
+        purpose: "prepared-artifact",
+      })
+    ).state,
+  ).toBe("consumed");
+  expect(
+    journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
+  ).toHaveLength(2);
+  expect(
+    f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
+  ).toBe(false);
 }, 60000);
