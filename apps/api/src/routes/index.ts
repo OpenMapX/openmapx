@@ -3,6 +3,7 @@ import { adminRoute } from "./admin";
 import { adminAccountsRoute } from "./admin-accounts";
 import { adminActivityRoute } from "./admin-activity";
 import { adminArtifactTransfersRoute } from "./admin-artifact-transfers";
+import { adminBackupMaintenanceRoute } from "./admin-backup-maintenance";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
@@ -138,6 +139,7 @@ export async function registerCoreRoutes(
   await server.register(adminStandaloneIntegrationsRoute, { prefix: "/api" });
   await server.register(adminCacheRoute, { prefix: "/api" });
   await server.register(adminReleaseControlsRoute, { prefix: "/api" });
+  await server.register(adminBackupMaintenanceRoute, { prefix: "/api" });
   await server.register(adminSystemRoute, { prefix: "/api" });
   await server.register(attributionRoute, { prefix: "/api" });
 

@@ -47,7 +47,7 @@ const fields: { key: Field; label: string; help: string }[] = [
   {
     key: "backupRetentionDays",
     label: "Backup retention (days)",
-    help: "1–36500 days. Applies to creation, restore and scheduled/manual pruning.",
+    help: "1–36500 days. Existing backup expiry can shorten but never extend; longer retention applies to new backups.",
   },
 ];
 const confirmationLabels = {
@@ -219,7 +219,11 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
           managed = field?.source === "database";
         const value = managed ? field.value : view.values[key];
         return (
-          <Stack key={key} sx={{ gap: 1 }}>
+          <Stack
+            key={key}
+            id={key === "backupRetentionDays" ? "backup-retention" : undefined}
+            sx={{ gap: 1 }}
+          >
             <TextField
               label={label}
               value={value ?? ""}

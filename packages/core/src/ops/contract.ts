@@ -12,6 +12,11 @@ import {
   artifactTransferResultSchemas,
 } from "./artifact-transfer";
 import {
+  backupPrunePreviewSchema,
+  backupPruneProofSchema,
+  backupPruneResultSchema,
+} from "./backup-prune";
+import {
   configurationHandoffInspectionSchema,
   configurationHandoffInspectOperationSchema,
   configurationHandoffPreparedSchema,
@@ -137,6 +142,8 @@ export const OPS_OPERATION_KINDS = [
   "backup.create",
   "backup.restore",
   "backup.delete",
+  "backup.prune.preview",
+  "backup.prune",
   "system.diagnostics",
   "system.inspect",
   "system.update",
@@ -286,6 +293,8 @@ export const OPS_KIND_POLICIES = {
   "backup.create": asyncEffect("api", 30 * 60_000),
   "backup.restore": asyncEffect("api", 30 * 60_000),
   "backup.delete": asyncEffect("api", 5 * 60_000),
+  "backup.prune.preview": sync("api", 30_000, 128 * 1024),
+  "backup.prune": asyncEffect("api", 5 * 60_000, 16384),
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
   "system.update": asyncEffect("api", 48 * 3600_000),
@@ -538,6 +547,8 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     stopRunning: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("backup.delete"), backupId: backupIdSchema }),
+  z.strictObject({ kind: z.literal("backup.prune.preview") }),
+  z.strictObject({ kind: z.literal("backup.prune"), proof: backupPruneProofSchema }),
   kindOnly("system.diagnostics"),
   kindOnly("system.inspect"),
   z.strictObject({
@@ -926,6 +937,7 @@ const backupInventoryEntry = z
   .strictObject({
     backupId: backupIdSchema,
     createdAt: timestampSchema,
+    expiresAt: timestampSchema.optional(),
     platformVersion: z.string().min(1).max(64).optional(),
     /** Present when the agent could authenticate the exact manifest bytes. */
     manifestDigest: z
@@ -1162,6 +1174,8 @@ export const OPS_RESULT_SCHEMAS = {
   "backup.create": backup,
   "backup.restore": backup,
   "backup.delete": backup,
+  "backup.prune.preview": backupPrunePreviewSchema,
+  "backup.prune": backupPruneResultSchema,
   "system.diagnostics": z.strictObject({
     ok: z.boolean(),
     checks: z

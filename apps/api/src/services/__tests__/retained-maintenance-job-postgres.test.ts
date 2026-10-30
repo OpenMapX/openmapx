@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApiClient } from "@openmapx/core";
-import { clearAdminReleaseSelection, pullAdminServiceImages } from "@openmapx/core/api-admin-sdk";
+import {
+  clearAdminReleaseSelection,
+  previewAdminBackupPrune,
+  pruneAdminServiceBackups,
+  pullAdminServiceImages,
+} from "@openmapx/core/api-admin-sdk";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { eq, inArray } from "drizzle-orm";
@@ -72,6 +77,117 @@ dbDescribe("retained finite maintenance requests", () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
   const body = { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" };
+  it("retains the actual preview-bound backup prune across lost admission and terminal replay", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    const host = await ownedServiceHost(),
+      backupRoot = join(host.infraDir, "backups");
+    function archive(name: string, age: number) {
+      const path = join(backupRoot, name);
+      mkdirSync(path, { recursive: true, mode: 0o700 });
+      writeFileSync(
+        join(path, "manifest.json"),
+        JSON.stringify({
+          formatVersion: 2,
+          name,
+          createdAt: new Date(Date.now() - age * 86400000).toISOString(),
+          openmapxVersion: "1.0.0",
+          services: [],
+        }),
+        { mode: 0o600 },
+      );
+      return path;
+    }
+    const old = archive("expired", 40),
+      fresh = archive("fresh", 2),
+      freshBytes = readFileSync(join(fresh, "manifest.json"));
+    state.services = host.loaded;
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      }),
+      journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+    const agent = buildOpsAgentServer({
+      runtime: host.runtime,
+      resourceClaimer: host.claimer,
+      journal,
+      controlInstallation: installation,
+      tokens: { api: host.token, "data-manager": "d".repeat(43) },
+    });
+    let lost = false;
+    agent.addHook("onSend", async (request, reply, payload) => {
+      if (
+        !lost &&
+        reply.statusCode === 202 &&
+        (request.body as { operation?: { kind?: string } } | undefined)?.operation?.kind ===
+          "backup.prune"
+      ) {
+        lost = true;
+        reply.code(503);
+        return JSON.stringify({ error: "Synthetic lost admission response" });
+      }
+      return payload;
+    });
+    const endpoint = await agent.listen({ host: "127.0.0.1", port: 0 }),
+      tokenFile = join(host.root, "backup-api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    vi.stubEnv("OPS_AGENT_URL", endpoint);
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+    const { jobRunner } = await import("../job-runner"),
+      { handleBackupPruneJob } = await import("../admin-backup-maintenance"),
+      { adminBackupMaintenanceRoute } = await import("../../routes/admin-backup-maintenance");
+    jobRunner.register("backup.prune", handleBackupPruneJob);
+    const api = await createAdminTestApp(adminBackupMaintenanceRoute, { prefix: "/api" }),
+      url = await api.listen({ host: "127.0.0.1", port: 0 }),
+      options = { client: createApiClient({ baseUrl: url }) };
+    try {
+      const preview = await previewAdminBackupPrune(options);
+      expect(preview.status).toBe(200);
+      if (preview.status !== 200) throw Error("Preview unavailable");
+      expect(preview.data.candidates.map((entry) => entry.backupId)).toEqual(["expired"]);
+      expect(existsSync(old)).toBe(true);
+      const request = { proof: preview.data.proof, confirmation: "PRUNE EXPIRED BACKUPS" as const },
+        key = { "idempotency-key": "actual-backup-prune-retained-001" };
+      const accepted = await pruneAdminServiceBackups(request, key, options);
+      expect(accepted.status).toBe(202);
+      if (accepted.status !== 202) throw Error("Prune unavailable");
+      await vi.waitFor(
+        async () => {
+          const [job] = await state.fixture.db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.id, accepted.data.jobId));
+          expect(job?.status).toBe("success");
+          expect(job?.result).toMatchObject({ deleted: ["expired"], retainedCount: 1 });
+        },
+        { timeout: 20000, interval: 100 },
+      );
+      expect(lost).toBe(true);
+      expect(existsSync(old)).toBe(false);
+      expect(readFileSync(join(fresh, "manifest.json"))).toEqual(freshBytes);
+      const newcomer = archive("after-preview", 40),
+        replay = await pruneAdminServiceBackups(request, key, options);
+      expect(replay.data).toEqual(accepted.data);
+      expect(existsSync(newcomer)).toBe(true);
+      expect(journal.records().filter((job) => job.operation.kind === "backup.prune")).toHaveLength(
+        1,
+      );
+    } finally {
+      await api.close();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(worker.active.size).toBe(0);
+        expect(worker.pumping).toBe(false);
+      });
+      await agent.close();
+      closeControlInstallation(installation);
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+    }
+  }, 60000);
   it("serializes competing requests and preserves terminal duplicates across a new call", async () => {
     const key = "same-release-intent-001",
       ids = await Promise.all(

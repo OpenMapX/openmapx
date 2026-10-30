@@ -131,6 +131,7 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "system.update",
   "release.clear",
   "service.images.pull",
+  "backup.prune",
 ] as const;
 
 /** Routing only, never admission authority. The selected fixed producer must

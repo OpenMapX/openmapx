@@ -5,7 +5,7 @@ import { and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-export type RetainedMaintenanceJobType = "release.clear" | "service.images.pull";
+export type RetainedMaintenanceJobType = "release.clear" | "service.images.pull" | "backup.prune";
 export class MaintenanceRequestConflict extends Error {}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,

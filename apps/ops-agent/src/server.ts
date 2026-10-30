@@ -1361,6 +1361,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (
             job.operation.kind !== "coreService.restart" &&
             job.operation.kind !== "service.image.stage" &&
+            job.operation.kind !== "backup.prune" &&
             !(
               job.operation.kind === "service.pull" &&
               job.operation.serviceId === "data-manager" &&
@@ -1372,7 +1373,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         try {
           return await dispatch(job.operation, runtime, contextFor(job, controller.signal, claim));
         } catch (error) {
-          if (authority && job.operation.kind === "service.image.stage") {
+          if (
+            authority &&
+            (job.operation.kind === "service.image.stage" || job.operation.kind === "backup.prune")
+          ) {
             try {
               // The nominal producer checks the original started cell and all
               // children. A begun stage cannot be relabeled as unissued.
@@ -1438,16 +1442,17 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               );
             } else if (
               (timedOut || job.state === "termination_pending") &&
-              job.role === "data-manager" &&
-              [
-                "motis.primary.stop",
-                "motis.staging.stop",
-                "motis.staging.restart",
-                "motis.primary.restart",
-                "motis.primary.promote",
-                "feedProxy.validateAndReload",
-                "transitousLock.approve",
-              ].includes(job.operation.kind)
+              ((job.role === "api" && job.operation.kind === "backup.prune") ||
+                (job.role === "data-manager" &&
+                  [
+                    "motis.primary.stop",
+                    "motis.staging.stop",
+                    "motis.staging.restart",
+                    "motis.primary.restart",
+                    "motis.primary.promote",
+                    "feedProxy.validateAndReload",
+                    "transitousLock.approve",
+                  ].includes(job.operation.kind)))
             ) {
               // These fixed leaf handlers return only after their host call
               // settles. Cancellation cannot erase a validated commit receipt

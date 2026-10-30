@@ -41,6 +41,7 @@ export const adminServiceBackupParamsSchema = z.strictObject({
 export const adminServiceBackupSchema = z.strictObject({
   name: z.string(),
   createdAt: adminTimestampSchema,
+  expiresAt: adminTimestampSchema.optional(),
   openmapxVersion: z.string().optional(),
   serviceCount: adminCountSchema,
   volumeCount: adminCountSchema,

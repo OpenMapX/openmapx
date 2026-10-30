@@ -1,4 +1,7 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
+export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
+export { backupRetentionExpiry } from "./backup-retention";
+export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
 export {
   type CapabilityCheck,
   type CapabilityKind,

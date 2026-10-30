@@ -209,6 +209,107 @@ describe("defaultBackupName", () => {
 });
 
 describe("backup retention", () => {
+  it.each(["invalid-selection", "stale-generation"])(
+    "does not change expiry for a rejected %s policy request",
+    async (mode) => {
+      const { services } = await import("@openmapx/core/server"),
+        infraDir = join(tmp, "infra", "docker");
+      process.env.BACKUP_RETENTION_DAYS = "30";
+      const dir = writeBackup("legacy", {
+          name: "legacy",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          services: [],
+        }),
+        original = readFileSync(join(dir, "manifest.json"));
+      await expect(
+        services.commitConfigurationGeneration({
+          infraDir,
+          services: [],
+          ...(mode === "stale-generation"
+            ? { expectedCurrentRevisionId: `cfg1_${"z".repeat(43)}` }
+            : {}),
+          input: {
+            domain: "maps.example.test",
+            selectedRoots: mode === "invalid-selection" ? ["missing"] : [],
+            serviceConfigs: [],
+            integrationConfigs: [],
+            serviceSecrets: [],
+            platform: { version: 1, backupRetentionDays: { source: "database", value: 1 } },
+          },
+        }),
+      ).rejects.toThrow();
+      expect(readFileSync(join(dir, "manifest.json"))).toEqual(original);
+    },
+  );
+  it("freezes legacy expiry before a policy increase and never reverses a later shortening", async () => {
+    const { services } = await import("@openmapx/core/server"),
+      infraDir = join(tmp, "infra", "docker");
+    process.env.BACKUP_RETENTION_DAYS = "30";
+    const dir = writeBackup("legacy", {
+      name: "legacy",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      services: [],
+    });
+    const input = {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    for (const days of [60, 5, 365]) {
+      await services.commitConfigurationGeneration({
+        infraDir,
+        services: [],
+        input: {
+          ...input,
+          platform: { version: 1, backupRetentionDays: { source: "database", value: days } },
+        },
+      });
+      expect(readBackupManifest(join(dir, "manifest.json")).expiresAt).toBe(
+        days === 60 ? "2026-08-31T00:00:00.000Z" : "2026-08-06T00:00:00.000Z",
+      );
+    }
+  });
+  it("does not extend a backup's stamped expiry when retention increases", () => {
+    writeBackup("stamped", {
+      name: "stamped",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      services: [],
+    });
+    const result = pruneExpiredBackups({
+      rootDir: tmp,
+      retentionDays: 365,
+      now: new Date("2026-08-31T00:00:00.000Z"),
+    });
+    expect(result.deleted).toEqual(["stamped"]);
+  });
+  it("rejects an expired stamped archive before any restore, including archives without the account database", () => {
+    const dir = writeBackup("expired", {
+      name: "expired",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      services: [],
+    });
+    const manifest = readBackupManifest(join(dir, "manifest.json"));
+    expect(() =>
+      validateRestoreDataProtection(manifest, {
+        rootDir: tmp,
+        retentionDays: 365,
+        now: new Date("2026-08-31T00:00:00.000Z"),
+      }),
+    ).toThrow(/expired|retention/i);
+  });
+  it("rejects invalid portable expiry fields", () => {
+    const dir = writeBackup("invalid-expiry", {
+      name: "invalid-expiry",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-07-01T00:00:00.000Z",
+      services: [],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/expiry/i);
+  });
   it("deletes only valid backups strictly older than the retention boundary", () => {
     writeBackup("old", { name: "old", createdAt: "2026-07-01T00:00:00.000Z", services: [] });
     writeBackup("boundary", {

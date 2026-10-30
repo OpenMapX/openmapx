@@ -81,6 +81,8 @@ export interface BackupManifest {
   formatVersion: 2;
   name: string;
   createdAt: string;
+  /** Latest allowed expiry, portable and never extended by a longer policy. */
+  expiresAt?: string;
   openmapxVersion: string;
   services: BackupServiceEntry[];
   privacySourceProvenance?: {
@@ -229,6 +231,8 @@ export function readBackupManifest(filePath: string): BackupManifest {
   if (raw.formatVersion !== 2) {
     throw new Error(`Malformed backup format version in ${filePath}`);
   }
+  if (raw.expiresAt !== undefined)
+    coreServices.backupRetentionExpiry(raw.createdAt, 36500, raw.expiresAt);
   const managed = raw.privacySourceProvenance?.managedDawarich;
   if (
     managed &&
@@ -657,6 +661,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
         }
       : {}),
   };
+  manifest.expiresAt = coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays);
 
   try {
     for (const svc of targets) {
@@ -948,32 +953,23 @@ export function pruneExpiredBackups(opts: PruneExpiredBackupsOptions): PruneExpi
   ) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }
-  const now = (opts.now ?? new Date()).getTime();
-  const cutoff = now - opts.retentionDays * 24 * 60 * 60 * 1000;
+  const now = opts.now ?? new Date();
   const deleted: string[] = [];
   const retained: string[] = [];
-  const backupsRoot = join(repoPaths(opts.rootDir).infraDir, "backups");
+  const infraDir = repoPaths(opts.rootDir).infraDir;
+  const backupsRoot = join(infraDir, "backups");
   if (!existsSync(backupsRoot)) return { deleted, retained };
+  coreServices.retainBackupExpiryCeilings(infraDir, opts.retentionDays);
+  const plan = coreServices.backupPruneInventory(infraDir, opts.retentionDays, now);
+  for (const name of plan.corruptBackups)
+    opts.onWarning?.(`using directory age for ${name}: unreadable expiry metadata`);
+  const candidates = new Set(plan.candidates.map((entry) => entry.backupId));
   for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !isValidBackupName(entry.name)) continue;
-    const backupDir = resolveBackupDir(opts.rootDir, entry.name);
-    const directoryStats = lstatSync(backupDir);
-    if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) continue;
-    let timestamp = directoryStats.mtimeMs;
-    try {
-      const manifest = readBackupManifest(join(backupDir, "manifest.json"));
-      const createdAt = Date.parse(manifest.createdAt);
-      if (Number.isFinite(createdAt) && createdAt <= now) timestamp = createdAt;
-      else opts.onWarning?.(`using directory age for ${entry.name}: invalid creation timestamp`);
-    } catch (error) {
-      opts.onWarning?.(`using directory age for ${entry.name}: ${(error as Error).message}`);
-    }
-    if (timestamp < cutoff) {
+    if (!isValidBackupName(entry.name) || !entry.isDirectory()) continue;
+    if (candidates.has(entry.name)) {
       deleteBackup({ rootDir: opts.rootDir, name: entry.name });
       deleted.push(entry.name);
-    } else {
-      retained.push(entry.name);
-    }
+    } else retained.push(entry.name);
   }
   deleted.sort();
   retained.sort();
@@ -1042,7 +1038,6 @@ export function validateRestoreDataProtection(
   manifest: BackupManifest,
   opts: { rootDir?: string; retentionDays?: number; now?: Date } = {},
 ): void {
-  if (!containsOpenMapXDatabase(manifest)) return;
   const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays(opts.rootDir);
   if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
@@ -1050,11 +1045,16 @@ export function validateRestoreDataProtection(
   const createdAt = Date.parse(manifest.createdAt);
   if (!Number.isFinite(createdAt)) throw new Error("Backup has an invalid creation timestamp");
   const now = (opts.now ?? new Date()).getTime();
-  if (createdAt < now - retentionDays * 24 * 60 * 60 * 1000) {
+  if (
+    Date.parse(
+      coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays, manifest.expiresAt),
+    ) < now
+  ) {
     throw new Error(
       `Backup exceeds the ${retentionDays}-day retention policy and cannot be restored`,
     );
   }
+  if (!containsOpenMapXDatabase(manifest)) return;
   const { journalPath } = erasureJournalPaths(opts.rootDir);
   const key = readErasureJournalKey(opts.rootDir);
   const journal = readErasureJournal(journalPath, key);

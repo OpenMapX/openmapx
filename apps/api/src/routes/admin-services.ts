@@ -76,6 +76,7 @@ function presentBackupInventory(inventory: BackupInventory) {
     backups: inventory.backups.map((backup) => ({
       name: backup.backupId,
       createdAt: backup.createdAt,
+      ...(backup.expiresAt ? { expiresAt: backup.expiresAt } : {}),
       ...(backup.platformVersion ? { openmapxVersion: backup.platformVersion } : {}),
       serviceCount: backup.serviceCount,
       volumeCount: backup.volumeCount,

@@ -301,6 +301,17 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     stopRunning: true,
   },
   "backup.delete": { kind: "backup.delete", backupId: "pre-update-20260823" },
+  "backup.prune.preview": { kind: "backup.prune.preview" },
+  "backup.prune": {
+    kind: "backup.prune",
+    proof: {
+      inventoryDigest: "a".repeat(64),
+      policyRevision: "b".repeat(64),
+      previewedAt: issuedAt,
+      expiresAt,
+      authenticator: "c".repeat(64),
+    },
+  },
   "system.diagnostics": { kind: "system.diagnostics" },
   "system.inspect": { kind: "system.inspect" },
   "system.update": {

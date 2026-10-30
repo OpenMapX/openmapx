@@ -10,6 +10,7 @@ import {
   type FixedCliRunner,
 } from "./administrative-runtime";
 import { readAgentHandoff } from "./agent-handoff";
+import { installBackupPruneRuntime } from "./backup-prune-runtime";
 import { installCatalogApprovalRuntime } from "./catalog-approval-runtime";
 import { installCatalogValidationInputsRuntime } from "./catalog-validation-inputs";
 import {
@@ -279,6 +280,10 @@ export async function createProductionOpsRuntime(
     infraDir: options.stack.infraDir,
     loadAuthority: options.loadAuthority,
     execFile: options.docker?.execFile,
+  });
+  installBackupPruneRuntime(runtime, {
+    infraDir: options.stack.infraDir,
+    token: options.candidateSource?.token,
   });
   const releaseEffects = installReleaseCapabilityBoundary(
     runtime,

@@ -1787,6 +1787,7 @@ function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
     !(
       operation.kind === "service.update" ||
       operation.kind === "service.image.stage" ||
+      operation.kind === "backup.prune" ||
       operation.kind === "coreService.restart" ||
       operation.kind === "stack.start" ||
       (operation.kind === "service.start" && operation.serviceId !== "data-manager") ||

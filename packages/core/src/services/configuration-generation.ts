@@ -26,6 +26,7 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "../ops/trusted-config";
+import { withBackupRetentionPolicyChange } from "./backup-retention-store";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -1230,16 +1231,38 @@ export async function commitConfigurationGeneration(
 async function commitOwnedConfigurationGeneration(
   options: CommitConfigurationOptions,
 ): Promise<CommittedConfiguration> {
-  const { infraDir, input } = options;
   if (
     options.expectedCurrentRevisionId !== undefined &&
     options.expectedCurrentRevisionId !== null &&
     !REVISION.test(options.expectedCurrentRevisionId)
-  ) {
+  )
     throw new Error("Bad expected current generation");
-  }
   options.signal?.throwIfAborted();
-  const { resolved, context, rendered } = renderConfiguration(options);
+  const rendered = renderConfiguration(options);
+  const oldDays = readAppliedPlatformValues(options.infraDir).backupRetentionDays;
+  const newDays = resolvePlatformConfiguration({ saved: options.input.platform }).values
+    .backupRetentionDays;
+  if (
+    oldDays !== newDays &&
+    options.expectedCurrentRevisionId !== undefined &&
+    options.expectedCurrentRevisionId !== currentConfigurationGeneration(options.infraDir)
+  )
+    throw new ConfigurationGenerationError({
+      outcome: "not_committed",
+      reason: "conflict",
+      currentRevisionId: currentConfigurationGeneration(options.infraDir),
+      cleanupFailed: false,
+    });
+  return withBackupRetentionPolicyChange(options.infraDir, oldDays, newDays, () =>
+    commitOwnedConfigurationFiles(options, rendered),
+  );
+}
+async function commitOwnedConfigurationFiles(
+  options: CommitConfigurationOptions,
+  prepared: ReturnType<typeof renderConfiguration>,
+): Promise<CommittedConfiguration> {
+  const { infraDir, input } = options;
+  const { resolved, context, rendered } = prepared;
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
   await retainConfigurationGenerations(
     infraDir,

@@ -110,6 +110,14 @@ describe("default fixed CLI live output", () => {
 });
 
 describe("administrative backup runtime", () => {
+  it("refuses a stale scheduled retention value before dispatching the CLI", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    const run = vi.fn();
+    await expect(pruneBackupRetention(temporaryRoot(), 5, run)).rejects.toThrow(
+      /retention.*changed/i,
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
   it("runs scheduled retention through the fixed CLI under validated bounds", async () => {
     const calls: string[][] = [];
     await pruneBackupRetention(temporaryRoot(), 30, async (args) => {

@@ -735,6 +735,13 @@ export async function postApiDataManagerTransitSyncPreflightRequest<T>(
 ): Promise<T> {
   return postApiDataManagerTransitSyncPreflightBound<T>(url, options);
 }
+const previewAdminBackupPruneBound = bindAdminOperation("previewAdminBackupPrune");
+export async function previewAdminBackupPruneRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminBackupPruneBound<T>(url, options);
+}
 const previewAdminExtensionInstallBound = bindAdminOperation("previewAdminExtensionInstall");
 export async function previewAdminExtensionInstallRequest<T>(
   url: string,
@@ -787,6 +794,13 @@ export async function provisionAdminDawarichRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return provisionAdminDawarichBound<T>(url, options);
+}
+const pruneAdminServiceBackupsBound = bindAdminOperation("pruneAdminServiceBackups");
+export async function pruneAdminServiceBackupsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return pruneAdminServiceBackupsBound<T>(url, options);
 }
 const pullAdminServiceImagesBound = bindAdminOperation("pullAdminServiceImages");
 export async function pullAdminServiceImagesRequest<T>(

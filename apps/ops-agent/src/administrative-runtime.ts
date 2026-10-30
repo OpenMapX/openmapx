@@ -198,6 +198,7 @@ type ReleaseTransactionPhase =
 export interface ParsedBackupManifest {
   name: string;
   createdAt: string;
+  expiresAt?: string;
   openmapxVersion: string;
   formatVersion: 2;
   manifestDigest: string;
@@ -335,6 +336,8 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
     throw new Error("Backup authority rejected");
   }
   if (raw.formatVersion !== 2) throw new Error("Backup authority rejected");
+  if (raw.expiresAt !== undefined)
+    coreServices.backupRetentionExpiry(String(raw.createdAt), 36500, raw.expiresAt);
   const seenServices = new Set<string>();
   let volumeCount = 0;
   const services = raw.services.map((value) => {
@@ -423,6 +426,7 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   return {
     name: backupId,
     createdAt: new Date(raw.createdAt).toISOString(),
+    ...(raw.expiresAt !== undefined ? { expiresAt: String(raw.expiresAt) } : {}),
     openmapxVersion: raw.openmapxVersion,
     formatVersion: 2,
     manifestDigest: createHash("sha256").update(contents).digest("hex"),
@@ -517,6 +521,7 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
     backups.push({
       backupId: entry.name,
       createdAt: manifest.createdAt,
+      ...(manifest.expiresAt ? { expiresAt: manifest.expiresAt } : {}),
       platformVersion: manifest.openmapxVersion,
       manifestDigest: manifest.manifestDigest,
       formatVersion: manifest.formatVersion,
@@ -717,7 +722,14 @@ function immutableWrite(path: string, contents: string): void {
 function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
   const root = backupRoot(rootDir);
   mkdirSync(root, { recursive: true, mode: 0o700 });
-  return acquireStoreLock(root, BACKUP_STORE_LOCK_NAME);
+  return acquireStoreLock(
+    root,
+    BACKUP_STORE_LOCK_NAME,
+    {},
+    Date.now,
+    false,
+    coreServices.BACKUP_STORE_LOCK_TTL_MS,
+  );
 }
 
 export async function pruneBackupRetention(
@@ -730,6 +742,11 @@ export async function pruneBackupRetention(
   }
   const lock = await acquireBackupStoreLock(rootDir);
   try {
+    if (
+      coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
+        .backupRetentionDays !== retentionDays
+    )
+      throw Error("Backup retention changed before the scheduled prune");
     await runFixedCli(["backup", "prune", "--retention-days", String(retentionDays)], {
       signal: new AbortController().signal,
       emitLog: () => {},

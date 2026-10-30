@@ -96,6 +96,13 @@ database does not rewrite existing snapshots.
 
 Local backups are automatically removed after `BACKUP_RETENTION_DAYS` (30 by
 default), and an expired backup is refused even if its directory was copied back.
+New snapshots also carry a portable `expiresAt` ceiling. Increasing retention
+applies to new snapshots; it cannot make an old snapshot restorable again.
+Before a UI-managed policy change, legacy manifests acquire their existing expiry
+under the backup-store lock. A shorter policy lowers existing ceilings. If a later
+configuration apply fails, the stricter expiry remains. When changing host-owned
+environment values directly, run pruning under the old policy before increasing
+it; the application cannot infer an earlier environment value after replacement.
 Database restores replay the external pseudonymous erasure journal before they
 finish, so an account deleted after the snapshot is deleted again. Restrict and
 encrypt every local and off-host copy, and apply the same expiry to off-host
@@ -146,6 +153,16 @@ service and volume counts, and total size; it refreshes on its own and links
 straight to **Activity** so you can watch the job and read its log (see
 [Monitoring](./monitoring.md)). Because the CLI and the admin UI both write to
 `infra/docker/backups/`, a snapshot made one way shows up in the other.
+
+**Preview expired backups** shows the current policy and its host/database source,
+the eligible snapshots and their size, retained count, and unreadable expiry metadata.
+The preview does not modify archives. Type **PRUNE EXPIRED BACKUPS** to queue deletion.
+It expires after 15 minutes, and a changed policy, newly created backup, or replaced
+archive requires a fresh preview. Only the original listed set is deleted; later
+eligibility does not enlarge it. A lost response can be retried with the same
+retained request. **Edit backup retention policy** opens the existing source-aware
+platform setting, where host ownership can be explicitly adopted or restored.
+Pruning and restore both honor the earlier of the current policy and stored expiry.
 
 ## Listing and inspecting backups
 

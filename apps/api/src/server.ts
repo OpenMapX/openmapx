@@ -1,3 +1,4 @@
+import { handleBackupPruneJob } from "./services/admin-backup-maintenance";
 import { handleImageStageJob } from "./services/admin-image-staging";
 import { handleReleaseClearJob } from "./services/admin-release-controls";
 import "@openmapx/core/undici-fetch";
@@ -704,6 +705,7 @@ jobRunner.register("backup.operation", handleBackupOperationJob);
 jobRunner.register("service.bulk", handleServiceBulkJob);
 jobRunner.register("release.clear", handleReleaseClearJob);
 jobRunner.register("service.images.pull", handleImageStageJob);
+jobRunner.register("backup.prune", handleBackupPruneJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 

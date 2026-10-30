@@ -46,6 +46,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { useClientPagination, useTextFilter } from "../shared/tableHooks";
+import { BackupPruneControls } from "./BackupPruneControls";
 
 function parseServiceIds(raw: string): string[] {
   return raw
@@ -228,6 +229,7 @@ function BackupsView() {
         </Typography>
       </Paper>
       {data && <Typography variant="caption">Backup storage: {data.root}</Typography>}
+      <BackupPruneControls />
       {isLoading && (
         <Box
           sx={{
@@ -332,7 +334,14 @@ function BackupsView() {
                           )}
                         </Stack>
                       </TableCell>
-                      <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
+                      <TableCell>
+                        {new Date(backup.createdAt).toLocaleString()}
+                        {backup.expiresAt && (
+                          <Typography variant="caption" sx={{ display: "block" }}>
+                            Expires {new Date(backup.expiresAt).toLocaleString()}
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
                       </TableCell>
@@ -351,7 +360,9 @@ function BackupsView() {
                             title={
                               backup.corrupt
                                 ? "Corrupt backup — cannot be restored"
-                                : "Restore backup"
+                                : backup.expiresAt && Date.parse(backup.expiresAt) < Date.now()
+                                  ? "Expired backup — cannot be restored"
+                                  : "Restore backup"
                             }
                           >
                             <span>
@@ -366,7 +377,10 @@ function BackupsView() {
                                   setRestoreStopRunning(false);
                                   setRestoreTarget(backup);
                                 }}
-                                disabled={backup.corrupt}
+                                disabled={
+                                  backup.corrupt ||
+                                  !!(backup.expiresAt && Date.parse(backup.expiresAt) < Date.now())
+                                }
                               >
                                 <RestoreIcon fontSize="small" />
                               </IconButton>

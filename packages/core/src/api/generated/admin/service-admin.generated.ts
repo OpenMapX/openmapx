@@ -37,9 +37,11 @@ import {
   listAdminServiceBackupsRequest,
   listAdminServicePresetsRequest,
   listAdminServicesRequest,
+  previewAdminBackupPruneRequest,
   previewAdminOperationRequest,
   previewAdminPlatformConfigurationRequest,
   provisionAdminDawarichRequest,
+  pruneAdminServiceBackupsRequest,
   pullAdminServiceImagesRequest,
   restoreAdminServiceBackupRequest,
   rollbackAdminSharedMobilityRequest,
@@ -332,6 +334,15 @@ import type {
   ListAdminServices415,
   ListAdminServices429,
   ListAdminServices500,
+  PreviewAdminBackupPrune200,
+  PreviewAdminBackupPrune400,
+  PreviewAdminBackupPrune401,
+  PreviewAdminBackupPrune403,
+  PreviewAdminBackupPrune413,
+  PreviewAdminBackupPrune415,
+  PreviewAdminBackupPrune429,
+  PreviewAdminBackupPrune500,
+  PreviewAdminBackupPrune503,
   PreviewAdminOperation200,
   PreviewAdminOperation400,
   PreviewAdminOperation401,
@@ -366,6 +377,18 @@ import type {
   ProvisionAdminDawarich500,
   ProvisionAdminDawarich503,
   ProvisionAdminDawarichBody,
+  PruneAdminServiceBackups202,
+  PruneAdminServiceBackups400,
+  PruneAdminServiceBackups401,
+  PruneAdminServiceBackups403,
+  PruneAdminServiceBackups409,
+  PruneAdminServiceBackups413,
+  PruneAdminServiceBackups415,
+  PruneAdminServiceBackups429,
+  PruneAdminServiceBackups500,
+  PruneAdminServiceBackups503,
+  PruneAdminServiceBackupsBody,
+  PruneAdminServiceBackupsHeaders,
   PullAdminServiceImages202,
   PullAdminServiceImages400,
   PullAdminServiceImages401,
@@ -2944,6 +2967,197 @@ export const createAdminServiceBackup = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(createAdminServiceBackupBody),
+    },
+  );
+};
+
+export type pruneAdminServiceBackupsResponse202 = {
+  data: PruneAdminServiceBackups202;
+  status: 202;
+};
+
+export type pruneAdminServiceBackupsResponse400 = {
+  data: PruneAdminServiceBackups400;
+  status: 400;
+};
+
+export type pruneAdminServiceBackupsResponse401 = {
+  data: PruneAdminServiceBackups401;
+  status: 401;
+};
+
+export type pruneAdminServiceBackupsResponse403 = {
+  data: PruneAdminServiceBackups403;
+  status: 403;
+};
+
+export type pruneAdminServiceBackupsResponse409 = {
+  data: PruneAdminServiceBackups409;
+  status: 409;
+};
+
+export type pruneAdminServiceBackupsResponse413 = {
+  data: PruneAdminServiceBackups413;
+  status: 413;
+};
+
+export type pruneAdminServiceBackupsResponse415 = {
+  data: PruneAdminServiceBackups415;
+  status: 415;
+};
+
+export type pruneAdminServiceBackupsResponse429 = {
+  data: PruneAdminServiceBackups429;
+  status: 429;
+};
+
+export type pruneAdminServiceBackupsResponse500 = {
+  data: PruneAdminServiceBackups500;
+  status: 500;
+};
+
+export type pruneAdminServiceBackupsResponse503 = {
+  data: PruneAdminServiceBackups503;
+  status: 503;
+};
+
+export type pruneAdminServiceBackupsResponseSuccess = pruneAdminServiceBackupsResponse202 & {
+  headers: Headers;
+};
+export type pruneAdminServiceBackupsResponseError = (
+  | pruneAdminServiceBackupsResponse400
+  | pruneAdminServiceBackupsResponse401
+  | pruneAdminServiceBackupsResponse403
+  | pruneAdminServiceBackupsResponse409
+  | pruneAdminServiceBackupsResponse413
+  | pruneAdminServiceBackupsResponse415
+  | pruneAdminServiceBackupsResponse429
+  | pruneAdminServiceBackupsResponse500
+  | pruneAdminServiceBackupsResponse503
+) & {
+  headers: Headers;
+};
+
+export type pruneAdminServiceBackupsResponse =
+  | pruneAdminServiceBackupsResponseSuccess
+  | pruneAdminServiceBackupsResponseError;
+
+export const getPruneAdminServiceBackupsUrl = () => {
+  return `/api/admin/services/backups/prune`;
+};
+
+export const pruneAdminServiceBackups = async (
+  pruneAdminServiceBackupsBody: PruneAdminServiceBackupsBody,
+  headers: PruneAdminServiceBackupsHeaders,
+  options?: Parameters<typeof pruneAdminServiceBackupsRequest>[1],
+): Promise<pruneAdminServiceBackupsResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return pruneAdminServiceBackupsRequest<pruneAdminServiceBackupsResponse>(
+    getPruneAdminServiceBackupsUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(pruneAdminServiceBackupsBody),
+    },
+  );
+};
+
+export type previewAdminBackupPruneResponse200 = {
+  data: PreviewAdminBackupPrune200;
+  status: 200;
+};
+
+export type previewAdminBackupPruneResponse400 = {
+  data: PreviewAdminBackupPrune400;
+  status: 400;
+};
+
+export type previewAdminBackupPruneResponse401 = {
+  data: PreviewAdminBackupPrune401;
+  status: 401;
+};
+
+export type previewAdminBackupPruneResponse403 = {
+  data: PreviewAdminBackupPrune403;
+  status: 403;
+};
+
+export type previewAdminBackupPruneResponse413 = {
+  data: PreviewAdminBackupPrune413;
+  status: 413;
+};
+
+export type previewAdminBackupPruneResponse415 = {
+  data: PreviewAdminBackupPrune415;
+  status: 415;
+};
+
+export type previewAdminBackupPruneResponse429 = {
+  data: PreviewAdminBackupPrune429;
+  status: 429;
+};
+
+export type previewAdminBackupPruneResponse500 = {
+  data: PreviewAdminBackupPrune500;
+  status: 500;
+};
+
+export type previewAdminBackupPruneResponse503 = {
+  data: PreviewAdminBackupPrune503;
+  status: 503;
+};
+
+export type previewAdminBackupPruneResponseSuccess = previewAdminBackupPruneResponse200 & {
+  headers: Headers;
+};
+export type previewAdminBackupPruneResponseError = (
+  | previewAdminBackupPruneResponse400
+  | previewAdminBackupPruneResponse401
+  | previewAdminBackupPruneResponse403
+  | previewAdminBackupPruneResponse413
+  | previewAdminBackupPruneResponse415
+  | previewAdminBackupPruneResponse429
+  | previewAdminBackupPruneResponse500
+  | previewAdminBackupPruneResponse503
+) & {
+  headers: Headers;
+};
+
+export type previewAdminBackupPruneResponse =
+  | previewAdminBackupPruneResponseSuccess
+  | previewAdminBackupPruneResponseError;
+
+export const getPreviewAdminBackupPruneUrl = () => {
+  return `/api/admin/services/backups/prune/preview`;
+};
+
+export const previewAdminBackupPrune = async (
+  options?: Parameters<typeof previewAdminBackupPruneRequest>[1],
+): Promise<previewAdminBackupPruneResponse> => {
+  return previewAdminBackupPruneRequest<previewAdminBackupPruneResponse>(
+    getPreviewAdminBackupPruneUrl(),
+    {
+      ...options,
+      method: "POST",
     },
   );
 };
