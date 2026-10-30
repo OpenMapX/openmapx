@@ -62,6 +62,13 @@ export type ValidatedBuildBundle = {
   manifestSha256: string;
   artifactFingerprint: string;
 };
+/** Exact parsed metadata, before payload extraction. Deployment consumers reserve
+ * disk/inode quota from these values instead of reserving the policy ceiling. */
+export interface ArtifactPayloadReservation {
+  readonly expandedBytes: number;
+  readonly entries: number;
+  readonly manifestBytes: number;
+}
 function checkLimits(limits: ArtifactArchiveLimits) {
   if (
     Object.keys(DEFAULT_ARTIFACT_ARCHIVE_LIMITS).some(
@@ -263,6 +270,7 @@ export async function validateBuildBundle(options: {
   stagingRoot: string;
   limits: ArtifactArchiveLimits;
   signal: AbortSignal;
+  reservePayload?: (reservation: ArtifactPayloadReservation) => void | Promise<void>;
 }): Promise<ValidatedBuildBundle> {
   const { source, limits, signal } = options;
   checkLimits(limits);
@@ -385,6 +393,15 @@ export async function validateBuildBundle(options: {
         for (const p of [...manifest.directories, ...manifest.files.map((f) => f.path)])
           if (!safeArtifactPath(p, limits.maxPathBytes, limits.maxPathDepth))
             throw Error("Manifest path limit exceeded");
+        await options.reservePayload?.(
+          Object.freeze({
+            expandedBytes: total,
+            entries: manifest.directories.length + manifest.files.length + 1,
+            manifestBytes: bytes.length,
+          }),
+        );
+        signal.throwIfAborted();
+        root.check();
         expectedFiles = new Map(manifest.files.map((f) => [f.path, f]));
         expectedDirs = new Set(manifest.directories);
       } else if (type === "5") {

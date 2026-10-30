@@ -8,6 +8,7 @@ export const MAINTENANCE_JOB_TYPES = [
   "service.images.pull",
   "backup.prune",
   "compose.render",
+  "artifact.validate",
 ] as const;
 export function maintenanceJobAuthorization(
   token: string,

@@ -1025,6 +1025,13 @@ export async function uploadAdminArtifactTransferContentRequest<T>(
 ): Promise<T> {
   return uploadAdminArtifactTransferContentBound<T>(url, options);
 }
+const validateAdminArtifactTransferBound = bindAdminOperation("validateAdminArtifactTransfer");
+export async function validateAdminArtifactTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return validateAdminArtifactTransferBound<T>(url, options);
+}
 const validateAdminTransitPinsBound = bindAdminOperation("validateAdminTransitPins");
 export async function validateAdminTransitPinsRequest<T>(
   url: string,

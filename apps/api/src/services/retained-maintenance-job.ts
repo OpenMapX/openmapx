@@ -10,7 +10,8 @@ export type RetainedMaintenanceJobType =
   | "release.clear"
   | "service.images.pull"
   | "backup.prune"
-  | "compose.render";
+  | "compose.render"
+  | "artifact.validate";
 export class MaintenanceRequestConflict extends Error {}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,

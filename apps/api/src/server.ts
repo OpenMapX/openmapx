@@ -1,3 +1,4 @@
+import { handlePreparedArtifactValidationJob } from "./services/admin-artifact-validation";
 import { handleBackupPruneJob } from "./services/admin-backup-maintenance";
 import { handleComposeRenderJob } from "./services/admin-compose-render";
 import { handleImageStageJob } from "./services/admin-image-staging";
@@ -708,6 +709,7 @@ jobRunner.register("release.clear", handleReleaseClearJob);
 jobRunner.register("service.images.pull", handleImageStageJob);
 jobRunner.register("backup.prune", handleBackupPruneJob);
 jobRunner.register("compose.render", handleComposeRenderJob);
+jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 

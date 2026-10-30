@@ -71,6 +71,49 @@ async function validate(bytes: Buffer, overrides = {}) {
   });
 }
 describe("bounded build archive", () => {
+  it("reserves exact validated manifest capacity before creating any payload", async () => {
+    const api = await import("./archive"),
+      stagingRoot = join(root, "reserved-stage");
+    mkdirSync(stagingRoot, { mode: 0o700 });
+    let observed: unknown;
+    await expect(
+      api.validateBuildBundle({
+        source: Readable.from([archiveFixture()]),
+        stagingRoot,
+        limits: api.DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+        signal: new AbortController().signal,
+        reservePayload: (reservation) => {
+          observed = reservation;
+          throw Error("Insufficient reserved capacity");
+        },
+      }),
+    ).rejects.toThrow("Insufficient reserved capacity");
+    expect(observed).toEqual({
+      expandedBytes: payload.length,
+      entries: 3,
+      manifestBytes: Buffer.byteLength(JSON.stringify(fixtureManifest())),
+    });
+    expect(existsSync(join(stagingRoot, "osrm-graph"))).toBe(false);
+  });
+  it("does not extract after cancellation while waiting for manifest capacity", async () => {
+    const api = await import("./archive"),
+      stagingRoot = join(root, "canceled-reservation"),
+      controller = new AbortController();
+    mkdirSync(stagingRoot, { mode: 0o700 });
+    await expect(
+      api.validateBuildBundle({
+        source: Readable.from([archiveFixture()]),
+        stagingRoot,
+        limits: api.DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+        signal: controller.signal,
+        reservePayload: async () => {
+          controller.abort();
+        },
+      }),
+    ).rejects.toThrow();
+    expect(existsSync(join(stagingRoot, "osrm-graph"))).toBe(false);
+  });
+
   it.each([false, true])("streams safe v1 bytes from plain/gzip (%s) tar", async (gzip) => {
     const bytes = gzip ? gzipSync(archiveFixture()) : archiveFixture();
     const result = await validate(bytes);

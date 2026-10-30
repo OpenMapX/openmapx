@@ -57,6 +57,7 @@ import {
   streamAdminServiceLogsRequest,
   updateAdminServiceConfigRequest,
   uploadAdminArtifactTransferContentRequest,
+  validateAdminArtifactTransferRequest,
 } from "./operation-bindings.generated";
 import type {
   ApplyAdminPlatformConfiguration202,
@@ -558,6 +559,21 @@ import type {
   UploadAdminArtifactTransferContent500,
   UploadAdminArtifactTransferContent503,
   UploadAdminArtifactTransferContent507,
+  ValidateAdminArtifactTransfer202,
+  ValidateAdminArtifactTransfer400,
+  ValidateAdminArtifactTransfer401,
+  ValidateAdminArtifactTransfer403,
+  ValidateAdminArtifactTransfer404,
+  ValidateAdminArtifactTransfer409,
+  ValidateAdminArtifactTransfer410,
+  ValidateAdminArtifactTransfer413,
+  ValidateAdminArtifactTransfer415,
+  ValidateAdminArtifactTransfer422,
+  ValidateAdminArtifactTransfer429,
+  ValidateAdminArtifactTransfer500,
+  ValidateAdminArtifactTransfer503,
+  ValidateAdminArtifactTransfer507,
+  ValidateAdminArtifactTransferHeaders,
 } from "./service-models";
 export type listAdminArtifactTransfersResponse200 = {
   data: ListAdminArtifactTransfers200;
@@ -1327,6 +1343,140 @@ export const uploadAdminArtifactTransferContent: (
 ) => ReturnType<
   typeof uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent
 > = uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent;
+
+export type validateAdminArtifactTransferResponse202 = {
+  data: ValidateAdminArtifactTransfer202;
+  status: 202;
+};
+
+export type validateAdminArtifactTransferResponse400 = {
+  data: ValidateAdminArtifactTransfer400;
+  status: 400;
+};
+
+export type validateAdminArtifactTransferResponse401 = {
+  data: ValidateAdminArtifactTransfer401;
+  status: 401;
+};
+
+export type validateAdminArtifactTransferResponse403 = {
+  data: ValidateAdminArtifactTransfer403;
+  status: 403;
+};
+
+export type validateAdminArtifactTransferResponse404 = {
+  data: ValidateAdminArtifactTransfer404;
+  status: 404;
+};
+
+export type validateAdminArtifactTransferResponse409 = {
+  data: ValidateAdminArtifactTransfer409;
+  status: 409;
+};
+
+export type validateAdminArtifactTransferResponse410 = {
+  data: ValidateAdminArtifactTransfer410;
+  status: 410;
+};
+
+export type validateAdminArtifactTransferResponse413 = {
+  data: ValidateAdminArtifactTransfer413;
+  status: 413;
+};
+
+export type validateAdminArtifactTransferResponse415 = {
+  data: ValidateAdminArtifactTransfer415;
+  status: 415;
+};
+
+export type validateAdminArtifactTransferResponse422 = {
+  data: ValidateAdminArtifactTransfer422;
+  status: 422;
+};
+
+export type validateAdminArtifactTransferResponse429 = {
+  data: ValidateAdminArtifactTransfer429;
+  status: 429;
+};
+
+export type validateAdminArtifactTransferResponse500 = {
+  data: ValidateAdminArtifactTransfer500;
+  status: 500;
+};
+
+export type validateAdminArtifactTransferResponse503 = {
+  data: ValidateAdminArtifactTransfer503;
+  status: 503;
+};
+
+export type validateAdminArtifactTransferResponse507 = {
+  data: ValidateAdminArtifactTransfer507;
+  status: 507;
+};
+
+export type validateAdminArtifactTransferResponseSuccess =
+  validateAdminArtifactTransferResponse202 & {
+    headers: Headers;
+  };
+export type validateAdminArtifactTransferResponseError = (
+  | validateAdminArtifactTransferResponse400
+  | validateAdminArtifactTransferResponse401
+  | validateAdminArtifactTransferResponse403
+  | validateAdminArtifactTransferResponse404
+  | validateAdminArtifactTransferResponse409
+  | validateAdminArtifactTransferResponse410
+  | validateAdminArtifactTransferResponse413
+  | validateAdminArtifactTransferResponse415
+  | validateAdminArtifactTransferResponse422
+  | validateAdminArtifactTransferResponse429
+  | validateAdminArtifactTransferResponse500
+  | validateAdminArtifactTransferResponse503
+  | validateAdminArtifactTransferResponse507
+) & {
+  headers: Headers;
+};
+
+export type validateAdminArtifactTransferResponse =
+  | validateAdminArtifactTransferResponseSuccess
+  | validateAdminArtifactTransferResponseError;
+
+export const getValidateAdminArtifactTransferUrl = (stageId: string) => {
+  return `/api/admin/artifact-transfers/${encodeURIComponent(String(stageId))}/validate`;
+};
+
+export const validateAdminArtifactTransfer = async (
+  stageId: string,
+  headers: ValidateAdminArtifactTransferHeaders,
+  options?: Parameters<typeof validateAdminArtifactTransferRequest>[1],
+): Promise<validateAdminArtifactTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return validateAdminArtifactTransferRequest<validateAdminArtifactTransferResponse>(
+    getValidateAdminArtifactTransferUrl(stageId),
+    {
+      ...options,
+      method: "POST",
+      headers: { ...headers, ...getHeaders(options?.headers) },
+    },
+  );
+};
 
 export type listAdminCacheNamespacesResponse200 = {
   data: ListAdminCacheNamespaces200;

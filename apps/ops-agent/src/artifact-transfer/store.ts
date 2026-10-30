@@ -13,7 +13,11 @@ import {
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { AnchoredDirectory, executionAuthorityState } from "@openmapx/core/build-artifacts";
+import {
+  AnchoredDirectory,
+  executionAuthorityState,
+  validateBuildBundle,
+} from "@openmapx/core/build-artifacts";
 import {
   type ArtifactStageClaim,
   artifactStageClaimSchema,
@@ -63,6 +67,21 @@ import {
   transferPolicyRevision,
 } from "./policy";
 
+/** A consumer borrows the already-open descriptor; destroying its stream must
+ * not close the descriptor before the store's final identity verification. */
+async function* claimedFileBytes(file: FileHandle, signal: AbortSignal, bytes: number) {
+  let position = 0;
+  for (;;) {
+    signal.throwIfAborted();
+    const buffer = Buffer.alloc(64 * 1024),
+      { bytesRead } = await file.read(buffer, 0, buffer.length, position);
+    if (!bytesRead) break;
+    position += bytesRead;
+    if (position > bytes) failed(409, "Artifact consumer exceeded its immutable byte count");
+    yield buffer.subarray(0, bytesRead);
+  }
+  if (position !== bytes) failed(409, "Artifact consumer byte count changed");
+}
 const id = z.uuid();
 const integrationClaimRecordSchema = z.strictObject({
   claim: artifactStageClaimSchema,
@@ -690,6 +709,189 @@ export class ArtifactTransferStore {
       }
     }
   }
+  private preparedContext(context: OpsExecutionContext) {
+    if (!context.controlAuthority) throw Error("Prepared artifact execution authority required");
+    const authority = executionAuthorityState(context.controlAuthority),
+      operation = context.claim.operation;
+    if (
+      operation.kind !== "artifactTransfer.validate" ||
+      authority.kind !== operation.kind ||
+      authority.installation.installation.role !== "ops-agent" ||
+      context.execution.principal !== "api" ||
+      canonicalJson(authority.execution) !== canonicalJson(context.execution) ||
+      opsOperationFingerprint(operation) !== authority.execution.operationFingerprint
+    )
+      throw Error("Original prepared artifact execution required");
+    return operation;
+  }
+  async validatePreparedArtifact(context: OpsExecutionContext): Promise<TransferStage> {
+    const operation = this.preparedContext(context);
+    const stage = this.lock(
+      () => this.owned(operation.stageId, operation.ownerId, "prepared-artifact").stage,
+    );
+    if (!stage.sha256) failed(409, "Prepared upload is incomplete");
+    const identity = {
+      executionId: context.execution.executionId,
+      operationKey: context.execution.operationKey,
+      fingerprint: context.execution.fingerprint,
+      executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+    };
+    const claim = await this.claimStage(
+      {
+        stageId: operation.stageId,
+        ownerId: operation.ownerId,
+        purpose: "prepared-artifact",
+        use: "validate-build",
+        identity,
+        expectedSha256: stage.sha256,
+      },
+      context,
+    );
+    const previous = this.lock(
+      () =>
+        this.owned(claim.stageId, claim.ownerId).claims.find(
+          (record) => record.claim.claimId === claim.claimId,
+        )!,
+    );
+    if (previous.settlement) {
+      if (
+        previous.settlement.outcome !== "validated" ||
+        !previous.preparation ||
+        stage.state !== "ready"
+      )
+        failed(409, "Prepared validation has already settled");
+      const directory = this.directory(this.lock(() => this.owned(claim.stageId, claim.ownerId))),
+        prepared = directory.directory(`prepared-${claim.claimId}`, false, true);
+      try {
+        if (
+          canonicalJson({ dev: String(prepared.stat.dev), ino: String(prepared.stat.ino) }) !==
+            canonicalJson(previous.preparation.directory) ||
+          createHash("sha256")
+            .update(prepared.read("manifest.json", this.policy.maxManifestBytes))
+            .digest("hex") !== previous.preparation.manifestDigest
+        )
+          failed(409, "Prepared validation source changed");
+      } finally {
+        prepared.close();
+        directory.close();
+      }
+      return stage;
+    }
+    const directory = this.directory(this.lock(() => this.owned(claim.stageId, claim.ownerId)));
+    let prepared: AnchoredDirectory | undefined;
+    let created = false;
+    try {
+      // An unexplained extraction from an earlier process is recovery work, never
+      // permission to erase it or rerun a fresh validation identity.
+      mkdirSync(directory.name(`prepared-${claim.claimId}`), { mode: 0o700 });
+      created = true;
+      fsyncSync(directory.fd);
+      prepared = directory.directory(`prepared-${claim.claimId}`, false, true);
+      const extracted = prepared;
+      this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (!entry || entry.settlement || current.stage.state !== "validating")
+          failed(409, "Prepared validation owner changed");
+        entry.preparation = {
+          version: 1,
+          state: "extracting",
+          directory: { dev: String(extracted.stat.dev), ino: String(extracted.stat.ino) },
+        };
+        this.save(current);
+      });
+      const result = await this.withStageFile(
+        { claim, signal: context.signal },
+        async (file, signal) => {
+          const source = claimedFileBytes(file, signal, claim.bytes);
+          try {
+            return await validateBuildBundle({
+              source: Readable.from(source),
+              stagingRoot: extracted.anchor,
+              limits: this.policy,
+              signal,
+              reservePayload: (reservation) =>
+                this.lock(() => {
+                  const current = this.owned(claim.stageId, claim.ownerId),
+                    entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+                  if (!entry || entry.settlement || current.stage.state !== "validating")
+                    failed(409, "Prepared validation owner changed");
+                  const required =
+                    current.reservedBytes + reservation.expandedBytes + reservation.manifestBytes;
+                  if (!Number.isSafeInteger(required))
+                    failed(413, "Prepared stage capacity overflow");
+                  this.checkCapacity(Math.max(0, required - current.reservedBytes));
+                  if (this.capacity().inodes < reservation.entries + this.all().length * 3 + 16)
+                    failed(507, "Insufficient artifact inode capacity");
+                  current.reservedBytes = Math.max(required, current.reservedBytes);
+                  this.save(current);
+                }),
+            });
+          } finally {
+            await source.return(undefined);
+          }
+        },
+      );
+      if (result.archiveSha256 !== claim.sha256) failed(409, "Prepared archive digest changed");
+      const manifest = canonicalJson(result.manifest),
+        manifestDigest = createHash("sha256").update(manifest).digest("hex");
+      if (Buffer.byteLength(manifest) > this.policy.maxManifestBytes)
+        failed(413, "Prepared manifest is too large");
+      context.signal.throwIfAborted();
+      if (context.execution.deadlineAt <= this.now())
+        failed(410, "Prepared validation deadline expired");
+      extracted.write("manifest.json", manifest, true);
+      return this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (!entry || entry.settlement || current.stage.state !== "validating")
+          failed(409, "Prepared validation owner changed");
+        context.signal.throwIfAborted();
+        if (context.execution.deadlineAt <= this.now())
+          failed(410, "Prepared validation deadline expired");
+        const inspection = {
+          inspectionId: randomUUID(),
+          stageId: claim.stageId,
+          sha256: claim.sha256,
+          bytes: claim.bytes,
+          policyRevision: this.revision,
+          validationFingerprint: result.artifactFingerprint,
+          expiresAt: new Date(
+            Math.min(this.now() + 600000, Date.parse(current.stage.expiresAt)),
+          ).toISOString(),
+        };
+        entry.preparation = {
+          version: 1,
+          directory: { dev: String(extracted.stat.dev), ino: String(extracted.stat.ino) },
+          manifestDigest,
+          artifactFingerprint: result.artifactFingerprint,
+          archiveSha256: result.archiveSha256,
+          serviceId: result.manifest.service,
+          expandedBytes: result.expandedBytes,
+        };
+        entry.settlement = { outcome: "validated", inspection };
+        current.stage.state = "ready";
+        this.save(current);
+        return current.stage;
+      });
+    } catch (error) {
+      if (!created)
+        throw new ArtifactTransferError(409, "Prepared extraction requires original recovery");
+      this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (entry && !entry.settlement) {
+          entry.settlement = { outcome: "failed", receiptId: context.execution.executionId };
+          current.stage.state = "failed";
+          this.save(current);
+        }
+      });
+      throw error;
+    } finally {
+      prepared?.close();
+      directory.close();
+    }
+  }
   private integrationContext(context: OpsExecutionContext) {
     if (!context.controlAuthority) throw Error("Integration execution authority is required");
     const authority = executionAuthorityState(context.controlAuthority);
@@ -1013,7 +1215,10 @@ export class ArtifactTransferStore {
     context?: OpsExecutionContext,
   ): Promise<ArtifactStageClaim> {
     if (!context) failed(409, "Artifact purpose consumer is not installed for this operation");
-    const operation = this.integrationContext(context);
+    const operation =
+      context.claim.operation.kind === "artifactTransfer.validate"
+        ? this.preparedContext(context)
+        : this.integrationContext(context);
     this.admit();
     return this.lock(() => {
       const meta = this.owned(input.stageId, input.ownerId, input.purpose);
@@ -1024,7 +1229,10 @@ export class ArtifactTransferStore {
         executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
       };
       if (
-        input.purpose !== "integration-artifact" ||
+        input.purpose !==
+          (operation.kind === "artifactTransfer.validate"
+            ? "prepared-artifact"
+            : "integration-artifact") ||
         canonicalJson(input.identity) !== canonicalJson(identity)
       )
         failed(409, "Artifact claim execution mismatch");
@@ -1048,7 +1256,21 @@ export class ArtifactTransferStore {
         meta.claims.length >= 8
       )
         failed(409, "Artifact content is not available for this claim");
-      if (operation.kind === "integration.inspectInstall") {
+      if (operation.kind === "artifactTransfer.validate") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.stageId !== input.stageId ||
+          input.use !== "validate-build" ||
+          !["uploaded", "ready"].includes(meta.stage.state) ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Prepared validation claim mismatch");
+        if (
+          this.all().filter((record) => record.stage.state === "validating").length >=
+          this.policy.maxConcurrentArchiveJobs
+        )
+          failed(429, "Archive validation concurrency limit exceeded");
+      } else if (operation.kind === "integration.inspectInstall") {
         if (
           operation.ownerId !== input.ownerId ||
           operation.source.kind !== "uploaded-artifact" ||
@@ -1119,7 +1341,9 @@ export class ArtifactTransferStore {
             : null,
         transactionId: operation.kind === "integration.install" ? operation.operationId : null,
       });
-      meta.stage.state = input.use === "inspect-integration" ? "validating" : "claimed";
+      meta.stage.state = ["inspect-integration", "validate-build"].includes(input.use)
+        ? "validating"
+        : "claimed";
       this.save(meta);
       return claim;
     });
@@ -1329,7 +1553,7 @@ export class ArtifactTransferStore {
   ): Promise<T> {
     const claim = artifactStageClaimSchema.parse(input.claim);
     const meta = this.lock(() => {
-      const meta = this.owned(claim.stageId, claim.ownerId, "integration-artifact");
+      const meta = this.owned(claim.stageId, claim.ownerId, claim.purpose);
       const record = meta.claims.find(
         (entry) => canonicalJson(entry.claim) === canonicalJson(claim),
       );
@@ -1406,20 +1630,7 @@ export class ArtifactTransferStore {
     if (input.claim.purpose !== "integration-artifact" || input.claim.use !== "inspect-integration")
       failed(409, "Expected integration inspection claim");
     return this.withStageFile(input, async (file, signal) => {
-      const source = (async function* () {
-        let position = 0;
-        for (;;) {
-          signal.throwIfAborted();
-          const buffer = Buffer.alloc(64 * 1024);
-          const { bytesRead } = await file.read(buffer, 0, buffer.length, position);
-          if (!bytesRead) break;
-          position += bytesRead;
-          if (position > input.claim.bytes)
-            failed(409, "Artifact consumer exceeded its immutable byte count");
-          yield buffer.subarray(0, bytesRead);
-        }
-        if (position !== input.claim.bytes) failed(409, "Artifact consumer byte count changed");
-      })();
+      const source = claimedFileBytes(file, signal, input.claim.bytes);
       try {
         return await run({ source, signal, bytes: input.claim.bytes, sha256: input.claim.sha256 });
       } finally {

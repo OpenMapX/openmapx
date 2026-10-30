@@ -117,6 +117,12 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     decision: "commit",
     expectedContentDigest: "a".repeat(64),
   },
+  "artifactTransfer.validate": {
+    kind: "artifactTransfer.validate",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+  },
   "artifactTransfer.create": {
     kind: "artifactTransfer.create",
     ownerId: "admin",

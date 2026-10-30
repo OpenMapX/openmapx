@@ -39,6 +39,7 @@
       "artifactTransfer.inspectClaim",
       "artifactTransfer.list",
       "artifactTransfer.settle",
+      "artifactTransfer.validate",
       "backup.create",
       "backup.delete",
       "backup.list",
@@ -404,6 +405,14 @@
         "apps/ops-agent/src/administrative-runtime.ts#createAdministrativeRuntime"
       ],
       "typedKinds": ["data.generateApiKeys"]
+    },
+    {
+      "id": "api.artifact-validation",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactValidationJob"
+      ],
+      "typedKinds": ["artifactTransfer.validate"]
     },
     {
       "id": "api.artifact-transfers",

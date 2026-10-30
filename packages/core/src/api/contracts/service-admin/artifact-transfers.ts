@@ -40,6 +40,21 @@ const errors = {
   507: adminJson(httpErrorSchema),
 };
 export const artifactTransferAdminOperations = {
+  validateAdminArtifactTransfer: {
+    method: "POST",
+    path: "/api/admin/artifact-transfers/:stageId/validate",
+    auth: "admin",
+    request: {
+      params,
+      headers: z.object({
+        "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),
+      }),
+    },
+    responses: {
+      202: adminJson(z.strictObject({ ok: z.literal(true), jobId: z.uuid() })),
+      ...errors,
+    },
+  },
   listAdminArtifactTransfers: {
     method: "GET",
     path: "/api/admin/artifact-transfers",

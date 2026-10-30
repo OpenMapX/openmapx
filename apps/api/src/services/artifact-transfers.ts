@@ -32,6 +32,29 @@ export class AdminArtifactTransfers {
       throw error;
     }
   }
+  async validate(ownerId: string, stageId: string, key: string) {
+    const stage = await this.inspect(ownerId, stageId);
+    if (
+      stage.purpose !== "prepared-artifact" ||
+      stage.direction !== "upload" ||
+      !["uploaded", "ready", "validating"].includes(stage.state)
+    )
+      throw new AdminArtifactTransferError(409);
+    const { jobRunner } = await import("./job-runner"),
+      { MaintenanceRequestConflict } = await import("./retained-maintenance-job");
+    try {
+      const jobId = await jobRunner.enqueueMaintenance(
+        "artifact.validate",
+        { stageId, ownerId },
+        ownerId,
+        key,
+      );
+      return { ok: true as const, jobId };
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict) throw new AdminArtifactTransferError(409);
+      throw error;
+    }
+  }
   list(ownerId: string, limit = 50, offset = 0) {
     return this.execute({ kind: "artifactTransfer.list", ownerId, limit, offset });
   }

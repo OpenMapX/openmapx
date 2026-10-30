@@ -83,6 +83,7 @@ describe("job runner restart initialization", () => {
       "release.clear",
       "service.images.pull",
       "backup.prune",
+      "artifact.validate",
     ]);
     await jobRunner.initialize({ completeRestartedUpdates: true });
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "queued" }));

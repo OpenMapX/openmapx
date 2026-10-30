@@ -90,6 +90,10 @@ export const claimTransferStageSchema = inspectTransferStageSchema.extend({
   inspection: stageInspectionBindingSchema.optional(),
 });
 export const artifactTransferOperationSchemas = [
+  inspectTransferStageSchema.extend({
+    kind: z.literal("artifactTransfer.validate"),
+    purpose: z.literal("prepared-artifact"),
+  }),
   createTransferStageSchema.extend({ kind: z.literal("artifactTransfer.create") }),
   z.strictObject({
     kind: z.literal("artifactTransfer.list"),
@@ -113,6 +117,7 @@ export const artifactTransferOperationSchemas = [
   }),
 ] as const;
 export const artifactTransferResultSchemas = {
+  "artifactTransfer.validate": transferStageSchema,
   "artifactTransfer.create": transferStageSchema,
   "artifactTransfer.list": z.strictObject({
     items: z.array(transferStageSchema).max(100),
