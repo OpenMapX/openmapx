@@ -9,6 +9,7 @@ import {
   adminJob,
   authPolicyApplication,
   authPolicyState,
+  configurationMigrationPreview,
   dataDisclosureEvent,
   dataExportReauthentication,
   dataManagerOfflinePackageArtifactReferences,
@@ -1053,6 +1054,27 @@ export async function* streamOpenMapxRegistrationRecords(
             ),
           )
           .orderBy(asc(transitCredentialPreview.id)),
+        {
+          policyCodes: ["secret-value-redacted"],
+          map: ({ id, ...row }) => ({ ...row, proposalDigest: pseudonymousIdentifier(id) }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            id: configurationMigrationPreview.id,
+            kind: configurationMigrationPreview.kind,
+            createdAt: configurationMigrationPreview.createdAt,
+            expiresAt: configurationMigrationPreview.expiresAt,
+          })
+          .from(configurationMigrationPreview)
+          .where(
+            and(
+              eq(configurationMigrationPreview.actorId, context.userId),
+              lte(configurationMigrationPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(configurationMigrationPreview.id)),
         {
           policyCodes: ["secret-value-redacted"],
           map: ({ id, ...row }) => ({ ...row, proposalDigest: pseudonymousIdentifier(id) }),

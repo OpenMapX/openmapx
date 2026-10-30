@@ -103,6 +103,14 @@ import {
 } from "./configuration-maintenance-step-records";
 import { assertLegacyIntegrationImportOverlay } from "./configuration-migration/legacy-integration-import-intent";
 import {
+  assertStagedMigrationOverlay,
+  isStagedMigrationParticipant,
+  retainedStagedMigration,
+  retainedStagedMigrationSource,
+  stagedMigrationHasPlatform,
+  stagedMigrationPatch,
+} from "./configuration-migration/participant";
+import {
   ConfigurationSourceOwned,
   IntegrationConfigurationConflict,
   integrationOwnershipSnapshot,
@@ -345,8 +353,24 @@ async function verifyConfigurationCommitParticipant(
     if (!actual) throw Error("Actual coordinator job unavailable");
     assertRetainedCoordinatorLifecycleProvenance(actual, state.record);
   }
-  if (state.overlay.purpose === "migration")
-    assertLegacyIntegrationImportOverlay(writer, state.overlay);
+  if (state.overlay.purpose === "migration") {
+    if (
+      recoveredCommittedCandidates.has(candidate) &&
+      state.record.privateIntegrationReload?.stagedMigration
+    ) {
+      await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
+        {
+          previewId: state.record.privateIntegrationReload.stagedMigration.previewId,
+          actorId: writer.actorId,
+          jobId: owner.job.jobId,
+          candidateId: candidate.candidateId,
+        },
+        owner.connection,
+      );
+    } else if (owner.participant && isStagedMigrationParticipant(owner.participant, writer))
+      assertStagedMigrationOverlay(writer, state.overlay);
+    else assertLegacyIntegrationImportOverlay(writer, state.overlay);
+  }
   if (state.overlay.purpose === "integration-binding")
     assertIntegrationBindingOverlay(writer, state.overlay);
   if (state.overlay.purpose === "platform") {
@@ -1498,14 +1522,27 @@ async function assertCurrentIntegrationReloadSources(candidate: ValidatedConfigu
   });
 }
 export async function reloadProspectiveIntegrations(candidate: ValidatedConfigurationCandidate) {
-  await assertCurrentIntegrationReloadSources(candidate);
   const state = validatedConfigurationCandidateState(candidate);
   assertCommittedConfigurationCandidate(candidate);
+  if (
+    state.record.privateIntegrationReload?.stagedMigration &&
+    state.record.privateIntegrationReload.integrations.length === 0
+  ) {
+    await withAdministrativeConfigurationRead({}, async (read) => {
+      if (read.integrations.length) throw Error("Integration source changed");
+    });
+    return { message: "No integration providers", reloaded: 0, enabled: 0 };
+  }
+  await assertCurrentIntegrationReloadSources(candidate);
   const { reloadIntegrations } = await import("../integration-host");
   if (!recoveredCommittedCandidates.has(candidate))
     return withProspectiveConfigurationRead(candidate, (read) => reloadIntegrations(read));
   const retained = state.record.privateIntegrationReload;
-  if (state.record.apiFollowUp !== "integration-reload" || !retained || !retained.bindings)
+  if (
+    (state.record.apiFollowUp !== "integration-reload" && !retained?.stagedMigration) ||
+    !retained ||
+    !retained.bindings
+  )
     throw new JobObservationPending("recovery_required");
   return withAdministrativeConfigurationRead({}, async (read) => {
     if (
@@ -1633,6 +1670,20 @@ export async function completeProspectiveServiceCredential(
 }
 function retainedIntegrationIds(record: PreparedConfigurationRecord, overlay: Overlay): string[] {
   if (overlay.purpose === "migration") {
+    const staged = record.privateIntegrationReload?.stagedMigration;
+    if (staged) {
+      if (
+        record.privateIntegrationReload?.legacyImport ||
+        !["integration-reload", "platform-apply"].includes(record.apiFollowUp ?? "") ||
+        canonicalJson(staged.integrationIds) !==
+          canonicalJson([...new Set(staged.integrationIds)].sort()) ||
+        overlay.changes.some(
+          (c) => "integrationId" in c && !staged.integrationIds.includes(c.integrationId),
+        )
+      )
+        throw new JobObservationPending("recovery_required");
+      return staged.integrationIds;
+    }
     const provenance = record.privateIntegrationReload?.legacyImport;
     if (
       !provenance ||
@@ -1825,7 +1876,8 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         !preparation &&
         result._configurationMaintenance === undefined &&
         (record.privateMaintenancePreparation !== undefined ||
-          record.privateCoordinatorSource !== undefined);
+          record.privateCoordinatorSource !== undefined ||
+          !!record.privateIntegrationReload?.stagedMigration);
     const recoveryControls = [
       ...(unusedDecision?.delivery
         ? [
@@ -1913,18 +1965,24 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
           ? overlay.purpose !== "render" ||
             overlay.changes.length !== 0 ||
             overlay.coordinatorMode !== "ensure-running"
-          : !platform ||
-            !row ||
-            !platformJobMatchesPreview(row, { release: platform.release }) ||
-            overlay.purpose !== "platform" ||
-            overlay.coordinatorMode !== "require-running" ||
-            record.apiFollowUp !== "platform-apply" ||
-            overlay.changes.length !== 1 ||
-            overlay.changes[0]?.kind !== "platform" ||
-            canonicalJson({ version: 1, ...overlay.changes[0].patch }) !==
-              canonicalJson(platform.configuration) ||
-            platform.sourceRevision !== record.expectedSourceRevision ||
-            platform.expectedCurrentRevisionId !== operation.expectedCurrentRevisionId) ||
+          : record.privateIntegrationReload?.stagedMigration
+            ? overlay.purpose !== "migration" ||
+              !["integration-reload", "platform-apply"].includes(record.apiFollowUp ?? "") ||
+              !["configuration.migration.apply", "credential.import"].includes(job.jobType ?? "") ||
+              canonicalJson(writer.integrationIds) !==
+                canonicalJson(retainedIntegrationIds(record, overlay))
+            : !platform ||
+              !row ||
+              !platformJobMatchesPreview(row, { release: platform.release }) ||
+              overlay.purpose !== "platform" ||
+              overlay.coordinatorMode !== "require-running" ||
+              record.apiFollowUp !== "platform-apply" ||
+              overlay.changes.length !== 1 ||
+              overlay.changes[0]?.kind !== "platform" ||
+              canonicalJson({ version: 1, ...overlay.changes[0].patch }) !==
+                canonicalJson(platform.configuration) ||
+              platform.sourceRevision !== record.expectedSourceRevision ||
+              platform.expectedCurrentRevisionId !== operation.expectedCurrentRevisionId) ||
       !record.maintenanceId ||
       !record.prepareOperationKey ||
       record.apiJobId !== job.jobId ||
@@ -2096,6 +2154,16 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
       )
         throw new JobObservationPending("recovery_required");
       await assertConfigurationSavedRows(tx, decision.rowVersions);
+      if (record.privateIntegrationReload?.stagedMigration)
+        await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
+          {
+            previewId: record.privateIntegrationReload.stagedMigration.previewId,
+            actorId: writer.actorId,
+            jobId: job.jobId,
+            candidateId: record.candidateId,
+          },
+          tx,
+        );
       if (
         coordinator &&
         (decision.rowVersions.some((row) => row.rowVersion !== row.previousRowVersion) ||
@@ -2170,6 +2238,14 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         bytes: inspected.sealed,
       },
     };
+    if (preRoot && record.privateIntegrationReload?.stagedMigration) {
+      if (Object.keys(projection.operations).length || result._dataExecutions !== undefined)
+        throw new JobObservationPending("recovery_required");
+      candidates.set(candidate, state);
+      candidateStages.set(candidate, "recovered_unissued");
+      checkpoint = result;
+      return candidate;
+    }
     if (preRoot && coordinator) {
       const prefix =
         coordinator.action === "update"
@@ -2475,7 +2551,10 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
           overlay.changes[0].kind === overlay.purpose) ||
         (operation.kind === "stack.render" &&
           overlay.purpose === "migration" &&
-          !!record.privateIntegrationReload?.legacyImport);
+          !!(
+            record.privateIntegrationReload?.legacyImport ||
+            record.privateIntegrationReload?.stagedMigration
+          ));
     const reload = record.apiFollowUp === "integration-reload",
       credential = record.apiFollowUp === "service-apply",
       ordinaryCredential =
@@ -2520,7 +2599,12 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
         canonicalJson(retainedIntegrationIds(record, overlay)) ||
       reload !==
         (operation.kind === "integrationConfig.apply" || overlay.purpose === "migration") ||
-      (overlay.purpose === "migration") !== (job.jobType === "integration.config.import") ||
+      (overlay.purpose === "migration") !==
+        [
+          "integration.config.import",
+          "configuration.migration.apply",
+          "credential.import",
+        ].includes(job.jobType ?? "") ||
       (result._parentExecution !== undefined &&
         canonicalJson(result._parentExecution) !== canonicalJson(parent)) ||
       (attempt &&
@@ -2532,6 +2616,16 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
       throw new JobObservationPending("recovery_required");
     const rows = z.array(configurationSavedRowSchema).max(512).parse(retained.rowVersions);
     await assertConfigurationSavedRows(tx, rows);
+    if (record.privateIntegrationReload?.stagedMigration)
+      await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
+        {
+          previewId: record.privateIntegrationReload.stagedMigration.previewId,
+          actorId: writer.actorId,
+          jobId: job.jobId,
+          candidateId: record.candidateId,
+        },
+        tx,
+      );
     const payload = trustedConfigurationPayloadSchema.parse(
         JSON.parse(inspected.sealed.toString("utf8")).payload,
       ),
@@ -2772,7 +2866,8 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
     )
       await completeProspectiveServiceCredential(candidate);
     if (
-      state.record.apiFollowUp !== "integration-reload" ||
+      (state.record.apiFollowUp !== "integration-reload" &&
+        !state.record.privateIntegrationReload?.stagedMigration) ||
       !completeTrustedConfigurationApply(receipt.application)
     )
       return { configuration: receipt.application };
@@ -2924,14 +3019,27 @@ function fieldDefinition(schema: Record<string, unknown> | undefined, key: strin
 }
 function validateOverlay(overlay: Overlay, writer: AdministrativeConfigurationWriter): void {
   const state = administrativeConfigurationState(writer);
-  if (overlay.purpose === "migration") assertLegacyIntegrationImportOverlay(writer, overlay);
+  if (overlay.purpose === "migration") {
+    if (state.participant && isStagedMigrationParticipant(state.participant, writer))
+      assertStagedMigrationOverlay(writer, overlay);
+    else assertLegacyIntegrationImportOverlay(writer, overlay);
+  }
   if (overlay.purpose === "integration-binding") assertIntegrationBindingOverlay(writer, overlay);
-  if (overlay.purpose === "migration" && state.participant?.kind !== "configuration-migration")
+  if (
+    overlay.purpose === "migration" &&
+    !["configuration-migration", "credential-import"].includes(state.participant?.kind ?? "")
+  )
     throw Error("Configuration commit participant unavailable");
   if (overlay.purpose === "platform") assertPlatformConfigurationOverlay(writer, overlay);
   if (
     overlay.changes.some((change) => change.kind === "platform") &&
-    overlay.purpose !== "platform"
+    overlay.purpose !== "platform" &&
+    !(
+      overlay.purpose === "migration" &&
+      state.participant &&
+      isStagedMigrationParticipant(state.participant, writer) &&
+      stagedMigrationHasPlatform(writer)
+    )
   )
     throw Error("Platform configuration participant required");
   const fields = new Set<string>();
@@ -2964,7 +3072,7 @@ function validateOverlay(overlay: Overlay, writer: AdministrativeConfigurationWr
       change.key === "TRANSITOUS_API_KEYS"
     ) {
       if (
-        overlay.purpose !== "transit-credentials" ||
+        !["transit-credentials", "migration"].includes(overlay.purpose) ||
         !state.participant?.managedServiceSecretKeys.some(
           (item) => item.serviceId === "data-manager" && item.key === change.key,
         )
@@ -3197,7 +3305,13 @@ export async function prepareProspectiveConfiguration(input: {
   input.signal?.throwIfAborted();
   const overlay = overlaySchema.parse(input.overlay);
   const platformIntent =
-    overlay.purpose === "platform" ? retainedPlatformConfigurationIntent(writer) : undefined;
+    overlay.purpose === "platform" ||
+    (overlay.purpose === "migration" &&
+      owner.participant &&
+      isStagedMigrationParticipant(owner.participant, writer) &&
+      stagedMigrationHasPlatform(writer))
+      ? retainedPlatformConfigurationIntent(writer)
+      : undefined;
   if (overlay.purpose === "transit-credentials") {
     const { assertTransitCredentialOverlay } = await import(
       "./transit-feed-credential-participant"
@@ -3217,12 +3331,16 @@ export async function prepareProspectiveConfiguration(input: {
   const publisher = publisherOptions(token);
   const source = platformIntent
     ? retainedPlatformConfigurationSource(writer)
-    : await executeAndWait(
-        createApiOpsClient(),
-        { kind: "configuration.sources.inspect" },
-        createDurableOpsKey("configuration.sources.inspect", input.operationKey),
-        { signal: input.signal },
-      );
+    : overlay.purpose === "migration" &&
+        owner.participant &&
+        isStagedMigrationParticipant(owner.participant, writer)
+      ? retainedStagedMigrationSource(writer)
+      : await executeAndWait(
+          createApiOpsClient(),
+          { kind: "configuration.sources.inspect" },
+          createDurableOpsKey("configuration.sources.inspect", input.operationKey),
+          { signal: input.signal },
+        );
   if (source.revisionId !== input.expectedCurrentRevisionId)
     throw Error("Configuration revision conflict");
   let cleanupOperationKey: string | undefined;
@@ -3288,7 +3406,9 @@ export async function prepareProspectiveConfiguration(input: {
                   overlay.changes.flatMap((change) =>
                     change.kind !== "integration-binding" &&
                     "serviceId" in change &&
-                    change.serviceId
+                    change.serviceId &&
+                    (overlay.purpose !== "migration" ||
+                      context.services.some((s) => s.manifest.id === change.serviceId && s.enabled))
                       ? [change.serviceId]
                       : [],
                   ),
@@ -3309,6 +3429,10 @@ export async function prepareProspectiveConfiguration(input: {
         const maintenanceId =
           platformIntent ||
           coordinator ||
+          (overlay.purpose === "migration" &&
+            owner.participant &&
+            isStagedMigrationParticipant(owner.participant, writer) &&
+            affectedServiceIds.length > 0) ||
           (input.followUp && affectedServiceIds[0] === "data-manager")
             ? randomUUID()
             : null;
@@ -3319,7 +3443,10 @@ export async function prepareProspectiveConfiguration(input: {
               ? (`coordinator-${coordinator.action}` as const)
               : input.followUp) ??
           (kind === "integrationConfig.apply" ||
-          (overlay.purpose === "migration" && owner.participant?.kind === "configuration-migration")
+          (overlay.purpose === "migration" &&
+            ["configuration-migration", "credential-import"].includes(
+              owner.participant?.kind ?? "",
+            ))
             ? "integration-reload"
             : "none");
         const root = maintenanceId
@@ -3467,7 +3594,10 @@ export async function prepareProspectiveConfiguration(input: {
                 },
               }
             : {}),
-          ...(apiFollowUp === "integration-reload"
+          ...(apiFollowUp === "integration-reload" ||
+          (overlay.purpose === "migration" &&
+            owner.participant &&
+            isStagedMigrationParticipant(owner.participant, writer))
             ? {
                 privateIntegrationReload: {
                   version: 1 as const,
@@ -3482,9 +3612,16 @@ export async function prepareProspectiveConfiguration(input: {
                   bindings: merged.integrationBindingSnapshot,
                   ...(overlay.purpose === "migration"
                     ? {
-                        legacyImport: (
-                          await import("./configuration-migration/legacy-integration-import-intent")
-                        ).retainedLegacyIntegrationImportIntent(writer),
+                        ...(owner.participant &&
+                        isStagedMigrationParticipant(owner.participant, writer)
+                          ? { stagedMigration: retainedStagedMigration(writer) }
+                          : {
+                              legacyImport: (
+                                await import(
+                                  "./configuration-migration/legacy-integration-import-intent"
+                                )
+                              ).retainedLegacyIntegrationImportIntent(writer),
+                            }),
                       }
                     : {}),
                 },
@@ -3617,7 +3754,9 @@ function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown)
     ? record.affectedServiceIds.filter(
         (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
       )
-    : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+    : record.apiFollowUp === "service-apply" ||
+        record.privateCoordinatorLifecycle ||
+        record.privateIntegrationReload?.stagedMigration
       ? record.affectedServiceIds
       : [];
   const handoff =
@@ -3658,7 +3797,7 @@ function assertMaintenanceIntentCapacity(state: CandidateState, result: unknown)
 
 function savedRowIntents(state: CandidateState) {
   const { rows, sourceRows } = state;
-  if (state.record.privatePlatformIntent)
+  if (state.record.privatePlatformIntent && !state.record.privateIntegrationReload?.stagedMigration)
     return [
       {
         kind: "platform" as const,
@@ -3713,7 +3852,19 @@ function savedRowIntents(state: CandidateState) {
     return receipts;
   }
   const seen = new Set<string>();
-  return state.overlay.changes.flatMap((change) => {
+  const ordinaryIntents: Array<{
+    kind:
+      | "platform"
+      | "service-config"
+      | "integration-config"
+      | "service-secret"
+      | "integration-secret";
+    ownerId: string;
+    key?: string;
+    rowId: string;
+    previousRowVersion: string | null;
+    state: "present" | "absent";
+  }> = state.overlay.changes.flatMap((change) => {
     if (
       change.kind === "selection" ||
       change.kind === "platform" ||
@@ -3770,6 +3921,15 @@ function savedRowIntents(state: CandidateState) {
       },
     ];
   });
+  if (state.record.privatePlatformIntent)
+    ordinaryIntents.push({
+      kind: "platform",
+      ownerId: "platform",
+      rowId: "platformConfiguration",
+      previousRowVersion: state.record.privatePlatformIntent.expectedDesiredRowVersion,
+      state: "present",
+    } as (typeof ordinaryIntents)[number]);
+  return ordinaryIntents;
 }
 function assertRowReceiptBudget(rows: unknown) {
   if (Buffer.byteLength(canonicalJson(rows)) > 65536)
@@ -3927,7 +4087,9 @@ async function persistOverlay(
       ) {
         const { transitParticipantPatch } = await import("./transit-feed-credential-participant");
         await persistPreparedFeedCredentialPatch({
-          patch: transitParticipantPatch(owner.participant, state.writer),
+          patch: isStagedMigrationParticipant(owner.participant, state.writer)
+            ? stagedMigrationPatch(state.writer)
+            : transitParticipantPatch(owner.participant, state.writer),
           candidate,
           writer: state.writer,
         });
@@ -4680,7 +4842,8 @@ export async function persistAndApplyProspectiveConfiguration(
           }
         : {}),
     });
-    if (!registryUpdateFailed) await retireSettledProspectiveConfiguration(candidate);
+    if (!registryUpdateFailed && !state.record.privateIntegrationReload?.stagedMigration)
+      await retireSettledProspectiveConfiguration(candidate);
     return {
       candidateId: candidate.candidateId,
       revisionId: candidate.revisionId,
@@ -4796,6 +4959,16 @@ async function applyCommittedOrdinaryCandidate(
       throw new JobObservationPending("recovery_required");
     const rows = z.array(configurationSavedRowSchema).max(512).parse(retained.rowVersions);
     await assertConfigurationSavedRows(tx, rows);
+    if (state.record.privateIntegrationReload?.stagedMigration)
+      await (await import("./configuration-migration/staging")).assertRetainedMigrationRows(
+        {
+          previewId: state.record.privateIntegrationReload.stagedMigration.previewId,
+          actorId: state.writer.actorId,
+          jobId: owner.job.jobId,
+          candidateId: state.record.candidateId,
+        },
+        tx,
+      );
     if (state.overlay.purpose === "integration-binding")
       await assertSavedIntegrationBinding(candidate, state.overlay, tx);
     committed = result;
@@ -4899,6 +5072,29 @@ export async function publishPreparedTrustedConfigurationSnapshot(
   );
 }
 
+/** The installed staged preview can discard only its original unissued packet.
+ * The existing nonissuance protocol proves there was no remote/save admission. */
+export async function discardStagedMigrationPreview(candidate: ValidatedConfigurationCandidate) {
+  const state = validatedConfigurationCandidateState(candidate),
+    owner = administrativeConfigurationState(state.writer);
+  if (
+    !owner.participant ||
+    owner.participant.mode !== "preview" ||
+    !isStagedMigrationParticipant(owner.participant, state.writer)
+  )
+    throw Error("Original staged preview required");
+  if (
+    state.persisted ||
+    Object.values(readProjection(owner.job.checkpointResult).operations).some(
+      (entry) =>
+        entry.operationKey === state.record.prepareOperationKey ||
+        entry.operationKey === state.record.operationKey,
+    )
+  )
+    throw Error("Unadmitted staged preview required");
+  candidateStages.set(candidate, "preflight");
+  return discardUnadmittedTrustedConfigurationCandidate(candidate);
+}
 /** Fixed producer cleanup: an inert, unadmitted candidate cannot have a ready/claimed alias. */
 export async function discardUnadmittedTrustedConfigurationCandidate(
   candidate: ValidatedConfigurationCandidate,
@@ -5583,7 +5779,9 @@ export async function prepareConfigurationMaintenance(
     coordinatorMode: source.overlay.coordinatorMode,
     followUp: record.privatePlatformIntent
       ? "platform-apply"
-      : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+      : record.apiFollowUp === "service-apply" ||
+          record.privateCoordinatorLifecycle ||
+          record.privateIntegrationReload?.stagedMigration
         ? "service-apply"
         : "render-only",
   });

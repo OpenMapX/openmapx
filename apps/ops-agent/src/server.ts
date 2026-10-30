@@ -7,6 +7,7 @@ import {
   assertFreshControlRoot,
   beginControlEffect,
   bindBorrowedControlExecution,
+  buildArtifactSpec,
   type ControlInstallation,
   cancelArtifactTargetLease,
   cancelControlExecution,
@@ -51,6 +52,12 @@ import {
   verifyRetainedArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
+import {
+  inspectArtifactPublication,
+  inspectSettledArtifactImport,
+  retainArtifactValidationObservation,
+  retainUnstartedArtifactImport,
+} from "@openmapx/core/build-artifacts/publication";
 import {
   type ConfigurationApplyResult,
   canonicalJson,
@@ -477,7 +484,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     });
   }
   if (options.artifactTransfers) {
-    registerArtifactTransferLifecycle(app, options.artifactTransfers);
     registerArtifactTransferRoutes(app, {
       store: options.artifactTransfers,
       apiToken: options.tokens.api,
@@ -835,6 +841,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
       }
       let releaseUnstartedRoot = false;
+      let containedValidation: import("@openmapx/core/ops").TransferStage | undefined;
       if (authority && state === "termination_pending") cancelControlExecution(authority);
       if (lease && state === "termination_pending") await cancelArtifactTargetLease(lease);
       if (authority && ["succeeded", "failed", "timed_out"].includes(state)) {
@@ -861,6 +868,32 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         let originalGenerationNonCommit = false;
         let unstartedConfiguration = false;
+        if (
+          state === "failed" &&
+          job.operation.kind === "artifactTransfer.validate" &&
+          options.artifactTransfers
+        ) {
+          try {
+            containedValidation =
+              await options.artifactTransfers.containPreparedValidation(authority);
+            retainControlEffectReceipt(authority, {
+              outcome: "committed",
+              publication: "committed",
+              receipt: { kind: "ops-result", result: containedValidation },
+            });
+          } catch {
+            containedValidation = undefined; /* Uncontained extraction remains unknown. */
+          }
+        }
+        let unstartedArtifact = false;
+        if (state === "failed" && job.operation.kind === "artifactTransfer.import") {
+          try {
+            retainUnstartedArtifactImport(authority);
+            unstartedArtifact = true;
+          } catch {
+            /* Attempted publication remains fenced. */
+          }
+        }
         if (state === "failed") {
           try {
             inspectConfigurationPreEffectRefusal(authority);
@@ -887,7 +920,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           committed &&
           job.operation.kind === "artifactTransfer.import" &&
           (updates.result as { outcome?: string })?.outcome === "not_committed";
-        if (!originalGenerationNonCommit && !unstartedConfiguration)
+        if (
+          !originalGenerationNonCommit &&
+          !unstartedConfiguration &&
+          !unstartedArtifact &&
+          !containedValidation
+        )
           retainControlEffectReceipt(authority, {
             outcome: artifactNonCommit
               ? "contained"
@@ -938,8 +976,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             lease,
             verifyControlEffectSettlement(options.controlInstallation, authority.execution),
           );
-          if (lease.mode === "owner" && committed) await releaseArtifactTargetLease(lease);
-          if (lease.mode === "owner" && unstartedConfiguration) releaseUnstartedRoot = true;
+          if (lease.mode === "owner" && committed) {
+            await releaseArtifactTargetLease(lease);
+            if (job.operation.kind === "artifactTransfer.import") {
+              try {
+                await options.artifactTransfers?.reconcileReleasedPreparedImport(authority);
+              } catch {
+                /* Keep unexplained purpose state pinned. */
+              }
+            }
+          }
+          if (lease.mode === "owner" && (unstartedConfiguration || unstartedArtifact))
+            releaseUnstartedRoot = true;
         }
       }
       if (["failed", "timed_out"].includes(state) && job.progressResult)
@@ -950,6 +998,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             ...updates.failureResult,
           }),
         };
+      if (releaseUnstartedRoot && job.operation.kind === "artifactTransfer.import") {
+        state = "succeeded";
+        updates = {
+          ...updates,
+          result: { outcome: "not_committed", reason: "failed", cleanupFailed: false },
+          errorClass: undefined,
+          failureResult: undefined,
+        };
+      }
       const candidate: JobRecord = { ...job, ...updates, state, updatedAt };
       if (["succeeded", "failed", "timed_out"].includes(state)) delete candidate.progressResult;
       if (state === "succeeded" && job.operation.kind === "services.buildAll")
@@ -966,6 +1023,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       if (releaseUnstartedRoot && lease?.mode === "owner" && authority) {
         await releaseArtifactTargetLease(lease);
         verifyRetainedArtifactTargetRootRelease(authority);
+        if (job.operation.kind === "artifactTransfer.import")
+          await options.artifactTransfers?.reconcileReleasedPreparedImport(authority);
       }
       await journal.replace(
         [...jobsById.values()].map((entry) => persisted(entry === job ? candidate : entry)),
@@ -983,6 +1042,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         delete job.failureResult;
       job.updatedAt = updatedAt;
       job.state = state;
+      if (containedValidation && authority && job.terminalAt !== undefined) {
+        retainArtifactValidationObservation(
+          authority,
+          statusFor(job, 2, true),
+          job.terminalAt,
+          containedValidation,
+        );
+        completeControlJournalExecution(authority);
+      }
       if (lease && ["succeeded", "failed", "timed_out"].includes(state)) {
         closeArtifactTargetLeaseHandle(lease);
         controlLeases.delete(job.operationId);
@@ -1388,6 +1456,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             job.operation.kind !== "coreService.restart" &&
             job.operation.kind !== "service.image.stage" &&
             job.operation.kind !== "backup.prune" &&
+            // This fixed publisher begins only after validation, destination
+            // materialization and compatibility checks, immediately before its
+            // journaled managed-directory transaction.
+            job.operation.kind !== "artifactTransfer.import" &&
             !(
               job.operation.kind === "service.pull" &&
               job.operation.serviceId === "data-manager" &&
@@ -1760,9 +1832,156 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     };
   });
 
+  const preparedImportsReconciling = new Map<string, Promise<void>>();
+  const reconcileOriginalPreparedImport = (job: JobRecord): Promise<void> => {
+    const installation = options.controlInstallation;
+    if (
+      !installation ||
+      job.operation.kind !== "artifactTransfer.import" ||
+      job.state === "succeeded"
+    )
+      return Promise.resolve();
+    const prior = preparedImportsReconciling.get(job.operationId);
+    if (prior) return prior;
+    const pending = (async () => {
+      try {
+        const authority = restoreAdmittedControlExecution(installation, executionFor(job)),
+          lease = restoreArtifactTargetLeaseForSettlement(authority);
+        controlAuthorities.set(job.operationId, authority);
+        controlLeases.set(job.operationId, lease);
+        const publication = inspectArtifactPublication(authority);
+        if (publication?.phase !== "committed") {
+          cancelControlExecution(authority);
+          await cancelArtifactTargetLease(lease);
+        }
+        const signal = AbortSignal.timeout(30000),
+          claim = await resourceClaimer.claim(
+            job.operation,
+            opsOperationFingerprint(job.operation),
+            signal,
+            { role: job.role, operationKey: job.operationKey },
+          );
+        if (!claim) throw Error("Original import source unavailable");
+        const context = contextFor(job, signal, claim),
+          result = await recoverPreparedImportFiles(runtime, context);
+        if (result) {
+          retainControlEffectReceipt(authority, {
+            outcome: result.outcome === "committed" ? "committed" : "contained",
+            publication: result.outcome === "committed" ? "committed" : "not_started",
+            receipt: { kind: "ops-result", result },
+          });
+          await settleArtifactTargetLeaseChild(
+            lease,
+            verifyControlEffectSettlement(installation, authority.execution),
+          );
+          await releaseArtifactTargetLease(lease);
+          controlLeases.delete(job.operationId);
+          if (result.outcome === "not_committed")
+            await finishRestoredPreparedImport(runtime, context);
+          try {
+            await transition(job, "succeeded", {
+              result,
+              errorClass: undefined,
+              terminalAt: now().getTime(),
+            });
+            retainControlTerminalStatus(
+              installation,
+              authority.execution,
+              statusFor(job, 2),
+              job.terminalAt,
+            );
+            completeControlJournalExecution(authority);
+            stickyRecoveryRequired.delete(job.operationId);
+          } catch {
+            // Preserve an older canonical tuple. Its fixed purpose observer
+            // can still expose proved committed files and physical release.
+            if (result.outcome === "committed" && job.terminalAt !== undefined) {
+              try {
+                inspectSettledArtifactImport(authority, statusFor(job, 2), job.terminalAt);
+              } catch {
+                /* retain unknown source */
+              }
+            }
+          }
+        }
+      } catch {
+        /* Unknown/foreign paths or the operator-owned configuration lock retain their original fences. */
+      }
+    })().finally(() => preparedImportsReconciling.delete(job.operationId));
+    preparedImportsReconciling.set(job.operationId, pending);
+    return pending;
+  };
+
+  if (options.artifactTransfers && options.controlInstallation) {
+    runtime["artifactTransfer.inspectClaim"] = async (operation) => {
+      let found = await options.artifactTransfers!.inspectClaim(operation);
+      if (!found || !["import-build", "validate-build"].includes(found.claim.use)) return found;
+      const job = jobsById.get(found.claim.identity.executionId);
+      if (
+        !job ||
+        !["artifactTransfer.import", "artifactTransfer.validate"].includes(job.operation.kind) ||
+        !("stageId" in job.operation) ||
+        job.operation.stageId !== operation.stageId ||
+        !("ownerId" in job.operation) ||
+        job.operation.ownerId !== operation.ownerId ||
+        job.fingerprint !== operation.identity.fingerprint ||
+        job.operationKey !== operation.identity.operationKey ||
+        new Date(job.deadlineAt!).toISOString() !== operation.identity.executionDeadlineAt ||
+        job.terminalAt === undefined
+      )
+        return found;
+      if (job.operation.kind === "artifactTransfer.import") {
+        await reconcileOriginalPreparedImport(job);
+        found = await options.artifactTransfers!.inspectClaim(operation);
+        if (!found) return null;
+      }
+      try {
+        const authority = restoreAdmittedControlExecution(
+          options.controlInstallation!,
+          executionFor(job),
+        );
+        if (
+          job.operation.kind === "artifactTransfer.validate" &&
+          found.claim.use === "validate-build"
+        ) {
+          const validation = await options.artifactTransfers!.recoverPreparedValidation(authority);
+          cancelControlExecution(authority);
+          retainControlEffectReceipt(authority, {
+            outcome: "committed",
+            publication: "committed",
+            receipt: { kind: "ops-result", result: validation },
+          });
+          retainControlTerminalCommitment(authority, statusFor(job, 2), job.terminalAt);
+          retainArtifactValidationObservation(
+            authority,
+            statusFor(job, 2),
+            job.terminalAt,
+            validation,
+          );
+          completeControlJournalExecution(authority);
+          stickyRecoveryRequired.delete(job.operationId);
+          return { ...found, validation };
+        }
+        if (job.operation.kind !== "artifactTransfer.import" || found.claim.use !== "import-build")
+          return found;
+        const publication = inspectSettledArtifactImport(
+          authority,
+          statusFor(job, 2),
+          job.terminalAt,
+        );
+        return { ...found, publication };
+      } catch {
+        return found;
+      }
+    };
+  }
+
   // No replay during restart. Rejoin original signed admissions/adoptions and
   // retained own-effect proof; absent containment evidence keeps its fence.
   app.addHook("onReady", async () => {
+    await options.artifactTransfers
+      ?.reconcileTransferStages({ signal: AbortSignal.timeout(30000) })
+      .catch(() => undefined);
     let changed = false;
     if (options.controlInstallation) {
       const accepted = restoreConfigurationMaintenanceControlJournal(options.controlInstallation),
@@ -1843,62 +2062,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         job.operation.kind === "artifactTransfer.import" &&
         job.state !== "succeeded" &&
         options.controlInstallation
-      ) {
-        try {
-          const authority = restoreAdmittedControlExecution(
-              options.controlInstallation,
-              executionFor(job),
-            ),
-            lease = restoreArtifactTargetLeaseForSettlement(authority);
-          controlAuthorities.set(job.operationId, authority);
-          controlLeases.set(job.operationId, lease);
-          cancelControlExecution(authority);
-          await cancelArtifactTargetLease(lease);
-          const signal = AbortSignal.timeout(30000),
-            claim = await resourceClaimer.claim(
-              job.operation,
-              opsOperationFingerprint(job.operation),
-              signal,
-              { role: job.role, operationKey: job.operationKey },
-            );
-          if (!claim) throw Error("Original import source unavailable");
-          const context = contextFor(job, signal, claim),
-            result = await recoverPreparedImportFiles(runtime, context);
-          if (result && result.outcome === "not_committed") {
-            retainControlEffectReceipt(authority, {
-              outcome: "contained",
-              publication: "not_started",
-              receipt: { kind: "ops-result", result },
-            });
-            await settleArtifactTargetLeaseChild(
-              lease,
-              verifyControlEffectSettlement(options.controlInstallation, authority.execution),
-            );
-            await releaseArtifactTargetLease(lease);
-            await finishRestoredPreparedImport(runtime, context);
-            try {
-              await transition(job, "succeeded", {
-                result,
-                errorClass: undefined,
-                terminalAt: now().getTime(),
-              });
-              retainControlTerminalStatus(
-                options.controlInstallation,
-                authority.execution,
-                statusFor(job, 2),
-                job.terminalAt,
-              );
-              completeControlJournalExecution(authority);
-              changed = true;
-              stickyRecoveryRequired.delete(job.operationId);
-            } catch {
-              /* An older canonical terminal remains immutable; the purpose claim retains the proved restoration. */
-            }
-          }
-        } catch {
-          /* Unknown/foreign paths or the operator-owned configuration lock retain their original fences. */
-        }
-      }
+      )
+        await reconcileOriginalPreparedImport(job);
       if (job.controlAdoption) {
         try {
           if (!options.controlInstallation) throw Error("Control trust unavailable");
@@ -2078,6 +2243,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
       }
     }
+    if (options.controlInstallation && options.artifactTransfers) {
+      for (const job of jobsById.values())
+        if (job.operation.kind === "artifactTransfer.import" && job.terminalAt !== undefined) {
+          try {
+            await options.artifactTransfers.reconcileReleasedPreparedImport(
+              restoreAdmittedControlExecution(options.controlInstallation, executionFor(job)),
+            );
+          } catch {
+            /* No conclusive nonissuance/root release; keep claim pinned. */
+          }
+        }
+    }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
     if (options.controlInstallation)
       await reconcileControlRetention(options.controlInstallation).catch(() => undefined);
@@ -2171,6 +2348,22 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     operation,
                     options.tokens.api,
                   );
+            if (
+              existing &&
+              ["artifactTransfer.import", "artifactTransfer.validate"].includes(
+                existing.operation.kind,
+              ) &&
+              options.artifactTransfers
+            ) {
+              await options.artifactTransfers.confirmPreparedReceipt(
+                restoreAdmittedControlExecution(
+                  options.controlInstallation,
+                  executionFor(existing),
+                ),
+                operation,
+                options.tokens.api,
+              );
+            }
             return reply
               .code(200)
               .send(
@@ -2739,15 +2932,22 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
                 const targets =
                   maintenancePlan?.serviceIds ??
-                  ("serviceId" in operation &&
-                  ![
-                    "service.start",
-                    "service.recreate",
-                    "service.recreateIsolated",
-                    "service.update",
-                  ].includes(operation.kind)
-                    ? [operation.serviceId]
-                    : controlRegisteredServiceIds(options.controlInstallation));
+                  (operation.kind === "artifactTransfer.export"
+                    ? [
+                        ...new Set([
+                          operation.serviceId,
+                          ...buildArtifactSpec(operation.serviceId).consumers,
+                        ]),
+                      ]
+                    : "serviceId" in operation &&
+                        ![
+                          "service.start",
+                          "service.recreate",
+                          "service.recreateIsolated",
+                          "service.update",
+                        ].includes(operation.kind)
+                      ? [operation.serviceId]
+                      : controlRegisteredServiceIds(options.controlInstallation));
                 const fixedDataPlan = isFixedSingleDataCommand(job.operation.kind)
                   ? planFixedSingleDataCommand(
                       executionFor(job),
@@ -2817,6 +3017,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   [
                     "configurationMaintenance.prepare",
                     "artifactTransfer.import",
+                    "artifactTransfer.export",
                     "stack.start",
                     "coreService.restart",
                     "service.start",
@@ -2834,6 +3035,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                       maintenancePlan ||
                       hardlinksPlan ||
                       lifecyclePlan ||
+                      job.operation.kind === "artifactTransfer.export" ||
                       [
                         "stack.start",
                         "service.start",
@@ -3196,6 +3398,26 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     )
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
+      if (
+        job.operation.kind === "artifactTransfer.import" &&
+        job.state !== "succeeded" &&
+        options.controlInstallation
+      ) {
+        let lease: ReturnType<typeof restoreArtifactTargetLeaseForSettlement> | undefined;
+        try {
+          const authority = restoreAdmittedControlExecution(
+            options.controlInstallation,
+            executionFor(job),
+          );
+          lease = restoreArtifactTargetLeaseForSettlement(authority);
+          cancelControlExecution(authority);
+          await cancelArtifactTargetLease(lease);
+        } catch {
+          /* Released or unverifiable roots grant no new cancellation authority. */
+        } finally {
+          if (lease) closeArtifactTargetLeaseHandle(lease);
+        }
+      }
       return reply
         .code(200)
         .send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
@@ -3266,5 +3488,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       }),
     );
   });
+  if (options.artifactTransfers) registerArtifactTransferLifecycle(app, options.artifactTransfers);
   return app;
 }

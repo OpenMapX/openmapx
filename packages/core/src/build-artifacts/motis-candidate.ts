@@ -2,9 +2,9 @@
 import { realpathSync } from "node:fs";
 import type { MotisConfigExpectations, MotisOperationsPolicy } from "@openmapx/transitous-core";
 import { z } from "zod";
+import { safeArtifactPath } from "./artifact-path";
 import { hashArtifactFile } from "./copy-tree";
 import { AnchoredDirectory } from "./filesystem";
-import { safeArtifactPath } from "./manifest";
 export const CANDIDATE_MANIFEST_FILENAME = "motis-candidate-manifest.json";
 export const CAPABILITY_SNAPSHOT_FILENAME = "mobility-capabilities.json";
 export const CANDIDATE_PROXY_DIRNAME = ".openmapx-feed-proxy";

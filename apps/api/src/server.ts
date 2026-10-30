@@ -1,4 +1,5 @@
 import {
+  handlePreparedArtifactExportJob,
   handlePreparedArtifactImportJob,
   handlePreparedArtifactValidationJob,
 } from "./services/admin-artifact-validation";
@@ -714,6 +715,7 @@ jobRunner.register("backup.prune", handleBackupPruneJob);
 jobRunner.register("compose.render", handleComposeRenderJob);
 jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
 jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
+jobRunner.register("artifact.export", handlePreparedArtifactExportJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 

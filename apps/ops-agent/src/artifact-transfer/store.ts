@@ -12,10 +12,12 @@ import {
 } from "node:fs";
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import {
   AnchoredDirectory,
+  acknowledgeControlRetention,
   artifactFingerprint,
+  assertArtifactTargetLeaseExecution,
   executionAuthorityState,
   inspectArtifactTargetLeaseChildSettlement,
   lookupControlChildPhaseBinding,
@@ -27,8 +29,12 @@ import {
 } from "@openmapx/core/build-artifacts";
 import {
   type ArtifactFilePublicationResult,
+  assertKnownArtifactStageReceipt,
   cleanupRestoredArtifactPublication,
   inspectArtifactPublication,
+  inspectUnstartedArtifactImport,
+  originalArtifactImportOperation,
+  originalArtifactValidationOperation,
 } from "@openmapx/core/build-artifacts/publication";
 import {
   type ArtifactImportPreview,
@@ -73,6 +79,7 @@ import {
   standaloneOwnershipRecordSchema,
   standaloneTransactionRecordSchema,
 } from "../standalone-integration-records";
+import { acquireArtifactByteOwner } from "./byte-owner";
 import { inspectStageCleanup, removeStageCleanup } from "./cleanup";
 import { ArtifactTransferError } from "./errors";
 import {
@@ -103,6 +110,7 @@ const integrationClaimRecordSchema = z.strictObject({
   settlement: stageClaimSettlementSchema.nullable(),
   preparation: z.record(z.string(), z.unknown()).nullable(),
   transactionId: z.uuid().nullable(),
+  receiptDelivered: z.boolean().default(false),
 });
 const metaSchema = z.strictObject({
   stage: transferStageSchema,
@@ -176,8 +184,20 @@ export class ArtifactTransferStore {
   private readonly data: AnchoredDirectory;
   private readonly records: AnchoredDirectory;
   private readonly integrationRecords: AnchoredDirectory;
+  private readonly byteOwners: AnchoredDirectory;
+  private readonly byteOperations = new Set<Promise<void>>();
+  private readonly purposeOwners = new Set<string>();
   private readonly integrationJournals = new Map<string, IntegrationPublicationJournal>();
-  private readonly streams = new Map<string, { ownerId: string; controller: AbortController }>();
+  private readonly streams = new Map<
+    string,
+    {
+      ownerId: string;
+      controller: AbortController;
+      kind: "bytes" | "purpose";
+      closed: Promise<void>;
+    }
+  >();
+  private draining = false;
   private readonly capacity: () => { bytes: number; inodes: number };
   private readonly now: () => number;
   constructor(options: {
@@ -201,6 +221,7 @@ export class ArtifactTransferStore {
     this.data = new AnchoredDirectory(options.dataRoot, undefined, true);
     this.records = new AnchoredDirectory(options.privateRoot, undefined, true);
     this.integrationRecords = this.records.directory("integrations", true, true);
+    this.byteOwners = this.records.directory("byte-owners", true, true);
     this.capacity =
       options.capacity ??
       (() => {
@@ -214,20 +235,73 @@ export class ArtifactTransferStore {
   }
   private readonly admissionsOpen: () => boolean;
   get activeStreams() {
-    return this.streams.size;
+    return this.streams.size + this.purposeOwners.size;
   }
   close() {
-    if (this.streams.size) throw Error("Transfer streams still owned");
+    if (this.streams.size || this.purposeOwners.size) throw Error("Transfer streams still owned");
     for (const journal of this.integrationJournals.values())
       closeIntegrationPublicationJournal(journal);
     this.integrationJournals.clear();
+    this.byteOwners.close();
     this.integrationRecords.close();
     this.records.close();
     this.data.close();
     this.key.fill(0);
   }
   private admit() {
-    if (!this.admissionsOpen()) failed(503, "Artifact transfer admission is draining");
+    if (this.draining || !this.admissionsOpen())
+      failed(503, "Artifact transfer admission is draining");
+  }
+  private ownStream(
+    stageId: string,
+    ownerId: string,
+    controller: AbortController,
+    kind: "bytes" | "purpose",
+  ) {
+    let closed!: () => void;
+    const entry = {
+      ownerId,
+      controller,
+      kind,
+      closed: new Promise<void>((resolve) => {
+        closed = resolve;
+      }),
+    };
+    this.streams.set(stageId, entry);
+    return () => {
+      if (this.streams.get(stageId) !== entry)
+        throw Error("Original artifact stream owner changed");
+      this.streams.delete(stageId);
+      closed();
+    };
+  }
+  async drainByteStreams(): Promise<void> {
+    this.draining = true;
+    const owned = [...this.streams.values()].filter((entry) => entry.kind === "bytes");
+    for (const entry of owned)
+      entry.controller.abort(new ArtifactTransferError(503, "Artifact byte stream is closing"));
+    await Promise.all([...owned.map((entry) => entry.closed), ...this.byteOperations]);
+  }
+  private async withByteOwner<T>(stageId: string, run: () => Promise<T>): Promise<T> {
+    id.parse(stageId);
+    this.admit();
+    let done!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+    this.byteOperations.add(pending);
+    let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+    try {
+      owner = await acquireArtifactByteOwner(this.byteOwners.name(stageId));
+      return await run();
+    } finally {
+      try {
+        await owner?.release();
+      } finally {
+        this.byteOperations.delete(pending);
+        done();
+      }
+    }
   }
   private lock<T>(run: () => T): T {
     let guard: AnchoredDirectory;
@@ -271,7 +345,7 @@ export class ArtifactTransferStore {
   }
   private all(): Meta[] {
     return this.records
-      .listBounded(4097)
+      .listBounded(10005)
       .filter((name) => /^[a-f0-9-]{36}\.json$/.test(name))
       .map((name) => this.load(name.slice(0, -5)));
   }
@@ -324,6 +398,27 @@ export class ArtifactTransferStore {
   async reservedBytes() {
     return this.lock(() => this.all().reduce((sum, m) => sum + m.reservedBytes, 0));
   }
+  async transferCapabilities() {
+    let freeBytes: number | null = null,
+      freeInodes: number | null = null;
+    try {
+      const available = this.capacity();
+      if (Number.isSafeInteger(available.bytes) && available.bytes >= 0)
+        freeBytes = available.bytes;
+      if (Number.isSafeInteger(available.inodes) && available.inodes >= 0)
+        freeInodes = available.inodes;
+    } catch {
+      /* Unknown capacity remains unavailable; never infer space. */
+    }
+    const { maxUploadBytes, maxExpandedBytes, maxStageBytes, stageMs, downloadRetentionMs } =
+      this.policy;
+    return {
+      limits: { maxUploadBytes, maxExpandedBytes, maxStageBytes, stageMs, downloadRetentionMs },
+      freeBytes,
+      freeInodes,
+      reservedBytes: await this.reservedBytes(),
+    };
+  }
   async createStage(raw: CreateTransferStage): Promise<TransferStage> {
     const input = createTransferStageSchema.parse(raw);
     this.admit();
@@ -350,7 +445,7 @@ export class ArtifactTransferStore {
         this.policy.maxRetainedStagesPerPrincipal
       )
         failed(429, "Artifact stage retention quota exceeded");
-      if (records.length >= 4096) failed(507, "Artifact stage metadata capacity exceeded");
+      if (records.length >= 10000) failed(507, "Artifact stage metadata capacity exceeded");
       const limit = purposeByteLimit(this.policy, input.purpose);
       const reserved = input.declaredBytes ?? Math.min(1024 ** 3, limit);
       if (reserved > limit) failed(413, "Artifact stage exceeds purpose limit");
@@ -410,6 +505,12 @@ export class ArtifactTransferStore {
     });
   }
   async deleteStage(input: { stageId: string; ownerId: string }): Promise<void> {
+    return this.cleanupStage(input, "expired");
+  }
+  private async cleanupStage(
+    input: { stageId: string; ownerId: string },
+    terminalState: "expired" | "failed",
+  ): Promise<void> {
     this.lock(() => {
       const meta = this.owned(input.stageId, input.ownerId);
       if (
@@ -463,7 +564,7 @@ export class ArtifactTransferStore {
         this.save(meta);
         removeStageCleanup(dir, tree);
         meta.stage.cleanup = "complete";
-        meta.stage.state = "expired";
+        meta.stage.state = terminalState;
         meta.reservedBytes = 0;
         meta.content = null;
         this.save(meta);
@@ -480,17 +581,143 @@ export class ArtifactTransferStore {
    * work. Purpose consumers must first settle their actual retained claims. */
   async reconcileTransferStages(input: { signal: AbortSignal }) {
     const summary = { expired: 0, removed: 0, cleanupFailed: 0 };
-    const stages = this.lock(() =>
-      this.all().map((meta) => ({
+    const stages = this.lock(() => {
+      const names = this.records
+        .listBounded(10005)
+        .filter((name) => /^[a-f0-9-]{36}\.json$/.test(name))
+        .sort();
+      let after = "";
+      try {
+        const cursor = z
+          .strictObject({ body: z.string().max(128), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+          .parse(JSON.parse(this.records.read("sweep-cursor.json", 1024).toString("utf8")));
+        if (
+          !timingSafeEqual(
+            createHmac("sha256", this.key).update(cursor.body).digest(),
+            Buffer.from(cursor.mac, "hex"),
+          )
+        )
+          throw Error("Artifact sweep cursor authentication failed");
+        after = z.strictObject({ after: z.string().max(64) }).parse(JSON.parse(cursor.body)).after;
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      const ordered = [
+        ...names.filter((name) => name > after),
+        ...names.filter((name) => name <= after),
+      ].slice(0, 1000);
+      const entries = ordered.map((name) => this.load(name.slice(0, -5)));
+      const body = JSON.stringify({ after: ordered.at(-1) ?? "" });
+      this.records.write(
+        "sweep-cursor.json",
+        JSON.stringify({ body, mac: createHmac("sha256", this.key).update(body).digest("hex") }),
+      );
+      return entries.map((meta) => ({
         stageId: meta.stage.stageId,
         ownerId: meta.ownerId,
         expiresAt: meta.stage.expiresAt,
         cleanup: meta.stage.cleanup,
-      })),
-    );
+      }));
+    });
     for (const stage of stages) {
       input.signal.throwIfAborted();
-      if (stage.cleanup === "complete" || Date.parse(stage.expiresAt) > this.now()) continue;
+      if (stage.cleanup === "complete") {
+        if (this.now() >= Date.parse(stage.expiresAt) + 7 * 86400000)
+          this.lock(() => {
+            const meta = this.owned(stage.stageId, stage.ownerId);
+            if (
+              meta.stage.cleanup !== "complete" ||
+              meta.reservedBytes !== 0 ||
+              this.streams.has(stage.stageId) ||
+              meta.claims.some(
+                (entry) =>
+                  !entry.settlement ||
+                  entry.settlement.outcome === "unknown" ||
+                  (meta.stage.purpose === "prepared-artifact" &&
+                    ["validate-build", "import-build"].includes(entry.claim.use) &&
+                    !entry.receiptDelivered),
+              )
+            )
+              return;
+            let dir: AnchoredDirectory | undefined;
+            try {
+              dir = this.directory(meta);
+              if (dir.listBounded(1).length) throw Error("Completed artifact stage is not empty");
+            } catch (error) {
+              if (!absent(error)) throw error;
+            } finally {
+              dir?.close();
+            }
+            if (dir) this.data.removeDirectory(stage.stageId, meta.directory);
+            // A completed stage cannot admit another stream. Its UUID is never
+            // reused, and every original attempt has outlived its bounded clock.
+            try {
+              this.byteOwners.removeFile(stage.stageId);
+            } catch (error) {
+              if (!absent(error)) throw error;
+            }
+            this.records.removeFile(`${stage.stageId}.json`);
+          });
+        continue;
+      }
+      // The Linux kernel lease proves the old byte owner has actually exited.
+      // Only a partial UPLOAD without any host-purpose claim is recoverable this
+      // way; downloads/exports and publication claims require their own proof.
+      if (
+        process.platform === "linux" &&
+        !this.streams.has(stage.stageId) &&
+        !this.purposeOwners.has(stage.stageId)
+      ) {
+        let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+        try {
+          owner = await acquireArtifactByteOwner(this.byteOwners.name(stage.stageId));
+          const orphan = this.lock(() => {
+            const meta = this.owned(stage.stageId, stage.ownerId);
+            if (
+              meta.stage.direction === "upload" &&
+              ["uploading", "failed"].includes(meta.stage.state) &&
+              !meta.claims.length &&
+              !this.streams.has(stage.stageId)
+            ) {
+              meta.stage.state = "failed";
+              this.save(meta);
+              return true;
+            }
+            const current = meta.claims.at(-1);
+            if (
+              meta.stage.purpose === "prepared-artifact" &&
+              ["validating", "failed"].includes(meta.stage.state) &&
+              current?.claim.use === "validate-build" &&
+              (!current.settlement || current.settlement.outcome === "failed") &&
+              !this.purposeOwners.has(stage.stageId) &&
+              meta.claims
+                .slice(0, -1)
+                .every((entry) => entry.settlement && entry.settlement.outcome !== "unknown")
+            ) {
+              // This fixed purpose can write only its private extraction tree.
+              // The whole validation method held the same kernel descriptor.
+              current.settlement = {
+                outcome: "failed",
+                receiptId: current.claim.identity.executionId,
+              };
+              meta.stage.state = "failed";
+              this.save(meta);
+              return true;
+            }
+            return false;
+          });
+          if (orphan) {
+            await this.cleanupStage(stage, "failed");
+            summary.removed++;
+            continue;
+          }
+        } catch {
+          /* A live or unverifiable kernel owner retains bytes and quota. */
+        } finally {
+          await owner?.release();
+        }
+      }
+      if (Date.parse(stage.expiresAt) > this.now()) continue;
       // Reacquire and revalidate immediately before each deletion. No expiry
       // snapshot or external execution status can substitute for purpose proof.
       const eligible = this.lock(() => {
@@ -517,6 +744,7 @@ export class ArtifactTransferStore {
   private start(
     input: StreamInput,
     upload: boolean,
+    exporting = false,
   ): { meta: Meta; controller: AbortController; done: () => void; touch: () => void } {
     this.admit();
     const meta = this.lock(() => {
@@ -538,7 +766,8 @@ export class ArtifactTransferStore {
         failed(429, "Artifact stream concurrency limit exceeded");
       if (
         upload
-          ? meta.stage.direction !== "upload" || meta.stage.state !== "created"
+          ? meta.stage.direction !== (exporting ? "download" : "upload") ||
+            meta.stage.state !== "created"
           : meta.stage.direction !== "download" || meta.stage.state !== "ready"
       )
         failed(409, "Artifact stage is not available for this stream");
@@ -556,7 +785,7 @@ export class ArtifactTransferStore {
       return meta;
     });
     const controller = new AbortController();
-    this.streams.set(input.stageId, { ownerId: input.ownerId, controller });
+    const releaseStream = this.ownStream(input.stageId, input.ownerId, controller, "bytes");
     let idle: ReturnType<typeof setTimeout>;
     const touch = () => {
       clearTimeout(idle);
@@ -589,14 +818,26 @@ export class ArtifactTransferStore {
         clearTimeout(total);
         clearTimeout(idle);
         input.signal?.removeEventListener("abort", abort);
-        this.streams.delete(input.stageId);
+        releaseStream();
       },
     };
   }
   async upload(
     input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
   ): Promise<TransferStage> {
-    const lifetime = this.start(input, true);
+    return this.writeContent(input, false);
+  }
+  private async writeContent(
+    input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+    exporting: boolean,
+  ): Promise<TransferStage> {
+    return this.withByteOwner(input.stageId, () => this.writeOwnedContent(input, exporting));
+  }
+  private async writeOwnedContent(
+    input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+    exporting: boolean,
+  ): Promise<TransferStage> {
+    const lifetime = this.start(input, true, exporting);
     let fd: number | undefined,
       dir: AnchoredDirectory | undefined,
       reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -710,6 +951,128 @@ export class ArtifactTransferStore {
       }
     }
   }
+  /** The installed fixed producer writes into this private download; a public
+   * upload can never populate a download stage or assert it ready. */
+  async writePreparedExport(
+    context: OpsExecutionContext,
+    produce: (target: Writable, signal: AbortSignal) => Promise<{ artifactFingerprint: string }>,
+  ) {
+    const operation = context.claim.operation,
+      authority = context.controlAuthority,
+      lease = context.ownedTargetLease;
+    if (operation.kind !== "artifactTransfer.export" || !authority || !lease)
+      throw Error("Original prepared export owner required");
+    const owner = executionAuthorityState(authority);
+    if (
+      owner.kind !== operation.kind ||
+      owner.installation.installation.role !== "ops-agent" ||
+      context.execution.principal !== "api" ||
+      canonicalJson(owner.execution) !== canonicalJson(context.execution) ||
+      opsOperationFingerprint(operation) !== context.execution.operationFingerprint
+    )
+      throw Error("Original prepared export execution differs");
+    assertArtifactTargetLeaseExecution(lease, context.execution);
+    const stage = await this.createStage({
+      ownerId: operation.ownerId,
+      purpose: "prepared-artifact",
+      direction: "download",
+      operationKey: context.execution.operationKey,
+    });
+    if (stage.state === "ready" && stage.sha256)
+      return {
+        stageId: stage.stageId,
+        sha256: stage.sha256,
+        bytes: stage.bytes,
+        expiresAt: stage.expiresAt,
+      };
+    if (stage.state !== "created") failed(409, "Original export requires recovery");
+    const abort = new AbortController(),
+      signal = AbortSignal.any([context.signal, abort.signal]);
+    const stream = new TransformStream<Uint8Array, Uint8Array>(),
+      writer = stream.writable.getWriter();
+    const target = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        void (async () => {
+          for (let offset = 0; offset < chunk.length; offset += 65536) {
+            signal.throwIfAborted();
+            await writer.write(chunk.subarray(offset, offset + 65536));
+          }
+        })().then(() => done(), done);
+      },
+      final(done) {
+        void writer.close().then(() => done(), done);
+      },
+      destroy(error, done) {
+        void writer
+          .abort(error)
+          .catch(() => {})
+          .then(() => done(error));
+      },
+    });
+    target.on("error", () => {});
+    let work: Promise<unknown>[] = [];
+    try {
+      const writing = this.writeContent(
+        {
+          stageId: stage.stageId,
+          ownerId: operation.ownerId,
+          purpose: "prepared-artifact",
+          attemptId: randomUUID(),
+          deadlineAt: context.execution.deadlineAt,
+          body: stream.readable,
+          signal,
+        },
+        true,
+      ).catch((error) => {
+        abort.abort(error);
+        target.destroy(error);
+        throw error;
+      });
+      const generating = produce(target, signal)
+        .then((result) => {
+          if (result.artifactFingerprint !== operation.expectedArtifactFingerprint)
+            throw Error("Prepared export source changed");
+          return result;
+        })
+        .catch((error) => {
+          abort.abort(error);
+          target.destroy(error);
+          throw error;
+        });
+      work = [writing, generating];
+      await Promise.all(work);
+      signal.throwIfAborted();
+      assertArtifactTargetLeaseExecution(lease, context.execution);
+      return this.lock(() => {
+        const meta = this.owned(stage.stageId, operation.ownerId, "prepared-artifact");
+        if (meta.stage.state !== "uploaded" || !meta.stage.sha256)
+          failed(409, "Export bytes are not finalized");
+        meta.stage.state = "ready";
+        meta.stage.expiresAt = new Date(
+          Math.min(Date.parse(meta.stage.expiresAt), this.now() + this.policy.downloadRetentionMs),
+        ).toISOString();
+        this.save(meta);
+        return {
+          stageId: meta.stage.stageId,
+          sha256: meta.stage.sha256,
+          bytes: meta.stage.bytes,
+          expiresAt: meta.stage.expiresAt,
+        };
+      });
+    } catch (error) {
+      abort.abort(error);
+      target.destroy(error instanceof Error ? error : new Error("Prepared export failed"));
+      await Promise.allSettled(work);
+      this.lock(() => {
+        const meta = this.owned(stage.stageId, operation.ownerId, "prepared-artifact");
+        if (meta.stage.state !== "ready") {
+          meta.stage.state = "failed";
+          this.save(meta);
+        }
+      });
+      throw error;
+    }
+  }
   private async readChunk(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal) {
     let abort: () => void = () => {};
     try {
@@ -726,6 +1089,16 @@ export class ArtifactTransferStore {
     }
   }
   async openDownload<T>(
+    input: StreamInput,
+    consume: (input: {
+      body: ReadableStream<Uint8Array>;
+      signal: AbortSignal;
+      headers: Headers;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.withByteOwner(input.stageId, () => this.readOwnedDownload(input, consume));
+  }
+  private async readOwnedDownload<T>(
     input: StreamInput,
     consume: (input: {
       body: ReadableStream<Uint8Array>;
@@ -819,6 +1192,28 @@ export class ArtifactTransferStore {
     }
   }
   /** Local, fixed prepared consumer. The descriptor-derived path never crosses HTTP. */
+  async reservePreparedMaterialization(input: { stageId: string; ownerId: string }) {
+    // Fixed upper bound for the offline MOTIS producer and its separate proxy
+    // consumer copy. No request may choose or reduce this reservation.
+    const allowance = 64 * 1024 * 1024;
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      if (!["ready", "claimed"].includes(meta.stage.state)) failed(409, "Validated stage required");
+      const preparation = [...meta.claims]
+        .reverse()
+        .find(
+          (entry) =>
+            entry.claim.use === "validate-build" && entry.settlement?.outcome === "validated",
+        )?.preparation;
+      if (preparation?.serviceId !== "motis" || typeof preparation.expandedBytes !== "number")
+        failed(409, "Validated MOTIS source required");
+      const required =
+        meta.stage.bytes + preparation.expandedBytes + this.policy.maxManifestBytes + allowance;
+      this.checkCapacity(Math.max(0, required - meta.reservedBytes));
+      meta.reservedBytes = Math.max(required, meta.reservedBytes);
+      this.save(meta);
+    });
+  }
   async withPreparedArtifact<T>(
     input: { stageId: string; ownerId: string },
     consume: (source: {
@@ -964,7 +1359,7 @@ export class ArtifactTransferStore {
   async completePreparedImport(
     context: OpsExecutionContext,
     claim: ArtifactStageClaim,
-    result: ArtifactFilePublicationResult,
+    result: ArtifactFilePublicationResult & { followUp?: "complete" | "failed" },
   ) {
     const operation = this.preparedContext(context),
       authority = context.controlAuthority,
@@ -987,7 +1382,15 @@ export class ArtifactTransferStore {
         settlement = binding
           ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
           : null;
-      if (settlement?.outcome !== "committed" || settlement.publication !== "committed")
+      if (
+        (!binding && result.followUp !== "failed") ||
+        (binding &&
+          (result.followUp === "failed"
+            ? !settlement ||
+              settlement.outcome === "unknown" ||
+              settlement.publication === "unknown"
+            : settlement?.outcome !== "committed" || settlement.publication !== "committed"))
+      )
         failed(409, "Original hardlink child is not settled");
     }
     return this.lock(() => {
@@ -1011,11 +1414,158 @@ export class ArtifactTransferStore {
       return meta.stage;
     });
   }
+  async containPreparedValidation(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactValidationOperation(authority);
+    if (this.purposeOwners.has(operation.stageId) || this.streams.has(operation.stageId))
+      throw Error("Validation still owns its private files");
+    const owner = await acquireArtifactByteOwner(this.byteOwners.name(operation.stageId));
+    try {
+      const failed = this.lock(() => {
+        const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+          entry = meta.claims.find(
+            (value) =>
+              value.claim.use === "validate-build" &&
+              value.claim.identity.executionId === authority.execution.executionId &&
+              value.claim.identity.operationKey === authority.execution.operationKey &&
+              value.claim.identity.fingerprint === authority.execution.fingerprint,
+          );
+        return meta.stage.state === "failed" && entry?.settlement?.outcome === "failed";
+      });
+      if (!failed) throw Error("Original private validation failure required");
+      await this.cleanupStage(operation, "failed");
+      return await this.recoverPreparedValidation(authority);
+    } finally {
+      await owner?.release();
+    }
+  }
+  async confirmPreparedReceipt(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    input: Parameters<typeof acknowledgeControlRetention>[1],
+    token: string,
+  ) {
+    const owner = executionAuthorityState(authority),
+      operation =
+        owner.kind === "artifactTransfer.import"
+          ? originalArtifactImportOperation(authority)
+          : originalArtifactValidationOperation(authority);
+    if (
+      input.operationKey !== authority.execution.operationKey ||
+      input.fingerprint !== authority.execution.fingerprint ||
+      input.originRootKey !== owner.origin?.rootKey
+    )
+      throw Error("Original prepared receipt required");
+    assertKnownArtifactStageReceipt(authority);
+    acknowledgeControlRetention(owner.installation.installation, input, token);
+    this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (value) =>
+            value.claim.identity.executionId === authority.execution.executionId &&
+            value.claim.identity.operationKey === authority.execution.operationKey &&
+            value.claim.identity.fingerprint === authority.execution.fingerprint,
+        );
+      if (!entry?.settlement || entry.settlement.outcome === "unknown")
+        throw Error("Prepared purpose receipt unresolved");
+      entry.receiptDelivered = true;
+      this.save(meta);
+    });
+  }
+  async recoverPreparedValidation(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactValidationOperation(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact");
+      const entry = meta.claims.find(
+        (entry) =>
+          entry.claim.use === "validate-build" &&
+          entry.claim.identity.executionId === authority.execution.executionId &&
+          entry.claim.identity.operationKey === authority.execution.operationKey &&
+          entry.claim.identity.fingerprint === authority.execution.fingerprint,
+      );
+      if (
+        entry?.settlement?.outcome === "validated" &&
+        entry.preparation &&
+        entry.claim.sha256 === meta.stage.sha256 &&
+        entry.claim.sha256 === entry.settlement.inspection.sha256 &&
+        entry.preparation.archiveSha256 === meta.stage.sha256 &&
+        entry.preparation.artifactFingerprint === entry.settlement.inspection.validationFingerprint
+      )
+        return { ...meta.stage, state: "ready" as const, cleanup: "pending" as const };
+      if (
+        !entry ||
+        entry.settlement?.outcome !== "failed" ||
+        meta.stage.state !== "failed" ||
+        meta.stage.cleanup !== "complete" ||
+        meta.reservedBytes !== 0 ||
+        this.streams.has(operation.stageId) ||
+        this.purposeOwners.has(operation.stageId)
+      )
+        throw Error("Original validation remains unresolved");
+      return meta.stage;
+    });
+  }
+  async completeRecoveredPreparedImport(
+    context: OpsExecutionContext,
+    result: ArtifactFilePublicationResult & { followUp: "complete" | "failed" },
+  ) {
+    const operation = this.preparedContext(context);
+    if (operation.kind !== "artifactTransfer.import") failed(409, "Original import required");
+    const claim = this.lock(
+      () =>
+        this.owned(operation.stageId, operation.ownerId).claims.find(
+          (entry) =>
+            entry.claim.use === "import-build" &&
+            entry.claim.identity.executionId === context.execution.executionId &&
+            entry.claim.identity.operationKey === context.execution.operationKey &&
+            entry.claim.identity.fingerprint === context.execution.fingerprint,
+        )?.claim,
+    );
+    if (!claim) failed(409, "Original import claim unavailable");
+    return this.completePreparedImport(context, claim, result);
+  }
+  async releaseUnstartedPreparedImport(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = inspectUnstartedArtifactImport(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact");
+      const entry = meta.claims.find(
+        (entry) =>
+          entry.claim.use === "import-build" &&
+          entry.claim.identity.executionId === authority.execution.executionId &&
+          entry.claim.identity.operationKey === authority.execution.operationKey &&
+          entry.claim.identity.fingerprint === authority.execution.fingerprint &&
+          entry.claim.sha256 === operation.expectedSha256,
+      );
+      if (!entry || entry.settlement) return;
+      entry.settlement = { outcome: "released", evidence: "no_effect" };
+      // Offline MOTIS generation may have created private, unpublished files.
+      // Keep that inert candidate deletable, rather than pretending it is the
+      // original validation projection for another import.
+      meta.stage.state = "failed";
+      this.save(meta);
+    });
+  }
   async releaseRestoredPreparedImport(context: OpsExecutionContext) {
-    const operation = this.preparedContext(context),
-      authority = context.controlAuthority;
-    if (operation.kind !== "artifactTransfer.import" || !authority)
-      failed(409, "Original import recovery required");
+    this.preparedContext(context);
+    if (!context.controlAuthority) failed(409, "Original import required");
+    return this.releaseRestoredArtifactClaim(context.controlAuthority);
+  }
+  async reconcileReleasedPreparedImport(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const publication = inspectArtifactPublication(authority);
+    if (publication?.phase === "restored") return this.releaseRestoredArtifactClaim(authority);
+    if (!publication) return this.releaseUnstartedPreparedImport(authority);
+  }
+  private async releaseRestoredArtifactClaim(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactImportOperation(authority),
+      context = { execution: authority.execution };
     const publication = inspectArtifactPublication(authority);
     if (
       !publication ||
@@ -1079,6 +1629,25 @@ export class ArtifactTransferStore {
     return operation;
   }
   async validatePreparedArtifact(context: OpsExecutionContext): Promise<TransferStage> {
+    const operation = this.preparedContext(context);
+    if (operation.kind !== "artifactTransfer.validate") failed(409, "Original validation required");
+    if (this.purposeOwners.has(operation.stageId)) failed(409, "Validation is still owned");
+    this.purposeOwners.add(operation.stageId);
+    let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+    try {
+      owner = await acquireArtifactByteOwner(this.byteOwners.name(operation.stageId));
+      return await this.validateOwnedPreparedArtifact(context);
+    } finally {
+      try {
+        await owner?.release();
+      } finally {
+        this.purposeOwners.delete(operation.stageId);
+      }
+    }
+  }
+  private async validateOwnedPreparedArtifact(
+    context: OpsExecutionContext,
+  ): Promise<TransferStage> {
     const operation = this.preparedContext(context);
     const stage = this.lock(
       () => this.owned(operation.stageId, operation.ownerId, "prepared-artifact").stage,
@@ -1161,7 +1730,7 @@ export class ArtifactTransferStore {
           try {
             return await validateBuildBundle({
               source: Readable.from(source),
-              stagingRoot: extracted.anchor,
+              stagingRoot: extracted,
               limits: this.policy,
               signal,
               reservePayload: (reservation) =>
@@ -1711,6 +2280,7 @@ export class ArtifactTransferStore {
               )?.preparation ?? null)
             : null,
         transactionId: operation.kind === "integration.install" ? operation.operationId : null,
+        receiptDelivered: false,
       });
       meta.stage.state = ["inspect-integration", "validate-build"].includes(input.use)
         ? "validating"
@@ -1952,7 +2522,7 @@ export class ArtifactTransferStore {
       Math.max(1, Date.parse(claim.identity.executionDeadlineAt) - this.now()),
     );
     timer.unref?.();
-    this.streams.set(claim.stageId, { ownerId: claim.ownerId, controller });
+    const releaseStream = this.ownStream(claim.stageId, claim.ownerId, controller, "purpose");
     let directory: AnchoredDirectory | undefined, file: FileHandle | undefined;
     try {
       controller.signal.throwIfAborted();
@@ -1985,7 +2555,7 @@ export class ArtifactTransferStore {
       } finally {
         clearTimeout(timer);
         input.signal.removeEventListener("abort", abort);
-        this.streams.delete(claim.stageId);
+        releaseStream();
       }
     }
   }

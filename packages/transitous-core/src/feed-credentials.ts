@@ -128,9 +128,10 @@ export function parseFeedCredentialMapJson(json: string): Readonly<Record<string
 export function validateFeedCredentialMap(
   existing: Readonly<Record<string, string>>,
   changes: readonly FeedCredentialChange[],
+  maxChanges: 100 | 1000 = 100,
 ): ValidatedFeedCredentialMap {
   const values = Object.fromEntries(entriesOf(existing));
-  if (!Array.isArray(changes) || changes.length > 100) throw invalid();
+  if (!Array.isArray(changes) || changes.length > maxChanges) throw invalid();
   const seen = new Set<string>();
   for (const change of changes) {
     if (

@@ -217,7 +217,12 @@
     "./build-artifacts/publication": {
       "types": "./src/build-artifacts/publication.ts",
       "default": "./src/build-artifacts/publication.ts"
-    }
+    },
+    "./build-artifacts/motis-portable": {
+      "types": "./src/build-artifacts/motis-portable.ts",
+      "default": "./src/build-artifacts/motis-portable.ts"
+    },
+    "./build-artifacts/motis-destination": "./src/build-artifacts/motis-destination.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
@@ -273,7 +278,8 @@
     "tz-lookup": "^6.1.25",
     "undici": "8.11.2",
     "zod": "^4.6.5",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "@openmapx/motis-feed-proxy-config": "workspace:^"
   },
   "private": true
 }

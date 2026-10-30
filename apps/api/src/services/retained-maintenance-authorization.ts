@@ -10,6 +10,7 @@ export const MAINTENANCE_JOB_TYPES = [
   "compose.render",
   "artifact.validate",
   "artifact.import",
+  "artifact.export",
 ] as const;
 export function maintenanceJobAuthorization(
   token: string,

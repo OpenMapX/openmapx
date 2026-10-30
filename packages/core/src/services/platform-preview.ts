@@ -39,6 +39,8 @@ export function buildPlatformConfigurationPreview(input: {
   services: readonly LoadedService[];
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
   reconcileServiceIds?: readonly string[];
+  /** Finite staged migration selected services, joined into this same generation. */
+  additionalServiceIds?: readonly string[];
   release?: { releaseId: string; manifestDigest: string };
 }) {
   const currentRevisionId = revision.parse(input.currentRevisionId);
@@ -86,9 +88,17 @@ export function buildPlatformConfigurationPreview(input: {
     (key) => before.values[key] !== after.values[key],
   );
   const domain = before.values.domain !== after.values.domain;
+  const additional = z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .max(256)
+    .parse(input.additionalServiceIds ?? []);
+  if (additional.some((id) => !input.services.some((s) => s.enabled && s.manifest.id === id)))
+    throw Error("Migration service unavailable");
   const affectedServiceIds = input.services
     .filter((service) => {
-      if (!service.isBuiltIn || !service.enabled) return false;
+      if (!service.enabled) return false;
+      if (additional.includes(service.manifest.id)) return true;
+      if (!service.isBuiltIn) return false;
       const m = service.manifest;
       if (release) return Object.hasOwn(configurationReleaseServiceImagesSchema.shape, m.id);
       if (reconcileServiceIds?.includes(m.id as (typeof reconcileServiceIds)[number])) return true;

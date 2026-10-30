@@ -17,6 +17,8 @@ export function platformJobMatchesPreview(
   preview: Pick<AdminPlatformPreview, "release">,
 ) {
   if (job.type === "platform.apply") return true;
+  if (["configuration.migration.apply", "credential.import"].includes(job.type))
+    return !preview.release;
   if (job.type !== "system.update" || !preview.release) return false;
   const payload = guardedSystemReleasePayloadSchema.safeParse(job.payload);
   return (

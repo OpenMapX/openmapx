@@ -104,7 +104,12 @@ export async function commitPlatformConfigurationIntent(
   const [actor] = await tx.select().from(user).where(eq(user.id, input.actorId)).for("share");
   if (
     !job ||
-    !["platform.apply", "system.update"].includes(job.type) ||
+    ![
+      "platform.apply",
+      "system.update",
+      "configuration.migration.apply",
+      "credential.import",
+    ].includes(job.type) ||
     job.createdBy !== input.actorId ||
     actor?.role !== "admin" ||
     actor.banned === true

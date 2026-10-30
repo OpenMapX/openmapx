@@ -4,23 +4,35 @@ import { createHash } from "node:crypto";
 import { fsyncSync, lstatSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { z } from "zod";
+import { transferStageSchema } from "../ops/artifact-transfer";
 import { canonicalJson } from "../ops/canonical-json";
+import { type OpsJobStatus, opsOperationSchema } from "../ops/contract";
+import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
+import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
   currentConfigurationGeneration,
   withConfigurationGenerationWriter,
 } from "../services/configuration-generation";
 import type { ValidatedBuildBundle } from "./archive";
+import { inspectControlChildPublication } from "./child-phase";
 import {
   beginControlEffect,
+  cancelControlExecution,
+  childSettlementState,
   controlDigest,
   executionAuthorityState,
   readPrivateRecord,
+  retainControlEffectReceipt,
+  retainControlTerminalCommitment,
+  retainControlTerminalStatus,
   type VerifiedExecutionAuthority,
+  verifyControlEffectSettlement,
   writePrivateRecord,
 } from "./control-authority";
 import { signControl, verifyControl } from "./control-records";
 import { hashArtifactFile, inspectArtifactTree } from "./copy-tree";
 import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
+import { inspectOwnedGenerationHardlinks } from "./generation-hardlinks-owner";
 import {
   BUILD_RECORD_DIR,
   buildArtifactSpec,
@@ -28,8 +40,16 @@ import {
   parseBundleManifest,
   safeArtifactPath,
 } from "./manifest";
+import type { MotisCandidateManifest } from "./motis-candidate";
+import type { VerifiedPortableMotisMaterialization } from "./motis-portable";
+import {
+  assertMotisPublicationAliases,
+  materializedMotisBundle,
+  motisPublicationLayoutSchema,
+  readMotisPublicationLayout,
+} from "./motis-publication";
 import { capturePreparedBuildEvidence, incompletePreparedLayout } from "./prepared-evidence";
-import { verifyFamilyOwnedRecord } from "./retention-family";
+import { publishFamilyCanonicalTerminal, verifyFamilyOwnedRecord } from "./retention-family";
 import {
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
@@ -48,6 +68,10 @@ export interface ArtifactPublicationInput {
   authority: VerifiedExecutionAuthority;
   lease: TargetLeaseAuthority;
   expectedFingerprint: string;
+  materialization?: VerifiedPortableMotisMaterialization;
+  /** Fixed destination producer runs inside this one configuration writer. Its
+   * nominal output is reverified; a callback cannot supply generated-file authority. */
+  materializeMotis?: () => Promise<VerifiedPortableMotisMaterialization>;
   signal?: AbortSignal;
   /** Fixed local consumer's denial-only compatibility fence, acquired after
    * payload hashing while this publisher owns the configuration writer.
@@ -59,6 +83,7 @@ const inode = z.strictObject({ dev: z.string(), ino: z.string() }),
   digest = z.string().regex(/^[a-f0-9]{64}$/);
 const directoryEntry = z.strictObject({
   path: z.string(),
+  targetPath: z.string().optional(),
   old: inode.nullable(),
   next: inode,
   oldMetadata: digest.nullable(),
@@ -67,6 +92,7 @@ const directoryEntry = z.strictObject({
 });
 const recordEntry = z.strictObject({
   name: z.string(),
+  scope: z.enum(["build", "motis"]).optional(),
   old: inode.nullable(),
   next: inode.nullable(),
   digest: digest.nullable(),
@@ -81,6 +107,8 @@ const journalSchema = z.strictObject({
   serviceId: z.string(),
   archiveSha256: digest,
   artifactFingerprint: digest,
+  portableArtifactFingerprint: digest.optional(),
+  motisLayout: motisPublicationLayoutSchema.optional(),
   expectedFingerprint: digest,
   stagingRelative: z.string(),
   stagingIdentity: inode,
@@ -88,7 +116,7 @@ const journalSchema = z.strictObject({
   recordsIdentity: inode,
   phase: z.enum(["prepared", "committed", "restored"]),
   directories: z.array(directoryEntry).max(8),
-  records: z.array(recordEntry).length(2),
+  records: z.array(recordEntry).min(2).max(3),
   cleanupFailed: z.boolean(),
 });
 type Journal = z.infer<typeof journalSchema>;
@@ -129,8 +157,9 @@ function parent(root: AnchoredDirectory, path: string, create = false) {
   return { ...directoryAt(root, parts.join("/"), create), name };
 }
 function dirIdentity(root: AnchoredDirectory, path: string): FileIdentity | null {
-  const p = parent(root, path);
+  let p: ReturnType<typeof parent> | undefined;
   try {
+    p = parent(root, path);
     const stat = lstatSync(p.dir.name(p.name), { bigint: true });
     if (!stat.isDirectory()) throw Error("Artifact directory alias refused");
     const d = p.dir.directory(p.name, false, false);
@@ -143,7 +172,7 @@ function dirIdentity(root: AnchoredDirectory, path: string): FileIdentity | null
     if (missing(error)) return null;
     throw error;
   } finally {
-    p.close();
+    p?.close();
   }
 }
 function directoryMetadata(root: AnchoredDirectory, path: string) {
@@ -167,13 +196,15 @@ function equal(a: FileIdentity | null, b: FileIdentity | null) {
 }
 function snapshot(root: AnchoredDirectory, serviceId: string) {
   const spec = buildArtifactSpec(serviceId);
-  if (serviceId === "motis") throw Error("MOTIS requires the destination materialization adapter");
+  const motisLayout = serviceId === "motis" ? readMotisPublicationLayout(root) : undefined;
   const directories = spec.dirs.map((path) => {
-    const id = dirIdentity(root, path);
-    if (!id) return { path, id: null, metadata: null };
-    const d = directoryAt(root, path);
+    const targetPath = path === "motis/live" && motisLayout ? motisLayout.physicalLive : path;
+    const id = dirIdentity(root, targetPath);
+    const entry = { path, ...(targetPath === path ? {} : { targetPath }) };
+    if (!id) return { ...entry, id: null, metadata: null };
+    const d = directoryAt(root, targetPath);
     try {
-      return { path, id, metadata: inspectArtifactTree(d.dir, TREE_LIMITS).metadataDigest };
+      return { ...entry, id, metadata: inspectArtifactTree(d.dir, TREE_LIMITS).metadataDigest };
     } finally {
       d.close();
     }
@@ -185,18 +216,28 @@ function snapshot(root: AnchoredDirectory, serviceId: string) {
     if (!missing(error)) throw error;
   }
   try {
-    return {
-      directories,
-      records: [`${serviceId}.json`, `${serviceId}.evidence.json`].map((name) => {
-        const id = records ? fileIdentity(records, name) : null;
-        return {
-          name,
-          id,
-          digest:
-            id && records ? hash(records.read(name, MAX_METADATA, false).toString("utf8")) : null,
-        };
-      }),
-    };
+    const snapshots: Array<{
+      name: string;
+      id: FileIdentity | null;
+      digest: string | null;
+      scope?: "motis";
+    }> = [`${serviceId}.json`, `${serviceId}.evidence.json`].map((name) => {
+      const id = records ? fileIdentity(records, name) : null;
+      return {
+        name,
+        id,
+        digest:
+          id && records ? hash(records.read(name, MAX_METADATA, false).toString("utf8")) : null,
+      };
+    });
+    if (motisLayout?.slotState)
+      snapshots.push({
+        name: "slot-state.json",
+        scope: "motis",
+        id: motisLayout.slotState.inode,
+        digest: motisLayout.slotState.digest,
+      });
+    return { directories, records: snapshots, ...(motisLayout ? { motisLayout } : {}) };
   } finally {
     records?.close();
   }
@@ -360,12 +401,48 @@ function validateJournal(
     journal.stageId !== input.stageId ||
     journal.serviceId !== input.bundle.manifest.service ||
     journal.archiveSha256 !== input.bundle.archiveSha256 ||
-    journal.artifactFingerprint !== input.bundle.artifactFingerprint ||
+    (journal.portableArtifactFingerprint ?? journal.artifactFingerprint) !==
+      input.bundle.artifactFingerprint ||
     canonicalJson(journal.directories.map((d) => d.path)) !== canonicalJson(spec.dirs) ||
     canonicalJson(journal.records.map((r) => r.name)) !==
-      canonicalJson([`${journal.serviceId}.json`, `${journal.serviceId}.evidence.json`])
+      canonicalJson([
+        `${journal.serviceId}.json`,
+        `${journal.serviceId}.evidence.json`,
+        ...(journal.motisLayout?.slotState ? ["slot-state.json"] : []),
+      ]) ||
+    journal.records.some((entry, index) =>
+      index < 2 ? entry.scope === "motis" : entry.scope !== "motis",
+    ) ||
+    journal.directories.some(
+      (entry) =>
+        (entry.targetPath ?? entry.path) !==
+        (entry.path === "motis/live" && journal.motisLayout
+          ? journal.motisLayout.physicalLive
+          : entry.path),
+    ) ||
+    (journal.serviceId === "motis"
+      ? !journal.motisLayout || !journal.portableArtifactFingerprint
+      : journal.motisLayout !== undefined || journal.portableArtifactFingerprint !== undefined)
   )
     throw Error("Artifact publication journal identity changed");
+}
+function targetPath(entry: Journal["directories"][number]) {
+  return entry.targetPath ?? entry.path;
+}
+function withRecord<T>(
+  root: AnchoredDirectory,
+  records: AnchoredDirectory,
+  entry: Journal["records"][number],
+  run: (directory: AnchoredDirectory) => T,
+): T {
+  if (entry.scope !== "motis") return run(records);
+  if (entry.name !== "slot-state.json") throw Error("Invalid MOTIS metadata record");
+  const motis = root.directory("motis", false, false);
+  try {
+    return run(motis);
+  } finally {
+    motis.close();
+  }
 }
 function restore(
   root: AnchoredDirectory,
@@ -374,9 +451,10 @@ function restore(
   records: AnchoredDirectory,
   journal: Journal,
 ) {
+  if (journal.motisLayout) assertMotisPublicationAliases(root, journal.motisLayout);
   // Validate the WHOLE recorded set before restoring any member.
   for (const entry of journal.directories) {
-    const live = dirIdentity(root, entry.path),
+    const live = dirIdentity(root, targetPath(entry)),
       next = dirIdentity(source, entry.path),
       old = dirIdentity(backups, entry.backup);
     if (
@@ -389,7 +467,7 @@ function restore(
       throw Error("Artifact restoration identity is uncertain");
   }
   for (const entry of journal.records) {
-    const live = fileIdentity(records, entry.name),
+    const live = withRecord(root, records, entry, (home) => fileIdentity(home, entry.name)),
       old = fileIdentity(backups, entry.backup);
     if (
       (live && !equal(live, entry.old) && !equal(live, entry.next)) ||
@@ -400,8 +478,8 @@ function restore(
   }
   for (const entry of journal.directories) {
     const old = entry.old
-      ? equal(dirIdentity(root, entry.path), entry.old)
-        ? { root, path: entry.path }
+      ? equal(dirIdentity(root, targetPath(entry)), entry.old)
+        ? { root, path: targetPath(entry) }
         : { root: backups, path: entry.backup }
       : null;
     if (old && directoryMetadata(old.root, old.path) !== entry.oldMetadata)
@@ -410,26 +488,39 @@ function restore(
   for (const entry of journal.records) {
     const old =
       entry.old &&
-      (equal(fileIdentity(records, entry.name), entry.old)
-        ? { root: records, name: entry.name }
+      (equal(
+        withRecord(root, records, entry, (home) => fileIdentity(home, entry.name)),
+        entry.old,
+      )
+        ? {
+            root: entry.scope === "motis" ? root : records,
+            name: entry.scope === "motis" ? "motis/slot-state.json" : entry.name,
+          }
         : { root: backups, name: entry.backup });
     if (
       old &&
-      hash(old.root.read(old.name, MAX_METADATA, false).toString("utf8")) !== entry.oldDigest
+      hash(
+        (old.root === root && entry.scope === "motis"
+          ? withRecord(root, records, entry, (home) => home.read(entry.name, MAX_METADATA, false))
+          : old.root.read(old.name, MAX_METADATA, false)
+        ).toString("utf8"),
+      ) !== entry.oldDigest
     )
       throw Error("Artifact record restoration content is uncertain");
   }
   for (const entry of [...journal.directories].reverse()) {
-    if (equal(dirIdentity(root, entry.path), entry.next))
-      moveDirectory(root, entry.path, source, entry.path, entry.next);
+    if (equal(dirIdentity(root, targetPath(entry)), entry.next))
+      moveDirectory(root, targetPath(entry), source, entry.path, entry.next);
     if (entry.old && equal(dirIdentity(backups, entry.backup), entry.old))
-      moveDirectory(backups, entry.backup, root, entry.path, entry.old);
+      moveDirectory(backups, entry.backup, root, targetPath(entry), entry.old);
   }
   for (const entry of journal.records) {
-    if (entry.next && equal(fileIdentity(records, entry.name), entry.next))
-      records.removeFile(entry.name);
-    if (entry.old && equal(fileIdentity(backups, entry.backup), entry.old))
-      moved(backups, entry.backup, records, entry.name, entry.old, false);
+    withRecord(root, records, entry, (home) => {
+      if (entry.next && equal(fileIdentity(home, entry.name), entry.next))
+        home.removeFile(entry.name);
+      if (entry.old && equal(fileIdentity(backups, entry.backup), entry.old))
+        moved(backups, entry.backup, home, entry.name, entry.old, false);
+    });
   }
 }
 function cleanup(backups: AnchoredDirectory, journal: Journal) {
@@ -520,7 +611,24 @@ export async function publishValidatedBuild(
       assertArtifactTargetLeaseExecution(input.lease, owner.execution);
       if (controlDigest(snapshot(root, serviceId)) !== input.expectedFingerprint)
         return { outcome: "not_committed", reason: "conflict", cleanupFailed: false };
-      const manifest = parseBundleManifest(JSON.stringify(input.bundle.manifest));
+      let bundle = input.bundle,
+        motisCandidate: MotisCandidateManifest | undefined;
+      if (serviceId === "motis") {
+        const materialization = input.materialization ?? (await input.materializeMotis?.());
+        if (!materialization) throw Error("Original destination MOTIS materialization required");
+        const materialized = await materializedMotisBundle(
+          input.bundle,
+          input.stagingRoot,
+          materialization,
+          input.signal,
+        );
+        bundle = materialized;
+        motisCandidate = materialized.motisCandidate;
+      }
+      const manifest =
+        serviceId === "motis"
+          ? bundle.manifest
+          : parseBundleManifest(JSON.stringify(bundle.manifest));
       if (
         manifest.files.length + manifest.directories.length > 10000 ||
         incompletePreparedLayout(serviceId, manifest.files)
@@ -589,7 +697,13 @@ export async function publishValidatedBuild(
         stageId: input.stageId,
         serviceId,
         archiveSha256: input.bundle.archiveSha256,
-        artifactFingerprint: input.bundle.artifactFingerprint,
+        artifactFingerprint: bundle.artifactFingerprint,
+        ...(initial.motisLayout
+          ? {
+              motisLayout: initial.motisLayout,
+              portableArtifactFingerprint: input.bundle.artifactFingerprint,
+            }
+          : {}),
         expectedFingerprint: input.expectedFingerprint,
         stagingRelative,
         stagingIdentity: identity(source.dir.stat),
@@ -598,6 +712,7 @@ export async function publishValidatedBuild(
         phase: "prepared",
         directories: initial.directories.map((dir, index) => ({
           path: dir.path,
+          ...(dir.targetPath ? { targetPath: dir.targetPath } : {}),
           old: dir.id,
           oldMetadata: dir.metadata,
           nextMetadata: sourceMetadata.get(dir.path)!,
@@ -606,6 +721,7 @@ export async function publishValidatedBuild(
         })),
         records: initial.records.map((record, index) => ({
           name: record.name,
+          ...(record.scope ? { scope: record.scope } : {}),
           old: record.id,
           oldDigest: record.digest,
           next: null,
@@ -625,11 +741,16 @@ export async function publishValidatedBuild(
         for (const entry of journal.directories) {
           input.signal?.throwIfAborted();
           assertArtifactTargetLeaseExecution(input.lease, owner.execution);
-          if (entry.old) moveDirectory(root, entry.path, backups, entry.backup, entry.old);
-          moveDirectory(source.dir, entry.path, root, entry.path, entry.next);
+          if (journal.motisLayout) assertMotisPublicationAliases(root, journal.motisLayout);
+          if (entry.old) moveDirectory(root, targetPath(entry), backups, entry.backup, entry.old);
+          moveDirectory(source.dir, entry.path, root, targetPath(entry), entry.next);
         }
+        const originalRecords = backups;
         for (const entry of journal.records)
-          if (entry.old) moved(records, entry.name, backups, entry.backup, entry.old, false);
+          if (entry.old)
+            withRecord(root, records, entry, (home) =>
+              moved(home, entry.name, originalRecords, entry.backup, entry.old!, false),
+            );
         const { dirs: _dirs, directories: _directories, files: _files, ...record } = manifest;
         const pin = (name: string, inode: FileIdentity, bytes: string) => {
           const entry = journal!.records.find((entry) => entry.name === name);
@@ -645,11 +766,11 @@ export async function publishValidatedBuild(
           signal: input.signal,
           beforePublish: (inode, bytes) => pin(`${serviceId}.evidence.json`, inode, bytes),
         });
-        if (next.artifactFingerprint !== input.bundle.artifactFingerprint)
+        if (next.artifactFingerprint !== bundle.artifactFingerprint)
           throw Error("Published artifact content differs from validation");
         if (
           journal.directories.some(
-            (entry) => directoryMetadata(root, entry.path) !== entry.nextMetadata,
+            (entry) => directoryMetadata(root, targetPath(entry)) !== entry.nextMetadata,
           )
         )
           throw Error("Imported content changed before commit");
@@ -657,6 +778,36 @@ export async function publishValidatedBuild(
         records.write(`${serviceId}.json`, bytes, false, (inode) =>
           pin(`${serviceId}.json`, inode, bytes),
         );
+        if (journal.motisLayout?.slotState && motisCandidate) {
+          const original = journal.motisLayout.slotState.record;
+          const manifestHash = manifest.files.find(
+            (file) => file.path === "motis/live/motis-candidate-manifest.json",
+          )?.sha256;
+          if (!manifestHash) throw Error("Materialized MOTIS manifest proof missing");
+          const imageDigest = manifest.runtimeImages.motis?.match(/@(sha256:[a-f0-9]{64})$/)?.[1];
+          const nextState = {
+            schemaVersion: 1,
+            activeSlot: original.activeSlot,
+            ...(original.previousHealthySlot && original.previousHealthySlot !== original.activeSlot
+              ? { previousHealthySlot: original.previousHealthySlot }
+              : {}),
+            ...(original.retainedRollback && original.retainedRollback.slot !== original.activeSlot
+              ? { retainedRollback: original.retainedRollback }
+              : {}),
+            datasetEpoch: motisCandidate.epoch,
+            manifestHash,
+            ...(imageDigest ? { imageDigest } : {}),
+          };
+          const entry = journal.records.find((record) => record.scope === "motis");
+          if (!entry) throw Error("Original MOTIS slot metadata reservation missing");
+          const stateBytes = JSON.stringify(nextState);
+          withRecord(root, records, entry, (home) =>
+            home.write("slot-state.json", stateBytes, false, (inode) =>
+              pin("slot-state.json", inode, stateBytes),
+            ),
+          );
+        }
+        if (journal.motisLayout) assertMotisPublicationAliases(root, journal.motisLayout);
         journal.phase = "committed";
         writeJournal(owner, journal);
       } catch (error) {
@@ -707,6 +858,7 @@ export function inspectArtifactPublication(authority: VerifiedExecutionAuthority
     archiveSha256: journal.archiveSha256,
     serviceId: journal.serviceId,
     artifactFingerprint: journal.artifactFingerprint,
+    cleanupFailed: journal.cleanupFailed,
   };
 }
 
@@ -750,4 +902,252 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
     source?.close();
     root.close();
   }
+}
+
+/** Close only this purpose's proved historical publication. The original
+ * canonical status/digest/time remain unchanged even if delivery failed after
+ * files committed; containment is a separate, source-verified family fact. */
+export function inspectSettledArtifactImport(
+  authority: VerifiedExecutionAuthority,
+  status: OpsJobStatus,
+  terminalAt: number,
+) {
+  const owner = executionAuthorityState(authority);
+  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
+    throw Error("Original import required");
+  const journal = readJournal({ ...owner, origin: owner.origin });
+  if (!journal || !["committed", "restored"].includes(journal.phase))
+    throw Error("Original settled import required");
+  verifyRetainedArtifactTargetRootRelease(authority);
+  const effect = childSettlementState(
+    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
+  ).evidence;
+  if (
+    journal.phase === "committed"
+      ? effect.outcome !== "committed" || effect.publication !== "committed"
+      : effect.outcome === "unknown" || effect.publication !== "not_started"
+  )
+    throw Error("Original settled effect required");
+  const followUp =
+    inspectOwnedGenerationHardlinks(authority) === "complete"
+      ? ("complete" as const)
+      : ("failed" as const);
+  retainControlTerminalCommitment(authority, status, terminalAt);
+  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
+  publishFamilyCanonicalTerminal(
+    owner.installation,
+    owner.origin,
+    owner.execution,
+    true,
+    controlTerminalReceiptDigest(status),
+    terminalAt,
+  );
+  if (journal.phase === "restored")
+    return {
+      outcome: "not_committed" as const,
+      reason: "failed" as const,
+      cleanupFailed: journal.cleanupFailed,
+    };
+  return {
+    outcome: "committed" as const,
+    serviceId: journal.serviceId,
+    artifactFingerprint: journal.artifactFingerprint,
+    cleanupFailed: journal.cleanupFailed,
+    followUp,
+  };
+}
+
+/** A transfer claim may be released only after this exact import never began
+ * publication and the original whole target tree is physically released. */
+export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.kind !== "artifactTransfer.import" ||
+    !owner.origin ||
+    readJournal({ ...owner, origin: owner.origin })
+  )
+    throw Error("Unstarted original import required");
+  const started = readPrivateRecord(
+    owner.installation,
+    "effect-started",
+    `${owner.execution.operationKey}.json`,
+  );
+  if (started !== null) throw Error("Import publication began");
+  verifyFamilyOwnedRecord(
+    owner.installation,
+    owner.origin,
+    {
+      scope: "private",
+      namespace: "effect-started",
+      container: "",
+      name: `${owner.execution.operationKey}.json`,
+    },
+    canonicalJson(started),
+  );
+  const effect = childSettlementState(
+    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
+  ).evidence;
+  if (
+    !["failed_without_effect", "contained"].includes(effect.outcome) ||
+    effect.publication !== "not_started"
+  )
+    throw Error("Unstarted import containment required");
+  verifyRetainedArtifactTargetRootRelease(authority);
+  const admitted = readPrivateRecord(
+    owner.installation,
+    "executions",
+    `${owner.execution.operationKey}.json`,
+    65536,
+  ) as { payload: { operation: unknown } };
+  if (controlDigest(admitted) !== owner.receiptDigest)
+    throw Error("Original import admission changed");
+  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  if (
+    operation.kind !== "artifactTransfer.import" ||
+    opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
+  )
+    throw Error("Original import body required");
+  return operation;
+}
+
+/** Actual fixed runtime has finished without starting publication. Freeze the
+ * original issuer, prove every finite child unused, then retain nonissuance. */
+export function retainUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.kind !== "artifactTransfer.import" ||
+    !owner.origin ||
+    readJournal({ ...owner, origin: owner.origin })
+  )
+    throw Error("Unstarted import required");
+  const started = readPrivateRecord(
+    owner.installation,
+    "effect-started",
+    `${owner.execution.operationKey}.json`,
+  );
+  if (started !== null) throw Error("Import publication began");
+  verifyFamilyOwnedRecord(
+    owner.installation,
+    owner.origin,
+    {
+      scope: "private",
+      namespace: "effect-started",
+      container: "",
+      name: `${owner.execution.operationKey}.json`,
+    },
+    canonicalJson(started),
+  );
+  if (
+    cancelControlExecution(authority).length ||
+    owner.reservations.some((slot) => {
+      const source = inspectControlChildPublication(authority, slot);
+      return source.binding !== null || source.publication.state !== "unissued";
+    })
+  )
+    throw Error("Original import child remains attempted");
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: { kind: "not-started" },
+  });
+}
+
+/** Fixed original body projection; callers cannot substitute stage/owner IDs. */
+export function originalArtifactImportOperation(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
+    throw Error("Original import required");
+  const admitted = readPrivateRecord(
+    owner.installation,
+    "executions",
+    `${owner.execution.operationKey}.json`,
+    65536,
+  ) as { payload: { operation: unknown } };
+  if (controlDigest(admitted) !== owner.receiptDigest)
+    throw Error("Original import admission changed");
+  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  if (
+    operation.kind !== "artifactTransfer.import" ||
+    opsOperationFingerprint(operation) !== owner.execution.operationFingerprint
+  )
+    throw Error("Original import body required");
+  return operation;
+}
+
+export function originalArtifactValidationOperation(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.kind !== "artifactTransfer.validate" ||
+    !owner.origin ||
+    owner.installation.installation.role !== "ops-agent"
+  )
+    throw Error("Original validation required");
+  const admitted = readPrivateRecord(
+    owner.installation,
+    "executions",
+    `${owner.execution.operationKey}.json`,
+    65536,
+  ) as { payload: { operation: unknown } };
+  if (controlDigest(admitted) !== owner.receiptDigest)
+    throw Error("Original validation admission changed");
+  const operation = opsOperationSchema.parse(admitted.payload.operation);
+  if (
+    operation.kind !== "artifactTransfer.validate" ||
+    opsOperationFingerprint(operation) !== owner.execution.operationFingerprint ||
+    owner.plan.length ||
+    owner.reservations.length
+  )
+    throw Error("Original private-only validation body required");
+  return operation;
+}
+/** This fixed private-only operation has no managed target or child. The live
+ * store producer first proves its extraction is contained and cleaned. Match
+ * its actual signed effect result before upgrading only the family knowledge;
+ * the original public status tuple, deadline and timestamp remain unchanged. */
+export function retainArtifactValidationObservation(
+  authority: VerifiedExecutionAuthority,
+  status: OpsJobStatus,
+  terminalAt: number,
+  result: unknown,
+) {
+  const operation = originalArtifactValidationOperation(authority),
+    owner = executionAuthorityState(authority),
+    stage = transferStageSchema.parse(result);
+  if (
+    stage.stageId !== operation.stageId ||
+    stage.purpose !== "prepared-artifact" ||
+    !["ready", "failed"].includes(stage.state) ||
+    (stage.state === "failed" && stage.cleanup !== "complete")
+  )
+    throw Error("Original contained validation required");
+  const effect = childSettlementState(
+    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
+  ).evidence;
+  if (
+    effect.outcome !== "committed" ||
+    effect.publication !== "committed" ||
+    effect.terminalReceiptDigest !== controlDigest({ kind: "ops-result", result: stage })
+  )
+    throw Error("Original validation producer result required");
+  retainControlTerminalStatus(owner.installation.installation, owner.execution, status, terminalAt);
+  publishFamilyCanonicalTerminal(
+    owner.installation,
+    owner.origin!,
+    owner.execution,
+    true,
+    controlTerminalReceiptDigest(status),
+    terminalAt,
+  );
+}
+
+export function assertKnownArtifactStageReceipt(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (!["artifactTransfer.import", "artifactTransfer.validate"].includes(owner.kind))
+    throw Error("Original prepared purpose required");
+  const effect = childSettlementState(
+    verifyControlEffectSettlement(owner.installation.installation, owner.execution),
+  ).evidence;
+  if (effect.outcome === "unknown" || effect.publication === "unknown")
+    throw Error("Prepared purpose remains unknown");
+  if (owner.kind === "artifactTransfer.import") verifyRetainedArtifactTargetRootRelease(authority);
 }

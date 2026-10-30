@@ -267,7 +267,7 @@ function pax(data: Buffer): Record<string, string> {
 }
 export async function validateBuildBundle(options: {
   source: Readable;
-  stagingRoot: string;
+  stagingRoot: string | AnchoredDirectory;
   limits: ArtifactArchiveLimits;
   signal: AbortSignal;
   reservePayload?: (reservation: ArtifactPayloadReservation) => void | Promise<void>;
@@ -275,9 +275,13 @@ export async function validateBuildBundle(options: {
   const { source, limits, signal } = options;
   checkLimits(limits);
   signal.throwIfAborted();
-  const root = new AnchoredDirectory(options.stagingRoot);
+  const borrowed = options.stagingRoot instanceof AnchoredDirectory;
+  const root = borrowed
+    ? (options.stagingRoot as AnchoredDirectory)
+    : new AnchoredDirectory(options.stagingRoot as string);
+  root.check();
   if (root.list().length) {
-    root.close();
+    if (!borrowed) root.close();
     throw Error("Archive staging root must be empty");
   }
   const archiveHash = createHash("sha256");
@@ -487,7 +491,7 @@ export async function validateBuildBundle(options: {
     signal.removeEventListener("abort", abort);
     source.destroy();
     await decoded.return(undefined);
-    root.close();
+    if (!borrowed) root.close();
   }
 }
 function excluded(path: string, dir: boolean, patterns: readonly string[]) {
@@ -534,6 +538,11 @@ export async function writeBuildBundle(options: {
   const files: BundleFile[] = [];
   const directories: string[] = [];
   const sources = new Map<string, string>();
+  // Real DM candidates hardlink acquired bulk inputs. No generated metadata,
+  // script, proxy configuration or other service can use this exception.
+  const linkedMotisInput = (path: string) =>
+    options.serviceId === "motis" &&
+    /^motis\/(?:live|slots\/[AB])\/[^/]+\.(?:gtfs\.zip|netex\.zip|osm\.pbf)$/.test(path);
   const fileRead = async (path: string, read: (fd: number, stat: Stats) => Promise<void>) => {
     const parts = path.split("/");
     const leaf = parts.pop()!;
@@ -548,7 +557,7 @@ export async function writeBuildBundle(options: {
       const name = parent.name(leaf);
       fd = openSync(name, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
       const before = fstatSync(fd);
-      if (!before.isFile() || before.nlink !== 1)
+      if (!before.isFile() || (before.nlink !== 1 && !linkedMotisInput(path)))
         throw Error("Refusing non-regular or hardlinked build artifact");
       await read(fd, before);
       const after = fstatSync(fd);
@@ -560,7 +569,7 @@ export async function writeBuildBundle(options: {
         before.size !== after.size ||
         before.mtimeMs !== after.mtimeMs ||
         before.ctimeMs !== after.ctimeMs ||
-        after.nlink !== 1
+        after.nlink !== before.nlink
       )
         throw Error("Build artifact changed during export");
     } finally {
@@ -578,6 +587,7 @@ export async function writeBuildBundle(options: {
         (rel.startsWith("motis/live/") &&
           !(rel === "motis/live/data" || rel.startsWith("motis/live/data/")) &&
           !/\.(osm\.pbf|gtfs\.zip|netex\.zip)$/.test(rel) &&
+          rel !== "motis/live/license.json" &&
           rel !== "motis/live/portable-sources.json"))
     )
       return;
@@ -589,7 +599,7 @@ export async function writeBuildBundle(options: {
       const entries = withDirectories(root, physical.split("/"), false, (d) => d.list().sort());
       for (const name of entries) await visit(`${rel}/${name}`, `${physical}/${name}`);
     } else {
-      if (!stat.isFile() || stat.nlink !== 1)
+      if (!stat.isFile() || (stat.nlink !== 1 && !linkedMotisInput(physical)))
         throw Error(`Refusing non-regular or hardlinked build artifact: ${rel}`);
       if (excluded(rel, false, spec.exclude)) return;
       let sha256 = "";

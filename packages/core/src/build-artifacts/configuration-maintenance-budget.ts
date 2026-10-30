@@ -408,7 +408,9 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
       ? record.affectedServiceIds.filter(
           (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
         )
-      : record.apiFollowUp === "service-apply" || record.privateCoordinatorLifecycle
+      : record.apiFollowUp === "service-apply" ||
+          record.privateCoordinatorLifecycle ||
+          record.privateIntegrationReload?.stagedMigration
         ? record.affectedServiceIds
         : [];
   const handoff =

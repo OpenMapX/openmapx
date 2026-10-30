@@ -3,6 +3,7 @@ import type { DatasetMetadata } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import type { Command } from "commander";
 import {
+  ArtifactImportCommittedError,
   BUILD_ARTIFACTS,
   buildArtifactSpec,
   exportBuildBundle,
@@ -18,7 +19,7 @@ import {
 } from "../lib/data-local";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { runCliDataUpdate } from "../lib/data-update-command";
-import { runningComposeServices } from "../lib/docker";
+import { runningComposeServices, runningComposeServicesStrict } from "../lib/docker";
 import {
   OPENMAPX_REGION_ENV,
   resolveOsmRegion,
@@ -264,14 +265,18 @@ export function registerDataCommands(program: Command): void {
     .action(async (serviceId: string, bundle: string) => {
       if (bundle === "-") routeLogsToStderr();
       try {
-        const running = await runningComposeServices(buildArtifactSpec(serviceId).consumers);
+        const running = await runningComposeServicesStrict(buildArtifactSpec(serviceId).consumers);
         if (running.length > 0) {
           throw new Error(
             `${running.join(", ")} ${running.length === 1 ? "is" : "are"} running and may be writing the artifact; stop first with \`openmapx services stop ${running.join(" ")}\``,
           );
         }
         log.dim(`Hashing ${serviceId} artifact…`);
-        const manifest = await exportBuildBundle({ serviceId, bundle });
+        const manifest = await exportBuildBundle({
+          serviceId,
+          bundle,
+          runningServices: runningComposeServicesStrict,
+        });
         const bytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
         log.ok(
           `Exported ${serviceId} (${manifest.files.length} files, ${formatBytes(bytes)}, region ${manifest.region ?? "unknown"}) → ${bundle === "-" ? "stdout" : bundle}`,
@@ -285,27 +290,26 @@ export function registerDataCommands(program: Command): void {
   data
     .command("import <bundle>")
     .description(
-      "Verify a bundle written by `data export` (`-` reads stdin), check it matches this host's runtime images, swap it in, then render and link",
+      "Verify and journal-publish prepared data under its original target lease, then apply the current configuration's hardlinks without starting consumers (`-` reads stdin)",
     )
     .action(async (bundle: string) => {
       let manifest: Awaited<ReturnType<typeof importBuildBundle>>;
       try {
-        manifest = await importBuildBundle({ bundle, runningServices: runningComposeServices });
+        manifest = await importBuildBundle({
+          bundle,
+          runningServices: runningComposeServicesStrict,
+        });
       } catch (err) {
-        log.err(`import failed: ${(err as Error).message}`);
+        log.err(
+          err instanceof ArtifactImportCommittedError
+            ? err.message
+            : `import failed: ${(err as Error).message}`,
+        );
         completeCliCommand(1);
       }
       log.ok(
         `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
       );
-      try {
-        await renderAndApplyHardlinks();
-      } catch (err) {
-        log.err(
-          `The artifact is in place, but rendering and linking failed: ${(err as Error).message}. Fix that, then run \`openmapx data link\`.`,
-        );
-        completeCliCommand(1);
-      }
       log.info(
         `Start the consumers with \`openmapx services start ${buildArtifactSpec(manifest.service).consumers.join(" ")}\``,
       );

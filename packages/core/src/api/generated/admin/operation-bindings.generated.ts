@@ -46,6 +46,22 @@ export async function applyAdminAuthPolicyRequest<T>(
 ): Promise<T> {
   return applyAdminAuthPolicyBound<T>(url, options);
 }
+const applyAdminConfigurationMigrationBound = bindAdminOperation(
+  "applyAdminConfigurationMigration",
+);
+export async function applyAdminConfigurationMigrationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return applyAdminConfigurationMigrationBound<T>(url, options);
+}
+const applyAdminCredentialTransferBound = bindAdminOperation("applyAdminCredentialTransfer");
+export async function applyAdminCredentialTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return applyAdminCredentialTransferBound<T>(url, options);
+}
 const applyAdminPlatformConfigurationBound = bindAdminOperation("applyAdminPlatformConfiguration");
 export async function applyAdminPlatformConfigurationRequest<T>(
   url: string,
@@ -94,6 +110,15 @@ export async function checkAdminServicesRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return checkAdminServicesBound<T>(url, options);
+}
+const chooseAdminCredentialTransferFieldsBound = bindAdminOperation(
+  "chooseAdminCredentialTransferFields",
+);
+export async function chooseAdminCredentialTransferFieldsRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return chooseAdminCredentialTransferFieldsBound<T>(url, options);
 }
 const clearAdminCacheBound = bindAdminOperation("clearAdminCache");
 export async function clearAdminCacheRequest<T>(
@@ -275,6 +300,29 @@ export async function enableAdminIntegrationRequest<T>(
 ): Promise<T> {
   return enableAdminIntegrationBound<T>(url, options);
 }
+const exportAdminArtifactTransferBound = bindAdminOperation("exportAdminArtifactTransfer");
+export async function exportAdminArtifactTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return exportAdminArtifactTransferBound<T>(url, options);
+}
+const exportAdminConfigurationMigrationBound = bindAdminOperation(
+  "exportAdminConfigurationMigration",
+);
+export async function exportAdminConfigurationMigrationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return exportAdminConfigurationMigrationBound<T>(url, options);
+}
+const exportAdminCredentialTransferBound = bindAdminOperation("exportAdminCredentialTransfer");
+export async function exportAdminCredentialTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return exportAdminCredentialTransferBound<T>(url, options);
+}
 const exportAdminIntegrationConfigsBound = bindAdminOperation("exportAdminIntegrationConfigs");
 export async function exportAdminIntegrationConfigsRequest<T>(
   url: string,
@@ -326,6 +374,15 @@ export async function getAdminArtifactTransferRequest<T>(
 ): Promise<T> {
   return getAdminArtifactTransferBound<T>(url, options);
 }
+const getAdminArtifactTransferCapabilitiesBound = bindAdminOperation(
+  "getAdminArtifactTransferCapabilities",
+);
+export async function getAdminArtifactTransferCapabilitiesRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminArtifactTransferCapabilitiesBound<T>(url, options);
+}
 const getAdminAuthPolicyBound = bindAdminOperation("getAdminAuthPolicy");
 export async function getAdminAuthPolicyRequest<T>(
   url: string,
@@ -339,6 +396,15 @@ export async function getAdminComposePreviewRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return getAdminComposePreviewBound<T>(url, options);
+}
+const getAdminConfigurationMigrationInventoryBound = bindAdminOperation(
+  "getAdminConfigurationMigrationInventory",
+);
+export async function getAdminConfigurationMigrationInventoryRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminConfigurationMigrationInventoryBound<T>(url, options);
 }
 const getAdminDawarichBound = bindAdminOperation("getAdminDawarich");
 export async function getAdminDawarichRequest<T>(
@@ -910,6 +976,22 @@ export async function previewAdminBackupPruneRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return previewAdminBackupPruneBound<T>(url, options);
+}
+const previewAdminConfigurationMigrationBound = bindAdminOperation(
+  "previewAdminConfigurationMigration",
+);
+export async function previewAdminConfigurationMigrationRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminConfigurationMigrationBound<T>(url, options);
+}
+const previewAdminCredentialTransferBound = bindAdminOperation("previewAdminCredentialTransfer");
+export async function previewAdminCredentialTransferRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return previewAdminCredentialTransferBound<T>(url, options);
 }
 const previewAdminExtensionInstallBound = bindAdminOperation("previewAdminExtensionInstall");
 export async function previewAdminExtensionInstallRequest<T>(

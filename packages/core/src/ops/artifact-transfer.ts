@@ -140,7 +140,15 @@ export const artifactImportOperationSchema = z.strictObject({
     .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
     .nullable(),
 });
+export const artifactExportOperationSchema = z.strictObject({
+  kind: z.literal("artifactTransfer.export"),
+  serviceId: z.enum(["tileserver", "osrm", "otp", "pelias", "motis"]),
+  ownerId: owner,
+  expectedArtifactFingerprint: digest,
+});
 export const artifactTransferOperationSchemas = [
+  z.strictObject({ kind: z.literal("artifactTransfer.capabilities"), ownerId: owner }),
+  artifactExportOperationSchema,
   z.strictObject({
     kind: z.literal("artifactTransfer.previewImport"),
     stageId: z.uuid(),
@@ -174,6 +182,34 @@ export const artifactTransferOperationSchemas = [
   }),
 ] as const;
 export const artifactTransferResultSchemas = {
+  "artifactTransfer.capabilities": z.strictObject({
+    limits: z.strictObject({
+      maxUploadBytes: count,
+      maxExpandedBytes: count,
+      maxStageBytes: count,
+      stageMs: count,
+      downloadRetentionMs: count,
+    }),
+    freeBytes: count.nullable(),
+    freeInodes: count.nullable(),
+    reservedBytes: count,
+    targets: z
+      .array(
+        z.strictObject({
+          serviceId: z.string().max(64),
+          available: z.boolean(),
+          reason: z.string().max(512).nullable(),
+          artifactFingerprint: digest.nullable(),
+        }),
+      )
+      .max(5),
+  }),
+  "artifactTransfer.export": z.strictObject({
+    stageId: z.uuid(),
+    sha256: digest,
+    bytes: count,
+    expiresAt: z.iso.datetime(),
+  }),
   "artifactTransfer.previewImport": artifactImportPreviewSchema,
   "artifactTransfer.import": artifactPublicationResultSchema,
   "artifactTransfer.validate": transferStageSchema,
@@ -191,6 +227,9 @@ export const artifactTransferResultSchemas = {
     .strictObject({
       claim: artifactStageClaimSchema,
       settlement: stageClaimSettlementSchema.nullable(),
+      /** Original signed publication and released-root observation, never a transfer-state inference. */
+      publication: artifactPublicationResultSchema.optional(),
+      validation: transferStageSchema.optional(),
     })
     .nullable(),
   "artifactTransfer.settle": transferStageSchema,

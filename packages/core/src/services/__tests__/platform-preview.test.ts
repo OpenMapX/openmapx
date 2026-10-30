@@ -39,6 +39,29 @@ const input = () => ({
   services,
 });
 describe("platform configuration preview", () => {
+  it("joins exact migration targets into one unchanged-platform handoff intent", () => {
+    const base = { ...input(), changes: { version: 1 as const } },
+      preview = buildPlatformConfigurationPreview({
+        ...base,
+        additionalServiceIds: ["redis", "data-manager"],
+      });
+    expect(preview.affectedServiceIds).toEqual(["data-manager", "redis"]);
+    expect(preview.requiredConfirmation.domain).toBe(false);
+    expect(preview.oldOrigin).toBe(preview.newOrigin);
+    expect(preview.previewFingerprint).not.toBe(
+      buildPlatformConfigurationPreview(base).previewFingerprint,
+    );
+    expect(() =>
+      buildPlatformConfigurationPreview({ ...base, additionalServiceIds: ["unknown-service"] }),
+    ).toThrow();
+    expect(() =>
+      buildPlatformConfigurationPreview({
+        ...base,
+        services: services.map((s) => ({ ...s, enabled: false })),
+        additionalServiceIds: ["redis"],
+      }),
+    ).toThrow();
+  });
   it("previews an explicit protected resource reconciliation without inventing a global setting change", () => {
     const base = { ...input(), changes: { version: 1 as const } };
     const preview = buildPlatformConfigurationPreview({

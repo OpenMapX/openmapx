@@ -83,14 +83,20 @@ describe.skipIf(!enabled)(
       vi.stubEnv("OPENMAPX_RELEASE", "local");
       vi.stubEnv("OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL", migrated.connectionUri);
       vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
-      state.fixture = await createConfigurationPostgresFixture({ withAccountAdministration: true });
+      state.fixture = await createConfigurationPostgresFixture({
+        withAccountAdministration: true,
+        withConfigurationMigration: context.task.name.startsWith("staged"),
+      });
       const schemas = Object.fromEntries(
         ["motis", "ops-agent", "app-api", "traefik", "postgis", "redis", "data-manager"].map(
           (id) => [
             id,
             {
               type: "object",
-              properties: { TRANSITOUS_API_KEYS: { type: "string", "x-openmapx-secret": true } },
+              properties: {
+                TRANSITOUS_API_KEYS: { type: "string", "x-openmapx-secret": true },
+                ORDINARY_TOKEN: { type: "string", "x-openmapx-secret": true },
+              },
             },
           ],
         ),
@@ -367,6 +373,240 @@ describe.skipIf(!enabled)(
       });
       return { input, catalog, challenge, preview, sessionId: fresh.id, nonce: challenge.nonce };
     }
+    it("staged mixed credential import consumes both proofs atomically under one original maintenance root", async () => {
+      const { input: initial, catalog, sessionId } = await authorizedInput();
+      const { previewCredentialTransfer } = await import(
+        "./configuration-migration/credential-preview"
+      );
+      await state.fixture.db
+        .update(schema.serviceSecret)
+        .set(
+          encrypt(
+            JSON.stringify({
+              orphan: "untouched",
+              retained: "existing",
+              unselected: "preserved orphan",
+            }),
+          ),
+        )
+        .where(eq(schema.serviceSecret.serviceId, "data-manager"));
+      const importedMap = JSON.stringify({
+        "de/A": "a".repeat(7000),
+        orphan: "b".repeat(7000),
+        retained: "c".repeat(7000),
+      });
+      // Actual declared source vault export under a different source master key.
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", "92".repeat(32));
+      await state.fixture.db
+        .update(schema.serviceSecret)
+        .set(encrypt(importedMap))
+        .where(eq(schema.serviceSecret.key, "TRANSITOUS_API_KEYS"));
+      await state.fixture.db.insert(schema.serviceSecret).values({
+        id: randomUUID(),
+        serviceId: "data-manager",
+        key: "ORDINARY_TOKEN",
+        ...encrypt("synthetic ordinary credential"),
+      });
+      const { exportCredentialSelection } = await import(
+        "./configuration-migration/credential-preview"
+      );
+      const envelope = await exportCredentialSelection({
+        actorId: initial.actorId,
+        selection: [
+          { scope: "service", id: "data-manager", key: "ORDINARY_TOKEN" },
+          { scope: "service", id: "data-manager", key: "TRANSITOUS_API_KEYS" },
+        ],
+        passphrase: "synthetic transfer passphrase",
+      });
+      await state.fixture.db.delete(schema.serviceSecret);
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+      await state.fixture.db.insert(schema.serviceSecret).values({
+        id: randomUUID(),
+        serviceId: "data-manager",
+        key: "TRANSITOUS_API_KEYS",
+        ...encrypt(
+          JSON.stringify({
+            orphan: "untouched",
+            retained: "existing",
+            unselected: "preserved orphan",
+          }),
+        ),
+      });
+      const [prior] = await state.fixture.db.select().from(schema.serviceSecret);
+      const preview = await previewCredentialTransfer({
+        actorId: initial.actorId,
+        envelope,
+        passphrase: "synthetic transfer passphrase",
+        choices: {
+          entries: [
+            { scope: "service", id: "data-manager", key: "ORDINARY_TOKEN", action: "import" },
+            { scope: "service", id: "data-manager", key: "TRANSITOUS_API_KEYS", action: "import" },
+          ],
+          feedMap: {
+            catalogRevisionId: catalog,
+            expectedCredentialsRevision: transitCredentialRevision(prior),
+            setKeys: ["de/A", "orphan", "retained"],
+            deleteKeys: [],
+          },
+        },
+      });
+      expect(preview.applyable).toBe(true);
+      const reauth = new AdminActionReauthentication(state.fixture.db),
+        importProof = await reauth.start({
+          actorId: initial.actorId,
+          startingSessionId: sessionId,
+          purpose: "credentials.import",
+          targetId: preview.previewId,
+          intentFingerprint: preview.intentFingerprint,
+        }),
+        transitProof = await reauth.start({
+          actorId: initial.actorId,
+          startingSessionId: sessionId,
+          purpose: "transit.credentials",
+          targetId: catalog,
+          intentFingerprint: preview.intentFingerprint,
+          nonce: importProof.nonce,
+        });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const fresh = {
+        id: randomUUID(),
+        userId: initial.actorId,
+        authenticatedAt: new Date(),
+        method: "password" as const,
+        mfaConfigured: false,
+      };
+      await state.fixture.db.insert(schema.session).values({
+        id: fresh.id,
+        userId: fresh.userId,
+        token: randomUUID(),
+        expiresAt: new Date(Date.now() + 3600000),
+        createdAt: fresh.authenticatedAt,
+        updatedAt: fresh.authenticatedAt,
+      });
+      await state.fixture.db.insert(schema.sessionAuthAssurance).values({
+        sessionId: fresh.id,
+        userId: fresh.userId,
+        method: "password",
+        authenticatedAt: fresh.authenticatedAt,
+        originIndependentPasswordLogin: true,
+      });
+      for (const challengeId of [importProof.challengeId, transitProof.challengeId])
+        await reauth.complete({ challengeId, nonce: importProof.nonce, session: fresh });
+      const result = await jobRunner
+        .runImmediateConfigurationMigration({
+          actorId: initial.actorId,
+          operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+          kind: "credentials",
+          previewId: preview.previewId,
+          fingerprint: preview.intentFingerprint,
+          expectedCurrentRevisionId: preview.expectedCurrentRevisionId,
+          proof: {
+            sessionId: fresh.id,
+            nonce: importProof.nonce,
+            importProofToken: importProof.challengeId,
+            transitProofToken: transitProof.challengeId,
+          },
+        })
+        .catch(async (error) => {
+          const jobs = await state.fixture.db.select().from(schema.adminJob);
+          console.log(
+            "MIGRATION_FAILURE_DIAGNOSTIC",
+            jobs.map((j) => {
+              const r = j.result as Record<string, unknown> | null;
+              return {
+                status: j.status,
+                type: j.type,
+                failure: r?._migrationFailure,
+                configuration: r?.configuration,
+                phase: (r?._configurationCandidate as { phase?: unknown })?.phase,
+              };
+            }),
+          );
+          throw error;
+        });
+      expect(result.outcome).toBe("applied");
+      const rows = await state.fixture.db.select().from(schema.serviceSecret),
+        ordinary = rows.find((r) => r.key === "ORDINARY_TOKEN"),
+        managed = rows.find((r) => r.key === "TRANSITOUS_API_KEYS");
+      expect(ordinary && decrypt(ordinary.ciphertext, ordinary.iv, ordinary.tag)).toBe(
+        "synthetic ordinary credential",
+      );
+      expect(managed && JSON.parse(decrypt(managed.ciphertext, managed.iv, managed.tag))).toEqual({
+        "de/A": "a".repeat(7000),
+        orphan: "b".repeat(7000),
+        retained: "c".repeat(7000),
+        unselected: "preserved orphan",
+      });
+      const proofs = await state.fixture.db.select().from(schema.adminActionReauthentication);
+      expect(
+        proofs
+          .filter((p) => [importProof.challengeId, transitProof.challengeId].includes(p.id))
+          .map((p) => p.state),
+      ).toEqual(["consumed", "consumed"]);
+      expect(dm.preparePosts).toBe(1);
+      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
+      expect(services.readAppliedTransitCredentialsRevision(host.infraDir)).toBe(
+        transitCredentialRevision(managed),
+      );
+      const logs = await state.fixture.db.select().from(schema.adminJobLog),
+        jobs = await state.fixture.db.select().from(schema.adminJob);
+      expect(JSON.stringify({ logs, jobs })).not.toContain("synthetic ordinary credential");
+      expect(JSON.stringify({ logs, jobs })).not.toContain("synthetic transfer passphrase");
+    }, 90000);
+    it("staged portable platform and pending auth share the same guarded candidate transaction", async () => {
+      const { input } = await authorizedInput();
+      const { createDurableOpsKey } = await import("./ops-client");
+      const preview = await jobRunner.runImmediateConfigurationMigrationPreview({
+        actorId: input.actorId,
+        operationKey: createDurableOpsKey("migration.platform.preview", randomUUID()),
+        document: {
+          format: "openmapx-configuration",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          settings: { instanceName: "Synthetic migrated instance", passwordMinLength: 12 },
+          platform: { version: 1, backupRetentionDays: { source: "database", value: 60 } },
+          integrations: [],
+          serviceConfigs: [],
+          bindings: [],
+          installations: [],
+          prerequisites: [],
+        },
+      });
+      expect(preview.platform?.configuration.backupRetentionDays).toEqual({
+        source: "database",
+        value: 60,
+      });
+      const result = await jobRunner.runImmediateConfigurationMigration({
+        actorId: input.actorId,
+        operationKey: createDurableOpsKey("migration.platform.apply", randomUUID()),
+        previewId: preview.previewId,
+        fingerprint: preview.fingerprint,
+        kind: "migration",
+        platformAuthorization: {
+          confirmations: {
+            domain: false,
+            dnsTls: false,
+            oauth: false,
+            passkeys: false,
+            alternateLogin: false,
+          },
+        },
+      });
+      expect(result.outcome).toBe("partial");
+      expect(result.steps.find((s) => s.id === "passwordMinLength")).toMatchObject({
+        scope: "pending-auth",
+        status: "pending",
+      });
+      const settings = await state.fixture.db.select().from(schema.systemSettings);
+      expect(settings.find((r) => r.key === "passwordMinLength")?.value).toBe(12);
+      await expect(
+        (await import("../account/auth-policy")).loadAuthPolicy(state.fixture.db),
+      ).resolves.toMatchObject({ passwordMinLength: 8 });
+      expect(
+        services.readAppliedConfiguration(host.infraDir).platform?.backupRetentionDays,
+      ).toEqual({ source: "database", value: 60 });
+      expect(dm.preparePosts).toBe(1);
+    }, 90000);
     it("consumes one real purpose proof and commits a preserved map through one original guard, recreation and active mounted revision", async () => {
       const { input, catalog, challenge } = await authorizedInput();
       const competing = await authorizedInput({ seed: false }),

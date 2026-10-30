@@ -199,6 +199,7 @@ export {
 export {
   executeOwnedGenerationHardlinks,
   type GenerationHardlinksOwnerPlan,
+  inspectOwnedGenerationHardlinks,
   planGenerationHardlinksOwner,
   readGenerationHardlinksOwnerPlan,
   readOwnedGenerationHardlinkPlan,

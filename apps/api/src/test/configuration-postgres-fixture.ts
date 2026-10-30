@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 /** An explicitly supplied owned/migrated synthetic database. No migrations run.
  * Only empty fixture copies of the current configuration/job tables are created and removed. */
 export async function createConfigurationPostgresFixture(
-  options: { withAccountAdministration?: boolean } = {},
+  options: { withAccountAdministration?: boolean; withConfigurationMigration?: boolean } = {},
 ) {
   const url = process.env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL;
   if (!url) throw Error("Explicit owned synthetic PostgreSQL connection required");
@@ -27,6 +27,9 @@ export async function createConfigurationPostgresFixture(
       "service_secret",
       "integration_secret",
       "transit_credential_preview",
+      ...(options.withConfigurationMigration
+        ? ["configuration_migration_preview", "system_settings", "platform_configuration_preview"]
+        : []),
       ...(options.withAccountAdministration
         ? [
             "user",

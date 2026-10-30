@@ -2,16 +2,18 @@ import { randomBytes, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import {
   closeControlInstallation,
   DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
   openControlInstallation,
   restoreAdmittedControlExecution,
+  validateBuildBundle,
   verifyRetainedArtifactTargetRootRelease,
   writeBuildBundle,
 } from "@openmapx/core/build-artifacts";
 import {
+  controlTerminalReceiptDigest,
   createControlRootOperationKey,
   executionRefSchema,
   OpsClient,
@@ -195,6 +197,68 @@ async function fixture() {
     },
   };
 }
+it("exports a verified stopped prepared target into an owner-scoped streamed download", async () => {
+  const f = await fixture();
+  const preview = await f.preview();
+  await f.run({
+    kind: "artifactTransfer.import",
+    stageId: f.stage.stageId,
+    ownerId: "synthetic-admin",
+    expectedSha256: preview.sha256,
+    previewFingerprint: preview.fingerprint,
+    expectedCurrentRevisionId: preview.currentRevisionId,
+  });
+  const record = JSON.parse(
+    readFileSync(join(f.infraDir, "data/.openmapx-builds/osrm.json"), "utf8"),
+  );
+  const result = await f.run({
+    kind: "artifactTransfer.export",
+    serviceId: "osrm",
+    ownerId: "synthetic-admin",
+    expectedArtifactFingerprint: record.artifactFingerprint,
+  });
+  const output = result.result as { stageId: string; sha256: string; bytes: number };
+  expect(output.stageId).toBeTruthy();
+  const extraction = join(f.root, "download-validation");
+  mkdirSync(extraction, { mode: 0o700 });
+  const bundle = await f.store.openDownload(
+    {
+      stageId: output.stageId,
+      ownerId: "synthetic-admin",
+      purpose: "prepared-artifact",
+      attemptId: randomUUID(),
+      deadlineAt: Date.now() + 60000,
+    },
+    async ({ body }) =>
+      validateBuildBundle({
+        source: Readable.from(
+          (async function* () {
+            const reader = body.getReader();
+            try {
+              for (;;) {
+                const next = await reader.read();
+                if (next.done) return;
+                yield next.value;
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          })(),
+        ),
+        stagingRoot: extraction,
+        limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+        signal: new AbortController().signal,
+      }),
+  );
+  expect(bundle.archiveSha256).toBe(output.sha256);
+  expect(bundle.manifest.service).toBe("osrm");
+  expect(readFileSync(join(extraction, "osrm-graph/region.osrm"), "utf8")).toBe(
+    "synthetic region.osrm",
+  );
+  expect(
+    f.calls.some((args) => args.includes("up") || args.includes("pull") || args.includes("stop")),
+  ).toBe(false);
+}, 60000);
 it("imports through the real registered server and original target root after a lost admission response", async () => {
   const f = await fixture(),
     preview = await f.preview();
@@ -488,6 +552,210 @@ it("reconciles the original prepared publication after exact foreign-inode repai
   expect(
     journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
   ).toHaveLength(2);
+  expect(
+    f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
+  ).toBe(false);
+}, 60000);
+
+it("observes committed publication after result loss without rewriting its original canonical failure or redispatching", async () => {
+  const f = await fixture(),
+    preview = await f.preview();
+  const operation = {
+    kind: "artifactTransfer.import" as const,
+    stageId: f.stage.stageId,
+    ownerId: "synthetic-admin",
+    expectedSha256: preview.sha256,
+    previewFingerprint: preview.fingerprint,
+    expectedCurrentRevisionId: preview.currentRevisionId,
+  };
+  const originalRead = f.store.withPreparedArtifact.bind(f.store);
+  let lost = false;
+  vi.spyOn(f.store, "withPreparedArtifact").mockImplementation(async (input, consume) => {
+    const result = await originalRead(input, consume);
+    if (!lost && existsSync(join(f.infraDir, "data/.openmapx-builds/osrm.json"))) {
+      lost = true;
+      throw Error("Named lost completed-import result");
+    }
+    return result;
+  });
+  const deadline = Date.now() + 600000,
+    key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+  const admitted = await f.client.execute(operation, {
+    operationKey: key,
+    execution: { requestedDeadlineAt: deadline },
+  });
+  if (admitted.execution !== "async") throw Error("Original import was not admitted");
+  let original = await f.client.status(operation.kind, admitted.operationId);
+  await vi.waitFor(
+    async () => {
+      original = await f.client.status(operation.kind, admitted.operationId);
+      expect(original.state).toBe("failed");
+      expect(original.errorClass).toBe("runtime");
+    },
+    { timeout: 30000, interval: 50 },
+  );
+  expect(lost).toBe(true);
+  const files = readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8");
+  await f.app.close();
+  const next = await reassembleCommittedFixture(f);
+  const identity = {
+    executionId: original.operationId,
+    operationKey: original.operationKey,
+    fingerprint: original.fingerprint!,
+    executionDeadlineAt: new Date(original.deadlineAt!).toISOString(),
+  };
+  const observed = await next.freshClient.execute({
+    kind: "artifactTransfer.inspectClaim",
+    stageId: f.stage.stageId,
+    ownerId: "synthetic-admin",
+    identity,
+  });
+  if (observed.execution !== "sync") throw Error("No original purpose observation");
+  expect(observed.value).toMatchObject({
+    settlement: { outcome: "consumed" },
+    publication: { outcome: "committed", followUp: "complete" },
+  });
+  expect(
+    controlTerminalReceiptDigest(
+      await next.freshClient.status(operation.kind, admitted.operationId),
+    ),
+  ).toBe(controlTerminalReceiptDigest(original));
+  const execution = executionRefSchema.parse({
+    executor: "ops-agent",
+    principal: "api",
+    executionId: original.operationId,
+    operationKey: original.operationKey,
+    operationFingerprint: opsOperationFingerprint(operation),
+    fingerprint: original.fingerprint,
+    deadlineAt: original.deadlineAt,
+  });
+  verifyRetainedArtifactTargetRootRelease(
+    restoreAdmittedControlExecution(next.installation, execution),
+  );
+  expect(readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(files);
+  expect(
+    next.journal.records().filter((job) => job.operation.kind === operation.kind),
+  ).toHaveLength(1);
+  expect(f.calls.some((args) => args.includes("up") || args.includes("stop"))).toBe(false);
+}, 60000);
+
+async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>) {
+  const installation = openControlInstallation({
+    infraDir: f.infraDir,
+    role: "ops-agent",
+    serviceIds: f.loaded.map((s) => s.manifest.id),
+  });
+  cleanups.push(() => closeControlInstallation(installation));
+  const runtime = await createProductionOpsRuntime({
+    rootDir: f.root,
+    stack: f.stack,
+    loadAuthority: f.loadAuthority,
+    communityRepositories: f.repositories,
+    docker: { execFile: f.execFile, fileExists: existsSync },
+  });
+  const store = new ArtifactTransferStore({
+    dataRoot: join(f.infraDir, "data/.openmapx-transfers"),
+    privateRoot: join(f.infraDir, "control-private/ops-agent/artifact-transfers"),
+    token: f.token,
+    capacity: () => ({ bytes: 8 * 1024 ** 3, inodes: 100000 }),
+  });
+  cleanups.push(() => store.close());
+  installArtifactTransferRuntime(runtime, store);
+  installPreparedImportRuntime(runtime, store, {
+    rootDir: f.root,
+    infraDir: f.infraDir,
+    stack: f.stack,
+    loadAuthority: f.loadAuthority,
+    ownedServices: productionOwnedServices(runtime),
+    execFile: f.execFile,
+  });
+  const journal = await openOpsJobJournal(join(f.infraDir, "data/ops-agent/jobs-v1.json")),
+    app = buildOpsAgentServer({
+      runtime,
+      journal,
+      resourceClaimer: f.createResourceClaimer(runtime),
+      controlInstallation: installation,
+      artifactTransfers: store,
+      tokens: { api: f.token, "data-manager": "d".repeat(43) },
+    });
+  cleanups.push(() => app.close());
+  const freshClient = new OpsClient({
+    baseUrl: await app.listen({ host: "127.0.0.1", port: 0 }),
+    tokenFile: join(f.root, "api-token"),
+  });
+  return { installation, runtime, store, journal, app, freshClient };
+}
+
+it("contains a failed archive validation and exposes only its original private-purpose failure", async () => {
+  const f = await fixture(),
+    before = await f.store.reservedBytes(),
+    bytes = Buffer.from("not an archive");
+  const stage = await f.store.createStage({
+    ownerId: "synthetic-admin",
+    purpose: "prepared-artifact",
+    direction: "upload",
+    declaredBytes: bytes.length,
+    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+  });
+  await f.store.upload({
+    stageId: stage.stageId,
+    ownerId: "synthetic-admin",
+    purpose: stage.purpose,
+    attemptId: randomUUID(),
+    deadlineAt: Date.now() + 60000,
+    body: new ReadableStream({
+      start(c) {
+        c.enqueue(bytes);
+        c.close();
+      },
+    }),
+  });
+  const deadline = Date.now() + 600000,
+    operation = {
+      kind: "artifactTransfer.validate" as const,
+      stageId: stage.stageId,
+      ownerId: "synthetic-admin",
+      purpose: "prepared-artifact" as const,
+    };
+  const admitted = await f.client.execute(operation, {
+    operationKey: createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+    execution: { requestedDeadlineAt: deadline },
+  });
+  if (admitted.execution !== "async") throw Error("Validation was not queued");
+  let status = await f.client.status(operation.kind, admitted.operationId);
+  await vi.waitFor(
+    async () => {
+      status = await f.client.status(operation.kind, admitted.operationId);
+      expect(status.state).toBe("failed");
+    },
+    { timeout: 20000, interval: 50 },
+  );
+  const failed = await f.store.getStage({
+    stageId: stage.stageId,
+    ownerId: "synthetic-admin",
+    purpose: stage.purpose,
+  });
+  expect(failed).toMatchObject({ state: "failed", cleanup: "complete" });
+  expect(await f.store.reservedBytes()).toBe(before);
+  const observed = await f.client.execute({
+    kind: "artifactTransfer.inspectClaim",
+    stageId: stage.stageId,
+    ownerId: "synthetic-admin",
+    identity: {
+      executionId: status.operationId,
+      operationKey: status.operationKey,
+      fingerprint: status.fingerprint!,
+      executionDeadlineAt: new Date(status.deadlineAt!).toISOString(),
+    },
+  });
+  if (observed.execution !== "sync") throw Error("No private-purpose observation");
+  expect(observed.value).toMatchObject({
+    settlement: { outcome: "failed" },
+    validation: { state: "failed", cleanup: "complete" },
+  });
+  expect(
+    controlTerminalReceiptDigest(await f.client.status(operation.kind, admitted.operationId)),
+  ).toBe(controlTerminalReceiptDigest(status));
   expect(
     f.calls.some((args) => args.includes("up") || args.includes("stop") || args.includes("pull")),
   ).toBe(false);

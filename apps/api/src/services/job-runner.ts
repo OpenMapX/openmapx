@@ -135,6 +135,7 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "backup.prune",
   "artifact.validate",
   "artifact.import",
+  "artifact.export",
 ] as const;
 
 /** Routing only, never admission authority. The selected fixed producer must
@@ -155,6 +156,8 @@ function hasRetainedImmediateConfiguration(job: {
       "platform.apply",
       "integration.config.import",
       "integration.binding.apply",
+      "configuration.migration.apply",
+      "credential.import",
     ].includes(job.type) &&
     result?._immediateJobId === job.id &&
     typeof result._immediateActorId === "string" &&
@@ -330,7 +333,10 @@ class AdminJobRunner {
         | "service.apply"
         | "compose.start"
         | "integration.config.import"
-        | "integration.binding.apply";
+        | "integration.binding.apply"
+        | "configuration.migration.preview"
+        | "configuration.migration.apply"
+        | "credential.import";
       actorId?: string;
       operationKey: string;
       intent: unknown;
@@ -417,6 +423,8 @@ class AdminJobRunner {
           "platform.apply",
           "integration.config.import",
           "integration.binding.apply",
+          "configuration.migration.apply",
+          "credential.import",
         ].includes(options.type)
       )
         throw new JobObservationPending("recovery_required");
@@ -535,6 +543,73 @@ class AdminJobRunner {
     )
       throw new AdminJobFailure("Binding provider did not activate", result);
     return result;
+  }
+
+  runImmediateConfigurationMigrationPreview(input: {
+    actorId: string;
+    operationKey: string;
+    document: import("../../../../packages/core/src/api/contracts/integration-admin/configuration-migration").ConfigurationMigrationDocument;
+  }) {
+    return this.immediate(
+      {
+        type: "configuration.migration.preview",
+        actorId: input.actorId,
+        operationKey: input.operationKey,
+        intent: input.document,
+      },
+      async (ctx) => {
+        const value = await (
+          await import("./configuration-migration/apply")
+        ).runConfigurationMigrationPreview(ctx, input);
+        return { value, result: { ...ctx.checkpointResult, migrationPreview: value } };
+      },
+      (result) => {
+        return result.migrationPreview as import("../../../../packages/core/src/api/contracts/integration-admin/configuration-migration").ConfigurationMigrationPreview;
+      },
+    );
+  }
+  runImmediateConfigurationMigration(
+    input: import("./configuration-migration/apply").MigrationApplicationInput,
+  ) {
+    return this.immediate(
+      {
+        type: input.kind === "credentials" ? "credential.import" : "configuration.migration.apply",
+        actorId: input.actorId,
+        operationKey: input.operationKey,
+        intent: {
+          previewId: input.previewId,
+          fingerprint: input.fingerprint,
+          kind: input.kind,
+          expectedCurrentRevisionId: input.expectedCurrentRevisionId ?? null,
+          platformConfirmations: input.platformAuthorization?.confirmations ?? null,
+        },
+      },
+      (ctx) =>
+        import("./configuration-migration/apply").then((m) =>
+          m.runConfigurationMigration(ctx, input),
+        ),
+      (result) => {
+        if (result.migration)
+          return result.migration as import("./configuration-migration/apply").MigrationResult;
+        const steps = (result._migrationSteps ??
+            []) as import("./configuration-migration/apply").MigrationResult["steps"],
+          applied = completeTrustedConfigurationApply(
+            parseTrustedConfigurationApplyOutcome(result.configuration),
+          );
+        return {
+          operationId: String(result._immediateJobId),
+          outcome: applied
+            ? steps.some((s) => s.scope === "pending-auth")
+              ? "partial"
+              : "applied"
+            : "unknown",
+          steps: steps.map((s) => ({
+            ...s,
+            status: s.scope === "pending-auth" ? "pending" : applied ? "applied" : "unknown",
+          })),
+        } as import("./configuration-migration/apply").MigrationResult;
+      },
+    );
   }
 
   /** Desired values remain transient or in the guarded private candidate, never job payload/result. */
@@ -1390,6 +1465,21 @@ class AdminJobRunner {
           .limit(1);
         if (!current) return;
         if (current.status === "cancel_pending" && !retainedStandalone) {
+          const original = current.result as Record<string, unknown> | null;
+          const artifactObservation =
+            retainedMaintenance &&
+            ["artifact.import", "artifact.validate"].includes(type) &&
+            Object.values(readProjection(original).operations).some(
+              (operation) =>
+                operation.operationId &&
+                operation.attempt &&
+                operation.fingerprint &&
+                operation.deadlineAt &&
+                operation.kind ===
+                  (type === "artifact.import"
+                    ? "artifactTransfer.import"
+                    : "artifactTransfer.validate"),
+            );
           const outcome = await cancelAdminJobOperations(current.result, undefined, {
             context: ctx,
             jobId,
@@ -1403,13 +1493,20 @@ class AdminJobRunner {
                 })
                 .where(jobOwnership(jobId, execution, ["cancel_pending"]));
             },
+          }).catch((error) => {
+            // Failed artifact canonicals require a durable purpose copy BEFORE
+            // ACK. Let only their fixed read-only handler obtain that copy.
+            if (artifactObservation && error instanceof JobObservationPending)
+              return "pending" as const;
+            throw error;
           });
           if (outcome === "pending") {
-            const original = current.result as Record<string, unknown> | null;
+            if (artifactObservation) ctx.observationOnly = true; // The fixed handler can only rejoin an already-admitted identity.
             if (
-              !retainedConfiguration ||
-              Object.keys(readProjection(original).operations).length !== 0 ||
-              original?._dataExecutions !== undefined
+              !artifactObservation &&
+              (!retainedConfiguration ||
+                Object.keys(readProjection(original).operations).length !== 0 ||
+                original?._dataExecutions !== undefined)
             ) {
               await pending("transport");
               return;

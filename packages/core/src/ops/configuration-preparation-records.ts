@@ -161,6 +161,14 @@ export const preparedConfigurationRecordSchema = z.strictObject({
         ),
       ),
       bindings: z.record(id, z.record(z.string().min(1).max(128), id)).optional(),
+      stagedMigration: z
+        .strictObject({
+          version: z.literal(1),
+          kind: z.enum(["migration", "credentials"]),
+          previewId: z.uuid(),
+          integrationIds: z.array(id).max(256),
+        })
+        .optional(),
       legacyImport: z
         .strictObject({
           version: z.literal(1),

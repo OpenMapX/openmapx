@@ -1064,7 +1064,11 @@ export async function assertPlannedCoordinatorConfigurationWrite(
     record.candidateId !== operation.candidateId ||
     !record.maintenanceId ||
     !record.prepareOperationKey ||
-    canonicalJson(record.affectedServiceIds) !== '["data-manager"]'
+    (canonicalJson(record.affectedServiceIds) !== '["data-manager"]' &&
+      !(
+        record.privateIntegrationReload?.stagedMigration &&
+        record.affectedServiceIds.includes("data-manager")
+      ))
   )
     throw Error("Planned coordinator identity changed");
   if (record.privateCoordinatorLifecycle) {
@@ -1072,6 +1076,48 @@ export async function assertPlannedCoordinatorConfigurationWrite(
     return;
   }
   const overlay = record.privateOverlay as { purpose?: unknown; changes?: unknown } | null;
+  if (record.privateIntegrationReload?.stagedMigration) {
+    if (
+      original.kind !== "stack.render" ||
+      !overlay ||
+      overlay.purpose !== "migration" ||
+      !Array.isArray(overlay.changes) ||
+      overlay.changes.length > 512 ||
+      !["integration-reload", "platform-apply"].includes(record.apiFollowUp ?? "") ||
+      overlay.changes.some(
+        (change) =>
+          !change ||
+          typeof change !== "object" ||
+          ![
+            "service-config",
+            "integration-config",
+            "service-secret",
+            "integration-secret",
+            "integration-binding",
+            "platform",
+            "selection",
+          ].includes(change.kind),
+      )
+    )
+      throw Error("Fixed staged migration producer required");
+    const managed = overlay.changes.find(
+      (change) =>
+        change.kind === "service-secret" &&
+        change.serviceId === "data-manager" &&
+        change.key === "TRANSITOUS_API_KEYS",
+    );
+    if (
+      managed &&
+      (record.privateIntegrationReload.stagedMigration.kind !== "credentials" ||
+        managed.action !== "set" ||
+        candidate.payload.serviceSecrets.find((entry) => entry.serviceId === "data-manager")?.values
+          .TRANSITOUS_API_KEYS !== managed.value ||
+        !candidate.payload.transitCredentialsRevision)
+    )
+      throw Error("Original managed migration map required");
+    return;
+  }
+
   if (
     original.kind !== "vault.apply" ||
     original.serviceId !== "data-manager" ||
@@ -5185,7 +5231,8 @@ export async function prepareConfigurationMaintenanceAdmission(
           (id) => !protectedConfigurationServiceIdSchema.safeParse(id).success,
         )
       : candidate.record.apiFollowUp === "service-apply" ||
-          candidate.record.privateCoordinatorLifecycle
+          candidate.record.privateCoordinatorLifecycle ||
+          candidate.record.privateIntegrationReload?.stagedMigration
         ? candidate.record.affectedServiceIds
         : [];
   if (

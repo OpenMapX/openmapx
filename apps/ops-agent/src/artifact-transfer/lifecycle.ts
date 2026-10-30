@@ -32,6 +32,9 @@ export function registerArtifactTransferLifecycle(
     }, 15 * 60000);
     timer.unref();
   });
+  app.addHook("preClose", async () => {
+    await store.drainByteStreams();
+  });
   app.addHook("onClose", async () => {
     clearInterval(timer);
     controller.abort();

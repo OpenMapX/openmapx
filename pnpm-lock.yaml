@@ -2542,6 +2542,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../mobility-core
+      '@openmapx/motis-feed-proxy-config':
+        specifier: workspace:^
+        version: link:../motis-feed-proxy-config
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../transitous-core

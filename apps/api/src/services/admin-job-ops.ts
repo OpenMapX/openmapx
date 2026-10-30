@@ -38,6 +38,7 @@ import {
   JobOwnershipLost,
   JobStepAllocationConflict,
 } from "./admin-job-state";
+import { readArtifactPurposeObservation } from "./artifact-purpose-observation";
 import { configurationMaintenanceProjectedStepOrigin } from "./configuration-maintenance-step-records";
 import {
   assertCoordinatorPullIntent,
@@ -114,6 +115,25 @@ export async function ensureAdminJobReceiptDelivery(
     !opsKindRequiresControlAuthority(projected.kind)
   )
     return;
+  const canonical = status ?? projected.receiptDelivery?.terminalReceipt;
+  if (
+    canonical &&
+    canonical.state !== "succeeded" &&
+    ["artifactTransfer.import", "artifactTransfer.validate"].includes(projected.kind)
+  ) {
+    if (
+      !projected.operationId ||
+      !projected.fingerprint ||
+      !projected.deadlineAt ||
+      !readArtifactPurposeObservation(context.checkpointResult, projected.operation, {
+        executionId: projected.operationId,
+        operationKey: projected.operationKey,
+        fingerprint: projected.fingerprint,
+        executionDeadlineAt: new Date(projected.deadlineAt).toISOString(),
+      })
+    )
+      throw new JobObservationPending("recovery_required");
+  }
   try {
     if (!projected.receiptDelivery) {
       if (!status || !context.execution) throw new JobObservationPending("recovery_required");

@@ -40,3 +40,21 @@ it("defines bounded prepared preview and import operations without caller paths 
     }).success,
   ).toBe(false);
 });
+
+it("exports only named prepared targets under an exact artifact fingerprint", async () => {
+  const { opsOperationSchema, OPS_KIND_POLICIES } = await import("./contract");
+  const valid = {
+    kind: "artifactTransfer.export",
+    serviceId: "osrm",
+    ownerId: "admin",
+    expectedArtifactFingerprint: "a".repeat(64),
+  };
+  expect(opsOperationSchema.safeParse(valid).success).toBe(true);
+  expect(opsOperationSchema.safeParse({ ...valid, serviceId: "redis" }).success).toBe(false);
+  expect(opsOperationSchema.safeParse({ ...valid, path: "/arbitrary" }).success).toBe(false);
+  expect(OPS_KIND_POLICIES["artifactTransfer.export"]).toMatchObject({
+    role: "api",
+    execution: "async",
+    timeoutMs: 72 * 3600_000,
+  });
+});

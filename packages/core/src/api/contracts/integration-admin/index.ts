@@ -1,8 +1,9 @@
 export * from "./application";
 export * from "./common";
+export * from "./configuration-migration";
+export * from "./credential-transfer";
 export * from "./credentials";
 export * from "./health";
 export * from "./operations";
 export * from "./overview";
-
 export * from "./standalone-integrations";

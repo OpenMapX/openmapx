@@ -6,6 +6,13 @@ describe("subject-data policy gate", () => {
     const result = validateSubjectDataInventory();
     expect(result.errors).toEqual([]);
   });
+  it("classifies encrypted migration preview actor attribution", () => {
+    expect(
+      validateSubjectDataInventory({
+        directUserForeignKeys: ["configuration_migration_preview.actor_id"],
+      }).errors,
+    ).toEqual([]);
+  });
 
   it("reports unknown manifest registration ids", () => {
     const result = validateSubjectDataInventory({

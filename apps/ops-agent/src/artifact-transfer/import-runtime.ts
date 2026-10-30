@@ -8,6 +8,7 @@ import {
   executeOwnedGenerationHardlinks,
   executionAuthorityState,
   type GenerationHardlinksOwnerPlan,
+  inspectOwnedGenerationHardlinks,
   lookupControlChildPhaseBinding,
   planGenerationHardlinksOwner,
   readGenerationHardlinksOwnerPlan,
@@ -23,6 +24,7 @@ import {
   artifactPublicationFingerprint,
   inspectArtifactPublication,
   publishValidatedBuild,
+  retainUnstartedArtifactImport,
 } from "@openmapx/core/build-artifacts/publication";
 import {
   type ArtifactImportPreview,
@@ -42,6 +44,8 @@ import { type DockerRuntimeOptions, runContainedProcess } from "../docker-runtim
 import type { OwnedServiceResolver } from "../owned-services";
 import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "../runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "../trusted-config-runtime";
+import { installPreparedExportRuntime } from "./export-runtime";
+import { inspectMotisPortableDestination, materializeMotisPortableDestination } from "./motis";
 import type { ArtifactTransferStore } from "./store";
 
 type ImportOperation = Extract<OpsOperation, { kind: "artifactTransfer.import" }>;
@@ -60,6 +64,11 @@ const planSchema = z.strictObject({
   preview: artifactImportPreviewSchema,
   targetFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   preparationId: z.uuid(),
+  motisFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable()
+    .default(null),
 });
 type ImportPlan = z.infer<typeof planSchema>;
 const domain = "openmapx-artifact-import-owner-v1";
@@ -78,7 +87,13 @@ function originalImportPlan(authority: VerifiedExecutionAuthority) {
   return verifyControl(owner.installation.installation.publicKey, domain, raw, planSchema);
 }
 const configSchema = z.object({
-  services: z.record(z.string(), z.object({ image: z.string().min(1).max(4096).optional() })),
+  services: z.record(
+    z.string(),
+    z.object({
+      image: z.string().min(1).max(4096).optional(),
+      environment: z.record(z.string(), z.string().nullable()).optional(),
+    }),
+  ),
 });
 async function snapshot(
   source: Source,
@@ -137,15 +152,33 @@ async function snapshot(
       blockers.push("Bundle runtime images differ from the current Compose configuration.");
     if (prepared.bundle.manifest.files.length + prepared.bundle.manifest.directories.length > 10000)
       blockers.push("Prepared publication supports at most 10,000 entries per bundle.");
-    if (prepared.bundle.manifest.service === "motis")
-      blockers.push("Target MOTIS credential materialization must complete before publication.");
-    const targetFingerprint =
-      prepared.bundle.manifest.service === "motis"
-        ? controlDigest({ blocked: "motis-target-materialization" }) // Denial-only preview; it cannot admit an import.
-        : await artifactPublicationFingerprint(
-            join(source.infraDir, "data"),
-            prepared.bundle.manifest.service,
-          );
+    let motisFingerprint: string | null = null;
+    if (prepared.bundle.manifest.service === "motis" && revisionId) {
+      try {
+        motisFingerprint = (
+          await inspectMotisPortableDestination({
+            rootDir: source.rootDir,
+            infraDir: source.infraDir,
+            stagingDir: join(prepared.stagingRoot, "motis/live"),
+            configurationRevisionId: revisionId,
+            dataManagerEnvironment: Object.fromEntries(
+              Object.entries(parsed.services["data-manager"]?.environment ?? {}).filter(
+                (entry): entry is [string, string] => entry[1] !== null,
+              ),
+            ),
+            signal,
+          })
+        ).fingerprint;
+      } catch {
+        blockers.push(
+          "MOTIS requires the same approved catalog pins, a portable recipe and complete destination-managed feed credentials.",
+        );
+      }
+    }
+    const targetFingerprint = await artifactPublicationFingerprint(
+      join(source.infraDir, "data"),
+      prepared.bundle.manifest.service,
+    );
     const hardlinks = revisionId
       ? readOwnedGenerationHardlinkPlan(source.infraDir, revisionId)
       : null;
@@ -167,6 +200,7 @@ async function snapshot(
       consumers: inventory.services.filter((s) => ids.includes(s.serviceId)),
       unverified: inventory.unverifiedServiceIds.filter((id) => ids.includes(id)),
       targetFingerprint,
+      motisFingerprint,
       hardlinkDigest: hardlinks ? controlDigest(hardlinks) : null,
     };
     const preview = artifactImportPreviewSchema.parse({
@@ -189,7 +223,7 @@ async function snapshot(
         Math.min(Date.now() + 600000, Date.parse(prepared.stage.expiresAt)),
       ).toISOString(),
     });
-    return { preview, targetFingerprint, preparationId: prepared.preparationId };
+    return { preview, targetFingerprint, preparationId: prepared.preparationId, motisFingerprint };
   });
 }
 /** Fixed source invoked by the actual server before signing the original root. */
@@ -243,6 +277,7 @@ export function installPreparedImportRuntime(
   options: Omit<Source, "store" | "execFile"> & { execFile?: Source["execFile"] },
 ) {
   const source: Source = { ...options, store, execFile: options.execFile ?? runContainedProcess };
+  installPreparedExportRuntime(runtime, store, source);
   sources.set(runtime, source);
   runtime["artifactTransfer.previewImport"] = async (operation, context) => {
     const result = await snapshot(source, operation, context.signal);
@@ -287,6 +322,46 @@ export function installPreparedImportRuntime(
       context,
     );
     return store.withPreparedArtifact(operation, async (prepared) => {
+      const materializeMotis =
+        prepared.bundle.manifest.service === "motis" && !published
+          ? async () => {
+              if (!plan.motisFingerprint || !plan.preview.currentRevisionId)
+                throw Error("Original MOTIS destination snapshot required");
+              await store.reservePreparedMaterialization(operation);
+              const config = configSchema.parse(
+                JSON.parse(
+                  (
+                    await source.execFile(
+                      "docker",
+                      [
+                        ...services.stackComposeArgs(source.stack, existsSync),
+                        "config",
+                        "--format",
+                        "json",
+                      ],
+                      { signal: context.signal, timeout: 30000, maxBuffer: 1024 * 1024 },
+                    )
+                  ).stdout,
+                ),
+              );
+              return (
+                await materializeMotisPortableDestination({
+                  rootDir: source.rootDir,
+                  infraDir: source.infraDir,
+                  stagingDir: join(prepared.stagingRoot, "motis/live"),
+                  configurationRevisionId: plan.preview.currentRevisionId,
+                  dataManagerEnvironment: Object.fromEntries(
+                    Object.entries(config.services["data-manager"]?.environment ?? {}).filter(
+                      (entry): entry is [string, string] => entry[1] !== null,
+                    ),
+                  ),
+                  expectedFingerprint: plan.motisFingerprint,
+                  archiveFingerprint: prepared.bundle.artifactFingerprint,
+                  signal: context.signal,
+                })
+              ).materialization;
+            }
+          : undefined;
       const result = await publishValidatedBuild({
         ...prepared,
         stageId: operation.stageId,
@@ -294,6 +369,7 @@ export function installPreparedImportRuntime(
         authority,
         lease,
         expectedFingerprint: plan.targetFingerprint,
+        materializeMotis,
         signal: context.signal,
         beforePublication: async () => {
           const infra = new AnchoredDirectory(source.infraDir),
@@ -329,8 +405,10 @@ export function installPreparedImportRuntime(
             throw error;
           }
         },
-      }).catch(() => {
-        throw new OpsExecutionFailure("recovery_required", {});
+      }).catch((cause) => {
+        const failure = new OpsExecutionFailure("recovery_required", {});
+        failure.cause = cause;
+        throw failure;
       });
       if (result.outcome !== "committed") return result;
       // The frozen CURRENT generation already names the producer paths; importing
@@ -386,7 +464,26 @@ export async function recoverPreparedImportFiles(
   )
     throw Error("Original prepared import recovery source required");
   const published = inspectArtifactPublication(authority);
-  if (!published || !["prepared", "restored"].includes(published.phase)) return null;
+  if (!published)
+    return services.withConfigurationGenerationWriter(source.infraDir, async () => {
+      retainUnstartedArtifactImport(authority);
+      return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
+    });
+  if (published.phase === "committed") {
+    const followUp =
+      inspectOwnedGenerationHardlinks(authority, lease) === "complete"
+        ? ("complete" as const)
+        : ("failed" as const);
+    const result = {
+      outcome: "committed" as const,
+      serviceId: published.serviceId,
+      artifactFingerprint: published.artifactFingerprint,
+      cleanupFailed: false,
+      followUp,
+    };
+    await source.store.completeRecoveredPreparedImport(context, result);
+    return result;
+  }
   if (published.phase === "restored")
     return { outcome: "not_committed" as const, reason: "failed" as const, cleanupFailed: false };
   const plan = originalImportPlan(authority),
@@ -410,5 +507,6 @@ export async function finishRestoredPreparedImport(
 ) {
   const source = sources.get(runtime);
   if (!source) throw Error("Prepared import source unavailable");
-  return source.store.releaseRestoredPreparedImport(context);
+  if (!context.controlAuthority) throw Error("Original import recovery required");
+  return source.store.reconcileReleasedPreparedImport(context.controlAuthority);
 }

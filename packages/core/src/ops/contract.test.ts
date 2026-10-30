@@ -66,6 +66,13 @@ const transferClaim = {
   bytes: 4,
 };
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "artifactTransfer.capabilities": { kind: "artifactTransfer.capabilities", ownerId: "admin" },
+  "artifactTransfer.export": {
+    kind: "artifactTransfer.export",
+    serviceId: "osrm",
+    ownerId: "admin",
+    expectedArtifactFingerprint: "a".repeat(64),
+  },
   "artifactTransfer.previewImport": {
     kind: "artifactTransfer.previewImport",
     stageId: transferClaim.stageId,

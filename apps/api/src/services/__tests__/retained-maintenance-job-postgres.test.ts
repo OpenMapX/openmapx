@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +8,9 @@ import { createApiClient } from "@openmapx/core";
 import {
   clearAdminReleaseSelection,
   createAdminArtifactTransfer,
+  downloadAdminArtifactTransferContent,
+  exportAdminArtifactTransfer,
+  getAdminArtifactTransferCapabilities,
   importAdminArtifactTransfer,
   previewAdminArtifactImport,
   previewAdminBackupPrune,
@@ -92,208 +95,420 @@ dbDescribe("retained finite maintenance requests", () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
   const body = { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" };
-  it("validates uploaded bundle bytes through actual SDK, queued SQL job and production agent", async () => {
-    const host = await ownedServiceHost({ extraServiceIds: ["osrm"] });
-    state.services = host.loaded;
-    const installation = openControlInstallation({
+  it.each([false, true, "cancel"] as const)(
+    "validates uploaded bundle bytes through actual SDK, queued SQL job and production agent (result loss=%s)",
+    async (loseImportResult) => {
+      const keySuffix =
+        loseImportResult === "cancel" ? "-canceled-result" : loseImportResult ? "-lost-result" : "";
+      const host = await ownedServiceHost({ extraServiceIds: ["osrm"] });
+      state.services = host.loaded;
+      const installation = openControlInstallation({
         infraDir: host.infraDir,
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
-      }),
-      journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
-    const { ArtifactTransferStore } = await import(
-        "../../../../ops-agent/src/artifact-transfer/store"
-      ),
-      { installArtifactTransferRuntime } = await import(
-        "../../../../ops-agent/src/artifact-transfer/runtime"
-      );
-    const store = new ArtifactTransferStore({
-      dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
-      privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
-      token: host.token,
-      capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
-    });
-    installArtifactTransferRuntime(host.runtime, store);
-    const { installPreparedImportRuntime } = await import(
-      "../../../../ops-agent/src/artifact-transfer/import-runtime"
-    );
-    installPreparedImportRuntime(host.runtime, store, {
-      rootDir: host.root,
-      infraDir: host.infraDir,
-      stack: host.stack,
-      loadAuthority: host.loadAuthority,
-      ownedServices: host.owned,
-      execFile: host.execFile,
-    });
-    const agent = buildOpsAgentServer({
-      runtime: host.runtime,
-      resourceClaimer: host.claimer,
-      journal,
-      controlInstallation: installation,
-      artifactTransfers: store,
-      tokens: { api: host.token, "data-manager": "d".repeat(43) },
-    });
-    let lostAdmission = false;
-    agent.addHook("onSend", async (request, reply, payload) => {
-      if (
-        !lostAdmission &&
-        reply.statusCode === 202 &&
-        (request.body as { operation?: { kind?: string } } | undefined)?.operation?.kind ===
-          "artifactTransfer.validate"
-      ) {
-        lostAdmission = true;
-        reply.code(503);
-        return JSON.stringify({ error: "Synthetic lost validation admission response" });
-      }
-      return payload;
-    });
-    const tokenFile = join(host.root, "validation-api-token");
-    writeFileSync(tokenFile, host.token, { mode: 0o600 });
-    vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
-    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    const { jobRunner } = await import("../job-runner"),
-      { handlePreparedArtifactValidationJob, handlePreparedArtifactImportJob } = await import(
-        "../admin-artifact-validation"
-      ),
-      { adminArtifactTransfersRoute } = await import("../../routes/admin-artifact-transfers");
-    jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
-    jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
-    const api = await createAdminTestApp(adminArtifactTransfersRoute, { prefix: "/api" }),
-      url = await api.listen({ host: "127.0.0.1", port: 0 }),
-      options = { client: createApiClient({ baseUrl: url }) };
-    const source = join(host.root, "validation-source");
-    mkdirSync(join(source, "osrm-graph"), { recursive: true });
-    for (const name of [
-      "region.osrm",
-      "region.osrm.partition",
-      "region.osrm.cells",
-      "region.osrm.mldgr",
-    ])
-      writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`);
-    const chunks: Buffer[] = [];
-    await writeBuildBundle({
-      dataRoot: source,
-      serviceId: "osrm",
-      record: {
-        schemaVersion: 1,
-        service: "osrm",
-        builtAt: "2026-10-30T00:00:00.000Z",
-        runtimeImages: { osrm: "example/osrm:1" },
-        toolImages: {},
-      },
-      target: new Writable({
-        write(chunk, _encoding, done) {
-          chunks.push(Buffer.from(chunk));
-          done();
-        },
-      }),
-      limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
-      signal: new AbortController().signal,
-    });
-    const bytes = Buffer.concat(chunks);
-    try {
-      const created = await createAdminArtifactTransfer(
-        { purpose: "prepared-artifact", direction: "upload", declaredBytes: bytes.length },
-        { "idempotency-key": "actual-prepared-stage-create-001" },
-        options,
-      );
-      expect(created.status).toBe(200);
-      if (created.status !== 200) throw Error("No stage");
-      expect(
-        (await uploadAdminArtifactTransferContent(created.data.stageId, new Blob([bytes]), options))
-          .status,
-      ).toBe(200);
-      const key = { "idempotency-key": "actual-prepared-stage-validation-001" },
-        accepted = await validateAdminArtifactTransfer(created.data.stageId, key, options);
-      expect(accepted.status).toBe(202);
-      if (accepted.status !== 202) throw Error("Validation unavailable");
-      await vi.waitFor(
-        async () => {
-          const [row] = await state.fixture.db
-            .select()
-            .from(adminJob)
-            .where(eq(adminJob.id, accepted.data.jobId));
-          expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
-            "success",
-          );
-          expect(row?.result).toMatchObject({
-            operation: "validate-artifact",
-            stage: { stageId: created.data.stageId, state: "ready" },
-          });
-        },
-        { timeout: 20000, interval: 100 },
-      );
-      expect(
-        (await validateAdminArtifactTransfer(created.data.stageId, key, options)).data,
-      ).toEqual(accepted.data);
-      const preview = await previewAdminArtifactImport(created.data.stageId, options);
-      expect(preview.status).toBe(200);
-      if (preview.status !== 200) throw Error("Import preview unavailable");
-      expect(preview.data.blockers).toEqual([]);
-      const body = {
-          expectedSha256: preview.data.sha256,
-          previewFingerprint: preview.data.fingerprint,
-          expectedCurrentRevisionId: preview.data.currentRevisionId,
-        },
-        importKey = { "idempotency-key": "actual-prepared-stage-import-001" };
-      const imported = await importAdminArtifactTransfer(
-        created.data.stageId,
-        body,
-        importKey,
-        options,
-      );
-      expect(imported.status).toBe(202);
-      if (imported.status !== 202) throw Error("Import admission unavailable");
-      await vi.waitFor(
-        async () => {
-          const [row] = await state.fixture.db
-            .select()
-            .from(adminJob)
-            .where(eq(adminJob.id, imported.data.jobId));
-          expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
-            "success",
-          );
-          expect(row?.result).toMatchObject({
-            operation: "import-artifact",
-            publication: { outcome: "committed", followUp: "complete" },
-          });
-        },
-        { timeout: 30000, interval: 100 },
-      );
-      expect(
-        (await importAdminArtifactTransfer(created.data.stageId, body, importKey, options)).data,
-      ).toEqual(imported.data);
-      expect(readFileSync(join(host.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(
-        "synthetic region.osrm",
-      );
-      expect(
-        journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
-      ).toHaveLength(1);
-      expect(lostAdmission).toBe(true);
-      expect(
-        journal.records().filter((job) => job.operation.kind === "artifactTransfer.validate"),
-      ).toHaveLength(1);
-      expect(
-        host.calls.some(
-          (args) => args.includes("up") || args.includes("stop") || args.includes("pull"),
-        ),
-      ).toBe(false);
-    } finally {
-      await api.close();
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      const runner = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
-      await vi.waitFor(() => {
-        expect(runner.active.size).toBe(0);
-        expect(runner.pumping).toBe(false);
       });
-      await agent.close();
-      store.close();
-      closeControlInstallation(installation);
-      state.services = [];
-      rmSync(host.cleanupRoot, { recursive: true, force: true });
-      vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
-    }
-  }, 60000);
+      let journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+      const { ArtifactTransferStore } = await import(
+          "../../../../ops-agent/src/artifact-transfer/store"
+        ),
+        { installArtifactTransferRuntime } = await import(
+          "../../../../ops-agent/src/artifact-transfer/runtime"
+        );
+      let store = new ArtifactTransferStore({
+        dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
+        privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
+        token: host.token,
+        capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
+      });
+      const stores = [store];
+      installArtifactTransferRuntime(host.runtime, store);
+      const { installPreparedImportRuntime } = await import(
+        "../../../../ops-agent/src/artifact-transfer/import-runtime"
+      );
+      installPreparedImportRuntime(host.runtime, store, {
+        rootDir: host.root,
+        infraDir: host.infraDir,
+        stack: host.stack,
+        loadAuthority: host.loadAuthority,
+        ownedServices: host.owned,
+        execFile: host.execFile,
+      });
+      let agent = buildOpsAgentServer({
+        runtime: host.runtime,
+        resourceClaimer: host.claimer,
+        journal,
+        controlInstallation: installation,
+        artifactTransfers: store,
+        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      });
+      agent.addHook("preHandler", async (request, reply) => {
+        const operation = (
+          request.body as
+            | { operation?: { kind?: string; identity?: { executionId?: string } } }
+            | undefined
+        )?.operation;
+        if (
+          loseImportResult &&
+          operation?.kind === "artifactTransfer.inspectClaim" &&
+          journal
+            .records()
+            .some(
+              (record) =>
+                record.operationId === operation.identity?.executionId &&
+                record.operation.kind === "artifactTransfer.import",
+            )
+        )
+          return reply.code(503).send({ error: "Named unavailable original import observer" });
+      });
+      let lostAdmission = false;
+      agent.addHook("onSend", async (request, reply, payload) => {
+        if (
+          !lostAdmission &&
+          reply.statusCode === 202 &&
+          (request.body as { operation?: { kind?: string } } | undefined)?.operation?.kind ===
+            "artifactTransfer.validate"
+        ) {
+          lostAdmission = true;
+          reply.code(503);
+          return JSON.stringify({ error: "Synthetic lost validation admission response" });
+        }
+        return payload;
+      });
+      const tokenFile = join(host.root, "validation-api-token");
+      writeFileSync(tokenFile, host.token, { mode: 0o600 });
+      const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
+      vi.stubEnv("OPS_AGENT_URL", agentUrl);
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+      const { jobRunner } = await import("../job-runner"),
+        {
+          handlePreparedArtifactValidationJob,
+          handlePreparedArtifactImportJob,
+          handlePreparedArtifactExportJob,
+        } = await import("../admin-artifact-validation"),
+        { adminArtifactTransfersRoute } = await import("../../routes/admin-artifact-transfers");
+      jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
+      jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
+      jobRunner.register("artifact.export", handlePreparedArtifactExportJob);
+      const api = await createAdminTestApp(adminArtifactTransfersRoute, { prefix: "/api" }),
+        url = await api.listen({ host: "127.0.0.1", port: 0 }),
+        options = { client: createApiClient({ baseUrl: url }) };
+      const source = join(host.root, "validation-source");
+      mkdirSync(join(source, "osrm-graph"), { recursive: true });
+      for (const name of [
+        "region.osrm",
+        "region.osrm.partition",
+        "region.osrm.cells",
+        "region.osrm.mldgr",
+      ])
+        writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`);
+      const chunks: Buffer[] = [];
+      await writeBuildBundle({
+        dataRoot: source,
+        serviceId: "osrm",
+        record: {
+          schemaVersion: 1,
+          service: "osrm",
+          builtAt: "2026-10-30T00:00:00.000Z",
+          runtimeImages: { osrm: "example/osrm:1" },
+          toolImages: {},
+        },
+        target: new Writable({
+          write(chunk, _encoding, done) {
+            chunks.push(Buffer.from(chunk));
+            done();
+          },
+        }),
+        limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+        signal: new AbortController().signal,
+      });
+      const bytes = Buffer.concat(chunks);
+      try {
+        const created = await createAdminArtifactTransfer(
+          { purpose: "prepared-artifact", direction: "upload", declaredBytes: bytes.length },
+          { "idempotency-key": `actual-prepared-stage-create-001${keySuffix}` },
+          options,
+        );
+        expect(created.status).toBe(200);
+        if (created.status !== 200) throw Error("No stage");
+        expect(
+          (
+            await uploadAdminArtifactTransferContent(
+              created.data.stageId,
+              new Blob([bytes]),
+              options,
+            )
+          ).status,
+        ).toBe(200);
+        const key = { "idempotency-key": `actual-prepared-stage-validation-001${keySuffix}` },
+          accepted = await validateAdminArtifactTransfer(created.data.stageId, key, options);
+        expect(accepted.status).toBe(202);
+        if (accepted.status !== 202) throw Error("Validation unavailable");
+        await vi.waitFor(
+          async () => {
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, accepted.data.jobId));
+            expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+              "success",
+            );
+            expect(row?.result).toMatchObject({
+              operation: "validate-artifact",
+              stage: { stageId: created.data.stageId, state: "ready" },
+            });
+          },
+          { timeout: 20000, interval: 100 },
+        );
+        expect(
+          (await validateAdminArtifactTransfer(created.data.stageId, key, options)).data,
+        ).toEqual(accepted.data);
+        const preview = await previewAdminArtifactImport(created.data.stageId, options);
+        expect(preview.status).toBe(200);
+        if (preview.status !== 200) throw Error("Import preview unavailable");
+        expect(preview.data.blockers).toEqual([]);
+        const body = {
+            expectedSha256: preview.data.sha256,
+            previewFingerprint: preview.data.fingerprint,
+            expectedCurrentRevisionId: preview.data.currentRevisionId,
+          },
+          importKey = { "idempotency-key": `actual-prepared-stage-import-001${keySuffix}` };
+        if (loseImportResult) {
+          const originalRead = store.withPreparedArtifact.bind(store);
+          let lost = false;
+          vi.spyOn(store, "withPreparedArtifact").mockImplementation(async (input, consume) => {
+            const value = await originalRead(input, consume);
+            if (!lost && existsSync(join(host.infraDir, "data/.openmapx-builds/osrm.json"))) {
+              lost = true;
+              throw Error("Named lost completed-import result");
+            }
+            return value;
+          });
+        }
+        const imported = await importAdminArtifactTransfer(
+          created.data.stageId,
+          body,
+          importKey,
+          options,
+        );
+        expect(imported.status).toBe(202);
+        if (imported.status !== 202) throw Error("Import admission unavailable");
+        let historicalTerminal: string | undefined;
+        let lostPurposeAck = false;
+        const purposeReads: { status: number; publication: boolean }[] = [];
+        if (loseImportResult) {
+          await vi.waitFor(
+            () =>
+              expect(
+                journal.records().find((row) => row.operation.kind === "artifactTransfer.import")
+                  ?.state,
+              ).toBe("failed"),
+            { timeout: 30000, interval: 50 },
+          );
+          const original = journal
+            .records()
+            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+          historicalTerminal = JSON.stringify({
+            state: original.state,
+            errorClass: original.errorClass,
+            terminalAt: original.terminalAt,
+            updatedAt: original.updatedAt,
+          });
+          if (loseImportResult === "cancel") {
+            // false means containment is pending, not that the intent was lost.
+            expect(await jobRunner.cancel(imported.data.jobId)).toBe(false);
+            const [canceling] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, imported.data.jobId));
+            expect(canceling?.status).toBe("cancel_pending");
+          }
+          await agent.close();
+          const runtime = await createProductionOpsRuntime({
+            rootDir: host.root,
+            stack: host.stack,
+            loadAuthority: host.loadAuthority,
+            communityRepositories: host.repositories,
+            docker: { execFile: host.execFile, fileExists: existsSync },
+          });
+          store = new ArtifactTransferStore({
+            dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
+            privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
+            token: host.token,
+            capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
+          });
+          stores.push(store);
+          installArtifactTransferRuntime(runtime, store);
+          installPreparedImportRuntime(runtime, store, {
+            rootDir: host.root,
+            infraDir: host.infraDir,
+            stack: host.stack,
+            loadAuthority: host.loadAuthority,
+            ownedServices: productionOwnedServices(runtime),
+            execFile: host.execFile,
+          });
+          journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+          agent = buildOpsAgentServer({
+            runtime,
+            journal,
+            resourceClaimer: host.createResourceClaimer(runtime),
+            controlInstallation: installation,
+            artifactTransfers: store,
+            tokens: { api: host.token, "data-manager": "d".repeat(43) },
+          });
+          agent.addHook("onSend", async (request, reply, payload) => {
+            const op = (
+              request.body as { operation?: { kind?: string; operationKey?: string } } | undefined
+            )?.operation;
+            if (op?.kind === "artifactTransfer.inspectClaim") {
+              const value = typeof payload === "string" ? JSON.parse(payload) : {};
+              purposeReads.push({
+                status: reply.statusCode,
+                publication: JSON.stringify(value).includes('"publication"'),
+              });
+            }
+            if (
+              !lostPurposeAck &&
+              reply.statusCode === 200 &&
+              op?.kind === "controlRetention.acknowledge" &&
+              op.operationKey === original.operationKey
+            ) {
+              const [row] = await state.fixture.db
+                .select()
+                .from(adminJob)
+                .where(eq(adminJob.id, imported.data.jobId));
+              expect(row?.result).toMatchObject({
+                _artifactPurposeObservation: {
+                  kind: "artifactTransfer.import",
+                  publication: { outcome: "committed", followUp: "complete" },
+                },
+              });
+              lostPurposeAck = true;
+              reply.code(503);
+              return JSON.stringify({ error: "Named lost purpose receipt acknowledgement" });
+            }
+            return payload;
+          });
+          await agent.listen({ host: "127.0.0.1", port: Number(new URL(agentUrl).port) });
+        }
+        await vi.waitFor(
+          async () => {
+            // This route-only Fastify fixture omits application bootstrap's
+            // daemon timer; invoke its actual observer entrypoint explicitly.
+            if (loseImportResult) await jobRunner.reconcile();
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, imported.data.jobId));
+
+            expect(
+              row?.status,
+              JSON.stringify({ error: row?.error, result: row?.result, purposeReads }),
+            ).toBe("success");
+            expect(row?.result).toMatchObject({
+              operation: "import-artifact",
+              publication: { outcome: "committed", followUp: "complete" },
+            });
+          },
+          { timeout: 30000, interval: 100 },
+        );
+        if (historicalTerminal) {
+          expect(lostPurposeAck).toBe(true);
+          const original = journal
+            .records()
+            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+          expect(
+            JSON.stringify({
+              state: original.state,
+              errorClass: original.errorClass,
+              terminalAt: original.terminalAt,
+              updatedAt: original.updatedAt,
+            }),
+          ).toBe(historicalTerminal);
+        }
+        expect(
+          (await importAdminArtifactTransfer(created.data.stageId, body, importKey, options)).data,
+        ).toEqual(imported.data);
+        expect(readFileSync(join(host.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(
+          "synthetic region.osrm",
+        );
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
+        ).toHaveLength(1);
+        const capabilities = await getAdminArtifactTransferCapabilities(options);
+        expect(capabilities.status).toBe(200);
+        if (capabilities.status !== 200) throw Error("Export capabilities unavailable");
+        const osrm = capabilities.data.targets.find((target) => target.serviceId === "osrm");
+        expect(osrm?.available).toBe(true);
+        if (!osrm?.artifactFingerprint) throw Error("Prepared fingerprint missing");
+        const exportBody = {
+            serviceId: "osrm" as const,
+            expectedArtifactFingerprint: osrm.artifactFingerprint,
+          },
+          exportKey = { "idempotency-key": `actual-prepared-export-001${keySuffix}` },
+          exporting = await exportAdminArtifactTransfer(exportBody, exportKey, options);
+        expect(exporting.status).toBe(202);
+        if (exporting.status !== 202) throw Error("Export admission unavailable");
+        let exported: { stageId: string; sha256: string; bytes: number } | undefined;
+        await vi.waitFor(
+          async () => {
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, exporting.data.jobId));
+            expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+              "success",
+            );
+            exported = (row?.result as { stage?: typeof exported }).stage;
+            expect(exported?.stageId).toBeTruthy();
+          },
+          { timeout: 30000, interval: 100 },
+        );
+        if (!exported) throw Error("Export result missing");
+        const downloadChunks: Buffer[] = [];
+        const downloaded = await downloadAdminArtifactTransferContent(exported.stageId, {
+          ...options,
+          onByteChunk: async (chunk) => {
+            downloadChunks.push(Buffer.from(chunk));
+          },
+        });
+        expect(downloaded.status).toBe(200);
+        expect(createHash("sha256").update(Buffer.concat(downloadChunks)).digest("hex")).toBe(
+          exported.sha256,
+        );
+        expect(Buffer.concat(downloadChunks).length).toBe(exported.bytes);
+        expect((await exportAdminArtifactTransfer(exportBody, exportKey, options)).data).toEqual(
+          exporting.data,
+        );
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.export"),
+        ).toHaveLength(1);
+        expect(lostAdmission).toBe(true);
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.validate"),
+        ).toHaveLength(1);
+        expect(
+          host.calls.some(
+            (args) => args.includes("up") || args.includes("stop") || args.includes("pull"),
+          ),
+        ).toBe(false);
+      } finally {
+        await api.close();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        const runner = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+        await vi.waitFor(() => {
+          expect(runner.active.size).toBe(0);
+          expect(runner.pumping).toBe(false);
+        });
+        await agent.close();
+        for (const originalStore of stores.reverse()) originalStore.close();
+        closeControlInstallation(installation);
+        state.services = [];
+        rmSync(host.cleanupRoot, { recursive: true, force: true });
+        vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+      }
+    },
+    120000,
+  );
   it("generates configuration only through the actual retained API job and production agent", async () => {
     const host = await ownedServiceHost();
     state.services = host.loaded;

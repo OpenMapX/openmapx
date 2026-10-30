@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ServiceRegistry } from "../services/registry";
 import { serviceContainerImageReference } from "../services/types";
+import { artifactFingerprint, safeArtifactPath } from "./artifact-path";
+import { portableMotisRecipeSchema } from "./motis-portable";
 export interface BuildArtifactSpec {
   dirs: string[];
   exclude: string[];
@@ -19,7 +20,7 @@ export const BUILD_ARTIFACTS: Readonly<Record<string, BuildArtifactSpec>> = {
   motis: {
     dirs: ["motis/live", "motis-feed-proxy"],
     exclude: [],
-    consumers: ["motis", "motis-staging"],
+    consumers: ["motis", "motis-staging", "motis-feed-proxy"],
   },
 };
 export function buildArtifactSpec(serviceId: string): BuildArtifactSpec {
@@ -92,28 +93,8 @@ const schema = z.discriminatedUnion("schemaVersion", [
   z.strictObject({ schemaVersion: z.literal(1), ...common, ...layout }),
   z.strictObject({ schemaVersion: z.literal(2), ...common, ...v2, ...layout }),
 ]);
-export function safeArtifactPath(path: string, maxBytes = 4096, maxDepth = 64): boolean {
-  return (
-    !!path &&
-    Buffer.byteLength(path) <= maxBytes &&
-    !/^[A-Za-z]:/.test(path) &&
-    !path.includes("\\") &&
-    ![...path].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) &&
-    path.split("/").length <= maxDepth &&
-    path.split("/").every((p) => !!p && p !== "." && p !== ".." && Buffer.byteLength(p) <= 255)
-  );
-}
-export function artifactFingerprint(files: readonly BundleFile[]): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify(
-        [...files]
-          .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-          .map((f) => [f.path, f.sizeBytes, f.sha256]),
-      ),
-    )
-    .digest("hex");
-}
+
+export { artifactFingerprint, safeArtifactPath } from "./artifact-path";
 export function parseBundleManifest(text: string): BundleManifest {
   const result = schema.safeParse(JSON.parse(text));
   if (!result.success) throw Error("Bundle manifest is malformed");
@@ -181,6 +162,7 @@ export async function runtimeImageMismatches(
 }
 
 export const portableMotisSourcesSchema = z.strictObject({
+  recipe: portableMotisRecipeSchema.optional(),
   version: z.literal(1),
   sourceFingerprints: z
     .array(

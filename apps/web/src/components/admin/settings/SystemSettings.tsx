@@ -35,6 +35,7 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AuthPolicySettings } from "./AuthPolicySettings";
+import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
 
 export interface ResolvedSetting {
   group: string;
@@ -981,6 +982,7 @@ export function SystemSettings({
         />
       ))}
       {showTransfer && <ExportImportSection onMsg={showToast} />}
+      {showTransfer && <ConfigurationMigrationPanel />}
       <Snackbar
         open={!!toast}
         autoHideDuration={4000}

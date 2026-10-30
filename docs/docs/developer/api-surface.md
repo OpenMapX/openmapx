@@ -583,3 +583,35 @@ header interceptor. It performs no download and cannot provide custom headers,
 progress or cancellation. Other configured clients keep using the callback-based
 byte client with a supported file sink; do not silently change their credentials
 or buffer a large response into a Blob.
+
+### Prepared-artifact jobs and purpose observations
+
+Artifact capabilities and export/import controls use the service-admin registry.
+Exports, archive validation and imports are retained administrative jobs; acceptance
+is not their terminal outcome. Stage ownership is scoped to the authenticated
+administrator and purpose. The API forwards byte streams to typed agent transport
+without gaining Docker or arbitrary filesystem authority.
+
+The agent's private publication journal distinguishes file commit from stage
+transfer and frozen-generation hardlink completion. A reconstructed agent may
+restore an interrupted transaction or observe its original committed result, but
+cannot redispatch an attempted child. A historical canonical failure remains
+immutable. The fixed `artifactTransfer.inspectClaim` observer can additionally
+return `publication` only after the original signed journal, child containment,
+known effect and physically released whole target tree are verified. The API
+durably copies that separate purpose observation into its owned SQL checkpoint
+before acknowledging the original canonical tuple. Stage metadata cannot retire
+that receipt before delivery. An HTTP status, expired deadline, consumed stage or absent
+PID alone cannot authorize that transition.
+
+MOTIS's generated credential-bearing files are a private projection from a nominal
+offline destination materialization handle. The public archive schema continues to
+reject those files. Capacity is reserved before materialization, and publication
+binds both the immutable portable fingerprint and generated local fingerprint.
+The CLI and agent share that same publisher and fixed destination adapter.
+
+Linux byte uploads, downloads and private archive validation hold an inherited
+descriptor lock. Shutdown drains byte streams; it does not cancel host jobs.
+After actual process death, startup can reclaim authenticated private partial
+bytes when the kernel lock is free. Unknown managed-file publication remains
+fenced and is never inferred from a timeout or process identifier.

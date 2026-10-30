@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -193,6 +201,9 @@ it("exports a sanitized MOTIS candidate with credential IDs and no generated run
   mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
   symlinkSync("slots/A", join(data, "motis/live"));
   writeFileSync(join(data, "motis/slots/A/data/tt.bin"), "TT");
+  writeFileSync(join(data, "motis/slots/A/license.json"), '{"license":"synthetic-public"}');
+  writeFileSync(join(root, "acquired.gtfs.zip"), "synthetic acquired timetable");
+  linkSync(join(root, "acquired.gtfs.zip"), join(data, "motis/slots/A/de_feed.gtfs.zip"));
   writeFileSync(join(data, "motis/slots/A/config.yml"), "secret-api-key");
   writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "secret-api-key");
   writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "secret-api-key");
@@ -231,6 +242,8 @@ it("exports a sanitized MOTIS candidate with credential IDs and no generated run
     runtimeMaterialization: "motis-target-credentials",
   });
   expect(Buffer.concat(chunks).includes(Buffer.from("secret-api-key"))).toBe(false);
+  expect(result.manifest.files.map((file) => file.path)).toContain("motis/live/license.json");
+  expect(result.manifest.files.map((file) => file.path)).toContain("motis/live/de_feed.gtfs.zip");
   const validated = await validate(Buffer.concat(chunks));
   expect(validated.artifactFingerprint).toBe(result.artifactFingerprint);
 });

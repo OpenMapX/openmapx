@@ -46,6 +46,8 @@ interface State {
   overlay: ProspectiveConfigurationOverlay;
   participant: ConfigurationCommitParticipant;
   committed?: { candidateId: string; revisionId: string; rowVersion: string };
+  migrationStageId?: string;
+  additionalServiceIds?: readonly string[];
 }
 function immutable<T>(value: T): T {
   if (value && typeof value === "object") {
@@ -56,10 +58,17 @@ function immutable<T>(value: T): T {
 }
 const intents = new WeakMap<PlatformConfigurationIntent, State>(),
   participants = new WeakMap<ConfigurationCommitParticipant, State>();
+const migrationParents = new WeakMap<ConfigurationCommitParticipant, State>();
 function active(writer: AdministrativeConfigurationWriter) {
   const owner = administrativeConfigurationState(writer);
   if (
-    !["platform.apply", "system.update"].includes(owner.job.jobType ?? "") ||
+    ![
+      "platform.apply",
+      "system.update",
+      "configuration.migration.apply",
+      "configuration.migration.preview",
+      "credential.import",
+    ].includes(owner.job.jobType ?? "") ||
     !owner.job.execution
   )
     throw new PlatformPreviewConflict();
@@ -73,7 +82,9 @@ export function isPlatformConfigurationParticipant(
 }
 function stateFor(writer: AdministrativeConfigurationWriter) {
   const owner = active(writer),
-    state = owner.participant && participants.get(owner.participant);
+    state =
+      owner.participant &&
+      (participants.get(owner.participant) ?? migrationParents.get(owner.participant));
   if (!state || state.writer !== writer) throw new PlatformPreviewConflict();
   return state;
 }
@@ -144,6 +155,7 @@ export function assertPlatformConfigurationSource(
     ...(p.reconcileServiceIds ? { reconcileServiceIds: p.reconcileServiceIds } : {}),
     ...(p.release ? { release: p.release } : {}),
     ...input,
+    ...(state.additionalServiceIds ? { additionalServiceIds: state.additionalServiceIds } : {}),
   });
   if (rebuilt.previewFingerprint !== p.previewFingerprint) throw new PlatformPreviewConflict();
 }
@@ -153,7 +165,30 @@ export async function preparePlatformConfigurationChange(
     "previewFingerprint" | "expectedCurrentRevisionId" | "confirmations" | "proof"
   >,
   writer: AdministrativeConfigurationWriter,
+  migration?: {
+    stage: import("./configuration-migration/staging").MigrationStage;
+    mode: "preview" | "apply";
+    additionalServiceIds: readonly string[];
+  },
 ): Promise<PlatformConfigurationIntent> {
+  if (migration) {
+    const { assertRetainedMigrationStage } = await import("./configuration-migration/staging");
+    assertRetainedMigrationStage(migration.stage);
+    if (
+      !["migration", "credentials"].includes(migration.stage.kind) ||
+      migration.stage.actorId !== writer.actorId ||
+      (migration.stage.value as { platformPreview?: { previewFingerprint: string } })
+        .platformPreview?.previewFingerprint !== input.previewFingerprint
+    )
+      throw new PlatformPreviewConflict();
+  } else if (
+    [
+      "configuration.migration.apply",
+      "configuration.migration.preview",
+      "credential.import",
+    ].includes(active(writer).job.jobType ?? "")
+  )
+    throw new PlatformPreviewConflict();
   const owner = active(writer),
     retained = await readPlatformPreview(
       { actorId: writer.actorId, previewFingerprint: input.previewFingerprint },
@@ -161,20 +196,25 @@ export async function preparePlatformConfigurationChange(
     ),
     preview = immutable(retained.preview);
   if (
-    !platformJobMatchesPreview({ type: owner.job.jobType!, payload: owner.job.payload }, preview) ||
+    (!migration &&
+      !platformJobMatchesPreview(
+        { type: owner.job.jobType!, payload: owner.job.payload },
+        preview,
+      )) ||
     retained.consumedByJobId ||
     !retained.sourceSnapshot ||
     retained.desiredRowVersion === undefined ||
     preview.expectedCurrentRevisionId !== input.expectedCurrentRevisionId ||
     preview.authPolicyRevision !== (await loadAuthPolicy(owner.connection)).revision ||
-    Object.entries(preview.requiredConfirmation).some(
-      ([key, required]) =>
-        required && input.confirmations[key as keyof typeof input.confirmations] !== true,
-    )
+    (migration?.mode !== "preview" &&
+      Object.entries(preview.requiredConfirmation).some(
+        ([key, required]) =>
+          required && input.confirmations[key as keyof typeof input.confirmations] !== true,
+      ))
   )
     throw new PlatformPreviewConflict();
   const proof = input.proof ? { ...input.proof, nonce: Buffer.from(input.proof.nonce) } : undefined;
-  if (preview.requiredConfirmation.domain) {
+  if (preview.requiredConfirmation.domain && migration?.mode !== "preview") {
     if (!proof) throw new PlatformPreviewConflict("Domain recovery proof required");
     await new AdminActionReauthentication(owner.connection).check(
       {
@@ -292,7 +332,7 @@ export async function preparePlatformConfigurationChange(
   };
   const participant = Object.freeze({
     kind: "platform",
-    mode: "apply",
+    mode: migration?.mode ?? "apply",
     actorId: writer.actorId,
     operationKey: writer.operationKey,
     managedServiceSecretKeys: Object.freeze([]),
@@ -308,6 +348,7 @@ export async function preparePlatformConfigurationChange(
     ) => {
       const current = active(actual);
       if (
+        migration?.mode === "preview" ||
         actual !== writer ||
         current.connection !== tx ||
         !current.transactionActive ||
@@ -349,6 +390,12 @@ export async function preparePlatformConfigurationChange(
     sourceSnapshot: immutable(retained.sourceSnapshot!),
     expectedDesiredRowVersion: desired?.version ?? null,
     handoffId: randomUUID(),
+    ...(migration
+      ? {
+          migrationStageId: migration.stage.previewId,
+          additionalServiceIds: [...migration.additionalServiceIds],
+        }
+      : {}),
     overlay,
     participant,
     ...(proof
@@ -372,4 +419,23 @@ export async function preparePlatformConfigurationChange(
   intents.set(intent, state);
   participants.set(participant, state);
   return intent;
+}
+
+/** Joins only this original platform issuer to the actual staged migration issuer. */
+export async function bindStagedMigrationPlatform(
+  intent: PlatformConfigurationIntent,
+  parent: ConfigurationCommitParticipant,
+  writer: AdministrativeConfigurationWriter,
+) {
+  const state = intents.get(intent);
+  if (
+    !state ||
+    state.writer !== writer ||
+    !state.migrationStageId ||
+    !["configuration-migration", "credential-import"].includes(parent.kind) ||
+    parent.actorId !== writer.actorId ||
+    parent.operationKey !== writer.operationKey
+  )
+    throw new PlatformPreviewConflict();
+  migrationParents.set(parent, state);
 }

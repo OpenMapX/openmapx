@@ -459,3 +459,40 @@ was restored, or that reconciliation is required. Restoration never authorizes
 overwriting a newer administrator/host edit. If reconciliation is required,
 inspect saved configuration, the applied host generation and runtime state before
 making another deliberate change. Do not automatically retry the import.
+
+## Portable configuration and protected credentials
+
+System Settings includes configuration migration with an ownership inventory.
+Export contains declared database-owned non-secret settings, integration and
+service configuration, bindings, and installation prerequisites. Environment
+and file overrides, vault values, bootstrap keys, and unsupported metadata are
+listed as omissions. Install missing extensions and resolve required credentials
+before applying dependent configuration.
+
+Import a configuration JSON file of at most 1 MiB, review the selected scopes and
+prerequisites, and apply its ten-minute preview. The preview is bound to the
+administrator and original configuration sources. A changed configuration or
+source requires a new preview. Selected desired changes share one guarded
+transaction and generation; later provider or host effects can remain partial or
+unknown. Activity retains those outcomes. Imported authentication settings are
+pending drafts until the separate authentication policy Apply action.
+
+Platform fields use the existing origin, DNS/TLS, OAuth, passkey and alternate
+login confirmations. Domain changes require a fresh purpose-bound sign-in and
+use the same guarded generation as the other selected configuration.
+
+Protected credential transfer exports only explicitly selected, effective vault
+credentials to `openmapx-vault-transfer.json.enc`. Supply a passphrase of 12–1024
+UTF-8 bytes and confirm a fresh administrator sign-in. The authenticated encrypted
+file is at most 1 MiB. A lost export response requires another explicit sign-in;
+the server does not retain the passphrase or a plaintext export for replay.
+
+On import, confirm sign-in to decrypt and review the file, then explicitly choose
+which fields to import or skip. Existing ordinary credentials are overwritten
+only when selected. Managed Transitous credentials also require the current
+catalog and credential revisions: selected feed IDs are merged, unselected keys
+are preserved, and only explicitly listed deletion IDs are removed. Applying a
+managed transfer requires both import and transit-credential purposes from one
+fresh sign-in. The encrypted preview expires after ten minutes; changing choices
+invalidates its prior confirmation. Passphrases are cleared after each request
+and when the dialog closes.

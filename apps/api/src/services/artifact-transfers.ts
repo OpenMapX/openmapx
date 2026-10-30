@@ -9,12 +9,43 @@ import {
 } from "@openmapx/core/ops";
 import { createApiOpsClient, createDurableOpsKey } from "./ops-client";
 export class AdminArtifactTransferError extends Error {
-  constructor(readonly statusCode: number) {
-    super("Artifact transfer unavailable; inspect the retained stage before retrying");
+  constructor(
+    readonly statusCode: number,
+    readonly jobId?: string,
+  ) {
+    super(
+      jobId
+        ? `This stage is retained by job ${jobId}. Review its outcome in Activity before cleanup.`
+        : "Artifact transfer unavailable; inspect the retained stage before retrying",
+    );
   }
 }
 export class AdminArtifactTransfers {
   constructor(private readonly client: OpsClient = createApiOpsClient()) {}
+  capabilities(ownerId: string) {
+    return this.execute({ kind: "artifactTransfer.capabilities", ownerId });
+  }
+  async exportPrepared(
+    ownerId: string,
+    key: string,
+    input: {
+      serviceId: "tileserver" | "osrm" | "otp" | "pelias" | "motis";
+      expectedArtifactFingerprint: string;
+    },
+  ) {
+    const payload = { ownerId, ...input };
+    const { jobRunner } = await import("./job-runner"),
+      { MaintenanceRequestConflict } = await import("./retained-maintenance-job");
+    try {
+      return {
+        ok: true as const,
+        jobId: await jobRunner.enqueueMaintenance("artifact.export", payload, ownerId, key),
+      };
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict) throw new AdminArtifactTransferError(409);
+      throw error;
+    }
+  }
   private async execute<K extends OpsOperationKind>(
     operation: Extract<OpsOperation, { kind: K }>,
   ): Promise<OpsResultFor<K>> {
@@ -134,7 +165,34 @@ export class AdminArtifactTransfers {
     });
   }
   async delete(ownerId: string, stageId: string) {
-    return this.execute({ kind: "artifactTransfer.delete", stageId, ownerId });
+    try {
+      return await this.execute({ kind: "artifactTransfer.delete", stageId, ownerId });
+    } catch (error) {
+      if (error instanceof AdminArtifactTransferError && error.statusCode === 409) {
+        let jobId: string | undefined;
+        try {
+          const { db } = await import("../db"),
+            { adminJob } = await import("../db/schema"),
+            { and, desc, sql } = await import("drizzle-orm");
+          const [row] = await db
+            .select({ id: adminJob.id })
+            .from(adminJob)
+            .where(
+              and(
+                sql`${adminJob.payload}->>'ownerId' = ${ownerId}`,
+                sql`coalesce(${adminJob.payload}->>'stageId',${adminJob.payload}->'source'->>'stageId') = ${stageId}`,
+              ),
+            )
+            .orderBy(desc(adminJob.createdAt))
+            .limit(1);
+          jobId = row?.id;
+        } catch {
+          /* A lookup failure cannot weaken the retained stage conflict. */
+        }
+        if (jobId) throw new AdminArtifactTransferError(409, jobId);
+      }
+      throw error;
+    }
   }
   async upload(
     ownerId: string,

@@ -49,6 +49,7 @@ import {
   assertArtifactTargetLeaseExecution,
   inspectArtifactTargetLeaseChildSettlement,
   type TargetLeaseAuthority,
+  verifyRetainedArtifactTargetRootRelease,
 } from "./target-lease";
 
 const schema = z.strictObject({
@@ -269,4 +270,49 @@ export async function executeOwnedGenerationHardlinks(options: {
   if (!contained || status.status !== "ok" || status.result?.kind !== "generation-hardlinks")
     throw new DataExecutionObservationPending(identity, "transport");
   return hardlinkApplySummarySchema.parse(status.result.hardlinks);
+}
+
+/** Settlement-only observation. Never bind, issue, dispatch, cancel or replay a
+ * hardlink leaf after its original owner has stopped forwarding. */
+export function inspectOwnedGenerationHardlinks(
+  authority: VerifiedExecutionAuthority,
+  lease?: TargetLeaseAuthority,
+) {
+  if (!lease) verifyRetainedArtifactTargetRootRelease(authority);
+  const owner = executionAuthorityState(authority),
+    plan = readGenerationHardlinksOwnerPlan(authority);
+  if (!plan.reservation) return "complete" as const;
+  const binding = lookupControlChildPhaseBinding(authority, plan.reservation);
+  if (!binding) return "not_attempted" as const;
+  const proof = verifyDataControlTerminalWitness(
+      owner.installation.installation,
+      binding.child.execution,
+    ),
+    settled = lease
+      ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
+      : null;
+  if (
+    lease &&
+    (!settled ||
+      settled.outcome === "unknown" ||
+      settled.publication === "unknown" ||
+      settled.publication !== proof.status.publication)
+  )
+    throw Error("Original hardlink leaf remains unresolved");
+  if (
+    proof.status.status === "ok" &&
+    proof.status.publication === "committed" &&
+    proof.status.result?.kind === "generation-hardlinks"
+  ) {
+    if (lease && settled?.outcome !== "committed")
+      throw Error("Original hardlink commit remains unresolved");
+    hardlinkApplySummarySchema.parse(proof.status.result.hardlinks);
+    return "complete" as const;
+  }
+  if (
+    proof.status.publication !== "unknown" &&
+    ["partial", "error", "canceled", "interrupted"].includes(proof.status.status)
+  )
+    return "failed" as const;
+  throw Error("Original hardlink leaf remains unresolved");
 }

@@ -39,6 +39,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "saved_list.user_id": "saved-lists",
   "service_secret.updated_by": "secret-update-attribution",
   "transit_credential_preview.actor_id": "secret-update-attribution",
+  "configuration_migration_preview.actor_id": "secret-update-attribution",
   "session.user_id": "auth-sessions",
   "admin_action_reauthentication.actor_id": "auth-sessions",
   "share_link.user_id": "share-links",

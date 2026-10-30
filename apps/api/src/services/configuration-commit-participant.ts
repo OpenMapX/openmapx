@@ -21,9 +21,11 @@ export async function withConfigurationCommitParticipant<T>(
   const { isPlatformConfigurationParticipant } = await import(
     "./platform-configuration-participant"
   );
+  const { isStagedMigrationParticipant } = await import("./configuration-migration/participant");
   // Exact installed built-in issuer, never a registration or caller callback.
   if (
     (!isLegacyIntegrationImportParticipant(participant, writer) &&
+      !isStagedMigrationParticipant(participant, writer) &&
       !isIntegrationBindingParticipant(participant, writer) &&
       !isTransitCredentialParticipant(participant, writer) &&
       !isPlatformConfigurationParticipant(participant, writer)) ||

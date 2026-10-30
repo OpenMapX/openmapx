@@ -36,6 +36,7 @@ import type { AdminOperationContract } from "../operations/adminOperationsApi";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
+import { ArtifactTransfersSection } from "./ArtifactTransfersSection";
 import { DataInventorySection } from "./DataInventorySection";
 import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
 import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
@@ -429,6 +430,7 @@ function DataWorkflowsView() {
       <Stack spacing={2}>
         <DataOperationsSection apiUrl={apiUrl} />
         <DataInventorySection osm={data.osm} builds={data.builds} onPageChange={setOsmOffset} />
+        <ArtifactTransfersSection apiUrl={apiUrl} />
         <OvertureMaintenance apiUrl={apiUrl} />
         <SearchIndexMaintenance apiUrl={apiUrl} />
         <AmbientPlacesMaintenance apiUrl={apiUrl} />

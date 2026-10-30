@@ -29,6 +29,8 @@ import {
   adminIntegrationValidationErrorSchema,
   adminIntegrationVaultUnavailableSchema,
 } from "./common";
+import { configurationMigrationOperations } from "./configuration-migration";
+import { credentialTransferOperations } from "./credential-transfer";
 import {
   adminCredentialsSchema,
   adminIntegrationCredentialDeleteSchema,
@@ -44,7 +46,6 @@ import {
   adminIntegrationHealthSweepSchema,
 } from "./health";
 import { adminOverviewSchema } from "./overview";
-
 import { standaloneIntegrationAdminOperations } from "./standalone-integrations";
 
 const common = adminCommonResponses;
@@ -65,6 +66,8 @@ const _ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
 export const integrationAdminOperations = {
+  ...configurationMigrationOperations,
+  ...credentialTransferOperations,
   ...standaloneIntegrationAdminOperations,
   listAdminIntegrations: {
     method: "GET",

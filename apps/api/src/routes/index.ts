@@ -7,7 +7,9 @@ import { adminBackupMaintenanceRoute } from "./admin-backup-maintenance";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
+import { adminConfigurationMigrationRoute } from "./admin-configuration-migration";
 import { adminCoverageRoute } from "./admin-coverage";
+import { adminCredentialTransferRoute } from "./admin-credential-transfer";
 import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
 import { adminJobEventsRoute } from "./admin-job-events";
@@ -83,6 +85,8 @@ export async function registerCoreRoutes(
 ): Promise<void> {
   await server.register(authRoute, options);
   await server.register(adminAccountsRoute, { prefix: "/api" });
+  await server.register(adminConfigurationMigrationRoute, { prefix: "/api" });
+  await server.register(adminCredentialTransferRoute, { prefix: "/api" });
   await server.register(adminReauthenticationRoute, { prefix: "/api" });
 
   await server.register(metaRoute);

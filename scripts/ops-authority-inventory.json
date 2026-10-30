@@ -35,9 +35,11 @@
       "agent.update",
       "appApi.replace",
       "appApi.runtime.inspect",
+      "artifactTransfer.capabilities",
       "artifactTransfer.claim",
       "artifactTransfer.create",
       "artifactTransfer.delete",
+      "artifactTransfer.export",
       "artifactTransfer.import",
       "artifactTransfer.inspect",
       "artifactTransfer.inspectClaim",
@@ -431,7 +433,8 @@
         "artifactTransfer.claim",
         "artifactTransfer.inspectClaim",
         "artifactTransfer.settle",
-        "artifactTransfer.previewImport"
+        "artifactTransfer.previewImport",
+        "artifactTransfer.capabilities"
       ]
     },
     {
@@ -483,6 +486,15 @@
         "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactImportJob"
       ],
       "typedKinds": ["artifactTransfer.import"]
+    },
+    {
+      "id": "api.artifact-export",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactExportJob",
+        "apps/ops-agent/src/artifact-transfer/export-runtime.ts#installPreparedExportRuntime"
+      ],
+      "typedKinds": ["artifactTransfer.export"]
     }
   ],
   "mounts": [

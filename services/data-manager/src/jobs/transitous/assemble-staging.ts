@@ -9,8 +9,14 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
+import {
+  createMotisPinnedBlobReader,
+  PORTABLE_MOTIS_FILENAME,
+  producePortableMotisRecipe,
+} from "@openmapx/core/build-artifacts/motis-portable";
+import { parseFeedCredentialMapJson } from "@openmapx/transitous-core/feed-credentials";
 import { CANDIDATE_PROXY_DIRNAME, createCandidateManifestAsync } from "./candidate.js";
-import { GTFS_ARCHIVE_RE } from "./internal.js";
+import { GTFS_ARCHIVE_RE, resolveTransitousApiKeysPath } from "./internal.js";
 import { readTransitSourceManifest, TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
@@ -219,6 +225,40 @@ export const run: StageFn = async (ctx) => {
       ctx.abortSignal,
     );
 
+    // Only the successful real assembly may retain a portable recipe. Unsupported
+    // host/operator sources remain usable locally, with an explicit export prerequisite.
+    rmSync(join(stagingDir, PORTABLE_MOTIS_FILENAME), { force: true });
+    let portableRecipeWritten = false;
+    if (ctx.state.catalogPins && missingFeeds.length === 0 && osmSource !== "missing") {
+      try {
+        const pins = {
+          transitousCommit: ctx.state.catalogPins.transitous.ref.split("@").at(-1) ?? "",
+          atlasCommit: ctx.state.catalogPins.transitous.submodules["transitland-atlas"] ?? "",
+        };
+        const keysPath = resolveTransitousApiKeysPath(ctx.apiKeysPath);
+        const credentials = existsSync(keysPath)
+          ? parseFeedCredentialMapJson(readFileSync(keysPath, "utf8"))
+          : {};
+        await producePortableMotisRecipe({
+          stagingDir,
+          pins,
+          credentials,
+          readBlob: createMotisPinnedBlobReader(
+            ctx.state.catalogDir ?? ctx.catalogDir,
+            pins,
+            ctx.abortSignal,
+          ),
+          signal: ctx.abortSignal,
+        });
+        portableRecipeWritten = true;
+      } catch {
+        ctx.abortSignal.throwIfAborted();
+        ctx.logger.warn(
+          "assemble-staging: portable export unavailable; supported pinned nonsecret source metadata and destination credential bindings are required",
+        );
+      }
+    }
+
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(
       status,
@@ -234,6 +274,13 @@ export const run: StageFn = async (ctx) => {
         osm: osm ?? null,
         osmSource,
         candidateEpoch: manifest.epoch,
+        portableRecipeWritten,
+        ...(!portableRecipeWritten
+          ? {
+              portableExportPrerequisite:
+                "Rebuild with supported pinned, nonsecret source metadata and credential bindings",
+            }
+          : {}),
         configHash: manifest.artifacts.config.sha256,
         licenseHash: manifest.artifacts.license.sha256,
       },

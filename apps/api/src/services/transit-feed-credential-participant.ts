@@ -138,6 +138,9 @@ export async function inspectFeedCredentials(input: {
   });
 }
 interface ChangeInput {
+  /** Set only by the finite encrypted transfer coordinator; direct routes stay bounded at100. */
+  transfer?: true;
+  previewOperationKey?: string;
   actorId: string;
   catalogRevisionId: string;
   proposalId?: string;
@@ -163,7 +166,7 @@ async function validateInput(input: ChangeInput) {
     for (const change of input.changes)
       if (!Object.hasOwn(existing, change.key) && !host.requiredKeys.includes(change.key))
         throw new TransitCredentialConflict("TRANSIT_CREDENTIAL_KEY_NOT_IN_CATALOG");
-    const next = validateFeedCredentialMap(existing, input.changes);
+    const next = validateFeedCredentialMap(existing, input.changes, input.transfer ? 1000 : 100);
     return { host, row, revision, existing, next };
   });
 }
@@ -271,7 +274,10 @@ function proofInput(state: PatchState) {
     challengeId: authorization.transitProofToken,
     purpose: "transit.credentials" as const,
     targetId: state.input.catalogRevisionId,
-    intentFingerprint: preview.intentFingerprint,
+    intentFingerprint:
+      authorization.kind === "credential-import"
+        ? authorization.importFingerprint
+        : preview.intentFingerprint,
   };
   return {
     nonce: context.nonce,
@@ -324,7 +330,10 @@ export async function authorizePreparedFeedCredentialPatch(input: {
       actorId: state.input.actorId,
       previewId: input.preview.previewId,
       intentFingerprint: input.preview.intentFingerprint,
-      operationKey: state.input.operationKey,
+      operationKey:
+        input.authorization.kind === "credential-import"
+          ? (state.input.previewOperationKey ?? state.input.operationKey)
+          : state.input.operationKey,
     },
     administrativeConfigurationState(input.writer).connection,
   );

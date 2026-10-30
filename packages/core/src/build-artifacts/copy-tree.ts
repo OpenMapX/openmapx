@@ -14,8 +14,8 @@ import {
 import { open } from "node:fs/promises";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { artifactFingerprint, safeArtifactPath } from "./artifact-path";
 import { type AnchoredDirectory, identity, sameInode } from "./filesystem";
-import { artifactFingerprint, safeArtifactPath } from "./manifest";
 export interface ArtifactTreeLimits {
   maximumEntries: number;
   maximumBytes: number;

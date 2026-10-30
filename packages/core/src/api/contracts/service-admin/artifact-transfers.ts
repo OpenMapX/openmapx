@@ -1,7 +1,9 @@
 import z from "zod/v4";
 import {
+  artifactExportOperationSchema,
   artifactImportOperationSchema,
   artifactImportPreviewSchema,
+  artifactTransferResultSchemas,
   transferPurposeSchema,
   transferStageSchema,
 } from "../../../ops/artifact-transfer";
@@ -49,7 +51,35 @@ export const adminArtifactImportInputSchema = artifactImportOperationSchema.omit
   stageId: true,
   ownerId: true,
 });
+export const adminArtifactExportInputSchema = artifactExportOperationSchema.omit({
+  kind: true,
+  ownerId: true,
+});
 export const artifactTransferAdminOperations = {
+  getAdminArtifactTransferCapabilities: {
+    method: "GET",
+    path: "/api/admin/artifact-transfers/capabilities",
+    auth: "admin",
+    responses: {
+      200: adminJson(artifactTransferResultSchemas["artifactTransfer.capabilities"]),
+      ...errors,
+    },
+  },
+  exportAdminArtifactTransfer: {
+    method: "POST",
+    path: "/api/admin/artifact-transfers/exports",
+    auth: "admin",
+    request: {
+      body: adminArtifactExportInputSchema,
+      headers: z.object({
+        "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),
+      }),
+    },
+    responses: {
+      202: adminJson(z.strictObject({ ok: z.literal(true), jobId: z.uuid() })),
+      ...errors,
+    },
+  },
   previewAdminArtifactImport: {
     method: "POST",
     path: "/api/admin/artifact-transfers/:stageId/preview-import",

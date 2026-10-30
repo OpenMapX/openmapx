@@ -20,6 +20,8 @@ import {
   deleteAdminServiceBackupRequest,
   deleteAdminServiceCredentialRequest,
   downloadAdminArtifactTransferContentRequest,
+  exportAdminArtifactTransferRequest,
+  getAdminArtifactTransferCapabilitiesRequest,
   getAdminArtifactTransferRequest,
   getAdminComposePreviewRequest,
   getAdminDawarichRequest,
@@ -178,6 +180,22 @@ import type {
   DownloadAdminArtifactTransferContent500,
   DownloadAdminArtifactTransferContent503,
   DownloadAdminArtifactTransferContent507,
+  ExportAdminArtifactTransfer202,
+  ExportAdminArtifactTransfer400,
+  ExportAdminArtifactTransfer401,
+  ExportAdminArtifactTransfer403,
+  ExportAdminArtifactTransfer404,
+  ExportAdminArtifactTransfer409,
+  ExportAdminArtifactTransfer410,
+  ExportAdminArtifactTransfer413,
+  ExportAdminArtifactTransfer415,
+  ExportAdminArtifactTransfer422,
+  ExportAdminArtifactTransfer429,
+  ExportAdminArtifactTransfer500,
+  ExportAdminArtifactTransfer503,
+  ExportAdminArtifactTransfer507,
+  ExportAdminArtifactTransferBody,
+  ExportAdminArtifactTransferHeaders,
   GetAdminArtifactTransfer200,
   GetAdminArtifactTransfer400,
   GetAdminArtifactTransfer401,
@@ -192,6 +210,20 @@ import type {
   GetAdminArtifactTransfer500,
   GetAdminArtifactTransfer503,
   GetAdminArtifactTransfer507,
+  GetAdminArtifactTransferCapabilities200,
+  GetAdminArtifactTransferCapabilities400,
+  GetAdminArtifactTransferCapabilities401,
+  GetAdminArtifactTransferCapabilities403,
+  GetAdminArtifactTransferCapabilities404,
+  GetAdminArtifactTransferCapabilities409,
+  GetAdminArtifactTransferCapabilities410,
+  GetAdminArtifactTransferCapabilities413,
+  GetAdminArtifactTransferCapabilities415,
+  GetAdminArtifactTransferCapabilities422,
+  GetAdminArtifactTransferCapabilities429,
+  GetAdminArtifactTransferCapabilities500,
+  GetAdminArtifactTransferCapabilities503,
+  GetAdminArtifactTransferCapabilities507,
   GetAdminComposePreview400,
   GetAdminComposePreview401,
   GetAdminComposePreview403,
@@ -861,6 +893,252 @@ export const createAdminArtifactTransfer = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(createAdminArtifactTransferBody),
+    },
+  );
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse200 = {
+  data: GetAdminArtifactTransferCapabilities200;
+  status: 200;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse400 = {
+  data: GetAdminArtifactTransferCapabilities400;
+  status: 400;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse401 = {
+  data: GetAdminArtifactTransferCapabilities401;
+  status: 401;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse403 = {
+  data: GetAdminArtifactTransferCapabilities403;
+  status: 403;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse404 = {
+  data: GetAdminArtifactTransferCapabilities404;
+  status: 404;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse409 = {
+  data: GetAdminArtifactTransferCapabilities409;
+  status: 409;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse410 = {
+  data: GetAdminArtifactTransferCapabilities410;
+  status: 410;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse413 = {
+  data: GetAdminArtifactTransferCapabilities413;
+  status: 413;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse415 = {
+  data: GetAdminArtifactTransferCapabilities415;
+  status: 415;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse422 = {
+  data: GetAdminArtifactTransferCapabilities422;
+  status: 422;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse429 = {
+  data: GetAdminArtifactTransferCapabilities429;
+  status: 429;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse500 = {
+  data: GetAdminArtifactTransferCapabilities500;
+  status: 500;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse503 = {
+  data: GetAdminArtifactTransferCapabilities503;
+  status: 503;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse507 = {
+  data: GetAdminArtifactTransferCapabilities507;
+  status: 507;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponseSuccess =
+  getAdminArtifactTransferCapabilitiesResponse200 & {
+    headers: Headers;
+  };
+export type getAdminArtifactTransferCapabilitiesResponseError = (
+  | getAdminArtifactTransferCapabilitiesResponse400
+  | getAdminArtifactTransferCapabilitiesResponse401
+  | getAdminArtifactTransferCapabilitiesResponse403
+  | getAdminArtifactTransferCapabilitiesResponse404
+  | getAdminArtifactTransferCapabilitiesResponse409
+  | getAdminArtifactTransferCapabilitiesResponse410
+  | getAdminArtifactTransferCapabilitiesResponse413
+  | getAdminArtifactTransferCapabilitiesResponse415
+  | getAdminArtifactTransferCapabilitiesResponse422
+  | getAdminArtifactTransferCapabilitiesResponse429
+  | getAdminArtifactTransferCapabilitiesResponse500
+  | getAdminArtifactTransferCapabilitiesResponse503
+  | getAdminArtifactTransferCapabilitiesResponse507
+) & {
+  headers: Headers;
+};
+
+export type getAdminArtifactTransferCapabilitiesResponse =
+  | getAdminArtifactTransferCapabilitiesResponseSuccess
+  | getAdminArtifactTransferCapabilitiesResponseError;
+
+export const getGetAdminArtifactTransferCapabilitiesUrl = () => {
+  return `/api/admin/artifact-transfers/capabilities`;
+};
+
+export const getAdminArtifactTransferCapabilities = async (
+  options?: Parameters<typeof getAdminArtifactTransferCapabilitiesRequest>[1],
+): Promise<getAdminArtifactTransferCapabilitiesResponse> => {
+  return getAdminArtifactTransferCapabilitiesRequest<getAdminArtifactTransferCapabilitiesResponse>(
+    getGetAdminArtifactTransferCapabilitiesUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type exportAdminArtifactTransferResponse202 = {
+  data: ExportAdminArtifactTransfer202;
+  status: 202;
+};
+
+export type exportAdminArtifactTransferResponse400 = {
+  data: ExportAdminArtifactTransfer400;
+  status: 400;
+};
+
+export type exportAdminArtifactTransferResponse401 = {
+  data: ExportAdminArtifactTransfer401;
+  status: 401;
+};
+
+export type exportAdminArtifactTransferResponse403 = {
+  data: ExportAdminArtifactTransfer403;
+  status: 403;
+};
+
+export type exportAdminArtifactTransferResponse404 = {
+  data: ExportAdminArtifactTransfer404;
+  status: 404;
+};
+
+export type exportAdminArtifactTransferResponse409 = {
+  data: ExportAdminArtifactTransfer409;
+  status: 409;
+};
+
+export type exportAdminArtifactTransferResponse410 = {
+  data: ExportAdminArtifactTransfer410;
+  status: 410;
+};
+
+export type exportAdminArtifactTransferResponse413 = {
+  data: ExportAdminArtifactTransfer413;
+  status: 413;
+};
+
+export type exportAdminArtifactTransferResponse415 = {
+  data: ExportAdminArtifactTransfer415;
+  status: 415;
+};
+
+export type exportAdminArtifactTransferResponse422 = {
+  data: ExportAdminArtifactTransfer422;
+  status: 422;
+};
+
+export type exportAdminArtifactTransferResponse429 = {
+  data: ExportAdminArtifactTransfer429;
+  status: 429;
+};
+
+export type exportAdminArtifactTransferResponse500 = {
+  data: ExportAdminArtifactTransfer500;
+  status: 500;
+};
+
+export type exportAdminArtifactTransferResponse503 = {
+  data: ExportAdminArtifactTransfer503;
+  status: 503;
+};
+
+export type exportAdminArtifactTransferResponse507 = {
+  data: ExportAdminArtifactTransfer507;
+  status: 507;
+};
+
+export type exportAdminArtifactTransferResponseSuccess = exportAdminArtifactTransferResponse202 & {
+  headers: Headers;
+};
+export type exportAdminArtifactTransferResponseError = (
+  | exportAdminArtifactTransferResponse400
+  | exportAdminArtifactTransferResponse401
+  | exportAdminArtifactTransferResponse403
+  | exportAdminArtifactTransferResponse404
+  | exportAdminArtifactTransferResponse409
+  | exportAdminArtifactTransferResponse410
+  | exportAdminArtifactTransferResponse413
+  | exportAdminArtifactTransferResponse415
+  | exportAdminArtifactTransferResponse422
+  | exportAdminArtifactTransferResponse429
+  | exportAdminArtifactTransferResponse500
+  | exportAdminArtifactTransferResponse503
+  | exportAdminArtifactTransferResponse507
+) & {
+  headers: Headers;
+};
+
+export type exportAdminArtifactTransferResponse =
+  | exportAdminArtifactTransferResponseSuccess
+  | exportAdminArtifactTransferResponseError;
+
+export const getExportAdminArtifactTransferUrl = () => {
+  return `/api/admin/artifact-transfers/exports`;
+};
+
+export const exportAdminArtifactTransfer = async (
+  exportAdminArtifactTransferBody: ExportAdminArtifactTransferBody,
+  headers: ExportAdminArtifactTransferHeaders,
+  options?: Parameters<typeof exportAdminArtifactTransferRequest>[1],
+): Promise<exportAdminArtifactTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return exportAdminArtifactTransferRequest<exportAdminArtifactTransferResponse>(
+    getExportAdminArtifactTransferUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(exportAdminArtifactTransferBody),
     },
   );
 };

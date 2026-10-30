@@ -13,6 +13,42 @@ import type {
   AdoptAdminStandaloneIntegration503,
   AdoptAdminStandaloneIntegrationBody,
   AdoptAdminStandaloneIntegrationHeaders,
+  ApplyAdminConfigurationMigration200,
+  ApplyAdminConfigurationMigration400,
+  ApplyAdminConfigurationMigration401,
+  ApplyAdminConfigurationMigration403,
+  ApplyAdminConfigurationMigration409,
+  ApplyAdminConfigurationMigration413,
+  ApplyAdminConfigurationMigration415,
+  ApplyAdminConfigurationMigration429,
+  ApplyAdminConfigurationMigration500,
+  ApplyAdminConfigurationMigration503,
+  ApplyAdminConfigurationMigrationBody,
+  ApplyAdminConfigurationMigrationHeaders,
+  ApplyAdminCredentialTransfer200,
+  ApplyAdminCredentialTransfer400,
+  ApplyAdminCredentialTransfer401,
+  ApplyAdminCredentialTransfer403,
+  ApplyAdminCredentialTransfer409,
+  ApplyAdminCredentialTransfer413,
+  ApplyAdminCredentialTransfer415,
+  ApplyAdminCredentialTransfer429,
+  ApplyAdminCredentialTransfer500,
+  ApplyAdminCredentialTransfer503,
+  ApplyAdminCredentialTransferBody,
+  ApplyAdminCredentialTransferHeaders,
+  ChooseAdminCredentialTransferFields200,
+  ChooseAdminCredentialTransferFields400,
+  ChooseAdminCredentialTransferFields401,
+  ChooseAdminCredentialTransferFields403,
+  ChooseAdminCredentialTransferFields409,
+  ChooseAdminCredentialTransferFields413,
+  ChooseAdminCredentialTransferFields415,
+  ChooseAdminCredentialTransferFields429,
+  ChooseAdminCredentialTransferFields500,
+  ChooseAdminCredentialTransferFields503,
+  ChooseAdminCredentialTransferFieldsBody,
+  ChooseAdminCredentialTransferFieldsHeaders,
   DeleteAdminIntegrationBinding200,
   DeleteAdminIntegrationBinding400,
   DeleteAdminIntegrationBinding401,
@@ -62,6 +98,27 @@ import type {
   EnableAdminIntegration500,
   EnableAdminIntegrationBody,
   EnableAdminIntegrationHeaders,
+  ExportAdminConfigurationMigration200,
+  ExportAdminConfigurationMigration400,
+  ExportAdminConfigurationMigration401,
+  ExportAdminConfigurationMigration403,
+  ExportAdminConfigurationMigration409,
+  ExportAdminConfigurationMigration413,
+  ExportAdminConfigurationMigration415,
+  ExportAdminConfigurationMigration429,
+  ExportAdminConfigurationMigration500,
+  ExportAdminConfigurationMigration503,
+  ExportAdminCredentialTransfer200,
+  ExportAdminCredentialTransfer400,
+  ExportAdminCredentialTransfer401,
+  ExportAdminCredentialTransfer403,
+  ExportAdminCredentialTransfer409,
+  ExportAdminCredentialTransfer413,
+  ExportAdminCredentialTransfer415,
+  ExportAdminCredentialTransfer429,
+  ExportAdminCredentialTransfer500,
+  ExportAdminCredentialTransfer503,
+  ExportAdminCredentialTransferBody,
   ExportAdminIntegrationConfigs200,
   ExportAdminIntegrationConfigs400,
   ExportAdminIntegrationConfigs401,
@@ -70,6 +127,16 @@ import type {
   ExportAdminIntegrationConfigs415,
   ExportAdminIntegrationConfigs429,
   ExportAdminIntegrationConfigs500,
+  GetAdminConfigurationMigrationInventory200,
+  GetAdminConfigurationMigrationInventory400,
+  GetAdminConfigurationMigrationInventory401,
+  GetAdminConfigurationMigrationInventory403,
+  GetAdminConfigurationMigrationInventory409,
+  GetAdminConfigurationMigrationInventory413,
+  GetAdminConfigurationMigrationInventory415,
+  GetAdminConfigurationMigrationInventory429,
+  GetAdminConfigurationMigrationInventory500,
+  GetAdminConfigurationMigrationInventory503,
   GetAdminIntegration200,
   GetAdminIntegration400,
   GetAdminIntegration401,
@@ -190,6 +257,30 @@ import type {
   PatchAdminIntegrationConfig500,
   PatchAdminIntegrationConfigBody,
   PatchAdminIntegrationConfigHeaders,
+  PreviewAdminConfigurationMigration200,
+  PreviewAdminConfigurationMigration400,
+  PreviewAdminConfigurationMigration401,
+  PreviewAdminConfigurationMigration403,
+  PreviewAdminConfigurationMigration409,
+  PreviewAdminConfigurationMigration413,
+  PreviewAdminConfigurationMigration415,
+  PreviewAdminConfigurationMigration429,
+  PreviewAdminConfigurationMigration500,
+  PreviewAdminConfigurationMigration503,
+  PreviewAdminConfigurationMigrationBody,
+  PreviewAdminConfigurationMigrationHeaders,
+  PreviewAdminCredentialTransfer200,
+  PreviewAdminCredentialTransfer400,
+  PreviewAdminCredentialTransfer401,
+  PreviewAdminCredentialTransfer403,
+  PreviewAdminCredentialTransfer409,
+  PreviewAdminCredentialTransfer413,
+  PreviewAdminCredentialTransfer415,
+  PreviewAdminCredentialTransfer429,
+  PreviewAdminCredentialTransfer500,
+  PreviewAdminCredentialTransfer503,
+  PreviewAdminCredentialTransferBody,
+  PreviewAdminCredentialTransferHeaders,
   PreviewAdminStandaloneIntegration202,
   PreviewAdminStandaloneIntegration400,
   PreviewAdminStandaloneIntegration401,
@@ -280,11 +371,17 @@ import type {
 } from "./integration-models";
 import {
   adoptAdminStandaloneIntegrationRequest,
+  applyAdminConfigurationMigrationRequest,
+  applyAdminCredentialTransferRequest,
+  chooseAdminCredentialTransferFieldsRequest,
   deleteAdminIntegrationBindingRequest,
   deleteAdminIntegrationCredentialRequest,
   disableAdminIntegrationRequest,
   enableAdminIntegrationRequest,
+  exportAdminConfigurationMigrationRequest,
+  exportAdminCredentialTransferRequest,
   exportAdminIntegrationConfigsRequest,
+  getAdminConfigurationMigrationInventoryRequest,
   getAdminIntegrationCredentialsRequest,
   getAdminIntegrationHealthHistoryRequest,
   getAdminIntegrationHealthRequest,
@@ -298,6 +395,8 @@ import {
   listAdminIntegrationsRequest,
   listAdminStandaloneIntegrationsRequest,
   patchAdminIntegrationConfigRequest,
+  previewAdminConfigurationMigrationRequest,
+  previewAdminCredentialTransferRequest,
   previewAdminStandaloneIntegrationRequest,
   reloadAdminIntegrationRequest,
   reloadAdminIntegrationsRequest,
@@ -307,6 +406,848 @@ import {
   setAdminIntegrationCredentialRequest,
   testAdminIntegrationCredentialsRequest,
 } from "./operation-bindings.generated";
+export type applyAdminConfigurationMigrationResponse200 = {
+  data: ApplyAdminConfigurationMigration200;
+  status: 200;
+};
+
+export type applyAdminConfigurationMigrationResponse400 = {
+  data: ApplyAdminConfigurationMigration400;
+  status: 400;
+};
+
+export type applyAdminConfigurationMigrationResponse401 = {
+  data: ApplyAdminConfigurationMigration401;
+  status: 401;
+};
+
+export type applyAdminConfigurationMigrationResponse403 = {
+  data: ApplyAdminConfigurationMigration403;
+  status: 403;
+};
+
+export type applyAdminConfigurationMigrationResponse409 = {
+  data: ApplyAdminConfigurationMigration409;
+  status: 409;
+};
+
+export type applyAdminConfigurationMigrationResponse413 = {
+  data: ApplyAdminConfigurationMigration413;
+  status: 413;
+};
+
+export type applyAdminConfigurationMigrationResponse415 = {
+  data: ApplyAdminConfigurationMigration415;
+  status: 415;
+};
+
+export type applyAdminConfigurationMigrationResponse429 = {
+  data: ApplyAdminConfigurationMigration429;
+  status: 429;
+};
+
+export type applyAdminConfigurationMigrationResponse500 = {
+  data: ApplyAdminConfigurationMigration500;
+  status: 500;
+};
+
+export type applyAdminConfigurationMigrationResponse503 = {
+  data: ApplyAdminConfigurationMigration503;
+  status: 503;
+};
+
+export type applyAdminConfigurationMigrationResponseSuccess =
+  applyAdminConfigurationMigrationResponse200 & {
+    headers: Headers;
+  };
+export type applyAdminConfigurationMigrationResponseError = (
+  | applyAdminConfigurationMigrationResponse400
+  | applyAdminConfigurationMigrationResponse401
+  | applyAdminConfigurationMigrationResponse403
+  | applyAdminConfigurationMigrationResponse409
+  | applyAdminConfigurationMigrationResponse413
+  | applyAdminConfigurationMigrationResponse415
+  | applyAdminConfigurationMigrationResponse429
+  | applyAdminConfigurationMigrationResponse500
+  | applyAdminConfigurationMigrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type applyAdminConfigurationMigrationResponse =
+  | applyAdminConfigurationMigrationResponseSuccess
+  | applyAdminConfigurationMigrationResponseError;
+
+export const getApplyAdminConfigurationMigrationUrl = () => {
+  return `/api/admin/configuration-migration/apply`;
+};
+
+export const applyAdminConfigurationMigration = async (
+  applyAdminConfigurationMigrationBody: ApplyAdminConfigurationMigrationBody,
+  headers: ApplyAdminConfigurationMigrationHeaders,
+  options?: Parameters<typeof applyAdminConfigurationMigrationRequest>[1],
+): Promise<applyAdminConfigurationMigrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return applyAdminConfigurationMigrationRequest<applyAdminConfigurationMigrationResponse>(
+    getApplyAdminConfigurationMigrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(applyAdminConfigurationMigrationBody),
+    },
+  );
+};
+
+export type exportAdminConfigurationMigrationResponse200 = {
+  data: ExportAdminConfigurationMigration200;
+  status: 200;
+};
+
+export type exportAdminConfigurationMigrationResponse400 = {
+  data: ExportAdminConfigurationMigration400;
+  status: 400;
+};
+
+export type exportAdminConfigurationMigrationResponse401 = {
+  data: ExportAdminConfigurationMigration401;
+  status: 401;
+};
+
+export type exportAdminConfigurationMigrationResponse403 = {
+  data: ExportAdminConfigurationMigration403;
+  status: 403;
+};
+
+export type exportAdminConfigurationMigrationResponse409 = {
+  data: ExportAdminConfigurationMigration409;
+  status: 409;
+};
+
+export type exportAdminConfigurationMigrationResponse413 = {
+  data: ExportAdminConfigurationMigration413;
+  status: 413;
+};
+
+export type exportAdminConfigurationMigrationResponse415 = {
+  data: ExportAdminConfigurationMigration415;
+  status: 415;
+};
+
+export type exportAdminConfigurationMigrationResponse429 = {
+  data: ExportAdminConfigurationMigration429;
+  status: 429;
+};
+
+export type exportAdminConfigurationMigrationResponse500 = {
+  data: ExportAdminConfigurationMigration500;
+  status: 500;
+};
+
+export type exportAdminConfigurationMigrationResponse503 = {
+  data: ExportAdminConfigurationMigration503;
+  status: 503;
+};
+
+export type exportAdminConfigurationMigrationResponseSuccess =
+  exportAdminConfigurationMigrationResponse200 & {
+    headers: Headers;
+  };
+export type exportAdminConfigurationMigrationResponseError = (
+  | exportAdminConfigurationMigrationResponse400
+  | exportAdminConfigurationMigrationResponse401
+  | exportAdminConfigurationMigrationResponse403
+  | exportAdminConfigurationMigrationResponse409
+  | exportAdminConfigurationMigrationResponse413
+  | exportAdminConfigurationMigrationResponse415
+  | exportAdminConfigurationMigrationResponse429
+  | exportAdminConfigurationMigrationResponse500
+  | exportAdminConfigurationMigrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type exportAdminConfigurationMigrationResponse =
+  | exportAdminConfigurationMigrationResponseSuccess
+  | exportAdminConfigurationMigrationResponseError;
+
+export const getExportAdminConfigurationMigrationUrl = () => {
+  return `/api/admin/configuration-migration/export`;
+};
+
+export const exportAdminConfigurationMigration = async (
+  options?: Parameters<typeof exportAdminConfigurationMigrationRequest>[1],
+): Promise<exportAdminConfigurationMigrationResponse> => {
+  return exportAdminConfigurationMigrationRequest<exportAdminConfigurationMigrationResponse>(
+    getExportAdminConfigurationMigrationUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type getAdminConfigurationMigrationInventoryResponse200 = {
+  data: GetAdminConfigurationMigrationInventory200;
+  status: 200;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse400 = {
+  data: GetAdminConfigurationMigrationInventory400;
+  status: 400;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse401 = {
+  data: GetAdminConfigurationMigrationInventory401;
+  status: 401;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse403 = {
+  data: GetAdminConfigurationMigrationInventory403;
+  status: 403;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse409 = {
+  data: GetAdminConfigurationMigrationInventory409;
+  status: 409;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse413 = {
+  data: GetAdminConfigurationMigrationInventory413;
+  status: 413;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse415 = {
+  data: GetAdminConfigurationMigrationInventory415;
+  status: 415;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse429 = {
+  data: GetAdminConfigurationMigrationInventory429;
+  status: 429;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse500 = {
+  data: GetAdminConfigurationMigrationInventory500;
+  status: 500;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse503 = {
+  data: GetAdminConfigurationMigrationInventory503;
+  status: 503;
+};
+
+export type getAdminConfigurationMigrationInventoryResponseSuccess =
+  getAdminConfigurationMigrationInventoryResponse200 & {
+    headers: Headers;
+  };
+export type getAdminConfigurationMigrationInventoryResponseError = (
+  | getAdminConfigurationMigrationInventoryResponse400
+  | getAdminConfigurationMigrationInventoryResponse401
+  | getAdminConfigurationMigrationInventoryResponse403
+  | getAdminConfigurationMigrationInventoryResponse409
+  | getAdminConfigurationMigrationInventoryResponse413
+  | getAdminConfigurationMigrationInventoryResponse415
+  | getAdminConfigurationMigrationInventoryResponse429
+  | getAdminConfigurationMigrationInventoryResponse500
+  | getAdminConfigurationMigrationInventoryResponse503
+) & {
+  headers: Headers;
+};
+
+export type getAdminConfigurationMigrationInventoryResponse =
+  | getAdminConfigurationMigrationInventoryResponseSuccess
+  | getAdminConfigurationMigrationInventoryResponseError;
+
+export const getGetAdminConfigurationMigrationInventoryUrl = () => {
+  return `/api/admin/configuration-migration/inventory`;
+};
+
+export const getAdminConfigurationMigrationInventory = async (
+  options?: Parameters<typeof getAdminConfigurationMigrationInventoryRequest>[1],
+): Promise<getAdminConfigurationMigrationInventoryResponse> => {
+  return getAdminConfigurationMigrationInventoryRequest<getAdminConfigurationMigrationInventoryResponse>(
+    getGetAdminConfigurationMigrationInventoryUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type previewAdminConfigurationMigrationResponse200 = {
+  data: PreviewAdminConfigurationMigration200;
+  status: 200;
+};
+
+export type previewAdminConfigurationMigrationResponse400 = {
+  data: PreviewAdminConfigurationMigration400;
+  status: 400;
+};
+
+export type previewAdminConfigurationMigrationResponse401 = {
+  data: PreviewAdminConfigurationMigration401;
+  status: 401;
+};
+
+export type previewAdminConfigurationMigrationResponse403 = {
+  data: PreviewAdminConfigurationMigration403;
+  status: 403;
+};
+
+export type previewAdminConfigurationMigrationResponse409 = {
+  data: PreviewAdminConfigurationMigration409;
+  status: 409;
+};
+
+export type previewAdminConfigurationMigrationResponse413 = {
+  data: PreviewAdminConfigurationMigration413;
+  status: 413;
+};
+
+export type previewAdminConfigurationMigrationResponse415 = {
+  data: PreviewAdminConfigurationMigration415;
+  status: 415;
+};
+
+export type previewAdminConfigurationMigrationResponse429 = {
+  data: PreviewAdminConfigurationMigration429;
+  status: 429;
+};
+
+export type previewAdminConfigurationMigrationResponse500 = {
+  data: PreviewAdminConfigurationMigration500;
+  status: 500;
+};
+
+export type previewAdminConfigurationMigrationResponse503 = {
+  data: PreviewAdminConfigurationMigration503;
+  status: 503;
+};
+
+export type previewAdminConfigurationMigrationResponseSuccess =
+  previewAdminConfigurationMigrationResponse200 & {
+    headers: Headers;
+  };
+export type previewAdminConfigurationMigrationResponseError = (
+  | previewAdminConfigurationMigrationResponse400
+  | previewAdminConfigurationMigrationResponse401
+  | previewAdminConfigurationMigrationResponse403
+  | previewAdminConfigurationMigrationResponse409
+  | previewAdminConfigurationMigrationResponse413
+  | previewAdminConfigurationMigrationResponse415
+  | previewAdminConfigurationMigrationResponse429
+  | previewAdminConfigurationMigrationResponse500
+  | previewAdminConfigurationMigrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type previewAdminConfigurationMigrationResponse =
+  | previewAdminConfigurationMigrationResponseSuccess
+  | previewAdminConfigurationMigrationResponseError;
+
+export const getPreviewAdminConfigurationMigrationUrl = () => {
+  return `/api/admin/configuration-migration/preview`;
+};
+
+export const previewAdminConfigurationMigration = async (
+  previewAdminConfigurationMigrationBody: PreviewAdminConfigurationMigrationBody,
+  headers: PreviewAdminConfigurationMigrationHeaders,
+  options?: Parameters<typeof previewAdminConfigurationMigrationRequest>[1],
+): Promise<previewAdminConfigurationMigrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return previewAdminConfigurationMigrationRequest<previewAdminConfigurationMigrationResponse>(
+    getPreviewAdminConfigurationMigrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(previewAdminConfigurationMigrationBody),
+    },
+  );
+};
+
+export type applyAdminCredentialTransferResponse200 = {
+  data: ApplyAdminCredentialTransfer200;
+  status: 200;
+};
+
+export type applyAdminCredentialTransferResponse400 = {
+  data: ApplyAdminCredentialTransfer400;
+  status: 400;
+};
+
+export type applyAdminCredentialTransferResponse401 = {
+  data: ApplyAdminCredentialTransfer401;
+  status: 401;
+};
+
+export type applyAdminCredentialTransferResponse403 = {
+  data: ApplyAdminCredentialTransfer403;
+  status: 403;
+};
+
+export type applyAdminCredentialTransferResponse409 = {
+  data: ApplyAdminCredentialTransfer409;
+  status: 409;
+};
+
+export type applyAdminCredentialTransferResponse413 = {
+  data: ApplyAdminCredentialTransfer413;
+  status: 413;
+};
+
+export type applyAdminCredentialTransferResponse415 = {
+  data: ApplyAdminCredentialTransfer415;
+  status: 415;
+};
+
+export type applyAdminCredentialTransferResponse429 = {
+  data: ApplyAdminCredentialTransfer429;
+  status: 429;
+};
+
+export type applyAdminCredentialTransferResponse500 = {
+  data: ApplyAdminCredentialTransfer500;
+  status: 500;
+};
+
+export type applyAdminCredentialTransferResponse503 = {
+  data: ApplyAdminCredentialTransfer503;
+  status: 503;
+};
+
+export type applyAdminCredentialTransferResponseSuccess =
+  applyAdminCredentialTransferResponse200 & {
+    headers: Headers;
+  };
+export type applyAdminCredentialTransferResponseError = (
+  | applyAdminCredentialTransferResponse400
+  | applyAdminCredentialTransferResponse401
+  | applyAdminCredentialTransferResponse403
+  | applyAdminCredentialTransferResponse409
+  | applyAdminCredentialTransferResponse413
+  | applyAdminCredentialTransferResponse415
+  | applyAdminCredentialTransferResponse429
+  | applyAdminCredentialTransferResponse500
+  | applyAdminCredentialTransferResponse503
+) & {
+  headers: Headers;
+};
+
+export type applyAdminCredentialTransferResponse =
+  | applyAdminCredentialTransferResponseSuccess
+  | applyAdminCredentialTransferResponseError;
+
+export const getApplyAdminCredentialTransferUrl = () => {
+  return `/api/admin/credential-transfer/apply`;
+};
+
+export const applyAdminCredentialTransfer = async (
+  applyAdminCredentialTransferBody: ApplyAdminCredentialTransferBody,
+  headers: ApplyAdminCredentialTransferHeaders,
+  options?: Parameters<typeof applyAdminCredentialTransferRequest>[1],
+): Promise<applyAdminCredentialTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return applyAdminCredentialTransferRequest<applyAdminCredentialTransferResponse>(
+    getApplyAdminCredentialTransferUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(applyAdminCredentialTransferBody),
+    },
+  );
+};
+
+export type exportAdminCredentialTransferResponse200 = {
+  data: ExportAdminCredentialTransfer200;
+  status: 200;
+};
+
+export type exportAdminCredentialTransferResponse400 = {
+  data: ExportAdminCredentialTransfer400;
+  status: 400;
+};
+
+export type exportAdminCredentialTransferResponse401 = {
+  data: ExportAdminCredentialTransfer401;
+  status: 401;
+};
+
+export type exportAdminCredentialTransferResponse403 = {
+  data: ExportAdminCredentialTransfer403;
+  status: 403;
+};
+
+export type exportAdminCredentialTransferResponse409 = {
+  data: ExportAdminCredentialTransfer409;
+  status: 409;
+};
+
+export type exportAdminCredentialTransferResponse413 = {
+  data: ExportAdminCredentialTransfer413;
+  status: 413;
+};
+
+export type exportAdminCredentialTransferResponse415 = {
+  data: ExportAdminCredentialTransfer415;
+  status: 415;
+};
+
+export type exportAdminCredentialTransferResponse429 = {
+  data: ExportAdminCredentialTransfer429;
+  status: 429;
+};
+
+export type exportAdminCredentialTransferResponse500 = {
+  data: ExportAdminCredentialTransfer500;
+  status: 500;
+};
+
+export type exportAdminCredentialTransferResponse503 = {
+  data: ExportAdminCredentialTransfer503;
+  status: 503;
+};
+
+export type exportAdminCredentialTransferResponseSuccess =
+  exportAdminCredentialTransferResponse200 & {
+    headers: Headers;
+  };
+export type exportAdminCredentialTransferResponseError = (
+  | exportAdminCredentialTransferResponse400
+  | exportAdminCredentialTransferResponse401
+  | exportAdminCredentialTransferResponse403
+  | exportAdminCredentialTransferResponse409
+  | exportAdminCredentialTransferResponse413
+  | exportAdminCredentialTransferResponse415
+  | exportAdminCredentialTransferResponse429
+  | exportAdminCredentialTransferResponse500
+  | exportAdminCredentialTransferResponse503
+) & {
+  headers: Headers;
+};
+
+export type exportAdminCredentialTransferResponse =
+  | exportAdminCredentialTransferResponseSuccess
+  | exportAdminCredentialTransferResponseError;
+
+export const getExportAdminCredentialTransferUrl = () => {
+  return `/api/admin/credential-transfer/export`;
+};
+
+export const exportAdminCredentialTransfer = async (
+  exportAdminCredentialTransferBody: ExportAdminCredentialTransferBody,
+  options?: Parameters<typeof exportAdminCredentialTransferRequest>[1],
+): Promise<exportAdminCredentialTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return exportAdminCredentialTransferRequest<exportAdminCredentialTransferResponse>(
+    getExportAdminCredentialTransferUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(exportAdminCredentialTransferBody),
+    },
+  );
+};
+
+export type previewAdminCredentialTransferResponse200 = {
+  data: PreviewAdminCredentialTransfer200;
+  status: 200;
+};
+
+export type previewAdminCredentialTransferResponse400 = {
+  data: PreviewAdminCredentialTransfer400;
+  status: 400;
+};
+
+export type previewAdminCredentialTransferResponse401 = {
+  data: PreviewAdminCredentialTransfer401;
+  status: 401;
+};
+
+export type previewAdminCredentialTransferResponse403 = {
+  data: PreviewAdminCredentialTransfer403;
+  status: 403;
+};
+
+export type previewAdminCredentialTransferResponse409 = {
+  data: PreviewAdminCredentialTransfer409;
+  status: 409;
+};
+
+export type previewAdminCredentialTransferResponse413 = {
+  data: PreviewAdminCredentialTransfer413;
+  status: 413;
+};
+
+export type previewAdminCredentialTransferResponse415 = {
+  data: PreviewAdminCredentialTransfer415;
+  status: 415;
+};
+
+export type previewAdminCredentialTransferResponse429 = {
+  data: PreviewAdminCredentialTransfer429;
+  status: 429;
+};
+
+export type previewAdminCredentialTransferResponse500 = {
+  data: PreviewAdminCredentialTransfer500;
+  status: 500;
+};
+
+export type previewAdminCredentialTransferResponse503 = {
+  data: PreviewAdminCredentialTransfer503;
+  status: 503;
+};
+
+export type previewAdminCredentialTransferResponseSuccess =
+  previewAdminCredentialTransferResponse200 & {
+    headers: Headers;
+  };
+export type previewAdminCredentialTransferResponseError = (
+  | previewAdminCredentialTransferResponse400
+  | previewAdminCredentialTransferResponse401
+  | previewAdminCredentialTransferResponse403
+  | previewAdminCredentialTransferResponse409
+  | previewAdminCredentialTransferResponse413
+  | previewAdminCredentialTransferResponse415
+  | previewAdminCredentialTransferResponse429
+  | previewAdminCredentialTransferResponse500
+  | previewAdminCredentialTransferResponse503
+) & {
+  headers: Headers;
+};
+
+export type previewAdminCredentialTransferResponse =
+  | previewAdminCredentialTransferResponseSuccess
+  | previewAdminCredentialTransferResponseError;
+
+export const getPreviewAdminCredentialTransferUrl = () => {
+  return `/api/admin/credential-transfer/preview`;
+};
+
+export const previewAdminCredentialTransfer = async (
+  previewAdminCredentialTransferBody: PreviewAdminCredentialTransferBody,
+  headers: PreviewAdminCredentialTransferHeaders,
+  options?: Parameters<typeof previewAdminCredentialTransferRequest>[1],
+): Promise<previewAdminCredentialTransferResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return previewAdminCredentialTransferRequest<previewAdminCredentialTransferResponse>(
+    getPreviewAdminCredentialTransferUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(previewAdminCredentialTransferBody),
+    },
+  );
+};
+
+export type chooseAdminCredentialTransferFieldsResponse200 = {
+  data: ChooseAdminCredentialTransferFields200;
+  status: 200;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse400 = {
+  data: ChooseAdminCredentialTransferFields400;
+  status: 400;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse401 = {
+  data: ChooseAdminCredentialTransferFields401;
+  status: 401;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse403 = {
+  data: ChooseAdminCredentialTransferFields403;
+  status: 403;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse409 = {
+  data: ChooseAdminCredentialTransferFields409;
+  status: 409;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse413 = {
+  data: ChooseAdminCredentialTransferFields413;
+  status: 413;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse415 = {
+  data: ChooseAdminCredentialTransferFields415;
+  status: 415;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse429 = {
+  data: ChooseAdminCredentialTransferFields429;
+  status: 429;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse500 = {
+  data: ChooseAdminCredentialTransferFields500;
+  status: 500;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse503 = {
+  data: ChooseAdminCredentialTransferFields503;
+  status: 503;
+};
+
+export type chooseAdminCredentialTransferFieldsResponseSuccess =
+  chooseAdminCredentialTransferFieldsResponse200 & {
+    headers: Headers;
+  };
+export type chooseAdminCredentialTransferFieldsResponseError = (
+  | chooseAdminCredentialTransferFieldsResponse400
+  | chooseAdminCredentialTransferFieldsResponse401
+  | chooseAdminCredentialTransferFieldsResponse403
+  | chooseAdminCredentialTransferFieldsResponse409
+  | chooseAdminCredentialTransferFieldsResponse413
+  | chooseAdminCredentialTransferFieldsResponse415
+  | chooseAdminCredentialTransferFieldsResponse429
+  | chooseAdminCredentialTransferFieldsResponse500
+  | chooseAdminCredentialTransferFieldsResponse503
+) & {
+  headers: Headers;
+};
+
+export type chooseAdminCredentialTransferFieldsResponse =
+  | chooseAdminCredentialTransferFieldsResponseSuccess
+  | chooseAdminCredentialTransferFieldsResponseError;
+
+export const getChooseAdminCredentialTransferFieldsUrl = (previewId: string) => {
+  return `/api/admin/credential-transfer/preview/${encodeURIComponent(String(previewId))}/choices`;
+};
+
+export const chooseAdminCredentialTransferFields = async (
+  previewId: string,
+  chooseAdminCredentialTransferFieldsBody: ChooseAdminCredentialTransferFieldsBody,
+  headers: ChooseAdminCredentialTransferFieldsHeaders,
+  options?: Parameters<typeof chooseAdminCredentialTransferFieldsRequest>[1],
+): Promise<chooseAdminCredentialTransferFieldsResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return chooseAdminCredentialTransferFieldsRequest<chooseAdminCredentialTransferFieldsResponse>(
+    getChooseAdminCredentialTransferFieldsUrl(previewId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
+      body: JSON.stringify(chooseAdminCredentialTransferFieldsBody),
+    },
+  );
+};
+
 export type listAdminCredentialsResponse200 = {
   data: ListAdminCredentials200;
   status: 200;

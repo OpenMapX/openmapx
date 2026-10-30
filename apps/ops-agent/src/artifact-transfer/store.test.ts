@@ -77,6 +77,24 @@ it("sweeps only expired unowned stages and preserves admission replay tombstones
   });
 });
 
+it("reclaims authenticated completed tombstones after seven days while preserving their replay window", async () => {
+  let now = Date.now();
+  const { store, root } = await fixture(undefined, () => now);
+  const request = { ...input(), declaredBytes: 1 },
+    stage = await store.createStage(request);
+  await store.deleteStage({ stageId: stage.stageId, ownerId });
+  now = Date.parse(stage.expiresAt) + 7 * 86400000 - 1;
+  await store.reconcileTransferStages({ signal: new AbortController().signal });
+  expect((await store.createStage(request)).stageId).toBe(stage.stageId);
+  now += 2;
+  await store.reconcileTransferStages({ signal: new AbortController().signal });
+  await expect(readFile(join(root, "private", `${stage.stageId}.json`))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect((await store.createStage(request)).stageId).not.toBe(stage.stageId);
+  expect(await readFile(join(root, "private/sweep-cursor.json"), "utf8")).toContain("mac");
+});
+
 it("cleans a conclusively failed upload using its retained original content inode", async () => {
   const { store } = await fixture();
   const stage = await store.createStage({ ...input(), declaredBytes: 2 });
@@ -90,6 +108,50 @@ it("cleans a conclusively failed upload using its retained original content inod
       body: stream(new Uint8Array([1])),
     }),
   ).rejects.toMatchObject({ statusCode: 422 });
+  await store.deleteStage({ stageId: stage.stageId, ownerId });
+  expect(await store.reservedBytes()).toBe(0);
+});
+it("shutdown waits for the original body and file cleanup before reporting the byte drain complete", async () => {
+  const { store } = await fixture();
+  const stage = await store.createStage({ ...input(), declaredBytes: 4 });
+  let release!: () => void,
+    cancelCalled = false,
+    drained = false;
+  const canceled = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelCalled = true;
+      return canceled;
+    },
+  });
+  const upload = store
+    .upload({
+      stageId: stage.stageId,
+      ownerId,
+      purpose: stage.purpose,
+      attemptId: randomUUID(),
+      deadlineAt: Date.now() + 10000,
+      body,
+    })
+    .catch((error) => error);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const closing = store.drainByteStreams().then(() => {
+    drained = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(cancelCalled).toBe(true);
+  expect(drained).toBe(false);
+  expect(store.activeStreams).toBe(1);
+  await expect(store.createStage(input())).rejects.toMatchObject({ statusCode: 503 });
+  await expect(store.deleteStage({ stageId: stage.stageId, ownerId })).rejects.toMatchObject({
+    statusCode: 409,
+  });
+  release();
+  await closing;
+  expect(await upload).toBeInstanceOf(Error);
+  expect(store.activeStreams).toBe(0);
   await store.deleteStage({ stageId: stage.stageId, ownerId });
   expect(await store.reservedBytes()).toBe(0);
 });

@@ -584,3 +584,62 @@ profile cannot avoid ferries or provide a stronger general hill-avoidance level,
 so gravel requests with ferry avoidance or strong hill avoidance use Valhalla. Other travel modes keep their existing engines. Operators can configure
 an explicit `routing-brouter` endpoint instead of the managed service; OpenMapX
 never selects a public BRouter endpoint by default.
+
+## Move prepared data between instances
+
+The admin panel's **Data Workflows → Prepared data** section uploads, validates,
+previews and imports prepared tileserver, OSRM, OTP, Pelias and MOTIS bundles. It
+also exports verified prepared data into an authenticated, temporary download.
+The CLI's `data export-build` and `data import-build` commands use the same archive
+validator and journaled publisher.
+
+Use a bundle from a complete build with matching destination runtime images.
+Validation checks the archive's framing, declared membership, sizes and SHA-256
+hashes before publication. Archive paths, links, devices and undeclared files
+cannot select host destinations. A successful upload or validation is not an
+import: review the compatibility preview and explicitly confirm publication.
+Imports currently support at most 10,000 payload files and directories.
+
+Stop all consumers listed in the preview using the normal service controls.
+Import never stops or starts containers, pulls images, or applies pending desired
+configuration. It applies the already-current generation's hardlink plan through
+the original import job; a nonempty plan requires Data Manager already running.
+If files commit but the hardlink follow-up fails, keep consumers stopped and
+reconcile that generation before starting them. Partial or unknown outcomes stay
+visible in Activity and retain their original ownership; retrying observation does
+not repeat publication.
+
+MOTIS export requires a retained portable recipe and compiled candidate. Source
+credentials and generated proxy configuration are excluded from the bundle. The
+destination must have the same approved catalog pins and all required managed feed
+credentials; the preview lists credential identifiers without their values. Host
+credential-file overrides require explicit host preparation. Import rebuilds the
+private candidate and proxy files offline from those pins and destination secrets.
+Existing `live` and `staging` slot links are preserved; replaced data does not
+inherit an old successful health check. Start and validate it through the normal
+MOTIS workflow before treating it as ready.
+
+Uploads stream directly, and downloads use browser-native navigation where the
+client's origin and authentication permit it. Other clients require a streaming
+file sink. Unsupported browsers receive guidance instead of buffering a large
+archive in browser memory. Leaving the page aborts only an active byte transfer;
+queued validation, import and export jobs continue in Activity. Cancel durable
+work there. Deleting a stage owned by unfinished work returns a conflict.
+
+Default agent limits are a 1 TiB upload, 2 TiB expanded archive, 4 TiB combined
+stage quota, a five-minute idle timeout and a 72-hour transfer deadline. Upload
+stages expire after 96 hours; prepared downloads expire after 24 hours. The
+private deployment policy at `/run/openmapx/artifact-transfer-policy.json` can
+adjust bounded limits and memory allocation. The UI reports the effective limits,
+reservations and currently observable free space; unavailable capacity refuses
+admission. Country-scale throughput depends on disk, memory, ingress and timeout
+configuration and is not established by a small successful transfer.
+
+The agent reconciles stages at startup and every 15 minutes, processing at most
+1,000 per sweep. Linux descriptor locks preserve live byte owners and permit
+partial-upload cleanup after actual process death. Non-Linux development hosts
+retain uncertain orphan bytes for operator recovery. Expiry never releases an
+unknown publication or cancels its job. Completed stage tombstones retain request
+replay protection for seven days after expiry, with at most 10,000 retained
+records. Failed cleanup keeps its quota charged and is retried; unknown purpose
+claims remain pinned until their original evidence resolves.
