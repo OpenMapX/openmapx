@@ -100,6 +100,7 @@ import { registerArtifactTransferRoutes } from "./artifact-transfer/routes";
 import type { ArtifactTransferStore } from "./artifact-transfer/store";
 import { readCommittedCatalogApproval } from "./catalog-approval-runtime";
 import { configurationHandoffBlocksReplacement } from "./configuration-handoff";
+import { assertPreparedConfigurationHandoff } from "./configuration-handoff-store";
 import { prepareConfigurationHardlinksAdmission } from "./configuration-hardlinks-runtime";
 import {
   configurationMaintenanceAdmissionState,
@@ -113,6 +114,7 @@ import {
   assertManagedCliConfigurationPreflight,
   ConfigurationMaintenanceControlConflict,
   ConfigurationMaintenanceControlUnauthorized,
+  configurationHandoffPendingMaintenanceIds,
   configurationMaintenanceControlOwnerState,
   inspectConfigurationMaintenanceDecisionControl,
   inspectConfigurationMaintenanceSettleControl,
@@ -188,6 +190,9 @@ export const OPS_AGENT_RETENTION_LIMITS = {
 } as const;
 // Conservative read-only surface while a retained release transaction needs reconciliation.
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
+  "configurationHandoff.inspect",
+  "configurationMaintenance.inspect",
+  "system.diagnostics",
   "docker.status",
   "stack.status",
   "services.inspect",
@@ -462,7 +467,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     registerArtifactTransferRoutes(app, {
       store: options.artifactTransfers,
       apiToken: options.tokens.api,
-      admissionsOpen: () => !options.replacementInProgress?.(),
+      admissionsOpen: () =>
+        !options.replacementInProgress?.() &&
+        configurationHandoffPendingMaintenanceIds(runtime).size === 0,
     });
   const runtime = options.runtime ?? createUnavailableRuntime();
   const dispatch =
@@ -817,6 +824,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const committed = state === "succeeded" && updates.result !== undefined;
         const preparedMaintenance =
           committed && job.operation.kind === "configurationMaintenance.prepare";
+        const preparedHandoff = committed && job.operation.kind === "configurationHandoff.prepare";
+        if (preparedHandoff) assertPreparedConfigurationHandoff(authority, updates.result);
         if (
           preparedMaintenance &&
           canonicalJson(readOwnedConfigurationMaintenance(authority).receipt) !==
@@ -885,7 +894,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           } catch {
             /* Original retained owner/recovery path remains mandatory. */
           }
-        } else if (lease && job.operation.kind !== "configurationMaintenance.prepare") {
+        } else if (
+          lease &&
+          job.operation.kind !== "configurationMaintenance.prepare" &&
+          !preparedHandoff
+        ) {
           await settleArtifactTargetLeaseChild(
             lease,
             verifyControlEffectSettlement(options.controlInstallation, authority.execution),
@@ -925,7 +938,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       if (
         authority &&
         state === "succeeded" &&
-        job.operation.kind === "configurationMaintenance.prepare"
+        (job.operation.kind === "configurationMaintenance.prepare" ||
+          job.operation.kind === "configurationHandoff.prepare")
       )
         retainControlPreparedTerminal(authority);
       Object.assign(job, updates);
@@ -1530,6 +1544,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               job.state === "succeeded" &&
               (isTrustedConfigurationApplyOperation(job.operation) ||
                 job.operation.kind === "configuration.hardlinks.apply" ||
+                job.operation.kind === "configurationHandoff.prepare" ||
                 job.operation.kind === "service.recreate" ||
                 job.operation.kind === "service.recreateIsolated") &&
               job.operation.maintenanceId
@@ -1998,6 +2013,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               existing &&
               (isTrustedConfigurationApplyOperation(existing.operation) ||
                 existing.operation.kind === "configuration.hardlinks.apply" ||
+                existing.operation.kind === "configurationHandoff.prepare" ||
                 existing.operation.kind === "service.recreate" ||
                 existing.operation.kind === "service.recreateIsolated") &&
               existing.operation.maintenanceId;
@@ -2134,6 +2150,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (
           (isTrustedConfigurationApplyOperation(operation) ||
             operation.kind === "configuration.hardlinks.apply" ||
+            operation.kind === "configurationHandoff.prepare" ||
             operation.kind === "service.recreate" ||
             operation.kind === "service.recreateIsolated") &&
           operation.maintenanceId
@@ -2254,10 +2271,26 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             throw new RequestGuardError("busy", 429);
           }
           // A resumed agent update re-attaches above; nothing new may start.
-          if (operation.kind !== "agent.update" && options.replacementInProgress?.()) {
+          if (
+            operation.kind !== "agent.update" &&
+            options.replacementInProgress?.() &&
+            configurationHandoffPendingMaintenanceIds(runtime).size === 0
+          ) {
             throw new RequestGuardError("busy", 409);
           }
         }
+        const pendingHandoffs = configurationHandoffPendingMaintenanceIds(runtime);
+        if (
+          pendingHandoffs.size &&
+          !RELEASE_RECOVERY_READ_KINDS.has(kind) &&
+          !(
+            configurationMaintenanceControl &&
+            "maintenanceId" in operation &&
+            operation.maintenanceId &&
+            pendingHandoffs.has(operation.maintenanceId)
+          )
+        )
+          throw new RequestGuardError("busy", 409);
         if (options.releaseRecovery?.ready === false && !RELEASE_RECOVERY_READ_KINDS.has(kind))
           throw new RequestGuardError("recovery_required", 409);
         if (

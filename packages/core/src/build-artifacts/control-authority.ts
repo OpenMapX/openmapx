@@ -1,5 +1,10 @@
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import {
+  configurationHandoffIntentRecordSchema,
+  configurationHandoffRecordDomains,
+  configurationHandoffRecordName,
+} from "./configuration-handoff-records";
+import {
   type ControlChildPhase,
   type ControlRecipient,
   childPhaseKinds,
@@ -4920,6 +4925,48 @@ export function readFixedCliSpawnIntent(
   )
     throw Error("Fixed CLI spawn identity/command mismatch");
   s.registeredTargets = new Set(saved.serviceIds);
+  return saved;
+}
+/** Fixed helper enrollment from the original indexed role-signed launch. A
+ * caller target list cannot enroll a child, and the role key remains masked. */
+export function readConfigurationHandoffSpawnIntent(
+  installation: ControlInstallation,
+  execution: ExecutionRef,
+  handoffId: string,
+) {
+  const s = installationState(installation),
+    name = configurationHandoffRecordName(handoffId, "intent"),
+    raw = readPrivateRecord(s, "observations", name),
+    saved = verifyControl(
+      s.publicKeys["ops-agent"],
+      configurationHandoffRecordDomains.intent,
+      raw,
+      configurationHandoffIntentRecordSchema,
+    );
+  if (
+    !s.fixedChildId ||
+    installation.role !== "ops-agent" ||
+    s.fixedChildId !== saved.delegationId ||
+    installation.installationId !== saved.installationId ||
+    installation.publicKey !== saved.helperPublicKey ||
+    saved.operation.handoffId !== handoffId ||
+    canonicalJson(saved.helper) !== canonicalJson(execution) ||
+    execution.executor !== "host-cli" ||
+    execution.operationFingerprint !==
+      controlDigest({
+        kind: "configuration-helper",
+        handoffId,
+        intentDigest: controlDigest(saved.operation),
+      })
+  )
+    throw Error("Original configuration helper spawn required");
+  verifyFamilyOwnedRecord(
+    s,
+    saved.origin,
+    { scope: "private", namespace: "observations", container: "", name },
+    canonicalJson(raw),
+  );
+  s.registeredTargets = new Set(saved.operation.serviceIds);
   return saved;
 }
 export function beginFixedCliExecution(

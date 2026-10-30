@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 /** Fixed original-owner helper journal. All cells stay in the existing indexed
  * role-private observations namespace and original retention family. */
 import {
+  assertArtifactTargetLeaseForward,
   bindControlChildPhase,
   closeControlInstallation,
+  consumeControlChildDispatch,
   controlDigest,
   controlRolePublicKey,
   executionAuthorityState,
@@ -12,6 +15,7 @@ import {
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   openFixedChildInstallation,
+  prepareFixedControlChild,
   readPrivateRecord,
   signControl,
   type VerifiedExecutionAuthority,
@@ -32,9 +36,13 @@ import {
   configurationHandoffRecordDomains as domains,
   configurationHandoffRecordName as recordName,
 } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
-import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
+import {
+  CONFIGURATION_HANDOFF_LABEL,
+  configurationHandoffRunArgs,
+  inspectConfigurationHandoffPrerequisite,
+} from "./configuration-handoff";
 import { assertOwnedMaintenanceHandoffRuntime } from "./configuration-maintenance-store";
-import type { OpsExecutionContext, OpsRuntime } from "./runtime";
+import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 
 declare const preparedBrand: unique symbol;
 export type PreparedConfigurationHandoff = Readonly<{ readonly [preparedBrand]: true }>;
@@ -166,10 +174,11 @@ export async function prepareConfigurationHandoffLaunch(
   if (lookupControlChildPhaseAttempt(authority, reservation))
     throw Error("Attempted helper without original launch intent requires recovery");
   const bound = await bindControlChildPhase(authority, reservation),
+    publicKey = prepareFixedControlChild(authority, randomUUID()),
     issued = await issueControlChildPhase(authority, {
       phase: "configuration-handoff",
       ordinal: 0,
-      childPublicKey: "",
+      childPublicKey: publicKey,
       lease,
     }),
     attempt = lookupControlChildPhaseAttempt(authority, reservation),
@@ -264,4 +273,151 @@ export function preparedConfigurationHandoffState(value: PreparedConfigurationHa
   const observed = readIntent(state.authority, state.intent.operation.handoffId);
   if (bytes(observed) !== bytes(state.intent)) throw Error("Original handoff launch changed");
   return state;
+}
+
+export function assertPreparedConfigurationHandoff(
+  authority: VerifiedExecutionAuthority,
+  result: unknown,
+): void {
+  const local = executionAuthorityState(authority);
+  if (local.kind !== "configurationHandoff.prepare")
+    throw Error("Original handoff preparation required");
+  const body = result as { handoffId?: string; phase?: string } | null;
+  if (!body || body.phase !== "prepared" || !body.handoffId)
+    throw Error("Original prepared result required");
+  const intent = readIntent(authority, body.handoffId),
+    progress = readProgress(authority, intent);
+  if (progress.phase !== "launched" || progress.launch.state !== "confirmed")
+    throw Error("Original confirmed helper launch required");
+}
+
+function readProgress(
+  authority: VerifiedExecutionAuthority,
+  intent: ConfigurationHandoffIntentRecord,
+) {
+  const local = executionAuthorityState(authority),
+    name = recordName(intent.operation.handoffId, "progress"),
+    raw = readPrivateRecord(local.installation, "observations", name),
+    value = verifyControl(
+      local.installation.installation.publicKey,
+      domains.progress,
+      raw,
+      configurationHandoffProgressSchema,
+    );
+  indexed(authority, name, raw);
+  if (
+    value.intentDigest !== controlDigest(intent) ||
+    bytes(value.targets.map((target) => target.serviceId).sort()) !==
+      bytes(intent.operation.serviceIds)
+  )
+    throw Error("Original handoff progress changed");
+  return value;
+}
+
+/** First dispatch alone consumes the original helper ticket. Once launch intent
+ * is durable, every recovery only inspects the deterministic container. */
+export async function launchPreparedConfigurationHandoff(
+  runtime: OpsRuntime,
+  operation: Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>,
+  context: OpsExecutionContext,
+) {
+  const marker = await prepareConfigurationHandoffLaunch(runtime, operation, context),
+    state = preparedConfigurationHandoffState(marker),
+    { authority, intent } = state,
+    source = (await assertOwnedMaintenanceHandoffRuntime(runtime, operation, context)).source;
+  let progress = readProgress(authority, intent);
+  const inspect = async () => {
+    const result = await source.execFile(
+      "docker",
+      ["container", "inspect", "--format", "{{json .}}", intent.helperContainerName],
+      {
+        signal: context.signal,
+        timeout: 15000,
+        maxBuffer: 65536,
+      },
+    );
+    const value = JSON.parse(result.stdout) as {
+      Id?: string;
+      Image?: string;
+      Config?: { Labels?: Record<string, string> };
+    };
+    if (
+      !value ||
+      !/^[a-f0-9]{64}$/.test(value.Id ?? "") ||
+      value.Image !== state.facts.imageId ||
+      value.Config?.Labels?.[CONFIGURATION_HANDOFF_LABEL] !== operation.handoffId
+    )
+      throw Error("Original helper container required");
+    return value.Id!;
+  };
+  if (progress.launch.state === "not_attempted") {
+    if (!state.dispatchTicket) throw new OpsExecutionFailure("recovery_required", {});
+    context.signal.throwIfAborted();
+    assertArtifactTargetLeaseForward(context.artifactLease!);
+    // Source and target verification precede this durable one-use launch marker.
+    progress = {
+      ...progress,
+      sequence: progress.sequence + 1,
+      phase: "launch_attempted",
+      launch: { state: "attempted", containerId: null },
+      updatedAt: Date.now(),
+    };
+    writeProgress(authority, intent, progress);
+    consumeControlChildDispatch(state.dispatchTicket);
+    prepared.set(marker, Object.freeze({ authority, intent, facts: state.facts }));
+    try {
+      await source.execFile(
+        "docker",
+        configurationHandoffRunArgs(state.facts, source.rootDir!, {
+          handoffId: operation.handoffId,
+          assertion: intent.assertion,
+          execution: intent.helper,
+        }),
+        { signal: context.signal, timeout: 30000, maxBuffer: 65536 },
+      );
+    } catch {
+      // A lost create response is resolved by the exact name/label/image below;
+      // no second run is permitted, including after a process replacement.
+    }
+  }
+  let containerId: string;
+  try {
+    containerId = await inspect();
+  } catch {
+    throw new OpsExecutionFailure("recovery_required", {});
+  }
+  if (progress.launch.containerId && progress.launch.containerId !== containerId)
+    throw new OpsExecutionFailure("recovery_required", {});
+  if (progress.launch.state !== "confirmed") {
+    progress = {
+      ...progress,
+      sequence: progress.sequence + 1,
+      phase: "launched",
+      launch: { state: "confirmed", containerId },
+      updatedAt: Date.now(),
+    };
+    writeProgress(authority, intent, progress);
+  }
+  // The helper cannot start effects until the real server publishes this
+  // original terminal preparation. There is no writer held while draining.
+  while ((context.otherActiveOperations?.() ?? 0) > 0) {
+    context.signal.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      const done = () => {
+        clearTimeout(timer);
+        context.signal.removeEventListener("abort", aborted);
+      };
+      const aborted = () => {
+        done();
+        reject(context.signal.reason);
+      };
+      const timer = setTimeout(() => {
+        done();
+        resolve();
+      }, 100);
+      context.signal.addEventListener("abort", aborted, { once: true });
+      if (context.signal.aborted) aborted();
+    });
+  }
+  return { handoffId: operation.handoffId, phase: "prepared" as const };
 }

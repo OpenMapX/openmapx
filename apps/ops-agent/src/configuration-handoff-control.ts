@@ -1,0 +1,160 @@
+/** The detached helper adopts only its original fixed child grant. It has an
+ * ephemeral signing key, no installation role key and no root acquisition. */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import {
+  adoptArtifactTargetLease,
+  assertArtifactTargetLeaseExecution,
+  type BorrowedArtifactTargetLease,
+  beginFixedCliExecution,
+  bindBorrowedControlExecution,
+  type ControlInstallation,
+  closeArtifactTargetLeaseHandle,
+  closeControlInstallation,
+  controlDigest,
+  executionAuthorityState,
+  openFixedChildInstallation,
+  readConfigurationHandoffSpawnIntent,
+  retainAdmittedControlExecution,
+  type VerifiedExecutionAuthority,
+  verifiedParentForArtifactDelegation,
+  verifyConfigurationHelperReady,
+  verifyFixedCliControlPeer,
+} from "@openmapx/core/build-artifacts";
+import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
+import type { ConfigurationHandoffIntentRecord } from "../../../packages/core/src/build-artifacts/configuration-handoff-records";
+
+declare const childBrand: unique symbol;
+export type ConfigurationHandoffChild = Readonly<{ readonly [childBrand]: true }>;
+const children = new WeakMap<
+  ConfigurationHandoffChild,
+  {
+    installation: ControlInstallation;
+    authority: VerifiedExecutionAuthority;
+    lease: BorrowedArtifactTargetLease;
+    intent: ConfigurationHandoffIntentRecord;
+  }
+>();
+function immutable<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) immutable(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+export async function openConfigurationHandoffChild(input: {
+  rootDir: string;
+  handoffId: string;
+  assertion: string;
+  execution: ExecutionRef;
+}): Promise<ConfigurationHandoffChild> {
+  const execution = executionRefSchema.parse(input.execution),
+    infraDir = join(input.rootDir, "infra/docker"),
+    installation = openFixedChildInstallation({
+      infraDir,
+      assertion: input.assertion,
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+    });
+  let lease: BorrowedArtifactTargetLease | undefined;
+  try {
+    const intent = immutable(
+      readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+    );
+    if (
+      intent.installationId !== installation.installationId ||
+      intent.operation.handoffId !== input.handoffId ||
+      intent.assertion !== input.assertion ||
+      intent.helperPublicKey !== installation.publicKey ||
+      canonicalJson(intent.helper) !== canonicalJson(execution)
+    )
+      throw Error("Original fixed helper launch required");
+    const body = {
+        kind: "configuration-helper",
+        handoffId: input.handoffId,
+        intentDigest: controlDigest(intent.operation),
+      },
+      peer = verifyFixedCliControlPeer(installation, {
+        assertion: input.assertion,
+        execution,
+        kind: body.kind,
+        recipient: "configuration-helper",
+      }),
+      parent = verifiedParentForArtifactDelegation(installation, input.assertion, execution);
+    if (
+      canonicalJson(parent.operationKey) !== canonicalJson(intent.preparer.operationKey) ||
+      parent.fingerprint !== intent.preparer.fingerprint
+    )
+      throw Error("Original helper preparer required");
+    lease = await adoptArtifactTargetLease({
+      dataRoot: join(infraDir, "data"),
+      assertion: input.assertion,
+      peer,
+      execution,
+      serviceIds: intent.operation.serviceIds,
+    });
+    const authority = retainAdmittedControlExecution(installation, {
+      execution,
+      kind: body.kind,
+      operation: body,
+      admittedAt: intent.admittedAt,
+      requestedDeadlineAt: intent.requestedDeadlineAt,
+      parent,
+      serviceIds: intent.operation.serviceIds,
+    });
+    bindBorrowedControlExecution(lease, authority);
+    assertArtifactTargetLeaseExecution(lease, execution);
+    beginFixedCliExecution(installation, execution);
+    const child = Object.freeze({}) as ConfigurationHandoffChild;
+    children.set(child, { installation, authority, lease, intent });
+    return child;
+  } catch (error) {
+    if (lease) closeArtifactTargetLeaseHandle(lease);
+    closeControlInstallation(installation);
+    throw error;
+  }
+}
+export function configurationHandoffChildState(child: ConfigurationHandoffChild) {
+  const state = children.get(child);
+  if (!state) throw Error("Original nominal helper required");
+  executionAuthorityState(state.authority);
+  return state;
+}
+export async function waitForConfigurationHandoffPreparation(
+  child: ConfigurationHandoffChild,
+  signal: AbortSignal,
+): Promise<void> {
+  const { lease, intent } = configurationHandoffChildState(child);
+  for (;;) {
+    signal.throwIfAborted();
+    if (Date.now() >= intent.helper.deadlineAt) throw Error("Original helper deadline expired");
+    try {
+      verifyConfigurationHelperReady(lease);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", aborted);
+      };
+      const aborted = () => {
+        done();
+        reject(signal.reason);
+      };
+      const timer = setTimeout(() => {
+        done();
+        resolve();
+      }, 100);
+      signal.addEventListener("abort", aborted, { once: true });
+      if (signal.aborted) aborted();
+    });
+  }
+}
+export function closeConfigurationHandoffChild(child: ConfigurationHandoffChild): void {
+  const state = configurationHandoffChildState(child);
+  children.delete(child);
+  closeArtifactTargetLeaseHandle(state.lease);
+  closeControlInstallation(state.installation);
+}

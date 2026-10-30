@@ -20,6 +20,7 @@ import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-t
 import { startOpsAgentServer } from "./bootstrap";
 import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
+import { configurationHandoffPendingMaintenanceIds } from "./configuration-maintenance-store";
 import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
@@ -200,6 +201,7 @@ async function main(): Promise<void> {
       },
     });
     const replacementInProgress = () => {
+      if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
       try {
         const handoff = readAgentHandoff(config.rootDir);
         return handoff !== null && !isTerminalHandoff(handoff.phase);
@@ -308,6 +310,7 @@ async function main(): Promise<void> {
         runtime,
         artifactTransfers,
         replacementInProgress: () => {
+          if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
           try {
             const handoff = readAgentHandoff(config.rootDir);
             return handoff !== null && !isTerminalHandoff(handoff.phase);

@@ -205,6 +205,7 @@ import {
   installationState,
   publishConfigurationMaintenanceForwardWitness,
   verifyConfigurationMaintenanceChildTerminal,
+  verifyControlPreparedTerminal,
   withPrivateEffectWriter,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import { CONTROL_RETENTION_LIMITS } from "../../../packages/core/src/build-artifacts/control-retention";
@@ -614,9 +615,12 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
     );
   if (
     !step ||
-    !["configuration-commit", "maintenance-hardlinks", "maintenance-recreate"].includes(
-      step.phase,
-    ) ||
+    ![
+      "configuration-commit",
+      "maintenance-hardlinks",
+      "maintenance-recreate",
+      "maintenance-handoff",
+    ].includes(step.phase) ||
     canonicalJson(step.operation) !== canonicalJson(operation) ||
     actor.apiJobId !== original.apiJobId ||
     actor.parentOperationKey !== original.operationKey ||
@@ -641,6 +645,14 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
       await verifyFrozenMaintenanceHardlinksSource(runtime, authority, request.signal);
     else if (step.phase === "maintenance-recreate")
       await verifyFrozenMaintenanceRecreateSource(runtime, authority, step.ordinal, request.signal);
+    else if (step.phase === "maintenance-handoff")
+      await verifyFrozenMaintenanceFollowUpSource(
+        runtime,
+        authority,
+        step.ordinal,
+        request.signal,
+        "maintenance-handoff",
+      );
     else
       throw new ConfigurationMaintenanceControlUnauthorized(
         "Uninstalled frozen maintenance continuation",
@@ -758,7 +770,9 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
     reservations:
       step.phase === "maintenance-hardlinks" && owner.plan.nestedHardlinks
         ? [owner.plan.nestedHardlinks]
-        : [],
+        : step.phase === "maintenance-handoff" && owner.plan.nestedHandoff
+          ? [owner.plan.nestedHandoff]
+          : [],
     async adopt(execution: ExecutionRef) {
       if (!freshDispatch || canonicalJson(execution) !== canonicalJson(binding.child.execution))
         throw new ConfigurationMaintenanceControlConflict("Attempted frozen phase is lookup-only");
@@ -1600,7 +1614,9 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
     lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
     const physical = inspectArtifactTargetLeaseChildSettlement(lease, execution);
-    if (!physical || canonicalJson(physical) !== canonicalJson(proof.settlement))
+    const handoff = owner.plan.steps[source.ordinal]?.phase === "maintenance-handoff";
+    if (handoff) verifyControlPreparedTerminal(local, execution);
+    else if (!physical || canonicalJson(physical) !== canonicalJson(proof.settlement))
       throw Error("Original phase physical settlement unavailable");
     withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
       const current = read(authority),
@@ -1622,9 +1638,11 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
           value.ordinal === source.ordinal ? { ...value, canonical } : value,
         ),
         sequence = current.sequence + 1,
-        complete = current.plan.steps.every((step) =>
-          steps.some((value) => value.ordinal === step.ordinal && value.canonical !== null),
-        ),
+        complete =
+          !current.plan.handoff &&
+          current.plan.steps.every((step) =>
+            steps.some((value) => value.ordinal === step.ordinal && value.canonical !== null),
+          ),
         generation = current.plan.steps[source.ordinal]!.phase === "configuration-commit",
         notCommitted =
           generation &&
@@ -1645,7 +1663,13 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
                 appliedRevisionId: notCommitted ? null : current.plan.operation.revisionId,
               }
             : {}),
-          ...(notCommitted ? { followUp: "contained" } : complete ? { followUp: "complete" } : {}),
+          ...(handoff
+            ? { followUp: "unknown" }
+            : notCommitted
+              ? { followUp: "contained" }
+              : complete
+                ? { followUp: "complete" }
+                : {}),
         },
       });
     });
@@ -1699,7 +1723,9 @@ export function acknowledgeConfigurationMaintenanceStep(
     lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
     const physical = inspectArtifactTargetLeaseChildSettlement(lease, source.execution);
-    if (!physical || canonicalJson(physical) !== canonicalJson(actual.settlement))
+    if (owner.plan.steps[source.ordinal]?.phase === "maintenance-handoff")
+      verifyControlPreparedTerminal(local, source.execution);
+    else if (!physical || canonicalJson(physical) !== canonicalJson(actual.settlement))
       throw Error("Original copied phase settlement unavailable");
     return withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
       const current = read(authority),
@@ -3771,6 +3797,21 @@ export async function assertStagedCoordinatorConfigurationWrite(
   throw new OpsExecutionFailure("configuration_prerequisite", {});
 }
 const journals = new WeakMap<OpsRuntime, OpsJobJournal>();
+/** Conservative drain gate from the actual durable journal. This closes new
+ * work only; a matching ID never supplies continuation or release authority. */
+export function configurationHandoffPendingMaintenanceIds(
+  runtime: OpsRuntime,
+): ReadonlySet<string> {
+  return new Set(
+    (journals.get(runtime)?.records() ?? [])
+      .filter((job) => job.operation.kind === "configurationHandoff.prepare")
+      .map(
+        (job) =>
+          (job.operation as Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>)
+            .maintenanceId,
+      ),
+  );
+}
 /** Bound to the server's actual durable journal. Records alone cannot qualify
  * a pull: the fixed reader authenticates canonical/effect/private admissions. */
 export function registerConfigurationMaintenanceJournal(

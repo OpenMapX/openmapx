@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -131,10 +131,22 @@ export async function ownedServiceHost(options: { selectedRoots?:string[]; confi
   let inventoryProcess: (() => Promise<void>) | undefined;
   let imagePullProcess: ((reference:string,signal:AbortSignal)=>Promise<void>) | undefined;
   const imageIdentities = new Map<string,string>();
+  const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
+  const helperContainers = new Map<string, unknown>();
   const execFile: NonNullable<DockerRuntimeOptions["execFile"]> = async (_file, args, options) => {
     calls.push([...args]);
     let stdout = "";
-    if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
+    if (configurationHelperVersion !== undefined && args[0] === "run") {
+      const name = args[args.indexOf("--name") + 1]!, label = args[args.indexOf("--label") + 1]!;
+      if (!name.startsWith("openmapx-configuration-handoff-") || !label.startsWith("openmapx.configuration-handoff=")) throw Error("Unexpected helper launch");
+      if (helperContainers.has(name)) throw Error("Duplicate helper launch");
+      const Id = "e".repeat(64);
+      helperContainers.set(name, { Id, Image: imageId, Config: { Labels: { "openmapx.configuration-handoff": label.split("=")[1] } } });
+      stdout = Id;
+      if (optionsForHelperLaunchResponseLoss) throw Error("Named lost Docker launch response");
+    } else if (args[0] === "container" && args[1] === "inspect" && helperContainers.has(args.at(-1)!)) {
+      stdout = JSON.stringify(helperContainers.get(args.at(-1)!));
+    } else if(configurationHelperVersion!==undefined && args[0]==="container" && args[1]==="inspect" && args[2]==="--format" && (["{{.Image}}","{{.Config.User}}","{{json .HostConfig.GroupAdd}}","{{json .Mounts}}"].includes(args[3]??"") || args[3]?.includes("range .Config.Env"))) {
       const selected=rows.find(row=>row.Id===args[4]);
       if(!selected)throw Error("Named helper prerequisite container unavailable");
       const format=args[3];

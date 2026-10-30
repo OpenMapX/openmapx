@@ -31,6 +31,7 @@ import {
 } from "./docker-runtime";
 import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
+import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
 import { serviceActionForOperation } from "./policy";
 import {
   type OpsExecutionContext,
@@ -249,6 +250,7 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile,
   });
   installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
+  installPlatformConfigurationRuntime(runtime);
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
     runFixedCli,

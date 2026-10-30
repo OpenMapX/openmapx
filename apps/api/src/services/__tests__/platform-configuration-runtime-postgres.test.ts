@@ -1,6 +1,6 @@
 /** Actual API candidate -> production registry/agent -> real DM HTTP/SQL guard.
- * Docker inspection is the only substituted I/O; this qualifies preparation,
- * not yet helper launch/application or the public platform HTTP routes. */
+ * Docker I/O is substituted. This qualifies preparation, launch reconciliation
+ * and real child adoption; not native helper application/public platform HTTP. */
 import { randomUUID } from "node:crypto";
 import { rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import {
 import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -51,14 +51,14 @@ const { checkpointOwnedAdminJob } = await import("../admin-job-checkpoint");
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "owned platform preparation",
   () => {
-    beforeAll(async () => {
+    beforeEach(async () => {
       state.fixture = await createMigratedPostgresFixture();
     }, 90000);
-    afterAll(async () => {
+    afterEach(async () => {
       await state.fixture?.stop();
     });
-    it.each(["old", "1"])(
-      "preflights actual helper image version %s before desired changes",
+    it.each(["old", "1", "launch", "launch-lost"])(
+      "guards and retains helper mode %s through original ownership",
       async (version) => {
         const ids = [
           "motis",
@@ -76,7 +76,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "ops-agent": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
             "app-api": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
           },
-          configurationHelperVersion: version,
+          configurationHelperVersion: version.startsWith("launch") ? "1" : version,
+          configurationHelperLaunchResponseLoss: version === "launch-lost",
           actualComposeConfig: true,
         });
         state.services = host.loaded;
@@ -220,6 +221,30 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     });
                     await prospective.stageProspectiveConfigurationMaintenance(candidate);
                     await prospective.prepareConfigurationMaintenance(candidate);
+                    if (version.startsWith("launch")) {
+                      const decision =
+                        await prospective.commitProspectiveConfigurationMaintenance(candidate);
+                      await prospective.decideConfigurationMaintenance(decision);
+                      const prepared = await prospective.inspectConfigurationMaintenance({
+                        maintenanceId:
+                          prospective.validatedConfigurationCandidateState(candidate).record
+                            .maintenanceId!,
+                        candidateId: candidate.candidateId,
+                      });
+                      for (const step of prepared.steps)
+                        await prospective.executeConfigurationMaintenanceStep(
+                          candidate,
+                          step.ordinal,
+                        );
+                      expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+                      // Reattachment observes the same terminal preparation;
+                      // it cannot consume another dispatch ticket/create again.
+                      await prospective.executeConfigurationMaintenanceStep(
+                        candidate,
+                        prepared.steps.at(-1)!.ordinal,
+                      );
+                      expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+                    }
                     return candidate;
                   });
                 if (version === "old")
@@ -233,6 +258,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   try {
                     candidate = await run();
                   } catch (error) {
+                    console.info(
+                      "platform-step-status",
+                      journal.records().map((job) => ({
+                        kind: job.operation.kind,
+                        state: job.state,
+                        errorClass: job.errorClass,
+                      })),
+                    );
                     const value = error as {
                       result?: { errorCode?: unknown; configurationPreflight?: unknown };
                     };
@@ -248,7 +281,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   const retained = ctx.checkpointResult?._configurationMaintenance as
                     | { phase?: string; receipt?: { state?: string; steps?: { phase: string }[] } }
                     | undefined;
-                  expect(retained?.receipt?.state).toBe("prepared");
+                  expect(retained?.receipt?.state).toBe(
+                    version.startsWith("launch") ? "authorized" : "prepared",
+                  );
                   expect(retained?.receipt?.steps?.at(-1)?.phase).toBe("maintenance-handoff");
                   expect(candidate.affectedServiceIds).toEqual(["app-api", "ops-agent"]);
                   const receipt = await prospective.inspectConfigurationMaintenance({
@@ -269,6 +304,80 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   });
                   expect(owner.plan.nestedHandoff?.recipient).toBe("configuration-helper");
                   expect(receipt.binding.expectedSourceRevision).toBe(source.sourceRevision);
+                  if (version.startsWith("launch")) {
+                    expect(receipt).toMatchObject({
+                      state: "applying",
+                      followUp: "unknown",
+                      dmFence: { state: "prepared" },
+                    });
+                    await expect(dm.assertDataAdmission()).rejects.toThrow();
+                    const [saved] = await state.fixture.db
+                      .select()
+                      .from(schema.systemSettings)
+                      .where(eq(schema.systemSettings.key, "platformConfiguration"));
+                    expect(saved?.value).toMatchObject({
+                      candidateId: candidate.candidateId,
+                      revisionId: candidate.revisionId,
+                    });
+                    expect(dm.settlePosts).toBe(0);
+                    const blocked = await fetch(`${url}/v1/operations`, {
+                      method: "POST",
+                      headers: {
+                        authorization: `Bearer ${host.token}`,
+                        "x-ops-protocol-version": "2",
+                        "content-type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        version: 2,
+                        requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
+                        operationKey: createDurableOpsKey("platform.blocked", jobId),
+                        issuedAt: new Date().toISOString(),
+                        expiresAt: new Date(Date.now() + 15000).toISOString(),
+                        execution: { requestedDeadlineAt: Date.now() + 60000 },
+                        operation: { kind: "service.restart", serviceId: "motis" },
+                      }),
+                    });
+                    expect(blocked.status).toBe(409);
+                    expect(await blocked.json()).toMatchObject({ error: { class: "busy" } });
+                    expect(
+                      (await createApiOpsClient().execute({ kind: "docker.status" })).execution,
+                    ).toBe("sync");
+                    const childControl = await import(
+                      "../../../../ops-agent/src/configuration-handoff-control"
+                    );
+                    const args = host.calls.find((args) => args[0] === "run")!;
+                    const env = (name: string) =>
+                      args.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
+                    await expect(
+                      childControl.openConfigurationHandoffChild({
+                        rootDir: host.root,
+                        handoffId: owner.plan.handoff!.handoffId,
+                        assertion: env("OPENMAPX_CONTROL_DELEGATION"),
+                        execution: {
+                          ...JSON.parse(env("OPENMAPX_CONTROL_EXECUTION")),
+                          executionId: randomUUID(),
+                        },
+                      }),
+                    ).rejects.toThrow("Original configuration helper spawn required");
+                    const child = await childControl.openConfigurationHandoffChild({
+                      rootDir: host.root,
+                      handoffId: owner.plan.handoff!.handoffId,
+                      assertion: env("OPENMAPX_CONTROL_DELEGATION"),
+                      execution: JSON.parse(env("OPENMAPX_CONTROL_EXECUTION")),
+                    });
+                    try {
+                      await childControl.waitForConfigurationHandoffPreparation(
+                        child,
+                        AbortSignal.timeout(2000),
+                      );
+                      expect(
+                        host.calls.filter((args) => args[0] === "compose" && args.includes("up")),
+                      ).toHaveLength(0);
+                    } finally {
+                      childControl.closeConfigurationHandoffChild(child);
+                    }
+                    return;
+                  }
                   const abandon =
                     await prospective.prepareConfigurationMaintenanceAbandon(candidate);
                   await prospective.decideConfigurationMaintenance(abandon);
