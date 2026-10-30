@@ -1,6 +1,7 @@
 import { type Attribution, OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { type ResolvedPlatformEndpoint, resolvePlatformEndpoint } from "../platform-endpoints";
+import { urlCredentialsAsBasicAuth } from "../url-credentials";
 import { USER_AGENT } from "../userAgent";
 import type { OverpassResponse } from "./types";
 
@@ -127,13 +128,17 @@ function overpassErrorPageError(text: string): Error {
 const OVERPASS_REQUEST_TIMEOUT_MS = 35_000;
 
 async function fetchOverpass(url: string, query: string): Promise<OverpassResponse> {
-  const contributors = snapshotContributors(captureSupplier(url));
+  // An operator's `https://user:pass@host` goes as Basic auth: fetch refuses
+  // a URL carrying credentials and names the whole URL in its error.
+  const target = urlCredentialsAsBasicAuth(url);
+  const contributors = snapshotContributors(captureSupplier(target.url));
   try {
-    const res = await fetch(url, {
+    const res = await fetch(target.url, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": USER_AGENT,
+        ...(target.authorization ? { Authorization: target.authorization } : {}),
       },
       body: `data=${encodeURIComponent(query)}`,
       signal: AbortSignal.timeout(OVERPASS_REQUEST_TIMEOUT_MS),

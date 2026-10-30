@@ -20,6 +20,21 @@ afterEach(() => {
 });
 
 describe("overpassQuery", () => {
+  it("sends OVERPASS_URL credentials as Basic auth, which fetch refuses in the URL", async () => {
+    vi.stubEnv("OVERPASS_URL", "https://mapper:s3cret@overpass.example.org");
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(JSON.stringify({ elements: [] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(overpassQuery(QUERY)).resolves.toMatchObject({ elements: [] });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://overpass.example.org/api/interpreter");
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe(
+      `Basic ${Buffer.from("mapper:s3cret").toString("base64")}`,
+    );
+  });
+
   it("reports a server that does not answer in time as unavailable, not as a 500", async () => {
     setOverpassUrl("http://overpass.test");
     vi.stubGlobal(
