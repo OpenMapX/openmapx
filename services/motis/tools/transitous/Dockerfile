@@ -1,22 +1,22 @@
-FROM docker.io/golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM docker.io/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+FROM docker.io/debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
 # Keep this aligned with the `ghcr.io/motis-project/motis` image tag the
 # `motis`/`motis-staging` services run and the `@motis-project/motis-client`
 # version in package.json.
-ARG MOTIS_VERSION=v2.11.3
+ARG MOTIS_VERSION=v2.11.4
 # Reviewed per-architecture SHA256 values for the corresponding release assets.
 # A MOTIS bump must update both values; an unchecked build is never permitted.
-ARG MOTIS_SHA256_AMD64=0ffc7fc0633049edbcf88170ac037d2665ceaf1f0884a00b15f6c2b81313c825
-ARG MOTIS_SHA256_ARM64=eda48ad1744e7be9bdd1cb515e7229e9c7ecdc3cf82c6621a64670505b3d485b
+ARG MOTIS_SHA256_AMD64=b521bb29c961a3b994ff4dac663778ba64fee7b4cfaf3f2b20ff1d5e1d15e0dc
+ARG MOTIS_SHA256_ARM64=76f41df5bb4db14ccd163dad0a23dd85bebbb9f21a9736834e9b3d4201080f3b
 # `TARGETARCH` is auto-populated by BuildKit when building with buildx
 # (including for multi-platform manifests). Declaring it here makes it
 # available inside the RUN below.

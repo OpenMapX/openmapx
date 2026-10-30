@@ -91,7 +91,7 @@ esac
     }
     expect(workflow).toContain('exit-code: "1"');
     expect(workflow).toContain('ignore-unfixed: "true"');
-    expect(workflow.match(/version: v0\.75\.0/g)).toHaveLength(2);
+    expect(workflow.match(/version: v0\.76\.1/g)).toHaveLength(2);
   });
   it.each(["ok", "type-error", "build-error"])(
     "fails the shared Docker recipe on %s",

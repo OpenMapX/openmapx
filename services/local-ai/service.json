@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "ollama/ollama",
-    "tag": "0.40.3",
-    "digest": "sha256:adca95a12c2b386a8f9a995e7fa0600e187e3323b5e5522f5a6c3b1ec73eff99",
+    "tag": "0.40.13",
+    "digest": "sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429",
     "expose": [11434],
     "environment": {
       "OLLAMA_KEEP_ALIVE": "${OLLAMA_KEEP_ALIVE:-30m}",

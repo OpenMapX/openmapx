@@ -27,7 +27,7 @@ import { restoreBackup } from "../src/commands/backup";
 
 const runIntegration = process.env.OPENMAPX_RUN_RESTORE_DATABASE_TESTS === "1";
 const POSTGIS_IMAGE =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7";
 const DATABASE = "openmapx";
 const POSTGRES_USER = "postgres";
 const DELETED_USER_ID = "restore-erased-user";

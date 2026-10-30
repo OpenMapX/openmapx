@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "ghcr.io/motis-project/motis",
-    "tag": "2.11.3",
-    "digest": "sha256:7126a80f8d1537426655a14a121e395e9d56451c36144f3a1ce5c3e4deb38f64",
+    "tag": "2.11.4",
+    "digest": "sha256:594eff881d4319549387563a28dffb2ac48650df5422325a44a6c2f69f79e9b9",
     "containerName": "motis",
     "expose": [8080],
     "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",

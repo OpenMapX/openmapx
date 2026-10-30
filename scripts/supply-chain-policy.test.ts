@@ -194,12 +194,12 @@ describe("production supply-chain policy", () => {
 
     // DuckDB is the image's one downloaded executable.
     expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(1);
-    expect(dataManagerDockerfile).toContain("ARG DUCKDB_VERSION=1.5.6");
+    expect(dataManagerDockerfile).toContain("ARG DUCKDB_VERSION=2.0.0");
     expect(dataManagerDockerfile).toContain(
-      "ARG DUCKDB_SHA256_AMD64=6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f",
+      "ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc",
     );
     expect(dataManagerDockerfile).toContain(
-      "ARG DUCKDB_SHA256_ARM64=c544e92c9b7c31fc53c2139802cabd8e2d1b2b3e3f933117f31611239c1402db",
+      "ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe",
     );
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);

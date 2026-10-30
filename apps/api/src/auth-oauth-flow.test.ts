@@ -253,8 +253,9 @@ describe("OpenMapX OAuth provider protocol", () => {
       code: rejectedCode ?? "",
       verifier: `${rejectedPkce.verifier}-wrong`,
     });
-    expect(wrongVerifier.status).toBe(401);
-    await expect(wrongVerifier.json()).resolves.toMatchObject({ error: "invalid_request" });
+    // RFC 7636 section 4.6: a verifier that does not match is an invalid grant.
+    expect(wrongVerifier.status).toBe(400);
+    await expect(wrongVerifier.json()).resolves.toMatchObject({ error: "invalid_grant" });
 
     const runFlow = async (scope: string, state: string) => {
       const pkce = makePkce(state);

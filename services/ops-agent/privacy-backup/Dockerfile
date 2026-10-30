@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Keep the restore engine aligned with the deployment's reviewed PostgreSQL/PostGIS image.
-FROM ghcr.io/baosystems/postgis:18-3.6@sha256:8784f86b3e0e046859c96ea25eb8b10f0b801fd891b99a82b82f28ac4a643db8
+FROM ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7
 
 # Apply distribution security fixes; this non-root entrypoint does not use gosu.
 # The minimum Brotli version (CVE-2026-111497) fails a stale mirror and, when

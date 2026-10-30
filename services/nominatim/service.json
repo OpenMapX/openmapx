@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "mediagis/nominatim",
-    "tag": "5.2",
-    "digest": "sha256:3c49ad9443baab1f1ea13a6b1355fa377ae5fb0874dc328cba9b97a0ca7914bb",
+    "tag": "5.3",
+    "digest": "sha256:168c30e20fbba0c2e8199fca7a8aa2640e8cc1a62f8b05b1958897796fdb38f1",
     "expose": [8080],
     "environment": {
       "PBF_PATH": "/nominatim/data/data.osm.pbf",

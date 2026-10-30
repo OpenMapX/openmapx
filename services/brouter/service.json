@@ -16,7 +16,7 @@
   "container": {
     "image": "eclipse-temurin",
     "tag": "17-jdk-jammy",
-    "digest": "sha256:43f4431cc895d37ceb115e2e1f160545ec45caee9c1cb4246fc6bb879d58aeda",
+    "digest": "sha256:81336a07f69ac361c7f278183b195e32037ebdb532684996806265a3b47ef516",
     "expose": [17777],
     "entrypoint": ["bash", "/opt/openmapx/brouter/run.sh"],
     "memory": "${BROUTER_MEMORY:-2g}",

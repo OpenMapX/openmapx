@@ -29,7 +29,7 @@ export const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
  * the `@motis-project/motis-client` deps must all match it — enforced by
  * `pnpm check-toolchain-pins`.
  */
-export const MOTIS_VERSION = "2.11.3";
+export const MOTIS_VERSION = "2.11.4";
 
 /**
  * Pinned `gtfsclean` build (the GTFS post-processor fetch.py runs). Single
@@ -47,5 +47,5 @@ export const GTFSCLEAN_COMMIT = "013af793337b759e782c3f8919e0b535cb702944";
 export const TRANSITOUS_ARTIFACT_BASE_URL = "https://api.transitous.org/gtfs/";
 
 /** Immutable MobilityData registry revision paired with gbfs-catalog.lock.json. */
-export const MOBILITYDATA_GBFS_CATALOG_COMMIT = "b4fb1b71c536262d533c6e6b8fc7371e87139c63";
+export const MOBILITYDATA_GBFS_CATALOG_COMMIT = "98c2f3bf101c069c8d09665a80d9acadbf94e58c";
 export const MOBILITYDATA_GBFS_CATALOG_URL = `https://raw.githubusercontent.com/MobilityData/gbfs/${MOBILITYDATA_GBFS_CATALOG_COMMIT}/systems.csv`;

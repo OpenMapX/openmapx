@@ -46,7 +46,7 @@ function patternNames(value: unknown, fade: number | undefined): string[] {
   ];
 }
 
-/** Per-refresh host-only evidence cache for MapLibre 6.13 render-produced paint. */
+/** Per-refresh host-only evidence cache for MapLibre 6.16 render-produced paint. */
 export function createRenderedPaintEvidence(map: MapLibreMap) {
   const indexes = new Map<string, Map<string, Tile[]>>();
   const matchingTiles = (feature: MapGeoJSONFeature): Tile[] => {
@@ -60,8 +60,12 @@ export function createRenderedPaintEvidence(map: MapLibreMap) {
       index = new Map();
       indexes.set(scope, index);
       const manager = map.style?.tileManagers?.[sourceId];
+      // Feature geometry is part of the key; tiles project it through the
+      // style's world coordinates, as the public querySourceFeatures does.
+      const worldCoordinateHelper = map.style?.projection?.worldCoordinateHelper;
       if (
         !manager ||
+        !worldCoordinateHelper ||
         typeof manager.getVisibleCoordinates !== "function" ||
         typeof manager.getTile !== "function"
       )
@@ -70,7 +74,7 @@ export function createRenderedPaintEvidence(map: MapLibreMap) {
         const tile = manager.getTile(coordinate);
         if (!tile?.hasData() || typeof tile.querySourceFeatures !== "function") continue;
         const records: SourceFeature[] = [];
-        tile.querySourceFeatures(records, { sourceLayer });
+        tile.querySourceFeatures(records, { sourceLayer, worldCoordinateHelper });
         const seen = new Set<string>();
         for (const record of records) {
           const key = featureKey(record);

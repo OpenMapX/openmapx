@@ -14,14 +14,14 @@
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
 
-FROM docker.io/golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS build-gtfsclean
+FROM docker.io/golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
+FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -85,7 +85,7 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/services/data-manager/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM node:24.22.1-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS runner
+FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -109,9 +109,9 @@ RUN apt-get update \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.0.22-1~deb12u2' \
     && rm -rf /var/lib/apt/lists/*
 
-ARG DUCKDB_VERSION=1.5.6
-ARG DUCKDB_SHA256_AMD64=6e89deac1ebbc36eed0291caf8b567b030c7b86ac35998f71854e22b3c5d5e2f
-ARG DUCKDB_SHA256_ARM64=c544e92c9b7c31fc53c2139802cabd8e2d1b2b3e3f933117f31611239c1402db
+ARG DUCKDB_VERSION=2.0.0
+ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
+ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
@@ -119,12 +119,13 @@ RUN set -eux; \
       aarch64|arm64) duckdb_arch=linux-arm64; expected_sha="$DUCKDB_SHA256_ARM64" ;; \
       *) echo "Unsupported arch $arch for DuckDB CLI install" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-${duckdb_arch}.zip" -o /tmp/duckdb.zip; \
-    echo "${expected_sha}  /tmp/duckdb.zip" | sha256sum -c -; \
-    unzip /tmp/duckdb.zip -d /tmp/duckdb-bin; \
+    curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb-cli-${duckdb_arch}.tar.gz" -o /tmp/duckdb.tar.gz; \
+    echo "${expected_sha}  /tmp/duckdb.tar.gz" | sha256sum -c -; \
+    mkdir /tmp/duckdb-bin; \
+    tar -xzf /tmp/duckdb.tar.gz -C /tmp/duckdb-bin duckdb; \
     mv /tmp/duckdb-bin/duckdb /usr/local/bin/duckdb; \
     chmod +x /usr/local/bin/duckdb; \
-    rm -rf /tmp/duckdb.zip /tmp/duckdb-bin; \
+    rm -rf /tmp/duckdb.tar.gz /tmp/duckdb-bin; \
     duckdb --version
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
