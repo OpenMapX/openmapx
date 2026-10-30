@@ -1,3 +1,7 @@
+import { cacheAdminOperations } from "./cache";
+
+export * from "./cache";
+
 import { artifactTransferAdminOperations } from "./artifact-transfers";
 import { platformAdminOperations } from "./platform";
 
@@ -81,6 +85,7 @@ export * from "./workflows";
 
 /** Complete service/workflow family. Authentication metadata never grants access. */
 export const serviceAdminOperations = {
+  ...cacheAdminOperations,
   ...artifactTransferAdminOperations,
   ...platformAdminOperations,
   listAdminServicePresets: {

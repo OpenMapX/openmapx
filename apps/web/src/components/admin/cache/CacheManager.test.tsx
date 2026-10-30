@@ -47,6 +47,55 @@ afterEach(() => {
 });
 
 describe("CacheManager", () => {
+  it("previews a scoped glob and confirms only the captured preview target", async () => {
+    const user = userEvent.setup();
+    mockRoutes();
+    fetchMock.mockImplementation(async (url, options) =>
+      String(url).endsWith("/clear")
+        ? {
+            ok: true,
+            json: async () =>
+              JSON.parse((options as { body: string }).body).dryRun
+                ? { dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] }
+                : { deleted: 2, patterns: ["int:geocoding:*"] },
+          }
+        : { ok: true, json: async () => LIST_BODY },
+    );
+    render(<CacheManager />, { wrapper: createQueryWrapper() });
+    await user.type(screen.getByLabelText("Cache pattern"), "int:geocoding:*");
+    await user.click(screen.getByRole("button", { name: "Preview pattern" }));
+    await screen.findByText(/Estimated matching keys: 2/);
+    expect(lastClearBody()).toEqual({ pattern: "int:geocoding:*", dryRun: true });
+    await user.click(screen.getByRole("button", { name: "Clear previewed pattern" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(lastClearBody()).toEqual({ pattern: "int:geocoding:*" }));
+  });
+  it("invalidates the displayed preview on edit and prevents foreign-prefix requests", async () => {
+    const user = userEvent.setup();
+    mockRoutes();
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      json: async () =>
+        String(url).endsWith("/clear")
+          ? { dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] }
+          : LIST_BODY,
+    }));
+    render(<CacheManager />, { wrapper: createQueryWrapper() });
+    const input = screen.getByLabelText("Cache pattern");
+    await user.type(input, "session:*");
+    expect(screen.getByRole("button", { name: "Preview pattern" })).toBeDisabled();
+    expect(clearCalls()).toHaveLength(0);
+    await user.clear(input);
+    await user.type(input, "int:geocoding:*");
+    await user.click(screen.getByRole("button", { name: "Preview pattern" }));
+    await screen.findByText(/Estimated matching keys: 2/);
+    await user.clear(input);
+    await user.type(input, "cache:*");
+    expect(screen.queryByText(/Estimated matching keys/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Clear previewed pattern" })).toBeDisabled();
+    expect(clearCalls()).toHaveLength(1);
+  });
   it("renders namespace rows with key counts", async () => {
     mockRoutes();
     render(<CacheManager />, { wrapper: createQueryWrapper() });

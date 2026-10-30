@@ -79,6 +79,13 @@ export async function checkAdminServicesRequest<T>(
 ): Promise<T> {
   return checkAdminServicesBound<T>(url, options);
 }
+const clearAdminCacheBound = bindAdminOperation("clearAdminCache");
+export async function clearAdminCacheRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return clearAdminCacheBound<T>(url, options);
+}
 const completeAdminReauthenticationBound = bindAdminOperation("completeAdminReauthentication");
 export async function completeAdminReauthenticationRequest<T>(
   url: string,
@@ -511,6 +518,13 @@ export async function listAdminArtifactTransfersRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return listAdminArtifactTransfersBound<T>(url, options);
+}
+const listAdminCacheNamespacesBound = bindAdminOperation("listAdminCacheNamespaces");
+export async function listAdminCacheNamespacesRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminCacheNamespacesBound<T>(url, options);
 }
 const listAdminCredentialsBound = bindAdminOperation("listAdminCredentials");
 export async function listAdminCredentialsRequest<T>(

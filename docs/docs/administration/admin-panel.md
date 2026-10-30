@@ -142,7 +142,17 @@ limitations, and repair links behind the table.
 
 The Redis/Valkey cache inspector — list the cache namespaces (geocoding
 results, provider responses, and the rest) with their key counts, and clear one
-namespace or the whole cache. Handy after switching a provider or credential so
+namespace or the whole application cache. A scoped Redis glob must begin literally
+with `int:` or `cache:` and contain at most 256 characters. **Preview pattern**
+counts without deleting or changing invalidation state; counts are estimates under
+concurrent writes and SCAN duplication. **Clear previewed pattern** requires a
+confirmation of the captured target. Session/job/foreign prefixes and unrestricted
+`*` are rejected. Web clears never run FLUSHDB.
+
+Clears consume SCAN pages and delete bounded batches, preserving the shared
+invalidation fence against concurrent cache fills.
+
+Handy after switching a provider or credential so
 stale responses don't linger.
 
 ### Activity

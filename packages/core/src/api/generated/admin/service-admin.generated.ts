@@ -12,6 +12,7 @@ import { bindAdminDownloadTarget } from "../../admin-sdk-transport";
 import {
   applyAdminPlatformConfigurationRequest,
   checkAdminServicesRequest,
+  clearAdminCacheRequest,
   createAdminArtifactTransferRequest,
   createAdminServiceBackupRequest,
   deleteAdminArtifactTransferRequest,
@@ -30,6 +31,7 @@ import {
   getAdminServiceSelectionRequest,
   getAdminSharedMobilityRequest,
   listAdminArtifactTransfersRequest,
+  listAdminCacheNamespacesRequest,
   listAdminOperationsRequest,
   listAdminServiceBackupsRequest,
   listAdminServicePresetsRequest,
@@ -73,6 +75,15 @@ import type {
   CheckAdminServices429,
   CheckAdminServices500,
   CheckAdminServicesBody,
+  ClearAdminCache200,
+  ClearAdminCache400,
+  ClearAdminCache401,
+  ClearAdminCache403,
+  ClearAdminCache413,
+  ClearAdminCache415,
+  ClearAdminCache429,
+  ClearAdminCache500,
+  ClearAdminCacheBody,
   CreateAdminArtifactTransfer200,
   CreateAdminArtifactTransfer400,
   CreateAdminArtifactTransfer401,
@@ -266,6 +277,14 @@ import type {
   ListAdminArtifactTransfers503,
   ListAdminArtifactTransfers507,
   ListAdminArtifactTransfersParams,
+  ListAdminCacheNamespaces200,
+  ListAdminCacheNamespaces400,
+  ListAdminCacheNamespaces401,
+  ListAdminCacheNamespaces403,
+  ListAdminCacheNamespaces413,
+  ListAdminCacheNamespaces415,
+  ListAdminCacheNamespaces429,
+  ListAdminCacheNamespaces500,
   ListAdminOperations200,
   ListAdminOperations400,
   ListAdminOperations401,
@@ -1246,6 +1265,173 @@ export const uploadAdminArtifactTransferContent: (
 ) => ReturnType<
   typeof uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent
 > = uploadAdminArtifactTransferContentClient.uploadAdminArtifactTransferContent;
+
+export type listAdminCacheNamespacesResponse200 = {
+  data: ListAdminCacheNamespaces200;
+  status: 200;
+};
+
+export type listAdminCacheNamespacesResponse400 = {
+  data: ListAdminCacheNamespaces400;
+  status: 400;
+};
+
+export type listAdminCacheNamespacesResponse401 = {
+  data: ListAdminCacheNamespaces401;
+  status: 401;
+};
+
+export type listAdminCacheNamespacesResponse403 = {
+  data: ListAdminCacheNamespaces403;
+  status: 403;
+};
+
+export type listAdminCacheNamespacesResponse413 = {
+  data: ListAdminCacheNamespaces413;
+  status: 413;
+};
+
+export type listAdminCacheNamespacesResponse415 = {
+  data: ListAdminCacheNamespaces415;
+  status: 415;
+};
+
+export type listAdminCacheNamespacesResponse429 = {
+  data: ListAdminCacheNamespaces429;
+  status: 429;
+};
+
+export type listAdminCacheNamespacesResponse500 = {
+  data: ListAdminCacheNamespaces500;
+  status: 500;
+};
+
+export type listAdminCacheNamespacesResponseSuccess = listAdminCacheNamespacesResponse200 & {
+  headers: Headers;
+};
+export type listAdminCacheNamespacesResponseError = (
+  | listAdminCacheNamespacesResponse400
+  | listAdminCacheNamespacesResponse401
+  | listAdminCacheNamespacesResponse403
+  | listAdminCacheNamespacesResponse413
+  | listAdminCacheNamespacesResponse415
+  | listAdminCacheNamespacesResponse429
+  | listAdminCacheNamespacesResponse500
+) & {
+  headers: Headers;
+};
+
+export type listAdminCacheNamespacesResponse =
+  | listAdminCacheNamespacesResponseSuccess
+  | listAdminCacheNamespacesResponseError;
+
+export const getListAdminCacheNamespacesUrl = () => {
+  return `/api/admin/cache`;
+};
+
+export const listAdminCacheNamespaces = async (
+  options?: Parameters<typeof listAdminCacheNamespacesRequest>[1],
+): Promise<listAdminCacheNamespacesResponse> => {
+  return listAdminCacheNamespacesRequest<listAdminCacheNamespacesResponse>(
+    getListAdminCacheNamespacesUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export type clearAdminCacheResponse200 = {
+  data: ClearAdminCache200;
+  status: 200;
+};
+
+export type clearAdminCacheResponse400 = {
+  data: ClearAdminCache400;
+  status: 400;
+};
+
+export type clearAdminCacheResponse401 = {
+  data: ClearAdminCache401;
+  status: 401;
+};
+
+export type clearAdminCacheResponse403 = {
+  data: ClearAdminCache403;
+  status: 403;
+};
+
+export type clearAdminCacheResponse413 = {
+  data: ClearAdminCache413;
+  status: 413;
+};
+
+export type clearAdminCacheResponse415 = {
+  data: ClearAdminCache415;
+  status: 415;
+};
+
+export type clearAdminCacheResponse429 = {
+  data: ClearAdminCache429;
+  status: 429;
+};
+
+export type clearAdminCacheResponse500 = {
+  data: ClearAdminCache500;
+  status: 500;
+};
+
+export type clearAdminCacheResponseSuccess = clearAdminCacheResponse200 & {
+  headers: Headers;
+};
+export type clearAdminCacheResponseError = (
+  | clearAdminCacheResponse400
+  | clearAdminCacheResponse401
+  | clearAdminCacheResponse403
+  | clearAdminCacheResponse413
+  | clearAdminCacheResponse415
+  | clearAdminCacheResponse429
+  | clearAdminCacheResponse500
+) & {
+  headers: Headers;
+};
+
+export type clearAdminCacheResponse = clearAdminCacheResponseSuccess | clearAdminCacheResponseError;
+
+export const getClearAdminCacheUrl = () => {
+  return `/api/admin/cache/clear`;
+};
+
+export const clearAdminCache = async (
+  clearAdminCacheBody?: ClearAdminCacheBody,
+  options?: Parameters<typeof clearAdminCacheRequest>[1],
+): Promise<clearAdminCacheResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return clearAdminCacheRequest<clearAdminCacheResponse>(getClearAdminCacheUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(clearAdminCacheBody),
+  });
+};
 
 export type stopAdminComposeResponse400 = {
   data: StopAdminCompose400;

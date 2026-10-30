@@ -1,6 +1,7 @@
 import { createApiClient } from "@openmapx/core";
 import {
   artifactTransferAdminOperations,
+  cacheAdminOperations,
   platformAdminOperations,
   serviceAdminOperations,
 } from "@openmapx/core/api-contracts";
@@ -561,6 +562,7 @@ describe("actual service producers through final exported SDK", () => {
     const { registered, close } = await wire();
     try {
       const dedicated = new Set([
+        ...Object.keys(cacheAdminOperations), // Scoped route/SDK/real Valkey coverage is dedicated.
         ...Object.keys(platformAdminOperations),
         ...Object.keys(artifactTransferAdminOperations),
       ]);
@@ -729,7 +731,7 @@ describe("actual service producers through final exported SDK", () => {
         await sdk.streamAdminServiceLogs(
           "motis",
           key,
-          { lines: "3.9" },
+          { lines: "3" },
           {
             ...options,
             onTextChunk: (chunk) => {
@@ -1049,7 +1051,7 @@ it("serves actual raw log Content-Type and complete streamed bytes over loopback
     const result = await sdk.streamAdminServiceLogs(
       "motis",
       { "idempotency-key": "raw-synthetic-intent-001" },
-      { lines: "3.9" },
+      { lines: "3" },
       {
         client,
         timeoutMs: 3000,
@@ -1270,22 +1272,33 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
       }),
     ).toMatchObject({ status: 503, data: { error: "Service registry not available" } });
     expect(execute).toHaveBeenCalledTimes(1);
-    for (const [lines, tail] of [
-      ["", 1],
-      ["-2", 1],
-      ["3.9", 3],
-      ["99999", 1000],
-      ["Infinity", 200],
-      ["garbage", 200],
-    ] as const) {
-      await sdk.streamAdminServiceLogs(
+    for (const lines of ["", "-2", "3.9", "99999", "Infinity", "garbage"]) {
+      const result = await sdk.streamAdminServiceLogs(
         "motis",
         key,
         { lines },
         { ...options, onTextChunk: () => {} },
       );
+      expect(result).toMatchObject({
+        status: 400,
+        data: { error: "Invalid administration query" },
+      });
+    }
+    expect(execute).toHaveBeenCalledTimes(1);
+    for (const [lines, tail] of [
+      ["1", 1],
+      ["3", 3],
+      ["1000", 1000],
+    ] as const) {
+      const result = await sdk.streamAdminServiceLogs(
+        "motis",
+        key,
+        { lines },
+        { ...options, onTextChunk: () => {} },
+      );
+      expect(result.status).toBe(200);
       expect(execute).toHaveBeenLastCalledWith(
-        expect.objectContaining({ kind: "service.logs.follow", tail }),
+        expect.objectContaining({ kind: "service.logs.follow", tail, maxDurationSeconds: 900 }),
         expect.anything(),
       );
     }

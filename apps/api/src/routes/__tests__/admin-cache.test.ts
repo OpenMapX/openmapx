@@ -108,6 +108,74 @@ describe("GET /admin/cache", () => {
 });
 
 describe("POST /admin/cache/clear", () => {
+  it.each([
+    { pattern: "*" },
+    { pattern: "session:*" },
+    { pattern: "job:*" },
+    { pattern: "cache:\u0000*" },
+    { pattern: "cache:\u0085*" },
+    { namespace: "   " },
+    { pattern: "int:" + "x".repeat(253) },
+    { pattern: "cache:*", namespace: "geocoding" },
+    { dryRun: "true" },
+    { extra: true },
+  ])("rejects invalid scoped input %j before any epoch/deletion", async (payload) => {
+    const before = [...cacheStore.entries()];
+    const res = await app.inject({ method: "POST", url: "/admin/cache/clear", payload });
+    expect(res.statusCode).toBe(400);
+    expect([...cacheStore.entries()]).toEqual(before);
+    expect(mockUnlink).not.toHaveBeenCalled();
+  });
+  it("previews the exact pattern without deletion, epochs or mutation audit", async () => {
+    const before = [...cacheStore.entries()];
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/cache/clear",
+      payload: { pattern: "int:geocoding:*", dryRun: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ dryRun: true, estimatedCount: 2, patterns: ["int:geocoding:*"] });
+    expect([...cacheStore.entries()]).toEqual(before);
+    expect(mockUnlink).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+  it("clears an explicit app namespace without adding a second prefix", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/cache/clear",
+      payload: { namespace: "int:geocoding" },
+    });
+    expect(res.json()).toEqual({ deleted: 2, patterns: ["int:geocoding:*"] });
+    expect(cacheStore.has("session:user:1")).toBe(true);
+  });
+  it("deletes bounded batches while scanning rather than collecting the entire key list", async () => {
+    let produced = 0;
+    mockUnlink.mockImplementationOnce(async () => {
+      expect(produced).toBeLessThan(100);
+      return 0;
+    });
+    mockScanStream.mockImplementationOnce(() =>
+      Readable.from(
+        (async function* () {
+          for (let index = 0; index < 100; index++) {
+            produced++;
+            yield Array.from(
+              { length: index === 0 ? 1201 : 1 },
+              (_, i) => `int:large:${index}:${i}`,
+            );
+          }
+        })(),
+      ),
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/cache/clear",
+      payload: { pattern: "int:large:*" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(produced).toBe(100);
+    expect(mockUnlink.mock.calls.every((args) => args.length <= 500)).toBe(true);
+  });
   it("invalidates the targeted local cache around Redis deletion", async () => {
     const { cacheInvalidation } = await import("../../services/cache-invalidation");
     const events: boolean[] = [];
@@ -132,7 +200,7 @@ describe("POST /admin/cache/clear", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ deleted: 2 });
+    expect(res.json()).toEqual({ deleted: 2, patterns: ["int:geocoding:*"] });
     // Only the matching prefix was removed; other keys remain.
     expect(cacheStore.has("int:routing:c")).toBe(true);
     expect(cacheStore.has("cache:geocode:d")).toBe(true);
@@ -141,7 +209,7 @@ describe("POST /admin/cache/clear", () => {
       expect.objectContaining({
         action: "cache.clear",
         targetType: "cache",
-        details: { namespace: "geocoding" },
+        details: { namespace: "geocoding", patterns: ["int:geocoding:*"] },
       }),
     );
     expect(mockFlushdb).not.toHaveBeenCalled();
@@ -152,7 +220,7 @@ describe("POST /admin/cache/clear", () => {
 
     expect(res.statusCode).toBe(200);
     // int:* (3) + cache:* (1) removed; session:* untouched.
-    expect(res.json()).toEqual({ deleted: 4 });
+    expect(res.json()).toEqual({ deleted: 4, patterns: ["int:*", "cache:*"] });
     expect(cacheStore.has("session:user:1")).toBe(true);
     expect(mockFlushdb).not.toHaveBeenCalled();
   });
@@ -165,7 +233,7 @@ describe("POST /admin/cache/clear", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ deleted: 4 });
+    expect(res.json()).toEqual({ deleted: 4, patterns: ["int:*", "cache:*"] });
     expect(mockFlushdb).not.toHaveBeenCalled();
   });
 
@@ -221,7 +289,7 @@ describe("when Redis is disabled", () => {
       url: "/admin/cache/clear",
       payload: {},
     });
-    expect(clearRes.json()).toEqual({ deleted: 0 });
+    expect(clearRes.json()).toEqual({ deleted: 0, patterns: ["int:*", "cache:*"] });
     unsubscribe();
     expect(events).toEqual([true, true, true]);
 
