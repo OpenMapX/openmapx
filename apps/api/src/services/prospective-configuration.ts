@@ -1091,6 +1091,17 @@ export async function assertSettledConfigurationCandidate(
       reload.revisionId !== candidate.revisionId
     )
       throw Error("Configuration reload unavailable");
+  } else if (state.record.privatePlatformIntent) {
+    const followUp = result.platformConfiguration as Record<string, unknown> | undefined,
+      fixed = state.record.privatePlatformIntent;
+    if (
+      state.record.apiFollowUp !== "platform-apply" ||
+      followUp?.previewFingerprint !== fixed.previewFingerprint ||
+      followUp.handoffId !== fixed.handoffId ||
+      followUp.revisionId !== candidate.revisionId ||
+      followUp.followUp !== (contained ? "contained" : "complete")
+    )
+      throw Error("Original platform completion required");
   } else if (state.record.privateCoordinatorLifecycle) {
     const followUp = result.coordinatorLifecycle as Record<string, unknown> | undefined,
       fixed = state.record.privateCoordinatorLifecycle;
@@ -1110,12 +1121,49 @@ export async function retireSettledProspectiveConfiguration(
   await assertSettledConfigurationCandidate(candidate);
   const state = validatedConfigurationCandidateState(candidate),
     { job } = administrativeConfigurationState(state.writer);
+  if (state.record.privatePlatformIntent) {
+    const fixed = state.record.privatePlatformIntent;
+    // This function has already verified the exact remote final/SQL/ACK/root
+    // closure and API durable copy. A status flag cannot retire this preview.
+    await withConfigurationWriteTransaction(state.writer, async (tx) => {
+      const [current] = await tx
+          .select({ result: schema.adminJob.result })
+          .from(schema.adminJob)
+          .where(jobOwnership(job.jobId, job.execution))
+          .for("update"),
+        proof = (current?.result as Record<string, unknown> | undefined)?._configurationCandidate as
+          | Record<string, unknown>
+          | undefined;
+      if (
+        proof?.candidateId !== candidate.candidateId ||
+        proof.revisionId !== candidate.revisionId ||
+        proof.phase !== "settled"
+      )
+        throw new JobObservationPending("recovery_required");
+      const [retired] = await tx
+        .update(schema.platformConfigurationPreview)
+        .set({
+          retiredAt: sql`coalesce(${schema.platformConfigurationPreview.retiredAt},greatest(${schema.platformConfigurationPreview.consumedAt},${new Date().toISOString()}::timestamptz))`,
+        })
+        .where(
+          and(
+            eq(schema.platformConfigurationPreview.id, fixed.previewId),
+            eq(schema.platformConfigurationPreview.actorId, state.writer.actorId),
+            eq(schema.platformConfigurationPreview.previewFingerprint, fixed.previewFingerprint),
+            eq(schema.platformConfigurationPreview.consumedByJobId, job.jobId),
+          ),
+        )
+        .returning({ id: schema.platformConfigurationPreview.id });
+      if (!retired) throw new JobObservationPending("recovery_required");
+    });
+  }
   const queuedCoordinator =
     !!state.record.privateCoordinatorLifecycle &&
     ((job.jobType === "service.apply" && job.payload.service === "data-manager") ||
       (job.jobType === "service.bulk" && job.payload.action === "update"));
   if (
     queuedCoordinator ||
+    state.record.privatePlatformIntent ||
     (job.checkpointResult?._immediateJobId === job.jobId &&
       [
         "service.apply",
@@ -1133,6 +1181,9 @@ export async function retireSettledProspectiveConfiguration(
         ...(original.serviceCredential ? { serviceCredential: original.serviceCredential } : {}),
         ...(original.coordinatorLifecycle
           ? { coordinatorLifecycle: original.coordinatorLifecycle }
+          : {}),
+        ...(original.platformConfiguration
+          ? { platformConfiguration: original.platformConfiguration }
           : {}),
         ...(original.integrationReload ? { integrationReload: original.integrationReload } : {}),
         ...(original.integrationBinding ? { integrationBinding: original.integrationBinding } : {}),
@@ -4548,6 +4599,16 @@ export async function persistAndApplyProspectiveConfiguration(
             coordinatorLifecycle: {
               serviceId: "data-manager",
               action: state.record.privateCoordinatorLifecycle.action,
+              revisionId: candidate.revisionId,
+              followUp: contained ? "contained" : "complete",
+            },
+          }
+        : {}),
+      ...(state.record.privatePlatformIntent
+        ? {
+            platformConfiguration: {
+              previewFingerprint: state.record.privatePlatformIntent.previewFingerprint,
+              handoffId: state.record.privatePlatformIntent.handoffId,
               revisionId: candidate.revisionId,
               followUp: contained ? "contained" : "complete",
             },

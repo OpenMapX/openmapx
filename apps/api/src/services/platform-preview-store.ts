@@ -6,12 +6,13 @@ import {
   canonicalJson,
   configurationSourcesInspectionSchema,
 } from "@openmapx/core/ops";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthDatabase } from "../account/auth-database";
 import { db } from "../db";
-import { platformConfigurationPreview as table } from "../db/schema";
+import { adminJob, platformConfigurationPreview as table } from "../db/schema";
 import { preservationAllowsDeletion, withPreservationRetentionLock } from "../privacy/preservation";
+import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
 
 const TTL = 600_000;
 const storedPreviewSchema = z.strictObject({
@@ -67,6 +68,42 @@ function decode(row: typeof table.$inferSelect) {
     throw new PlatformPreviewConflict();
   }
 }
+/** Caller holds the shared preservation-retention lock. Unknown/running work
+ * is pinned; a completed preview and its exact job share the later 72h floor. */
+export async function prunePlatformConfigurationPreviews(
+  connection: Pick<typeof db, "delete">,
+  now = new Date(),
+): Promise<number> {
+  const rows = connection
+    .delete(table)
+    .where(
+      and(
+        or(
+          and(isNull(table.consumedByJobId), lt(table.expiresAt, now)),
+          and(
+            isNotNull(table.retiredAt),
+            sql`exists (
+            select 1 from ${adminJob}
+            where ${adminJob.id} = ${table.consumedByJobId}::text
+              and ${adminJob.status} in ('success','failed','canceled')
+              and ${adminJob.finishedAt} is not null
+              and greatest(${table.retiredAt},${adminJob.finishedAt}) < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz
+              and ${noPendingReceiptDelivery()}
+              and ${noUnsettledManagedOperation()}
+          )`,
+          ),
+        ),
+        preservationAllowsDeletion({
+          registrationId: "platform-configuration-previews",
+          candidateTimestamp: table.createdAt,
+          subjectIds: [table.actorId],
+        }),
+      ),
+    )
+    .returning({ id: table.id });
+  return (await rows).length;
+}
+
 export async function retainPlatformPreview(
   input: {
     actorId: string;
@@ -103,18 +140,7 @@ export async function retainPlatformPreview(
         throw new PlatformPreviewConflict("Platform preview expired; create a new preview");
       return decode(existing);
     }
-    // Unconsumed previews never authorized effects; consumed/unknown work stays pinned.
-    await tx.delete(table).where(
-      and(
-        isNull(table.consumedByJobId),
-        lt(table.expiresAt, now),
-        preservationAllowsDeletion({
-          registrationId: "admin-jobs-attribution",
-          candidateTimestamp: table.createdAt,
-          subjectIds: [table.actorId],
-        }),
-      ),
-    );
+    await prunePlatformConfigurationPreviews(tx, now);
     const capacity = await tx.select({ id: table.id }).from(table).limit(4096);
     if (capacity.length >= 4096)
       throw new PlatformPreviewConflict("Platform preview capacity unavailable");

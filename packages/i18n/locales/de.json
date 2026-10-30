@@ -3773,6 +3773,15 @@
     },
     "catalogue": {
       "entries": {
+        "platform-configuration-previews": {
+          "category": "Metadaten zur Vorschau der Plattformkonfiguration",
+          "purpose": "Eine Konfigurationsänderung einem Administratorkonto zuordnen und sicher wiederherstellen",
+          "source": "Von diesem Konto erstellte Plattformvorschauen",
+          "retention": "Unbenutzte Vorschauen laufen nach zehn Minuten ab. Aktive oder unklare Änderungen bleiben für die Wiederherstellung erhalten. Abgeschlossene Datensätze können nach Abschluss des Auftrags und seiner Belege sowie nach Ablauf der Aufbewahrungsfrist gelöscht werden. Eine Kontolöschung entfernt freigegebene Zuordnungsdaten.",
+          "safeRepresentation": "Nur Zeitangaben und eine pseudonyme Vorschaureferenz. Konfigurationswerte, Nachweise, Host-Fingerabdrücke und Auftragsreferenzen werden zurückgehalten.",
+          "portabilityExclusion": "Betriebliche Konfigurationsmetadaten sind keine übertragbaren Kontoinhalte",
+          "rightsOfOthers": "Konfigurationswerte und Angaben über andere Personen erfordern eine Prüfung durch den Betreiber"
+        },
         "account-profile": {
           "category": "Kontoprofil",
           "purpose": "Ihr OpenMapX-Konto bereitstellen und schützen",

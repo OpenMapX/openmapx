@@ -37,6 +37,7 @@ import {
   passkey,
   personalTimelineConnection,
   personalVehicle,
+  platformConfigurationPreview,
   savedList,
   savedPlace,
   serviceSecret,
@@ -911,6 +912,30 @@ export async function* streamOpenMapxRegistrationRecords(
             recordId: `integration-application-${pseudonymousIdentifier(operationId)}`,
             ...row,
           }),
+        },
+      );
+      return;
+    case "platform-configuration-previews":
+      yield* emit(
+        database
+          .select({
+            id: platformConfigurationPreview.id,
+            createdAt: platformConfigurationPreview.createdAt,
+            expiresAt: platformConfigurationPreview.expiresAt,
+            consumedAt: platformConfigurationPreview.consumedAt,
+            retiredAt: platformConfigurationPreview.retiredAt,
+          })
+          .from(platformConfigurationPreview)
+          .where(
+            and(
+              eq(platformConfigurationPreview.actorId, context.userId),
+              lte(platformConfigurationPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(platformConfigurationPreview.id)),
+        {
+          policyCodes: ["configuration-intent-redacted", "rights-of-others"],
+          map: ({ id, ...row }) => ({ ...row, previewDigest: pseudonymousIdentifier(id) }),
         },
       );
       return;

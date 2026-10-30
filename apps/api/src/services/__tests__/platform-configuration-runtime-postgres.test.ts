@@ -35,6 +35,7 @@ import type { JobContext } from "../job-runner";
 const state = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
   services: [] as services.LoadedService[],
+  registry: null as InstanceType<typeof services.ServiceRegistry> | null,
 }));
 vi.mock("../../db", () => ({
   get db() {
@@ -46,7 +47,7 @@ vi.mock("../../db", () => ({
 }));
 vi.mock("../../integration-host", () => ({ getAllIntegrations: () => [] }));
 vi.mock("../service-registry", () => ({
-  getServiceRegistry: () => ({ list: () => state.services }),
+  getServiceRegistry: () => state.registry ?? { list: () => state.services },
 }));
 const writer = await import("../administrative-configuration-writer-owner");
 const { withConfigurationCommitParticipant } = await import("../configuration-commit-participant");
@@ -226,6 +227,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-before-effect",
       "launch-native-after-effect",
       "launch-native-killed",
+      "launch-native-producer",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (version) => {
@@ -268,6 +270,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           actualComposeConfig: true,
         });
         state.services = host.loaded;
+        if (version === "launch-native-producer") {
+          state.registry = new services.ServiceRegistry({
+            rootDir: host.root,
+            enabledIds: new Set(ids),
+          });
+          await state.registry.load();
+          state.services = state.registry.list();
+        }
         let rows = ids.map((id, index) => ({
           ...host.row,
           Id: String(index + 1).repeat(64),
@@ -539,6 +549,61 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           step.ordinal,
                         );
                       expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+                      if (version === "launch-native-producer") {
+                        const args = host.calls.find((args) => args[0] === "run")!,
+                          env = (name: string) =>
+                            args
+                              .find((value) => value.startsWith(`${name}=`))!
+                              .slice(name.length + 1);
+                        await nativeHelper(host, {
+                          OPENMAPX_ROOT_DIR: host.root,
+                          OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+                          OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+                          OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+                        });
+                        const result = await prospective.persistAndApplyProspectiveConfiguration(
+                          candidate,
+                          { coordinatorMode: "require-running" },
+                        );
+                        expect(result).toMatchObject({
+                          saved: "committed",
+                          application: {
+                            outcome: "committed",
+                            followUp: "complete",
+                            publisherCleanupFailed: false,
+                            registryUpdateFailed: false,
+                          },
+                        });
+                        const [retired] = await state.fixture.db
+                          .select()
+                          .from(schema.platformConfigurationPreview)
+                          .where(eq(schema.platformConfigurationPreview.id, preview.previewId));
+                        expect(retired?.retiredAt).toBeInstanceOf(Date);
+                        const original =
+                          prospective.validatedConfigurationCandidateState(candidate);
+                        expect(
+                          existsSync(
+                            join(host.queue, ".candidates", `${original.record.operationKey}.json`),
+                          ),
+                        ).toBe(false);
+                        expect(ctx.checkpointResult?._completion).toMatchObject({
+                          result: {
+                            platformConfiguration: {
+                              previewFingerprint: preview.previewFingerprint,
+                              revisionId: candidate.revisionId,
+                              followUp: "complete",
+                            },
+                          },
+                        });
+                        expect(dm.settlePosts).toBe(1);
+                        expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
+                        expect(
+                          host.calls
+                            .filter((args) => args[0] === "compose" && args.includes("up"))
+                            .map((args) => args.at(-1)),
+                        ).toEqual(["app-api", "ops-agent"]);
+                        return candidate;
+                      }
                       // Reattachment observes the same terminal preparation;
                       // it cannot consume another dispatch ticket/create again.
                       await prospective.executeConfigurationMaintenanceStep(
@@ -580,7 +645,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     );
                     throw error;
                   }
-                  if (version === "policy-change") return;
+                  if (version === "policy-change" || version === "launch-native-producer") return;
                   const retained = ctx.checkpointResult?._configurationMaintenance as
                     | { phase?: string; receipt?: { state?: string; steps?: { phase: string }[] } }
                     | undefined;
@@ -1008,6 +1073,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await app.close();
           closeControlInstallation(installation);
           state.services = [];
+          state.registry = null;
           vi.unstubAllEnvs();
           rmSync(host.cleanupRoot, { recursive: true, force: true });
         }

@@ -3773,6 +3773,15 @@
     },
     "catalogue": {
       "entries": {
+        "platform-configuration-previews": {
+          "category": "Platform configuration preview metadata",
+          "purpose": "Attribute and safely recover an administrator's configuration change",
+          "source": "Platform previews created by this account",
+          "retention": "Unused previews expire after ten minutes. Active or uncertain changes remain held for recovery; completed records are eligible for deletion after the job and its receipts close and the retention period passes. Account deletion removes eligible attribution records.",
+          "safeRepresentation": "Dates and a pseudonymous preview reference only. Configuration values, proof material, host-source fingerprints and job references are withheld.",
+          "portabilityExclusion": "Operational configuration metadata is not designated as portable account content",
+          "rightsOfOthers": "Configuration values and information about other people require operator review"
+        },
         "account-profile": {
           "category": "Account profile",
           "purpose": "Provide and secure your OpenMapX account",

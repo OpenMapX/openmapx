@@ -1,19 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { adminJob } from "../../db/schema";
 import { createDbMock, type DbMock } from "../../test/db.js";
 
 const dbMock: DbMock = createDbMock();
 vi.mock("../../db", () => ({ db: dbMock.db }));
-vi.mock("../../db/schema", () => ({
-  adminAuditLog: {
-    id: "auditId",
-    actorId: "auditActorId",
-    targetId: "auditTargetId",
-    createdAt: "auditCreatedAt",
-  },
-  adminJob: { id: "jobId", createdBy: "jobCreatedBy", finishedAt: "jobFinishedAt" },
-  appLog: { id: "appLogId", metadata: "appLogMetadata", createdAt: "appLogCreatedAt" },
-  verification: { id: "verificationId", expiresAt: "verificationExpiresAt" },
-}));
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm")>();
   return { ...actual, lt: vi.fn((column: unknown, value: unknown) => ({ column, value })) };
@@ -74,10 +64,15 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
     });
 
     it("deletes rows and computes the cutoff for a positive day count", async () => {
+      if (fn === pruneCompletedJobs) {
+        dbMock.queueDelete([]);
+        dbMock.queueDelete([]);
+      }
       dbMock.queueDelete([{ id: "a" }, { id: "b" }]);
       const result = await fn(happyDays);
       expect(result).toBe(2);
-      expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
+      if (fn === pruneCompletedJobs) expect(dbMock.db.delete).toHaveBeenLastCalledWith(adminJob);
+      else expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
       const expectedCutoff = new Date(NOW.getTime() - happyDays * MS_PER_DAY);
       expect(lt).toHaveBeenCalledWith(expect.anything(), expectedCutoff);
     });

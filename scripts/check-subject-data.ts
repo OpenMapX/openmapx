@@ -32,6 +32,7 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "oauth_consent.user_id": "auth-oauth-resources",
   "oauth_refresh_token.user_id": "auth-oauth-resources",
   "parked_location.user_id": "parked-locations",
+  "platform_configuration_preview.actor_id": "platform-configuration-previews",
   "passkey.user_id": "auth-passkeys",
   "personal_timeline_connection.user_id": "timeline-connections",
   "personal_vehicle.user_id": "personal-vehicles",

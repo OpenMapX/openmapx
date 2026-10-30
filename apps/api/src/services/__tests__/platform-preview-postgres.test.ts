@@ -66,6 +66,285 @@ dbDescribe("durable exact platform preview", () => {
       services: [],
     });
   }
+  it("reclaims only closed previews after both retirement and job completion floors", async () => {
+    const actorId = await actor(),
+      created = new Date("2025-02-01T00:00:00Z"),
+      rows = [] as { id: string; kind: string }[];
+    for (const kind of ["closed", "uncertain", "running", "late-job", "recent-retirement"]) {
+      const value = preview(actorId),
+        jobId = randomUUID();
+      await retainPlatformPreview(
+        {
+          actorId,
+          operationKey: randomUUID(),
+          requestFingerprint: "e".repeat(64),
+          preview: value,
+          now: created,
+        },
+        fixture.db,
+      );
+      await fixture.db.insert(adminJob).values({
+        id: jobId,
+        type: "platform.apply",
+        createdBy: actorId,
+        payload: {},
+        result: {},
+        status: kind === "uncertain" || kind === "running" ? "running" : "success",
+        createdAt: created,
+        finishedAt:
+          kind === "uncertain" || kind === "running"
+            ? null
+            : new Date(created.getTime() + (kind === "late-job" ? 95 * 3600000 : 180000)),
+      });
+      await fixture.db
+        .update(platformConfigurationPreview)
+        .set({
+          consumedByJobId: jobId,
+          consumedAt: new Date(created.getTime() + 60000),
+          retiredAt:
+            kind === "uncertain"
+              ? null
+              : new Date(
+                  created.getTime() + (kind === "recent-retirement" ? 95 * 3600000 : 120000),
+                ),
+        })
+        .where(eq(platformConfigurationPreview.id, value.previewId));
+      rows.push({ id: value.previewId, kind });
+    }
+    const trigger = async (now: Date) =>
+      retainPlatformPreview(
+        {
+          actorId,
+          operationKey: randomUUID(),
+          requestFingerprint: "f".repeat(64),
+          preview: preview(actorId),
+          now,
+        },
+        fixture.db,
+      );
+    await trigger(new Date(created.getTime() + 72 * 3600000));
+    for (const row of rows)
+      expect(
+        await fixture.db
+          .select()
+          .from(platformConfigurationPreview)
+          .where(eq(platformConfigurationPreview.id, row.id)),
+      ).toHaveLength(1);
+    await trigger(new Date(created.getTime() + 96 * 3600000));
+    for (const row of rows)
+      expect(
+        await fixture.db
+          .select()
+          .from(platformConfigurationPreview)
+          .where(eq(platformConfigurationPreview.id, row.id)),
+        row.kind,
+      ).toHaveLength(row.kind === "closed" ? 0 : 1);
+  });
+  it("honors an actor-bound privacy preservation hold when unused previews expire", async () => {
+    const actorId = await actor(),
+      value = preview(actorId),
+      created = new Date(Date.now() - 20 * 60000);
+    await retainPlatformPreview(
+      {
+        actorId,
+        operationKey: randomUUID(),
+        requestFingerprint: "d".repeat(64),
+        preview: value,
+        now: created,
+      },
+      fixture.db,
+    );
+    const { PrivacyRequestService } = await import("../../privacy/request-service"),
+      { loadMasterKeyRing } = await import("../../privacy/crypto"),
+      { dataSubjectRequestPreservation } = await import("../../db/schema"),
+      { releasePreservation } = await import("../../privacy/preservation");
+    const service = new PrivacyRequestService({
+        database: fixture.db,
+        keyRing: loadMasterKeyRing({
+          env: {
+            NODE_ENV: "development",
+            OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 9).toString("base64url"),
+          },
+        }),
+      }),
+      request = await service.create({
+        userId: actorId,
+        kind: "access",
+        channel: "self_service",
+        locale: "en",
+        timeZone: "UTC",
+      });
+    const [hold] = await fixture.db
+      .select()
+      .from(dataSubjectRequestPreservation)
+      .where(
+        sql`${dataSubjectRequestPreservation.requestId}=${request.id} AND ${dataSubjectRequestPreservation.registrationId}='platform-configuration-previews'`,
+      );
+    expect(hold?.status).toBe("held");
+    const trigger = () =>
+      retainPlatformPreview(
+        {
+          actorId,
+          operationKey: randomUUID(),
+          requestFingerprint: "c".repeat(64),
+          preview: preview(actorId),
+        },
+        fixture.db,
+      );
+    await trigger();
+    expect(
+      await fixture.db
+        .select()
+        .from(platformConfigurationPreview)
+        .where(eq(platformConfigurationPreview.id, value.previewId)),
+    ).toHaveLength(1);
+    await releasePreservation({ id: hold!.id, database: fixture.db });
+    await trigger();
+    expect(
+      await fixture.db
+        .select()
+        .from(platformConfigurationPreview)
+        .where(eq(platformConfigurationPreview.id, value.previewId)),
+    ).toHaveLength(0);
+  });
+  it("keeps the original job while a closed platform preview is still preserved", async () => {
+    const actorId = await actor(),
+      value = preview(actorId),
+      jobId = randomUUID(),
+      created = new Date(Date.now() - 5 * 86400000),
+      closed = new Date(Date.now() - 4 * 86400000);
+    await retainPlatformPreview(
+      {
+        actorId,
+        operationKey: randomUUID(),
+        requestFingerprint: "b".repeat(64),
+        preview: value,
+        now: created,
+      },
+      fixture.db,
+    );
+    await fixture.db.insert(adminJob).values({
+      id: jobId,
+      type: "platform.apply",
+      createdBy: actorId,
+      payload: {},
+      result: {},
+      status: "success",
+      createdAt: created,
+      finishedAt: closed,
+    });
+    await fixture.db
+      .update(platformConfigurationPreview)
+      .set({
+        consumedByJobId: jobId,
+        consumedAt: new Date(created.getTime() + 60000),
+        retiredAt: closed,
+      })
+      .where(eq(platformConfigurationPreview.id, value.previewId));
+    const { PrivacyRequestService } = await import("../../privacy/request-service"),
+      { loadMasterKeyRing } = await import("../../privacy/crypto"),
+      { dataSubjectRequestPreservation } = await import("../../db/schema"),
+      { releasePreservation } = await import("../../privacy/preservation"),
+      { pruneCompletedJobs } = await import("../activity-retention");
+    const service = new PrivacyRequestService({
+        database: fixture.db,
+        keyRing: loadMasterKeyRing({
+          env: {
+            NODE_ENV: "development",
+            OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 9).toString("base64url"),
+          },
+        }),
+      }),
+      request = await service.create({
+        userId: actorId,
+        kind: "access",
+        channel: "self_service",
+        locale: "en",
+        timeZone: "UTC",
+      });
+    const holds = await fixture.db
+      .select()
+      .from(dataSubjectRequestPreservation)
+      .where(eq(dataSubjectRequestPreservation.requestId, request.id));
+    const jobHold = holds.find((row) => row.registrationId === "admin-jobs-attribution")!,
+      previewHold = holds.find((row) => row.registrationId === "platform-configuration-previews")!;
+    await releasePreservation({ id: jobHold.id, database: fixture.db });
+    await pruneCompletedJobs(1);
+    expect(await fixture.db.select().from(adminJob).where(eq(adminJob.id, jobId))).toHaveLength(1);
+    expect(
+      await fixture.db
+        .select()
+        .from(platformConfigurationPreview)
+        .where(eq(platformConfigurationPreview.id, value.previewId)),
+    ).toHaveLength(1);
+    await releasePreservation({ id: previewHold.id, database: fixture.db });
+    await pruneCompletedJobs(1);
+    expect(
+      await fixture.db
+        .select()
+        .from(platformConfigurationPreview)
+        .where(eq(platformConfigurationPreview.id, value.previewId)),
+    ).toHaveLength(0);
+    expect(await fixture.db.select().from(adminJob).where(eq(adminJob.id, jobId))).toHaveLength(0);
+  });
+  it("exports only the subject's cutoff-bound platform preview metadata, never private intent", async () => {
+    const actorId = await actor(),
+      otherId = await actor(),
+      now = new Date("2025-01-01T00:00:00Z"),
+      own = preview(actorId),
+      foreign = preview(otherId),
+      future = preview(actorId),
+      privateSentinel = "private-purpose-proof-must-never-export";
+    for (const [who, value, time] of [
+      [actorId, own, now],
+      [otherId, foreign, now],
+      [actorId, future, new Date(now.getTime() + 60000)],
+    ] as const)
+      await retainPlatformPreview(
+        {
+          actorId: who,
+          operationKey: randomUUID(),
+          requestFingerprint: "f".repeat(64),
+          preview: value,
+          now: time,
+        },
+        fixture.db,
+      );
+    await fixture.db
+      .update(platformConfigurationPreview)
+      .set({ preview: { ...own, privatePurposeProof: privateSentinel } })
+      .where(eq(platformConfigurationPreview.id, own.previewId));
+    const { collectOpenMapxRegistration } = await import("../../privacy/openmapx-collectors"),
+      part = await collectOpenMapxRegistration("platform-configuration-previews", {
+        userId: actorId,
+        cutoffAt: new Date(now.getTime() + 30000),
+        database: fixture.db,
+      });
+    expect(part.records).toHaveLength(1);
+    expect(part.records[0]?.data).toMatchObject({
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 600000).toISOString(),
+      consumedAt: null,
+      retiredAt: null,
+    });
+    expect(JSON.stringify(part)).not.toContain(privateSentinel);
+    for (const value of [
+      own.previewId,
+      foreign.previewId,
+      future.previewId,
+      own.previewFingerprint,
+      own.authPolicyRevision,
+      own.newOrigin,
+    ])
+      expect(JSON.stringify(part)).not.toContain(value);
+    expect(Object.keys(part.records[0]!.data).sort()).toEqual([
+      "consumedAt",
+      "createdAt",
+      "expiresAt",
+      "previewDigest",
+      "retiredAt",
+    ]);
+  });
   it("retains one original request and rejects changed intent, actor substitution and expiry", async () => {
     const actorId = await actor(),
       operationKey = randomUUID(),
