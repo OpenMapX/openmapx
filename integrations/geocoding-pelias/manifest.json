@@ -32,9 +32,12 @@
       }
     }
   },
+  "endpointConfigKeys": {
+    "pelias": "endpoint"
+  },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "${service:pelias}/v1/search?text=test&size=1"
+    "urlTemplate": "${endpoint:pelias}/v1/search?text=test&size=1"
   },
   "quality": "built-in",
   "category": "Geocoding",

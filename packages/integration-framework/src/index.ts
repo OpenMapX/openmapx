@@ -1,3 +1,4 @@
+export type { PlatformEndpointId } from "@openmapx/extension-contracts";
 export {
   type ActivationTransactionScope,
   createActivationTransactionScope,
@@ -350,6 +351,11 @@ export {
 } from "./media-attribution";
 export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+export {
+  type PlatformEndpointIntegration,
+  type RequiredServiceLookup,
+  resolveIntegrationPlatformEndpoint,
+} from "./platform-endpoints";
 export {
   type ProviderCallContext,
   ProviderCancelledError,

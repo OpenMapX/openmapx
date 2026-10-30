@@ -20,11 +20,11 @@ describe("integration manifest health-check endpoints", () => {
 
   it("rejects an unknown endpoint, naming the known ones", () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
-    const result = withHealthCheck({ type: "http", urlTemplate: "${endpoint:nominatim}/status" });
+    const result = withHealthCheck({ type: "http", urlTemplate: "${endpoint:geoserver}/status" });
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual([
       // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
-      'manifest.healthCheck: unknown endpoint "nominatim" in ${endpoint:nominatim} (known: overpass)',
+      'manifest.healthCheck: unknown endpoint "geoserver" in ${endpoint:geoserver} (known: overpass, nominatim, photon, pelias, osrm, valhalla, motis, transitous)',
     ]);
   });
 
@@ -56,6 +56,31 @@ describe("integration manifest health-check endpoints", () => {
     expect(result.errors).toEqual([
       // biome-ignore lint/suspicious/noTemplateCurlyInString: error text names the syntax
       "manifest.healthCheck: ${endpoint:<id>} may not appear in headers",
+    ]);
+  });
+
+  it("accepts endpoint settings naming declared configSchema properties", () => {
+    const result = validateManifest({
+      id: "transit-motis",
+      name: "MOTIS",
+      domains: ["transit"],
+      configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
+      endpointConfigKeys: { motis: "endpoint" },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects an endpoint setting for an unknown endpoint or an undeclared property", () => {
+    const result = validateManifest({
+      id: "transit-motis",
+      name: "MOTIS",
+      domains: ["transit"],
+      configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
+      endpointConfigKeys: { geoserver: "endpoint", motis: "motisUrl" },
+    });
+    expect(result.errors).toEqual([
+      'manifest.endpointConfigKeys: unknown endpoint "geoserver" (known: overpass, nominatim, photon, pelias, osrm, valhalla, motis, transitous)',
+      'manifest.endpointConfigKeys.motis: "motisUrl" is not a configSchema property',
     ]);
   });
 });

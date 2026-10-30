@@ -90,6 +90,7 @@ export * from "./getAdminIntegration200ManifestDataSourcesItemLicensingVersion";
 export * from "./getAdminIntegration200ManifestDataSourcesItemRedistribution";
 export * from "./getAdminIntegration200ManifestDataSourcesItemRedistributionDerivedData";
 export * from "./getAdminIntegration200ManifestDataSourcesItemRedistributionSourceData";
+export * from "./getAdminIntegration200ManifestEndpointConfigKeys";
 export * from "./getAdminIntegration200ManifestFrontend";
 export * from "./getAdminIntegration200ManifestFrontendLayerSelector";
 export * from "./getAdminIntegration200ManifestFrontendLayerSelectorGroup";

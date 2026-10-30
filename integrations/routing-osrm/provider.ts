@@ -15,11 +15,12 @@ import type {
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint
 // (INTEGRATION_ROUTING_OSRM_ENDPOINT) → hardcoded fallback.
-let OSRM_URL = "https://router.project-osrm.org";
+const DEFAULT_OSRM_URL = "https://router.project-osrm.org";
+let OSRM_URL = DEFAULT_OSRM_URL;
 
-/** Update the OSRM base URL (called from setup() when service registry resolves it). */
-export function setOsrmUrl(url: string): void {
-  OSRM_URL = url;
+/** The instance to query; undefined restores the default. */
+export function setOsrmUrl(url: string | undefined): void {
+  OSRM_URL = url ?? DEFAULT_OSRM_URL;
 }
 
 interface OsrmManeuver {

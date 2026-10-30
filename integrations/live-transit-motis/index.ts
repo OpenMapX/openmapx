@@ -30,22 +30,6 @@ const PROVIDER_ID = "live-transit-motis";
 const SOURCE_ID = "motis-rt";
 const ALERT_PREFIX = "mr:";
 
-/**
- * The self-hosted MOTIS endpoint, if the deployment has one. Resolution order:
- * service registry → manifest config → MOTIS_URL env, the same chain as
- * `transit-motis` and `geocoding-motis`. Undefined without one; live data then
- * comes from Transitous directly.
- */
-function resolveMotisUrl(ctx: IntegrationContext): string | undefined {
-  const resolved = ctx.getRequiredService?.("motis");
-  return [resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL]
-    .find(
-      (candidate): candidate is string =>
-        typeof candidate === "string" && candidate.trim().length > 0,
-    )
-    ?.trim();
-}
-
 interface LiveTransitMotisInstances {
   /** The self-hosted MOTIS; absent when the deployment runs on Transitous. */
   local?: MotisInstance;
@@ -53,7 +37,9 @@ interface LiveTransitMotisInstances {
 }
 
 function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMotisInstances {
-  const localUrl = resolveMotisUrl(ctx);
+  // The self-hosted MOTIS, if any: the service, the `endpoint` setting or
+  // MOTIS_URL. Without one, live data comes from Transitous directly.
+  const localUrl = ctx.resolvePlatformEndpoint("motis")?.url;
   return {
     ...(localUrl
       ? {
@@ -66,7 +52,7 @@ function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMo
         }
       : {}),
     transitous: createMotisInstance({
-      baseUrl: (ctx.config.transitousUrl as string | undefined)?.trim() || TRANSITOUS_URL,
+      baseUrl: ctx.resolvePlatformEndpoint("transitous")?.url ?? TRANSITOUS_URL,
       prefix: "mo:",
       provider: "mo",
       userAgent: USER_AGENT_TRANSIT,
@@ -286,7 +272,6 @@ export const __testing = {
   mapMotisAlert,
   mapMotisAlertSeverity,
   createLiveTransitMotisInstances,
-  resolveMotisUrl,
   routeForId,
   vehicleSource,
   stripPrefix,

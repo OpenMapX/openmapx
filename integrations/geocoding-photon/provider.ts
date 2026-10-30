@@ -18,11 +18,12 @@ import type {
 import { fetchJson, normalizeSearchTerm, resolvePoiIconPath } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPhotonUrl.
-let PHOTON_URL = "https://photon.komoot.io";
+const DEFAULT_PHOTON_URL = "https://photon.komoot.io";
+let PHOTON_URL = DEFAULT_PHOTON_URL;
 
-/** Update the Photon base URL (called from setup() when service registry resolves it). */
-export function setPhotonUrl(url: string): void {
-  PHOTON_URL = url;
+/** The instance to query; undefined restores the default. */
+export function setPhotonUrl(url: string | undefined): void {
+  PHOTON_URL = url ?? DEFAULT_PHOTON_URL;
 }
 
 /**

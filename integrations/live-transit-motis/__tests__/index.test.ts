@@ -1,4 +1,11 @@
-import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import { readFileSync } from "node:fs";
+import {
+  type IntegrationContext,
+  type PlatformEndpointId,
+  type RealtimeProvider,
+  resolveIntegrationPlatformEndpoint,
+} from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +52,15 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
     },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     getRequiredService: () => null,
+    resolvePlatformEndpoint: (id: PlatformEndpointId) =>
+      resolveIntegrationPlatformEndpoint(
+        {
+          manifest: { endpointConfigKeys: { motis: "endpoint", transitous: "transitousUrl" } },
+          config,
+        },
+        () => null,
+        id,
+      ),
     onActivate: (activate: () => void) => activate(),
     registerRealtimeProvider: (next: RealtimeProvider) => {
       provider = next;
@@ -306,56 +322,43 @@ describe("live-transit-motis provider", () => {
     expect(mapMotisAlertSeverity(undefined)).toBe("info");
   });
 
-  describe("resolveMotisUrl resolution chain", () => {
-    const ORIGINAL_ENV = process.env.MOTIS_URL;
+  describe("self-hosted MOTIS resolution", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../manifest.json", import.meta.url), "utf8"),
+    ) as IntegrationContext["manifest"];
 
     afterEach(() => {
-      if (ORIGINAL_ENV === undefined) delete process.env.MOTIS_URL;
-      else process.env.MOTIS_URL = ORIGINAL_ENV;
+      vi.unstubAllEnvs();
     });
 
-    function ctxWith(opts: {
-      service?: { url: string } | null;
-      configEndpoint?: string;
-    }): IntegrationContext {
-      return {
+    function ctxWith(opts: { service?: string; configEndpoint?: string }): IntegrationContext {
+      const ctx = createMockIntegrationContext({
+        manifest,
         config: opts.configEndpoint ? { endpoint: opts.configEndpoint } : {},
-        getRequiredService: () => opts.service ?? null,
-      } as unknown as IntegrationContext;
+      });
+      ctx.getRequiredService = (key) =>
+        key === "motis" && opts.service
+          ? { serviceId: "motis", url: opts.service, enabled: true }
+          : null;
+      return ctx;
     }
 
-    it("prefers the service registry url", async () => {
-      delete process.env.MOTIS_URL;
-      const mod = await loadModule();
-      const ctx = ctxWith({
-        service: { url: "http://motis.registry:8080" },
+    it("ranks the service, then the endpoint setting, then MOTIS_URL", () => {
+      vi.stubEnv("MOTIS_URL", "http://env.example:9000");
+      const both = ctxWith({
+        service: "http://motis.registry:8080",
         configEndpoint: "http://config.example",
       });
-      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://motis.registry:8080");
+      expect(both.resolvePlatformEndpoint("motis")?.url).toBe("http://motis.registry:8080");
+      expect(
+        ctxWith({ configEndpoint: "http://config.example" }).resolvePlatformEndpoint("motis")?.url,
+      ).toBe("http://config.example");
+      expect(ctxWith({}).resolvePlatformEndpoint("motis")?.url).toBe("http://env.example:9000");
     });
 
-    it("falls back to config.endpoint", async () => {
-      delete process.env.MOTIS_URL;
-      const mod = await loadModule();
-      const ctx = ctxWith({
-        service: null,
-        configEndpoint: "http://config.example",
-      });
-      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://config.example");
-    });
-
-    it("falls back to the MOTIS_URL env var", async () => {
-      process.env.MOTIS_URL = "http://env.example:9000";
-      const mod = await loadModule();
-      const ctx = ctxWith({ service: null });
-      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://env.example:9000");
-    });
-
-    it("reports no local MOTIS when nothing is wired", async () => {
-      delete process.env.MOTIS_URL;
-      const mod = await loadModule();
-      const ctx = ctxWith({ service: null });
-      expect(mod.__testing.resolveMotisUrl(ctx)).toBeUndefined();
+    it("reports no local MOTIS when nothing is wired", () => {
+      vi.stubEnv("MOTIS_URL", "");
+      expect(ctxWith({}).resolvePlatformEndpoint("motis")).toBeNull();
     });
   });
 

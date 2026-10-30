@@ -25965,6 +25965,12 @@
                             ]
                           }
                         },
+                        "endpointConfigKeys": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
                         "healthCheck": {
                           "anyOf": [
                             {

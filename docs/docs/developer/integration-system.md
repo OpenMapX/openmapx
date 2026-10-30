@@ -267,17 +267,14 @@ A `healthCheck` makes the integration probeable. Probe the instance the
 integration actually queries, not a fixed public URL. `urlTemplate` and `headers`
 interpolate three placeholders:
 
-| Placeholder        | Resolves to                                                                                                                                                        | When it cannot resolve                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `${configKey}`     | The value from the config cascade, so a probe can carry an API key without hard-coding it.                                                                         | Empty; list the key in `requiredConfigKeys` to report **unconfigured** instead. |
-| `${service:<id>}`  | The URL of the enabled self-hosted service.                                                                                                                        | **Unconfigured**: the service is not enabled.                                   |
-| `${endpoint:<id>}` | The instance of a platform backend that the platform's own client queries: the self-hosted service when enabled, then the operator's URL, then the public default. | **Unconfigured**: no instance is set and there is no public default.            |
+| Placeholder        | Resolves to                                                                                                                                                  | When it cannot resolve                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `${configKey}`     | The value from the config cascade, so a probe can carry an API key without hard-coding it.                                                                   | Empty; list the key in `requiredConfigKeys` to report **unconfigured** instead. |
+| `${service:<id>}`  | The URL of the enabled self-hosted service.                                                                                                                  | **Unconfigured**: the service is not enabled.                                   |
+| `${endpoint:<id>}` | The instance of a platform backend the integration queries, as `ctx.resolvePlatformEndpoint(id)` returns it (see [Platform endpoints](#platform-endpoints)). | **Unconfigured**: no instance is set and there is no public default.            |
 
-Endpoint ids are fixed by the contract (`HEALTH_CHECK_ENDPOINT_IDS`); today the
-only one is `overpass`: the self-hosted `overpass` service, then `OVERPASS_URL`,
-then `overpass-api.de`. The Overpass integrations probe
-`${endpoint:overpass}/api/status`. An endpoint can be an internal host carrying
-the operator's credentials, so it is only ever where a probe goes:
+An endpoint can be an internal host carrying the operator's credentials, so it
+is only ever where a probe goes:
 
 - it must be the whole URL prefix of `urlTemplate`, used once, followed by a
   path or nothing; validation rejects it anywhere else, including headers;
@@ -285,10 +282,12 @@ the operator's credentials, so it is only ever where a probe goes:
   down;
 - the operator's credentials go only to the endpoint's own origin.
 
-Self-hosted services and an operator's instance may be internal hosts. Every
-other probe URL must be public. Credentials in a URL, such as an operator's
-`https://user:pass@host`, are sent as Basic auth and never shown in the status
-URL or an error. A manifest's own `Authorization` header takes precedence.
+The resolved instance (a self-hosted service, an integration's URL setting or
+the operator's URL) may be an internal host. Every other probe URL must be
+public. Credentials in a URL, such as an operator's `https://user:pass@host`,
+are sent as Basic auth and never shown in the status URL or an error. A
+manifest's own `Authorization` header takes precedence.
+
 Use cheap, static endpoints for third-party reachability checks. Set
 `healthCheckIntervalMs` to a considerate background cadence (Mangrove uses
 900000 ms, or 15 minutes). The scheduler reuses cached results between probes
@@ -297,6 +296,37 @@ Explicit administrator checks still probe immediately.
 An array of checks rolls up into one signal: all must pass. The states and how
 they surface are described on the
 [admin page](../administration/integrations-administration.md#integration-health).
+
+### Platform endpoints
+
+Some backends run wherever the deployment keeps them: as a self-hosted service,
+at an instance the operator names, or as a public service. Integrations ask
+for the one in use with `ctx.resolvePlatformEndpoint(id)` instead of resolving
+it themselves, and their health checks probe `${endpoint:<id>}`. Both resolve
+through one function, in this order:
+
+1. the enabled self-hosted service the integration requires (`requires`);
+2. the integration's own URL setting, named in `endpointConfigKeys`;
+3. the operator's environment variable;
+4. the public default.
+
+| Id           | Service     | Operator URL     | Public default                                       |
+| ------------ | ----------- | ---------------- | ---------------------------------------------------- |
+| `overpass`   | `overpass`  | `OVERPASS_URL`   | `https://overpass-api.de`                            |
+| `nominatim`  | `nominatim` | `NOMINATIM_URL`  | `https://nominatim.openstreetmap.org`                |
+| `photon`     | `photon`    | `PHOTON_URL`     | `https://photon.komoot.io`                           |
+| `pelias`     | `pelias`    | `PELIAS_URL`     | none                                                 |
+| `osrm`       | `osrm`      | `OSRM_URL`       | `https://router.project-osrm.org`                    |
+| `valhalla`   | `valhalla`  | `VALHALLA_URL`   | `https://api.stadiamaps.com` (needs an API key)      |
+| `motis`      | `motis`     | `MOTIS_URL`      | none: without one, MOTIS integrations use Transitous |
+| `transitous` | none        | `TRANSITOUS_URL` | `https://api.transitous.org`                         |
+
+`endpointConfigKeys` maps an endpoint id to the `configSchema` property that
+overrides it for this integration, for example
+`"endpointConfigKeys": { "motis": "endpoint", "transitous": "transitousUrl" }`.
+Validation rejects unknown ids and undeclared properties. `resolvePlatformEndpoint`
+returns `{ url, source }`, with `url` without a trailing slash, or null when no
+instance is set and there is no public default.
 
 ### Data sources
 
@@ -953,6 +983,7 @@ interface IntegrationContext {
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
 
   getRequiredService(key: string): { serviceId: string; url: string; enabled: boolean } | null;
+  resolvePlatformEndpoint(id: PlatformEndpointId): ResolvedPlatformEndpoint | null;
   getDisallowedSourceIds?(): Promise<Set<string>>;
   getDisallowedIntegrationIds?(): Promise<Set<string>>;
 }
@@ -971,7 +1002,9 @@ and unsubscribe listeners; prevent retired requests from publishing into new
 state.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
 `getRequiredService(key)` is how an integration reads a resolved requirement at
-runtime (see below). The two `getDisallowed*` resolvers expose the operator's
+runtime (see below). `resolvePlatformEndpoint(id)` returns the instance of a
+platform backend the integration should query, as its health checks probe it
+(see [Platform endpoints](#platform-endpoints)). The two `getDisallowed*` resolvers expose the operator's
 data-use policy: orchestrators skip providers whose source or whole
 integration the policy disallows, and fall back to the next.
 

@@ -2,14 +2,14 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { attribution } from "./attributions.js";
 import { setupCloud } from "./cloud.js";
 import { createTransitMotisInstances, createTransitousInstance } from "./instances.js";
-import { resolveLocalMotisUrl, setupLocal } from "./local.js";
+import { setupLocal } from "./local.js";
 
 export function setup(ctx: IntegrationContext): void {
   ctx.onActivate(() => attribution.set(ctx.manifest.dataSources ?? []));
-  const resolved = ctx.getRequiredService("motis");
-  const localUrl = resolveLocalMotisUrl(resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL);
+  // The self-hosted MOTIS, if any: the service, the `endpoint` setting or MOTIS_URL.
+  const localUrl = ctx.resolvePlatformEndpoint("motis")?.url;
   const transitous = {
-    transitousUrl: ctx.config.transitousUrl as string | undefined,
+    transitousUrl: ctx.resolvePlatformEndpoint("transitous")?.url,
     transitousUserAgent: ctx.config.transitousUserAgent as string | undefined,
   };
   if (!localUrl) {

@@ -14,15 +14,15 @@ export {
   validateExtensionManifest,
 } from "./extension";
 export type {
-  HealthCheckEndpointId,
   IntegrationDataSource,
   IntegrationManifest,
+  PlatformEndpointId,
 } from "./integration";
 export {
   ENDPOINT_URL_TEMPLATE,
-  HEALTH_CHECK_ENDPOINT_IDS,
   integrationManifestSchema,
-  isHealthCheckEndpointId,
+  isPlatformEndpointId,
+  PLATFORM_ENDPOINT_IDS,
   validateDataSource,
   validateManifest,
 } from "./integration";
