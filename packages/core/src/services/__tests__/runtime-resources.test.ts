@@ -122,10 +122,29 @@ describe("operator runtime resources", () => {
       render("elasticsearch", { OPENMAPX_JAVA_HEAP_MIB: "1024 -javaagent:x" }),
     ).toThrow();
   });
+  it("does not interpret a community manifest's environment as host-variable authority", () => {
+    const untrusted = {
+      id: "community-example",
+      quality: "built-in",
+      firstParty: true,
+      configSchema: {
+        type: "object",
+        properties: { PUBLIC_VALUE: { type: "string", default: "safe-default" } },
+      },
+      container: { environment: { PUBLIC_VALUE: "${DATABASE_URL}" } },
+    };
+    const resolved = resolveServiceConfigFromEnv(untrusted, {
+      DATABASE_URL: "synthetic-platform-secret",
+    });
+    expect(JSON.stringify(resolved)).not.toContain("synthetic-platform-secret");
+  });
   it("owns host-backed resource expressions and parses SERVICE numeric intent strictly", () => {
     expect(
-      resolveServiceConfigFromEnv(manifest("local-ai"), { LOCAL_AI_MEMORY: "16g" })
-        .OPENMAPX_MEMORY_MIB,
+      resolveServiceConfigFromEnv(
+        manifest("local-ai"),
+        { LOCAL_AI_MEMORY: "16g" },
+        { firstParty: true },
+      ).OPENMAPX_MEMORY_MIB,
     ).toMatchObject({ source: "env" });
     expect(
       resolveServiceConfigFromEnv(manifest("redis"), { SERVICE_REDIS_OPENMAPX_MEMORY_MIB: "4096" })

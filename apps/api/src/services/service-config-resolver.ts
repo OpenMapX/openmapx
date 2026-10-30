@@ -52,6 +52,8 @@ export interface ResolveServiceConfigInput {
    */
   containerEnv?: Record<string, string>;
   containerMemory?: string;
+  /** Registry provenance, never the manifest quality label. */
+  isBuiltIn?: boolean;
   /**
    * The config key naming the service's proxy host (`exposure.proxy.host.configKey`).
    * The host is routed by Traefik labels, which a Compose env reference
@@ -89,6 +91,7 @@ export async function resolveServiceConfigWithSources(
       container: { environment: manifest.containerEnv, memory: manifest.containerMemory },
     },
     process.env,
+    { firstParty: manifest.isBuiltIn === true },
   );
 
   const result: Record<string, ConfigValueWithSource> = {};
@@ -165,7 +168,7 @@ export async function resolveAllServiceConfigs(
       const flat: Record<string, unknown> = {};
       const fromEnv: string[] = [];
       for (const [key, entry] of Object.entries(resolved)) {
-        if (entry.manifestExpression) continue;
+        if (entry.manifestExpression && key !== m.proxyHostConfigKey) continue;
         if (
           entry.source === "env" &&
           key !== m.proxyHostConfigKey &&
@@ -209,6 +212,7 @@ export async function resolveServiceConfigWithSourcesStrict(
       container: { environment: manifest.containerEnv, memory: manifest.containerMemory },
     },
     context.env,
+    { firstParty: manifest.isBuiltIn === true },
   );
   const result: Record<string, ConfigValueWithSource> = {};
   for (const [key, entry] of Object.entries(envLayer))
@@ -234,7 +238,7 @@ export async function resolveAllServiceConfigsStrict(
     const flat: Record<string, unknown> = {};
     const fromEnv: string[] = [];
     for (const [key, entry] of Object.entries(resolved)) {
-      if (entry.manifestExpression) continue;
+      if (entry.manifestExpression && key !== manifest.proxyHostConfigKey) continue;
       if (
         entry.source === "env" &&
         key !== manifest.proxyHostConfigKey &&

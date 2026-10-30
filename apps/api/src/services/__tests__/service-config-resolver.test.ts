@@ -165,6 +165,7 @@ describe("typed render settings and host ownership", () => {
     selectLimitMock.mockResolvedValueOnce([{ config: { OPENMAPX_MEMORY_MIB: 1024 } }]);
     const input = {
       id: "test",
+      isBuiltIn: true,
       configSchema: {
         properties: { OPENMAPX_MEMORY_MIB: { type: "integer", minimum: 16, maximum: 1048576 } },
       },
@@ -187,6 +188,7 @@ describe("typed render settings and host ownership", () => {
     selectLimitMock.mockResolvedValueOnce([{ config: { THREADS: 4 } }]);
     const input = {
       id: "test",
+      isBuiltIn: true,
       configSchema: { properties: { THREADS: { type: "integer" } } },
       containerEnv: { THREADS: "${SERVICE_TEST_ORIGINAL_THREADS:-2}" },
     };

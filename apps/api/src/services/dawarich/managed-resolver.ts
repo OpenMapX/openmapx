@@ -295,6 +295,7 @@ async function readConfig(serviceId: string): Promise<Record<string, unknown>> {
     configSchema: service.manifest.configSchema,
     containerEnv: service.manifest.container.environment,
     containerMemory: service.manifest.container.memory,
+    isBuiltIn: service.isBuiltIn,
   });
 }
 

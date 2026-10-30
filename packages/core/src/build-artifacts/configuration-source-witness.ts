@@ -166,7 +166,7 @@ export function configurationHostFields(
     "motis-staging": "MOTIS_SLOT_MEMORY",
     postgis: "POSTGIS_MEMORY",
   };
-  return services.map(({ manifest }) => {
+  return services.map(({ manifest, isBuiltIn }) => {
     const schema = (manifest.configSchema?.properties ?? manifest.configSchema ?? {}) as Record<
       string,
       unknown
@@ -187,9 +187,10 @@ export function configurationHostFields(
       const hostExpression = manifest.container.environment?.[key]?.match(
         /^\$\{([A-Z][A-Z0-9_]*)(?::[-?][^}]*)?\}$/,
       )?.[1];
-      if (hostExpression) names.push(hostExpression);
+      if (isBuiltIn && hostExpression) names.push(hostExpression);
       const variable = memory[manifest.id];
       if (
+        isBuiltIn &&
         key === "OPENMAPX_MEMORY_MIB" &&
         variable &&
         manifest.container.memory?.startsWith(`\${${variable}`)

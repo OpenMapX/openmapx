@@ -82,6 +82,7 @@ export function resolveServiceConfigFromEnv(
     container?: Pick<ServiceManifest["container"], "environment" | "memory">;
   },
   env: NodeJS.ProcessEnv = process.env,
+  provenance: { firstParty?: boolean } = {},
 ): Record<string, ConfigValueWithSource> {
   const keys = configSchemaKeys(manifest.configSchema);
   if (keys.length === 0) return {};
@@ -98,7 +99,12 @@ export function resolveServiceConfigFromEnv(
   // A manifest-owned host interpolation remains authoritative over database values.
   for (const { key } of keys) {
     const variable = memoryHostVariable(manifest.container?.environment?.[key]);
-    if (variable && env[variable] !== undefined && env[variable] !== "")
+    if (
+      provenance.firstParty === true &&
+      variable &&
+      env[variable] !== undefined &&
+      env[variable] !== ""
+    )
       result[key] = { value: env[variable], source: "env", manifestExpression: true };
   }
   const prefix = serviceConfigEnvPrefix(manifest.id);
@@ -126,7 +132,12 @@ export function resolveServiceConfigFromEnv(
   }
 
   const hostMemory = memoryHostVariable(manifest.container?.memory);
-  if (!result.OPENMAPX_MEMORY_MIB && hostMemory && env[hostMemory])
+  if (
+    provenance.firstParty === true &&
+    !result.OPENMAPX_MEMORY_MIB &&
+    hostMemory &&
+    env[hostMemory]
+  )
     result.OPENMAPX_MEMORY_MIB = {
       value: env[hostMemory],
       source: "env",

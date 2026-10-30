@@ -383,7 +383,9 @@ function resolveInput(
     const entry = saved.get(service.manifest.id);
     const envKeys = new Set(entry?.envKeys ?? []);
     const defaults = Object.entries(
-      flattenResolvedConfig(resolveServiceConfigFromEnv(service.manifest, {})),
+      flattenResolvedConfig(
+        resolveServiceConfigFromEnv(service.manifest, {}, { firstParty: service.isBuiltIn }),
+      ),
     ).filter(([key]) => !envKeys.has(key));
     const values = { ...Object.fromEntries(defaults), ...entry?.values };
     if (Object.keys(values).length > 0) serviceConfigs.set(service.manifest.id, values);

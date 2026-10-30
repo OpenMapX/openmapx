@@ -280,7 +280,7 @@ export async function renderComposeWithWriter(
     const { id } = service.manifest;
     const proxyHostKey = service.manifest.exposure?.proxy?.host?.configKey;
     const fromEnv = Object.entries(
-      resolveServiceConfigFromEnv(service.manifest, process.env),
+      resolveServiceConfigFromEnv(service.manifest, process.env, { firstParty: service.isBuiltIn }),
     ).filter(([, entry]) => entry.source === "env");
     // An env value is a reference in the YAML, except the proxy host, which
     // the routes need as a value.
@@ -302,7 +302,7 @@ export async function renderComposeWithWriter(
       );
     for (const [key, entry] of fromEnv)
       if (
-        !entry.manifestExpression &&
+        (!entry.manifestExpression || key === proxyHostKey) &&
         (key === proxyHostKey || coreServices.materializeServiceConfigKey(id, key))
       )
         values[key] = entry.value as string | number | boolean;

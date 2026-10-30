@@ -11,6 +11,7 @@ import {
 } from "../services/release-manifest";
 import type { LoadedService } from "../services/types";
 import {
+  configurationHostFields,
   observeConfigurationSources,
   verifyConfigurationSourceWitness,
 } from "./configuration-source-witness";
@@ -260,4 +261,30 @@ it("projects only validated non-secret platform ownership under the original rev
   } finally {
     closeControlInstallation(installation);
   }
+});
+
+it("does not assign foreign host ownership from community interpolation", () => {
+  const service: LoadedService = {
+    manifest: {
+      id: "community-example",
+      name: "Example",
+      version: "1",
+      quality: "community",
+      configSchema: { type: "object", properties: { PUBLIC_VALUE: { type: "string" } } },
+      container: {
+        image: "example/community",
+        tag: "1",
+        environment: { PUBLIC_VALUE: "${DATABASE_URL}" },
+      },
+    },
+    directory: "/synthetic",
+    isBuiltIn: false,
+    enabled: true,
+  };
+  const result = configurationHostFields([service], { DATABASE_URL: "synthetic-platform-secret" });
+  expect(result[0]?.fields.find((field) => field.key === "PUBLIC_VALUE")).toEqual({
+    key: "PUBLIC_VALUE",
+    source: "none",
+  });
+  expect(JSON.stringify(result)).not.toContain("synthetic-platform-secret");
 });

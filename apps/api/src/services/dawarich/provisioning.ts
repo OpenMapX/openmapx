@@ -691,6 +691,7 @@ async function readEffectiveServiceConfig(serviceId: string): Promise<Record<str
     configSchema: service.manifest.configSchema,
     containerEnv: service.manifest.container.environment,
     containerMemory: service.manifest.container.memory,
+    isBuiltIn: service.isBuiltIn,
   });
 }
 
