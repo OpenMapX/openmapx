@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const labels = JSON.parse(readFileSync(new URL("../.github/labels.json", import.meta.url), "utf8"));
-const workflowLabels = ["needs-triage", "needs-info", "blocked"];
+const workflowLabels = ["needs-triage", "needs-info"];
 const fieldPolicy = [
   { name: "Priority", visibility: "public", options: ["High", "Low", "Medium", "Urgent"] },
   { name: "Effort", visibility: "public", options: ["High", "Low", "Medium"] },

@@ -10,11 +10,6 @@
     "description": "Waiting for an answer to a specific linked question"
   },
   {
-    "name": "blocked",
-    "color": "b60205",
-    "description": "Cannot proceed until a named linked prerequisite is resolved"
-  },
-  {
     "name": "dependencies",
     "color": "ededed",
     "description": "Dependency updates and dependency maintenance"
