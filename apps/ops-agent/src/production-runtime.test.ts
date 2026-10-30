@@ -46,6 +46,48 @@ afterEach(() => {
 });
 
 describe("assembled production service authority", () => {
+  it.each(["1", "old", undefined])(
+    "reports guarded maintenance readiness from the actual helper image (%s)",
+    async (version) => {
+      const ids = ["motis", "data-manager", "ops-agent"];
+      const host = await fixture({
+        withCoordinator: true,
+        configurationHelperVersion: version,
+        selectedRoots: ids,
+      });
+      host.setRows(
+        ids.map((id, index) => ({
+          ...host.row,
+          Id: String(index + 1).repeat(64),
+          ConfigImage: services.serviceContainerImageReference(
+            host.loaded.find((service) => service.manifest.id === id)!.manifest.container,
+          ),
+          Labels: { ...host.row.Labels, "com.docker.compose.service": id },
+        })),
+      );
+      const effects = productionReleaseEffects(host.runtime);
+      const io = { signal: new AbortController().signal, emitLog() {} };
+      const before = services.currentConfigurationGeneration(host.infraDir);
+      await expect(effects.inspectSystem(io)).resolves.toMatchObject({
+        maintenanceReady: version === "1",
+      });
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
+      expect(
+        host.calls.some((args) => args[0] === "run" || args.includes("up") || args[0] === "pull"),
+      ).toBe(false);
+      if (version === "1") {
+        host.setServiceState("data-manager", "exited");
+        await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
+        host.setServiceState("data-manager", "running");
+        const path = join(host.infraDir, ".ops-agent-releases", "transaction.json");
+        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+        writeFileSync(path, "{}", { mode: 0o600 });
+        await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
+        expect(readFileSync(path, "utf8")).toBe("{}");
+      }
+    },
+  );
+
   it("refuses unsupported legacy release mutation without staging and keeps inspection available", async () => {
     const host = await fixture();
     const effects = productionReleaseEffects(host.runtime);

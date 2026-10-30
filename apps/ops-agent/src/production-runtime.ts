@@ -9,7 +9,7 @@ import {
   createDefaultReleaseEffects,
   type FixedCliRunner,
 } from "./administrative-runtime";
-import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { readAgentHandoff } from "./agent-handoff";
 import { installCatalogApprovalRuntime } from "./catalog-approval-runtime";
 import { installCatalogValidationInputsRuntime } from "./catalog-validation-inputs";
 import {
@@ -17,6 +17,7 @@ import {
   installCommunityRepositoryRuntime,
 } from "./community-repositories";
 import type { ConfigurationCandidateSource } from "./configuration-candidate-source";
+import { inspectConfigurationHandoffPrerequisite } from "./configuration-handoff";
 import { installConfigurationHardlinksRuntime } from "./configuration-hardlinks-runtime";
 import { registerConfigurationMaintenanceSource } from "./configuration-maintenance-runtime";
 import {
@@ -73,8 +74,24 @@ function installReleaseCapabilityBoundary(
   rootDir: string,
   infraDir: string,
   legacy: AdministrativeReleaseEffects,
+  owned: OwnedServiceResolver,
+  execFile: NonNullable<DockerRuntimeOptions["execFile"]>,
 ): AdministrativeReleaseEffects {
   const directory = join(infraDir, ".ops-agent-releases");
+  const assertLegacyRecoveryComplete = () => {
+    try {
+      lstatSync(join(directory, "transaction.json"));
+      throw new OpsExecutionFailure("recovery_required", {});
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const handoff = readAgentHandoff(rootDir);
+    if (
+      handoff &&
+      !(handoff.consumed === true && ["applied", "rolled_back"].includes(handoff.phase))
+    )
+      throw new OpsExecutionFailure("recovery_required", {});
+  };
   const withSource = async <T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> => {
     try {
       return await services.withConfigurationGenerationWriter(
@@ -112,24 +129,41 @@ function installReleaseCapabilityBoundary(
       // Inspection bypasses the legacy cached initializer, which may replay
       // fixed CLI under the release lock or mutate handoff evidence.
       await legacy.inspect();
-      let transaction = false;
-      try {
-        lstatSync(join(directory, "transaction.json"));
-        transaction = true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      const handoff = readAgentHandoff(rootDir);
-      if (transaction || (handoff && !isTerminalHandoff(handoff.phase)))
-        throw new OpsExecutionFailure("recovery_required", {});
+      assertLegacyRecoveryComplete();
     },
     resolve: (context) => withSource(context.signal, () => legacy.resolve(context)),
-    inspectSystem: async (context) => ({
-      ...(await legacy.inspectSystem(context)),
-      // Docker/Compose readiness alone cannot advertise the absent guarded
-      // release installer as runnable maintenance.
-      maintenanceReady: false,
-    }),
+    inspectSystem: async (context) => {
+      const inspection = await legacy.inspectSystem(context);
+      let maintenanceReady = false;
+      if (inspection.dockerReachable && inspection.composeReady)
+        try {
+          assertLegacyRecoveryComplete();
+          const containers = await owned.inspectOwnedServices(context.signal),
+            agent = containers.find((row) => row.serviceId === "ops-agent"),
+            coordinator = containers.find((row) => row.serviceId === "data-manager");
+          if (agent?.state === "running" && coordinator?.state === "running") {
+            await inspectConfigurationHandoffPrerequisite({
+              rootDir,
+              containerId: agent.containerId,
+              imageId: agent.provenance.imageId,
+              signal: context.signal,
+              runDocker: async (args, io) =>
+                (
+                  await execFile("docker", args, {
+                    signal: io.signal,
+                    timeout: 15_000,
+                    maxBuffer: 1024 * 1024,
+                  })
+                ).stdout,
+            });
+            maintenanceReady = true;
+          }
+        } catch {
+          // Availability is a read-only observation. The actual candidate
+          // repeats every prerequisite before acquiring or applying ownership.
+        }
+      return { ...inspection, maintenanceReady };
+    },
     pull: (_releaseId, context) => unavailable(context.signal),
     apply: (_releaseId, _serviceIds, context) => unavailable(context.signal),
     updateAgent: (_request, context) => unavailable(context.signal),
@@ -234,6 +268,8 @@ export async function createProductionOpsRuntime(
     options.rootDir,
     options.stack.infraDir,
     createDefaultReleaseEffects(options.rootDir, runFixedCli),
+    owned,
+    options.docker?.execFile ?? runContainedProcess,
   );
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
   installTransitCredentialsRuntime(runtime, {

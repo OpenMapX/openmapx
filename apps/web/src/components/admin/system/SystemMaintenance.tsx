@@ -472,9 +472,9 @@ export function SystemMaintenance() {
               {candidateToApply?.expectedDigest}
             </Typography>
             <Alert severity="info">
-              Images are downloaded before any container is replaced. The operations agent updates
-              first when the release changes it, then Data Manager and Web; API updates last and
-              briefly interrupts this page.
+              Images are downloaded before containers are replaced. Services update in dependency
+              order, with the operations agent last. API or proxy updates may briefly interrupt this
+              page; reconnect to follow the original job.
             </Alert>
             <FormControlLabel
               control={

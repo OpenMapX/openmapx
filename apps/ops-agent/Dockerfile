@@ -54,6 +54,7 @@ COPY apps/ops-agent/ apps/ops-agent/
 COPY --parents \
     services/data-manager/src/transitous-lock.ts \
     services/data-manager/src/gbfs-catalog-lock.ts \
+    services/data-manager/src/jobs/transitous-feeds-overlay.ts \
     services/data-manager/src/utils/atomic-write.ts \
     integrations/transit-dynamic-registry/ \
     ./
@@ -71,6 +72,7 @@ COPY --from=bundle /app/apps/ops-agent/dist/runtime-packages.json /tmp/runtime-p
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
 FROM base AS runner
+LABEL openmapx.configuration-handoff.version="1"
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
 # git fetches community service repositories into services/.community.

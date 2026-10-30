@@ -677,6 +677,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
+              { adminSystemRoute } = await import("../../routes/admin-system"),
               { jobRunner } = await import("../job-runner"),
               { createDirectAdminOpsKey } = await import("../direct-ops-idempotency");
             state.session = mockAdminSession();
@@ -684,9 +685,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             state.session.session.userId = actorId;
             publicApi = Fastify();
             await publicApi.register(adminPlatformRoute, { prefix: "/api" });
-            const client = createApiClient({
-                baseUrl: await publicApi.listen({ host: "127.0.0.1", port: 0 }),
-              }),
+            await publicApi.register(adminSystemRoute, { prefix: "/api" });
+            const publicUrl = await publicApi.listen({ host: "127.0.0.1", port: 0 }),
+              client = createApiClient({ baseUrl: publicUrl }),
               headers = { "idempotency-key": operationKey },
               reviewed = systemRelease
                 ? undefined
@@ -728,25 +729,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               const { handleSystemUpdateJob } = await import("../system-maintenance");
               jobRunner.register("system.update", handleSystemUpdateJob);
             }
-            const apply = async () =>
-              systemRelease
-                ? {
-                    ok: true as const,
-                    jobId: await jobRunner.enqueue(
-                      "system.update",
-                      {
-                        operation: "apply",
-                        workflow: "guarded-release",
-                        createBackup: false,
-                        releaseId: checkedRelease!.releaseId,
-                        expectedDigest: checkedRelease!.manifestDigest,
-                      },
-                      actorId,
-                    ),
-                  }
-                : unwrapAdminResponse(
-                    await applyAdminPlatformConfiguration(input!, headers, { client }),
-                  );
+            const apply = async () => {
+              if (systemRelease) {
+                const response = await fetch(`${publicUrl}/api/admin/system/updates/apply`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    confirmation: "UPDATE OPENMAPX",
+                    createBackup: false,
+                    releaseId: checkedRelease!.releaseId,
+                    expectedDigest: checkedRelease!.manifestDigest,
+                  }),
+                });
+                expect(response.status).toBe(200);
+                const body = await response.json();
+                expect(body).toEqual({ ok: true, jobId: expect.any(String) });
+                return body as { ok: true; jobId: string };
+              }
+              return unwrapAdminResponse(
+                await applyAdminPlatformConfiguration(input!, headers, { client }),
+              );
+            };
             const accepted = await apply();
             if (version === "launch-native-resource") {
               expect(reviewed!.preview.configuration).toEqual({ version: 1 });
