@@ -14,10 +14,46 @@ import {
   REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
   verifyMangroveReview,
 } from "@openmapx/mangrove-client";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { mangroveGetReviews, mangroveSubmit, mangroveUploadImage } from "./client.js";
 import type { MangroveWirePayload, MangroveWireReview } from "./types.js";
 
 const MARESI_PREFIX = "urn:maresi:";
+
+type ReviewLicense = NonNullable<NonNullable<Review["metadata"]>["license"]>;
+
+const REVIEW_LICENSE_URLS: Readonly<Record<ReviewLicense, string>> = {
+  "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
+  "CC-BY-SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+};
+
+/**
+ * Each Mangrove review states its own licence. Credit a review that states one
+ * under it, keeping the source's name and link; a review stating none keeps the
+ * source's own credit.
+ */
+function creditStatedLicense(review: Review, source: Attribution | undefined): Review {
+  const license = review.metadata?.license;
+  if (!license || !source?.licensing) return review;
+  const url = REVIEW_LICENSE_URLS[license];
+  return {
+    ...review,
+    contributors: [
+      {
+        ...source,
+        licensing: {
+          ...source.licensing,
+          bindings: source.licensing.bindings.map((binding) =>
+            binding.scope === "data"
+              ? { ...binding, license: { kind: "spdx", expression: license, url } }
+              : binding,
+          ),
+          declarations: [{ text: license, url }],
+        },
+      },
+    ],
+  };
+}
 
 /**
  * Mangrove records are self-authenticating, so only records whose signatures
@@ -333,57 +369,69 @@ function aggregateFromReviews(reviews: Review[]): ReviewAggregate {
   };
 }
 
-export const mangroveProvider: ReviewProvider = {
+type ReadOptions = { signal?: AbortSignal; strict?: boolean };
+
+async function readEffectiveReviews(
+  subject: ReviewSubject,
+  options?: ReadOptions,
+): Promise<Review[]> {
+  // Query without `q=NAME` so Mangrove's spatial-OR-name filter doesn't
+  // bleed in same-named reviews from across the world. The post-filter
+  // below tightens the upstream `stored_u + query_u` radius to a sane cap.
+  const sub = buildMangroveQueryUri(subject);
+  const latest = await mangroveGetReviews(sub, { limit: 200, signal: options?.signal });
+  const hasAction = latest.reviews.some(
+    (r) => r.payload.action && r.payload.sub?.startsWith(MARESI_PREFIX),
+  );
+  const originalReviews = hasAction
+    ? await mangroveGetReviews(sub, {
+        limit: 200,
+        latestEditsOnly: false,
+        signal: options?.signal,
+      })
+        .then((r) => r.reviews)
+        .catch((error) => {
+          if (options?.strict || options?.signal?.aborted) throw error;
+          return [];
+        })
+    : [];
+  const seen = new Set<string>();
+  const reviews = [...originalReviews, ...latest.reviews].filter((r) => {
+    if (seen.has(r.signature)) return false;
+    seen.add(r.signature);
+    return true;
+  });
+  const verified = await verifyWireReviews(reviews);
+  const mapped = verified
+    .filter((r) => isWireReviewWithinSubject(r, subject))
+    .map((r) => toReview(subject, r));
+  return collapseDuplicateEffectiveReviews(applyMutations(mapped));
+}
+
+/**
+ * `readSource` returns the manifest's Mangrove source credit. It is read when
+ * a read starts, before any upstream request, like the host's own capture.
+ */
+export const createMangroveProvider = (
+  readSource: () => Attribution | undefined,
+): ReviewProvider => ({
   id: "mangrove",
   // Mangrove's own subject aggregate over-counts, so the mean is computed here.
   aggregateComputed: true,
   name: "Mangrove.reviews",
 
-  async getReviews(
-    subject: ReviewSubject,
-    options?: { signal?: AbortSignal; strict?: boolean },
-  ): Promise<Review[]> {
-    // Query without `q=NAME` so Mangrove's spatial-OR-name filter doesn't
-    // bleed in same-named reviews from across the world. The post-filter
-    // below tightens the upstream `stored_u + query_u` radius to a sane cap.
-    const sub = buildMangroveQueryUri(subject);
-    const latest = await mangroveGetReviews(sub, { limit: 200, signal: options?.signal });
-    const hasAction = latest.reviews.some(
-      (r) => r.payload.action && r.payload.sub?.startsWith(MARESI_PREFIX),
+  async getReviews(subject: ReviewSubject, options?: ReadOptions): Promise<Review[]> {
+    const source = readSource();
+    return (await readEffectiveReviews(subject, options)).map((review) =>
+      creditStatedLicense(review, source),
     );
-    const originalReviews = hasAction
-      ? await mangroveGetReviews(sub, {
-          limit: 200,
-          latestEditsOnly: false,
-          signal: options?.signal,
-        })
-          .then((r) => r.reviews)
-          .catch((error) => {
-            if (options?.strict || options?.signal?.aborted) throw error;
-            return [];
-          })
-      : [];
-    const seen = new Set<string>();
-    const reviews = [...originalReviews, ...latest.reviews].filter((r) => {
-      if (seen.has(r.signature)) return false;
-      seen.add(r.signature);
-      return true;
-    });
-    const verified = await verifyWireReviews(reviews);
-    const mapped = verified
-      .filter((r) => isWireReviewWithinSubject(r, subject))
-      .map((r) => toReview(subject, r));
-    return collapseDuplicateEffectiveReviews(applyMutations(mapped));
   },
 
-  async getAggregate(
-    subject: ReviewSubject,
-    options?: { signal?: AbortSignal; strict?: boolean },
-  ): Promise<ReviewAggregate> {
+  async getAggregate(subject: ReviewSubject, options?: ReadOptions): Promise<ReviewAggregate> {
     // Compute from the spatially-filtered review list; `/subject/{sub}` has
     // the same flawed matching as `/reviews` and would over-count.
     try {
-      const reviews = await mangroveProvider.getReviews(subject, options);
+      const reviews = await readEffectiveReviews(subject, options);
       return aggregateFromReviews(reviews);
     } catch (error) {
       if (options?.strict || options?.signal?.aborted) throw error;
@@ -412,7 +460,7 @@ export const mangroveProvider: ReviewProvider = {
     const src = await mangroveUploadImage(file, filename);
     return { src };
   },
-};
+});
 
 /** Exported for hinting payload shape on callers. */
 export type { MangroveWirePayload };

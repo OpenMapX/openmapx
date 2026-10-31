@@ -3,8 +3,8 @@ import { generateKeypair, publicKeyToPem, signMangroveReview } from "@openmapx/m
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mangroveGetReviews } from "../client.js";
 import {
+  createMangroveProvider,
   getMangroveVerificationStats,
-  mangroveProvider,
   resetMangroveVerificationStats,
 } from "../provider.js";
 import type { MangroveWireReview } from "../types.js";
@@ -58,6 +58,7 @@ function invalidWire(overrides: Partial<MangroveWireReview> = {}): MangroveWireR
 }
 
 const mockedGetReviews = vi.mocked(mangroveGetReviews);
+const mangroveProvider = createMangroveProvider(() => undefined);
 
 describe("Mangrove review verification rollout", () => {
   beforeEach(() => {
