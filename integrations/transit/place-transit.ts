@@ -79,6 +79,22 @@ const TTL = {
   partialDiscovery: TTL_POLICY.REALTIME_WARM,
 };
 
+/**
+ * Whether some of a place's per-stop lookups failed. When all of them failed it
+ * rejects instead, so an outage is neither shown nor cached as "nothing here".
+ */
+function partialLookups(results: PromiseSettledResult<unknown>[], what: string): boolean {
+  const failed = results.filter((result) => result.status === "rejected").length;
+  if (failed > 0 && failed === results.length) {
+    throw new Error(`Transit ${what} sources unavailable`);
+  }
+  return failed > 0;
+}
+
+function withPartial(freshness: Freshness, partial: boolean): Freshness {
+  return partial ? { ...freshness, isPartial: true } : freshness;
+}
+
 /** A result built on a partial discovery is retried soon instead of living for its full lifetime. */
 function cacheTtl(freshness: Freshness, completeTtl: number): number {
   return freshness.isPartial ? Math.min(completeTtl, TTL.partialDiscovery) : completeTtl;
@@ -367,6 +383,7 @@ export function createPlaceTransit(
     const routeResults = await Promise.allSettled(
       stops.map((s) => orchestrator.getRoutesForStop(s.id)),
     );
+    const partialRoutes = partialLookups(routeResults, "route");
 
     // Map: "(mode):(shortName)" -> best MergedRoute candidate
     const byKey = new Map<string, MergedRoute>();
@@ -440,7 +457,7 @@ export function createPlaceTransit(
     }
 
     const attributions = contributorsForRecords(merged);
-    const freshness = mergeFreshness(...allFresh);
+    const freshness = withPartial(mergeFreshness(...allFresh), partialRoutes);
     const envelope: CachedRoutes = { routes: merged, attributions, freshness };
     await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
     return { data: merged, attributions, freshness };
@@ -466,11 +483,8 @@ export function createPlaceTransit(
     if (stops.length === 0) return emptyResult<MergedDeparture[]>([], { hasRealtimeData: true });
 
     const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
-    if (results.every((result) => result.status === "rejected")) {
-      // A transport failure must not replace a cached timetable with a successful empty result.
-      throw new Error("Transit timetable sources unavailable");
-    }
-    const partial = results.some((result) => result.status === "rejected");
+    // A transport failure must not replace a cached timetable with a successful empty result.
+    const partial = partialLookups(results, "timetable");
     const byKey = new Map<string, MergedDeparture>();
     const allFresh: Freshness[] = [];
 
@@ -616,7 +630,7 @@ export function createPlaceTransit(
     return {
       data: unique,
       attributions: contributorsForRecords(unique),
-      freshness: { ...mergeFreshness(...allFresh), ...(partial ? { isPartial: true } : {}) },
+      freshness: withPartial(mergeFreshness(...allFresh), partial),
     };
   }
 
@@ -705,6 +719,7 @@ export function createPlaceTransit(
     const alertResults = await Promise.allSettled(
       stops.map((s) => orchestrator.getStopAlerts(s.id)),
     );
+    const partialAlerts = partialLookups(alertResults, "alert");
     const byId = new Map<string, ServiceAlert>();
     // Attribute only providers that returned alerts, not the stop-search fan-out.
     const allFresh: Freshness[] = [stopsRes.freshness];
@@ -739,7 +754,7 @@ export function createPlaceTransit(
 
     const merged = Array.from(byId.values());
     const attributions = contributorsForRecords(merged);
-    const freshness = mergeFreshness(...allFresh);
+    const freshness = withPartial(mergeFreshness(...allFresh), partialAlerts);
     const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
     await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
     return { data: merged, attributions, freshness };
@@ -786,6 +801,7 @@ export function createPlaceTransit(
     }
 
     const facResults = await Promise.allSettled(stops.map((s) => orchestrator.getFacilities(s.id)));
+    const partialFacilities = partialLookups(facResults, "facility");
     const byId = new Map<string, Facility>();
     // Attribute only providers that returned facilities, not the stop-search fan-out.
     const allFresh: Freshness[] = [stopsRes.freshness];
@@ -800,7 +816,7 @@ export function createPlaceTransit(
 
     const merged = Array.from(byId.values());
     const attributions = contributorsForRecords(merged);
-    const freshness = mergeFreshness(...allFresh);
+    const freshness = withPartial(mergeFreshness(...allFresh), partialFacilities);
     const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
     await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
     return { data: merged, attributions, freshness };

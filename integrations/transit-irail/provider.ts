@@ -125,13 +125,15 @@ async function fetchLiveboard(
     lang: "en",
     arrdep,
   });
+  // A failed board must not read as "no departures"; callers decide how to degrade.
   const data = await fetchJson<{
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     departures?: { departure?: any };
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     arrivals?: { arrival?: any };
-  }>(`${BASE_URL}/liveboard/?${params}`, { nullOnError: true });
-  if (!data) return [];
+  }>(`${BASE_URL}/liveboard/?${params}`).catch(() => {
+    throw new Error("iRail timetable unavailable");
+  });
   const raw2 = arrdep === "departure" ? data.departures?.departure : data.arrivals?.arrival;
   // biome-ignore lint/suspicious/noExplicitAny: external API response
   const entries: any[] = Array.isArray(raw2) ? raw2 : raw2 ? [raw2] : [];

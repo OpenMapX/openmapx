@@ -175,11 +175,12 @@ export async function getDepartures(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data = await fetchJson<{ departures?: any[] }>(
       `${inst.baseUrl}/stops/${rawId}/departures?${params}`,
-      { nullOnError: true },
     );
-    return (data?.departures ?? []).map((d) => normalizeDeparture(d, inst));
+    if (!Array.isArray(data.departures)) throw new Error("malformed departures response");
+    return data.departures.map((d) => normalizeDeparture(d, inst));
   } catch {
-    return [];
+    // A failed board must not read as "no departures"; callers decide how to degrade.
+    throw new Error("HAFAS timetable unavailable");
   }
 }
 
@@ -198,11 +199,12 @@ export async function getArrivals(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data = await fetchJson<{ arrivals?: any[] }>(
       `${inst.baseUrl}/stops/${rawId}/arrivals?${params}`,
-      { nullOnError: true },
     );
-    return (data?.arrivals ?? []).map((d) => normalizeDeparture(d, inst));
+    if (!Array.isArray(data.arrivals)) throw new Error("malformed arrivals response");
+    return data.arrivals.map((d) => normalizeDeparture(d, inst));
   } catch {
-    return [];
+    // A failed board must not read as "no departures"; callers decide how to degrade.
+    throw new Error("HAFAS timetable unavailable");
   }
 }
 

@@ -542,13 +542,13 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/alerts
   ctx.registerRoute("GET", "/stops/:id/alerts", async (req, reply) => {
-    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const stopId = req.params.id;
     const cacheKey = `transit:stop-alerts:${stopId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getStopAlerts(stopId);
       return toEnvelope(res);
     });
+    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     reply.send(alerts);
   });
 

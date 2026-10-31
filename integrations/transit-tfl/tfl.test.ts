@@ -3,6 +3,7 @@ import {
   getAlerts,
   getDepartures,
   getRouteStopSequence,
+  getStopAlerts,
   getStops,
   searchByName,
   setTflApiKey,
@@ -182,5 +183,16 @@ describe("TfL transit provider", () => {
     mockFetch.mockResolvedValueOnce(mockOk({ matches: [] }));
 
     expect(await searchByName("Nowhere", 5)).toEqual([]);
+  });
+
+  it.each([
+    ["stop alerts", () => getStopAlerts("tfl:940GZZLUOXC")],
+    ["timetable", () => getDepartures("tfl:940GZZLUOXC", 10)],
+  ])("reports failed %s without exposing the keyed request URL", async (what, lookup) => {
+    mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+
+    const failure = await lookup().catch((error: unknown) => error);
+
+    expect((failure as Error).message).toBe(`TfL ${what} unavailable`);
   });
 });

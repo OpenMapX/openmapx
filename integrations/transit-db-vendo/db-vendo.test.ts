@@ -321,13 +321,12 @@ describe("getDepartures", () => {
     expect(deps[0].canceled).toBe(true);
   });
 
-  it("returns empty array when client throws", async () => {
+  it("reports a failed board as unavailable instead of no departures", async () => {
     mockClient.departures.mockRejectedValue(new Error("API error"));
 
     const { getDepartures } = await loadModule();
-    const deps = await getDepartures("db:8000105", 30);
 
-    expect(deps).toEqual([]);
+    await expect(getDepartures("db:8000105", 30)).rejects.toThrow("DB timetable unavailable");
   });
 
   it("maps nationalExpress product to rail mode", async () => {
@@ -388,13 +387,12 @@ describe("getArrivals", () => {
     expect(firstArg).toBe("8000105");
   });
 
-  it("returns empty array when client throws", async () => {
+  it("reports a failed board as unavailable instead of no arrivals", async () => {
     mockClient.arrivals.mockRejectedValue(new Error("timeout"));
 
     const { getArrivals } = await loadModule();
-    const arrivals = await getArrivals("db:8000105", 30);
 
-    expect(arrivals).toEqual([]);
+    await expect(getArrivals("db:8000105", 30)).rejects.toThrow("DB timetable unavailable");
   });
 
   it("calls client.arrivals with correct options", async () => {
@@ -1002,16 +1000,5 @@ describe("getTrip", () => {
     const journey = await getTrip("db:t1");
 
     expect(journey?.stops[0].delaySeconds).toBe(60);
-  });
-});
-
-// getStopAlerts
-
-describe("getStopAlerts", () => {
-  it("always returns empty array (DB has no station-level alerts API)", async () => {
-    const { getStopAlerts } = await loadModule();
-    const alerts = await getStopAlerts("db:8000105");
-
-    expect(alerts).toEqual([]);
   });
 });

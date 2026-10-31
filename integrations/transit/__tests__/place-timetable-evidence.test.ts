@@ -136,3 +136,53 @@ describe("linked stop discovery failures", () => {
     );
   });
 });
+
+describe("linked stop line, alert and facility failures", () => {
+  const panels = {
+    getMergedRoutes: ["getRoutesForStop", "route"],
+    getMergedAlerts: ["getStopAlerts", "alert"],
+    getMergedFacilities: ["getFacilities", "facility"],
+  } as const;
+
+  function linked(lookup: (id: string) => Promise<MobilityResult<unknown[]>>) {
+    const ctx = {
+      cache: {
+        get: async () => null,
+        set: async () => {},
+        withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+      },
+    } as unknown as IntegrationContext;
+    const orchestrator = {
+      searchByNameRaw: vi.fn(async () => result(stops)),
+      collectProviders: () => [],
+      getRoutesForStop: lookup,
+      getStopAlerts: lookup,
+      getFacilities: lookup,
+    } as unknown as TransitOrchestrator;
+    return createPlaceTransit(ctx, orchestrator);
+  }
+
+  it.each(Object.keys(panels) as (keyof typeof panels)[])(
+    "%s keeps what one stop answered and marks the panel incomplete when another stop failed",
+    async (panel) => {
+      const api = linked(async (id) => {
+        if (id.startsWith("mo:")) throw new Error("upstream failed");
+        return result([]);
+      });
+      const response = await api[panel](50.775, 6.084, "Aachen Central");
+      expect(response.freshness.isPartial).toBe(true);
+    },
+  );
+
+  it.each(Object.entries(panels) as [keyof typeof panels, (typeof panels)[keyof typeof panels]][])(
+    "%s rejects when every linked stop's lookup failed",
+    async (panel, [, what]) => {
+      const api = linked(async () => {
+        throw new Error("upstream failed");
+      });
+      await expect(api[panel](50.775, 6.084, "Aachen Central")).rejects.toThrow(
+        `Transit ${what} sources unavailable`,
+      );
+    },
+  );
+});

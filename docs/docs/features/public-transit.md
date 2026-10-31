@@ -69,7 +69,10 @@ interchangeable.
 A place's board starts by searching its stops by name. If a stop source does not
 answer, the board warns that departures may be missing instead of showing an
 empty board, and the place is looked up again within about a minute. If no
-source answers, the board shows a failure with a retry action.
+source answers, the board shows a failure with a retry action. Departures that
+cannot be loaded for some of the place's stops get the same warning. Lines,
+alerts and facilities that cannot be loaded are left out rather than kept as
+"none", and are loaded again on a later visit or within about a minute.
 
 ### Understanding timetable status
 

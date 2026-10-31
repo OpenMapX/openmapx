@@ -235,6 +235,30 @@ describe("MOTIS static route adapter", () => {
     expect(mocks.routes.mock.calls[0][0].query.zoom).toBe(11);
     expect(mocks.stoptimes).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ["the stop lookup fails", () => mocks.stoptimes.mockRejectedValue(new Error("down"))],
+    [
+      "the stop lookup answers an error",
+      () => mocks.stoptimes.mockResolvedValue({ data: undefined, error: { e: 1 } }),
+    ],
+    [
+      "the route request answers an error",
+      () => {
+        mocks.stoptimes.mockResolvedValue({ data: { place: stop("root", 8, 47), stopTimes: [] } });
+        mocks.routes.mockResolvedValue({ data: undefined, error: { e: 1 } });
+      },
+    ],
+  ])("rejects when %s instead of answering no lines", async (_case, arrange) => {
+    arrange();
+    await expect(getRoutesForStop(instance, "ms:root", "epoch")).rejects.toThrow(/unavailable/);
+  });
+
+  it("answers no lines for a stop MOTIS does not know", async () => {
+    mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
+    expect(await getRoutesForStop(instance, "ms:root", "epoch")).toEqual([]);
+    expect(mocks.routes).not.toHaveBeenCalled();
+  });
 });
 
 describe("MOTIS stops, platforms, and civil-day timetable", () => {

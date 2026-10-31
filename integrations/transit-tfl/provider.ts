@@ -36,6 +36,19 @@ function apiKey(): string | null {
   return tflApiKey;
 }
 
+/**
+ * Fetch a TfL resource whose failure must not read as "nothing here". Request
+ * URLs carry the app key, so the upstream error is not passed on.
+ */
+async function tflJson<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
+  try {
+    return await fetchJson<T>(url, { signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error(`TfL ${what} unavailable`);
+  }
+}
+
 function mapTflMode(modeName: string): TransportMode {
   return MODE_MAP[modeName] ?? "bus";
 }
@@ -113,20 +126,12 @@ export async function searchByName(
     maxResults: String(Math.min(limit, 50)),
     app_key: key,
   });
-  // A failed search must not read as "no stop by that name". The request URL
-  // carries the app key, so the upstream error is not passed on.
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  let data: { matches?: any[] };
-  try {
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    data = await fetchJson<{ matches?: any[] }>(
-      `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
-      { signal },
-    );
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    throw new Error("TfL stop search unavailable");
-  }
+  const data = await tflJson<{ matches?: any[] }>(
+    `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
+    "stop search",
+    signal,
+  );
   return (data.matches ?? []).slice(0, limit).map(normalizeStop);
 }
 
@@ -225,10 +230,11 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = await fetchJson<any[]>(`${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`, {
-    nullOnError: true,
-  });
-  if (!Array.isArray(data)) return [];
+  const data = await tflJson<any[]>(
+    `${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`,
+    "stop alerts",
+  );
+  if (!Array.isArray(data)) throw new Error("TfL stop alerts unavailable");
   return data
     .map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -261,13 +267,14 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const arrivals = await fetchJson<any[]>(
+  const arrivals = await tflJson<any[]>(
     `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Arrivals?${params}`,
-    { nullOnError: true },
+    "timetable",
   );
+  if (!Array.isArray(arrivals)) throw new Error("TfL timetable unavailable");
   const cutoff = minutes * 60;
   return (
-    (arrivals ?? [])
+    arrivals
       // Filter to the requested time window
       .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
       // Sort ascending by arrival time

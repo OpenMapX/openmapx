@@ -155,6 +155,13 @@ A normal successful empty query is valid. Leave a capability enabled when the
 upstream supports it but has no matching data; disable it for an unimplemented
 operation.
 
+Throw when the upstream fails: a network error, an error status or a malformed
+body. Don't return an empty list for a failure. An empty result means "nothing
+here", so the board would show "No departures" or no lines, and caches would keep
+it. The orchestrator turns a thrown error into a partial or failed board and
+records it in provider health. Keep thrown messages generic when request URLs
+carry credentials.
+
 ### Methods
 
 The data methods below are optional and return `MobilityResult<T>` so

@@ -91,6 +91,21 @@ async function resolveRawStop(instance: MotisInstance, stopId: string): Promise<
   }
 }
 
+/**
+ * Like `resolveRawStop`, but a failed request rejects instead of reading as an
+ * unknown stop, for lookups whose empty answer must mean "none".
+ */
+async function requireRawStop(instance: MotisInstance, stopId: string): Promise<Place | null> {
+  const response = await stoptimes({
+    client: instance.client,
+    query: { stopId: rawId(instance, stopId), n: 0, window: 0 },
+  }).catch(() => null);
+  if (!response || response.error || !response.data) {
+    throw new Error("MOTIS stop lookup unavailable");
+  }
+  return response.data.place ?? null;
+}
+
 /** Fetch stops within a bounding box. */
 export async function getStops(instance: MotisInstance, bbox: BBox): Promise<TransitStop[]> {
   const [west, south, east, north] = bbox;
@@ -514,7 +529,7 @@ export async function getRoutesForStop(
   stopId: string,
   activeEpoch: string,
 ): Promise<TransitRoute[]> {
-  const requested = await resolveRawStop(instance, stopId);
+  const requested = await requireRawStop(instance, stopId);
   if (!requested?.stopId) return [];
   const requestedIds = new Set(
     [requested.stopId, requested.parentId].filter((id): id is string => typeof id === "string"),
@@ -524,7 +539,7 @@ export async function getRoutesForStop(
   // false-positive guard, so the extra width costs nothing.
   const delta = 0.001;
   try {
-    const { data } = await motisRoutesApi({
+    const { data, error } = await motisRoutesApi({
       client: instance.client,
       query: {
         min: `${requested.lat - delta},${requested.lon - delta}`,
@@ -532,7 +547,8 @@ export async function getRoutesForStop(
         zoom: 11,
       },
     });
-    if (!data?.routes?.length) return [];
+    if (error || !data) throw new Error("MOTIS route lookup unavailable");
+    if (!data.routes?.length) return [];
     if (data.zoomFiltered !== false) {
       throw new Error("MOTIS zoom-11 route response was unexpectedly filtered");
     }

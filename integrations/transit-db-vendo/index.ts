@@ -29,7 +29,7 @@ export function setup(ctx: IntegrationContext): void {
       planning: true,
       vehiclePositions: false,
       vehicleJourney: true,
-      alerts: { byStop: true, byRoute: false, byBbox: false },
+      alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
     },
     async getStopsNearby(lat, lng, r) {
@@ -49,9 +49,6 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getStopPlatforms(id) {
       return wrap(await dbVendo.getPlatformStops(id));
-    },
-    async getAlertsForStop(id) {
-      return wrapRT(await dbVendo.getStopAlerts(id));
     },
     async planTrip(params) {
       const now = new Date();
