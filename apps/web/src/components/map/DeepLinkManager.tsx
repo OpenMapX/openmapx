@@ -135,6 +135,7 @@ const LIVE_TRANSIT_MODES = [
   "funicular",
   "cable_car",
   "monorail",
+  "other",
 ] as const satisfies readonly TransportMode[];
 
 const OVERLAY_STORES: SubscribableStore[] = [

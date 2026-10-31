@@ -17,7 +17,10 @@ export type TransportMode =
   // (door-to-door) legs returned by the transit planner. `cycling` also covers
   // bike-share rentals; `driving` covers car, park-and-ride and car-share.
   | "cycling"
-  | "driving";
+  | "driving"
+  // A public transport service whose source mode has no category here, such as a
+  // flight or taxi. Shown neutrally rather than as a guessed mode.
+  | "other";
 
 /** A public, source-backed identifier that riders can search for. */
 export interface TransitStopCode extends ContributingRecord {

@@ -1652,6 +1652,7 @@
     "funicular": "Standseilbahn",
     "cableCar": "Seilbahn",
     "monorail": "Einschienenbahn",
+    "otherModes": "Andere Verkehrsmittel",
     "nextDepartures": "Nächste Abfahrten",
     "noDeparturesInNext60": "Keine Abfahrten in den nächsten 60 Minuten.",
     "viewDeparturesArrivals": "Abfahrten & Ankünfte anzeigen",

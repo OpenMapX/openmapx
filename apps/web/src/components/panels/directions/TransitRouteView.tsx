@@ -1,6 +1,7 @@
 "use client";
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CommuteIcon from "@mui/icons-material/Commute";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
@@ -81,7 +82,8 @@ function LegBadge({ leg }: { leg: TripLeg }) {
       />
     );
   }
-  return <DirectionsBusIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
+  const ModeIcon = leg.mode === "other" ? CommuteIcon : DirectionsBusIcon;
+  return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
 }
 
 function BoardingSummary({ leg }: { leg: TripLeg }) {
