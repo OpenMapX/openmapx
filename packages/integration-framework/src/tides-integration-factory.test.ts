@@ -88,6 +88,8 @@ const cases = [
     setup: norway,
     id: "s",
     sourceId: "kartverket-sehavniva",
+    datum: "chart_datum",
+    timeZone: "iso_offset",
     catalog: '<location name="Station" code="s" latitude="54" longitude="10" type="PERM"/>',
     data: '<waterlevel value="100" time="2026-10-15T12:00:00Z" flag="pre"/><waterlevel value="100" time="2026-10-15T12:00:00Z" flag="high"/>',
   },
@@ -96,6 +98,8 @@ const cases = [
     setup: canada,
     id: "s",
     sourceId: "dfo-iwls",
+    datum: "chart_datum",
+    timeZone: "iso_offset",
     catalog: [
       {
         id: "s",
@@ -117,6 +121,8 @@ const cases = [
     setup: ioc,
     id: "s",
     sourceId: "ioc-sealevel",
+    datum: "sensor_reference",
+    timeZone: "iso_offset",
     catalog: [{ Code: "s", Location: "Station", Lat: 54, Lon: 10, status: 1 }],
     data: [
       { slevel: 1, stime: "2026-10-15 12:00:00", sensor: "a" },
@@ -128,12 +134,35 @@ const cases = [
     setup: pegel,
     id: "s",
     sourceId: "wsv-pegelonline",
+    datum: "gauge_zero",
+    timeZone: "iso_offset",
     catalog: [{ uuid: "s", shortname: "Station", latitude: 54, longitude: 10 }],
     data: [{ timestamp: "2026-10-15T12:00:00Z", value: 100 }],
   },
 ];
 
 describe.each(cases)("$name acquisition", (adapter) => {
+  it("names the reference its heights are measured from and its timestamp form", async () => {
+    const h = host();
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = String(input);
+      const isCatalog =
+        url.includes("stationlist") || url.includes("/stations?") || url.includes("/stations.json");
+      const value = isCatalog ? adapter.catalog : adapter.data;
+      return new Response(typeof value === "string" ? value : JSON.stringify(value), {
+        status: 200,
+      });
+    });
+    adapter.setup(h.ctx);
+    const direct = await h.read({ station: adapter.id });
+    const nearest = await h.read({ lat: "54", lng: "10" });
+    for (const payload of [direct, nearest]) {
+      expect(payload.datum).toBe(adapter.datum);
+      expect(payload.timeZone).toBe(adapter.timeZone);
+      for (const event of payload.events) expect(event.time).toMatch(/(Z|[+-]\d{2}:\d{2})$/);
+    }
+  });
+
   it("retains old inner-cache capture for direct station and a fresh coordinate key", async () => {
     const h = host();
     vi.stubGlobal("fetch", async (input: string | URL | Request) => {

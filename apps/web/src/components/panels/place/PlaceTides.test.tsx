@@ -58,6 +58,18 @@ describe("PlaceTidesContent", () => {
     expect(screen.queryByText("currentLevel")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["MLLW", "datumNoteMllw"],
+    ["chart_datum", "datumNoteChartDatum"],
+    ["gauge_zero", "datumNoteGaugeZero"],
+    ["sensor_reference", "datumNoteSensorReference"],
+  ] as const)("names the %s reference the heights are measured from", (datum, note) => {
+    render(<PlaceTidesContent data={{ ...baseResponse, datum }} />);
+
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.queryAllByText(/^datumNote/)).toHaveLength(1);
+  });
+
   it("renders a current observation when no predictions are available", () => {
     render(
       <PlaceTidesContent

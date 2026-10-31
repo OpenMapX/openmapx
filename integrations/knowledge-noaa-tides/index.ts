@@ -90,6 +90,13 @@ async function refreshLiveReadings(
   return { currentLevel, met };
 }
 
+/**
+ * `@openmapx/noaa-coops-data` requests `datum=MLLW&time_zone=lst_ldt`, which
+ * https://api.tidesandcurrents.noaa.gov/api/prod/ documents as "heights
+ * relative to Mean Lower Low Water (MLLW) for the station" and "Local Standard
+ * Time, corrected for Daylight Saving Time when appropriate, local to the
+ * requested station".
+ */
 async function buildTidesResponse(
   station: NoaaStation,
   distanceKm: number,

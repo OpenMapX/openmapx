@@ -24,7 +24,12 @@ import {
  *
  * Pegelonline publishes minute-resolution observations in cm above the
  * station's gauge zero (PNP). The integration converts to feet relative to
- * the same reference for parity with NOAA. Predictions are NOT published —
+ * the same reference for parity with NOAA. The station resource describes the
+ * `W` series as `"longname": "WASSERSTAND ROHDATEN", "unit": "cm"` beside a
+ * `gaugeZero` such as `{ "unit": "m. ü. NHN", "value": -5.033 }` (Cuxhaven), and
+ * https://www.pegelonline.wsv.de/webservice/dokuRestapi documents the gauge
+ * zero resource as "Es handelt sich hierbei um den Pegelnullpunkt". Timestamps
+ * carry their UTC offset. Predictions are NOT published —
  * the integration derives high/low events from the past 24 h of observations.
  *
  * Free + commercial use under Datenlizenz Deutschland Zero 2.0 (no
@@ -136,7 +141,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const quarterKey = Math.floor(Date.now() / (TIDES_TTL * 1000));
-  const cacheKey = `tides:contributors-v1:${station.uuid}:${quarterKey}`;
+  const cacheKey = `tides:datum-v1:${station.uuid}:${quarterKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
@@ -174,9 +179,9 @@ async function buildTidesResponse(
     },
     events,
     curve,
-    datum: "MLLW",
+    datum: "gauge_zero",
     units: "english",
-    timeZone: "lst_ldt",
+    timeZone: "iso_offset",
     currentLevel: {
       time: last.time,
       valueFt: Math.round(last.valueCm * CM_TO_FT * 100) / 100,

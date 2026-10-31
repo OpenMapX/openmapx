@@ -28,7 +28,11 @@ import {
  * from the past 24 h of observations. Forecast event sections self-hide
  * because the derived events all lie in the past.
  *
- * Units: m by default; converted to feet for parity with NOAA. The IOC policy
+ * Units: m by default; converted to feet for parity with NOAA. Levels are the
+ * gauge's raw signal against the instrument's own unreferenced zero, not a
+ * tidal datum: "We only deal with relative data, we don't have the vertical
+ * datum information available" (https://www.ioc-sealevelmonitoring.org/service.php).
+ * `stime` is UTC without a marker and is re-emitted with `Z`. The IOC policy
  * covers non-commercial use; commercial use requires the relevant data
  * originators' permission, which is not verified for this operator.
  *
@@ -156,7 +160,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const hourKey = new Date().toISOString().slice(0, 13);
-  const cacheKey = `tides:contributors-v1:${station.code}:${hourKey}`;
+  const cacheKey = `tides:datum-v1:${station.code}:${hourKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
@@ -198,9 +202,9 @@ async function buildTidesResponse(
     },
     events,
     curve,
-    datum: "MLLW",
+    datum: "sensor_reference",
     units: "english",
-    timeZone: "lst_ldt",
+    timeZone: "iso_offset",
     currentLevel: {
       time: last.time,
       valueFt: Math.round(last.value * M_TO_FT * 100) / 100,

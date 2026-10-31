@@ -39,15 +39,38 @@ export interface TideResponseStation {
   timezoneCorrHours?: number;
 }
 
+/**
+ * Vertical reference the network measures heights from. Values are re-encoded
+ * to feet but keep this reference.
+ *
+ * - `MLLW`: mean lower low water, the tidal datum NOAA CO-OPS requests use.
+ * - `chart_datum`: the national hydrographic chart datum (CHS in Canada,
+ *   Kartverket's sjøkartnull in Norway).
+ * - `gauge_zero`: the gauge's own zero point, for example a WSV
+ *   Pegelnullpunkt; not a tidal datum.
+ * - `sensor_reference`: the instrument's unreferenced level, as relayed raw by
+ *   the IOC monitoring facility; only differences between readings are meaningful.
+ */
+export type TideDatum = "MLLW" | "chart_datum" | "gauge_zero" | "sensor_reference";
+
+/**
+ * Form of every timestamp in the payload.
+ *
+ * - `lst_ldt`: station-local standard/daylight wall time without an offset
+ *   (NOAA CO-OPS `time_zone=lst_ldt`).
+ * - `iso_offset`: ISO-8601 carrying its own UTC offset or `Z`.
+ */
+export type TideTimeZone = "lst_ldt" | "iso_offset";
+
 export interface TidesPayload extends ContributingRecord {
   /** Captured ownership for independently acquired station, predictions and observations. */
   fieldContributors?: FieldContributors;
   station: TideResponseStation;
   events: TideEvent[];
   curve: TideCurvePoint[];
-  datum: "MLLW";
+  datum: TideDatum;
   units: "english";
-  timeZone: "lst_ldt";
+  timeZone: TideTimeZone;
   currentLevel?: WaterLevelObservation;
   met?: MetObservation;
 }
