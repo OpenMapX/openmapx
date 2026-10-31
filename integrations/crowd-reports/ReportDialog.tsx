@@ -19,6 +19,7 @@ import WarningIcon from "@mui/icons-material/Warning";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -134,6 +135,12 @@ export function ReportDialog() {
     setSeverity(defaultSeverityForCategory(c));
   };
 
+  // A failed submit's error belongs to this report, not the next one.
+  const handleClose = () => {
+    submit.reset();
+    closeDialog();
+  };
+
   const handleSubmit = () => {
     if (!location) return;
     const claim = buildReportClaim({
@@ -154,7 +161,7 @@ export function ReportDialog() {
   return (
     <Dialog
       open={open}
-      onClose={closeDialog}
+      onClose={handleClose}
       fullWidth
       maxWidth="sm"
       fullScreen={fullScreen}
@@ -353,13 +360,25 @@ export function ReportDialog() {
               </Button>
             </Stack>
           </Box>
-
-          {submit.isError && <Alert severity="error">{t("submitError")}</Alert>}
         </Stack>
       </DialogContent>
+      {/* Outside the scrolling content: on a phone the form overflows, and an
+          error at its end would sit below the fold, so a failed submit would
+          look like nothing happened. */}
+      {submit.isError && (
+        <Alert severity="error" sx={{ mx: 2, mt: 1.5 }}>
+          {t("submitError")}
+        </Alert>
+      )}
       <DialogActions>
-        <Button onClick={closeDialog}>{t("cancel")}</Button>
-        <Button variant="contained" onClick={handleSubmit} disabled={!location || submit.isPending}>
+        <Button onClick={handleClose}>{t("cancel")}</Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={!location || submit.isPending}
+          aria-busy={submit.isPending}
+          startIcon={submit.isPending ? <CircularProgress size={16} color="inherit" /> : undefined}
+        >
           {t("submit")}
         </Button>
       </DialogActions>
