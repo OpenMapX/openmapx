@@ -72,6 +72,7 @@ export async function recoverInterruptedExtensionChanges(
   }
   const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(findRepoRoot());
   const serviceRecovery: ServiceRuntimeRecovery = await reconcileCommunityRepositoryTransactions({
+    ctx: options.ctx,
     signal,
     restoreSelection: async (roots, recoveryId) => {
       await initServiceRegistry({ strict: true });

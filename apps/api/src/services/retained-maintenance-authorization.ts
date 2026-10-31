@@ -1,6 +1,7 @@
 /** Existing API token authenticates the exact retained row, request and actor. */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { canonicalJson, readOpsTokenFile } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import { JobObservationPending } from "./admin-job-failure";
 import type { JobContext } from "./job-runner";
 export const MAINTENANCE_JOB_TYPES = [
@@ -48,7 +49,7 @@ export async function assertRetainedMaintenanceJob(ctx: JobContext): Promise<voi
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(record.key)
   )
     throw new JobObservationPending("invalid_identity");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
     expected = maintenanceJobAuthorization(token, {
       jobId: ctx.jobId,
       type: ctx.jobType,

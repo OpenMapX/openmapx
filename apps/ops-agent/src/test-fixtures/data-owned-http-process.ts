@@ -7,6 +7,7 @@ import {
   openControlInstallation,
   restoreAdmittedControlExecution,
 } from "@openmapx/core/build-artifacts";
+import { services as coreServices } from "@openmapx/core/server";
 import { createDataTransitTrustedOpsDataSource } from "../data-transit-resource-source";
 import { createDockerRuntime, runContainedProcess } from "../docker-runtime";
 import { openOpsJobJournal } from "../journal";
@@ -31,7 +32,7 @@ const installation = openControlInstallation({
   role: "ops-agent",
   serviceIds: ["motis", "motis-feed-proxy"],
 });
-const journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
 const replace = journal.replace.bind(journal);
 journal.replace = async (records) => {
   const terminal = records.some(

@@ -215,7 +215,7 @@ describe("canonical administration SDK acquisition", () => {
 });
 
 describe("pending integration family operation binding", () => {
-  it("validates all22canonical operation closures before final producer generation", async () => {
+  it("validates all35canonical operation closures before final producer generation", async () => {
     const { integrationAdminOperations } = await import("./contracts/integration-admin");
     let calls = 0;
     for (const [id, operation] of Object.entries(integrationAdminOperations)) {
@@ -233,7 +233,7 @@ describe("pending integration family operation binding", () => {
       });
       expect(result).toMatchObject({ status: 400, data: { error: "Synthetic rejection" } });
     }
-    expect(calls).toBe(22);
+    expect(calls).toBe(35);
   });
   it("retains domain errors and vault hints and requires Retry-After without exposing malformed bodies", async () => {
     const cases = [

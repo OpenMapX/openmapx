@@ -13,7 +13,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
+
+const { CONFIGURATION_GENERATIONS, CURRENT_CONFIGURATION } = coreServices;
+
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterEach, expect, it, vi } from "vitest";
@@ -217,7 +221,7 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
   ])
     copyFileSync(join(ctx.motisStagingDataDir, name), join(stagingDir, name));
   const configurationRevisionId = `cfg1_${"a".repeat(43)}`,
-    generation = join(infraDir, ".trusted-config-generations", configurationRevisionId),
+    generation = join(infraDir, CONFIGURATION_GENERATIONS, configurationRevisionId),
     secretDir = join(generation, ".generated-secrets/data-manager");
   mkdirSync(secretDir, { recursive: true, mode: 0o700 });
   for (const path of [generation, join(generation, ".generated-secrets"), secretDir])
@@ -225,8 +229,8 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
   const secret = join(secretDir, "TRANSITOUS_API_KEYS");
   writeFileSync(secret, JSON.stringify({ "de/demo": destinationKey }), { mode: 0o444 });
   symlinkSync(
-    `.trusted-config-generations/${configurationRevisionId}`,
-    join(infraDir, ".trusted-config-current"),
+    relative(dirname(join(infraDir, CURRENT_CONFIGURATION)), generation),
+    join(infraDir, CURRENT_CONFIGURATION),
   );
   return {
     rootDir: root,
@@ -440,7 +444,7 @@ it("imports an actual portable candidate through the production agent with desti
   };
   const app = buildOpsAgentServer({
     runtime: host.runtime,
-    journal: await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+    journal: await openOpsJobJournal(coreServices.agentStatePaths(host.infraDir).journal),
     resourceClaimer: host.claimer,
     controlInstallation: installation,
     artifactTransfers: store,

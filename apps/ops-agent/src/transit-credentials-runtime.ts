@@ -167,7 +167,7 @@ export function installTransitCredentialsRuntime(
         const components = [
           "infra",
           "docker",
-          services.CONFIGURATION_GENERATIONS,
+          ...services.CONFIGURATION_GENERATIONS.split("/"),
           revision,
           services.GENERATED_SECRETS_DIRNAME,
           "data-manager",

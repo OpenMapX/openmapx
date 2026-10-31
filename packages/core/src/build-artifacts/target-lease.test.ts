@@ -536,9 +536,9 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
   await expect(
     a.delegateArtifactTargetLease(lease, { ...plan, childPublicKey: agent.publicKey }),
   ).rejects.toThrow();
-  mkdirSync(join(root, "data/ops-agent"), { mode: 0o700 });
+  mkdirSync(join(root, "state/ops-agent"), { recursive: true, mode: 0o700 });
   writeFileSync(
-    join(root, "data/ops-agent/jobs-v1.json"),
+    join(root, "state/ops-agent/jobs-v1.json"),
     JSON.stringify({
       version: 2,
       jobs: [

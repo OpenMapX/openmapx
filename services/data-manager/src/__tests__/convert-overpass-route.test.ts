@@ -57,7 +57,7 @@ describe("POST /convert/overpass", () => {
   });
 
   it.each([{}, { region: "europe/germany" }])(
-    "keeps the trusted region-based form available for %j",
+    "requires the assembled durable receiver for the region-based form %j",
     async (payload) => {
       const dataDir = makeDataDir();
       const app = Fastify();
@@ -70,9 +70,12 @@ describe("POST /convert/overpass", () => {
           payload,
         });
 
-        expect(response.statusCode).toBe(200);
-        expect(response.headers["content-type"]).toContain("application/x-ndjson");
-        expect(response.json()).toMatchObject({ event: "error" });
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toMatchObject({
+          error: "Service Unavailable",
+          message: "Durable data receiver is unavailable",
+        });
+        expect(existsSync(join(dataDir, "overpass"))).toBe(false);
       } finally {
         await app.close();
         rmSync(dataDir, { recursive: true, force: true });

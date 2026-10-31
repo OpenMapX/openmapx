@@ -351,6 +351,12 @@ async function wire() {
   });
   await app.register(adminRoute, { prefix: "/api" });
   await registerCapabilityBindingRoutes(app);
+  for (const route of [
+    (await import("../admin-standalone-integrations")).adminStandaloneIntegrationsRoute,
+    (await import("../admin-configuration-migration")).adminConfigurationMigrationRoute,
+    (await import("../admin-credential-transfer")).adminCredentialTransferRoute,
+  ])
+    await app.register(route, { prefix: "/api" });
   await app.ready();
   const transport = administrationSdkFetch(app);
   vi.stubGlobal("fetch", (input: string | Request | URL, init?: RequestInit) => {
@@ -361,7 +367,7 @@ async function wire() {
   return { app, registered, client };
 }
 describe("actual integration producers through generated SDK", () => {
-  it("exports and executes exactly all 22 registered operations with full serialized fields", async () => {
+  it("exports all 35 registered operations and executes integration producers with full serialized fields", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     for (const id of Object.keys(integrationAdminOperations))
       expect(sdk).toHaveProperty(id, expect.any(Function));

@@ -88,6 +88,7 @@ export {
   reconcileControlRetention,
   registerControlRetentionJournal,
   repairControlJournalTerminal,
+  replaceControlRegisteredServiceIds,
   requireControlJournalRetention,
   restoreAdmittedControlExecution,
   restoreConfigurationPreEffectTerminal,

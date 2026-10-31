@@ -4,6 +4,7 @@ import {
   readOpsTokenFile,
   standaloneOwnershipInspectionSchema,
 } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import z from "zod/v4";
 export const ownershipRequestSchema = z.strictObject({
   integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
@@ -37,7 +38,7 @@ export const ownershipStateSchema = z.strictObject({
   outcome: z.enum(["committed", "restored"]).nullable(),
 });
 export type OwnershipState = z.infer<typeof ownershipStateSchema>;
-const token = () => readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+const token = () => readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
 export async function sealOwnershipState(state: OwnershipState) {
   const body = canonicalJson(ownershipStateSchema.parse(state));
   return {

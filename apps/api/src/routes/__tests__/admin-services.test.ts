@@ -106,7 +106,8 @@ vi.mock("../../services/service-config-resolver.js", () => ({
     mockResolveServiceConfigWithSources(...args),
 }));
 
-vi.mock("../../services/configuration-ownership-view.js", () => ({
+vi.mock("../../services/configuration-ownership-view.js", async (importActual) => ({
+  ...(await importActual<typeof import("../../services/configuration-ownership-view.js")>()),
   inspectServiceConfiguration: async (...args: unknown[]) => ({
     resolved: await mockResolveServiceConfigWithSources(...args),
     ownership: {},
@@ -752,7 +753,7 @@ describe("service credentials", () => {
         );
       },
     );
-    it("answers an apply the operator can fix with its reason, after restoring what was saved", async () => {
+    it("answers an apply the operator can fix with its reason without route-owned writes", async () => {
       const problem =
         "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a symbolic link. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
       vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(
@@ -768,11 +769,13 @@ describe("service credentials", () => {
       const res = await app.inject({
         method: "POST",
         url: "/admin/services/openconditions-ingest/config",
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
         payload: { config: {} },
       });
       expect(res.statusCode).toBe(409);
       expect(res.json()).toEqual({ error: problem });
-      expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(1);
+      expect(mockRestoreServiceConfig).not.toHaveBeenCalled();
+      expect(mockMergeServiceConfig).not.toHaveBeenCalled();
     });
     it("persists only the route-validated update through the atomic writer", async () => {
       mockValidateConfigBody.mockReturnValueOnce({

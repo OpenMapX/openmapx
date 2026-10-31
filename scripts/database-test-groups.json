@@ -36,7 +36,10 @@
     "apps/api/src/services/__tests__/platform-preview-postgres.test.ts",
     "apps/api/src/services/__tests__/platform-configuration-runtime-postgres.test.ts",
     "apps/api/src/services/__tests__/retained-maintenance-job-postgres.test.ts",
-    "apps/api/src/privacy/admin-workflows-postgres.test.ts"
+    "apps/api/src/privacy/admin-workflows-postgres.test.ts",
+    "apps/api/src/services/extension-workflow-postgres.test.ts",
+    "apps/api/src/services/configuration-migration/credential-transfer-postgres.test.ts",
+    "apps/api/src/services/configuration-migration/migration-postgres.test.ts"
   ],
   "ingestion": [
     "apps/api/src/services/__tests__/job-runner-postgres.test.ts",

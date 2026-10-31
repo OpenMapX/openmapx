@@ -436,7 +436,7 @@ describe("the fixed CLI", () => {
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(lines).toEqual(["stdout: data link http://data-manager:4000 inherited"]);
+    expect(lines).toEqual(["stdout: data link http://data-manager:4000/ inherited"]);
   });
 });
 
@@ -1040,6 +1040,7 @@ describe("administrative release runtime", () => {
       });
       // Constructing the effects reads nothing: the new store is still empty.
       expect(readdirSync(releaseState(rootDir).store)).toEqual([]);
+      await effects.initialize?.();
       await expect(effects.runtimeInspect?.()).resolves.toEqual({ releaseId: "release-legacy" });
       expect(migrations).toEqual([
         expect.objectContaining({ outcome: "migrated", overlay: "regenerated", problems: [] }),
@@ -1103,7 +1104,7 @@ describe("administrative release runtime", () => {
     expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
   });
 
-  it("gives the self-update helper the release state's store, overlay and evidence", async () => {
+  it("lets the legacy self-update helper read checked pins but refuses unguarded overlay mutation", async () => {
     const rootDir = temporaryRoot();
     const { store, overlay, evidence } = releaseState(rootDir);
     mkdirSync(store, { recursive: true, mode: 0o700 });
@@ -1129,11 +1130,13 @@ describe("administrative release runtime", () => {
     expect(() => bindings.releasePins("release-helper", "0".repeat(64))).toThrow(
       "Release authority rejected",
     );
-    await bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest));
-    expect(readFileSync(overlay, "utf8")).toContain("file: ../../releases/evidence/");
-    expect(readdirSync(evidence)).toHaveLength(1);
-    expect(bindings.stackArgs()).toEqual(expect.arrayContaining(["-f", overlay]));
-    await bindings.withStoreLock(() => bindings.restoreOverlay(null));
+    await expect(
+      bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest)),
+    ).rejects.toThrow("Typed adapter is not wired");
+    await expect(bindings.withStoreLock(() => bindings.restoreOverlay(null))).rejects.toThrow(
+      "Typed adapter is not wired",
+    );
+    expect(existsSync(evidence)).toBe(false);
     expect(existsSync(overlay)).toBe(false);
     expect(bindings.stackArgs()).not.toContain(overlay);
   });

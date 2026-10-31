@@ -14,6 +14,7 @@ import {
   parseOpsJobStatus,
   signApiRetentionProof,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { openOpsJobJournal, type PersistedOpsJob } from "./journal";
@@ -169,7 +170,7 @@ it.each(
       else if (change.endsWith("cancel"))
         altered.terminationRequestedAt = new Date(originalTime).toISOString();
       else altered.terminalAt = new Date(originalTime + 1000).toISOString();
-      const file = join(root, "data/ops-agent/jobs-v1.json"),
+      const file = coreServices.agentStatePaths(root).journal,
         changedJournal = await openOpsJobJournal(file);
       await changedJournal.replace([altered]); // Actual parser accepts each schema-valid change.
       const clock = vi.spyOn(Date, "now").mockReturnValue(originalTime + 71 * 3600_000);
@@ -322,12 +323,14 @@ it.each(
           original.admittedAt += 1;
           original.submittedAt = new Date(original.admittedAt).toISOString();
           writeFileSync(
-            join(root, "data/ops-agent/jobs-v1.json"),
+            coreServices.agentStatePaths(root).journal,
             JSON.stringify({ version: 2, jobs: [original] }),
           );
         } else {
           original.result = { backupId: "different-result" };
-          const changedJournal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+          const changedJournal = await openOpsJobJournal(
+            coreServices.agentStatePaths(root).journal,
+          );
           await changedJournal.replace([original]);
         }
       }
@@ -352,7 +355,7 @@ it.each(
           role: "ops-agent",
           serviceIds: ["motis"],
         });
-        const journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+        const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
         const terminalClaimCleanup =
           "revisionId" in original.operation
             ? await initializeTerminalClaimCleanup(join(root, "trusted-config"), {
@@ -384,7 +387,7 @@ it.each(
           role: "ops-agent",
           serviceIds: ["motis"],
         });
-        const unproved = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+        const unproved = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
         const claimed = join(root, `trusted-config/.claimed/${original.operation.revisionId}.json`);
         expect(existsSync(claimed)).toBe(true);
         app = buildOpsAgentServer({
@@ -618,7 +621,7 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
       role: "ops-agent",
       serviceIds: ["motis"],
     });
-    const journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+    const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
     app = buildOpsAgentServer({
       tokens: { api: Buffer.alloc(32, 7).toString("base64url"), "data-manager": "b".repeat(32) },
       controlInstallation: installation,

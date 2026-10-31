@@ -60,8 +60,11 @@ it.each(["old-directory", "build-record"])(
       },
       { timeout: 30000, interval: 50 },
     );
-    const writerPath = join(root, ".trusted-config-writer"),
-      writerBefore = lstatSync(writerPath);
+    const writerPaths = [
+      join(root, ".trusted-config-writer"),
+      join(root, "state/ops-agent/configuration/.writer"),
+    ];
+    const writersBefore = writerPaths.map((path) => ({ path, identity: lstatSync(path) }));
     child.kill("SIGKILL");
     const [code, signal] = await exited;
     expect(code).toBeNull();
@@ -69,10 +72,14 @@ it.each(["old-directory", "build-record"])(
     // This isolated fixture owns its ONLY writer and has just killed it. Model
     // the documented explicit host operation; production never steals this lock
     // using elapsed time, a PID, or a missing process as execution authority.
-    const writerAfter = lstatSync(writerPath);
-    expect([writerAfter.dev, writerAfter.ino]).toEqual([writerBefore.dev, writerBefore.ino]);
-    expect(writerAfter.isDirectory() && !writerAfter.isSymbolicLink()).toBe(true);
-    rmdirSync(writerPath); // Empty, exact owned lock only; no recursive deletion.
+    // The current writer owns its state lock and the unretired legacy lock.
+    // Explicit recovery removes only those two exact empty fixture-owned inodes.
+    for (const { path, identity: before } of writersBefore.reverse()) {
+      const after = lstatSync(path);
+      expect([after.dev, after.ino]).toEqual([before.dev, before.ino]);
+      expect(after.isDirectory() && !after.isSymbolicLink()).toBe(true);
+      rmdirSync(path); // Empty, exact owned lock only; no recursive deletion.
+    }
 
     const state = JSON.parse(readFileSync(join(root, "fault.json"), "utf8")) as {
         execution: unknown;

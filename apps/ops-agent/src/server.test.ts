@@ -1,11 +1,36 @@
-import type { OpsOperation, OpsResourcePolicy } from "@openmapx/core/ops";
+import { existsSync, rmSync } from "node:fs";
+import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import {
+  type OpsOperation,
+  type OpsResourcePolicy,
+  parseControlRootOperationKey,
+} from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
+import { ownedServiceHost } from "./__fixtures__/owned-service-host";
+import {
+  buildControlTestServer as buildOpsAgentServer,
+  controlTestKey,
+} from "./__fixtures__/server";
 import { createDockerRuntime } from "./docker-runtime";
-import { type BuildOpsAgentServerOptions, buildOpsAgentServer, type OpsAuditEvent } from "./server";
+import {
+  type BuildOpsAgentServerOptions,
+  buildOpsAgentServer as buildActualOpsAgentServer,
+  type OpsAuditEvent,
+} from "./server";
 
 const apiToken = Buffer.alloc(32, 1).toString("base64url");
 const dataManagerToken = Buffer.alloc(32, 2).toString("base64url");
-const nowIso = "2026-08-23T18:00:00.000Z";
+const baseTime = Date.now();
+const nowIso = new Date(baseTime).toISOString();
+const testDeadlineAt = baseTime + 4 * 3600_000;
+const key = (label: string, deadlineAt = testDeadlineAt) => {
+  try {
+    parseControlRootOperationKey(label);
+    return label;
+  } catch {
+    return controlTestKey(label, deadlineAt);
+  }
+};
 const allowAll: OpsResourcePolicy = {
   allowGlobal: () => true,
   allowService: () => true,
@@ -22,11 +47,26 @@ const allowAll: OpsResourcePolicy = {
 function envelope(
   operation: OpsOperation | Record<string, unknown>,
   requestId = "ops1_0123456789abcdef",
-  operationKey = "opk1_0123456789abcdef",
+  operationKey = key("opk1_0123456789abcdef"),
   issuedAt = nowIso,
-  expiresAt = "2026-08-23T18:00:20.000Z",
+  expiresAt = new Date(baseTime + 20_000).toISOString(),
 ) {
-  return { version: 2, requestId, operationKey, issuedAt, expiresAt, operation };
+  let rootKey: string;
+  try {
+    parseControlRootOperationKey(operationKey);
+    rootKey = operationKey;
+  } catch {
+    rootKey = key(operationKey);
+  }
+  return {
+    version: 2,
+    requestId,
+    operationKey: rootKey,
+    issuedAt,
+    expiresAt,
+    operation,
+    execution: { requestedDeadlineAt: testDeadlineAt },
+  };
 }
 
 function auth(token: string) {
@@ -36,7 +76,7 @@ function auth(token: string) {
 describe("ops-agent request boundary", () => {
   it("publishes exact live privacy backup evidence and fails closed", async () => {
     const collectorImage = `ghcr.io/openmapx/privacy-backup@sha256:${"a".repeat(64)}`;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       privacyBackupHealth: async () => ({
         ready: true,
@@ -50,7 +90,7 @@ describe("ops-agent request boundary", () => {
     });
     await app.close();
 
-    const failedApp = buildOpsAgentServer({
+    const failedApp = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       privacyBackupHealth: async () => {
         throw new Error("docker socket detail");
@@ -65,7 +105,7 @@ describe("ops-agent request boundary", () => {
 
   it("authenticates and resolves role before operation validation or dispatch", async () => {
     const dispatch = vi.fn();
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -92,7 +132,7 @@ describe("ops-agent request boundary", () => {
   });
 
   it("rejects unknown fields, stale/future/duplicate requests, and excessive bodies", async () => {
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -105,9 +145,9 @@ describe("ops-agent request boundary", () => {
         envelope(
           { kind: "docker.status" },
           "ops1_stale00000000000",
-          "opk1_stale00000000000",
-          "2026-08-23T17:59:30.000Z",
-          "2026-08-23T17:59:59.999Z",
+          key("opk1_stale00000000000"),
+          new Date(baseTime - 30_000).toISOString(),
+          new Date(baseTime - 1).toISOString(),
         ),
         "stale",
       ],
@@ -115,8 +155,8 @@ describe("ops-agent request boundary", () => {
         envelope(
           { kind: "docker.status" },
           "ops1_future0000000000",
-          "opk1_future0000000000",
-          "2026-08-23T18:00:06.000Z",
+          key("opk1_future0000000000"),
+          new Date(baseTime + 6_000).toISOString(),
         ),
         "future",
       ],
@@ -165,7 +205,7 @@ describe("ops-agent request boundary", () => {
   it("emits only structured audit fields and redacts runtime failures", async () => {
     const events: OpsAuditEvent[] = [];
     const secret = `${apiToken} docker argv http://ops-agent:4300`;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -200,11 +240,11 @@ describe("ops-agent request boundary", () => {
 
   it("requires distinct role credentials and fails closed on resource authorization", async () => {
     expect(() =>
-      buildOpsAgentServer({
+      buildActualOpsAgentServer({
         tokens: { api: apiToken, "data-manager": apiToken },
       }),
     ).toThrow("distinct");
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: {},
       now: () => new Date(nowIso),
@@ -228,19 +268,26 @@ describe("ops-agent lifecycle deadlines", () => {
     ["service.stop", [299_999]],
     ["service.recreate", [240_000, 220_000]],
   ] as const)("allows bounded shutdown and dependency work for %s", async (kind, durations) => {
+    const host = await ownedServiceHost();
+    const installation = openControlInstallation({
+      infraDir: host.infraDir,
+      role: "ops-agent",
+      serviceIds: host.loaded.map((s) => s.manifest.id),
+    });
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(new Date(nowIso));
     let aborted = false;
+    let started = false;
     const completed: number[] = [];
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/trusted",
-        composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
-      },
-      fileExists: () => false,
-      execFile: (_file, _args, options) =>
-        new Promise((resolve, reject) => {
+      stack: host.stack,
+      fileExists: existsSync,
+      ownedServices: host.owned,
+      execFile: async (file, args, options) => {
+        if (args[0] !== "stop" && !args.includes("restart") && !args.includes("up"))
+          return host.execFile(file, args, options);
+        started = true;
+        return new Promise((resolve, reject) => {
           const timers: ReturnType<typeof setTimeout>[] = [];
           const cleanup = () => {
             for (const timer of timers) clearTimeout(timer);
@@ -266,11 +313,13 @@ describe("ops-agent lifecycle deadlines", () => {
               }, elapsed),
             );
           }
-        }),
+        });
+      },
     });
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
-      resourcePolicy: allowAll,
+      resourceClaimer: host.claimer,
+      controlInstallation: installation,
       now: () => new Date(nowIso),
       runtime,
     });
@@ -279,25 +328,36 @@ describe("ops-agent lifecycle deadlines", () => {
         method: "POST",
         url: "/v1/operations",
         headers: auth(apiToken),
-        payload: envelope({ kind, serviceId: "postgis" }),
+        payload: envelope({
+          kind,
+          serviceId: "motis",
+          ...(kind === "service.recreate"
+            ? { expectedConfigurationRevisionId: host.initial.revisionId }
+            : {}),
+        }),
       });
-      expect(response.statusCode).toBe(202);
+      expect(response.statusCode, response.body).toBe(202);
       const { operationId } = response.json().result;
+      await vi.waitFor(() => expect(started).toBe(true));
       await vi.advanceTimersByTimeAsync(durations.reduce((sum, duration) => sum + duration, 0));
-      const status = (
-        await app.inject({
-          method: "GET",
-          url: `/v1/operations/${operationId}`,
-          headers: auth(apiToken),
-        })
-      ).json().result;
-      expect(status).toMatchObject({ state: "succeeded", result: { changed: true } });
+      await vi.waitFor(async () => {
+        const terminal = (
+          await app.inject({
+            method: "GET",
+            url: `/v1/operations/${operationId}`,
+            headers: auth(apiToken),
+          })
+        ).json().result;
+        expect(terminal).toMatchObject({ state: "succeeded", result: { changed: true } });
+      });
       expect(aborted).toBe(false);
       expect(completed).toEqual([...durations]);
     } finally {
       await app.close();
       vi.clearAllTimers();
       vi.useRealTimers();
+      closeControlInstallation(installation);
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
     }
   });
 
@@ -318,7 +378,7 @@ describe("ops-agent lifecycle deadlines", () => {
             );
           }),
       );
-      const app = buildOpsAgentServer({
+      const app = await buildOpsAgentServer({
         tokens: { api: apiToken, "data-manager": dataManagerToken },
         resourcePolicy: allowAll,
         now: () => new Date(nowIso),
@@ -331,7 +391,7 @@ describe("ops-agent lifecycle deadlines", () => {
           headers: auth(apiToken),
           payload: envelope({ kind: "service.stop", serviceId: "postgis" }),
         });
-        expect(response.statusCode).toBe(202);
+        expect(response.statusCode, response.body).toBe(202);
         const { operationId, fingerprint } = response.json().result;
         await vi.advanceTimersByTimeAsync(mode === "deadline" ? 629_999 : 1_000);
         expect(signal?.aborted).toBe(false);
@@ -382,7 +442,7 @@ describe("retained execution deadlines", () => {
     let finish!: (x: unknown) => void;
     let calls = 0;
     const records: import("./journal").PersistedOpsJob[][] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       journal: {
@@ -468,7 +528,7 @@ describe("retained execution deadlines", () => {
     vi.setSystemTime(new Date(nowIso));
     let signal: AbortSignal | undefined;
     let finish!: (x: unknown) => void;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       dispatch: async (_o, _r, c) => {
@@ -485,6 +545,7 @@ describe("retained execution deadlines", () => {
         headers: auth(apiToken),
         payload: {
           ...envelope({ kind: "service.build", serviceId: "valhalla" }),
+          operationKey: key("expiry", Date.now() + 100),
           execution: { requestedDeadlineAt: Date.now() + 100 },
         },
       });
@@ -508,7 +569,7 @@ describe("retained execution deadlines", () => {
   });
   it("rejects unsigned wire parent and delegation headers before effects", async () => {
     const dispatch = vi.fn();
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -541,12 +602,12 @@ describe("execution identity at the agent boundary", () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(new Date(nowIso));
     const operation = { kind: "service.build" as const, serviceId: "valhalla" };
-    const operationKey = "opk1_parentBoundChild";
+    const operationKey = controlTestKey("opk1_parentBoundChild", Date.now() + 12 * 3600_000);
     const fields = {
       version: 1,
       apiJobId: "123e4567-e89b-42d3-a456-426614174000",
       apiOwnerVersion: 1,
-      parentOperationKey: "opk1_parentabcdefghij",
+      parentOperationKey: key("opk1_parentabcdefghij"),
       parentFingerprint: "a".repeat(64),
       parentDeadlineAt: Date.now() + 1000,
       childOperationKey: operationKey,
@@ -564,7 +625,7 @@ describe("execution identity at the agent boundary", () => {
         .digest("base64url");
     let finish!: (x: unknown) => void;
     let execution: import("@openmapx/core/ops").ExecutionRef | undefined;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       dispatch: async (_o, _r, c) => {
@@ -618,7 +679,7 @@ describe("execution identity at the agent boundary", () => {
     const { OpsExecutionFailure } = await import("./runtime");
     let fail!: (x: unknown) => void;
     const snapshots: import("./journal").PersistedOpsJob[][] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -677,7 +738,7 @@ it("observer abort leaves the admitted backend running until its real completion
   const observer = new AbortController();
   let backendSignal: AbortSignal | undefined;
   let finish!: (x: unknown) => void;
-  const app = buildOpsAgentServer({
+  const app = await buildOpsAgentServer({
     tokens: { api: apiToken, "data-manager": dataManagerToken },
     resourcePolicy: allowAll,
     now: () => new Date(nowIso),
@@ -796,7 +857,7 @@ it.each([0, 1])(
       ],
     });
     const retained: import("./journal").PersistedOpsJob[][] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       runtime,
@@ -873,17 +934,22 @@ it.each([0, 1])(
 );
 
 describe("fix1 baseline protocol compatibility", () => {
-  const legacyEnvelope = (...args: Parameters<typeof envelope>) => ({
-    ...envelope(...args),
-    version: 1,
-  });
+  const legacyEnvelope = (...args: Parameters<typeof envelope>) => {
+    const { execution: _execution, ...body } = envelope(...args);
+    return { ...body, version: 1 };
+  };
   it("projects the exact historical admission/status/lookup/cancel shapes for a v1 caller", async () => {
     const { opsOperationFingerprint } = await import("@openmapx/core/ops");
     let finish!: (x: unknown) => void;
     let signal: AbortSignal | undefined;
     let dispatches = 0;
-    const operation = { kind: "service.build" as const, serviceId: "osrm" };
-    const app = buildOpsAgentServer({
+    const operation = {
+      kind: "service.logs.follow" as const,
+      serviceId: "osrm",
+      tail: 10,
+      maxDurationSeconds: 300,
+    };
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
@@ -950,7 +1016,7 @@ describe("fix1 baseline protocol compatibility", () => {
         headers: { authorization: `Bearer ${apiToken}` },
       });
       await vi.waitFor(() => expect(signal?.aborted).toBe(true));
-      finish({ completed: true });
+      finish({ lines: 0, truncated: false });
       expect((await cancel).statusCode).toBe(200);
       const modern = (
         await app.inject({
@@ -970,7 +1036,7 @@ describe("fix1 baseline protocol compatibility", () => {
 
 it("fix1 cannot downgrade modern-origin cancellation to the legacy fence", async () => {
   let finish!: (x: unknown) => void;
-  const app = buildOpsAgentServer({
+  const app = await buildOpsAgentServer({
     tokens: { api: apiToken, "data-manager": dataManagerToken },
     resourcePolicy: allowAll,
     now: () => new Date(nowIso),

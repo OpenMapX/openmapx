@@ -12,7 +12,7 @@ it.each(["legacy", "expired"])(
   "fix1 production bootstrap retains health and observation with %s release recovery",
   async (mode) => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-bootstrap-"));
-    const directory = join(root, "infra/docker/.ops-agent-releases");
+    const directory = services.releaseStatePaths(join(root, "infra/docker")).store;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const manifest = {
       schemaVersion: 1,
@@ -60,7 +60,7 @@ it.each(["legacy", "expired"])(
       }),
       { mode: 0o600 },
     );
-    const overlay = join(root, "infra/docker/docker-compose.release.yml");
+    const overlay = services.releaseStatePaths(join(root, "infra/docker")).overlay;
     writeFileSync(overlay, "operator-state\n");
     const run = vi.fn(async () => undefined);
     const dispatch = vi.fn(async () => ({ reachable: true, version: "test" }));

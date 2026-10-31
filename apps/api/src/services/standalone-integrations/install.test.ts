@@ -76,7 +76,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         tokens: { api: state.host.token, "data-manager": "b".repeat(43) },
         runtime: state.host.runtime,
         resourceClaimer: state.host.claimer,
-        journal: await openOpsJobJournal(join(state.host.infraDir, "data/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(state.host.infraDir, "state/ops-agent/jobs-v1.json")),
         controlInstallation: installation,
         artifactTransfers: store,
       });

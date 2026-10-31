@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
+import {
+  buildControlTestServer as buildOpsAgentServer,
+  controlTestKey,
+} from "./__fixtures__/server";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
-import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -41,7 +45,11 @@ function fixture(mode = "matching", crash = false) {
     "services: {}\n",
   );
   const calls: string[][] = [];
-  const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+  const context = {
+    execution: testExecution(),
+    signal: new AbortController().signal,
+    emitLog: vi.fn(),
+  };
   const docker = vi.fn(async (args: readonly string[]) => {
     if (mode === "unreachable") throw new Error("daemon unavailable");
     if (args.includes("ps")) return mode === "missing" ? "" : "b".repeat(64);
@@ -110,7 +118,7 @@ describe("complete administrative release coverage", () => {
     const f = fixture("old-agent");
     const now = new Date();
     const token = Buffer.alloc(32, 1).toString("base64url");
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: token, "data-manager": Buffer.alloc(32, 2).toString("base64url") },
       resourcePolicy: { allowRelease: () => true },
       dispatch: async () => {
@@ -121,11 +129,12 @@ describe("complete administrative release coverage", () => {
       const admitted = await app.inject({
         method: "POST",
         url: "/v1/operations",
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
         payload: {
-          version: 1,
+          version: 2,
           requestId: "ops1_hostUpdateRequest",
-          operationKey: "opk1_hostUpdateRequest",
+          operationKey: controlTestKey("opk1_hostUpdateRequest", now.getTime() + 60000),
+          execution: { requestedDeadlineAt: now.getTime() + 60000 },
           issuedAt: now.toISOString(),
           expiresAt: new Date(now.getTime() + 20_000).toISOString(),
           operation: { kind: "release.apply", releaseId: "test-release" },
@@ -138,7 +147,7 @@ describe("complete administrative release coverage", () => {
           const response = await app.inject({
             method: "GET",
             url: `/v1/operations/${id}`,
-            headers: { authorization: `Bearer ${token}` },
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
           });
           return response.json().result;
         })

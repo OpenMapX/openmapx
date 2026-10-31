@@ -969,6 +969,18 @@ export function assertFreshControlRoot(
 export function controlInstallationDataRoot(installation: ControlInstallation): string {
   return installationState(installation).dataRoot;
 }
+/** Fixed agent registry refresh after a repository publication/removal. This
+ * local admission cache is populated from the literal trusted service loader,
+ * never an operation's requested IDs. Retained roots keep their signed targets. */
+export function replaceControlRegisteredServiceIds(
+  installation: ControlInstallation,
+  serviceIds: readonly string[],
+): void {
+  const state = installationState(installation);
+  if (installation.role !== "ops-agent" || state.fixedChildId)
+    throw Error("Agent registry refresh required");
+  state.registeredTargets = new Set(targetSchema.parse([...new Set(serviceIds)].sort()));
+}
 export function controlRegisteredServiceIds(installation: ControlInstallation): string[] {
   return [...installationState(installation).registeredTargets].sort();
 }
@@ -2094,7 +2106,10 @@ export function retainControlEffectReceipt(
         (s.kind === "integration.install" && result.outcome === "published") ||
         (s.kind === "integration.remove" && result.outcome === "removed") ||
         (s.kind === "integration.settle" && result.outcome === "restored") ||
-        (s.kind === "catalogIntegration.settle" && ["commit", "rollback"].includes(result.outcome))
+        (s.kind === "catalogIntegration.settle" &&
+          ["commit", "rollback"].includes(result.outcome)) ||
+        (s.kind === "serviceRepository.settle" &&
+          ["commit", "rollback", "release"].includes(result.outcome))
       ) {
         outcome = "committed";
         publication = "committed";
@@ -5388,10 +5403,12 @@ export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthor
     !["configurationMaintenance.prepare", "configurationHandoff.prepare"].includes(s.kind)
   )
     throw Error("Unsupported terminal preparation");
-  const data = new AnchoredDirectory(s.installation.dataRoot);
+  const infra = new AnchoredDirectory(dirname(s.installation.dataRoot));
+  let state: AnchoredDirectory | undefined;
   let jobs: AnchoredDirectory | undefined;
   try {
-    jobs = data.directory("ops-agent");
+    state = infra.directory("state");
+    jobs = state.directory("ops-agent");
     const journal = z
       .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(256) })
       .parse(JSON.parse(jobs.read("jobs-v1.json", 24 * 1024 * 1024).toString("utf8")));
@@ -5464,7 +5481,8 @@ export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthor
     }
   } finally {
     jobs?.close();
-    data.close();
+    state?.close();
+    infra.close();
   }
 }
 export function verifyControlPreparedTerminal(

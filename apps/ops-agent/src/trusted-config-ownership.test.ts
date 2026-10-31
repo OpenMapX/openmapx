@@ -22,16 +22,14 @@ import {
   prepareApiJobRoot,
 } from "../../api/src/services/admin-job-parent";
 import type { JobContext } from "../../api/src/services/job-runner";
+import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./__fixtures__/configuration-runtime";
 import { configurationSource } from "./__fixtures__/configuration-source";
 import { testExecution } from "./__fixtures__/execution";
 import type { PersistedOpsJob } from "./journal";
 import { createRegistryResourceClaimer } from "./policy";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { buildOpsAgentServer } from "./server";
-import {
-  installTrustedConfigurationRuntime,
-  type TrustedConfigurationRuntimeOptions,
-} from "./trusted-config-runtime";
+import type { TrustedConfigurationRuntimeOptions } from "./trusted-config-runtime";
 import { createFileTrustedOpsDataSource } from "./trusted-config-source";
 
 const roots: string[] = [];

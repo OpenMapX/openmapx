@@ -8,13 +8,26 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildControlTestServer as buildOpsAgentServer,
+  controlTestKey,
+} from "./__fixtures__/server";
 import { type OpsJobJournal, openOpsJobJournal, type PersistedOpsJob } from "./journal";
 import type { OpsResourceClaimer } from "./policy";
-import { buildOpsAgentServer } from "./server";
+
+const pullResult = {
+  changed: true as const,
+  revisionId: `cfg1_${"a".repeat(43)}`,
+  imageReference: "example/redis:1",
+  imageId: `sha256:${"b".repeat(64)}`,
+  releaseSelectionDigest: null,
+};
 
 const apiToken = Buffer.alloc(32, 31).toString("base64url");
 const dataManagerToken = Buffer.alloc(32, 32).toString("base64url");
-const baseTime = Date.parse("2026-08-23T18:00:00.000Z");
+const baseTime = Date.now();
+const deadlineAt = baseTime + 3_600_000;
+const key = (label: string) => controlTestKey(label, deadlineAt);
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -22,17 +35,23 @@ afterEach(() => {
 
 function request(operation: OpsOperation, requestId: string, operationKey: string) {
   return {
-    version: 1,
+    version: 2,
     requestId,
     operationKey,
+    execution: { requestedDeadlineAt: deadlineAt },
     issuedAt: new Date(baseTime).toISOString(),
     expiresAt: new Date(baseTime + 20_000).toISOString(),
     operation,
   };
 }
 
+function legacyRequest(...args: Parameters<typeof request>) {
+  const { execution: _execution, ...body } = request(...args);
+  return { ...body, version: 1 };
+}
+
 function auth() {
-  return { authorization: `Bearer ${apiToken}` };
+  return { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" };
 }
 
 const allow: OpsResourceClaimer = {
@@ -52,7 +71,7 @@ function persisted(
     role: "api",
     operation,
     operationId: "job1_restoredOperation0",
-    operationKey: "opk1_restoredOperation0",
+    operationKey: key("opk1_restoredOperation0"),
     fingerprint: opsOperationFingerprint(operation),
     resourceId: "redis",
     state: "running",
@@ -73,7 +92,7 @@ describe("reviewed durable admission boundary", () => {
       kind: "stack.render" as const,
       revisionId: `cfg1_${"t".repeat(43)}`,
     };
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       claimTimeoutMs: 5,
       resourceClaimer: {
@@ -103,7 +122,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_lateClaimRollback0", "opk1_lateClaimRollback0"),
+      payload: request(operation, "ops1_lateClaimRollback0", key("opk1_lateClaimRollback0")),
     });
     expect(response.statusCode).toBe(504);
     finish();
@@ -126,7 +145,7 @@ describe("reviewed durable admission boundary", () => {
         kind: "stack.render" as const,
         revisionId: `cfg1_${"r".repeat(43)}`,
       };
-      const app = buildOpsAgentServer({
+      const app = await buildOpsAgentServer({
         tokens: { api: apiToken, "data-manager": dataManagerToken },
         resourceClaimer: {
           claim: async (_operation, fingerprint) => ({
@@ -166,7 +185,7 @@ describe("reviewed durable admission boundary", () => {
         payload: request(
           operation,
           `ops1_terminalRelease${outcome}0`,
-          `opk1_terminalRelease${outcome}0`,
+          key(`opk1_terminalRelease${outcome}0`),
         ),
       });
       expect(admitted.statusCode).toBe(202);
@@ -199,13 +218,13 @@ describe("reviewed durable admission boundary", () => {
     } as const;
     const tombstone = persisted(operation, {
       operationId: "job1_recoveryTombstone0",
-      operationKey: "opk1_recoveryTombstone0",
+      operationKey: key("opk1_recoveryTombstone0"),
       state: "failed",
       errorClass: "recovery_required",
       terminalAt: new Date(baseTime).toISOString(),
     });
-    const dispatch = vi.fn(async () => ({ changed: true }));
-    const app = buildOpsAgentServer({
+    const dispatch = vi.fn(async () => pullResult);
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal: { records: () => [tombstone], replace: async () => undefined },
@@ -218,7 +237,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_tombstoneRetry000", "opk1_recoveryTombstone0"),
+      payload: legacyRequest(operation, "ops1_tombstoneRetry000", key("opk1_recoveryTombstone0")),
     });
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result).toMatchObject({
@@ -230,7 +249,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_tombstoneCapacity0", "opk1_tombstoneCapacity0"),
+      payload: legacyRequest(operation, "ops1_tombstoneCapacity0", key("opk1_tombstoneCapacity0")),
     });
     expect(capacity.statusCode).toBe(429);
     expect(dispatch).not.toHaveBeenCalled();
@@ -257,7 +276,7 @@ describe("reviewed durable admission boundary", () => {
       },
     };
     const dispatched: string[][] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: {
         claim: async (operation, fingerprint) => {
@@ -292,7 +311,7 @@ describe("reviewed durable admission boundary", () => {
           stopRunning: true,
         },
         "ops1_ownedSnapshot000",
-        "opk1_ownedSnapshot000",
+        key("opk1_ownedSnapshot000"),
       ),
     });
     expect(admitted.statusCode).toBe(202);
@@ -313,8 +332,8 @@ describe("reviewed durable admission boundary", () => {
         if (writes === 2) throw new Error("disk unavailable");
       },
     };
-    const dispatch = vi.fn(async () => ({ changed: true }));
-    const app = buildOpsAgentServer({
+    const dispatch = vi.fn(async () => pullResult);
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
@@ -330,14 +349,14 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_startPersistFail00", "opk1_startPersistFail00"),
+      payload: request(operation, "ops1_startPersistFail00", key("opk1_startPersistFail00")),
     });
     expect(first.statusCode).toBe(500);
     const retry = await app.inject({
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_startPersistRetry0", "opk1_startPersistFail00"),
+      payload: request(operation, "ops1_startPersistRetry0", key("opk1_startPersistFail00")),
     });
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result.state).toBe("failed");
@@ -354,12 +373,12 @@ describe("reviewed durable admission boundary", () => {
         if (writes >= 3) throw new Error("disk unavailable");
       },
     };
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),
-      dispatch: async () => ({ changed: true }),
+      dispatch: async () => pullResult,
     });
     const operation = {
       kind: "service.pull",
@@ -370,7 +389,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_terminalFail0000", "opk1_terminalFail0000"),
+      payload: request(operation, "ops1_terminalFail0000", key("opk1_terminalFail0000")),
     });
     const operationId = admitted.json().result.operationId as string;
     let status = await app.inject({
@@ -378,7 +397,11 @@ describe("reviewed durable admission boundary", () => {
       url: `/v1/operations/${operationId}`,
       headers: auth(),
     });
-    for (let attempt = 0; attempt < 100 && status.json().result.state !== "failed"; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 100 && status.json().result.state !== "termination_pending";
+      attempt += 1
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 1));
       status = await app.inject({
         method: "GET",
@@ -387,17 +410,16 @@ describe("reviewed durable admission boundary", () => {
       });
     }
     expect(status.json().result).toMatchObject({
-      state: "failed",
-      errorClass: "recovery_required",
+      state: "termination_pending",
     });
     expect(status.json().result).not.toHaveProperty("result");
     const retry = await app.inject({
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_terminalRetry000", "opk1_terminalFail0000"),
+      payload: request(operation, "ops1_terminalRetry000", key("opk1_terminalFail0000")),
     });
-    expect(retry.json().result.state).toBe("failed");
+    expect(retry.json().result.state).toBe("termination_pending");
     await app.close();
   });
 
@@ -406,8 +428,6 @@ describe("reviewed durable admission boundary", () => {
     roots.push(root);
     const path = join(root, "journal", "jobs-v1.json");
     const durable = await openOpsJobJournal(path);
-    let resolveTerminalSnapshot!: () => void;
-    const terminalSnapshot = new Promise<void>((resolve) => (resolveTerminalSnapshot = resolve));
     let blockAdmission = false;
     let entered!: () => void;
     let unblock!: () => void;
@@ -421,21 +441,23 @@ describe("reviewed durable admission boundary", () => {
           entered();
           await admissionBlocked;
         }
+        console.error(
+          "INTERLEAVE write",
+          records.map((r) => [r.operation.kind, r.state]),
+        );
         await durable.replace(records);
-        if (records.length === 2 && records.every((record) => record.state === "succeeded"))
-          resolveTerminalSnapshot();
       },
     };
     let releaseFirst!: () => void;
     const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),
       dispatch: async (operation) => {
         if (operation.kind === "service.pull") await firstBlocked;
-        return { changed: true };
+        return operation.kind === "service.pull" ? pullResult : { changed: true };
       },
     });
     const first = await app.inject({
@@ -449,31 +471,51 @@ describe("reviewed durable admission boundary", () => {
           expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
         },
         "ops1_interleaveFirst00",
-        "opk1_interleaveFirst00",
+        key("opk1_interleaveFirst00"),
       ),
     });
     expect(first.statusCode).toBe(202);
     blockAdmission = true;
-    const secondPromise = app.inject({
-      method: "POST",
-      url: "/v1/operations",
-      headers: auth(),
-      payload: request(
-        { kind: "service.stop", serviceId: "motis" },
-        "ops1_interleaveSecond0",
-        "opk1_interleaveSecond0",
-      ),
-    });
-    await admissionEntered;
+    const secondPromise = app
+      .inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: request(
+          { kind: "service.stop", serviceId: "motis" },
+          "ops1_interleaveSecond0",
+          key("opk1_interleaveSecond0"),
+        ),
+      })
+      .then((response) => response);
+    await Promise.race([
+      admissionEntered,
+      secondPromise.then((response) => {
+        throw Error(`Second admission completed before journal hold: ${response.body}`);
+      }),
+    ]);
     releaseFirst();
     unblock();
     expect((await secondPromise).statusCode).toBe(202);
-    await terminalSnapshot;
+    await expect
+      .poll(
+        () =>
+          durable.records().map(({ operation, state, errorClass }) => ({
+            kind: operation.kind,
+            state,
+            errorClass,
+          })),
+        { timeout: 3000 },
+      )
+      .toEqual([
+        { kind: "service.pull", state: "succeeded", errorClass: undefined },
+        { kind: "service.stop", state: "succeeded", errorClass: undefined },
+      ]);
     await app.close();
     const reopened = await openOpsJobJournal(path);
     expect(reopened.records()).toHaveLength(2);
     expect(new Set(reopened.records().map((record) => record.operationKey))).toEqual(
-      new Set(["opk1_interleaveFirst00", "opk1_interleaveSecond0"]),
+      new Set([key("opk1_interleaveFirst00"), key("opk1_interleaveSecond0")]),
     );
     expect(reopened.records().every((record) => record.state === "succeeded")).toBe(true);
   });
@@ -485,7 +527,7 @@ describe("reviewed durable admission boundary", () => {
       await blocked;
       return { changed: true };
     });
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
@@ -501,13 +543,13 @@ describe("reviewed durable admission boundary", () => {
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: request(operation, "ops1_concurrentFirst00", "opk1_concurrentShared0"),
+        payload: request(operation, "ops1_concurrentFirst00", key("opk1_concurrentShared0")),
       }),
       app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: request(operation, "ops1_concurrentSecond0", "opk1_concurrentShared0"),
+        payload: request(operation, "ops1_concurrentSecond0", key("opk1_concurrentShared0")),
       }),
     ]);
     expect(first.statusCode).toBe(202);
@@ -524,7 +566,7 @@ describe("reviewed durable admission boundary", () => {
     const baseBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
     result.lines[255] = "x".repeat(budget - baseBytes);
     expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBe(budget);
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
@@ -537,7 +579,7 @@ describe("reviewed durable admission boundary", () => {
       payload: request(
         { kind: "service.logs", serviceId: "redis", tail: 256 },
         "ops1_exactBudget00000",
-        "opk1_exactBudget00000",
+        key("opk1_exactBudget00000"),
       ),
     });
     expect(response.statusCode).toBe(200);
@@ -564,7 +606,7 @@ describe("reviewed durable admission boundary", () => {
     const records = states.map((state, index) =>
       persisted(operation, {
         operationId: `job1_retainedState${index}0000`,
-        operationKey: `opk1_retainedState${index}0000`,
+        operationKey: key(`opk1_retainedState${index}0000`),
         state,
         ...(state === "succeeded"
           ? { result: { changed: true }, terminalAt: new Date(baseTime).toISOString() }
@@ -576,7 +618,7 @@ describe("reviewed durable admission boundary", () => {
             : {}),
       }),
     );
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal: { records: () => records, replace: async () => undefined },
@@ -588,10 +630,10 @@ describe("reviewed durable admission boundary", () => {
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: request(
+        payload: legacyRequest(
           operation,
           `ops1_retainedState${index}0000`,
-          `opk1_retainedState${index}0000`,
+          key(`opk1_retainedState${index}0000`),
         ),
       });
       expect(response.statusCode).toBe(202);
@@ -614,8 +656,8 @@ describe("reviewed durable admission boundary", () => {
     const journal = await openOpsJobJournal(path, {
       now: () => new Date(baseTime + 1_000),
     });
-    const dispatch = vi.fn(async () => ({ changed: true }));
-    const app = buildOpsAgentServer({
+    const dispatch = vi.fn(async () => pullResult);
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
@@ -626,7 +668,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_restartRetry00000", "opk1_restoredOperation0"),
+      payload: legacyRequest(operation, "ops1_restartRetry00000", key("opk1_restoredOperation0")),
     });
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result).toMatchObject({
@@ -639,7 +681,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_explicitRetry000", "opk1_explicitRetry000"),
+      payload: request(operation, "ops1_explicitRetry000", key("opk1_explicitRetry000")),
     });
     expect(explicitRetry.statusCode).toBe(202);
     const explicitOperationId = explicitRetry.json().result.operationId as string;
@@ -672,7 +714,7 @@ describe("reviewed durable admission boundary", () => {
       errorClass: "recovery_required",
       terminalAt: new Date(baseTime).toISOString(),
     });
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal: { records: () => [existing], replace: async () => undefined },
@@ -684,7 +726,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(operation, "ops1_collisionRequest0", "opk1_collisionRequest0"),
+      payload: request(operation, "ops1_collisionRequest0", key("opk1_collisionRequest0")),
     });
     expect(response.statusCode).toBe(429);
     expect(response.json().error.class).toBe("busy");
@@ -708,7 +750,7 @@ describe("reviewed durable admission boundary", () => {
       },
     };
     const seen: string[] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: claimer,
       claimTimeoutMs: 5,
@@ -726,7 +768,7 @@ describe("reviewed durable admission boundary", () => {
       payload: request(
         { kind: "docker.status" },
         "ops1_claimTimeout00000",
-        "opk1_claimTimeout00000",
+        key("opk1_claimTimeout00000"),
       ),
     });
     expect(first.statusCode).toBe(504);
@@ -734,7 +776,11 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request({ kind: "docker.status" }, "ops1_claimBusy0000000", "opk1_claimBusy0000000"),
+      payload: request(
+        { kind: "docker.status" },
+        "ops1_claimBusy0000000",
+        key("opk1_claimBusy0000000"),
+      ),
     });
     expect(busy.statusCode).toBe(429);
     release();
@@ -743,7 +789,11 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request({ kind: "docker.status" }, "ops1_claimAccepted000", "opk1_claimAccepted000"),
+      payload: request(
+        { kind: "docker.status" },
+        "ops1_claimAccepted000",
+        key("opk1_claimAccepted000"),
+      ),
     });
     mutable.capability.values.target = "mutated";
     expect(accepted.statusCode).toBe(200);
@@ -773,7 +823,7 @@ describe("reviewed durable admission boundary", () => {
             };
       },
     };
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: claimer,
       maxConcurrency: 1,
@@ -787,16 +837,18 @@ describe("reviewed durable admission boundary", () => {
         headers: auth(),
         payload: request({ kind: "docker.status" }, requestId, operationKey),
       });
-    const denied = await send("ops1_hostileClaim0000", "opk1_hostileClaim0000");
+    const denied = await send("ops1_hostileClaim0000", key("opk1_hostileClaim0000"));
     expect(denied.statusCode).toBe(403);
     expect(denied.json().error.class).toBe("authorization");
-    expect((await send("ops1_afterHostile0000", "opk1_afterHostile0000")).statusCode).toBe(200);
+    expect((await send("ops1_afterHostile0000", key("opk1_afterHostile0000"))).statusCode).toBe(
+      200,
+    );
     await app.close();
   });
 
   it("contains a throwing audit sink on success and failure", async () => {
     let fail = false;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
@@ -812,7 +864,11 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request({ kind: "docker.status" }, "ops1_auditSuccess0000", "opk1_auditSuccess0000"),
+      payload: request(
+        { kind: "docker.status" },
+        "ops1_auditSuccess0000",
+        key("opk1_auditSuccess0000"),
+      ),
     });
     expect(success.statusCode).toBe(200);
     fail = true;
@@ -820,7 +876,11 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request({ kind: "docker.status" }, "ops1_auditFailure0000", "opk1_auditFailure0000"),
+      payload: request(
+        { kind: "docker.status" },
+        "ops1_auditFailure0000",
+        key("opk1_auditFailure0000"),
+      ),
     });
     expect(failure.statusCode).toBe(500);
     await app.close();
@@ -830,7 +890,7 @@ describe("reviewed durable admission boundary", () => {
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => (release = resolve));
     let calls = 0;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
@@ -852,11 +912,17 @@ describe("reviewed durable admission boundary", () => {
         headers: auth(),
         payload: request({ kind: "docker.status" }, requestId, operationKey),
       });
-    expect((await send("ops1_auditTimeout0000", "opk1_auditTimeout0000")).statusCode).toBe(504);
-    expect((await send("ops1_auditStillBusy00", "opk1_auditStillBusy00")).statusCode).toBe(429);
+    expect((await send("ops1_auditTimeout0000", key("opk1_auditTimeout0000"))).statusCode).toBe(
+      504,
+    );
+    expect((await send("ops1_auditStillBusy00", key("opk1_auditStillBusy00"))).statusCode).toBe(
+      429,
+    );
     release();
     await new Promise((resolve) => setTimeout(resolve, 2));
-    expect((await send("ops1_auditAfterLate00", "opk1_auditAfterLate00")).statusCode).toBe(200);
+    expect((await send("ops1_auditAfterLate00", key("opk1_auditAfterLate00"))).statusCode).toBe(
+      200,
+    );
     await app.close();
   });
 });
@@ -869,7 +935,7 @@ describe("operation context for agent replacement", () => {
     });
     const counts: number[] = [];
     const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
@@ -891,7 +957,7 @@ describe("operation context for agent replacement", () => {
         payload: request(
           { kind: "service.restart", serviceId: "redis" },
           "ops1_activeRestart0000",
-          "opk1_activeRestart0000",
+          key("opk1_activeRestart0000"),
         ),
       });
       expect(restart.statusCode).toBe(202);
@@ -907,7 +973,7 @@ describe("operation context for agent replacement", () => {
             handoffId: "handoff-1",
           },
           "ops1_activeUpdate00000",
-          "opk1_activeUpdate00000",
+          key("opk1_activeUpdate00000"),
         ),
       });
       expect(update.statusCode).toBe(202);
@@ -927,7 +993,7 @@ describe("admission during an agent replacement", () => {
     const dispatch = vi.fn(async () => ({ handoffId: "handoff-1", replaced: true }));
     const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
     let replacing = false;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
       journal,
@@ -943,7 +1009,7 @@ describe("admission during an agent replacement", () => {
         handoffId: "handoff-1",
       },
       "ops1_gateUpdate000000",
-      "opk1_gateUpdate000000",
+      key("opk1_gateUpdate000000"),
     );
     try {
       const first = await app.inject({
@@ -961,7 +1027,7 @@ describe("admission during an agent replacement", () => {
         payload: request(
           { kind: "service.restart", serviceId: "redis" },
           "ops1_gateRestart00000",
-          "opk1_gateRestart00000",
+          key("opk1_gateRestart00000"),
         ),
       });
       expect(restart.statusCode).toBe(409);

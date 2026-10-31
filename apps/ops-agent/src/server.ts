@@ -29,6 +29,7 @@ import {
   registerControlRetentionJournal,
   releaseArtifactTargetLease,
   repairControlJournalTerminal,
+  replaceControlRegisteredServiceIds,
   requireControlJournalRetention,
   reserveFeedProxyValidation,
   restoreAdmittedControlExecution,
@@ -168,7 +169,7 @@ import {
   registerPrivacyBackupExtractionRoute,
 } from "./privacy-backup-extraction";
 import { safeProcessDiagnostic } from "./process-output";
-import { productionOwnedServices } from "./production-runtime";
+import { productionOwnedServices, productionRegisteredServiceIds } from "./production-runtime";
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
@@ -2930,6 +2931,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 const maintenancePlan =
                   maintenanceAdmission &&
                   configurationMaintenanceAdmissionState(maintenanceAdmission).plan;
+                if (literalProductionRuntime)
+                  replaceControlRegisteredServiceIds(
+                    options.controlInstallation,
+                    await productionRegisteredServiceIds(runtime),
+                  );
                 const targets =
                   maintenancePlan?.serviceIds ??
                   (operation.kind === "artifactTransfer.export"

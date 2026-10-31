@@ -105,7 +105,7 @@ const installation = core.openControlInstallation({
   role: "ops-agent",
   serviceIds: input.serviceIds,
 });
-const journal = await openOpsJobJournal(join(input.infraDir, "data/ops-agent/jobs-v1.json"));
+const journal = await openOpsJobJournal(services.agentStatePaths(input.infraDir).journal);
 const app = buildOpsAgentServer({
   runtime,
   journal,

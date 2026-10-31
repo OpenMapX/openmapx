@@ -137,7 +137,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
-      const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+      const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
       app = buildOpsAgentServer({
         tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
         runtime: host.runtime,
@@ -3500,7 +3500,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             slot = actual.plan.reservations[0]!,
             bound = lookupControlChildPhaseBinding(authority, slot),
             attempt = lookupControlChildPhaseAttempt(authority, slot),
-            journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+            journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
             record = journal
               .records()
               .find((value) => value.operationKey === prepared.steps[0]!.operationKey);
@@ -3621,7 +3621,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           // fixture teardown instead of abandoning a timed-out API/SQL scope.
           const observer = setTimeout(() => {
             const journal = JSON.parse(
-              readFileSync(join(host.infraDir, "data/ops-agent/jobs-v1.json"), "utf8"),
+              readFileSync(join(host.infraDir, "state/ops-agent/jobs-v1.json"), "utf8"),
             );
             console.info(
               JSON.stringify({
@@ -3947,7 +3947,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               await app.close();
               closeControlInstallation(installation);
               const journal = await openOpsJobJournal(
-                join(host.infraDir, "data/ops-agent/jobs-v1.json"),
+                join(host.infraDir, "state/ops-agent/jobs-v1.json"),
               );
               installation = openControlInstallation({
                 infraDir: host.infraDir,
@@ -4530,7 +4530,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 await app.close();
                 closeControlInstallation(installation);
                 const journal = await openOpsJobJournal(
-                  join(host.infraDir, "data/ops-agent/jobs-v1.json"),
+                  join(host.infraDir, "state/ops-agent/jobs-v1.json"),
                 );
                 installation = openControlInstallation({
                   infraDir: host.infraDir,
@@ -5546,7 +5546,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           original = readFileSync(path);
         await app.close();
         closeControlInstallation(installation);
-        const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+        const journal = await openOpsJobJournal(
+          join(host.infraDir, "state/ops-agent/jobs-v1.json"),
+        );
         installation = openControlInstallation({
           infraDir: host.infraDir,
           role: "ops-agent",
@@ -5855,7 +5857,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(owner.apiControls.settle!.result).toBeNull();
         await app.close();
         closeControlInstallation(installation);
-        const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+        const journal = await openOpsJobJournal(
+          join(host.infraDir, "state/ops-agent/jobs-v1.json"),
+        );
         installation = openControlInstallation({
           infraDir: host.infraDir,
           role: "ops-agent",
@@ -6011,7 +6015,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await app.close();
           closeControlInstallation(installation);
           const journal = await openOpsJobJournal(
-              join(host.infraDir, "data/ops-agent/jobs-v1.json"),
+              join(host.infraDir, "state/ops-agent/jobs-v1.json"),
             ),
             original = journal
               .records()
@@ -6816,7 +6820,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             // another request/root or infer success from the API's cached result.
             await app.close();
             closeControlInstallation(installation);
-            const journalPath = join(host.infraDir, "data/ops-agent/jobs-v1.json"),
+            const journalPath = join(host.infraDir, "state/ops-agent/jobs-v1.json"),
               journal = await openOpsJobJournal(journalPath),
               originalEntry = journal
                 .records()
@@ -7762,7 +7766,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             } finally {
               core.closeArtifactTargetLeaseHandle(release);
             }
-            const journalPath = join(host.infraDir, "data/ops-agent/jobs-v1.json"),
+            const journalPath = join(host.infraDir, "state/ops-agent/jobs-v1.json"),
               originalJournal = readFileSync(journalPath),
               maintenance = await import("../configuration-maintenance");
             const inspectionAt = Date.now() + 3600000;

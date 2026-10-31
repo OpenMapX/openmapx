@@ -41,6 +41,7 @@ import {
   trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
+import { envString } from "@openmapx/core/server-env";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import * as schema from "../db/schema";
@@ -123,6 +124,7 @@ import {
   closeUnissuedCoordinatorPull,
   coordinatorLifecycleOperationKey,
 } from "./coordinator-lifecycle";
+import { readExtensionWorkflow } from "./extension-workflow";
 import {
   assertIntegrationBindingOverlay,
   assertSavedIntegrationBinding,
@@ -1448,7 +1450,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
   const handle = Object.freeze({}) as RetainedConfigurationRetirement;
   retirements.set(handle, {
     writer,
-    publisher: publisherOptions(await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "")),
+    publisher: publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""))),
     checkpoint: retained,
     apiJobId: job.jobId,
     actorId: writer.actorId,
@@ -1730,7 +1732,7 @@ export async function retainedConfigurationIntegrationIds(
     if (retained?.retirement !== undefined)
       return retirementSchema.parse(retained.retirement).integrationIds;
     if (typeof retained?.sealedOperationKey !== "string") throw Error();
-    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
       { record } = await readPreparedTrustedConfigurationCandidate(
         publisherOptions(token),
         retained.sealedOperationKey,
@@ -1811,7 +1813,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
     { job } = owner;
   if (!job.execution || job.execution.version < 2 || owner.participant)
     throw new JobObservationPending("recovery_required");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
     publisher = publisherOptions(token);
   let checkpoint: Record<string, unknown> | undefined;
   const candidate = await withConfigurationWriteTransaction(writer, async (tx, read) => {
@@ -2492,7 +2494,7 @@ async function restoreRetainedOrdinaryCandidate(): Promise<ValidatedConfiguratio
     { job } = owner;
   if (!job.execution || job.execution.version < 2 || owner.participant)
     throw new JobObservationPending("recovery_required");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
     publisher = publisherOptions(token);
   let checkpoint: Record<string, unknown> | undefined;
   const candidate = await withConfigurationWriteTransaction(writer, async (tx) => {
@@ -2732,9 +2734,7 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
   const operation = entry.operation;
   if (operation?.kind !== "service.pull" || !operation.candidateId)
     throw new JobObservationPending("invalid_identity");
-  const publisher = publisherOptions(
-      await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
-    ),
+  const publisher = publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""))),
     retained = await findPreparedTrustedConfigurationCandidate(publisher, operation.candidateId);
   if (retained) {
     const record = retained.record,
@@ -3299,6 +3299,9 @@ export async function prepareProspectiveConfiguration(input: {
     const { advanceCompletedBulkCandidate } = await import("./service-update-batch");
     await advanceCompletedBulkCandidate(writer);
   }
+  if (["extension.install", "extension.remove"].includes(owner.job.jobType ?? "")) {
+    await advanceCompletedExtensionCandidate(writer);
+  }
   const coordinator = input.coordinatorIntent
     ? await assertCoordinatorLifecycleIntent(input.coordinatorIntent, writer)
     : null;
@@ -3327,7 +3330,7 @@ export async function prepareProspectiveConfiguration(input: {
         canonicalJson({ purpose: "render", coordinatorMode: "ensure-running", changes: [] }))
   )
     throw Error("Fixed unchanged coordinator render required");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const publisher = publisherOptions(token);
   const source = platformIntent
     ? retainedPlatformConfigurationSource(writer)
@@ -6247,4 +6250,87 @@ export async function persistPreparedFeedCredentialPatch(input: {
     "./transit-feed-credential-participant"
   );
   return persistPreparedFeedCredentialRow({ ...input, candidateState: state });
+}
+
+/** Successive installer configuration phases retain all original ops/ACKs. Only
+ * a completed ordinary candidate in the authenticated same-job cursor advances. */
+async function advanceCompletedExtensionCandidate(
+  writer: import("./administrative-configuration-writer-owner").AdministrativeConfigurationWriter,
+) {
+  const { job } = administrativeConfigurationState(writer);
+  const current = job.checkpointResult?._configurationCandidate as
+    | Record<string, unknown>
+    | undefined;
+  if (!current || current.operationKey === writer.operationKey) return;
+  const frame = await readExtensionWorkflow(job.checkpointResult?._extensionWorkflow);
+  if (
+    frame.jobId !== job.jobId ||
+    frame.type !== job.jobType ||
+    job.observationOnly ||
+    current.maintenanceId
+  )
+    throw new JobObservationPending("recovery_required");
+  const payload = job.payload as {
+    manifest?: { id?: string; services?: Array<{ service: string }> };
+    id?: string;
+  };
+  const id = payload.manifest?.id ?? payload.id;
+  if (!id) throw new JobObservationPending("recovery_required");
+  const allowed = new Set([
+    createDurableOpsKey("extension.selection.enable", `${job.jobId}:${id}`),
+    createDurableOpsKey("extension.config.render", `${job.jobId}:${id}`),
+    createDurableOpsKey("extension.selection.disable", `${job.jobId}:${id}`),
+    createDurableOpsKey("extension.remove.render", `${job.jobId}:${id}`),
+    createDurableOpsKey("extension.selection.rollback", job.jobId),
+    createDurableOpsKey("extension.rollback.render", job.jobId),
+    ...(payload.manifest?.services ?? []).flatMap((s) =>
+      ["start", "extension-restore"].map((scope) =>
+        createDurableOpsKey("admin-job.config.prepare", `${job.jobId}:${scope}:${s.service}`),
+      ),
+    ),
+  ]);
+  if (!allowed.has(String(current.operationKey)) || !allowed.has(writer.operationKey))
+    throw new JobObservationPending("recovery_required");
+  let committed: Record<string, unknown> | undefined;
+  await withConfigurationWriteTransaction(writer, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(schema.adminJob)
+      .where(jobOwnership(job.jobId, job.execution))
+      .for("update");
+    if (
+      !row ||
+      row.type !== job.jobType ||
+      canonicalJson(row.payload) !== canonicalJson(job.payload)
+    )
+      throw new JobObservationPending("recovery_required");
+    const result = (row.result ?? {}) as Record<string, unknown>;
+    if (
+      canonicalJson(await readExtensionWorkflow(result._extensionWorkflow)) !==
+        canonicalJson(frame) ||
+      canonicalJson(result._configurationCandidate) !== canonicalJson(current) ||
+      current.phase !== "settled" ||
+      hasPendingReceiptDelivery(result) ||
+      hasUnsettledManagedOperation(result)
+    )
+      throw new JobObservationPending("recovery_required");
+    const outcome = parseTrustedConfigurationApplyOutcome(
+      (result._configurationOutcomes as Record<string, unknown>)?.[String(current.operationKey)],
+    );
+    if (
+      !completeTrustedConfigurationApply(outcome) ||
+      outcome.outcome !== "committed" ||
+      outcome.revisionId !== current.revisionId
+    )
+      throw new JobObservationPending("recovery_required");
+    committed = { ...result };
+    for (const field of ["_configurationCandidate", "_completion"]) delete committed[field];
+    const rows = await tx
+      .update(schema.adminJob)
+      .set({ result: committed })
+      .where(jobOwnership(job.jobId, job.execution))
+      .returning({ id: schema.adminJob.id });
+    if (rows.length !== 1) throw new JobObservationPending("recovery_required");
+  });
+  if (committed) job.checkpointResult = committed;
 }

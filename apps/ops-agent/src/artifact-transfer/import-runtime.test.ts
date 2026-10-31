@@ -64,7 +64,7 @@ async function fixture() {
     ownedServices: host.owned,
     execFile: host.execFile,
   });
-  const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+  const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
     app = buildOpsAgentServer({
       runtime: host.runtime,
       journal,
@@ -466,7 +466,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
     ownedServices: productionOwnedServices(runtime),
     execFile: f.execFile,
   });
-  const journal = await openOpsJobJournal(join(f.infraDir, "data/ops-agent/jobs-v1.json")),
+  const journal = await openOpsJobJournal(services.agentStatePaths(f.infraDir).journal),
     app = buildOpsAgentServer({
       runtime,
       journal,
@@ -669,7 +669,7 @@ async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>
     ownedServices: productionOwnedServices(runtime),
     execFile: f.execFile,
   });
-  const journal = await openOpsJobJournal(join(f.infraDir, "data/ops-agent/jobs-v1.json")),
+  const journal = await openOpsJobJournal(services.agentStatePaths(f.infraDir).journal),
     app = buildOpsAgentServer({
       runtime,
       journal,

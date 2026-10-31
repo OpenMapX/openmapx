@@ -41,6 +41,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   chmodSync(root, 0o755);
   const infraDir = join(root, "infra/docker");
   mkdirSync(infraDir, { recursive: true });
+  writeFileSync(join(infraDir, ".env"), `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`, { mode: 0o600 });
   mkdirSync(join(root, "services"));
   mkdirSync(join(root, "custom_integrations"));
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
@@ -131,6 +132,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     | ((args: readonly string[], signal: AbortSignal) => Promise<void>)
     | undefined;
   let inventoryProcess: (() => Promise<void>) | undefined;
+  let removingProcess: ((args: readonly string[]) => Promise<void>) | undefined;
   let imagePullProcess: ((reference:string,signal:AbortSignal)=>Promise<void>) | undefined;
   const imageIdentities = new Map<string,string>();
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
@@ -157,7 +159,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       else if(format==="{{.Config.User}}")stdout=`${process.getuid?.()??0}:${process.getgid?.()??0}`;
       else if(format==="{{json .HostConfig.GroupAdd}}")stdout="[]";
       else if(format?.includes("range .Config.Env"))stdout="HOME\nPATH\n";
-      else if(format==="{{json .Mounts}}")stdout=JSON.stringify([{Destination:"/var/run/docker.sock",Source:"/var/run/docker.sock"},{Destination:root,Source:root}]);
+      else if(format==="{{json .Mounts}}")stdout=JSON.stringify([{Type:"bind",RW:true,Destination:"/var/run/docker.sock",Source:"/var/run/docker.sock"},{Type:"bind",RW:true,Destination:root,Source:root}]);
       else throw Error("Unexpected fixed helper prerequisite format");
     } else if(configurationHelperVersion!==undefined && args[0]==="image" && args[1]==="inspect" && args[3]?.includes("openmapx.configuration-handoff.version")) {
       if(args.at(-1)!==imageId)throw Error("Unexpected old helper image");
@@ -193,6 +195,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     else if (args[0] === "image" && args[1] === "pull") await imagePullProcess?.(args.at(-1)!,options.signal);
     else if (args[0] === "compose" && args.includes("up"))
       await creatingProcess?.(args, options.signal);
+    else if (args[0] === "compose" && args.includes("rm"))
+      await removingProcess?.(args);
     else if (args[0] === "stop") {
       const stopped = rows.find((candidate) => candidate.Id === args[1]);
       if (stopped) stopped.State = "exited";
@@ -364,6 +368,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     setCreatingProcess(value: typeof creatingProcess) {
       creatingProcess = value;
     },
+    setRemovingProcess(value: typeof removingProcess) { removingProcess = value; },
     setInventoryProcess(value: typeof inventoryProcess) {
       inventoryProcess = value;
     },

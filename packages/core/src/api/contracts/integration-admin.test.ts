@@ -11,6 +11,23 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 const at = "2026-10-20T12:00:00.000Z";
 const inventory = [
+  [
+    "getAdminConfigurationMigrationInventory",
+    "GET",
+    "/api/admin/configuration-migration/inventory",
+  ],
+  ["exportAdminConfigurationMigration", "GET", "/api/admin/configuration-migration/export"],
+  ["previewAdminConfigurationMigration", "POST", "/api/admin/configuration-migration/preview"],
+  ["applyAdminConfigurationMigration", "POST", "/api/admin/configuration-migration/apply"],
+  ["exportAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/export"],
+  ["previewAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/preview"],
+  [
+    "chooseAdminCredentialTransferFields",
+    "POST",
+    "/api/admin/credential-transfer/preview/:previewId/choices",
+  ],
+  ["applyAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/apply"],
+
   ["listAdminStandaloneIntegrations", "GET", "/api/admin/standalone-integrations"],
   ["adoptAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/adopt"],
   ["removeAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/remove"],
@@ -193,7 +210,7 @@ function success(
   return contract.schema.parse(value);
 }
 describe("integration administration canonical producer contracts", () => {
-  it("binds exactly the 27 approved operation IDs, methods, paths and admin auth", () => {
+  it("binds exactly the 35 approved operation IDs, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("integrationAdminOperations");
     expect(
       Object.entries(contracts.integrationAdminOperations).map(([id, op]) => [

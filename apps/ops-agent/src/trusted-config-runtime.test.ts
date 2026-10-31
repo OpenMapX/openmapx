@@ -25,13 +25,13 @@ import {
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./__fixtures__/configuration-runtime";
 import { configurationSource } from "./__fixtures__/configuration-source";
 import { testExecution } from "./__fixtures__/execution";
 import { configurationPolicyRevision } from "./configured-resource-authority";
 import { createUnavailableRuntime, dispatchOpsOperation, type OpsTrustedClaim } from "./runtime";
 import {
   initializeTrustedConfigurationRuntime,
-  installTrustedConfigurationRuntime,
   readTrustedEnabledServiceIds,
 } from "./trusted-config-runtime";
 
@@ -149,6 +149,7 @@ async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Pro
     "docker-compose.generated.hardlinks.json",
   ])
     writeFileSync(join(oldGeneration, name), "sentinel", { mode: 0o600 });
+  writeFileSync(join(oldGeneration, "resolved-config.generated.json"), "{}", { mode: 0o600 });
   pointCurrentAt(paths, oldRevision);
 }
 

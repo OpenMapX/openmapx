@@ -43,9 +43,9 @@ export async function sendAdminByteResponse(
     { signal: input.signal },
   );
   const completion = finished(reply.raw, { signal: input.signal, cleanup: true });
-  reply.send(source);
+  const response = reply.send(source);
   try {
-    await completion;
+    await Promise.all([completion, response]);
   } finally {
     source.destroy();
     sending.delete(reply);

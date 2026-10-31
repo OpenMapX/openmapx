@@ -513,7 +513,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               : raw;
           },
         },
-        journal: await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
         controlInstallation: installation,
       });
       posts.clear();
@@ -1394,7 +1394,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(existsSync(pullPath)).toBe(false);
         expect(retired).toBeGreaterThan(0);
         const jobs = JSON.parse(
-          readFileSync(join(host.infraDir, "data/ops-agent/jobs-v1.json"), "utf8"),
+          readFileSync(join(host.infraDir, "state/ops-agent/jobs-v1.json"), "utf8"),
         ).jobs as { operationKey: string }[];
         expect(jobs.some((job) => pullPath.endsWith(`/${job.operationKey}.json`))).toBe(false);
         expect(

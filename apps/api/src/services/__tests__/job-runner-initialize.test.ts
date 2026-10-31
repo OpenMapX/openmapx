@@ -1,4 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+const authSecret = vi.hoisted(() => {
+  const previous = process.env.BETTER_AUTH_SECRET;
+  process.env.BETTER_AUTH_SECRET ??= "job-runner-initialize-unit-only-secret";
+  return { previous };
+});
+afterAll(() => {
+  if (authSecret.previous === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = authSecret.previous;
+});
 
 const dbMock = vi.hoisted(() => {
   const rows: Array<{ id: string; result: unknown }> = [];
@@ -60,6 +70,8 @@ afterEach(() => {
 describe("job runner restart initialization", () => {
   it("keeps typed agent-backed jobs for observation without handler replay", async () => {
     expect(AGENT_RECOVERABLE_ADMIN_JOB_TYPES).toEqual([
+      "extension.install",
+      "extension.remove",
       "standalone.adopt",
       "standalone.remove",
       "standalone.preview",
@@ -85,6 +97,7 @@ describe("job runner restart initialization", () => {
       "backup.prune",
       "artifact.validate",
       "artifact.import",
+      "artifact.export",
     ]);
     await jobRunner.initialize({ completeRestartedUpdates: true });
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "queued" }));

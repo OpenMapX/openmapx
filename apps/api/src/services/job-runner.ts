@@ -5,6 +5,7 @@ import {
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
@@ -41,6 +42,7 @@ import {
 } from "./configuration-ownership-view";
 import { coordinatorLifecycleOperationKey } from "./coordinator-lifecycle";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
+import { hasRetainedExtensionWorkflow } from "./extension-workflow";
 import { IntegrationBindingConflict as RetainedBindingConflict } from "./integration-binding-participant";
 import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { ApiOpsError, createDurableOpsKey, OpsObservationPending } from "./ops-client";
@@ -318,7 +320,7 @@ class AdminJobRunner {
   ): Promise<{ jobId: string; operationId: string }> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
       throw new RetainedJobConflict("Invalid mutation key");
-    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
     const digest = createHmac("sha256", token)
       .update("openmapx-standalone-request-v1\0")
       .update(canonicalJson({ type, payload, actorId }))
@@ -394,7 +396,7 @@ class AdminJobRunner {
     ) => Promise<{ value: T; result: Record<string, unknown>; failed?: boolean }>,
     restore: (result: Record<string, unknown>) => T,
   ): Promise<T> {
-    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
     const intentDigest = createHmac("sha256", token)
       .update("openmapx-immediate-configuration-intent-v1\0")
       .update(canonicalJson(options.intent))
@@ -1188,7 +1190,8 @@ class AdminJobRunner {
         (hasRetainedImmediateConfiguration(job) ||
           hasRetainedQueuedCoordinator(job) ||
           retainedMaintenanceJob(job) ||
-          hasRetainedStandalone(job));
+          hasRetainedStandalone(job) ||
+          hasRetainedExtensionWorkflow(job));
     this.active.set(job.id, controller);
     this.logSeq.set(job.id, 0);
 
@@ -1263,12 +1266,21 @@ class AdminJobRunner {
         observe &&
         hasRetainedQueuedCoordinator({ id: jobId, type, payload, result: checkpointResult }),
       retainedStandalone = observe && hasRetainedStandalone({ type, result: checkpointResult }),
+      retainedExtension =
+        observe && hasRetainedExtensionWorkflow({ type, result: checkpointResult }),
       retainedMaintenance = observe && retainedMaintenanceJob({ type, payload }),
       retainedConfiguration =
-        retainedImmediate || retainedQueuedCoordinator || retainedStandalone || retainedMaintenance,
+        retainedImmediate ||
+        retainedQueuedCoordinator ||
+        retainedStandalone ||
+        retainedMaintenance ||
+        retainedExtension,
       handler = retainedImmediate
         ? (ctx: JobContext) => this.resumeImmediateConfiguration(ctx)
-        : retainedQueuedCoordinator || retainedStandalone || retainedMaintenance
+        : retainedQueuedCoordinator ||
+            retainedStandalone ||
+            retainedMaintenance ||
+            retainedExtension
           ? this.handlers.get(type)
           : observe
             ? ["extension.install", "extension.remove"].includes(type)

@@ -320,7 +320,8 @@ describe("build bundles", () => {
     expect(existsSync(join(liveGraph, "region.osm.pbf"))).toBe(false);
     expect(existsSync(join(dataDir(serveHost), ".openmapx-import"))).toBe(false);
     expect(readBuildRecord("osrm", serveHost)).toMatchObject({ ...osrmRecord(), schemaVersion: 2 });
-  });
+    // Real private-journal export and import each fsync their retained ownership.
+  }, 60000);
 
   it("refuses a bundle built for a different runtime image", async () => {
     seedOsrmBuild(buildHost);

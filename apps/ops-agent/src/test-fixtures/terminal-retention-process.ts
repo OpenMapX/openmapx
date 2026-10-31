@@ -18,6 +18,7 @@ import {
   opsOperationFingerprint,
   sealTrustedConfigurationSnapshot,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { AnchoredDirectory } from "../../../../packages/core/src/build-artifacts/filesystem";
 import { configurationSource } from "../__fixtures__/configuration-source";
 import { openOpsJobJournal, type PersistedOpsJob } from "../journal";
@@ -112,7 +113,7 @@ const installation = c.openControlInstallation({
   role: "ops-agent",
   serviceIds: ["motis"],
 });
-const journal = await openOpsJobJournal(join(input.root, "data/ops-agent/jobs-v1.json"));
+const journal = await openOpsJobJournal(coreServices.agentStatePaths(input.root).journal);
 let terminal: PersistedOpsJob | undefined;
 function wire(job: PersistedOpsJob): OpsJobStatus {
   return {

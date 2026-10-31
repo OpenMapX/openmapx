@@ -88,7 +88,7 @@ async function destination(input: MotisPortableDestinationInput) {
       let directory = new AnchoredDirectory(realpathSync(input.infraDir));
       opened.push(directory);
       for (const part of [
-        CONFIGURATION_GENERATIONS,
+        ...CONFIGURATION_GENERATIONS.split("/"),
         input.configurationRevisionId,
         GENERATED_SECRETS_DIRNAME,
         "data-manager",

@@ -9,14 +9,49 @@ import {
 } from "./index";
 
 describe("application data-manager administration contracts", () => {
-  it("describes all 28 actual BFF operations with the real session-only distinctions", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(28);
+  it("describes all 38 actual BFF operations with the real session-only distinctions", () => {
+    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(38);
     const operations = Object.values(dataManagerAdminOperations);
-    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(28);
-    expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(11);
+    expect(new Set(operations.map(({ method, path }) => `${method} ${path}`)).size).toBe(38);
+    expect(operations.filter(({ auth }) => auth === "admin")).toHaveLength(21);
     expect(operations.every(({ path }) => path.startsWith("/api/"))).toBe(true);
     expect(dataManagerAdminOperations.getApiDataManagerTransitState.auth).toBe("service");
     expect(dataManagerAdminOperations.getApiDataManagerOvertureStatus.auth).toBe("admin");
+    // Approved parity additions: literal identities remain independent of registry order.
+    const additions = [
+      ["getAdminTransitCredentials", "GET", "/api/admin/transit/credentials", "admin"],
+      ["previewAdminTransitCredentials", "POST", "/api/admin/transit/credentials/preview", "admin"],
+      ["applyAdminTransitCredentials", "PATCH", "/api/admin/transit/credentials", "admin"],
+      ["getAdminTransitPins", "GET", "/api/admin/transit/pins", "admin"],
+      ["proposeAdminTransitPins", "POST", "/api/admin/transit/pins/proposals", "admin"],
+      [
+        "validateAdminTransitPins",
+        "POST",
+        "/api/admin/transit/pins/proposals/:proposalId/validate",
+        "admin",
+      ],
+      [
+        "activateAdminTransitPins",
+        "POST",
+        "/api/admin/transit/pins/proposals/:proposalId/activate",
+        "admin",
+      ],
+      [
+        "cancelAdminTransitPinExecution",
+        "DELETE",
+        "/api/admin/transit/pins/executions/:id",
+        "admin",
+      ],
+      ["getAdminTransitPinExecution", "GET", "/api/admin/transit/pins/executions/:id", "admin"],
+      [
+        "getApiDataManagerRoadConditionsPolicy",
+        "GET",
+        "/api/data-manager/road-conditions/policy",
+        "service",
+      ],
+    ] as const;
+    for (const [id, method, path, auth] of additions)
+      expect(dataManagerAdminOperations[id]).toMatchObject({ method, path, auth });
   });
   it("preserves actual provider state and its not-yet-observed timestamp absences", () => {
     const provider = {

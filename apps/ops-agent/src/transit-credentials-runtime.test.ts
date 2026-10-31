@@ -1,7 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
+
+const { CONFIGURATION_GENERATIONS, CURRENT_CONFIGURATION, GENERATED_SECRETS_DIRNAME } =
+  coreServices;
+
 import {
   closeControlInstallation,
   openControlInstallation,
@@ -189,6 +202,25 @@ it("discovers pinned keys and masks host-file values without adopting or modifyi
     configuredKeys: [],
   });
 }, 60_000);
+it("reads and masks managed credentials from the protected current generation", async () => {
+  const f = await fixture(),
+    infra = join(f.root, "infra/docker"),
+    revision = `cfg1_${"a".repeat(43)}`,
+    generation = join(infra, CONFIGURATION_GENERATIONS, revision),
+    secretDir = join(generation, GENERATED_SECRETS_DIRNAME, "data-manager"),
+    current = join(infra, CURRENT_CONFIGURATION);
+  mkdirSync(secretDir, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(secretDir, "TRANSITOUS_API_KEYS"),
+    JSON.stringify({ "de/A": "synthetic-managed-private" }),
+    { mode: 0o444 },
+  );
+  symlinkSync(relative(dirname(current), generation), current);
+  f.setEnv({ TRANSITOUS_API_KEYS_FILE: "/run/secrets/TRANSITOUS_API_KEYS" });
+  const value = await f.inspect();
+  expect(value).toMatchObject({ owner: "vault", editable: true, configuredKeys: ["de/A"] });
+  expect(JSON.stringify(value)).not.toContain("synthetic-managed-private");
+}, 60000);
 it("refuses malformed existing files rather than treating the vault as unset", async () => {
   const f = await fixture();
   writeFileSync(join(f.local, "api-keys.json"), '{"key":"first","key":"last"}', { mode: 0o600 });

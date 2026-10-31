@@ -28,6 +28,18 @@ import {
   serviceSelectionFixture,
 } from "./helpers/service-admin-fixtures";
 
+// Existing admin session guards are supplied by installAdminRouteMocks below.
+// Any accidental fallback to the external Better Auth provider fails closed.
+vi.mock("../../auth", () => ({
+  auth: {
+    api: {
+      getSession: async () => {
+        throw Error("Unexpected external session lookup in admin SDK fixture");
+      },
+    },
+  },
+}));
+
 const { requireAdmin, session, writeAuditLog } = installAdminRouteMocks();
 const service = {
   ...serviceFixture(),
@@ -377,6 +389,7 @@ async function wire(max = 1000) {
   });
   for (const route of [
     adminServicesRoute,
+    (await import("../admin-backup-maintenance")).adminBackupMaintenanceRoute,
     adminOperationsRoute,
     adminDawarichRoute,
     registerAdminComposeRoutes,

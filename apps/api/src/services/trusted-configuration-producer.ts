@@ -95,6 +95,32 @@ export async function applyTrustedConfigurationWithEvidence(
   integrationReload?: CapturedIntegrationReloadResult;
   integrationApplication?: IntegrationApplyReceipt;
 }> {
+  if (
+    options.ctx &&
+    ["extension.install", "extension.remove"].includes(options.ctx.jobType ?? "") &&
+    options.ctx.checkpointResult?._extensionWorkflow
+  ) {
+    const ctx = options.ctx,
+      retained = ctx.checkpointResult?._configurationCandidate as
+        | Record<string, unknown>
+        | undefined;
+    if (retained?.operationKey === options.operationKey && retained.phase !== "settled") {
+      const { retainedConfigurationIntegrationIds, resumeRetainedConfigurationCandidate } =
+        await import("./prospective-configuration");
+      const actorId = options.actorId ?? ctx.jobId;
+      const integrationIds = await retainedConfigurationIntegrationIds(
+        ctx,
+        actorId,
+        options.operationKey,
+      );
+      await withAdministrativeConfigurationJob(ctx, () =>
+        withAdministrativeConfigurationWriter(
+          { actorId, operationKey: options.operationKey, integrationIds, signal: ctx.signal },
+          () => resumeRetainedConfigurationCandidate(),
+        ),
+      );
+    }
+  }
   if (options.ctx && hasRetainedAdminJobOperation(options.ctx, options.operationKey)) {
     const outcome = configurationApplyResultSchema.parse(
       await observeRetainedAdminJobOperation(options.ctx, options.operationKey),

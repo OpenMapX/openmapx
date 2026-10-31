@@ -174,7 +174,7 @@ const installation = openControlInstallation({
   role: "ops-agent",
   serviceIds: input.serviceIds,
 });
-const journal = await openOpsJobJournal(join(input.infraDir, "data/ops-agent/jobs-v1.json"));
+const journal = await openOpsJobJournal(services.agentStatePaths(input.infraDir).journal);
 if (["pointer", "cancel-pointer", "before-pointer"].includes(input.catalogFault)) {
   const rename = fs.renameSync;
   let stopped = false;

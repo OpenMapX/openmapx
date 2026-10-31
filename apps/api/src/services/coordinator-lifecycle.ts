@@ -8,6 +8,7 @@ import {
   type PreparedConfigurationRecord,
   readOpsTokenFile,
 } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { readProjection } from "./admin-job-projection";
@@ -183,7 +184,7 @@ export function assertRetainedCoordinatorLifecycleProvenance(
  * prepared pull into an attempted one. Old-owner attempt bytes are preserved. */
 export async function claimCoordinatorPullDelivery(context: JobContext, candidateId: string) {
   if (!context.execution || context.observationOnly) throw refuse();
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   let updated: Record<string, unknown> | undefined;
   const delivery = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -264,7 +265,7 @@ export async function closeUnissuedCoordinatorPull(
   packetOperationKey?: string,
 ): Promise<void> {
   if (!context.execution || context.observationOnly) throw refuse();
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const updated = await db.transaction(async (tx) => {
     const [row] = await tx
       .select()

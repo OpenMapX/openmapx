@@ -1,6 +1,7 @@
 /** Finite queued maintenance requests, retained in the existing admin job table. */
 import { createHmac, randomUUID } from "node:crypto";
 import { canonicalJson, readOpsTokenFile } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import { and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob } from "../db/schema";
@@ -23,7 +24,7 @@ export async function retainMaintenanceJob(
 ): Promise<string> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
     throw new MaintenanceRequestConflict("Invalid mutation key");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const digest = createHmac("sha256", token)
     .update("openmapx-maintenance-request-v1\0")
     .update(canonicalJson({ type, payload, actorId }))
@@ -86,7 +87,7 @@ export async function lookupMaintenanceJob(
 ): Promise<string | null> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
     throw new MaintenanceRequestConflict("Invalid mutation key");
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? ""),
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
     digest = createHmac("sha256", token)
       .update("openmapx-maintenance-request-v1\0")
       .update(canonicalJson({ type, payload, actorId }))

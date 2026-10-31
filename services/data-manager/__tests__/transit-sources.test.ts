@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createCandidateManifest } from "../src/jobs/transitous/candidate.js";
 import { resolveTransitOverlayPath } from "../src/jobs/transitous/internal.js";
 import { safeOriginUrl } from "../src/jobs/transitous/source-manifest.js";
 import {
@@ -63,22 +65,30 @@ function fixture() {
           transformations: ["transitous-cleaning"],
           artifact: {
             relativePath: "de_active-feed.gtfs.zip",
-            sha256: "a".repeat(64),
-            sizeBytes: 42,
+            sha256: createHash("sha256").update("synthetic timetable").digest("hex"),
+            sizeBytes: Buffer.byteLength("synthetic timetable"),
             modifiedAt: "2026-07-29T12:00:00.000Z",
           },
         },
       ],
     }),
   );
+  const live = join(tmp, "motis", "live");
+  mkdirSync(join(live, ".openmapx-feed-proxy", "conf"), { recursive: true });
   writeFileSync(
-    join(tmp, "motis", "live", "motis-candidate-manifest.json"),
+    join(live, "config.yml"),
     JSON.stringify({
-      schemaVersion: 1,
-      epoch: "epoch-live",
-      artifacts: { sourceManifest: { path: "transit-source-manifest.json" } },
+      timetable: { datasets: { "de-active-feed": { path: "de_active-feed.gtfs.zip" } } },
     }),
   );
+  writeFileSync(join(live, "license.json"), "[]");
+  writeFileSync(join(live, "de_active-feed.gtfs.zip"), "synthetic timetable");
+  writeFileSync(
+    join(live, ".openmapx-feed-proxy", "conf", "default.conf"),
+    "# no realtime feeds\n",
+  );
+  writeFileSync(join(live, ".openmapx-feed-proxy", "feed-proxy-vars.json"), "{}");
+  createCandidateManifest(live, "epoch-live", "2026-07-30T00:00:00.000Z");
   return { dataDir: tmp, catalogDir, overlayPath };
 }
 

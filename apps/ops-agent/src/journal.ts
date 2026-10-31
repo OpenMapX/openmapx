@@ -26,6 +26,7 @@ import {
   validateRetainedConfigurationMaintenanceRecoveryControl,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 
 const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
 export const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
@@ -92,7 +93,10 @@ const productionJournalIndexes = new WeakMap<
 /** A bounded locator view of this actual journal, never source authority. */
 export function readProductionCoordinatorJournalIndex(journal: OpsJobJournal, dataRoot: string) {
   const owned = productionJournalIndexes.get(journal);
-  if (!owned || owned.path !== join(realpathSync(dataRoot), "ops-agent", "jobs-v1.json"))
+  if (
+    !owned ||
+    owned.path !== coreServices.agentStatePaths(dirname(realpathSync(dataRoot))).journal
+  )
     throw Error("Actual fixed ops-agent journal required");
   const records = owned.read();
   if (records.length > OPS_JOB_JOURNAL_MAX_ENTRIES) throw Error("Ops journal index limit");

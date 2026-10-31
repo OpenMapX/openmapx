@@ -50,9 +50,14 @@ describe("reviewed ops foundation contract", () => {
     for (const kind of requiredKinds) expect(OPS_OPERATION_KINDS).toContain(kind);
     expect(Object.keys(OPS_KIND_POLICIES).sort()).toEqual([...OPS_OPERATION_KINDS].sort());
     // Exact existing long-running owners, plus the approved ownership-only
-    // maintenance hour. Every other kind retains the original 30 minute cap.
+    // maintenance hour and bounded artifact transfer days. Every other kind
+    // retains the original 30 minute cap.
     const extendedBudgets: Record<string, number> = {
       "configurationMaintenance.prepare": 3600_000,
+      "configurationHandoff.prepare": 3600_000,
+      "artifactTransfer.validate": 72 * 3600_000,
+      "artifactTransfer.import": 72 * 3600_000,
+      "artifactTransfer.export": 72 * 3600_000,
       "service.build": 12 * 3600_000,
       "services.buildAll": 24 * 3600_000,
       "system.update": 48 * 3600_000,
@@ -61,6 +66,9 @@ describe("reviewed ops foundation contract", () => {
       "data.update": 24 * 3600_000,
       "data.convertOverpass": 24 * 3600_000,
       "data.overtureSync": 24 * 3600_000,
+      "data.overturePull": 24 * 3600_000,
+      "data.overtureIngest": 24 * 3600_000,
+      "data.overtureExtract": 24 * 3600_000,
       "data.overtureConflate": 24 * 3600_000,
       "data.searchIndexBuild": 24 * 3600_000,
       "data.notablePlacesBuild": 24 * 3600_000,
@@ -71,7 +79,7 @@ describe("reviewed ops foundation contract", () => {
       expect(policy.role === "api" || policy.role === "data-manager").toBe(true);
       expect(policy.execution === "sync" || policy.execution === "async").toBe(true);
       expect(policy.timeoutMs).toBeGreaterThan(0);
-      expect(policy.timeoutMs).toBeLessThanOrEqual(extendedBudgets[kind] ?? 30 * 60_000);
+      expect(policy.timeoutMs, kind).toBeLessThanOrEqual(extendedBudgets[kind] ?? 30 * 60_000);
       expect(policy.maxResultBytes).toBeGreaterThan(0);
       expect(policy.maxResultBytes).toBeLessThanOrEqual(1024 * 1024);
     }

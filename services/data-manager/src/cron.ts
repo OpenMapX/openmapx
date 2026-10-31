@@ -559,7 +559,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runAutoBump = async (): Promise<void> => {
     if (!options.catalogReview) throw Error("Installed paired catalog resolver is unavailable");
     const proposal = await options.catalogReview.resolveCatalogProposal({
-      branch: process.env.TRANSITOUS_AUTO_BUMP_BRANCH ?? "master",
+      branch: envString("TRANSITOUS_AUTO_BUMP_BRANCH", "master"),
     });
     log.info("transitous-auto-bump: paired proposal retained for administrator review", {
       proposalId: proposal.proposalId,

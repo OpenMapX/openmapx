@@ -1012,13 +1012,13 @@ describe("installIntegration (what the operations agent loads)", () => {
       { name: "copy.json", data: schemaManifest("linked-to") },
       { name: "manifest.json", type: "1", linkName: "copy.json" },
     ]);
-    await expectArtifactRejection(linkedTo, "linked-to", /must not be hard-linked/);
+    await expectArtifactRejection(linkedTo, "linked-to", /Unsupported artifact entry type '1'/);
     const linkedFrom = join(tmp, "manifest-linked-from.tar.gz");
     writeTarFixture(linkedFrom, [
       { name: "manifest.json", data: schemaManifest("linked-from") },
       { name: "alias.json", type: "1", linkName: "manifest.json" },
     ]);
-    await expectArtifactRejection(linkedFrom, "linked-from", /must not be hard-linked/);
+    await expectArtifactRejection(linkedFrom, "linked-from", /Unsupported artifact entry type '1'/);
     expect(agentLoads()).toEqual(["kept"]);
   });
 
@@ -1029,7 +1029,11 @@ describe("installIntegration (what the operations agent loads)", () => {
       { name: "real.json", data: schemaManifest("manifest-symlink") },
       { name: "manifest.json", type: "2", linkName: "real.json" },
     ]);
-    await expectArtifactRejection(artifact, "manifest-symlink", /not a symbolic link/);
+    await expectArtifactRejection(
+      artifact,
+      "manifest-symlink",
+      /Unsupported artifact entry type '2'/,
+    );
 
     const source = join(tmp, "local-symlink");
     mkdirSync(source);
@@ -1095,6 +1099,10 @@ describe("installIntegration (what the operations agent loads)", () => {
     >;
     chmodSync(join(backup.backupDirectory, "manifest.json"), 0o666);
     chmodSync(backup.backupDirectory, 0o777);
+    // Historical backups do not grant ownership of the current publication.
+    expect(() => restoreInstalledIntegration(tmp, backup)).toThrow(/ownership receipt/);
+    expect(agentLoads()).toEqual(["kept"]);
+    removeIntegration({ rootDir: tmp, id: "kept" });
     restoreInstalledIntegration(tmp, backup);
     expect(mode(target)).toBe(0o755);
     expect(mode(join(target, "manifest.json"))).toBe(0o644);

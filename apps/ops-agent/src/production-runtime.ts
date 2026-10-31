@@ -70,6 +70,16 @@ export interface ProductionOpsRuntimeOptions {
   runFixedCli?: FixedCliRunner;
   candidateSource?: ConfigurationCandidateSource;
 }
+const registeredServiceSources = new WeakMap<
+  OpsRuntime,
+  ProductionOpsRuntimeOptions["loadAuthority"]
+>();
+/** Literal factory-owned registry source; requests cannot supply this list. */
+export async function productionRegisteredServiceIds(runtime: OpsRuntime): Promise<string[]> {
+  const load = registeredServiceSources.get(runtime);
+  if (!load) throw Error("Production service registry unavailable");
+  return (await load()).services.map((service) => service.manifest.id).sort();
+}
 const resolvers = new WeakMap<OpsRuntime, OwnedServiceResolver>();
 const releaseAdapters = new WeakMap<OpsRuntime, AdministrativeReleaseEffects>();
 
@@ -506,6 +516,7 @@ export async function createProductionOpsRuntime(
     });
   };
   resolvers.set(runtime, owned);
+  registeredServiceSources.set(runtime, options.loadAuthority);
   releaseAdapters.set(runtime, releaseEffects);
   return runtime;
 }

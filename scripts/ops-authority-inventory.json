@@ -322,7 +322,7 @@
         "apps/api/src/services/community-repositories.ts#publishServiceRepository",
         "apps/api/src/services/community-repositories.ts#settleServiceRepository",
         "apps/api/src/services/community-repositories.ts#removeServiceRepository",
-        "apps/api/src/services/community-repositories.ts#readCommunityServices",
+        "apps/api/src/services/community-service-inventory.ts#readCommunityServices",
         "apps/api/src/services/extension-installer.ts#installExtension",
         "apps/api/src/services/extension-installer.ts#removeExtension"
       ],

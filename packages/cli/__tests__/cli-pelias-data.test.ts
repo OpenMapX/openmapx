@@ -114,7 +114,11 @@ describe("buildPeliasData", () => {
     expect(composeFile.startsWith(tmp)).toBe(false);
     expect(existsSync(dirname(composeFile))).toBe(false);
     // Nothing beside the data and what the generation applied before the build.
-    expect(readdirSync(join(tmp, "infra", "docker")).sort()).toEqual(["data", "state"]);
+    expect(readdirSync(join(tmp, "infra", "docker")).sort()).toEqual([
+      ".owned-service-generations.json",
+      "data",
+      "state",
+    ]);
     // The copy the applied generation mounts, not the checkout's.
     expect(compose.services["pelias-schema"]?.volumes).toEqual([
       `${peliasConfig}:/code/pelias.json:ro`,

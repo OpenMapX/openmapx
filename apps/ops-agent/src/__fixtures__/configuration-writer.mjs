@@ -7,7 +7,7 @@ import { closeControlInstallation, observeConfigurationSources, openControlInsta
 import { renderComposeForRepo } from "../../../../packages/cli/src/commands/compose";
 import { createUnavailableRuntime, dispatchOpsOperation } from "../runtime";
 import { testExecution } from "./execution";
-import { installTrustedConfigurationRuntime } from "../trusted-config-runtime";
+import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./configuration-runtime";
 
 const [root, mode, letter, expected, hold] = process.argv.slice(2);
 const infraDir = join(root, "infra/docker");

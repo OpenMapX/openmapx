@@ -19,6 +19,7 @@ import {
   OpsClient,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { expect, it } from "vitest";
 import { applyHardlinkPlan } from "../../../packages/hardlinks/src/index";
 import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
@@ -164,7 +165,7 @@ async function fixture(
         return { stdout: "", stderr: "" };
       },
     }),
-    journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json")),
+    journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal),
     token = "b".repeat(43),
     tokenFile = join(root, "token");
   writeFileSync(tokenFile, token, { mode: 0o600 });

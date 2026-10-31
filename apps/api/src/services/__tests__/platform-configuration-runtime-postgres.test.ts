@@ -683,7 +683,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: ids,
           pausePrepareResponse: version === "launch-native-system-release-api-before-save",
         });
-        const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+        const journal = await openOpsJobJournal(
+          join(host.infraDir, "state/ops-agent/jobs-v1.json"),
+        );
         const app = buildOpsAgentServer({
           tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
           runtime: host.runtime,

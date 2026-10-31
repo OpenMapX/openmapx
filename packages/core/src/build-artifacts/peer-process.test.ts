@@ -523,9 +523,9 @@ it.each([false, true])(
       plan: [plan],
     };
     const { writeFileSync } = await import("node:fs");
-    mkdirSync(join(root, "data/ops-agent"), { mode: 0o700 });
+    mkdirSync(join(root, "state/ops-agent"), { recursive: true, mode: 0o700 });
     writeFileSync(
-      join(root, "data/ops-agent/jobs-v1.json"),
+      join(root, "state/ops-agent/jobs-v1.json"),
       JSON.stringify({
         version: 2,
         jobs: [

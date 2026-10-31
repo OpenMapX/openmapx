@@ -6,6 +6,7 @@ import {
   standaloneInstallInspectionSchema,
   standaloneInstallSourceSchema,
 } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import z from "zod/v4";
 export const standaloneStateSchema = z.strictObject({
   version: z.literal(1),
@@ -32,7 +33,7 @@ export type StandaloneState = z.infer<typeof standaloneStateSchema>;
 
 export async function sealStandaloneState(state: StandaloneState) {
   const body = canonicalJson(standaloneStateSchema.parse(state));
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const mac = createHmac("sha256", token)
     .update("openmapx-standalone-install-state-v1\0")
     .update(body)
@@ -43,7 +44,7 @@ export async function readStandaloneState(value: unknown): Promise<StandaloneSta
   const sealed = z
     .strictObject({ body: z.string().max(16384), mac: z.string().regex(/^[a-f0-9]{64}$/) })
     .parse(value);
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const expected = createHmac("sha256", token)
     .update("openmapx-standalone-install-state-v1\0")
     .update(sealed.body)

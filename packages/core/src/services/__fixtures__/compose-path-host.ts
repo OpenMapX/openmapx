@@ -1,3 +1,4 @@
+import { readGenerationServiceFiles, serviceFileTreePath } from "../service-file-store";
 import { ensureReleaseStateDirectories } from "../release-state";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -165,10 +166,12 @@ export async function composePathHost() {
         entry?.volumes?.find((v) => v.target === "/infra-public")?.source ?? "",
         join(infraDir, "public-data.txt"),
       );
-      checks[`${id}.serviceBind`] = sameFile(
-        entry?.volumes?.find((v) => v.target === "/service-public")?.source ?? "",
-        join(service.directory, "local-public.txt"),
-      );
+      const source = entry?.volumes?.find((v) => v.target === "/service-public")?.source ?? "";
+      const tree = readGenerationServiceFiles(dirname(realpathSync(compose)))?.get(id);
+      const copy = tree ? join(serviceFileTreePath(infraDir, id, tree), "local-public.txt") : "";
+      const original = join(service.directory, "local-public.txt");
+      checks[`${id}.serviceBind`] = !!tree && sameFile(source, copy) && !sameFile(source, original) &&
+        readFileSync(source).equals(readFileSync(original)) && (statSync(source).mode & 0o777) === 0o444;
       const secret = Object.values(model.secrets).find((s) =>
         s.file.endsWith(`/${id}/PRIVATE_SETTING`),
       );

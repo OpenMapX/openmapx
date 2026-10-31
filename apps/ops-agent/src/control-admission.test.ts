@@ -9,6 +9,7 @@ import {
   executionFingerprint,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { expect, it } from "vitest";
 import { type OpsJobJournal, openOpsJobJournal } from "./journal";
 import type { OpsExecutionContext } from "./runtime";
@@ -23,7 +24,7 @@ it("refuses paired approval as a bearer-only root before reserving a worker", as
     role: "ops-agent",
     serviceIds: ["motis"],
   });
-  const journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json"));
+  const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
   const app = buildOpsAgentServer({
     controlInstallation: installation,
     journal,
@@ -149,7 +150,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
     });
     let workerContext: OpsExecutionContext | undefined;
     const token = "b".repeat(32);
-    const journalFile = join(root, "data/ops-agent/jobs-v1.json");
+    const journalFile = coreServices.agentStatePaths(root).journal;
     const options = {
       tokens: { api: "a".repeat(32), "data-manager": token },
       controlInstallation: agent,

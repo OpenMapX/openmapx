@@ -155,7 +155,7 @@ it("uses adopted default regions without expanding the deployment region authori
     input: {
       ...services.readAppliedConfiguration(host.infraDir),
       domain: "fixture.example.test",
-      selectedRoots: host.loaded.map((s) => s.manifest.id),
+      selectedRoots: services.readDesiredSelection(host.infraDir).roots,
       platform: { version: 1, defaultRegion: { source: "database", value: "europe/france" } },
     },
   });

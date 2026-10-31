@@ -1,3 +1,4 @@
+import { envString } from "@openmapx/core/server-env";
 import {
   type OpsProjection,
   type ProjectedOperation,
@@ -166,7 +167,7 @@ export async function ensureAdminJobReceiptDelivery(
     if (delivery.state === "confirmed") return;
     const fingerprint = projected.fingerprint;
     if (!fingerprint) throw new JobObservationPending("recovery_required");
-    const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+    const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
     const proof = signApiRetentionProof(token, {
       version: 1,
       apiJobId: projected.attempt.apiJobId,

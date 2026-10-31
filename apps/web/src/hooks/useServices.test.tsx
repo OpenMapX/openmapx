@@ -48,7 +48,12 @@ afterEach(() => {
 describe("service feature hooks use the generated SDK", () => {
   it("acquires list data and surfaces declared errors", async () => {
     const fetch = vi.fn(() =>
-      Response.json({ services: [], summary: { running: 2, stopped: 1, total: 3 } }),
+      Response.json({
+        acquisition: { state: "available", reason: null },
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { running: 2, stopped: 1, unknown: 0, total: 3 },
+      }),
     );
     vi.stubGlobal("fetch", fetch);
     const { result } = mount(useServicesList);

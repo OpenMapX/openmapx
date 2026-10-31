@@ -120,15 +120,22 @@ async function serviceComposeAction(
   return { exitCode: 0 };
 }
 
-export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
+export async function serviceStart(
+  service: string,
+  ctx: JobContext,
+  scope: "start" | "extension-restore" = "start",
+): Promise<void> {
   assertKnownService(service);
-  const prepared = await prepareServiceGeneration(ctx, `start:${service}`, {
+  const prepared = await prepareServiceGeneration(ctx, `${scope}:${service}`, {
     coordinatorMode: "ensure-running",
   });
   await ctx.checkpoint({
     ...ctx.checkpointResult,
     _completion: {
-      operationKey: createDurableOpsKey("admin-job.service.start", `${ctx.jobId}:${service}`),
+      operationKey: createDurableOpsKey(
+        scope === "start" ? "admin-job.service.start" : "admin-job.extension.restore",
+        `${ctx.jobId}:${service}`,
+      ),
       result: { service, action: "start" },
     },
   });
@@ -139,7 +146,7 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
       serviceId: service,
       expectedConfigurationRevisionId: prepared.revisionId,
     },
-    "admin-job.service.start",
+    scope === "start" ? "admin-job.service.start" : "admin-job.extension.restore",
     { durableIdentity: service },
   );
 }

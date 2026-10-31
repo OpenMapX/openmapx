@@ -432,6 +432,16 @@ describe("agent handoff helper container", () => {
       "type=bind,source=/srv/openmapx/infra/docker/data,target=/srv/openmapx/infra/docker/data",
       "type=bind,source=/srv/openmapx/infra/docker/secrets,target=/srv/openmapx/infra/docker/secrets",
       "type=bind,source=/srv/openmapx/infra/docker/backups,target=/srv/openmapx/infra/docker/backups",
+      ...["ops-agent", "data-manager", "host-cli"].map(
+        (role) =>
+          `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
+      ),
+      ...["data-manager", "host-cli"].map(
+        (role) =>
+          `type=bind,source=/srv/openmapx/infra/docker/control-private/empty,target=/srv/openmapx/infra/docker/control-private/${role},readonly`,
+      ),
+      "type=bind,source=/srv/openmapx/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private",
+      "type=bind,source=/srv/openmapx/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly",
     ]);
     expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
   });

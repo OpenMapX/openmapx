@@ -16,6 +16,7 @@ import {
   createReadStream,
   type Dirent,
   existsSync,
+  fchmodSync,
   fstatSync,
   fsyncSync,
   linkSync,
@@ -173,8 +174,9 @@ function stagingDir(rootDir: string): string {
 }
 
 function createStagePath(rootDir: string, prefix: string): string {
+  prepareCustomDir(rootDir);
   const parent = stagingDir(rootDir);
-  mkdirSync(parent, { recursive: true });
+  mkdirSync(parent, { recursive: true, mode: 0o700 });
   return join(parent, `${prefix}-${randomBytes(4).toString("hex")}`);
 }
 
@@ -542,6 +544,10 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
       // Publication is the CLI commit point; finish only its already-owned
       // cleanup even if cancellation arrives after the directory swap.
       await settleIntegrationPublication(publication, "commit", new AbortController().signal);
+      // This legacy CLI call returns no retained publication handle. Its exact
+      // committed workspace can retire; API purpose journals retain theirs.
+      normalizeCompletedCliInstallation(publication);
+      retireCompletedCliPreparation(context);
       return { id, directory: target, replaced: previous !== null };
     } catch (error) {
       if (state.phase !== "published") discardIntegrationPreparation(context);
@@ -633,7 +639,8 @@ async function stageArtifactSource(
   const token = randomBytes(4).toString("hex");
   const parent = stagingDir(opts.rootDir);
   const maxArtifactBytes = opts.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
-  mkdirSync(parent, { recursive: true });
+  prepareCustomDir(opts.rootDir);
+  mkdirSync(parent, { recursive: true, mode: 0o700 });
   const extractRoot = join(parent, `artifact-${token}`);
   const archivePath = join(parent, `artifact-${token}.tar.gz`);
   mkdirSync(extractRoot, { recursive: true, mode: 0o700 });
@@ -953,7 +960,7 @@ export function createIntegrationArtifactPreparation(options: {
   rootDir: string;
 }): IntegrationArtifactPreparationContext {
   const rootDir = resolve(options.rootDir);
-  mkdirSync(customDir(rootDir), { recursive: true });
+  prepareCustomDir(rootDir);
   const root = new AnchoredDirectory(customDir(rootDir));
   let staging: AnchoredDirectory | undefined, workspace: AnchoredDirectory | undefined;
   try {
@@ -1313,6 +1320,97 @@ export async function restorePreparedIntegration(options: {
     directory.close();
   }
 }
+/** Only legacy CLI installs expose the historical readable installed modes.
+ * Modern retained/API publications keep their private preparation modes. */
+function normalizeCompletedCliInstallation(handle: IntegrationPublication): void {
+  const publication = publicationState(handle),
+    state = preparationState(publication.context);
+  const receipt = loadPublication(publication);
+  if (state.journal || receipt.outcome !== "committed")
+    throw Error("Committed local CLI publication required");
+  requirePublishedTarget(publication, new AbortController().signal);
+  const directory = new AnchoredDirectory(
+    resolveInstallTarget(state.rootDir, receipt.integrationId),
+  );
+  let count = 0;
+  const walk = (parent: AnchoredDirectory) => {
+    parent.check();
+    fchmodSync(parent.fd, INSTALLED_DIRECTORY_MODE);
+    for (const name of parent.listBounded(4096)) {
+      if (++count > 4096) throw Error("Installed integration entry limit exceeded");
+      const path = parent.name(name),
+        before = lstatSync(path, { bigint: true });
+      if (before.isDirectory()) {
+        const child = parent.directory(name);
+        try {
+          walk(child);
+        } finally {
+          child.close();
+        }
+      } else {
+        const fd = openSync(path, C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+        try {
+          const opened = fstatSync(fd, { bigint: true });
+          if (
+            !opened.isFile() ||
+            opened.nlink !== 1n ||
+            opened.uid !== BigInt(process.getuid?.() ?? -1) ||
+            opened.dev !== before.dev ||
+            opened.ino !== before.ino ||
+            (opened.mode & 0o022n) !== 0n
+          )
+            throw Error("Installed integration file changed");
+          fchmodSync(fd, INSTALLED_FILE_MODE);
+          const actual = parent.fileIdentity(name, false);
+          if (actual.dev !== String(opened.dev) || actual.ino !== String(opened.ino))
+            throw Error("Installed integration file replaced");
+        } finally {
+          closeSync(fd);
+        }
+      }
+    }
+    parent.check();
+  };
+  try {
+    if (
+      !sameDirectory(
+        { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
+        receipt.preparation.content,
+      )
+    )
+      throw Error("Installed CLI directory changed");
+    walk(directory);
+    requirePublishedTarget(publication, new AbortController().signal);
+  } finally {
+    directory.close();
+  }
+}
+
+function retireCompletedCliPreparation(context: IntegrationArtifactPreparationContext): void {
+  const state = preparationState(context);
+  if (
+    state.journal ||
+    state.phase !== "published" ||
+    readPublicationRecord(state).outcome !== "committed"
+  )
+    throw Error("Committed local CLI preparation required");
+  const workspace = checkedWorkspace(state);
+  const root = new AnchoredDirectory(customDir(state.rootDir));
+  let parent: AnchoredDirectory | undefined;
+  try {
+    if (JSON.stringify(workspace.listBounded(2)) !== '["publication.json"]')
+      throw Error("Unexpected committed CLI preparation contents");
+    workspace.removeFile("publication.json");
+    parent = root.directory(STAGING_DIR_NAME);
+    parent.removeDirectory(`preparation-${state.preparationId}`, state.workspace);
+    state.phase = "discarded";
+  } finally {
+    parent?.close();
+    root.close();
+    workspace.close();
+  }
+}
+
 export function discardIntegrationPreparation(
   context: IntegrationArtifactPreparationContext,
 ): void {
@@ -2265,6 +2363,7 @@ function restoreInstalledIntegrationUnlocked(
       throw Error(
         "Historical integration rollback lacks a publication ownership receipt; preserve the current integration and reconcile the original journal",
       );
+    applyInstalledModes(restoreStage);
     renameSync(restoreStage, target);
   } catch (error) {
     rmSync(restoreStage, { recursive: true, force: true });

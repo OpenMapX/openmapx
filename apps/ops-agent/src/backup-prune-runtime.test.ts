@@ -47,7 +47,7 @@ it("awaits the actual held filesystem deletion before settling cancellation and 
       role: "ops-agent",
       serviceIds: ["motis"],
     }),
-    journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+    journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
     app = buildOpsAgentServer({
       runtime: host.runtime,
       journal,
@@ -142,7 +142,7 @@ it("previews and prunes only the unchanged original eligible set through the pro
       role: "ops-agent",
       serviceIds: ["motis"],
     }),
-    journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+    journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
     app = buildOpsAgentServer({
       runtime: host.runtime,
       resourceClaimer: host.claimer,

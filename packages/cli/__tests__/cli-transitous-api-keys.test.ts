@@ -483,4 +483,5 @@ it("uses actual active pin A while upstream is B and preserves unrelated credent
   expect(proposedValues["retained/orphan"]).toBe("  exact value\n");
   expect(readCatalogPinSet(tmp)?.generationId).toBe(active.generationId);
   expect(git(cache, ["rev-parse", "HEAD"])).toBe(sha);
-}, 45000);
+  // Two real Git repositories/submodules and paired-pin journals exceed 45s on this filesystem.
+}, 90000);

@@ -5,11 +5,15 @@ import { services } from "@openmapx/core/server";
 import { opsOperationFingerprint } from "@openmapx/core/ops";
 import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
 import { testExecution } from "./execution";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 const sources = new WeakMap<OpsRuntime, { revision: string | null; value: Promise<string> }>();
 export async function configurationSource(runtime: OpsRuntime, infraDir: string) {
-  const revision = services.currentConfigurationGeneration(infraDir);
+  let environment: string | null = null;
+  try { environment = readFileSync(join(infraDir, ".env"), "utf8"); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const revision = JSON.stringify([services.currentConfigurationGeneration(infraDir), environment]);
   let retained = sources.get(runtime);
   if (!retained || retained.revision !== revision) {
     const value = (async () => {

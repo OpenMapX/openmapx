@@ -79,7 +79,7 @@ describe("assembled production service authority", () => {
         host.setServiceState("data-manager", "exited");
         await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
         host.setServiceState("data-manager", "running");
-        const path = join(host.infraDir, ".ops-agent-releases", "transaction.json");
+        const path = join(services.releaseStatePaths(host.infraDir).store, "transaction.json");
         mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
         writeFileSync(path, "{}", { mode: 0o600 });
         await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
@@ -90,7 +90,7 @@ describe("assembled production service authority", () => {
 
   it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
     const host = await fixture(),
-      path = join(host.infraDir, "docker-compose.release.yml");
+      path = services.releaseStatePaths(host.infraDir).overlay;
     const manifest = {
       schemaVersion: 1 as const,
       release: "checked-pin",
@@ -111,7 +111,7 @@ describe("assembled production service authority", () => {
         },
       },
     };
-    services.writeReleaseComposeArtifacts(manifest as services.ReleaseManifest, path);
+    services.writeReleaseComposeArtifacts(manifest as services.ReleaseManifest, host.infraDir);
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
     });
@@ -179,7 +179,9 @@ describe("assembled production service authority", () => {
           (args[0] === "compose" && args.includes("config")),
       ),
     ).toBe(true);
-    expect(existsSync(join(host.infraDir, ".ops-agent-releases", "transaction.json"))).toBe(false);
+    expect(
+      existsSync(join(services.releaseStatePaths(host.infraDir).store, "transaction.json")),
+    ).toBe(false);
     expect(existsSync(agentHandoffPath(host.root))).toBe(false);
     expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
     await expect(effects.inspect()).resolves.toBeDefined();
@@ -233,7 +235,7 @@ describe("assembled production service authority", () => {
 
   it("production startup preserves actual interrupted legacy transaction and handoff while reads remain available", async () => {
     const host = await fixture();
-    const directory = join(host.infraDir, ".ops-agent-releases");
+    const directory = services.releaseStatePaths(host.infraDir).store;
     const manifest = services.parseReleaseManifest(
       JSON.stringify({
         schemaVersion: 1,
@@ -362,7 +364,7 @@ describe("assembled production service authority", () => {
       role: "ops-agent",
       serviceIds: host.loaded.map((s) => s.manifest.id),
     });
-    const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+    const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
     const app = buildOpsAgentServer({
       tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
       runtime: host.runtime,
@@ -486,7 +488,7 @@ describe("assembled production service authority", () => {
         tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
-        journal: await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
         controlInstallation: installation,
       }),
       deadline = Date.now() + 60000,
@@ -594,7 +596,7 @@ describe("assembled production service authority", () => {
       role: "ops-agent",
       serviceIds: host.loaded.map((s) => s.manifest.id),
     });
-    const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+    const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
     const app = buildOpsAgentServer({
       tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
       runtime: host.runtime,
@@ -895,10 +897,9 @@ async function installedCommunity() {
     serviceId: "community-live",
     expectedConfigurationRevisionId: services.currentConfigurationGeneration(host.infraDir)!,
   } as const;
-  const checkout = join(host.root, "services/.community", publication.repository);
+  const checkout = join(services.agentStatePaths(host.infraDir).community, publication.repository);
   const record = join(
-    host.root,
-    "services/.community",
+    services.agentStatePaths(host.infraDir).community,
     `.repository-${publication.repository}.json`,
   );
   const create = () => {

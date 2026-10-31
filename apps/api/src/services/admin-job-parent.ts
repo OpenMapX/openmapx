@@ -9,6 +9,7 @@ import {
   opsOperationFingerprint,
   readOpsTokenFile,
 } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 
@@ -30,6 +31,33 @@ function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
       opsExecutionBudget("integration.settle").processMs +
       60000
     );
+  if (ctx.jobType === "extension.remove") return 24 * 60 * 60_000;
+  if (ctx.jobType === "extension.install") {
+    const manifest = ctx.payload.manifest as
+      | { services?: unknown[]; integrations?: unknown[] }
+      | undefined;
+    const services = manifest?.services?.length ?? 0,
+      integrations = manifest?.integrations?.length ?? 0;
+    if (services > 256 || integrations > 256)
+      throw Error("Extension exceeds the bounded job capacity");
+    const serviceBudget = [
+      "serviceRepository.publish",
+      "serviceRepository.settle",
+      "service.pull",
+      "stack.render",
+      "generation-hardlinks",
+      "service.start",
+    ].reduce((sum, kind) => sum + opsExecutionBudget(kind).processMs, 60_000);
+    const integrationBudget =
+      opsExecutionBudget("catalogIntegration.publish").processMs +
+      opsExecutionBudget("catalogIntegration.settle").processMs;
+    // Freeze once at the first admission. Child normalization and all recovered
+    // attempts still use their original shorter absolute deadlines.
+    return Math.min(
+      24 * 60 * 60_000,
+      120_000 + Math.max(1, services) * serviceBudget + integrations * integrationBudget,
+    );
+  }
   if (ctx.jobType === "system.update") return opsExecutionBudget("system.update").processMs;
   if (ctx.jobType === "service.start" || ctx.jobType === "service.apply") {
     // Fixed current workflow: render, inspect, start the coordinator, await its
@@ -110,7 +138,7 @@ export function prepareApiJobChildAttempt(
   });
 }
 export async function issueApiJobChildAssertion(attempt: ApiJobChildAttempt): Promise<string> {
-  const token = await readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   // Exact schema order and NUL-terminated domain used by verifyApiJobParentExecution.
   const payload = Buffer.from(JSON.stringify(apiJobChildAttemptSchema.parse(attempt))).toString(
     "base64url",

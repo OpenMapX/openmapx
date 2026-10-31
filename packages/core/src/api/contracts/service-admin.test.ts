@@ -16,6 +16,20 @@ const actions = Object.fromEntries(
 );
 const at = "2026-10-21T10:00:00.000Z";
 const inventory = [
+  ["pullAdminServiceImages", "POST", "/services/images/pull"],
+  ["clearAdminReleaseSelection", "POST", "/system/release/clear"],
+  ["previewAdminBackupPrune", "POST", "/services/backups/prune/preview"],
+  ["pruneAdminServiceBackups", "POST", "/services/backups/prune"],
+  ["listAdminCacheNamespaces", "GET", "/cache"],
+  ["clearAdminCache", "POST", "/cache/clear"],
+  ["getAdminArtifactTransferCapabilities", "GET", "/artifact-transfers/capabilities"],
+  ["exportAdminArtifactTransfer", "POST", "/artifact-transfers/exports"],
+  ["previewAdminArtifactImport", "POST", "/artifact-transfers/:stageId/preview-import"],
+  ["importAdminArtifactTransfer", "POST", "/artifact-transfers/:stageId/import"],
+  ["validateAdminArtifactTransfer", "POST", "/artifact-transfers/:stageId/validate"],
+  ["listAdminServicePresets", "GET", "/services/presets"],
+  ["renderAdminComposeConfiguration", "POST", "/compose/render"],
+
   ["listAdminArtifactTransfers", "GET", "/artifact-transfers"],
   ["createAdminArtifactTransfer", "POST", "/artifact-transfers"],
   ["getAdminArtifactTransfer", "GET", "/artifact-transfers/:stageId"],
@@ -225,13 +239,12 @@ describe("canonical complete service administration contracts", () => {
   it("binds the complete approved identities, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("serviceAdminOperations");
     expect(
-      Object.entries(contracts.serviceAdminOperations).map(([id, op]) => [
-        id,
-        op.method,
-        op.path,
-        op.auth,
-      ]),
-    ).toEqual(inventory.map(([id, method, path]) => [id, method, `/api/admin${path}`, "admin"]));
+      Object.entries(contracts.serviceAdminOperations)
+        .map(([id, op]) => [id, op.method, op.path, op.auth])
+        .sort(),
+    ).toEqual(
+      inventory.map(([id, method, path]) => [id, method, `/api/admin${path}`, "admin"]).sort(),
+    );
   });
   it("retains full raw manifests including unknown nested JSON, structured capabilities and omitted defaults", () => {
     expect(serviceManifestSchema.parse(raw).container.gpu).toEqual({
@@ -324,6 +337,10 @@ describe("canonical complete service administration contracts", () => {
     const list = {
       acquisition,
       services: [summary],
+      capabilityInventory: {
+        recognized: ["routing-engine"],
+        unrecognized: [{ capability: "custom/routing", serviceIds: [raw.id] }],
+      },
       summary: { running: 0, stopped: 1, unknown: 0, total: 1 },
     };
     expect(response("listAdminServices", 200, list)).toEqual(list);
@@ -334,6 +351,23 @@ describe("canonical complete service administration contracts", () => {
         secret: { value: "***", source: "env" },
       },
       envPrefix: "SERVICE_SAMPLE",
+      ownership: {
+        field: {
+          source: "database",
+          secret: false,
+          writable: true,
+          adoption: "direct",
+          reason: null,
+        },
+        secret: {
+          source: "env",
+          secret: true,
+          writable: false,
+          adoption: "host_action_required",
+          reason: "host_environment",
+          envVar: "SERVICE_SAMPLE_SECRET",
+        },
+      },
     };
     expect(response("getAdminServiceConfig", 200, config)).toEqual(config);
     expect(response("getAdminServiceConfig", 200, { ...config, schema: null })).toEqual({

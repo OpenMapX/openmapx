@@ -23,7 +23,13 @@ function scannedEnvironmentNames(): Set<string> {
     /["'`]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)["'`]/g,
   ];
 
-  for (const file of sourceFiles(sourceRoot)) {
+  // The daemon resolves transit acquisition and operations policy in this shared module.
+  const files = [
+    ...sourceFiles(sourceRoot),
+    join(process.cwd(), "packages/transitous-core/src/constants.ts"),
+    join(process.cwd(), "packages/transitous-core/src/operations-profile.ts"),
+  ];
+  for (const file of files) {
     const source = readFileSync(file, "utf-8");
     for (const regex of regexes) {
       for (const match of source.matchAll(regex)) names.add(match[1]);
@@ -45,6 +51,8 @@ const INTENTIONALLY_UNDECLARED = new Set([
   // Set by services/data-manager/Dockerfile. Declaring it here would overwrite
   // it with an empty string and disable the production hard-fail in src/auth.ts.
   "NODE_ENV",
+  // Compatibility-only path fallback; new deployments expose API_KEYS_PATH.
+  "TRANSITOUS_API_KEYS_FILE",
 ]);
 
 /** Runtime knobs consumed by Node rather than by our own code. */

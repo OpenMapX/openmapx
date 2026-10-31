@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
@@ -33,7 +33,13 @@ describe("production core restart workflow", () => {
     async (serviceId, fail) => {
       const host = await ownedServiceHost();
       roots.push(host.cleanupRoot);
-      await host.select(["app-api", "traefik"]);
+      mkdirSync(join(host.root, "services/traefik/config"), { recursive: true });
+      cpSync(
+        join(import.meta.dirname, "../../../services/traefik/config"),
+        join(host.root, "services/traefik/config"),
+        { recursive: true },
+      );
+      expect(await host.select(["app-api", "traefik"])).toMatchObject({ outcome: "committed" });
       const compose = realpathSync(host.stack.composePath);
       const service = host.loaded.find((s) => s.manifest.id === serviceId)!;
       host.setRows([
@@ -75,7 +81,7 @@ describe("production core restart workflow", () => {
         role: "ops-agent",
         serviceIds: host.loaded.map((s) => s.manifest.id),
       });
-      const journal = await openOpsJobJournal(join(host.infraDir, "data/ops-agent/jobs-v1.json"));
+      const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
       const app = buildOpsAgentServer({
         tokens: { api: host.token, "data-manager": "d".repeat(32) },
         runtime,

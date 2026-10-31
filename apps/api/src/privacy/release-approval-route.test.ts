@@ -134,6 +134,7 @@ describe("privacy release approval routes", () => {
         method: "POST",
         url: `/privacy/admin/requests/${randomUUID()}/generate`,
         headers: { "idempotency-key": randomUUID() },
+        payload: {},
       });
       expect(response.statusCode).toBe(503);
       expect(response.json().code).toBe("PRIVACY_RELEASE_NOT_READY");

@@ -1486,9 +1486,16 @@ async function commitOwnedConfigurationGeneration(
     releaseServiceFiles: release,
     agentMountLayout: options.agentMountLayout?.(),
   });
-  const oldDays = readAppliedPlatformValues(options.infraDir).backupRetentionDays;
-  const newDays = resolvePlatformConfiguration({ saved: options.input.platform }).values
-    .backupRetentionDays;
+  // This store lock concerns retention only. An invocation-level domain
+  // override has already been validated by renderConfiguration above; parsing
+  // unrelated host fields again would incorrectly discard that override.
+  const retentionEnv = { BACKUP_RETENTION_DAYS: process.env.BACKUP_RETENTION_DAYS };
+  const oldDays = resolvePlatformConfiguration({
+    saved: readAppliedPlatformConfiguration(options.infraDir),
+    env: retentionEnv,
+  }).values.backupRetentionDays;
+  const newDays = resolvePlatformConfiguration({ saved: options.input.platform, env: retentionEnv })
+    .values.backupRetentionDays;
   if (
     oldDays !== newDays &&
     options.expectedCurrentRevisionId !== undefined &&

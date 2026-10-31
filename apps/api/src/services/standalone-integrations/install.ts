@@ -11,6 +11,7 @@ import {
   standaloneInstallSourceSchema,
   standaloneIntegrationProvenanceSchema,
 } from "@openmapx/core/ops";
+import { envString } from "@openmapx/core/server-env";
 import { and, eq, sql } from "drizzle-orm";
 import z from "zod/v4";
 import { db } from "../../db";
@@ -33,7 +34,7 @@ type State = import("./state").StandaloneState;
 import { readStandaloneState, sealStandaloneState } from "./state";
 
 async function token() {
-  return readOpsTokenFile(process.env.OPS_AGENT_TOKEN_FILE ?? "");
+  return readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
 }
 async function authenticatePayload(ctx: JobContext) {
   const payload = ctx.payload;

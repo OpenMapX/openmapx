@@ -89,6 +89,7 @@ describe("admin-owned accepted service jobs", () => {
       const oldResponse = Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: { unknown: 0, running: 0, stopped: 2, total: 2 },
       });
       let completed = false;
@@ -105,6 +106,7 @@ describe("admin-owned accepted service jobs", () => {
         return Response.json({
           acquisition,
           services: [],
+          capabilityInventory: { recognized: [], unrecognized: [] },
           summary: { unknown: 0, running: 2, stopped: 0, total: 2 },
         });
       });
@@ -161,6 +163,7 @@ describe("admin-owned accepted service jobs", () => {
         return Response.json({
           acquisition,
           services: [],
+          capabilityInventory: { recognized: [], unrecognized: [] },
           summary: { unknown: 0, running: completed ? 2 : 0, stopped: 0, total: 2 },
         });
       });
@@ -198,6 +201,7 @@ describe("admin-owned accepted service jobs", () => {
       return Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: { unknown: 0, running: 0, stopped: 0, total: 1 },
       });
     });
@@ -226,6 +230,7 @@ describe("admin-owned accepted service jobs", () => {
       return Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: { unknown: 0, running: 0, stopped: 0, total: 0 },
       });
     });
@@ -248,6 +253,7 @@ describe("admin-owned accepted service jobs", () => {
       return Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: { unknown: 0, running: 0, stopped: 0, total: 0 },
       });
     });
@@ -285,6 +291,7 @@ describe("admin-owned accepted service jobs", () => {
       return Response.json({
         acquisition,
         services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
         summary: { running: 0, stopped: 0, unknown: 0, total: 0 },
       });
     });

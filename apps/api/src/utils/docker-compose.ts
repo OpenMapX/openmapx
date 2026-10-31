@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
+import { executeAdminJobOperation } from "../services/admin-job-ops";
+import type { JobContext } from "../services/job-runner";
 import {
   type ApiOpsClient,
   ApiOpsError,
@@ -21,6 +23,7 @@ interface OpsDependencies {
 }
 
 interface AsyncOpsDependencies extends OpsDependencies {
+  ctx?: JobContext;
   operationKey?: string;
   signal?: AbortSignal;
   expectedConfigurationRevisionId?: string;
@@ -134,6 +137,12 @@ export async function dockerComposeAction(
       stdout: "",
       stderr: "A durable operation identity is required for this request.",
     };
+  }
+  if (options.ctx) {
+    await executeAdminJobOperation(options.ctx, operation, "extension.lifecycle", {
+      operationKey: options.operationKey,
+    });
+    return { exitCode: 0, stdout: "", stderr: "" };
   }
   try {
     await executeAndWait(client(options), operation, options.operationKey, {

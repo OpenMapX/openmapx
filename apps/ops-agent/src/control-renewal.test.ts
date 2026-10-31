@@ -11,6 +11,7 @@ import {
   parseOpsJobStatus,
   signApiRetentionProof,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { expect, it, vi } from "vitest";
 import { openOpsJobJournal } from "./journal";
 import { buildOpsAgentServer } from "./server";
@@ -26,7 +27,7 @@ it("retains the exact API terminal dependency until ack, retires it, and dischar
   });
   const token = "a".repeat(32),
     dmToken = "b".repeat(32),
-    journal = await openOpsJobJournal(join(root, "data/ops-agent/jobs-v1.json")),
+    journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal),
     dispatch = vi.fn(async () => ({ backupId: "daily" }));
   const app = buildOpsAgentServer({
     tokens: { api: token, "data-manager": dmToken },

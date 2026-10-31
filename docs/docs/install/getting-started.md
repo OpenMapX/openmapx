@@ -19,6 +19,8 @@ can be added after you have signed in and checked the application.
 ```bash
 git clone https://github.com/OpenMapX/openmapx.git
 cd openmapx
+# Protect the ancestors of the durable host-control keys and journal.
+chmod go-w . infra infra/docker infra/docker/secrets
 pnpm install --frozen-lockfile
 ```
 

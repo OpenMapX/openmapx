@@ -8,6 +8,7 @@ import {
   OpsClient,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import { expect, it } from "vitest";
 import { createDockerRuntime } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
@@ -26,7 +27,7 @@ it.each(["succeeded", "canceled"] as const)(
         role: "ops-agent",
         serviceIds: ["valhalla"],
       }),
-      journal = await openOpsJobJournal(join(data, "ops-agent/jobs-v1.json"));
+      journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
     let ready = () => {},
       release = () => {},
       aborted = () => {},

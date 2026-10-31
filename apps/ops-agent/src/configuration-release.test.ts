@@ -22,8 +22,8 @@ beforeEach(() => {
   vi.stubEnv("OPENMAPX_RELEASE", "main");
   vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
   root = mkdtempSync(join(tmpdir(), "openmapx-configuration-release-"));
-  directory = join(root, ".ops-agent-releases");
-  mkdirSync(directory, { mode: 0o700 });
+  directory = services.releaseStatePaths(root).store;
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
   raw = services.canonicalReleaseManifest(
     services.parseReleaseManifest(
       JSON.stringify({
@@ -266,7 +266,7 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
     const { writeAgentHandoff, agentHandoffPath } = await import("./agent-handoff");
     const checkout = join(root, "legacy-checkout"),
       infraDir = join(checkout, "infra/docker"),
-      store = join(infraDir, ".ops-agent-releases");
+      store = services.releaseStatePaths(infraDir).store;
     mkdirSync(store, { recursive: true, mode: 0o700 });
     writeFileSync(join(store, `${releaseId}.json`), raw, { mode: 0o600 });
     let legacy: string;
