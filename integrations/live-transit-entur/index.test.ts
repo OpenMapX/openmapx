@@ -135,6 +135,29 @@ describe("getVehiclePositions", () => {
     expect(result.attributions[0]?.sourceId).toBe("entur-live-vehicles");
   });
 
+  it.each([
+    ["COACH", "bus"],
+    ["AIR", "other"],
+    ["TAXI", "other"],
+    [null, "other"],
+  ])("maps an Entur %j vehicle to the %s mode", async (mode, expected) => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        vehicles: [
+          {
+            vehicleId: "VYX:Vehicle:1",
+            lastUpdated: "2026-03-10T10:00:00Z",
+            mode,
+            location: { latitude: 59.91, longitude: 10.75 },
+          },
+        ],
+      }),
+    );
+
+    const result = await registerProvider().getVehiclePositions([4, 57, 32, 71.5]);
+    expect(result.data.map((vehicle) => vehicle.mode)).toEqual([expected]);
+  });
+
   it("drops vehicles missing coordinates or a lastUpdated timestamp", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({

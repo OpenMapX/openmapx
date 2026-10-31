@@ -13,6 +13,7 @@ export const MODE_COLORS: Record<TransportMode, string> = {
   walking: "#757575",
   cycling: "#34A853",
   driving: "#5F6368",
+  other: "#607D8B",
 };
 
 /**

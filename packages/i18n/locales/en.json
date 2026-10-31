@@ -1652,6 +1652,7 @@
     "funicular": "Funicular",
     "cableCar": "Cable car",
     "monorail": "Monorail",
+    "otherModes": "Other modes",
     "nextDepartures": "Next departures",
     "noDeparturesInNext60": "No departures in the next 60 minutes.",
     "viewDeparturesArrivals": "View departures & arrivals",

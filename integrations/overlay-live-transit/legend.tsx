@@ -22,6 +22,7 @@ const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
   funicular: "funicular",
   cable_car: "cableCar",
   monorail: "monorail",
+  other: "otherModes",
 };
 
 function providerLabel(

@@ -2,6 +2,7 @@
 
 import type { SvgIconComponent } from "@mui/icons-material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CommuteIcon from "@mui/icons-material/Commute";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
@@ -542,7 +543,9 @@ export function TransitDetailsView({
                                   ? TramIcon
                                   : leg.mode === "ferry"
                                     ? DirectionsBoatIcon
-                                    : DirectionsBusIcon;
+                                    : leg.mode === "other"
+                                      ? CommuteIcon
+                                      : DirectionsBusIcon;
                           return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
                         })()}
                         <Box

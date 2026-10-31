@@ -122,6 +122,19 @@ describe("TransitItineraryCard", () => {
     expect(markup).not.toContain("Pl. undefined");
   });
 
+  it("shows a leg of another mode with a neutral icon instead of a bus", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([{ ...railLeg, mode: "other", route: undefined }])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).toContain('data-testid="CommuteIcon"');
+    expect(markup).not.toContain('data-testid="DirectionsBusIcon"');
+  });
+
   it("does not invent boarding details when the provider omitted them", () => {
     const markup = renderToStaticMarkup(
       <TransitItineraryCard
