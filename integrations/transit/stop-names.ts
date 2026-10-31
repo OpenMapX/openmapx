@@ -53,14 +53,22 @@ const GENERIC_STATION_WORDS = new Set(["bahnhof", "station", "gare"]);
  * is kept, since it tells a main station from other stops of a city.
  */
 export function stopNameKey(name: string): string {
-  const words = withoutBracketedParts(expandSearchQuery(name))
+  const words = stopNameWords(name).filter((word) => !GENERIC_STATION_WORDS.has(word));
+  return [...new Set(words)].sort().join(" ");
+}
+
+/**
+ * A stop name's words in order, normalised as {@link stopNameKey} compares
+ * them, but keeping the words that say the stop is a station.
+ */
+export function stopNameWords(name: string): string[] {
+  return withoutBracketedParts(expandSearchQuery(name))
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(PLATFORM_DESIGNATION, " ")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length > 1 && !GENERIC_STATION_WORDS.has(word));
-  return [...new Set(words)].sort().join(" ");
+    .filter((word) => word.length > 1);
 }
 
 /** How specific a stop name is: "Köln Breslauer Platz/Hbf" names more than "Köln Hbf". */

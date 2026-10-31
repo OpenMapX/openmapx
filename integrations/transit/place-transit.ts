@@ -1,5 +1,5 @@
 import type { BBox } from "@openmapx/core";
-import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import { haversineMeters } from "@openmapx/core";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
 import { captureTransitContributors } from "@openmapx/integration-framework";
 import {
@@ -34,12 +34,7 @@ import {
 } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
-import {
-  mainStopKey,
-  stopNameKey,
-  stopNameSpecificity,
-  withoutBracketedParts,
-} from "./stop-names.js";
+import { mainStopKey, stopNameKey, stopNameSpecificity, stopNameWords } from "./stop-names.js";
 
 /** Preserve scalar ownership when a weaker row supplies a missing field. */
 function retainFieldReceipt(
@@ -274,13 +269,9 @@ interface DepartureWithFeed extends Departure {
 }
 
 const LINK_RADIUS_M = 1000; // 1 km
-// Place→stop linking deliberately uses a more permissive Dice floor (0.4)
-// than `DEDUP.NAME_SIMILARITY_MIN` (0.6) because place names and transit
-// stop names often differ stylistically ("Köln Hbf" vs "Köln
-// Hauptbahnhof"). Tightening to the policy default would drop legitimate
-// links.
-const MIN_NAME_DICE = 0.4;
-const MIN_INFORMATIVE_TOKEN_LEN = 4;
+/** How far stops named after a place as their town tell that it is one, as "Brühl Mitte" does. */
+const TOWN_EVIDENCE_RADIUS_M = 2000;
+const MIN_TOWN_STOPS = 3;
 
 const TTL = {
   placeStops: TTL_POLICY.PLACE_LINK,
@@ -394,18 +385,113 @@ function hashKey(prefix: string, data: unknown): string {
   return `${prefix}:${(hash >>> 0).toString(36)}`;
 }
 
-function normalizeLinkName(name: string): string {
-  return withoutBracketedParts(name, ["()"])
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+/** Words saying a stop is a station's own, as in "Köln Dom/Hbf" or "Köln Bf Deutz/Messe". */
+const STATION_WORDS = new Set(["hauptbahnhof", "bahnhof", "bhf"]);
+/** Words saying only that a stop is a station, as in "Köln Messe/Deutz Bf". */
+const GENERIC_LINK_WORDS = new Set(["bahnhof", "bhf", "station", "gare"]);
+/** A station named for its side of town: "Ostbahnhof" is "München Ost". */
+const SIDE_STATION = /^(nord|ost|sud|west)bahnhof$/;
+/** Spellings of station words the search's synonyms don't cover. */
+const STATION_SPELLINGS: Readonly<Record<string, string>> = { hauptbf: "hauptbahnhof" };
+/** The most words a town written apart by a comma has, as in "Marienplatz, München". */
+const MAX_TOWN_WORDS = 2;
+
+interface LinkName {
+  /** Distinct words in order, street abbreviations written out. */
+  words: string[];
+  /** The words without a town leading the name ("Köln Neumarkt"), when no comma sets one apart. */
+  withoutLeadingTown: string[][];
+  /** The words without a town a comma sets apart, first or last ("Marienplatz, München"). */
+  withoutCommaTown: string[][];
+  /** Whether the name calls the stop a station. */
+  station: boolean;
 }
 
-function tokenizeLinkName(name: string): string[] {
-  const norm = normalizeLinkName(name);
-  if (!norm) return [];
-  return norm.split(" ").filter((t) => t.length > 0);
+function linkWords(text: string): { words: string[]; station: boolean } {
+  let station = false;
+  const words = stopNameWords(text).flatMap((spelt) => {
+    const word = STATION_SPELLINGS[spelt] ?? spelt;
+    const side = SIDE_STATION.exec(word);
+    if (side || STATION_WORDS.has(word)) station = true;
+    if (side) return [side[1]];
+    if (GENERIC_LINK_WORDS.has(word)) return [];
+    return [word.replace(/ß/g, "ss").replace(/str$/, "strasse")];
+  });
+  return { words: [...new Set(words)], station };
+}
+
+function linkName(name: string): LinkName {
+  const { words, station } = linkWords(name);
+  const parts = name.split(",");
+  const withoutCommaTown: string[][] = [];
+  if (parts.length > 1) {
+    for (const [town, rest] of [
+      [parts[0], parts.slice(1)],
+      [parts[parts.length - 1], parts.slice(0, -1)],
+    ] as const) {
+      if (linkWords(town).words.length <= MAX_TOWN_WORDS) {
+        withoutCommaTown.push(linkWords(rest.join(",")).words);
+      }
+    }
+  }
+  const nonEmpty = (list: string[][]) => list.filter((w) => w.length > 0);
+  return {
+    words,
+    withoutLeadingTown: nonEmpty(parts.length > 1 ? [] : [words.slice(1)]),
+    withoutCommaTown: nonEmpty(withoutCommaTown),
+    station,
+  };
+}
+
+const sameWords = (a: string[], b: string[]) =>
+  a.length > 0 && a.length === b.length && a.every((word) => b.includes(word));
+
+/**
+ * Whether a stop's name names the place: the same words, in any order, where
+ * one of the two may leave out its town ("Köln Neumarkt" and "Neumarkt",
+ * "Messe/Deutz" and "Köln Messe/Deutz", "Marienplatz, München" and
+ * "Marienplatz"); or a name calling the stop a station that has all of the
+ * place's words but its town ("Köln Dom/Hbf" and "Dom/Hbf" for "Köln
+ * Hauptbahnhof"). Sharing a district alone doesn't link: "Köln Deutz
+ * Suevenstr." is not "Köln Messe/Deutz".
+ *
+ * When the place is itself named like a town, a comma doesn't tell a stop's
+ * town: in "Brühl, Giesler Galerie" or "Rathaus, Garmisch-Partenkirchen"
+ * either part could be it.
+ */
+function namesPlace(stop: LinkName, place: LinkName, placeIsTown: boolean): boolean {
+  const stopWithoutTown = placeIsTown
+    ? stop.withoutLeadingTown
+    : [...stop.withoutLeadingTown, ...stop.withoutCommaTown];
+  const placeWithoutTown = [...place.withoutLeadingTown, ...place.withoutCommaTown];
+  if (sameWords(stop.words, place.words)) return true;
+  if (stopWithoutTown.some((words) => sameWords(words, place.words))) return true;
+  if (placeWithoutTown.some((words) => sameWords(stop.words, words))) return true;
+  if (!stop.station) return false;
+  return [place.words, ...placeWithoutTown].some(
+    (words) => words.length > 0 && words.every((word) => stop.words.includes(word)),
+  );
+}
+
+/**
+ * Whether nearby stops are named after the place as their town: at least
+ * {@link MIN_TOWN_STOPS} different ones begin with its name, as "Brühl Mitte",
+ * "Brühl Nord" and "Brühl Am Stern" do. A comma part is read on its own, so
+ * "Marienplatz, München" doesn't make Marienplatz a town.
+ */
+function namedLikeTown(place: LinkName, nearbyNames: string[]): boolean {
+  const n = place.words.length;
+  if (n === 0) return false;
+  const after = new Set<string>();
+  for (const name of nearbyNames) {
+    for (const part of name.split(",")) {
+      const { words } = linkWords(part);
+      if (words.length > n && place.words.every((word, i) => words[i] === word)) {
+        after.add(words.slice(n).join(" "));
+      }
+    }
+  }
+  return after.size >= MIN_TOWN_STOPS;
 }
 
 /** A name's canonical form, so "Köln Hbf" and "Köln Hauptbahnhof" are one. */
@@ -424,66 +510,25 @@ function placeCacheId(lat: number, lng: number, names: string[], placeId?: strin
 
 const OSM_REF = /^(node|way|relation)\/[1-9]\d*$/;
 
-/**
- * The stops a place's name links: within 1 km and named similarly to the name
- * or one of its spellings, and, when the candidates differ in other words,
- * sharing one of those words with the name, so a stop isn't linked by its
- * city's name alone.
- */
+/** The stops a place's name links: within 1 km and naming the place (see {@link namesPlace}). */
 function linkByName(
   candidates: TransitStop[],
   lat: number,
   lng: number,
   name: string,
 ): TransitStop[] {
-  const normVariants = getQueryVariants(name)
-    .map((v) => normalizeLinkName(v))
-    .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
-
-  // First-pass candidates: distance + fuzzy name match against any query variant.
-  const prelim = candidates.filter((stop) => {
-    if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-    const stopNorm = normalizeLinkName(stop.name);
-    if (!stopNorm) return false;
-    let best = 0;
-    for (const q of normVariants) {
-      const score = diceSimilarity(stopNorm, q);
-      if (score > best) best = score;
-    }
-    return best >= MIN_NAME_DICE;
+  const place = linkName(name);
+  const near = candidates.flatMap((stop) => {
+    const meters = haversineMeters(lat, lng, stop.lat, stop.lng);
+    return meters <= TOWN_EVIDENCE_RADIUS_M ? [{ stop, meters, name: linkName(stop.name) }] : [];
   });
-  if (prelim.length === 0) return [];
-
-  // Second-pass pruning: avoid linking by city token only.
-  // Keep candidates that share at least one informative token from the place
-  // name variants (tokens present in some, but not all, prelim candidates).
-  // Tokens are compared in expanded form, so "Köln Hbf" shares "hauptbahnhof"
-  // with a place or stop spelled "Köln Hauptbahnhof".
-  const tokenFreq = new Map<string, number>();
-  const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(expandSearchQuery(s.name))));
-  for (const tokens of prelimTokenSets) {
-    for (const t of tokens) {
-      tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
-    }
-  }
-
-  const placeTokens = new Set<string>();
-  for (const q of normVariants) {
-    for (const t of tokenizeLinkName(expandSearchQuery(q))) {
-      if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
-      if (/^\d+$/.test(t)) continue;
-      placeTokens.add(t);
-    }
-  }
-
-  const informativeTokens = Array.from(placeTokens).filter((t) => {
-    const count = tokenFreq.get(t) ?? 0;
-    return count > 0 && count < prelim.length;
-  });
-
-  return informativeTokens.length === 0
-    ? prelim
-    : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
+  const placeIsTown = namedLikeTown(
+    place,
+    near.map((n) => n.stop.name),
+  );
+  return near
+    .filter((n) => n.meters <= LINK_RADIUS_M && namesPlace(n.name, place, placeIsTown))
+    .map((n) => n.stop);
 }
 
 interface CachedStopsEnvelope {
