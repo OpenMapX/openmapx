@@ -216,13 +216,12 @@ describe("searchByName", () => {
     });
   });
 
-  it("returns empty array when client throws", async () => {
+  it("reports a failed search as unavailable instead of no matches", async () => {
     mockClient.locations.mockRejectedValue(new Error("Service unavailable"));
 
     const { searchByName } = await loadModule();
-    const results = await searchByName("test", 10);
 
-    expect(results).toEqual([]);
+    await expect(searchByName("test", 10)).rejects.toThrow("DB stop search unavailable");
   });
 });
 

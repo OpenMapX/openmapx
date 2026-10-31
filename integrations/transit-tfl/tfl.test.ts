@@ -4,6 +4,7 @@ import {
   getDepartures,
   getRouteStopSequence,
   getStops,
+  searchByName,
   setTflApiKey,
 } from "./provider.js";
 
@@ -165,5 +166,21 @@ describe("TfL transit provider", () => {
       { id: "tfl:s2", name: "Stop 2", lat: 51.51, lng: -0.11, sequence: 1 },
     ]);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/Line/central/Route/Sequence/outbound");
+  });
+
+  it("reports a failed stop search without exposing the keyed request URL", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+
+    const failure = await searchByName("Oxford Circus", 5).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe("TfL stop search unavailable");
+    expect((failure as Error).message).not.toContain("test-tfl-key");
+  });
+
+  it("returns no stops when the search succeeds without matches", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ matches: [] }));
+
+    expect(await searchByName("Nowhere", 5)).toEqual([]);
   });
 });

@@ -64,7 +64,12 @@ cancellations, and predicted times appear only when reported.
 Scheduled data comes from the stop's source. Compatible realtime providers can
 add updates; sources that already include realtime times do not need a second
 lookup. Similar station names alone do not make different source IDs
-interchangeable, and a failed stop lookup can leave a place without a board.
+interchangeable.
+
+A place's board starts by searching its stops by name. If a stop source does not
+answer, the board warns that departures may be missing instead of showing an
+empty board, and the place is looked up again within about a minute. If no
+source answers, the board shows a failure with a retry action.
 
 ### Understanding timetable status
 

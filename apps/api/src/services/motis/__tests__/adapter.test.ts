@@ -268,20 +268,28 @@ describe("searchByName", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("returns empty array when data is null", async () => {
-    vi.mocked(geocode).mockResolvedValueOnce({ data: null, error: undefined } as never);
+  it("returns an empty array when the search succeeds without matches", async () => {
+    vi.mocked(geocode).mockResolvedValueOnce({ data: [], error: undefined } as never);
 
-    const result = await searchByName(testInstance, "anything", 10);
-
-    expect(result).toEqual([]);
+    expect(await searchByName(testInstance, "anything", 10)).toEqual([]);
   });
 
-  it("returns empty array on error", async () => {
-    vi.mocked(geocode).mockRejectedValueOnce(new Error("fail"));
+  it.each([
+    ["a rejected request", () => vi.mocked(geocode).mockRejectedValueOnce(new Error("secret"))],
+    [
+      "an error response",
+      () => vi.mocked(geocode).mockResolvedValueOnce({ data: undefined, error: { e: 1 } } as never),
+    ],
+    [
+      "a malformed body",
+      () => vi.mocked(geocode).mockResolvedValueOnce({ data: null, error: undefined } as never),
+    ],
+  ])("reports %s as unavailable instead of no matches", async (_case, arrange) => {
+    arrange();
 
-    const result = await searchByName(testInstance, "anything", 10);
-
-    expect(result).toEqual([]);
+    await expect(searchByName(testInstance, "anything", 10)).rejects.toThrow(
+      "MOTIS stop search unavailable",
+    );
   });
 });
 

@@ -28,7 +28,11 @@ const departure: Departure = {
 };
 function resolver(fetch: (id: string) => Promise<MobilityResult<Departure[]>>, discovered = stops) {
   const ctx = {
-    cache: { withCache: (_key: string, _ttl: number, load: () => unknown) => load() },
+    cache: {
+      get: async () => null,
+      set: async () => {},
+      withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+    },
   } as unknown as IntegrationContext;
   const orchestrator = {
     searchByNameRaw: vi.fn(async () => result(discovered)),
@@ -72,5 +76,63 @@ describe("linked timetable source failures", () => {
     expect(
       (await resolver(fetch, []).getMergedDepartures(50.775, 6.084, "Aachen Central", 60)).data,
     ).toEqual([]);
+  });
+});
+
+describe("linked stop discovery failures", () => {
+  function discovering(search: TransitOrchestrator["searchByNameRaw"]) {
+    const ctx = {
+      cache: {
+        get: async () => null,
+        set: async () => {},
+        withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+      },
+    } as unknown as IntegrationContext;
+    const fetch = vi.fn(async () => result([departure]));
+    const orchestrator = {
+      searchByNameRaw: search,
+      getDepartures: fetch,
+      getArrivals: fetch,
+    } as unknown as TransitOrchestrator;
+    return createPlaceTransit(ctx, orchestrator);
+  }
+
+  it("answers an empty board from a partial discovery as incomplete, not as no service", async () => {
+    const partial = result<TransitStop[]>([]);
+    partial.freshness.isPartial = true;
+    const api = discovering(vi.fn(async () => partial));
+
+    const board = await api.getMergedDepartures(50.775, 6.084, "Aachen Central", 60);
+
+    expect(board.data).toEqual([]);
+    expect(board.freshness.isPartial).toBe(true);
+  });
+
+  it("keeps the stops found by one name variant when another variant's search fails", async () => {
+    const search = vi.fn(async (query: string) => {
+      if (query === "Aachen Hauptbahnhof") throw new Error("Transit stop sources unavailable");
+      return result(stops);
+    });
+    const api = discovering(search as unknown as TransitOrchestrator["searchByNameRaw"]);
+
+    const linked = await api.getLinkedStops(50.775, 6.084, "Aachen Hbf");
+
+    expect(search.mock.calls.map(([query]) => query)).toEqual(
+      expect.arrayContaining(["Aachen Hbf", "Aachen Hauptbahnhof"]),
+    );
+    expect(linked.data.map((stop) => stop.id)).toEqual(["ms:root", "mo:root"]);
+    expect(linked.freshness.isPartial).toBe(true);
+  });
+
+  it("rejects when no stop search answered, so the board reports a failure", async () => {
+    const api = discovering(
+      vi.fn(async () => {
+        throw new Error("Transit stop sources unavailable");
+      }),
+    );
+
+    await expect(api.getMergedDepartures(50.775, 6.084, "Aachen Central", 60)).rejects.toThrow(
+      "Transit stop sources unavailable",
+    );
   });
 });

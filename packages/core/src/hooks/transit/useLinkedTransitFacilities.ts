@@ -5,7 +5,11 @@ import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { Place } from "../../types/place";
 import { isTransitEligiblePlace } from "./transitEligibility";
-import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
+import {
+  type MobilityEnvelopeQueryResult,
+  mobilityEnvelopeTiming,
+  wrapMobilityEnvelope,
+} from "./useMobilityEnvelope";
 
 export function useLinkedTransitFacilities(
   place: Place | null,
@@ -25,7 +29,7 @@ export function useLinkedTransitFacilities(
       });
     },
     enabled,
-    staleTime: 24 * 60 * 60 * 1000,
+    ...mobilityEnvelopeTiming(24 * 60 * 60 * 1000),
   });
   return wrapMobilityEnvelope(query);
 }

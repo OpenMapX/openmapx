@@ -348,7 +348,8 @@ export const hafasMgateAdapter: ProtocolAdapter = {
         .filter((s) => s.type === "stop" || s.type === "station")
         .map((s) => normalizeStop(s, entry));
     } catch {
-      return [];
+      // A failed search must not read as "no stop by that name".
+      throw new Error("HAFAS stop search unavailable");
     }
   },
 

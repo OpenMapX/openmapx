@@ -31,6 +31,28 @@ function captureEnvelopeData<T>(envelope: MobilityEnvelope<T> | undefined): T | 
   return data;
 }
 
+/** How soon a partial envelope is fetched again. */
+export const PARTIAL_ENVELOPE_RETRY_MS = 60_000;
+
+function isPartialEnvelope(query: { state: { data?: MobilityEnvelope<unknown> } }): boolean {
+  return query.state.data?.freshness?.isPartial === true;
+}
+
+/**
+ * Query timing for a long-lived mobility envelope. A complete answer stays fresh
+ * for `completeStaleTime`. A partial one (some source failed) goes stale after a
+ * minute and is fetched again while the view is open, so a recovered source
+ * shows up without a reload.
+ */
+export function mobilityEnvelopeTiming(completeStaleTime: number) {
+  return {
+    staleTime: (query: { state: { data?: MobilityEnvelope<unknown> } }) =>
+      isPartialEnvelope(query) ? PARTIAL_ENVELOPE_RETRY_MS : completeStaleTime,
+    refetchInterval: (query: { state: { data?: MobilityEnvelope<unknown> } }) =>
+      isPartialEnvelope(query) ? PARTIAL_ENVELOPE_RETRY_MS : false,
+  };
+}
+
 /**
  * Wrap a react-query result whose payload is a `MobilityEnvelope<T>` so the
  * hook surface mirrors the pre-flip shape (`{ data, isLoading, ... }`) while
