@@ -21,6 +21,10 @@
       "types": "./src/line-name.ts",
       "default": "./src/line-name.ts"
     },
+    "./platform": {
+      "types": "./src/platform.ts",
+      "default": "./src/platform.ts"
+    },
     "./camera": {
       "types": "./src/types/camera.ts",
       "default": "./src/types/camera.ts"

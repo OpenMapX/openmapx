@@ -92,6 +92,11 @@ write the train number or their operator into the line's name ("DB S11
 train that two sources, or one source twice, list under different spellings
 shows as one departure.
 
+When sources give one departure different platforms, the board shows the
+platform most sources give: some timetables number a station's platforms
+differently from its signs. A platform change one source reports is shown when
+it moves the departure off the platform most sources plan.
+
 ### Understanding timetable status
 
 **Scheduled time** identifies explicitly timetable-only service. A prediction

@@ -72,3 +72,30 @@ describe("normalizeFptfDeparture line name", () => {
     expect(dep.serviceInfo).toBeUndefined();
   });
 });
+
+describe("normalizeFptfDeparture platform", () => {
+  const line = { name: "RE1", product: "regional" };
+
+  it("shows the platform a train was moved to and keeps the planned one", () => {
+    // hafas-client: `platform` is the prognosed platform, else the planned one.
+    const dep = normalizeFptfDeparture({ line, platform: "4", plannedPlatform: "2" }, "db:");
+    expect(dep.platform).toBe("4");
+    expect(dep.scheduledPlatform).toBe("2");
+  });
+
+  it("shows the planned platform when nothing changed", () => {
+    const dep = normalizeFptfDeparture({ line, platform: "2", plannedPlatform: "2" }, "db:");
+    expect(dep.platform).toBe("2");
+    expect(dep.scheduledPlatform).toBe("2");
+  });
+
+  it("keeps the planned platform of a cancelled departure", () => {
+    // hafas-client sets `platform: null` when a departure is cancelled.
+    const dep = normalizeFptfDeparture(
+      { line, cancelled: true, platform: null, plannedPlatform: "2" },
+      "db:",
+    );
+    expect(dep.platform).toBe("2");
+    expect(dep.canceled).toBe(true);
+  });
+});
