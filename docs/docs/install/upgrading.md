@@ -719,14 +719,6 @@ and API consumers to that canonical route. During the compatibility window, clie
 `aqi: null`, retain the per-station attribution/license, and treat 429/5xx responses as unavailable data,
 not as zero or "good" air quality.
 
-The legacy Open-Meteo route
-`GET /api/integrations/weather-open-meteo-air-quality/aqi` sends a 28 February 2027 sunset (`Sun, 28 Feb 2027 00:00:00 GMT`). Migrate point
-consumers to `GET /api/integrations/air-quality/current`; the canonical response preserves model provenance,
-the locally selected standard, nullable primary evidence/index fields, raw pollutant values, and explicit
-partial or unavailable status. Do not translate a missing canonical primary into the legacy route's
-normalised scalar. The compatibility response sends `Deprecation: true`, that route-specific `Sunset`, and a
-`rel="successor-version"` link to the canonical current route.
-
 ## Where to go next
 
 - [Preparing data](./preparing-data.md): refreshing OSM extracts, GTFS

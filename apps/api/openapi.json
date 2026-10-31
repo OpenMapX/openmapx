@@ -66172,23 +66172,6 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
-    "/api/integrations/weather-open-meteo-air-quality/aqi": {
-      "get": {
-        "operationId": "getApiIntegrationsWeatherOpenMeteoAirQualityAqi",
-        "responses": {
-          "default": {
-            "description": "Integration response"
-          }
-        },
-        "summary": "GET /aqi (weather-open-meteo-air-quality)",
-        "tags": [
-          "integrations"
-        ],
-        "x-openmapx-auth": "public",
-        "x-openmapx-integration": "weather-open-meteo-air-quality",
-        "x-openmapx-source": "integrations/weather-open-meteo-air-quality/index.ts"
-      }
-    },
     "/api/integrations/weather/current": {
       "get": {
         "operationId": "getApiIntegrationsWeatherCurrent",
