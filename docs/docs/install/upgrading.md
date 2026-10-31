@@ -416,6 +416,32 @@ that cross a schema change, consider taking the optional backup in step 1 when
 the deployment contains state you cannot readily recreate.
 :::
 
+### While a migration runs
+
+`app-api` logs `Applying N database migrations` with their names before it
+starts. It answers its healthcheck only after they finish, so the container
+shows as `starting` meanwhile, and `app-web` waits for it. Docker allows it 20
+minutes before it counts failed healthchecks. A migration that changes many rows
+can take a while. To follow it:
+
+- Every minute, `app-api` logs `Still applying database migrations` with the
+  statement it is running and for how long. If that statement is waiting for a
+  lock another database session holds, it logs that instead.
+- In PostgreSQL the migration's session is named `openmapx-api-migrations`.
+  From `psql` in the `postgis` container, connected to the `openmapx` database:
+
+  ```sql
+  SELECT state, wait_event_type, now() - query_start AS running, left(query, 80)
+  FROM pg_stat_activity WHERE application_name = 'openmapx-api-migrations';
+  ```
+
+Let a migration that is making progress finish. All pending migrations run in
+one transaction, so stopping `app-api` rolls every one of them back, and the next
+start repeats them from the beginning. The admin-panel updater does the same
+when `app-api` is not healthy in time: it returns the services to their previous
+images, which stops the migration. A second `app-api` started meanwhile waits for
+the first to finish instead of migrating the database at the same time.
+
 ## 6. Verify the upgrade
 
 Check that every container came back healthy and the API is serving:
