@@ -308,6 +308,58 @@ function makeTransitousVehicle(
   });
 }
 
+describe("dedupStations availability", () => {
+  it("keeps a later duplicate's stated availability over an absent one", () => {
+    const {
+      availableVehicles: _available,
+      isActive: _active,
+      ...base
+    } = makeStation({
+      id: "static",
+      name: "Station",
+      coordinates: [13.377, 52.52],
+      capacity: 4,
+    });
+    const live = makeStation({
+      id: "live",
+      name: "Station",
+      coordinates: [13.377, 52.52],
+      availableVehicles: 0,
+      isActive: false,
+    });
+
+    const [merged] = dedupStations([base, live]);
+
+    expect(merged.id).toBe("static");
+    expect(merged.availableVehicles).toBe(0);
+    expect(merged.isActive).toBe(false);
+    expect(merged.capacity).toBe(4);
+  });
+
+  it("does not let an absent duplicate erase stated availability", () => {
+    const live = makeStation({
+      id: "live",
+      name: "Station",
+      coordinates: [13.377, 52.52],
+      availableVehicles: 2,
+    });
+    const {
+      availableVehicles: _available,
+      isActive: _active,
+      ...base
+    } = makeStation({
+      id: "static",
+      name: "Station",
+      coordinates: [13.377, 52.52],
+    });
+
+    const [merged] = dedupStations([live, base]);
+
+    expect(merged.availableVehicles).toBe(2);
+    expect(merged.isActive).toBe(true);
+  });
+});
+
 describe("dedupVehicles", () => {
   it("returns empty array for empty input", () => {
     expect(dedupVehicles([])).toEqual([]);

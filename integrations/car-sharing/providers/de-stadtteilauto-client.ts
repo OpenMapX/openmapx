@@ -116,10 +116,10 @@ async function fetchData(
         id: `de-stadtteilauto/${raw.id}`,
         name,
         coordinates: [lng, lat] as LngLat,
-        availableVehicles: raw.vehicleCount ?? 0,
+        // The feed lists the vehicles assigned to a station, not those free to book now.
+        capacity: raw.vehicleCount,
         operator: "Stadtteilauto Münster",
         vehicleTypes: ["car"],
-        isActive: (raw.vehicleCount ?? 0) > 0,
         sources: ["de-stadtteilauto"],
         ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
         accessMethod: raw.information?.access,

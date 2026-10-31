@@ -83,6 +83,7 @@ const T = {
     reserved: t("value.reserved"),
     disabled: t("value.disabled"),
     available: t("value.available"),
+    availabilityNotPublished: t("value.availabilityNotPublished"),
     vehicleFallback: t("value.vehicleFallback"),
     yes: t("value.yes"),
     no: t("value.no"),
@@ -118,10 +119,19 @@ function cleanPlanName(name: string, description?: string): string {
 }
 
 function stationVariant(station: SharedMobilityStation): string {
-  if (!station.isActive) return "inactive";
+  if (station.isActive === false) return "inactive";
+  if (station.availableVehicles === undefined) return "unknown";
   if (station.availableVehicles === 0) return "empty";
   if (station.emptySlots === 0) return "full";
   return "available";
+}
+
+function stationSummary(station: SharedMobilityStation): I18nToken | undefined {
+  if (station.availableVehicles !== undefined) {
+    return t("summary.available", { count: station.availableVehicles });
+  }
+  if (station.capacity !== undefined) return t("summary.capacity", { count: station.capacity });
+  return undefined;
 }
 
 function formFactorToken(formFactor: string): I18nToken {
@@ -205,7 +215,7 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
       : { contributors: snapshotContributors(station.contributors) }),
     variant,
     status: variant,
-    summary: t("summary.available", { count: station.availableVehicles }),
+    summary: stationSummary(station),
     operator: station.operator,
     branding: brandingFromStation(station),
     mapContext: mapContextSelection(
@@ -216,7 +226,7 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
       station.vehicleTypes,
     ),
     sortValues: {
-      available: station.availableVehicles,
+      ...(station.availableVehicles === undefined ? {} : { available: station.availableVehicles }),
       slots: station.emptySlots ?? 0,
     },
   };
@@ -226,7 +236,9 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   const sections: DataSourceDetailSection[] = [];
 
   // Availability table
-  const rows: [I18nToken, Translatable][] = [[T.row.availableVehicles, station.availableVehicles]];
+  const rows: [I18nToken, Translatable][] = [
+    [T.row.availableVehicles, station.availableVehicles ?? T.value.availabilityNotPublished],
+  ];
   if (station.emptySlots !== undefined) {
     rows.push([T.row.emptySlots, station.emptySlots]);
   }

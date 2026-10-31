@@ -132,7 +132,7 @@ interface Props {
   domain?: string;
 }
 
-function translateStructuredSection(
+export function translateStructuredSection(
   section: DataSourceDetailSection,
   resolveT: (value: Translatable | undefined) => string,
 ): StructuredSection {
