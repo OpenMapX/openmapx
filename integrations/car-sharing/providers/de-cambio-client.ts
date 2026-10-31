@@ -9,33 +9,43 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
-import type { RegionalCarSharingClient } from "./regional-client-types.js";
+import { type RegionalCarSharingClient, regionMatchesBbox } from "./regional-client-types.js";
 
 const DE_CAMBIO_BASE = "https://cwapi.cambio-carsharing.com/pub";
 const FETCH_TIMEOUT_MS = 8_000;
 
-/** Cambio regions with approximate center coordinates for bbox matching. */
+/**
+ * Cambio regions, each with a point and a radius that covers all of its stations.
+ * A region feed can reach far beyond its city: Köln's holds Bonn and Düsseldorf,
+ * Bremen's holds Bremerhaven and Emden, and Flanders' spans Flemish Belgium. The
+ * radii add a margin to the farthest station of each feed as of 2026-10-31
+ * (Bremen 112 km, Wallonia 121 km, Flanders 126 km, the rest within 37 km).
+ * The national lists (`/pub/stations/DEU`, `/pub/stations/BEL`) hold exactly
+ * these regions' stations.
+ */
 const DE_CAMBIO_REGIONS: {
   code: string;
   name: string;
   lat: number;
   lng: number;
+  radiusKm: number;
   country: string;
 }[] = [
-  { code: "AAC", name: "Aachen", lat: 50.776, lng: 6.084, country: "DE" },
-  { code: "BRL", name: "Berlin", lat: 52.52, lng: 13.405, country: "DE" },
-  { code: "BIL", name: "Bielefeld", lat: 52.03, lng: 8.533, country: "DE" },
-  { code: "BRE", name: "Bremen", lat: 53.075, lng: 8.807, country: "DE" },
-  { code: "FLB", name: "Flensburg", lat: 54.794, lng: 9.437, country: "DE" },
-  { code: "HAM", name: "Hamburg", lat: 53.551, lng: 9.994, country: "DE" },
-  { code: "KOE", name: "Köln", lat: 50.938, lng: 6.96, country: "DE" },
-  { code: "LBG", name: "Lüneburg", lat: 53.251, lng: 10.414, country: "DE" },
-  { code: "OLD", name: "Oldenburg", lat: 53.144, lng: 8.214, country: "DE" },
-  { code: "SAB", name: "Saarbrücken", lat: 49.234, lng: 6.997, country: "DE" },
-  { code: "WUP", name: "Wuppertal", lat: 51.264, lng: 7.178, country: "DE" },
-  { code: "BXL", name: "Brussels", lat: 50.847, lng: 4.356, country: "BE" },
-  { code: "WAL", name: "Wallonia", lat: 50.464, lng: 4.87, country: "BE" },
-  { code: "VLA", name: "Flanders", lat: 51.054, lng: 3.717, country: "BE" },
+  { code: "AAC", name: "Aachen", lat: 50.776, lng: 6.084, radiusKm: 50, country: "DE" },
+  { code: "BRL", name: "Berlin", lat: 52.52, lng: 13.405, radiusKm: 50, country: "DE" },
+  { code: "BIL", name: "Bielefeld", lat: 52.03, lng: 8.533, radiusKm: 50, country: "DE" },
+  { code: "BRE", name: "Bremen", lat: 53.075, lng: 8.807, radiusKm: 130, country: "DE" },
+  { code: "DOR", name: "Dortmund", lat: 51.514, lng: 7.465, radiusKm: 50, country: "DE" },
+  { code: "FLB", name: "Flensburg", lat: 54.794, lng: 9.437, radiusKm: 50, country: "DE" },
+  { code: "HAM", name: "Hamburg", lat: 53.551, lng: 9.994, radiusKm: 50, country: "DE" },
+  { code: "KOE", name: "Köln", lat: 50.938, lng: 6.96, radiusKm: 50, country: "DE" },
+  { code: "LBG", name: "Lüneburg", lat: 53.251, lng: 10.414, radiusKm: 50, country: "DE" },
+  { code: "OLD", name: "Oldenburg", lat: 53.144, lng: 8.214, radiusKm: 50, country: "DE" },
+  { code: "SAB", name: "Saarbrücken", lat: 49.234, lng: 6.997, radiusKm: 50, country: "DE" },
+  { code: "WUP", name: "Wuppertal", lat: 51.264, lng: 7.178, radiusKm: 50, country: "DE" },
+  { code: "BXL", name: "Brussels", lat: 50.847, lng: 4.356, radiusKm: 50, country: "BE" },
+  { code: "WAL", name: "Wallonia", lat: 50.464, lng: 4.87, radiusKm: 140, country: "BE" },
+  { code: "VLA", name: "Flanders", lat: 51.054, lng: 3.717, radiusKm: 145, country: "BE" },
 ];
 
 interface DeCambioStation {
@@ -53,15 +63,10 @@ interface DeCambioStation {
   vehicleClasses?: { id: string; displayName: string }[];
 }
 
-/** Find Cambio regions whose center is within ~50km of the bbox. */
+/** Find Cambio regions that can hold a station inside the bbox. */
 function findRegionsInBbox(bbox: BoundingBox): typeof DE_CAMBIO_REGIONS {
-  const padding = 0.5; // ~50km
-  return DE_CAMBIO_REGIONS.filter(
-    (r) =>
-      r.lat >= bbox.south - padding &&
-      r.lat <= bbox.north + padding &&
-      r.lng >= bbox.west - padding &&
-      r.lng <= bbox.east + padding,
+  return DE_CAMBIO_REGIONS.filter((r) =>
+    regionMatchesBbox({ center: [r.lng, r.lat], radiusKm: r.radiusKm }, bbox),
   );
 }
 
@@ -134,7 +139,7 @@ export const deCambioClient: RegionalCarSharingClient = {
   name: "Cambio",
   regions: DE_CAMBIO_REGIONS.map((r) => ({
     center: [r.lng, r.lat] as LngLat,
-    radiusKm: 50,
+    radiusKm: r.radiusKm,
   })),
   search: searchDeCambio,
 };

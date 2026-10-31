@@ -25,16 +25,29 @@ export interface RegionalCarSharingClient {
   ): Promise<SharedMobilityStation[]>;
 }
 
+const KM_PER_DEGREE_LATITUDE = 111;
+
+/**
+ * Check if a bbox can hold a point within `radiusKm` of the region's center: the
+ * bbox, padded by the radius, contains the center. A degree of longitude spans
+ * cos(latitude) × 111 km, so the longitude padding widens with latitude.
+ */
+export function regionMatchesBbox(
+  region: { center: LngLat; radiusKm: number },
+  bbox: BoundingBox,
+): boolean {
+  const [lng, lat] = region.center;
+  const latPad = region.radiusKm / KM_PER_DEGREE_LATITUDE;
+  const lngPad = latPad / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  return (
+    lat >= bbox.south - latPad &&
+    lat <= bbox.north + latPad &&
+    lng >= bbox.west - lngPad &&
+    lng <= bbox.east + lngPad
+  );
+}
+
 /** Check if a bbox overlaps with any of the client's regions. */
 export function clientMatchesBbox(client: RegionalCarSharingClient, bbox: BoundingBox): boolean {
-  // Approximate: radiusKm / 111 gives degrees (slightly over-estimates longitude at higher latitudes, which is fine)
-  return client.regions.some((r) => {
-    const pad = r.radiusKm / 111;
-    return (
-      r.center[1] >= bbox.south - pad &&
-      r.center[1] <= bbox.north + pad &&
-      r.center[0] >= bbox.west - pad &&
-      r.center[0] <= bbox.east + pad
-    );
-  });
+  return client.regions.some((region) => regionMatchesBbox(region, bbox));
 }
