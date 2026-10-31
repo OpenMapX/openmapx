@@ -2,6 +2,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { refuseAgentSwitchOrExit } from "../lib/agent-layout";
+import { API_SERVICE_ID, migrateBeforeApiUpdate } from "../lib/api-migrations";
 import { dockerComposeStream } from "../lib/docker";
 import {
   applyGeneratedHardlinks,
@@ -506,6 +507,16 @@ export function registerServicesCommands(program: Command): void {
 
       // With its dependencies, the agent may be recreated too.
       await refuseAgentSwitchOrExit(options.deps === false ? allIds : "all");
+      if (allIds.includes(API_SERVICE_ID)) {
+        let migrationCode: number;
+        try {
+          migrationCode = await migrateBeforeApiUpdate({ deps: options.deps !== false });
+        } catch (err) {
+          log.err(`Database migration step failed: ${(err as Error).message}`);
+          process.exit(1);
+        }
+        if (migrationCode !== 0) process.exit(migrationCode);
+      }
       const code = await dockerComposeStream([
         "up",
         "-d",

@@ -391,14 +391,15 @@ dedicated hostname or port.
 ## 5. Database migrations apply automatically
 
 OpenMapX does not have a separate "run migrations" command for a self-host
-upgrade. The `app-api` container **applies pending Drizzle migrations on every
-boot**: at startup it runs the migration files bundled in the image against the
-database, and the migrator is **idempotent**; it skips migrations that are
+upgrade. When `services update` replaces `app-api` (step 4), it first stops the
+old `app-api` and applies the new image's pending Drizzle migrations in a one-off
+container. Their output is part of the update's output. Only then does it start
+the new containers. The migrator is **idempotent**; it skips migrations that are
 already applied and only runs the new ones.
 
-So once the new `app-api` image starts (step 4), any schema changes that shipped
-with the release are applied automatically. You can confirm it ran cleanly in the
-API logs:
+`app-api` also applies pending migrations whenever it starts, so a container
+started any other way catches up too. After the update's migration step there
+are none left. You can confirm it ran cleanly in the API logs:
 
 ```bash
 pnpm openmapx services logs app-api --tail 100
@@ -418,15 +419,13 @@ the deployment contains state you cannot readily recreate.
 
 ### While a migration runs
 
-`app-api` logs `Applying N database migrations` with their names before it
-starts. It answers its healthcheck only after they finish, so the container
-shows as `starting` meanwhile, and `app-web` waits for it. Docker allows it 20
-minutes before it counts failed healthchecks. A migration that changes many rows
-can take a while. To follow it:
+The migration step logs `Applying N database migrations` with their names before
+it starts. The API is unavailable until it finishes and the new containers have
+started. A migration that changes many rows can take a while. To follow it:
 
-- Every minute, `app-api` logs `Still applying database migrations` with the
-  statement it is running and for how long. If that statement is waiting for a
-  lock another database session holds, it logs that instead.
+- Every minute, it logs `Still applying database migrations` with the statement
+  it is running and for how long. If that statement is waiting for a lock another
+  database session holds, it logs that instead.
 - In PostgreSQL the migration's session is named `openmapx-api-migrations`.
   From `psql` in the `postgis` container, connected to the `openmapx` database:
 
@@ -436,11 +435,14 @@ can take a while. To follow it:
   ```
 
 Let a migration that is making progress finish. All pending migrations run in
-one transaction, so stopping `app-api` rolls every one of them back, and the next
-start repeats them from the beginning. The admin-panel updater does the same
-when `app-api` is not healthy in time: it returns the services to their previous
-images, which stops the migration. A second `app-api` started meanwhile waits for
-the first to finish instead of migrating the database at the same time.
+one transaction, so stopping the update rolls every one of them back. The
+previous `app-api` then starts again, nothing is replaced, and the next update
+repeats the migrations from the beginning. A migration that fails does the same.
+
+An update from the admin panel stops after 30 minutes, including its backup and
+image pull, and its migration with it. Apply a release whose migration needs
+longer from the host with `pnpm openmapx services update`, which has no time
+limit.
 
 ## 6. Verify the upgrade
 
