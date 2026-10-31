@@ -294,10 +294,10 @@ describe("mergeRegionalStations", () => {
       capacity: 3,
     };
     const live = makeStation({
-      id: "de-cambio/MST/1",
+      id: "live-feed/1",
       name: "Live",
       coordinates: [7.64, 51.9503],
-      sources: ["de-cambio/MST"],
+      sources: ["live-feed"],
       availableVehicles: 1,
       isActive: true,
     });
@@ -308,15 +308,15 @@ describe("mergeRegionalStations", () => {
     expect(merged.availableVehicles).toBe(1);
     expect(merged.isActive).toBe(true);
     expect(merged.capacity).toBe(3);
-    expect(merged.sources).toEqual(["de-stadtteilauto", "de-cambio/MST"]);
+    expect(merged.sources).toEqual(["de-stadtteilauto", "live-feed"]);
   });
 
   it("keeps a live station's availability when the static station comes second", () => {
     const live = makeStation({
-      id: "de-cambio/MST/1",
+      id: "live-feed/1",
       name: "Live",
       coordinates: [7.64, 51.95],
-      sources: ["de-cambio/MST"],
+      sources: ["live-feed"],
       availableVehicles: 0,
       isActive: false,
     });
