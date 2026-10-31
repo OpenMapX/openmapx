@@ -1050,20 +1050,28 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     vehicleId: string,
     fallbackIds?: string[],
   ): Promise<MobilityResult<VehicleJourney | null>> {
-    const provider = await resolveByPrefix(vehicleId);
-    if (!provider?.getVehicleJourney)
-      return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
-    const fn = provider.getVehicleJourney.bind(provider);
-    const outcome = await timed(
-      providerHealth,
-      metricsRecorder,
-      provider.id,
-      "getVehicleJourney",
-      () => fn(vehicleId, fallbackIds),
-    );
-    return outcome.ok
-      ? outcome.value
-      : emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
+    // A merged departure carries each source's trip id. Ask every id's own
+    // provider, the primary id's first, so one source failing or not knowing the
+    // trip falls back to the next instead of sending it ids it cannot resolve.
+    const byProvider = new Map<TransitProvider, string[]>();
+    for (const id of [vehicleId, ...(fallbackIds ?? [])]) {
+      const provider = await resolveByPrefix(id);
+      if (!provider?.getVehicleJourney) continue;
+      byProvider.set(provider, [...(byProvider.get(provider) ?? []), id]);
+    }
+    for (const [provider, [primary, ...rest]] of byProvider) {
+      if (!provider.getVehicleJourney) continue;
+      const fn = provider.getVehicleJourney.bind(provider);
+      const outcome = await timed(
+        providerHealth,
+        metricsRecorder,
+        provider.id,
+        "getVehicleJourney",
+        () => fn(primary, rest.length ? rest : undefined),
+      );
+      if (outcome.ok && outcome.value.data) return outcome.value;
+    }
+    return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
   }
 
   /** Facilities at a stop; rejects when the provider that offers them fails or is in cooldown. */

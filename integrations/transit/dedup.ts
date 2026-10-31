@@ -124,6 +124,45 @@ export function normalizeHeadsign(headsign: string): string {
   return normalizeName(headsign).split(" ").sort().join(" ");
 }
 
+/** Bigram similarity at which differently written headsigns still name one destination. */
+const HEADSIGN_SIMILARITY_MIN = 0.6;
+
+/**
+ * Whether two headsigns can name the same departure. Providers abbreviate and
+ * reorder destinations ("Köln Hbf", "Köln Hauptbahnhof", "Hbf, Köln"), and some
+ * shorten them ("Düsseldorf" for "Düsseldorf Flughafen"), but the two directions
+ * of a line name different places. A missing headsign is no evidence either way.
+ */
+export function headsignsCompatible(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return true;
+  const na = normalizeHeadsign(a);
+  const nb = normalizeHeadsign(b);
+  if (!na || !nb || na === nb) return true;
+  const ta = new Set(na.split(" "));
+  const tb = new Set(nb.split(" "));
+  const [fewer, more] = ta.size <= tb.size ? [ta, tb] : [tb, ta];
+  if ([...fewer].every((token) => more.has(token))) return true;
+  return diceSimilarity(na, nb) >= HEADSIGN_SIMILARITY_MIN;
+}
+
+/**
+ * Whether two route short names can name the same line. Spacing differs between
+ * providers ("RE 1", "RE1"), and some give only the product ("ICE" for
+ * "ICE 123"), but "S1" and "S2" are different lines. A missing name is no
+ * evidence either way.
+ */
+export function lineNamesCompatible(a: string | undefined, b: string | undefined): boolean {
+  const na = normalizeShortName(a ?? "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  const nb = normalizeShortName(b ?? "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  if (!na || !nb || na === nb) return true;
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  return /^\p{L}+$/u.test(shorter) && longer.startsWith(shorter) && /\d/.test(longer);
+}
+
 // Trip number detection
 
 /**

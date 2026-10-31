@@ -40,7 +40,6 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,
   contributorKey,
-  contributorsForField,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type {
@@ -71,6 +70,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { legToMergedDeparture } from "./legDeparture";
 import { getWheelchairStatus } from "./transitAccessibility";
 
 /**
@@ -100,27 +100,6 @@ function isPerLegRedundant(
   if (legAttrs.length !== trip.length) return false;
   const legIds = new Set(legAttrs.map(contributorKey));
   return trip.every((a) => legIds.has(contributorKey(a)));
-}
-
-function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
-  return {
-    contributors: snapshotContributors(
-      ...["route", "mode", "from", "to", "startTime", "headsign"].map((field) =>
-        contributorsForField(leg, field),
-      ),
-    ),
-    tripId: leg.tripId ?? "",
-    route: {
-      id: leg.routeId ?? "",
-      shortName: leg.route?.shortName ?? "",
-      longName: leg.route?.longName ?? "",
-      mode: leg.mode,
-      color: leg.route?.color,
-    },
-    headsign: leg.to.name,
-    scheduledAt: leg.startTime,
-    providers: provider ? [provider] : [],
-  };
 }
 
 function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
