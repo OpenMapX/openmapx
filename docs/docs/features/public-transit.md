@@ -74,6 +74,12 @@ cannot be loaded for some of the place's stops get the same warning. Lines,
 alerts and facilities that cannot be loaded are left out rather than kept as
 "none", and are loaded again on a later visit or within about a minute.
 
+A place's stops can have different names, for example a main station and a bus
+stop beside it. A departure from a stop other than the place's main one shows
+that stop's name next to its line, so you know where to board. The main stop is
+the one named like the place. Different spellings of one name, such as
+"Köln Hbf" and "Köln Hauptbahnhof", count as one stop and are not labelled.
+
 ### Understanding timetable status
 
 **Scheduled time** identifies explicitly timetable-only service. A prediction

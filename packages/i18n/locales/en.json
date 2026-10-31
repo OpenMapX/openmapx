@@ -1751,6 +1751,7 @@
     "moreAlerts": "{count} more alert{count, plural, one {} other {s}}",
     "showMoreAlerts": "+{count} more alert{count, plural, one {} other {s}}",
     "activeServiceAlert": "Active service alert for this route",
+    "rowStop": "Stop",
     "alertInfo": "Info",
     "alertWarning": "Warning",
     "alertSevere": "Service disruption",

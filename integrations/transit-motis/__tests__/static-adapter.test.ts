@@ -642,6 +642,33 @@ describe("MOTIS per-service realtime evidence", () => {
   );
 });
 
+describe("MOTIS stop time's own stop", () => {
+  it("names the stop each stop time leaves from, such as a station's platform", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: {
+          stopId: "de:05315:11201:3:9",
+          name: "Köln Hbf",
+          scheduledDeparture: "2026-10-07T08:00:00Z",
+        },
+        mode: "HIGHSPEED_RAIL",
+      } as never,
+      "departure",
+    );
+    expect(departure.stop).toEqual({ id: "ms:de:05315:11201:3:9", name: "Köln Hbf" });
+  });
+
+  it("leaves the stop out when MOTIS gives none", () => {
+    const departure = normalizeStoptime(
+      instance,
+      { place: { scheduledDeparture: "2026-10-07T08:00:00Z" }, mode: "BUS" } as never,
+      "departure",
+    );
+    expect(departure.stop).toBeUndefined();
+  });
+});
+
 describe("MOTIS timetable transport evidence", () => {
   beforeEach(() => mocks.stoptimes.mockReset());
   it.each([getDepartures, getArrivals])(
