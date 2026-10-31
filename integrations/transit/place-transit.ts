@@ -33,7 +33,12 @@ import {
 } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
-import { mainStopKey, stopNameKey, stopNameSpecificity } from "./stop-names.js";
+import {
+  mainStopKey,
+  stopNameKey,
+  stopNameSpecificity,
+  withoutBracketedParts,
+} from "./stop-names.js";
 
 /** Preserve scalar ownership when a weaker row supplies a missing field. */
 function retainFieldReceipt(
@@ -294,9 +299,8 @@ function hashKey(prefix: string, data: unknown): string {
 }
 
 function normalizeLinkName(name: string): string {
-  return name
+  return withoutBracketedParts(name, ["()"])
     .toLowerCase()
-    .replace(/\s*\([^)]*\)\s*/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();

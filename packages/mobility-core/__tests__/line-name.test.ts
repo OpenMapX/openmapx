@@ -25,5 +25,13 @@ describe("splitLineName", () => {
     expect(splitLineName("S6")).toEqual({ name: "S6" });
     expect(splitLineName("Bus 17 (SEV)")).toEqual({ name: "Bus 17 (SEV)" });
     expect(splitLineName("")).toEqual({ name: "" });
+    expect(splitLineName("(26826)")).toEqual({ name: "(26826)" });
+  });
+
+  it("handles long bracket-laden input in linear time", () => {
+    const started = performance.now();
+    splitLineName(`${"!(".repeat(50_000)}x`);
+    splitLineName(`S1 ${"(".repeat(50_000)}`);
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });

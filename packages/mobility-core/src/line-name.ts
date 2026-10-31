@@ -12,9 +12,7 @@ export interface LineName {
 }
 
 /** A train number in brackets at the end: "(26826)", "(Zug-Nr. 33192)". */
-const TRAIN_NUMBER_SUFFIX = /^(.*\S)\s*\((?:Zug-?Nr\.?\s*)?(\d+)\)$/i;
-/** An opening bracket the source cut off, as in RMV's "RE 1 (RR". */
-const UNCLOSED_SUFFIX = /^(.*\S)\s*\([^)]*$/;
+const TRAIN_NUMBER_SUFFIX = /\((?:Zug-?Nr\.?\s*)?(\d+)\)$/i;
 /** A line designation: letters then a number, as in "S11" or "RE 1". */
 const LINE_DESIGNATION = /^\p{L}+\s?\d/u;
 
@@ -27,13 +25,18 @@ const LINE_DESIGNATION = /^\p{L}+\s?\d/u;
 export function splitLineName(raw: string, operator?: string): LineName {
   let name = raw.trim();
   let trainNumber: string | undefined;
-  const numbered = name.match(TRAIN_NUMBER_SUFFIX);
-  if (numbered) {
-    name = numbered[1];
-    trainNumber = numbered[2];
-  } else {
-    const cut = name.match(UNCLOSED_SUFFIX);
-    if (cut) name = cut[1];
+  // The last opening bracket starts the suffix, if anything; found directly
+  // rather than by a pattern that backtracks over every earlier bracket.
+  const open = name.lastIndexOf("(");
+  const head = open > 0 ? name.slice(0, open).trimEnd() : "";
+  if (head) {
+    const numbered = name.slice(open).match(TRAIN_NUMBER_SUFFIX);
+    // Or the source cut the name off inside a bracket, as in RMV's "RE 1 (RR".
+    const cutOff = !name.includes(")", open);
+    if (numbered || cutOff) {
+      name = head;
+      trainNumber = numbered?.[1];
+    }
   }
   const prefix = operator?.trim();
   if (prefix && name.toLowerCase().startsWith(`${prefix.toLowerCase()} `)) {

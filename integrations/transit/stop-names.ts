@@ -5,6 +5,37 @@ import { expandSearchQuery } from "@openmapx/integration-geocoding/query-expansi
 const PLATFORM_DESIGNATION =
   /(^|[^\p{L}])(gl|gleis|gleise|bstg|bussteig|steig|platform|track|quai|voie)(?![\p{L}]).*$/u;
 
+/**
+ * The text with each closed bracketed part, "(...)" or "[...]", replaced by a
+ * space. Unclosed brackets stay. One pass: once a bracket kind has no closing
+ * partner left, later ones of that kind can't close either, so nothing is
+ * scanned twice, unlike a pattern that retries from every opening bracket.
+ */
+export function withoutBracketedParts(
+  text: string,
+  pairs: readonly string[] = ["()", "[]"],
+): string {
+  const open = new Map(pairs.map((pair) => [pair[0], pair[1]]));
+  const exhausted = new Set<string>();
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const close = open.get(text[i]);
+    if (close && !exhausted.has(close)) {
+      const end = text.indexOf(close, i + 1);
+      if (end !== -1) {
+        out += " ";
+        i = end + 1;
+        continue;
+      }
+      exhausted.add(close);
+    }
+    out += text[i];
+    i++;
+  }
+  return out;
+}
+
 /** Words saying only that a stop is a station, as in "Köln Messe/Deutz Bf". */
 const GENERIC_STATION_WORDS = new Set(["bahnhof", "station", "gare"]);
 
@@ -22,11 +53,10 @@ const GENERIC_STATION_WORDS = new Set(["bahnhof", "station", "gare"]);
  * is kept, since it tells a main station from other stops of a city.
  */
 export function stopNameKey(name: string): string {
-  const words = expandSearchQuery(name)
+  const words = withoutBracketedParts(expandSearchQuery(name))
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
-    .replace(/\s*(\([^)]*\)|\[[^\]]*\])\s*/g, " ")
     .replace(PLATFORM_DESIGNATION, " ")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((word) => word.length > 1 && !GENERIC_STATION_WORDS.has(word));

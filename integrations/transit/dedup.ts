@@ -68,14 +68,26 @@ const SHORT_NAME_OPERATOR_PREFIX_RE = /^(DB|ÖBB|OEBB|SBB|NS)\s+(?=\p{L}+\s?\d)/
 const SHORT_NAME_BRAND_SUFFIX_RE = /(?<=\d)\s*RRX$/i;
 
 /**
+ * A name without a bracket at its end, closed ("RE1 (26826)") or cut off by
+ * the source ("RE 1 (RR"). Found from the last opening bracket rather than by
+ * a pattern, which would backtrack over every earlier bracket.
+ */
+function withoutTrailingBracket(name: string): string {
+  const open = name.lastIndexOf("(");
+  if (open < 0) return name;
+  const close = name.indexOf(")", open);
+  if (close !== -1 && close !== name.trimEnd().length - 1) return name;
+  return name.slice(0, open).trimEnd();
+}
+
+/**
  * Comparison key for a route short name, equal for the ways sources write one
  * line: "RE1", "RE 1", "RE1 (26826)", "RE 1 (RR" (cut off), "RE1RRX" and
  * "RE1 (RRX)" share a key, as do "DB S11 (Zug-Nr. 33192)" and "S11", and
  * "Bus 73" and "73". Not for display.
  */
 export function normalizeShortName(name: string): string {
-  let n = name.trim();
-  n = n.replace(/\s*\([^)]*\)?\s*$/, ""); // drop "(...)" at the end, closed or cut off
+  let n = withoutTrailingBracket(name.trim()); // drop "(...)" at the end, closed or cut off
   n = n.replace(SHORT_NAME_MODE_PREFIX_RE, ""); // drop "Bus ", "Tram ", ...
   n = n.replace(SHORT_NAME_OPERATOR_PREFIX_RE, ""); // drop "DB " before "S11"
   n = n.replace(SHORT_NAME_BRAND_SUFFIX_RE, ""); // drop "RRX" after "RE1"
@@ -184,10 +196,7 @@ export function lineNamesCompatible(a: string | undefined, b: string | undefined
  */
 export function isTripNumber(shortName: string): boolean {
   // Strip parenthetical suffix and whitespace
-  const n = shortName
-    .trim()
-    .replace(/\s*\([^)]*\)\s*$/, "")
-    .replace(/\s+/g, "");
+  const n = withoutTrailingBracket(shortName.trim()).replace(/\s+/g, "");
 
   // 5+ pure digits
   if (/^\d{5,}$/.test(n)) return true;

@@ -3,7 +3,12 @@ import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { VehicleJourney } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
-import { headsignsCompatible, lineNamesCompatible } from "../dedup.js";
+import {
+  headsignsCompatible,
+  isTripNumber,
+  lineNamesCompatible,
+  normalizeShortName,
+} from "../dedup.js";
 import { createTransitOrchestrator } from "../orchestrator.js";
 
 describe("headsignsCompatible", () => {
@@ -51,6 +56,17 @@ describe("lineNamesCompatible", () => {
     ["RE1", "RE11"],
   ])("keeps %j and %j apart", (a, b) => {
     expect(lineNamesCompatible(a, b)).toBe(false);
+  });
+});
+
+describe("line keys of bracket-laden names", () => {
+  it("are computed in linear time", () => {
+    const started = performance.now();
+    for (const name of [` ${"( ".repeat(50_000)})x`, `${"!(".repeat(50_000)}x`]) {
+      normalizeShortName(name);
+      isTripNumber(name);
+    }
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });
 
