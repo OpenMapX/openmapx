@@ -175,6 +175,34 @@ export function buildAttributionHtml(ds: {
   });
 }
 
+/** Placeholders a catalogue leaves where its licence is yet to be filled in. */
+const LICENCE_PLACEHOLDER =
+  /^(?:todo|tbd|tba|n\/?a|-|\?+|licence not specified|license not specified)$/i;
+
+/** Whether a grant names no licence: unknown, and without a licence name of its own. */
+export function isUnstatedLicence(license: Licensing["bindings"][number]["license"]): boolean {
+  return (
+    license.kind === "unknown" &&
+    (!license.raw?.trim() || LICENCE_PLACEHOLDER.test(license.raw.trim()))
+  );
+}
+
+/**
+ * The licensing a credit shows: without grants that name no licence. "Licence
+ * not specified" beside a source tells a reader nothing, so the credit names
+ * the source alone. With `keepLinked`, an unstated grant that links its source's
+ * terms stays, for views that can label that link.
+ */
+export function creditLicensing(
+  licensing: Licensing,
+  options: { keepLinked?: boolean } = {},
+): Licensing | undefined {
+  const bindings = licensing.bindings.filter(
+    (binding) => !isUnstatedLicence(binding.license) || (options.keepLinked && binding.license.url),
+  );
+  return bindings.length > 0 ? { ...licensing, bindings } : undefined;
+}
+
 /** Render all applicable subjects and grants using the shared licence registry. */
 export function buildLicensingHtml(
   licensing: Licensing,
@@ -214,7 +242,8 @@ export function buildRuntimeAttributionHtml(
   const credit = attribution.attributionText
     ? sanitizeAttributionHtml(attribution.attributionText)
     : nameLink;
-  const licensing = attribution.licensing ? buildLicensingHtml(attribution.licensing, options) : "";
+  const shown = attribution.licensing && creditLicensing(attribution.licensing);
+  const licensing = shown ? buildLicensingHtml(shown, options) : "";
   return licensing ? `${credit} (${licensing})` : credit;
 }
 

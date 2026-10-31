@@ -266,3 +266,31 @@ it("retains ambiguous repeated-label notices when their link targets differ", ()
   expect(result.visible).toHaveLength(2);
   expect(result.fullHtml).toEqual([repeatedLabelNotice, other]);
 });
+
+describe("credits without an unstated licence", () => {
+  const credit = (license: Record<string, unknown>) =>
+    attributionHtml.buildRuntimeAttributionHtml({
+      sourceId: "kvb",
+      name: "Kölner Verkehrs-Betriebe AG",
+      url: "https://kvb.koeln/",
+      licensing: {
+        version: 1,
+        bindings: [{ scope: "data", subject: "KVB", license }],
+      } as never,
+    });
+
+  it("names the source alone when its licence is unknown", () => {
+    expect(credit({ kind: "unknown" })).toBe(
+      '<a href="https://kvb.koeln/" target="_blank" rel="noopener noreferrer">Kölner Verkehrs-Betriebe AG</a>',
+    );
+  });
+
+  it("treats a catalogue's placeholder as no licence", () => {
+    expect(credit({ kind: "unknown", raw: "todo" })).not.toContain("todo");
+  });
+
+  it("keeps a licence the source names", () => {
+    expect(credit({ kind: "spdx", expression: "CC-BY-4.0" })).toContain("CC-BY-4.0");
+    expect(credit({ kind: "unknown", raw: "Proprietary" })).toContain("Proprietary");
+  });
+});
