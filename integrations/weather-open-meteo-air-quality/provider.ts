@@ -15,6 +15,7 @@ import type {
   ProviderCallContext,
   UpstreamCacheTtl,
 } from "@openmapx/integration-framework";
+import { snapshotContributors } from "@openmapx/integration-framework";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import sourceManifest from "./manifest.json";
 
@@ -38,7 +39,7 @@ const FORECAST_TTL: UpstreamCacheTtl = {
   staleIfErrorMs: 6 * 60 * 60_000,
 };
 
-const source: AirQualitySourceRef = {
+const source = {
   sourceId: SOURCE_ID,
   name: "Open-Meteo Air Quality API / CAMS",
   url: "https://open-meteo.com/en/docs/air-quality-api",
@@ -46,7 +47,7 @@ const source: AirQualitySourceRef = {
   licensing: parseLicensing(sourceManifest.dataSources[0].licensing)!,
   methodologyUrl: "https://open-meteo.com/en/docs/air-quality-api",
   attribution: "Open-Meteo; CAMS ENSEMBLE data providers",
-};
+} satisfies AirQualitySourceRef;
 
 const pollutants: ReadonlyArray<{
   field: "pm10" | "pm2_5" | "carbon_monoxide" | "nitrogen_dioxide" | "sulphur_dioxide" | "ozone";
@@ -362,5 +363,14 @@ export async function getOpenMeteoLegacyCurrent(
     europeanAqi: data.current.european_aqi,
     usAqi: data.current.us_aqi,
     time: data.current.time,
+    contributors: snapshotContributors([
+      {
+        sourceId: source.sourceId,
+        name: source.name,
+        url: source.url,
+        licensing: source.licensing,
+        attributionText: source.attribution,
+      },
+    ]),
   };
 }
