@@ -11,12 +11,13 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   configurationApplyResultSchema,
@@ -101,6 +102,12 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
         target,
       ]);
       expect(statSync(target).uid).toBe(EXPECTED_UID);
+      const bin = join(clone, "docker-bin");
+      mkdirSync(bin, { mode: 0o700 });
+      symlinkSync(
+        join(ROOT, "apps/ops-agent/src/__fixtures__/production-docker-io.mjs"),
+        join(bin, "docker"),
+      );
       writeFileSync(join(target, "infra", "docker", ".env"), envWithoutUser(target), {
         mode: 0o600,
       });
@@ -129,6 +136,16 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       return { uid: Number(uid), gid: Number(gid) };
     }
 
+    /** Empty fixture host: real configuration/authority code observes named Docker reads. */
+    function fixtureEnvironment(target: string) {
+      return {
+        PATH: `${join(dirname(target), "docker-bin")}:${process.env.PATH}`,
+        HOME: process.env.HOME,
+        OPENMAPX_ROOT_DIR: target,
+        OMX_PRODUCTION_TEST_DOCKER_READ_ONLY: "1",
+      };
+    }
+
     /** `pnpm openmapx` on the host: the CLI from source. */
     async function hostCli(target: string, ...args: string[]) {
       const cli = join(ROOT, "packages", "cli");
@@ -137,7 +154,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
         ["--tsconfig", join(cli, "tsconfig.json"), join(cli, "src", "index.ts"), ...args],
         {
           cwd: target,
-          env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: target },
+          env: fixtureEnvironment(target),
         },
       );
     }
@@ -146,7 +163,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     async function agentCli(target: string, ...args: string[]) {
       return run(process.execPath, [join(outdir, "cli.mjs"), ...args], {
         cwd: target,
-        env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: target },
+        env: fixtureEnvironment(target),
       });
     }
 
@@ -192,9 +209,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const agent = spawn(process.execPath, [join(outdir, "agent.mjs")], {
         cwd: target,
         env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          OPENMAPX_ROOT_DIR: target,
+          ...fixtureEnvironment(target),
           OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
           OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
           OPS_TRUSTED_CONFIG_DIR: services.agentStatePaths(infra).trustedConfig,

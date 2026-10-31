@@ -1,6 +1,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -77,6 +78,13 @@ describe.skipIf(process.platform !== "linux")("the agent's Transitous pin", () =
       process.umask(previous);
     }
     const infra = join(target, "infra", "docker");
+    // Git-created directories inherit the deliberately permissive clone umask.
+    // Provision the fixture's authority roots explicitly, as a host operator
+    // must, rather than teaching production to accept group-writable trust.
+    chmodSync(target, 0o755);
+    chmodSync(join(target, "infra"), 0o755);
+    chmodSync(infra, 0o755);
+    chmodSync(join(infra, "secrets"), 0o700);
     // The deployment's user, which a host render writes from the checkout's
     // owner; the bundled CLI is the agent's and only reads it.
     const owner = statSync(target);

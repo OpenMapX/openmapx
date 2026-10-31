@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
@@ -476,7 +476,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("locks real service host fields and resource knobs, then permits explicit adoption after removal", async () => {
       vi.stubEnv("SERVICE_MOTIS_REGION", "host-region");
       vi.stubEnv("SERVICE_MOTIS_TOKEN", "host-private");
-      writeFileSync(join(host.infraDir, ".env"), "MOTIS_SLOT_MEMORY=8g\n");
+      const envPath = join(host.infraDir, ".env"),
+        deploymentEnv = readFileSync(envPath, "utf8");
+      writeFileSync(envPath, `${deploymentEnv}MOTIS_SLOT_MEMORY=8g\n`);
       const view = await api.inject({ url: "/api/admin/services/motis/config", headers });
       expect(view.statusCode, view.body).toBe(200);
       expect(view.json().ownership.REGION).toMatchObject({ source: "env", writable: false });
@@ -515,7 +517,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
       vi.stubEnv("SERVICE_MOTIS_REGION", "");
       vi.stubEnv("SERVICE_MOTIS_TOKEN", "");
-      rmSync(join(host.infraDir, ".env"));
+      writeFileSync(envPath, deploymentEnv);
       (await import("../utils/rate-limit")).serviceActionLimit.reset();
       const adopted = await api.inject({
         method: "POST",

@@ -798,8 +798,8 @@ dbDescribe("retained finite maintenance requests", () => {
         },
       }),
     );
-    const overlay = join(host.infraDir, "docker-compose.release.yml");
-    services.writeReleaseComposeArtifacts(manifest, overlay);
+    const overlay = services.releaseStatePaths(host.infraDir).overlay;
+    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
     const tokenFile = join(host.root, "clear-api-token");
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
     const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
@@ -928,7 +928,7 @@ dbDescribe("retained finite maintenance requests", () => {
         })),
       );
       host.setRows(rows);
-      const overlay = join(host.infraDir, "docker-compose.release.yml");
+      const overlay = services.releaseStatePaths(host.infraDir).overlay;
       if (pinned)
         services.writeReleaseComposeArtifacts(
           services.parseReleaseManifest(
@@ -953,7 +953,7 @@ dbDescribe("retained finite maintenance requests", () => {
               },
             }),
           ),
-          overlay,
+          host.infraDir,
         );
       const beforeOverlay = existsSync(overlay) ? readFileSync(overlay, "utf8") : null;
       const execFile: typeof host.execFile = async (file, argv, io) => {

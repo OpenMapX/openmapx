@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -24,6 +25,7 @@ import { parse as parseYaml } from "yaml";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
+import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
 import { createAgentHandoffBindings, createDefaultReleaseEffects } from "./administrative-runtime";
 import { agentHandoffPath, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
 import { startOpsAgentServer } from "./bootstrap";
@@ -36,7 +38,13 @@ import { initializeTrustedConfigurationRuntime } from "./trusted-config-runtime"
 
 const roots: string[] = [];
 async function fixture(options: Parameters<typeof ownedServiceHost>[0] = {}) {
-  const host = await ownedServiceHost(options);
+  const host = await ownedServiceHost({
+    ...options,
+    composeConfigIO: async (_file, args) => ({
+      stdout: JSON.stringify(readProductionFixtureCompose(args)),
+      stderr: "",
+    }),
+  });
   roots.push(host.root);
   return host;
 }
@@ -65,7 +73,24 @@ describe("assembled production service authority", () => {
           Labels: { ...host.row.Labels, "com.docker.compose.service": id },
         })),
       );
-      const effects = productionReleaseEffects(host.runtime);
+      const runtime = await createProductionOpsRuntime({
+        rootDir: host.root,
+        stack: host.stack,
+        loadAuthority: host.loadAuthority,
+        communityRepositories: host.repositories,
+        docker: { execFile: host.execFile, fileExists: existsSync },
+        releaseRuntimeOptions: {
+          runDocker: async (args, context) =>
+            (
+              await host.execFile("docker", args, {
+                signal: context.signal,
+                timeout: 30000,
+                maxBuffer: 1024 * 1024,
+              })
+            ).stdout,
+        },
+      });
+      const effects = productionReleaseEffects(runtime);
       const io = { signal: new AbortController().signal, emitLog() {} };
       const before = services.currentConfigurationGeneration(host.infraDir);
       await expect(effects.inspectSystem(io)).resolves.toMatchObject({
@@ -340,16 +365,14 @@ describe("assembled production service authority", () => {
     const bin = join(host.root, "fake-bin"),
       trace = join(host.root, "docker-trace.jsonl");
     mkdirSync(bin, { mode: 0o755 });
-    const docker = join(bin, "docker"),
-      realDocker = execFileSync("which", ["docker"], { encoding: "utf8" }).trim();
-    writeFileSync(
+    const docker = join(bin, "docker");
+    symlinkSync(
+      fileURLToPath(new URL("./__fixtures__/production-docker-io.mjs", import.meta.url)),
       docker,
-      `#!${process.execPath}\nconst fs=require("node:fs"),cp=require("node:child_process"),a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify(a)+"\\n");if(a[0]==="compose"&&a.includes("config")){const r=cp.spawnSync(${JSON.stringify(realDocker)},a,{encoding:"utf8"});process.stdout.write(r.stdout||"");process.stderr.write(r.stderr||"");process.exit(r.status??1);}\n`,
-      { mode: 0o700 },
     );
-    chmodSync(docker, 0o700);
     for (const [key, value] of Object.entries({
       PATH: `${bin}:${process.env.PATH}`,
+      OMX_PRODUCTION_TEST_DOCKER_TRACE: trace,
       OPENMAPX_ROOT_DIR: host.root,
       OPENMAPX_RELEASE: "local",
       DOMAIN: "example.test",

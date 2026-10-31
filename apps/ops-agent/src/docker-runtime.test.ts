@@ -1904,9 +1904,9 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       async (name) => {
         await expect(stackStatus(captured(name))).resolves.toEqual({
           services: [
-            { serviceId: "crashloop", state: "restarting" },
-            { serviceId: "web", state: "running" },
-            { serviceId: "worker", state: "paused" },
+            { serviceId: "crashloop", state: "restarting", health: "none" },
+            { serviceId: "web", state: "running", health: "none" },
+            { serviceId: "worker", state: "paused", health: "none" },
           ],
         });
       },
@@ -1926,7 +1926,29 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       );
       const result = await stackStatus(`${lines.join("\n")}\n`);
       expect(result.services).toHaveLength(256);
-      expect(result.services.at(-1)).toEqual({ serviceId: "service-255", state: "running" });
+      expect(result.services.at(-1)).toEqual({
+        serviceId: "service-255",
+        state: "running",
+        health: "unknown",
+      });
+    });
+
+    it.each([
+      ["healthy", "healthy"],
+      ["unhealthy", "unhealthy"],
+      ["starting", "starting"],
+      ["none", "none"],
+      ["unknown", "unknown"],
+      ["", "none"],
+      ["unexpected", "unknown"],
+      [null, "unknown"],
+      [undefined, "unknown"],
+    ])("preserves Docker health %j as %s for readiness", async (health, expected) => {
+      await expect(
+        stackStatus(JSON.stringify({ Service: "data-manager", State: "running", Health: health })),
+      ).resolves.toEqual({
+        services: [{ serviceId: "data-manager", state: "running", health: expected }],
+      });
     });
 
     it.each([

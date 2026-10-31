@@ -33,7 +33,7 @@ import { testExecution } from "./execution";
 import { createDefaultFixedCli } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
-export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean } = {}) {
+export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean; composeConfigIO?: DockerRuntimeOptions["execFile"] } = {}) {
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
@@ -81,6 +81,15 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     mkdirSync(service.directory, { recursive: true, mode: 0o755 });
     writeFileSync(join(service.directory, "service.json"), JSON.stringify(service.manifest), { mode: 0o644 });
   }
+  // Selecting Traefik requires its actual release-owned static configuration.
+  // Seed source bytes before authority capture and generation validation.
+  const traefikConfig = join(root, "services", "traefik", "config");
+  mkdirSync(traefikConfig, { recursive: true, mode: 0o755 });
+  writeFileSync(
+    join(traefikConfig, "traefik.yml"),
+    readFileSync(new URL("../../../../services/traefik/config/traefik.yml", import.meta.url)),
+    { mode: 0o644 },
+  );
   const releaseInventory = options.configurationHelperReleaseInventory ? await services.captureReleaseServiceAuthority(root) : undefined;
   const loadAuthority = createTrustedConfigurationAuthorityLoader({
     rootDir: root,
@@ -127,6 +136,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   let runtimeSecretBytes: Record<string, string> = {};
   const calls: string[][] = [];
   const actualComposeConfig = options.actualComposeConfig;
+  const composeConfigIO = options.composeConfigIO;
   const configurationHelperVersion=options.configurationHelperVersion;
   let creatingProcess:
     | ((args: readonly string[], signal: AbortSignal) => Promise<void>)
@@ -180,7 +190,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     } else if (args[0] === "compose" && args.includes("ps"))
       stdout = JSON.stringify(rows.map(row => ({ Service: row.Labels["com.docker.compose.service"], State: row.State, Health: "" })));
     else if (args[0] === "compose" && args.includes("config"))
-      stdout = actualComposeConfig ? (await runContainedProcess("docker", args, options)).stdout : JSON.stringify({
+      stdout = composeConfigIO ? (await composeConfigIO("docker", args, options)).stdout : actualComposeConfig ? (await runContainedProcess("docker", args, options)).stdout : JSON.stringify({
         services: Object.fromEntries(
           loaded.map((s) => [
             s.manifest.id,

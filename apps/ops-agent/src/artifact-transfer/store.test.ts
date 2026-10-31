@@ -401,8 +401,17 @@ it("closes new admissions during the existing drain without dropping the active 
   stores.push(store);
   const stage = await store.createStage({ ...input(), declaredBytes: 1 });
   const abort = new AbortController();
+  let bodyPulled!: () => void;
+  const pulling = new Promise<void>((resolve) => {
+    bodyPulled = resolve;
+  });
   const body = new ReadableStream<Uint8Array>(
-    { pull: () => new Promise<void>(() => {}) },
+    {
+      pull() {
+        bodyPulled();
+        return new Promise<void>(() => {});
+      },
+    },
     { highWaterMark: 0 },
   );
   const pending = store
@@ -416,7 +425,12 @@ it("closes new admissions during the existing drain without dropping the active 
       signal: abort.signal,
     })
     .catch((error) => error);
-  await new Promise((r) => setTimeout(r, 10));
+  await Promise.race([
+    pulling,
+    pending.then((error) => {
+      throw error;
+    }),
+  ]);
   open = false;
   await expect(store.createStage(input())).rejects.toMatchObject({ statusCode: 503 });
   expect(store.activeStreams).toBe(1);

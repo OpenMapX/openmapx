@@ -9,10 +9,11 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import {
@@ -73,13 +74,14 @@ interface FixtureState {
 }
 
 let fixture: FixtureState;
+const originalPath = process.env.PATH;
 let apiDatabase: typeof import("../../../apps/api/src/db/index").db;
 let apiSql: typeof import("../../../apps/api/src/db/index").sql;
 let runPrivacyDatabaseCleanup: typeof import("../../../apps/api/src/privacy/cleanup").runPrivacyDatabaseCleanup;
 
 function writeFixtureCompose(root: string, project: string, exportRoot: string): string {
   const infra = join(root, "infra", "docker");
-  mkdirSync(join(infra, "backups"), { recursive: true });
+  mkdirSync(join(infra, "backups"), { recursive: true, mode: 0o700 });
   mkdirSync(exportRoot, { recursive: true, mode: 0o700 });
   chmodSync(exportRoot, 0o700);
   const sentinelRoot = join(root, "api-sentinel");
@@ -98,11 +100,7 @@ while :; do sleep 3600; done
   );
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(root, "services"));
-  mkdirSync(join(infra, services.CURRENT_CONFIGURATION), { recursive: true });
-  const composeFile = join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml");
-  writeFileSync(
-    composeFile,
-    `name: ${project}
+  const composeYaml = `name: ${project}
 services:
   postgis:
     image: ${POSTGIS_IMAGE}
@@ -131,10 +129,42 @@ services:
 volumes:
   pgdata:
   scratch:
-`,
-    "utf8",
+`;
+  // This fixture runs its own frozen Compose bytes, not the release's services.
+  // Give them the same private generation layout the applied reader requires.
+  const revisionId = `cfg1_${createHash("sha256").update(composeYaml).digest("base64url")}`,
+    generation = join(infra, services.CONFIGURATION_GENERATIONS, revisionId),
+    current = join(infra, services.CURRENT_CONFIGURATION);
+  mkdirSync(generation, { recursive: true, mode: 0o700 });
+  const composeFile = join(generation, services.GENERATED_COMPOSE_FILE);
+  writeFileSync(composeFile, composeYaml, { mode: 0o400 });
+  writeFileSync(
+    join(generation, "resolved-config.generated.json"),
+    JSON.stringify({ serviceConfigs: [], integrationConfigs: [] }),
+    { mode: 0o400 },
+  );
+  symlinkSync(relative(dirname(current), generation), current);
+  symlinkSync(
+    `generations/${revisionId}`,
+    services.configurationGenerationBasePath(infra, revisionId),
   );
   return composeFile;
+}
+
+async function installPrivateDockerProjectTransport(root: string, project: string): Promise<void> {
+  const docker = (await execa("which", ["docker"])).stdout.trim();
+  if (!docker.startsWith("/")) throw Error("fixture Docker executable is not absolute");
+  const bin = join(root, "bin"),
+    shim = join(bin, "docker");
+  mkdirSync(bin, { mode: 0o700 });
+  // Only namespace the fixed production project. Every Docker operation, byte,
+  // SQL statement, image and volume still reaches the real engine unchanged.
+  writeFileSync(
+    shim,
+    `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const args=process.argv.slice(2);if(args[0]==='compose'){const at=args.indexOf('--project-name');if(at!==-1&&args[at+1]==='docker')args[at+1]=${JSON.stringify(project)};}const result=spawnSync(${JSON.stringify(docker)},args,{stdio:'inherit'});if(result.error)throw result.error;process.exit(result.status??1);\n`,
+    { mode: 0o700 },
+  );
+  process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
 }
 
 async function compose(args: string[], reject = true): Promise<string> {
@@ -231,7 +261,7 @@ async function resetMigratedDatabase(): Promise<void> {
       "postgis",
       "sh",
       "-ec",
-      `for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X -v ON_ERROR_STOP=1 -U ${POSTGRES_USER} -d ${DATABASE} -f "$file"; done`,
+      `for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X --single-transaction -v ON_ERROR_STOP=1 -U ${POSTGRES_USER} -d ${DATABASE} -f "$file"; done`,
     ],
     { cwd: fixture.infra, reject: false },
   );
@@ -473,6 +503,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       store: undefined as never,
       databaseUrl: "",
     };
+    await installPrivateDockerProjectTransport(root, project);
     await compose(["up", "-d", "--wait"]);
     await waitForPostgresInitialization();
     const port = (await compose(["port", "postgis", "5432"])).split(":").at(-1)?.trim();
@@ -508,6 +539,8 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     await apiSql?.end({ timeout: 2 }).catch(() => undefined);
     if (fixture?.composeFile) await compose(["down", "--volumes", "--remove-orphans"], false);
     if (fixture?.root) rmSync(fixture.root, { recursive: true, force: true });
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
   }, 30_000);
 
   it("erases the restored account without touching a suffix-email account and defers key destruction until physical cleanup", async () => {

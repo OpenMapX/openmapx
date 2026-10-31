@@ -405,6 +405,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "owned platform preparation",
   () => {
     beforeEach(async () => {
+      // Each scenario is an independent deployment/session, with a fresh limiter bucket.
+      (await import("../../utils/rate-limit")).systemMaintenanceLimit.reset();
       state.fixture = await createMigratedPostgresFixture();
     }, 90000);
     afterEach(async () => {
@@ -548,9 +550,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             releaseId: manifest.release,
             manifestDigest: createHash("sha256").update(raw).digest("hex"),
           };
-          mkdirSync(join(host.infraDir, ".ops-agent-releases"), { recursive: true, mode: 0o700 });
+          mkdirSync(services.releaseStatePaths(host.infraDir).store, {
+            recursive: true,
+            mode: 0o700,
+          });
           writeFileSync(
-            join(host.infraDir, ".ops-agent-releases", `${manifest.release}.json`),
+            join(services.releaseStatePaths(host.infraDir).store, `${manifest.release}.json`),
             raw,
             { mode: 0o600 },
           );
@@ -590,7 +595,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ) {
               await services.withConfigurationGenerationWriter(host.infraDir, async () => {
                 const lock = await services.acquireReleaseStoreLock(
-                  join(host.infraDir, ".ops-agent-releases"),
+                  services.releaseStatePaths(host.infraDir).store,
                   {},
                   { failIfBusy: true },
                 );
@@ -1073,9 +1078,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
                 false,
               );
-              expect(existsSync(join(host.infraDir, ".ops-agent-releases/current.json"))).toBe(
-                false,
-              );
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
               return;
             }
             if (version === "launch-native-system-release-agent-restart") {
@@ -1140,18 +1145,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   .filter((args) => args[0] === "compose" && args.includes("up"))
                   .map((args) => args.at(-1)),
               ).toEqual(["data-manager"]);
-              expect(existsSync(join(host.infraDir, ".ops-agent-releases/current.json"))).toBe(
-                false,
-              );
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
               return;
             }
             if (version === "launch-native-release-wrong-config") {
               await jobRunner.reconcile();
               expect((await readJob()).status).toBe("running");
               expect(dm.settlePosts).toBe(0);
-              expect(existsSync(join(host.infraDir, ".ops-agent-releases", "current.json"))).toBe(
-                false,
-              );
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
               expect(
                 host.calls
                   .filter((args) => args[0] === "compose" && args.includes("up"))
@@ -1231,7 +1236,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).toBe(true);
               expect(
                 JSON.parse(
-                  readFileSync(join(host.infraDir, ".ops-agent-releases", "current.json"), "utf8"),
+                  readFileSync(
+                    join(services.releaseStatePaths(host.infraDir).store, "current.json"),
+                    "utf8",
+                  ),
                 ),
               ).toMatchObject({
                 releaseId: checkedRelease.releaseId,
@@ -1512,7 +1520,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         new AbortController().signal,
                       ),
                       lock = await services.acquireReleaseStoreLock(
-                        join(host.infraDir, ".ops-agent-releases"),
+                        services.releaseStatePaths(host.infraDir).store,
                       );
                     const callsBeforeInspection = host.calls.length;
                     try {

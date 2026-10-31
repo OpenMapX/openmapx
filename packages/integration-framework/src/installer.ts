@@ -2051,7 +2051,16 @@ export async function restoreIntegrationPublication(options: {
         if (directory.listBounded(2).length === 0) {
           directory.close();
           locks.removeDirectory(receipt.integrationId, receipt.lockIdentity);
-        } else publicationState(handle).lock = restoreComponentLock(lockState);
+        } else {
+          // Directory inode numbers can be reused after the original lock is
+          // removed. A completed receipt observes its result; it must never
+          // adopt or release a later transaction's lock on that inode.
+          const owner = z
+            .strictObject({ version: z.literal(1), transactionId: z.uuid() })
+            .parse(JSON.parse(directory.read("owner.json", 2048).toString("utf8")));
+          if (owner.transactionId === receipt.transactionId)
+            publicationState(handle).lock = restoreComponentLock(lockState);
+        }
       } finally {
         directory?.close();
         locks?.close();

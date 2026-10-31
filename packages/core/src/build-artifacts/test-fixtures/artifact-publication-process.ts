@@ -19,9 +19,9 @@ if (!root || !["old-directory", "build-record"].includes(point))
   throw Error("Native fixture input required");
 const dataRoot = join(root, "data"),
   source = join(root, "source");
-fs.mkdirSync(join(dataRoot, "osrm-graph"), { recursive: true });
-fs.writeFileSync(join(dataRoot, "osrm-graph/old"), "old graph");
-fs.mkdirSync(join(dataRoot, ".openmapx-builds"));
+fs.mkdirSync(join(dataRoot, "osrm-graph"), { recursive: true, mode: 0o700 });
+fs.writeFileSync(join(dataRoot, "osrm-graph/old"), "old graph", { mode: 0o600 });
+fs.mkdirSync(join(dataRoot, ".openmapx-builds"), { mode: 0o700 });
 const oldRecord = JSON.stringify({
   schemaVersion: 1,
   service: "osrm",
@@ -31,14 +31,14 @@ const oldRecord = JSON.stringify({
 });
 fs.writeFileSync(join(dataRoot, ".openmapx-builds/osrm.json"), oldRecord, { mode: 0o600 });
 const oldDirectoryInode = fs.statSync(join(dataRoot, "osrm-graph")).ino;
-fs.mkdirSync(join(source, "osrm-graph"), { recursive: true });
+fs.mkdirSync(join(source, "osrm-graph"), { recursive: true, mode: 0o700 });
 for (const name of [
   "region.osrm",
   "region.osrm.partition",
   "region.osrm.cells",
   "region.osrm.mldgr",
 ])
-  fs.writeFileSync(join(source, "osrm-graph", name), `new ${name}`);
+  fs.writeFileSync(join(source, "osrm-graph", name), `new ${name}`, { mode: 0o600 });
 const chunks: Buffer[] = [];
 await writeBuildBundle({
   dataRoot: source,

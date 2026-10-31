@@ -434,7 +434,18 @@ function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
       const state = ["running", "stopped", "created", "restarting", "paused"].includes(rawState)
         ? (rawState as "running" | "stopped" | "created" | "restarting" | "paused")
         : "unknown";
-      return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
+      const rawHealth = item.Health;
+      const health =
+        rawHealth === ""
+          ? "none"
+          : rawHealth === "healthy" ||
+              rawHealth === "unhealthy" ||
+              rawHealth === "starting" ||
+              rawHealth === "none" ||
+              rawHealth === "unknown"
+            ? rawHealth
+            : "unknown";
+      return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state, health };
     }),
   };
 }

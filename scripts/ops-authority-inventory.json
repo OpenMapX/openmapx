@@ -546,6 +546,7 @@
     "ops-agent|@docker-socket|/var/run/docker.sock|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}/infra/docker|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker|true",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/catalog-pins|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/catalog-pins|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/state|false",

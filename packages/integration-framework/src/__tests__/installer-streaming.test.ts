@@ -415,6 +415,42 @@ it("finishes original empty lock removal after owner unlink acknowledgement loss
   const later = f.installer.acquireIntegrationComponentLock({ rootDir: f.root, id: f.prepared.id });
   f.installer.releaseIntegrationComponentLock(later);
 });
+it("observes a committed publication without adopting a different owner on the retained inode", async () => {
+  const f = await publicationFixture();
+  const published = await f.installer.publishPreparedIntegration(f.prepared, {
+    transactionId: "ac23034b-553c-4c01-97c4-a0b1c67bb029",
+    expectedPreviousContentDigest: null,
+    signal: f.signal,
+  });
+  calls.unlinkFault = true;
+  await expect(
+    f.installer.settleIntegrationPublication(published, "commit", f.signal),
+  ).rejects.toThrow("named owner unlink acknowledgement loss");
+  const ownerPath = join(
+    f.root,
+    "custom_integrations",
+    ".installation-locks",
+    f.prepared.id,
+    "owner.json",
+  );
+  const differentOwner = JSON.stringify({
+    version: 1,
+    transactionId: "944c81db-75da-418a-aef8-f839174cf87f",
+  });
+  writeFileSync(ownerPath, differentOwner, { mode: 0o600 });
+  const recovered = await f.installer.restoreIntegrationPublication({
+    rootDir: f.root,
+    receipt: f.installer.describeIntegrationPublication(published),
+    signal: f.signal,
+  });
+  await expect(
+    f.installer.settleIntegrationPublication(recovered, "commit", f.signal),
+  ).resolves.toMatchObject({ outcome: "committed" });
+  expect(readFileSync(ownerPath, "utf8")).toBe(differentOwner);
+  expect(() => f.installer.removeIntegration({ rootDir: f.root, id: f.prepared.id })).toThrow(
+    /busy/,
+  );
+});
 it("rejects oversized JSON metadata before parsing or whole-file reads", async () => {
   const root = mkdtempSync(join(tmpdir(), "openmapx-large-manifest-"));
   roots.push(root);

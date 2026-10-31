@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { isContainedProcessFailure } from "./docker-runtime";
 
 interface Waiter {
@@ -33,10 +34,20 @@ export class ServiceLifecycleExclusion {
   private directory: string;
   private file: string;
   constructor(infraDir: string) {
-    this.directory = join(infraDir, ".service-lifecycle");
+    // An older agent may have retained an unresolved effect here. A new,
+    // empty canonical store must never silently discard that denial.
+    try {
+      lstatSync(join(infraDir, ".service-lifecycle"));
+      throw Error(FAILED);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const state = services.agentStatePaths(infraDir).directory;
+    mkdirSync(state, { recursive: true, mode: 0o700 });
+    this.directory = join(state, "service-lifecycle");
     try {
       mkdirSync(this.directory, { mode: 0o700 });
-      const parent = openSync(infraDir, constants.O_RDONLY | constants.O_DIRECTORY);
+      const parent = openSync(state, constants.O_RDONLY | constants.O_DIRECTORY);
       try {
         fsyncSync(parent);
       } finally {
