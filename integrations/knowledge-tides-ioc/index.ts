@@ -51,7 +51,7 @@ const CATALOG_TTL = 7 * 24 * 60 * 60;
 const TIDES_TTL = 30 * 60; // observations refresh; predictions cache shorter
 const MAX_STATION_DISTANCE_KM = 80; // IOC stations are sparse globally
 const M_TO_FT = 3.28084;
-const CACHE_GENERATION = "sea-level-sensor-v1";
+const CACHE_GENERATION = "height-source-v1";
 
 /**
  * Sensor codes that measure sea level, from IOC's sensor-type table
@@ -259,6 +259,7 @@ async function buildTidesResponse(
     datum: "sensor_reference",
     units: "english",
     timeZone: "iso_offset",
+    heightSource: "observation",
     currentLevel: {
       time: last.time,
       valueFt: Math.round(last.value * M_TO_FT * 100) / 100,

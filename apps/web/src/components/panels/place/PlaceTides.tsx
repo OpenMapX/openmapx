@@ -119,19 +119,21 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
           ? t("stationLabelHere", { name: data.station.name })
           : t("stationLabel", { name: data.station.name, distance: data.station.distanceKm })}
       </Typography>
-      {/* Disclaimer */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0.75,
-          mt: 0.25,
-          color: "text.secondary",
-        }}
-      >
-        <InfoOutlinedIcon sx={{ fontSize: 14 }} />
-        <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
-      </Box>
+      {/* Measured levels already include wind and surge, so only predictions carry this note. */}
+      {data.heightSource === "prediction" && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.75,
+            mt: 0.25,
+            color: "text.secondary",
+          }}
+        >
+          <InfoOutlinedIcon sx={{ fontSize: 14 }} />
+          <Typography variant="caption">{t("predictionDisclaimer")}</Typography>
+        </Box>
+      )}
       {/* Attribution — rendered via the shared builder (SectionAttribution). */}
       <SectionAttribution attributions={contributorsForRecordFields(data, displayedFields)} />
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>

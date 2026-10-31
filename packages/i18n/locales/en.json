@@ -1566,7 +1566,7 @@
     "datumNoteChartDatum": "Heights above chart datum.",
     "datumNoteGaugeZero": "Heights above the gauge zero.",
     "datumNoteSensorReference": "Heights relative to the sensor's reference level.",
-    "informationalDisclaimer": "Astronomical tide only; excludes wind and storm surge.",
+    "predictionDisclaimer": "Predicted tides are astronomical only; they exclude wind and storm surge.",
     "attribution": "Source",
     "currentLevel": "Now",
     "preliminary": "preliminary",
