@@ -66,6 +66,69 @@ describe("fetchObservations", () => {
     expect(obs.map((p) => p.slevel)).toEqual([1.0, 1.2, 1.3]);
   });
 
+  it("skips a battery sensor that has more readings than the sea-level sensor", async () => {
+    // Shape of `alex3` (Alexandria): the battery logs extra duplicate samples.
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        { slevel: 4.03, stime: "2026-10-30 18:26:00", sensor: "bat" },
+        { slevel: 4.03, stime: "2026-10-30 18:26:00", sensor: "bat" },
+        { slevel: 4.02, stime: "2026-10-30 18:27:00", sensor: "bat" },
+        { slevel: -1.657, stime: "2026-10-30 18:25:00", sensor: "pwl" },
+        { slevel: -1.653, stime: "2026-10-30 18:26:00", sensor: "pwl" },
+      ]),
+    );
+
+    const obs = await fetchObservations("alex3");
+
+    expect(obs.map((p) => [p.sensor, p.slevel])).toEqual([
+      ["pwl", -1.657],
+      ["pwl", -1.653],
+    ]);
+  });
+
+  it("skips a battery sensor listed first with as many readings", async () => {
+    // Shape of `amor`: the battery and radar report every minute.
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        { slevel: 0, stime: "2026-10-30 18:25:00", sensor: "bat" },
+        { slevel: 0, stime: "2026-10-30 18:26:00", sensor: "bat" },
+        { slevel: -0.178, stime: "2026-10-30 18:25:00", sensor: "rad" },
+        { slevel: -0.172, stime: "2026-10-30 18:26:00", sensor: "rad" },
+      ]),
+    );
+
+    const obs = await fetchObservations("amor");
+
+    expect(obs.map((p) => p.sensor)).toEqual(["rad", "rad"]);
+  });
+
+  it("returns nothing when only non-sea-level sensors report", async () => {
+    // `tara1` lists air pressure and battery beside its radar.
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        { slevel: 1.0182, stime: "2026-10-30 18:25:00", sensor: "atm" },
+        { slevel: 1.0182, stime: "2026-10-30 18:31:00", sensor: "atm" },
+        { slevel: 0.012, stime: "2026-10-30 18:25:00", sensor: "bat" },
+      ]),
+    );
+
+    expect(await fetchObservations("tara1")).toEqual([]);
+  });
+
+  it("breaks a tie between sea-level sensors by IOC's sensor-type preference", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        { slevel: 0.2, stime: "2026-10-30 18:25:00", sensor: "pr1" },
+        { slevel: 0.3, stime: "2026-10-30 18:25:00", sensor: "prs" },
+        { slevel: 0.4, stime: "2026-10-30 18:25:00", sensor: "ra2" },
+      ]),
+    );
+
+    const obs = await fetchObservations("tie");
+
+    expect(obs.map((p) => p.sensor)).toEqual(["ra2"]);
+  });
+
   it("returns an empty array when the upstream call fails", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
     expect(await fetchObservations("acld")).toEqual([]);
