@@ -595,7 +595,7 @@ export function createPlaceTransit(
     // providers indexing either form are found, then deduplicate by stop id.
     const variants = [...new Set(names.flatMap((name) => getQueryVariants(name)))];
     const settled = await Promise.allSettled(
-      variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
+      variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox, undefined, { lat, lng })),
     );
     const variantResults = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
     const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");

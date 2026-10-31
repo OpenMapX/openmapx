@@ -65,6 +65,13 @@ function getProviderBbox(p: TransitProvider): BBox | null {
   return null;
 }
 
+/** Whether a point lies in the area the provider is the source for. */
+function providerHomeContains(p: TransitProvider, point: { lat: number; lng: number }): boolean {
+  if (!("bbox" in p.coverage)) return true;
+  const [west, south, east, north] = p.coverage.home ?? p.coverage.bbox;
+  return point.lng >= west && point.lng <= east && point.lat >= south && point.lat <= north;
+}
+
 function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
   const pBbox = getProviderBbox(p);
   if (!pBbox) return true; // `{ all: true }` matches everywhere
@@ -497,6 +504,8 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    * distance/name filtering is applied.
    *
    * A provider that fails or is in health cooldown makes the answer partial.
+   * With `place`, only one whose home area holds the place does: ÖBB failing
+   * doesn't leave gaps in Köln, where it only adds trains other sources list.
    * When providers should have answered and none did, the search rejects, so an
    * outage is never reported as "no stop by that name".
    */
@@ -505,6 +514,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     limit: number,
     bbox?: BBox,
     context?: ProviderCallContext,
+    place?: { lat: number; lng: number },
   ): Promise<MobilityResult<TransitStop[]>> {
     const candidates = (
       bbox ? providersOverlapping(bbox) : collectProviders().sort((a, b) => a.priority - b.priority)
@@ -531,17 +541,20 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     // A cancelled caller must see its cancellation, not a provider outage.
     context?.signal.throwIfAborted();
 
-    const ok = results
-      .map((r) => (r.status === "fulfilled" ? r.value : null))
-      .filter((v): v is MobilityResult<TransitStop[]> => v != null);
-    const unavailable = healthy.length + coolingDown.length - ok.length;
-    if (unavailable > 0 && ok.length === 0) throw new Error("Transit stop sources unavailable");
+    const answers = results.map((r) => (r.status === "fulfilled" ? r.value : null));
+    const ok = answers.filter((v): v is MobilityResult<TransitStop[]> => v != null);
+    const unavailable = [...coolingDown, ...healthy.filter((_, i) => answers[i] == null)];
+    if (unavailable.length > 0 && ok.length === 0)
+      throw new Error("Transit stop sources unavailable");
+    const gaps = place
+      ? unavailable.some((p) => providerHomeContains(p, place))
+      : unavailable.length > 0;
 
     const freshness = mergeFreshness(...ok.map((r) => r.freshness));
     return {
       data: ok.flatMap((r) => r.data),
       attributions: contributorsForRecords(ok.flatMap((r) => r.data)),
-      freshness: unavailable > 0 ? { ...freshness, isPartial: true } : freshness,
+      freshness: gaps ? { ...freshness, isPartial: true } : freshness,
     };
   }
 

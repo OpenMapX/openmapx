@@ -1,3 +1,4 @@
+import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   type IntegrationContext,
@@ -11,6 +12,7 @@ import { getAdapter } from "./adapters.js";
 import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { RegistryManager, registry } from "./registry.js";
+import type { RegistryEntry } from "./registry-types.js";
 
 // Provider receipts belong to each captured catalog entry; infrastructure disclosures
 // remain in the manifest rather than replacing the actual operator credit.
@@ -34,6 +36,19 @@ function buildAttributionFor(
       ),
     },
   ];
+}
+
+/**
+ * The area an entry is the source for: its live coverage, else its regular
+ * coverage. ÖBB's is Austria, though its timetable spans Europe.
+ */
+function homeArea(entry: RegistryEntry): BBox {
+  const tiers = entry.coverage.tiers;
+  return (
+    tiers.find((tier) => tier.level === "realtimeCoverage")?.bbox ??
+    tiers.find((tier) => tier.level === "regularCoverage")?.bbox ??
+    entry.coverage.bbox
+  );
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
@@ -106,7 +121,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
-      coverage: { bbox: entry.coverage.bbox },
+      coverage: { bbox: entry.coverage.bbox, home: homeArea(entry) },
       priority: 5,
       role: "enrichment",
       attribution: entryAttribution,
