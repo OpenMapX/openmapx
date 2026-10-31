@@ -112,8 +112,13 @@
   },
   "dataSources": {
     "de-cambio": {
-      "purpose": "Station-based car sharing in Germany and Belgium",
-      "dataSent": "Region code in URL path (matched by proximity to the map view, up to 15 regions). No user location data sent directly",
+      "purpose": "Station-based car sharing in Germany",
+      "dataSent": "Region code in URL path (matched by proximity to the map view, up to 12 regions). No user location data sent directly",
+      "dataReceived": "Station locations, vehicle counts, vehicle classes, addresses"
+    },
+    "be-cambio": {
+      "purpose": "Station-based car sharing in Belgium",
+      "dataSent": "Region code in URL path (matched by proximity to the map view, up to 3 regions). No user location data sent directly",
       "dataReceived": "Station locations, vehicle counts, vehicle classes, addresses"
     },
     "de-stadtteilauto": {

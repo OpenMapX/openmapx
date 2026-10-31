@@ -130,7 +130,7 @@
               "basis": "licence",
               "reviewedAt": "2026-10-31",
               "evidenceUrls": ["https://www.offenedaten-koeln.de/dataset/cambio-stationen-koeln"],
-              "reason": "Cambio lists its own station API (\"cambio Stationen Koeln API\", cwapi.cambio-carsharing.com/pub/KOE/stations) on Offene Daten Köln as Herausgeber \"cambio carsharing\" under \"Datenlizenz Deutschland – Zero – Version 2.0\"; Cambio Belgium's transportdata.be listing of its station API states no licence"
+              "reason": "Cambio lists its own station API (\"cambio Stationen Koeln API\", cwapi.cambio-carsharing.com/pub/KOE/stations) on Offene Daten Köln as Herausgeber \"cambio carsharing\" under \"Datenlizenz Deutschland – Zero – Version 2.0\"; the German regions only, the Belgian ones are the be-cambio source"
             }
           }
         ],
@@ -138,6 +138,51 @@
           {
             "text": "Datenlizenz Deutschland – Zero – Version 2.0",
             "url": "https://www.offenedaten-koeln.de/dataset/cambio-stationen-koeln"
+          }
+        ]
+      }
+    },
+    {
+      "sourceId": "be-cambio",
+      "name": "Cambio Belgium",
+      "url": "https://www.cambio.be/",
+      "apiHosts": ["cwapi.cambio-carsharing.com"],
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.cambio.be/en-bxl/cookie-and-privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "Cambio Belgium station material",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-4.0",
+              "url": "https://creativecommons.org/licenses/by/4.0/"
+            },
+            "attribution": {
+              "placement": "details",
+              "surfaces": ["map", "content", "image"],
+              "basis": "licence",
+              "reviewedAt": "2026-10-31",
+              "evidenceUrls": [
+                "https://transportdata.be/en/dataset/cambio-stations",
+                "https://transportdata.be/api/3/action/package_show?id=cambio-stations",
+                "https://www.cambio.be/en-bxl/opendata"
+              ],
+              "reason": "Cambio Belgium publishes its station list (cwapi.cambio-carsharing.com/pub/stations/BEL, exactly the BXL, WAL and VLA region feeds) on the Belgian National Access Point; the distribution's licence_type is the EU vocabulary's CC_BY_4_0, and Cambio's open-data page points to that listing for the metadata"
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC BY 4.0",
+            "url": "https://transportdata.be/en/dataset/cambio-stations"
           }
         ]
       }

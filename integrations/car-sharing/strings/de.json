@@ -112,8 +112,13 @@
   },
   "dataSources": {
     "de-cambio": {
-      "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",
-      "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnitt, bis zu 15 Regionen). Keine Nutzerstandortdaten direkt gesendet",
+      "purpose": "Stationsbasiertes Carsharing in Deutschland",
+      "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnitt, bis zu 12 Regionen). Keine Nutzerstandortdaten direkt gesendet",
+      "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Adressen"
+    },
+    "be-cambio": {
+      "purpose": "Stationsbasiertes Carsharing in Belgien",
+      "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnitt, bis zu 3 Regionen). Keine Nutzerstandortdaten direkt gesendet",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Adressen"
     },
     "de-stadtteilauto": {

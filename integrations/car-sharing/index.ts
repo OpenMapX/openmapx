@@ -6,7 +6,7 @@ import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobi
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { beCoopstroomClient, beDegageClient } from "./providers/be-degapp.js";
 import { caCommunautoClient } from "./providers/ca-communauto-client.js";
-import { deCambioClient } from "./providers/de-cambio-client.js";
+import { beCambioClient, deCambioClient } from "./providers/de-cambio-client.js";
 import { deNwBielefeldClient } from "./providers/de-nw-bielefeld-client.js";
 import { deNwWuppertalClient } from "./providers/de-nw-wuppertal-client.js";
 import { deStadtteilautoClient } from "./providers/de-stadtteilauto-client.js";
@@ -43,6 +43,7 @@ export function setup(ctx: IntegrationContext): void {
     log: ctx.log,
     clients: [
       deCambioClient,
+      beCambioClient,
       deStadtteilautoClient,
       deNwWuppertalClient,
       deNwBielefeldClient,
