@@ -842,6 +842,7 @@ it.each([0, 1])(
     writeFileSync(
       join(root, "cli.mjs"),
       `for(const frame of ${JSON.stringify(frames)})for(const byte of Buffer.from(frame))process.stdout.write(Buffer.from([byte]));process.exitCode=${exitCode};`,
+      { mode: 0o644 },
     );
     const runtime = createUnavailableRuntime();
     createAdministrativeRuntime(runtime, {

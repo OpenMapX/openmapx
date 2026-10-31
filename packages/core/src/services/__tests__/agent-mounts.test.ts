@@ -18,6 +18,12 @@ const manifest = JSON.parse(
 ) as ServiceManifest;
 
 const roots: string[] = [];
+it("keeps managed catalog metadata writable under the narrow agent layout", () => {
+  const mount = agentBindMounts(agent("/srv/openmapx"), "narrow").find((entry) =>
+    entry.target.endsWith("/infra/docker/catalog-pins"),
+  );
+  expect(mount).toMatchObject({ readOnly: false });
+});
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -40,7 +46,7 @@ function atCheckoutPath(volumes: readonly string[]): string[] {
 const NARROW = [
   // biome-ignore lint/suspicious/noTemplateCurlyInString: Compose substitutes this, as in the manifest
   "/infra/docker:${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker:ro",
-  ...["state", "data", "secrets", "backups"].map(
+  ...["state", "data", "secrets", "backups", "catalog-pins"].map(
     (name) =>
       `/infra/docker/${name}:\${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/${name}`,
   ),

@@ -19,7 +19,7 @@ const REF = `main@${"a".repeat(40)}`;
 function root(): string {
   const directory = mkdtempSync(join(tmpdir(), "openmapx-lock-runtime-"));
   roots.push(directory);
-  mkdirSync(join(directory, "infra", "docker"), { recursive: true });
+  mkdirSync(join(directory, "infra", "docker"), { mode: 0o755, recursive: true });
   return directory;
 }
 
@@ -198,6 +198,7 @@ describe("agent-owned Transitous catalog lock", () => {
         lockedBy: "operator",
         comment: "pinned",
       }),
+      { mode: 0o644 },
     );
     const commit = "b".repeat(40);
     writeFileSync(
@@ -211,6 +212,7 @@ describe("agent-owned Transitous catalog lock", () => {
         lockedAt: "2026-01-01T00:00:00.000Z",
         lockedBy: "fixture",
       }),
+      { mode: 0o644 },
     );
     const infra = join(rootDir, "infra/docker");
     mkdirSync(join(infra, "data"), { mode: 0o700 });
@@ -235,7 +237,7 @@ describe("agent-owned Transitous catalog lock", () => {
 
   it("rejects an oversized lock rather than loading it", async () => {
     const rootDir = root();
-    writeFileSync(lockPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`);
+    writeFileSync(lockPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`, { mode: 0o644 });
     await expect(
       dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
     ).rejects.toThrow(/not wired/i);

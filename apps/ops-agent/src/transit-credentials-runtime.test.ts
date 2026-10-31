@@ -50,13 +50,14 @@ async function fixture() {
     catalog = join(infraDir, "data/.transitous-catalog"),
     atlas = join(catalog, "transitland-atlas"),
     local = join(root, "services/motis/tools/transitous");
-  mkdirSync(join(catalog, "feeds"), { recursive: true });
-  mkdirSync(join(atlas, "feeds"), { recursive: true });
-  mkdirSync(local, { recursive: true });
+  mkdirSync(join(catalog, "feeds"), { mode: 0o755, recursive: true });
+  mkdirSync(join(atlas, "feeds"), { mode: 0o755, recursive: true });
+  mkdirSync(local, { mode: 0o755, recursive: true });
   git(atlas, ["init"]);
   writeFileSync(
     join(atlas, "feeds/a.dmfr.json"),
     JSON.stringify({ feeds: [{ id: "auth", authorization: { type: "api-key" } }] }),
+    { mode: 0o644 },
   );
   git(atlas, ["add", "."]);
   git(atlas, ["commit", "-m", "Atlas"]);
@@ -65,6 +66,7 @@ async function fixture() {
   writeFileSync(
     join(catalog, "feeds/de.json"),
     JSON.stringify({ sources: [{ name: "A", "transitland-atlas-id": "auth" }] }),
+    { mode: 0o644 },
   );
   git(catalog, ["add", "feeds"]);
   git(catalog, ["update-index", "--add", "--cacheinfo", `160000,${atlasSha},transitland-atlas`]);
@@ -78,6 +80,7 @@ async function fixture() {
       lockedAt: "2026-10-23T00:00:00.000Z",
       lockedBy: "fixture",
     }),
+    { mode: 0o644 },
   );
   const gbfs = "b".repeat(40);
   writeFileSync(
@@ -91,6 +94,7 @@ async function fixture() {
       lockedAt: "2026-10-23T00:00:00.000Z",
       lockedBy: "fixture",
     }),
+    { mode: 0o644 },
   );
   await provisionControlInstallation(infraDir);
   const installation = openControlInstallation({

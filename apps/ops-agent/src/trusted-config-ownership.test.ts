@@ -55,9 +55,9 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-ownership-"));
   roots.push(root);
   const infraDir = join(root, "infra/docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { recursive: true, mode: 0o700 });
   // The whole checkout is mounted, as this release's manifest has it.
-  mkdirSync(join(root, "services"));
+  mkdirSync(join(root, "services"), { mode: 0o755 });
   // The deployment's user, which only a host render writes into .env.
   writeFileSync(
     join(infraDir, ".env"),
@@ -308,7 +308,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const foreign = join(f.infraDir, coreServices.CONFIGURATION_DIRECTORY, ".writer", "foreign");
     const result = await f.apply("a", undefined, {
       afterCommit: async () => {
-        writeFileSync(foreign, "preserve");
+        writeFileSync(foreign, "preserve", { mode: 0o644 });
       },
     });
     expect(result).toMatchObject({

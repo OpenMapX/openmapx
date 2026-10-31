@@ -33,8 +33,8 @@ it("validates real uploaded bytes only under the exact retained integration exec
   const root = mkdtempSync(join(tmpdir(), "openmapx-stage-consumer-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const infra = join(root, "infra");
-  mkdirSync(join(infra, "data"), { recursive: true });
-  mkdirSync(join(root, "services"));
+  mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
+  mkdirSync(join(root, "services"), { mode: 0o755 });
   await control.provisionControlInstallation(infra);
   const installation = control.openControlInstallation({
     infraDir: infra,

@@ -30,8 +30,8 @@ function fixture() {
     "transit-source-manifest.json": '{"version":1,"sources":[]}',
   };
   for (const [path, bytes] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), bytes);
+    mkdirSync(dirname(join(root, path)), { mode: 0o755, recursive: true });
+    writeFileSync(join(root, path), bytes, { mode: 0o644 });
   }
   const artifact = (path: string) => ({
     path,
@@ -67,7 +67,9 @@ function fixture() {
       sourceManifest: artifact("transit-source-manifest.json"),
     },
   };
-  writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest));
+  writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest), {
+    mode: 0o644,
+  });
   return manifest;
 }
 async function api() {
@@ -92,7 +94,9 @@ it.each(["traversal", "duplicate", "digest", "size", "empty", "shape"])(
     if (kind === "size") manifest.artifacts.datasets[0]!.sizeBytes = -1;
     if (kind === "empty") manifest.artifacts.datasets = [];
     if (kind === "shape") manifest.expectations.timetableDatasets = -1;
-    writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest));
+    writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest), {
+      mode: 0o644,
+    });
     await expect((await api()).verifyCandidateManifest(root)).rejects.toThrow();
   },
 );
@@ -100,7 +104,7 @@ it("rejects symlinked intermediate artifact directories", async () => {
   fixture();
   const outside = mkdtempSync(join(tmpdir(), "omx-motis-outside-"));
   try {
-    writeFileSync(join(outside, "default.conf"), "server { listen 80; }");
+    writeFileSync(join(outside, "default.conf"), "server { listen 80; }", { mode: 0o644 });
     rmSync(join(root, ".openmapx-feed-proxy/conf"), { recursive: true });
     symlinkSync(outside, join(root, ".openmapx-feed-proxy/conf"));
     await expect((await api()).verifyCandidateManifest(root)).rejects.toThrow();
@@ -110,7 +114,7 @@ it("rejects symlinked intermediate artifact directories", async () => {
 });
 it("detects changed candidate content and honors cancellation", async () => {
   fixture();
-  writeFileSync(join(root, "license.json"), "changed");
+  writeFileSync(join(root, "license.json"), "changed", { mode: 0o644 });
   const mod = await api();
   await expect(mod.verifyCandidateManifest(root)).rejects.toThrow(/hash mismatch/);
   const abort = new AbortController();
@@ -120,7 +124,9 @@ it("detects changed candidate content and honors cancellation", async () => {
 it("bounds manifest metadata and leaves source bytes unchanged", async () => {
   fixture();
   const before = readFileSync(join(root, "demo.gtfs.zip"));
-  writeFileSync(join(root, "motis-candidate-manifest.json"), " ".repeat(32 * 1024 * 1024 + 1));
+  writeFileSync(join(root, "motis-candidate-manifest.json"), " ".repeat(32 * 1024 * 1024 + 1), {
+    mode: 0o644,
+  });
   await expect((await api()).verifyCandidateManifest(root)).rejects.toThrow();
   expect(readFileSync(join(root, "demo.gtfs.zip"))).toEqual(before);
 });
@@ -132,7 +138,9 @@ it.each(["mirror", "build"] as const)(
       ...fixture(),
       operationsPolicy: resolveOperationsProfile({ countries: ["de"], source }),
     };
-    writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest));
+    writeFileSync(join(root, "motis-candidate-manifest.json"), JSON.stringify(manifest), {
+      mode: 0o644,
+    });
     expect(await (await api()).verifyCandidateManifest(root)).toEqual(manifest);
   },
 );

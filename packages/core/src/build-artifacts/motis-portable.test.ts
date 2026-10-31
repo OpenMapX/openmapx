@@ -114,8 +114,8 @@ function fixture() {
     ".openmapx-feed-proxy/conf/default.conf": renderFeedProxyNginxConfig(vars),
   };
   for (const [name, bytes] of Object.entries(files)) {
-    mkdirSync(dirname(join(dir, name)), { recursive: true });
-    writeFileSync(join(dir, name), bytes);
+    mkdirSync(dirname(join(dir, name)), { mode: 0o755, recursive: true });
+    writeFileSync(join(dir, name), bytes, { mode: 0o644 });
   }
   createCandidateManifest(dir, "synthetic-epoch", "2026-10-30T00:00:00.000Z");
   return dir;
@@ -134,10 +134,13 @@ it.each([false, true])(
       exportRoot = root(),
       infraDir = root(),
       dataRoot = join(infraDir, "data");
+    mkdirSync(join(exportRoot, "motis"), { mode: 0o755 });
     cpSync(original.dir, join(exportRoot, "motis/live"), { recursive: true });
-    mkdirSync(join(exportRoot, "motis/live/data"));
-    writeFileSync(join(exportRoot, "motis/live/data/tt.bin"), "compiled timetable");
-    mkdirSync(join(exportRoot, "motis-feed-proxy"));
+    mkdirSync(join(exportRoot, "motis/live/data"), { mode: 0o755 });
+    writeFileSync(join(exportRoot, "motis/live/data/tt.bin"), "compiled timetable", {
+      mode: 0o644,
+    });
+    mkdirSync(join(exportRoot, "motis-feed-proxy"), { mode: 0o755 });
     const chunks: Buffer[] = [];
     await control.writeBuildBundle({
       dataRoot: exportRoot,
@@ -176,8 +179,8 @@ it.each([false, true])(
       credentials: destinationCredentials,
     });
     for (const slot of ["A", "B"]) {
-      mkdirSync(join(dataRoot, "motis/slots", slot), { recursive: true });
-      writeFileSync(join(dataRoot, "motis/slots", slot, "old"), slot);
+      mkdirSync(join(dataRoot, "motis/slots", slot), { mode: 0o755, recursive: true });
+      writeFileSync(join(dataRoot, "motis/slots", slot, "old"), slot, { mode: 0o644 });
     }
     symlinkSync("slots/A", join(dataRoot, "motis/live"));
     symlinkSync("slots/B", join(dataRoot, "motis/staging"));
@@ -190,9 +193,12 @@ it.each([false, true])(
         datasetEpoch: "old",
         activatedAt: "2026-01-01T00:00:00.000Z",
       }),
+      { mode: 0o644 },
     );
-    mkdirSync(join(dataRoot, "motis-feed-proxy/conf"), { recursive: true });
-    writeFileSync(join(dataRoot, "motis-feed-proxy/conf/default.conf"), "old proxy");
+    mkdirSync(join(dataRoot, "motis-feed-proxy/conf"), { mode: 0o755, recursive: true });
+    writeFileSync(join(dataRoot, "motis-feed-proxy/conf/default.conf"), "old proxy", {
+      mode: 0o644,
+    });
     const aliases = ["live", "staging"].map((name) => ({
       name,
       inode: lstatSync(join(dataRoot, "motis", name)).ino,
@@ -314,7 +320,7 @@ it.each([false, true])(
 function extract(data: Awaited<ReturnType<typeof produce>>) {
   const dest = root();
   for (const path of ["license.json", "de_demo.gtfs.zip", "portable-sources.json"])
-    writeFileSync(join(dest, path), readFileSync(join(data.dir, path)));
+    writeFileSync(join(dest, path), readFileSync(join(data.dir, path)), { mode: 0o644 });
   return dest;
 }
 it("produces the actual candidate's nonsecret recipe and materializes different destination credentials offline", async () => {
@@ -385,7 +391,7 @@ it("refuses attacker-selected endpoint metadata and config exfiltration before i
 it("refuses a changed compiled source before writing a destination config", async () => {
   const source = await produce(),
     destination = extract(source);
-  writeFileSync(join(destination, "de_demo.gtfs.zip"), "changed");
+  writeFileSync(join(destination, "de_demo.gtfs.zip"), "changed", { mode: 0o644 });
   await expect(
     materializePortableMotisCandidate({
       archiveFingerprint: "d".repeat(64),
@@ -406,11 +412,13 @@ it.each(["headers", "secret URL", "unbound endpoint", "oversized"])(
       writeFileSync(
         join(dir, "config.yml"),
         JSON.stringify({ ...config, elevators: { headers: { Authorization: "HOST_SECRET" } } }),
+        { mode: 0o644 },
       );
     if (kind === "secret URL")
       writeFileSync(
         join(dir, "config.yml"),
         JSON.stringify({ ...config, elevators: { url: "https://host.example/?key=HOST_SECRET" } }),
+        { mode: 0o644 },
       );
     if (kind === "unbound endpoint")
       writeFileSync(
@@ -421,11 +429,13 @@ it.each(["headers", "secret URL", "unbound endpoint", "oversized"])(
             headers: { "X-Api-Key": credentials["de/demo"] },
           },
         }),
+        { mode: 0o644 },
       );
     if (kind === "oversized")
       writeFileSync(
         join(dir, "config.yml"),
         JSON.stringify({ ...config, note: " ".repeat(1024 * 1024 + 1) }),
+        { mode: 0o644 },
       );
     createCandidateManifest(dir, "synthetic-epoch", "2026-10-30T00:00:00.000Z");
     await expect(
@@ -483,7 +493,9 @@ it("binds the nominal proof to the original archive, metadata and exact generate
       archiveFingerprint: "e".repeat(64),
     }),
   ).rejects.toThrow("archive");
-  writeFileSync(join(destination, ".openmapx-feed-proxy/feed-proxy-vars.json"), "{}");
+  writeFileSync(join(destination, ".openmapx-feed-proxy/feed-proxy-vars.json"), "{}", {
+    mode: 0o644,
+  });
   await expect(
     readVerifiedPortableMotisMaterialization(result.materialization, args),
   ).rejects.toThrow();

@@ -261,6 +261,7 @@ export async function renderComposeWithWriter(
   }
   const agentState = agentStatePaths(paths.infraDir);
   ensurePlatformPrivateDirectory(agentState.trustedConfig);
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
   ensurePlatformPrivateDirectory(agentState.privacyExtraction);

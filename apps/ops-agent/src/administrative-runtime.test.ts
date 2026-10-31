@@ -95,6 +95,7 @@ describe("default fixed CLI live output", () => {
       }
       console.log('last-diagnostic');
     `,
+      { mode: 0o644 },
     );
     const seen: string[] = [];
     const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
@@ -109,11 +110,11 @@ describe("default fixed CLI live output", () => {
       if (check === "visibility") {
         await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
       }
-      writeFileSync(release, "go");
+      writeFileSync(release, "go", { mode: 0o644 });
       await expect(completion).resolves.toBeUndefined();
       expect(seen).toContain("last-diagnostic");
     } finally {
-      writeFileSync(release, "go");
+      writeFileSync(release, "go", { mode: 0o644 });
       await completion.catch(() => undefined);
     }
   });
@@ -424,6 +425,7 @@ describe("the fixed CLI", () => {
     writeFileSync(
       join(entryDirectory, "cli.mjs"),
       'const { argv, env } = process;\nconsole.log([...argv.slice(2), env.DATA_MANAGER_URL, env.OPENMAPX_FIXED_CLI_PROBE].join(" "));\n',
+      { mode: 0o644 },
     );
     vi.stubEnv("DATA_MANAGER_URL", "http://localhost:4000");
     vi.stubEnv("OPENMAPX_FIXED_CLI_PROBE", "inherited");
@@ -546,8 +548,8 @@ describe("administrative data runtime", () => {
   it("returns bounded data inventory from the agent-owned root without a host path", async () => {
     const rootDir = temporaryRoot();
     const dataRoot = join(rootDir, "infra", "docker", "data");
-    mkdirSync(join(dataRoot, "osm"), { recursive: true });
-    mkdirSync(join(dataRoot, "valhalla"), { recursive: true });
+    mkdirSync(join(dataRoot, "osm"), { recursive: true, mode: 0o700 });
+    mkdirSync(join(dataRoot, "valhalla"), { recursive: true, mode: 0o700 });
     writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
     const runtime = createUnavailableRuntime();
     createAdministrativeRuntime(runtime, {
@@ -975,7 +977,8 @@ describe("administrative release runtime", () => {
         if (args[0] === "pull") return `Digest: sha256:${String(attempt).repeat(64)}`;
         if (args[0] === "image") return `sha256:${"e".repeat(64)}`;
         if (args[0] === "create") return "a".repeat(64);
-        if (args[0] === "cp") writeFileSync(args.at(-1) as string, JSON.stringify(manifest()));
+        if (args[0] === "cp")
+          writeFileSync(args.at(-1) as string, JSON.stringify(manifest()), { mode: 0o644 });
         return "";
       },
     });
@@ -1241,7 +1244,7 @@ describe("administrative release runtime", () => {
           if (joined.startsWith("create")) return "c".repeat(64);
           if (joined.startsWith("cp")) {
             const destination = args[2] as string;
-            writeFileSync(destination, stored(release));
+            writeFileSync(destination, stored(release), { mode: 0o644 });
             copied = true;
             // Yield so the sibling resolution interleaves here.
             await new Promise((resolve) => setTimeout(resolve, 5));
@@ -1533,6 +1536,7 @@ describe("administrative release runtime", () => {
         "docker-compose.generated.yml",
       ),
       "services:{}\n",
+      { mode: 0o644 },
     );
     const releaseId = "release-123";
     const manifest = {
@@ -1979,6 +1983,7 @@ describe("fixed CLI execution context", () => {
     writeFileSync(
       join(root, "cli.mjs"),
       `import{writeFileSync,existsSync}from'node:fs';import{setTimeout}from'node:timers/promises';if(process.env.OPENMAPX_CONTROL_DELEGATION||process.env.OPENMAPX_PARENT_EXECUTION)process.exit(2);const execution=JSON.parse(process.env.OPENMAPX_CONTROL_EXECUTION);writeFileSync(${JSON.stringify(ready)},JSON.stringify(execution));while(!existsSync(${JSON.stringify(release)}))await setTimeout(5);console.log('completed');`,
+      { mode: 0o644 },
     );
     vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", "untrusted-inherited");
     vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "untrusted-parent");
@@ -1999,7 +2004,7 @@ describe("fixed CLI execution context", () => {
       expect(JSON.parse(readFileSync(ready, "utf8"))).toEqual(execution);
       await vi.advanceTimersByTimeAsync(31 * 60_000);
       expect(settled).toBe(false);
-      writeFileSync(release, "go");
+      writeFileSync(release, "go", { mode: 0o644 });
       await expect(completion).resolves.toBeUndefined();
       await expect(
         createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
@@ -2009,7 +2014,7 @@ describe("fixed CLI execution context", () => {
         }),
       ).rejects.toMatchObject({ errorClass: "timeout" });
     } finally {
-      writeFileSync(release, "go");
+      writeFileSync(release, "go", { mode: 0o644 });
       vi.useRealTimers();
       vi.unstubAllEnvs();
       await completion.catch(() => undefined);
@@ -2113,9 +2118,9 @@ describe("fix1 legacy release recovery", () => {
       const transaction = join(directory, "transaction.json");
       const record = JSON.parse(readFileSync(transaction, "utf8"));
       record.phase = phase;
-      writeFileSync(transaction, JSON.stringify(record));
+      writeFileSync(transaction, JSON.stringify(record), { mode: 0o644 });
       const overlay = releaseState(rootDir).overlay;
-      writeFileSync(overlay, "operator-state\n");
+      writeFileSync(overlay, "operator-state\n", { mode: 0o644 });
       const run = vi.fn(async () => undefined);
       const recovered = createDefaultReleaseEffects(rootDir, run, {
         verifyAppliedRelease: async () => true,
@@ -2174,7 +2179,7 @@ it("fix1 recovery cannot publish after verification consumes the remaining deadl
     const path = join(directory, "transaction.json");
     const record = JSON.parse(readFileSync(path, "utf8"));
     record.phase = "services_applied";
-    writeFileSync(path, JSON.stringify(record));
+    writeFileSync(path, JSON.stringify(record), { mode: 0o644 });
     const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
       verifyAppliedRelease: async () => {
         vi.setSystemTime(Date.now() + 2000);

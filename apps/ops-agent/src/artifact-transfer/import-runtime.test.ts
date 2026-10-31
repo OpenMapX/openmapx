@@ -95,14 +95,14 @@ async function fixture() {
   });
   cleanups.push(() => app.close());
   const source = join(host.root, "portable-source");
-  mkdirSync(join(source, "osrm-graph"), { recursive: true });
+  mkdirSync(join(source, "osrm-graph"), { mode: 0o755, recursive: true });
   for (const name of [
     "region.osrm",
     "region.osrm.partition",
     "region.osrm.cells",
     "region.osrm.mldgr",
   ])
-    writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`);
+    writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`, { mode: 0o644 });
   const chunks: Buffer[] = [];
   await writeBuildBundle({
     dataRoot: source,
@@ -376,8 +376,8 @@ it("blocks a live consumer and refuses a changed configuration after preview wit
 it("reconciles the original prepared publication after exact foreign-inode repair and server reassembly", async () => {
   const f = await fixture(),
     old = join(f.infraDir, "data/osrm-graph");
-  mkdirSync(old);
-  writeFileSync(join(old, "old"), "old graph");
+  mkdirSync(old, { mode: 0o755 });
+  writeFileSync(join(old, "old"), "old graph", { mode: 0o644 });
   const oldInode = fs.statSync(old).ino;
   const preview = await f.preview(),
     operation = {
@@ -401,7 +401,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
       native.statSync(from).ino === newInode
     ) {
       replaced = true;
-      native.mkdirSync(to);
+      native.mkdirSync(to, { mode: 0o755 });
       throw Error("Named foreign live-directory replacement");
     }
     return native.renameSync(from, to);

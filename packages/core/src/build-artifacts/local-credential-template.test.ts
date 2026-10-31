@@ -26,7 +26,7 @@ const operation = {
 async function fixture(role: "host-cli" | "ops-agent" | "data-manager") {
   const root = mkdtempSync(join(tmpdir(), "omx-local-credential-owner-"));
   roots.push(root);
-  mkdirSync(join(root, "data"));
+  mkdirSync(join(root, "data"), { mode: 0o755 });
   await provisionControlInstallation(root);
   return openControlInstallation({ infraDir: root, role, serviceIds: ["motis", "valhalla"] });
 }

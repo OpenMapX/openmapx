@@ -32,7 +32,7 @@ let root: string;
 const revision = `cfg1_${"a".repeat(43)}`;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-lifecycle-receipt-"));
-  mkdirSync(join(root, "data"));
+  mkdirSync(join(root, "data"), { mode: 0o755 });
   await provisionControlInstallation(root);
 });
 afterEach(() => {
@@ -123,7 +123,7 @@ it("signs exact seed and checkpoints only with the live writer and physical targ
 it("rejects a foreign data root before creating any shared receipt", async () => {
   const o = owner(),
     foreign = join(root, "foreign");
-  mkdirSync(foreign);
+  mkdirSync(foreign, { mode: 0o755 });
   try {
     await expect(
       withServiceLifecycleReceiptAuthority(o.authority, () =>

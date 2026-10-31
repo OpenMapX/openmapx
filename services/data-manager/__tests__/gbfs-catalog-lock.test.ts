@@ -26,7 +26,7 @@ const LOCK = {
 describe("GBFS catalog lock", () => {
   it("roundtrips an immutable commit URL and hash", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-gbfs-lock-"));
-    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    mkdirSync(join(tmp, "infra", "docker"), { mode: 0o700, recursive: true });
     writeGbfsCatalogLock(tmp, LOCK);
     expect(() => readGbfsCatalogLock(tmp!)).toThrow(/not initialized/);
     expect(readFileSync(join(tmp, "infra", "docker", "gbfs-catalog.lock.json"), "utf-8")).toContain(

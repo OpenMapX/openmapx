@@ -55,10 +55,10 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
     data = join(infraDir, "data"),
     catalog = join(data, ".transitous-catalog"),
     atlas = join(catalog, "transitland-atlas");
-  mkdirSync(join(catalog, "feeds"), { recursive: true });
-  mkdirSync(join(catalog, "src"));
-  mkdirSync(join(catalog, "configs/motis"), { recursive: true });
-  mkdirSync(join(atlas, "feeds"), { recursive: true });
+  mkdirSync(join(catalog, "feeds"), { mode: 0o755, recursive: true });
+  mkdirSync(join(catalog, "src"), { mode: 0o755 });
+  mkdirSync(join(catalog, "configs/motis"), { mode: 0o755, recursive: true });
+  mkdirSync(join(atlas, "feeds"), { mode: 0o755, recursive: true });
   git(atlas, ["init"]);
   // Deliberately different filename and id: identity is the parsed pinned DMFR id.
   writeFileSync(
@@ -75,6 +75,7 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
         },
       ],
     }),
+    { mode: 0o644 },
   );
   git(atlas, ["add", "."]);
   git(atlas, ["commit", "-m", "Synthetic Atlas"]);
@@ -85,6 +86,7 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
     JSON.stringify({
       sources: [{ name: "demo", type: "transitland-atlas", "transitland-atlas-id": "f-demo" }],
     }),
+    { mode: 0o644 },
   );
   const approvedTemplate = actualPinnedTemplate
     ? readFileSync(
@@ -95,8 +97,10 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
         "utf8",
       )
     : "server:\n  port: 8080\ntimetable:\n  datasets: {}\n";
-  writeFileSync(join(catalog, "configs/motis/config.yml"), approvedTemplate);
-  writeFileSync(join(catalog, "src/generate-motis-config.py"), "# synthetic generator marker\n");
+  writeFileSync(join(catalog, "configs/motis/config.yml"), approvedTemplate, { mode: 0o644 });
+  writeFileSync(join(catalog, "src/generate-motis-config.py"), "# synthetic generator marker\n", {
+    mode: 0o644,
+  });
   git(catalog, ["add", "feeds", "configs", "src"]);
   git(catalog, ["update-index", "--add", "--cacheinfo", `160000,${atlasCommit},transitland-atlas`]);
   git(catalog, ["commit", "-m", "Synthetic catalog"]);
@@ -140,11 +144,12 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
     { mode: 0o600 },
   );
   const out = join(data, "gtfs");
-  mkdirSync(out);
+  mkdirSync(out, { mode: 0o755 });
   symlinkSync(out, join(catalog, "out"));
   writeFileSync(
     join(out, "config.yml"),
     "server:\n  port: 8080\ntimetable:\n  datasets:\n    de-demo:\n      path: de_demo.gtfs.zip\n      rt:\n        - url: https://rt.triptix.tech/feed/de-demo-0\n          protocol: gtfsrt\n",
+    { mode: 0o644 },
   );
   if (actualPinnedTemplate) {
     const generated = approvedTemplate
@@ -154,12 +159,12 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
       )
       .replace(/^ {2}feeds:.*$/m, "  feeds: {}")
       .replace(/^gbfs:$/m, "gbfs:\n  proxy: https://rt.triptix.tech");
-    writeFileSync(join(out, "config.yml"), generated);
-    writeFileSync(join(out, "planet-latest.osm.pbf"), "synthetic OSM input");
+    writeFileSync(join(out, "config.yml"), generated, { mode: 0o644 });
+    writeFileSync(join(out, "planet-latest.osm.pbf"), "synthetic OSM input", { mode: 0o644 });
   }
   const archive = "synthetic timetable";
-  writeFileSync(join(out, "de_demo.gtfs.zip"), archive);
-  writeFileSync(join(out, "license.json"), "[]");
+  writeFileSync(join(out, "de_demo.gtfs.zip"), archive, { mode: 0o644 });
+  writeFileSync(join(out, "license.json"), "[]", { mode: 0o644 });
   writeFileSync(
     join(out, "transit-source-manifest.json"),
     JSON.stringify({
@@ -183,9 +188,10 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
         },
       ],
     }),
+    { mode: 0o644 },
   );
   const sourceKeys = join(root, "source-keys.json");
-  writeFileSync(sourceKeys, JSON.stringify({ "de/demo": sourceKey }));
+  writeFileSync(sourceKeys, JSON.stringify({ "de/demo": sourceKey }), { mode: 0o600 });
   const ctx = buildJobContext({
     dataDir: data,
     store: new StateStore(data),
@@ -202,6 +208,7 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
               ...(!publicSource ? { headers: { "X-Key": sourceKey } } : {}),
             },
           }),
+          { mode: 0o644 },
         );
     },
   });
@@ -212,7 +219,7 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
   expect(assembled.status).toBe("ok");
   expect(assembled.artifacts?.portableRecipeWritten).toBe(true);
   const stagingDir = join(root, "prepared-motis-live");
-  mkdirSync(stagingDir);
+  mkdirSync(stagingDir, { mode: 0o755 });
   for (const name of [
     "license.json",
     "de_demo.gtfs.zip",
@@ -280,6 +287,7 @@ it("uses pinned Git objects even when the catalog working-tree endpoint is repla
     JSON.stringify({
       sources: [{ name: "demo", type: "url", spec: "gtfs-rt", url: "https://attacker.example" }],
     }),
+    { mode: 0o644 },
   );
   const preview = await inspectMotisPortableDestination(f);
   await materializeMotisPortableDestination({
@@ -315,7 +323,7 @@ it("reports host-owned and missing target credentials as explicit prerequisites"
     }),
   ).rejects.toThrow("host-owned");
   chmodSync(f.secret, 0o600);
-  writeFileSync(f.secret, "{}");
+  writeFileSync(f.secret, "{}", { mode: 0o644 });
   chmodSync(f.secret, 0o444);
   await expect(inspectMotisPortableDestination(f)).rejects.toThrow("missing feed credentials");
 }, 30000);
@@ -385,9 +393,9 @@ it("imports an actual portable candidate through the production agent with desti
   });
   const portable = join(source.rootDir, "export"),
     live = join(portable, "motis/live");
-  mkdirSync(join(live, "data"), { recursive: true });
+  mkdirSync(join(live, "data"), { mode: 0o755, recursive: true });
   cpSync(source.sourceStaging, live, { recursive: true });
-  writeFileSync(join(live, "data/tt.bin"), "synthetic compiled timetable");
+  writeFileSync(join(live, "data/tt.bin"), "synthetic compiled timetable", { mode: 0o644 });
   cpSync(join(source.sourceStaging, ".openmapx-feed-proxy"), join(portable, "motis-feed-proxy"), {
     recursive: true,
   });

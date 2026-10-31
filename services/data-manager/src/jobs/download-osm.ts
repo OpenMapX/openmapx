@@ -102,7 +102,7 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   const url = resolveOsmUrl(opts.region);
   const fileName = osmPbfName(opts.region);
   const targetDir = join(opts.dataDir, "osm");
-  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(targetDir, { recursive: true, mode: 0o700 });
   const targetPath = join(targetDir, fileName);
 
   let md5: string | undefined;

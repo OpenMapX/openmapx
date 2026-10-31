@@ -197,16 +197,22 @@ it("exports a sanitized MOTIS candidate with credential IDs and no generated run
   const { Writable } = await import("node:stream");
   const { writeFileSync, symlinkSync } = await import("node:fs");
   const data = join(root, "data");
-  mkdirSync(join(data, "motis/slots/A/data"), { recursive: true });
-  mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
+  mkdirSync(join(data, "motis/slots/A/data"), { mode: 0o755, recursive: true });
+  mkdirSync(join(data, "motis-feed-proxy/conf"), { mode: 0o755, recursive: true });
   symlinkSync("slots/A", join(data, "motis/live"));
-  writeFileSync(join(data, "motis/slots/A/data/tt.bin"), "TT");
-  writeFileSync(join(data, "motis/slots/A/license.json"), '{"license":"synthetic-public"}');
-  writeFileSync(join(root, "acquired.gtfs.zip"), "synthetic acquired timetable");
+  writeFileSync(join(data, "motis/slots/A/data/tt.bin"), "TT", { mode: 0o644 });
+  writeFileSync(join(data, "motis/slots/A/license.json"), '{"license":"synthetic-public"}', {
+    mode: 0o644,
+  });
+  writeFileSync(join(root, "acquired.gtfs.zip"), "synthetic acquired timetable", { mode: 0o644 });
   linkSync(join(root, "acquired.gtfs.zip"), join(data, "motis/slots/A/de_feed.gtfs.zip"));
-  writeFileSync(join(data, "motis/slots/A/config.yml"), "secret-api-key");
-  writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "secret-api-key");
-  writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "secret-api-key");
+  writeFileSync(join(data, "motis/slots/A/config.yml"), "secret-api-key", { mode: 0o644 });
+  writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "secret-api-key", {
+    mode: 0o644,
+  });
+  writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "secret-api-key", {
+    mode: 0o644,
+  });
   writeFileSync(
     join(data, "motis/slots/A/portable-sources.json"),
     JSON.stringify({
@@ -214,6 +220,7 @@ it("exports a sanitized MOTIS candidate with credential IDs and no generated run
       sourceFingerprints: [],
       credentialRequirements: ["synthetic-feed"],
     }),
+    { mode: 0o644 },
   );
   const chunks: Buffer[] = [];
   const target = new Writable({
@@ -263,12 +270,13 @@ it.each(["tileserver", "osrm", "otp", "pelias", "motis"])(
     const data = join(root, "data");
     const serviceDirs = dirs[service];
     if (!serviceDirs?.[0]) throw Error("Missing fixture artifact directory");
-    for (const dir of serviceDirs) mkdirSync(join(data, dir), { recursive: true });
-    writeFileSync(join(data, serviceDirs[0], "artifact.bin"), "DATA");
+    for (const dir of serviceDirs) mkdirSync(join(data, dir), { mode: 0o755, recursive: true });
+    writeFileSync(join(data, serviceDirs[0], "artifact.bin"), "DATA", { mode: 0o644 });
     if (service === "motis")
       writeFileSync(
         join(data, "motis/live/portable-sources.json"),
         JSON.stringify({ version: 1, sourceFingerprints: [], credentialRequirements: [] }),
+        { mode: 0o644 },
       );
     const chunks: Buffer[] = [];
     const result = await writeBuildBundle({

@@ -25,7 +25,7 @@ import {
 let root: string;
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-source-witness-"));
-  mkdirSync(join(root, "data"));
+  mkdirSync(join(root, "data"), { mode: 0o755 });
   await provisionControlInstallation(root);
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));

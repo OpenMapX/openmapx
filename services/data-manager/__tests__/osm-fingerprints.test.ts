@@ -28,9 +28,9 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
         publishedUnderLock = existsSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"));
       },
       downloadImpl: async (_url, target, options) => {
-        mkdirSync(join(root, "osm"), { recursive: true });
+        mkdirSync(join(root, "osm"), { mode: 0o700, recursive: true });
         const tmp = target + ".test-part";
-        writeFileSync(tmp, "fixture pbf bytes");
+        writeFileSync(tmp, "fixture pbf bytes", { mode: 0o600 });
         await options.beforePublish?.(tmp);
         await options.withPublishLock?.(() => renameSync(tmp, target));
         return { published: true };
@@ -56,9 +56,9 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
 });
 it("does not bind a 304 checksum to a replacement inode at publication", async () => {
   const root = mkdtempSync(join(tmpdir(), "omx-osm-304-evidence-"));
-  mkdirSync(join(root, "osm"));
+  mkdirSync(join(root, "osm"), { mode: 0o700 });
   const target = join(root, "osm/europe-germany.osm.pbf");
-  writeFileSync(target, "old bytes");
+  writeFileSync(target, "old bytes", { mode: 0o600 });
   try {
     await expect(
       downloadOsm({
@@ -68,7 +68,7 @@ it("does not bind a 304 checksum to a replacement inode at publication", async (
         verifyChecksum: false,
         downloadImpl: async () => ({ published: false }),
         withPublishLock: async (publish) => {
-          writeFileSync(target + ".replacement", "new bytes");
+          writeFileSync(target + ".replacement", "new bytes", { mode: 0o600 });
           renameSync(target + ".replacement", target);
           publish();
         },
@@ -95,8 +95,8 @@ it("reports failed sidecar publication without leaving verified evidence", async
         store: new StateStore(root),
         verifyChecksum: false,
         downloadImpl: async (_url, target, options) => {
-          mkdirSync(join(root, "osm"), { recursive: true });
-          writeFileSync(target + ".part", "new bytes");
+          mkdirSync(join(root, "osm"), { mode: 0o700, recursive: true });
+          writeFileSync(target + ".part", "new bytes", { mode: 0o600 });
           await options.beforePublish?.(target + ".part");
           await options.withPublishLock?.(() => renameSync(target + ".part", target));
           return { published: true };

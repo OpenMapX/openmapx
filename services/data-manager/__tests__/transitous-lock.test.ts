@@ -24,7 +24,7 @@ afterEach(() => {
 
 function makeRepoRoot(): string {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-tlock-"));
-  mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+  mkdirSync(join(tmp, "infra", "docker"), { mode: 0o700, recursive: true });
   return tmp;
 }
 
@@ -95,13 +95,15 @@ describe("readTransitousLock / writeTransitousLock", () => {
 
   it("throws on a malformed lockfile", () => {
     const root = makeRepoRoot();
-    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "not json");
+    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "not json", { mode: 0o600 });
     expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 
   it("throws when required fields are missing", () => {
     const root = makeRepoRoot();
-    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), JSON.stringify({ submodules: {} }));
+    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), JSON.stringify({ submodules: {} }), {
+      mode: 0o600,
+    });
     expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 });

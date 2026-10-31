@@ -64,10 +64,12 @@ function legacy() {
   writeFileSync(
     join(docker, "transitous.lock.json"),
     JSON.stringify({ $schema: "legacy", ...transitous }),
+    { mode: 0o644 },
   );
   writeFileSync(
     join(docker, "gbfs-catalog.lock.json"),
     JSON.stringify({ $schema: "legacy", ...gbfs }),
+    { mode: 0o644 },
   );
 }
 function identity(): CatalogPinCommitIdentity {
@@ -133,7 +135,7 @@ it("imports both exact legacy pins once, ignoring later compatibility-file chang
   const first = await initializeCatalogPinSet({ rootDir: root, lease });
   expect(first).toEqual(createCatalogPinSet(transitous, gbfs));
   const ptr = readFileSync(join(docker, "catalog-pins/current.json"));
-  writeFileSync(join(docker, "gbfs-catalog.lock.json"), "corrupt");
+  writeFileSync(join(docker, "gbfs-catalog.lock.json"), "corrupt", { mode: 0o644 });
   expect(await initializeCatalogPinSet({ rootDir: root, lease })).toEqual(first);
   expect(readCatalogPinSet(root)).toEqual(first);
   expect(readFileSync(join(docker, "catalog-pins/current.json"))).toEqual(ptr);
@@ -149,7 +151,9 @@ it("does not initialize from missing or malformed halves", async () => {
     { url: "https://example.test/mutable" },
     { lockedAt: "yesterday" },
   ]) {
-    writeFileSync(join(docker, "gbfs-catalog.lock.json"), JSON.stringify({ ...gbfs, ...patch }));
+    writeFileSync(join(docker, "gbfs-catalog.lock.json"), JSON.stringify({ ...gbfs, ...patch }), {
+      mode: 0o644,
+    });
     await expect(initializeCatalogPinSet({ rootDir: root, lease })).rejects.toThrow();
   }
   expect(existsSync(join(docker, "catalog-pins/current.json"))).toBe(false);
@@ -169,7 +173,7 @@ it("refuses symlinked locks and replacements between descriptor checks", async (
     if (fs.fstatSync(args[0]).ino === target.ino && seen++ === 0) {
       const path = join(docker, "transitous.lock.json");
       renameSync(path, `${path}.old`);
-      writeFileSync(path, JSON.stringify(transitous));
+      writeFileSync(path, JSON.stringify(transitous), { mode: 0o644 });
     }
     return result;
   }) as typeof read);
@@ -268,7 +272,9 @@ it("never falls back to legacy files when a selected generation is corrupt", asy
   legacy();
   const pins = await initializeCatalogPinSet({ rootDir: root, lease });
   if (!pins) throw Error("missing fixture pair");
-  writeFileSync(join(docker, `catalog-pins/generations/${pins.generationId}.json`), "{}");
+  writeFileSync(join(docker, `catalog-pins/generations/${pins.generationId}.json`), "{}", {
+    mode: 0o644,
+  });
   expect(() => readCatalogPinSet(root)).toThrow();
 });
 it("bootstraps an actual local initialization root and releases its MOTIS ownership", async () => {
@@ -282,8 +288,8 @@ it("bootstraps an actual local initialization root and releases its MOTIS owners
     serviceIds: ["motis"],
   });
   try {
-    writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(transitous));
-    writeFileSync(join(infra, "gbfs-catalog.lock.json"), JSON.stringify(gbfs));
+    writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(transitous), { mode: 0o644 });
+    writeFileSync(join(infra, "gbfs-catalog.lock.json"), JSON.stringify(gbfs), { mode: 0o644 });
     const { initializeManagedCatalogPins } = await import("./bootstrap");
     const pins = await initializeManagedCatalogPins({ rootDir: other, installation: local });
     expect(pins).toEqual(createCatalogPinSet(transitous, gbfs));
@@ -355,8 +361,8 @@ it("does not acquire a startup target root for a malformed legacy pair", async (
     serviceIds: ["motis"],
   });
   try {
-    writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(transitous));
-    writeFileSync(join(infra, "gbfs-catalog.lock.json"), "invalid");
+    writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(transitous), { mode: 0o644 });
+    writeFileSync(join(infra, "gbfs-catalog.lock.json"), "invalid", { mode: 0o644 });
     const { initializeManagedCatalogPins } = await import("./bootstrap");
     await expect(
       initializeManagedCatalogPins({ rootDir: other, installation: local }),
@@ -372,8 +378,8 @@ it("refuses to initialize another checkout with this checkout's MOTIS lease", as
   try {
     const dir = join(other, "infra/docker");
     mkdirSync(join(dir, "data"), { recursive: true, mode: 0o700 });
-    writeFileSync(join(dir, "transitous.lock.json"), JSON.stringify(transitous));
-    writeFileSync(join(dir, "gbfs-catalog.lock.json"), JSON.stringify(gbfs));
+    writeFileSync(join(dir, "transitous.lock.json"), JSON.stringify(transitous), { mode: 0o644 });
+    writeFileSync(join(dir, "gbfs-catalog.lock.json"), JSON.stringify(gbfs), { mode: 0o644 });
     await expect(initializeCatalogPinSet({ rootDir: other, lease })).rejects.toThrow(
       /root|foreign|checkout/i,
     );

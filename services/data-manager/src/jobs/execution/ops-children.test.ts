@@ -120,12 +120,15 @@ it.each(["promotion", "reload"] as const)(
       control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
       renameSync(join(root, "data/motis/staging"), join(root, "data/motis/live"));
     } else {
-      mkdirSync(join(root, "data/motis-feed-proxy/conf"), { recursive: true });
+      mkdirSync(join(root, "data/motis-feed-proxy/conf"), { mode: 0o700, recursive: true });
       writeFileSync(
         join(root, "data/motis-feed-proxy/conf/default.conf"),
         "server { listen 80; }\n",
+        { mode: 0o600 },
       );
-      writeFileSync(join(root, "data/motis-feed-proxy/feed-proxy-vars.json"), "{}\n");
+      writeFileSync(join(root, "data/motis-feed-proxy/feed-proxy-vars.json"), "{}\n", {
+        mode: 0o600,
+      });
       linkProxyFixture(join(root, "data"));
       control.retainOwnedDataTransitCandidate(authority, { phase, ordinal: 0 });
     }
@@ -554,19 +557,22 @@ it
           });
           let finalStatus: "ok" | "error" = "ok";
           if (kind === "promotion") {
-            mkdirSync(join(data, "motis/staging"), { recursive: true });
+            mkdirSync(join(data, "motis/staging"), { mode: 0o700, recursive: true });
             writePreparedFixture(join(data, "motis/staging"), context.execution.executionId);
             await retainTransitPhaseCandidate(job, phase);
             await publishDataChange(() =>
               renameSync(join(data, "motis/staging"), join(data, "motis/live")),
             );
           } else {
-            mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
+            mkdirSync(join(data, "motis-feed-proxy/conf"), { mode: 0o700, recursive: true });
             writeFileSync(
               join(data, "motis-feed-proxy/conf/default.conf"),
               "server { listen 80; }\n",
+              { mode: 0o600 },
             );
-            writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n");
+            writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n", {
+              mode: 0o600,
+            });
             linkProxyFixture(data);
             writePreparedFixture(job.motisStagingDataDir, context.execution.executionId);
             const staged = await stageProxy(job);
@@ -917,8 +923,8 @@ it
 );
 
 function writePreparedFixture(staging: string, executionId: string) {
-  mkdirSync(staging, { recursive: true });
-  mkdirSync(join(staging, ".openmapx-feed-proxy/conf"), { recursive: true });
+  mkdirSync(staging, { mode: 0o700, recursive: true });
+  mkdirSync(join(staging, ".openmapx-feed-proxy/conf"), { mode: 0o700, recursive: true });
   for (const [name, body] of [
     ["config.yml", "timetable:\n  datasets:\n    public: test.gtfs.zip\n"],
     ["license.json", "{}"],
@@ -930,7 +936,7 @@ function writePreparedFixture(staging: string, executionId: string) {
     ],
     ["test.gtfs.zip", "public-synthetic-dataset"],
   ])
-    writeFileSync(join(staging, name!), body!);
+    writeFileSync(join(staging, name!), body!, { mode: 0o600 });
   createCandidateManifest(staging, executionId, new Date().toISOString());
 }
 function linkProxyFixture(data: string) {
@@ -952,9 +958,11 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
   async (crash) => {
     const root = mkdtempSync(join(tmpdir(), "omx-proxy-proof-crash-")),
       data = join(root, "data");
-    mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
-    writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "server { listen 80; }\n");
-    writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n");
+    mkdirSync(join(data, "motis-feed-proxy/conf"), { mode: 0o700, recursive: true });
+    writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "server { listen 80; }\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(data, "motis-feed-proxy/feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     linkProxyFixture(data);
     await control.provisionControlInstallation(root);
     const dm = control.openControlInstallation({
@@ -1107,7 +1115,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
           control.verifyFeedProxyCanonicalTerminal(authority, bound.execution),
         ).toThrow();
       }
-      const jobs = JSON.parse(readFileSync(join(data, "ops-agent/jobs-v1.json"), "utf8"));
+      const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
       expect(existsSync(join(data, ".admin-target-control/locks/motis-feed-proxy"))).toBe(true);

@@ -61,7 +61,7 @@ try {
       integrationConfigs: [],
       serviceSecrets: [],
     };
-    mkdirSync(join(infraDir, "data"), { recursive: true });
+    mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
     await provisionControlInstallation(infraDir);
     const installation = openControlInstallation({ infraDir, role: "ops-agent", serviceIds: ["alpha"] });
     let source;

@@ -42,8 +42,8 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
       lockedAt: t.lockedAt,
       lockedBy: t.lockedBy,
     };
-  writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(t));
-  writeFileSync(join(infra, "gbfs-catalog.lock.json"), JSON.stringify(g));
+  writeFileSync(join(infra, "transitous.lock.json"), JSON.stringify(t), { mode: 0o600 });
+  writeFileSync(join(infra, "gbfs-catalog.lock.json"), JSON.stringify(g), { mode: 0o600 });
   await provisionControlInstallation(infra);
   const installation = openControlInstallation({
     infraDir: infra,

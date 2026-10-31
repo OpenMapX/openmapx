@@ -173,7 +173,7 @@ function createCandidateManifestWithHashes(
     },
   };
   const output = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
-  atomicWriteJsonSync(output, manifest, { durability: "full" });
+  atomicWriteJsonSync(output, manifest, { durability: "full", mode: 0o600 });
   return manifest;
 }
 

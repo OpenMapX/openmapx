@@ -21,15 +21,15 @@ afterEach(async () => {
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-writers-"));
   roots.push(root);
-  mkdirSync(join(root, "infra/docker"), { recursive: true });
+  mkdirSync(join(root, "infra/docker"), { recursive: true, mode: 0o700 });
   // The deployment's user, which only a host render writes into .env.
   writeFileSync(
     join(root, "infra/docker/.env"),
     `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`,
     { mode: 0o600 },
   );
-  mkdirSync(join(root, "services/alpha"), { recursive: true });
-  writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+  mkdirSync(join(root, "services/alpha"), { mode: 0o755, recursive: true });
+  writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n", { mode: 0o644 });
   writeFileSync(
     join(root, "services/alpha/service.json"),
     JSON.stringify({
@@ -40,6 +40,7 @@ function fixture() {
       container: { image: "example/alpha", tag: "1" },
       configSchema: { type: "object", properties: { label: { type: "string" } } },
     }),
+    { mode: 0o644 },
   );
   const selection = coreServices.serviceSelectionPath(join(root, "infra/docker"));
   mkdirSync(dirname(selection), { recursive: true, mode: 0o700 });

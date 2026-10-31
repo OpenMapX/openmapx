@@ -33,7 +33,7 @@ describe("production core restart workflow", () => {
     async (serviceId, fail) => {
       const host = await ownedServiceHost();
       roots.push(host.cleanupRoot);
-      mkdirSync(join(host.root, "services/traefik/config"), { recursive: true });
+      mkdirSync(join(host.root, "services/traefik/config"), { mode: 0o755, recursive: true });
       cpSync(
         join(import.meta.dirname, "../../../services/traefik/config"),
         join(host.root, "services/traefik/config"),

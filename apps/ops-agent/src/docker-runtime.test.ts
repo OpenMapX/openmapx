@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -16,6 +17,7 @@ import { delimiter, join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { testExecution } from "./__fixtures__/execution";
 import {
   createDockerRuntime,
@@ -33,7 +35,7 @@ async function preparedStack(ids = ["motis", "postgis", "redis"]) {
   const root = mkdtempSync(join(tmpdir(), "omx-docker-prepared-")),
     infraDir = join(root, "infra/docker");
   preparedRoots.push(root);
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { mode: 0o755, recursive: true });
   const loaded: services.LoadedService[] = ids.map((id) => ({
     manifest: {
       id,
@@ -65,6 +67,32 @@ async function preparedStack(ids = ["motis", "postgis", "redis"]) {
       composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     },
   };
+}
+
+/** The unit adapter boundary returns Docker's config read from the real generated inputs. */
+function readPreparedDockerConfig(
+  stack: { composePath: string; composeReleasePath: string },
+  file: string,
+  args: readonly string[],
+) {
+  expect(file).toBe("docker");
+  expect(args.slice(-3)).toEqual(["config", "--format", "json"]);
+  const serviceDefinitions: Record<string, unknown> = {};
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] !== "-f") continue;
+    const path = args[++index];
+    expect(
+      [stack.composePath, stack.composeReleasePath]
+        .filter(existsSync)
+        .map((path) => realpathSync(path)),
+    ).toContain(realpathSync(path!));
+    const configuration = parseYaml(readFileSync(path!, "utf8")) as {
+      services: Record<string, unknown>;
+    };
+    Object.assign(serviceDefinitions, configuration.services);
+  }
+  expect(Object.keys(serviceDefinitions).length).toBeGreaterThan(0);
+  return { stdout: JSON.stringify({ services: serviceDefinitions }), stderr: "" };
 }
 
 const ownedSnapshot = (serviceId = "redis") => ({
@@ -577,11 +605,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             const previous = await point(live);
             const candidate = await point(staging);
             const infra = join(root, `${layout}-${scenario}-infra`);
-            mkdirSync(infra);
+            mkdirSync(infra, { mode: 0o755 });
             const compose = join(infra, "compose.yml");
             const release = join(infra, "release.yml");
-            writeFileSync(join(infra, ".env"), "");
-            writeFileSync(release, "services: {}\n");
+            writeFileSync(join(infra, ".env"), "", { mode: 0o644 });
+            writeFileSync(release, "services: {}\n", { mode: 0o644 });
             const service = (name: string, path: string) => `  ${name}:
     image: ${image}
     container_name: ${name}
@@ -603,6 +631,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             writeFileSync(
               compose,
               `name: omx-canary-${randomUUID()}\nservices:\n${service("motis", live)}${service("motis-staging", staging)}`,
+              { mode: 0o644 },
             );
             const prefix = [
               "compose",
@@ -920,7 +949,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       ownedServices,
       execFile: async (file, args, options) => {
         calls.push([...args]);
-        if (args.includes("config")) return runContainedProcess(file, args, options);
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         return { stdout: "", stderr: "" };
       },
     });
@@ -978,7 +1007,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       fileExists: () => false,
       ownedServices,
       execFile: async (file, args, options) => {
-        if (args.includes("config")) return runContainedProcess(file, args, options);
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         expect(options.timeout).toBe(600_000);
         expect(options.signal.aborted).toBe(false);
         return { stdout: "", stderr: "" };
@@ -1035,7 +1064,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       fileExists: () => false,
       ownedServices,
       execFile: async (file, args, options) => {
-        if (args.includes("config")) return runContainedProcess(file, args, options);
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         return new Promise((resolve, reject) => {
           entered.resolve();
           const deadline = setTimeout(() => {
@@ -1082,15 +1111,15 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
 
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const prepared = await preparedStack();
-    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n");
-    writeFileSync(join(prepared.stack.infraDir, ".env"), "");
+    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n", { mode: 0o644 });
+    writeFileSync(join(prepared.stack.infraDir, ".env"), "", { mode: 0o644 });
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
       stack: prepared.stack,
       fileExists: () => true,
       execFile: async (file, args, options) => {
         calls.push({ file, args });
-        if (args.includes("config")) return runContainedProcess(file, args, options);
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         return { stdout: "ok\n", stderr: "" };
       },
     });
@@ -1468,9 +1497,9 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-planted-"));
         const dataRoot = join(root, "data");
         const shared = join(dataRoot, "valhalla", "osm-pbf");
-        mkdirSync(shared, { recursive: true });
+        mkdirSync(shared, { mode: 0o755, recursive: true });
         const sentinel = join(root, "sentinel");
-        writeFileSync(sentinel, "untouched");
+        writeFileSync(sentinel, "untouched", { mode: 0o644 });
         // The temporary name the agent used to write, and the manifest itself.
         symlinkSync(sentinel, join(shared, `traffic-generations.json.${"f".repeat(64)}.tmp`));
         symlinkSync(sentinel, join(shared, "traffic-generations.json"));
@@ -1523,8 +1552,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-swapped-"));
       const dataRoot = join(root, "data");
       const outside = join(root, "outside");
-      mkdirSync(join(outside, "osm-pbf"), { recursive: true });
-      mkdirSync(dataRoot);
+      mkdirSync(join(outside, "osm-pbf"), { mode: 0o755, recursive: true });
+      mkdirSync(dataRoot, { mode: 0o755 });
       symlinkSync(outside, join(dataRoot, "valhalla"));
       try {
         const runtime = createDockerRuntime({
@@ -1687,7 +1716,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     it("requires a coherent maintenance generation manifest before reporting ready", async () => {
       const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-inspect-"));
       const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-      mkdirSync(sharedDir, { recursive: true });
+      mkdirSync(sharedDir, { mode: 0o755, recursive: true });
       const runtime = createDockerRuntime({
         stack: {
           infraDir: "/trusted",
@@ -1722,6 +1751,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           waysToEdgesGeneration: generation,
           completedAt: new Date().toISOString(),
         }),
+        { mode: 0o644 },
       );
       await expect(
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
@@ -1733,7 +1763,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     it("reports a manifest the watchdog is re-checking as inconclusive, not as a rebuild", async () => {
       const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-unverified-"));
       const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-      mkdirSync(sharedDir, { recursive: true });
+      mkdirSync(sharedDir, { mode: 0o755, recursive: true });
       const calls: string[][] = [];
       const runtime = createDockerRuntime({
         stack: {
@@ -1748,7 +1778,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           return { stdout: "100\n", stderr: "" };
         },
       });
-      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}");
+      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}", { mode: 0o644 });
 
       await expect(
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
@@ -2348,6 +2378,7 @@ it("streams the actual default fixed Docker human output without the JSON collec
   writeFileSync(
     join(root, "docker"),
     `#!${process.execPath}\nconst{writeFileSync,existsSync}=require('node:fs');console.log('phase-one');writeFileSync(${JSON.stringify(ready)},'ready');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(release)})){clearInterval(timer);process.stdout.write('x'.repeat(2*1024*1024)+'\\nlast-diagnostic\\n');}},5);`,
+    { mode: 0o644 },
   );
   chmodSync(join(root, "docker"), 0o700);
   vi.stubEnv("PATH", root + delimiter + process.env.PATH);
@@ -2374,11 +2405,11 @@ it("streams the actual default fixed Docker human output without the JSON collec
   try {
     await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
     await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
-    writeFileSync(release, "go");
+    writeFileSync(release, "go", { mode: 0o644 });
     await expect(completion).resolves.toEqual({ changed: true });
     expect(seen).toContain("last-diagnostic");
   } finally {
-    writeFileSync(release, "go");
+    writeFileSync(release, "go", { mode: 0o644 });
     await completion.catch(() => undefined);
     vi.unstubAllEnvs();
     rmSync(root, { recursive: true, force: true });

@@ -101,7 +101,7 @@ export const run: StageFn = async (ctx) => {
     const { gtfs, osm } = parseConfigInputs(configText);
 
     const stagingDir = ctx.motisStagingDataDir;
-    mkdirSync(stagingDir, { recursive: true });
+    mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
 
     // config.yml — the import-time entrypoint.
     copyMetadata(configSrc, join(stagingDir, "config.yml"));

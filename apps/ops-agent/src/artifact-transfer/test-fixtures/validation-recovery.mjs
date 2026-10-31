@@ -26,8 +26,8 @@ try {
     const infra=${JSON.stringify(infra)},root=${JSON.stringify(root)},options=${JSON.stringify(options)};
     await control.provisionControlInstallation(infra);
     const installation=control.openControlInstallation({infraDir:infra,role:'ops-agent',serviceIds:['osrm']}), store=new ArtifactTransferStore(options);
-    fs.mkdirSync(root+'/source/osrm-graph',{recursive:true});
-    for(const name of ['region.osrm','region.osrm.partition','region.osrm.cells','region.osrm.mldgr'])fs.writeFileSync(root+'/source/osrm-graph/'+name,'synthetic '+name);
+    fs.mkdirSync(root+'/source/osrm-graph',{recursive:true,mode:0o755});
+    for(const name of ['region.osrm','region.osrm.partition','region.osrm.cells','region.osrm.mldgr'])fs.writeFileSync(root+'/source/osrm-graph/'+name,'synthetic '+name,{mode:0o644});
     const chunks=[];await control.writeBuildBundle({dataRoot:root+'/source',serviceId:'osrm',record:{schemaVersion:1,service:'osrm',builtAt:new Date().toISOString(),runtimeImages:{osrm:'example/osrm:1'},toolImages:{}},target:new Writable({write(chunk,e,done){chunks.push(Buffer.from(chunk));done();}}),limits:control.DEFAULT_ARTIFACT_ARCHIVE_LIMITS,signal:new AbortController().signal});
     const bytes=Buffer.concat(chunks),stage=await store.createStage({ownerId:'native-admin',purpose:'prepared-artifact',direction:'upload',declaredBytes:bytes.length,operationKey:'opk1_'+randomUUID().replaceAll('-','')});
     await store.upload({stageId:stage.stageId,ownerId:'native-admin',purpose:stage.purpose,attemptId:randomUUID(),deadlineAt:Date.now()+60000,body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}})});

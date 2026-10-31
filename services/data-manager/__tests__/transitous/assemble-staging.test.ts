@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -157,45 +158,47 @@ function setupFixture(opts: FixtureOptions): {
   const stagingDir = join(dataDir, "motis", "staging");
   const liveDir = join(dataDir, "motis", "live");
 
-  mkdirSync(outDir, { recursive: true });
-  mkdirSync(liveDir, { recursive: true });
+  mkdirSync(outDir, { mode: 0o700, recursive: true });
+  mkdirSync(liveDir, { mode: 0o700, recursive: true });
 
   const feeds = opts.feeds ?? [];
   const osm = opts.osmInLive ?? opts.osmMissing;
 
   if (opts.withConfig) {
     const configText = buildConfig(feeds, osm);
-    writeFileSync(join(outDir, "config.yml"), configText);
+    writeFileSync(join(outDir, "config.yml"), configText, { mode: 0o600 });
   }
 
   for (const feed of feeds) {
-    writeFileSync(join(outDir, feed), `fake-gtfs-data-${feed}`);
+    writeFileSync(join(outDir, feed), `fake-gtfs-data-${feed}`, { mode: 0o600 });
   }
 
   // Create OSM in live dir only when osmInLive is set (not when osmMissing)
   if (opts.osmInLive) {
-    writeFileSync(join(liveDir, opts.osmInLive), "fake-osm-data");
+    writeFileSync(join(liveDir, opts.osmInLive), "fake-osm-data", { mode: 0o600 });
   }
 
   // scripts/ + license.json in outDir (small text files the stage copies)
   const scriptsDir = join(outDir, "scripts");
-  mkdirSync(scriptsDir, { recursive: true });
-  writeFileSync(join(scriptsDir, "coloring.lua"), "-- lua script\n");
-  writeFileSync(join(outDir, "license.json"), JSON.stringify({ licenses: [] }));
-  writeFileSync(join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n');
+  mkdirSync(scriptsDir, { mode: 0o700, recursive: true });
+  writeFileSync(join(scriptsDir, "coloring.lua"), "-- lua script\n", { mode: 0o600 });
+  writeFileSync(join(outDir, "license.json"), JSON.stringify({ licenses: [] }), { mode: 0o600 });
+  writeFileSync(join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n', {
+    mode: 0o600,
+  });
   const proxyDir = join(outDir, CANDIDATE_PROXY_DIRNAME);
-  mkdirSync(join(proxyDir, "conf"), { recursive: true });
-  writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n");
-  writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n");
+  mkdirSync(join(proxyDir, "conf"), { mode: 0o700, recursive: true });
+  writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n", { mode: 0o600 });
+  writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
 
   if (opts.staleArchiveInStaging) {
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, opts.staleArchiveInStaging), "stale-content");
+    mkdirSync(stagingDir, { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, opts.staleArchiveInStaging), "stale-content", { mode: 0o600 });
   }
 
   if (opts.dataMarkerInStaging) {
-    mkdirSync(join(stagingDir, "data"), { recursive: true });
-    writeFileSync(join(stagingDir, "data", "tt.bin"), "compiled-timetable");
+    mkdirSync(join(stagingDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "compiled-timetable", { mode: 0o600 });
   }
 
   return { dataDir, outDir, stagingDir, liveDir };
@@ -222,7 +225,7 @@ describe("assemble-staging run()", () => {
     expect((await run(makeCtx(fx.dataDir))).status).toBe("ok");
     for (const name of ["config.yml", "license.json", TRANSIT_SOURCE_MANIFEST_FILENAME]) {
       const original = readFileSync(join(fx.stagingDir, name));
-      writeFileSync(join(fx.outDir, name), "next producer generation");
+      writeFileSync(join(fx.outDir, name), "next producer generation", { mode: 0o600 });
       expect(readFileSync(join(fx.stagingDir, name))).toEqual(original);
     }
   });
@@ -276,6 +279,7 @@ describe("assemble-staging run()", () => {
     writeFileSync(
       join(fx.outDir, "config.yml"),
       buildConfig(["present.gtfs.zip", "missing-feed.gtfs.zip"]),
+      { mode: 0o600 },
     );
 
     const result = await run(makeCtx(fx.dataDir));
@@ -298,7 +302,7 @@ describe("assemble-staging run()", () => {
   it("returns status 'error' when every referenced feed is missing from output", async () => {
     const fx = setupFixture({ withConfig: true, feeds: [] });
     // Config references a feed that was never written to disk → 0 linked.
-    writeFileSync(join(fx.outDir, "config.yml"), buildConfig(["gone.gtfs.zip"]));
+    writeFileSync(join(fx.outDir, "config.yml"), buildConfig(["gone.gtfs.zip"]), { mode: 0o600 });
     const result = await run(makeCtx(fx.dataDir));
     expect(result.status).toBe("error");
     expect((result.artifacts as Record<string, unknown>).missingFeeds).toContain("gone.gtfs.zip");
@@ -369,8 +373,10 @@ describe("assemble-staging run()", () => {
     const feeds = ["feed.gtfs.zip"];
     const fx = setupFixture({ withConfig: true, feeds });
     // Write config referencing osm, and put the osm file in outDir (not live dir)
-    writeFileSync(join(fx.outDir, "config.yml"), buildConfig(feeds, "local.osm.pbf"));
-    writeFileSync(join(fx.outDir, "local.osm.pbf"), "osm-data-from-out");
+    writeFileSync(join(fx.outDir, "config.yml"), buildConfig(feeds, "local.osm.pbf"), {
+      mode: 0o600,
+    });
+    writeFileSync(join(fx.outDir, "local.osm.pbf"), "osm-data-from-out", { mode: 0o600 });
 
     const result = await run(makeCtx(fx.dataDir));
     expect(result.status).toBe("ok");
@@ -386,16 +392,20 @@ describe("assemble-staging run()", () => {
 
     const outDir = join(dataDir, "gtfs");
     const liveDir = join(dataDir, "motis", "live");
-    mkdirSync(outDir, { recursive: true });
-    mkdirSync(liveDir, { recursive: true });
-    writeFileSync(join(outDir, "config.yml"), buildConfig(["feed.gtfs.zip"]));
-    writeFileSync(join(outDir, "feed.gtfs.zip"), "feed-content");
-    writeFileSync(join(outDir, "license.json"), "[]\n");
-    writeFileSync(join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n');
+    mkdirSync(outDir, { mode: 0o700, recursive: true });
+    mkdirSync(liveDir, { mode: 0o700, recursive: true });
+    writeFileSync(join(outDir, "config.yml"), buildConfig(["feed.gtfs.zip"]), { mode: 0o600 });
+    writeFileSync(join(outDir, "feed.gtfs.zip"), "feed-content", { mode: 0o600 });
+    writeFileSync(join(outDir, "license.json"), "[]\n", { mode: 0o600 });
+    writeFileSync(join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n', {
+      mode: 0o600,
+    });
     const proxyDir = join(outDir, CANDIDATE_PROXY_DIRNAME);
-    mkdirSync(join(proxyDir, "conf"), { recursive: true });
-    writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n");
-    writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n");
+    mkdirSync(join(proxyDir, "conf"), { mode: 0o700, recursive: true });
+    writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
 
     const ctx = buildJobContext({
       dataDir,
@@ -424,6 +434,7 @@ describe("assemble-staging run() — directory structure", () => {
     const result = await run(makeCtx(fx.dataDir));
     expect(result.status).toBe("ok");
     expect(existsSync(fx.stagingDir)).toBe(true);
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o700);
 
     const entries = readdirSync(fx.stagingDir);
     expect(entries).toContain("config.yml");

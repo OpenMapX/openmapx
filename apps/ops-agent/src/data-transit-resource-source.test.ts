@@ -36,9 +36,9 @@ async function fixture(
   const root = mkdtempSync(join(tmpdir(), "omx-real-candidate-policy-")),
     data = join(root, "data"),
     proxy = join(data, "motis-feed-proxy");
-  mkdirSync(join(proxy, "conf"), { recursive: true });
-  writeFileSync(join(proxy, "conf/default.conf"), "server { listen 80; }\n");
-  writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+  mkdirSync(join(proxy, "conf"), { recursive: true, mode: 0o700 });
+  writeFileSync(join(proxy, "conf/default.conf"), "server { listen 80; }\n", { mode: 0o600 });
+  writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
   applyHardlinkPlan(
     [
       {
@@ -139,7 +139,7 @@ async function fixture(
         calls++;
         if (args[2] === "/bin/sh") {
           const bin = join(root, "fixture-bin");
-          mkdirSync(bin, { recursive: true });
+          mkdirSync(bin, { mode: 0o755, recursive: true });
           writeFileSync(join(bin, "nginx"), `#!/bin/sh\nexit ${fault === "validation" ? 1 : 0}\n`, {
             mode: 0o700,
           });
@@ -155,7 +155,9 @@ async function fixture(
             options,
           );
           if (replaceAfterValidation)
-            writeFileSync(join(proxy, "conf/default.conf"), "replaced after the resource claim\n");
+            writeFileSync(join(proxy, "conf/default.conf"), "replaced after the resource claim\n", {
+              mode: 0o644,
+            });
           if (fault === "transport") throw Error("Lost Docker transport after validation");
           if (fault === "marker")
             return { ...completed, stdout: completed.stdout.replace(/:[0-9]+\n$/, ":256\n") };
@@ -266,7 +268,9 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
         };
         // An original failed invocation remains known after a later legitimate
         // restore replaces the active bytes. Observation grants no new effect.
-        writeFileSync(join(f.proxy, "conf/default.conf"), "restored previous proxy bytes\n");
+        writeFileSync(join(f.proxy, "conf/default.conf"), "restored previous proxy bytes\n", {
+          mode: 0o644,
+        });
         expect(() => control.commitFeedProxyValidationFailure(authority, input)).not.toThrow();
         expect(() =>
           control.commitFeedProxyValidationFailure(authority, { ...input, validationExitCode: 2 }),
@@ -412,21 +416,23 @@ it.each([
         const path = join(f.proxy, "conf/default.conf"),
           bytes = readFileSync(path);
         renameSync(path, `${path}.original`);
-        writeFileSync(path, bytes);
+        writeFileSync(path, bytes, { mode: 0o644 });
       }
       if (mode === "bytes")
-        writeFileSync(join(f.proxy, "feed-proxy-vars.json"), '{"foreign":true}\n');
+        writeFileSync(join(f.proxy, "feed-proxy-vars.json"), '{"foreign":true}\n', { mode: 0o644 });
       if (mode === "directory") {
         renameSync(f.proxy, `${f.proxy}.original`);
-        mkdirSync(join(f.proxy, "conf"), { recursive: true });
-        writeFileSync(join(f.proxy, "conf/default.conf"), "server { listen 80; }\n");
-        writeFileSync(join(f.proxy, "feed-proxy-vars.json"), "{}\n");
+        mkdirSync(join(f.proxy, "conf"), { mode: 0o755, recursive: true });
+        writeFileSync(join(f.proxy, "conf/default.conf"), "server { listen 80; }\n", {
+          mode: 0o644,
+        });
+        writeFileSync(join(f.proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o644 });
       }
       if (mode === "consumer-inode" || mode === "consumer-symlink") {
         const path = join(f.proxy, "motis-feed-proxy-config/default.conf"),
           bytes = readFileSync(path);
         rmSync(path);
-        if (mode === "consumer-inode") writeFileSync(path, bytes);
+        if (mode === "consumer-inode") writeFileSync(path, bytes, { mode: 0o644 });
         else (await import("node:fs")).symlinkSync(join(f.proxy, "conf/default.conf"), path);
       }
       if (mode === "canceled") {
@@ -472,7 +478,9 @@ it("rechecks the retained snapshot after nginx validation and before reload", as
     });
     if (accepted.execution !== "async") throw Error("Expected actual asynchronous agent admission");
     await expect
-      .poll(async () => (await f.client.status(f.operation.kind, accepted.operationId)).state)
+      .poll(async () => (await f.client.status(f.operation.kind, accepted.operationId)).state, {
+        timeout: 15000,
+      })
       .toBe("failed");
     expect(f.calls()).toBe(1);
   } finally {

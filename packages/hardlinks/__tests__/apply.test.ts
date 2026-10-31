@@ -29,6 +29,38 @@ describe("applyHardlinkPlan", () => {
     if (existsSync(root)) rmSync(root, { recursive: true, force: true });
   });
 
+  it.each(["tree", "single-file"] as const)(
+    "creates safe consumer permissions under umask 002: %s",
+    (kind) => {
+      mkdirSync(join(root, "src", "nested"), { recursive: true, mode: 0o700 });
+      writeFileSync(join(root, "src", "nested", "source.conf"), "fixture", { mode: 0o600 });
+      const previous = process.umask(0o002);
+      try {
+        applyHardlinkPlan(
+          [
+            {
+              source: kind === "tree" ? "src" : "src/nested",
+              target: "consumer/config",
+              consumerService: "svc",
+              dataType: "config",
+              ...(kind === "single-file" ? { targetFilename: "default.conf" } : {}),
+            },
+          ],
+          { rootDir: root },
+        );
+        for (const path of [
+          "consumer",
+          "consumer/config",
+          DEFAULT_SENTINEL_DIR,
+          ...(kind === "tree" ? ["consumer/config/nested"] : []),
+        ])
+          expect(statSync(join(root, path)).mode & 0o022, path).toBe(0);
+      } finally {
+        process.umask(previous);
+      }
+    },
+  );
+
   it("links files from source into target and writes a sentinel", () => {
     mkdirSync(join(root, "src"), { recursive: true });
     writeFileSync(join(root, "src", "a.txt"), "A");

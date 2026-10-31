@@ -23,9 +23,9 @@ function root() {
 function snapshot(dataDir: string, release: string) {
   const region = "europe/germany",
     directory = join(dataDir, "overture", release);
-  mkdirSync(directory, { recursive: true });
+  mkdirSync(directory, { mode: 0o700, recursive: true });
   const file = join(directory, "europe-germany.parquet");
-  writeFileSync(file, "metadata fixture, not a real parquet");
+  writeFileSync(file, "metadata fixture, not a real parquet", { mode: 0o600 });
   const contract = buildOverturePullContract(
     {
       release,
@@ -48,17 +48,21 @@ function snapshot(dataDir: string, release: string) {
     undefined,
     captureOvertureCatalogue("2026-10-13T00:00:00.000Z"),
   );
-  writeFileSync(pullContractPath(dataDir, release, region), JSON.stringify(contract));
+  writeFileSync(pullContractPath(dataDir, release, region), JSON.stringify(contract), {
+    mode: 0o600,
+  });
   return file;
 }
 it("selects the newest completed local region contract, ignoring partial pulls without creating files", () => {
   const path = root();
   snapshot(path, "2026-10-01.0");
   const newest = snapshot(path, "2026-10-21.0");
-  mkdirSync(join(path, "overture/2026-10-29.0"));
-  writeFileSync(join(path, "overture/2026-10-29.0/europe-germany.parquet"), "incomplete");
-  mkdirSync(join(path, "osm"));
-  writeFileSync(join(path, "osm/europe-germany.osm.pbf"), "PBF fixture");
+  mkdirSync(join(path, "overture/2026-10-29.0"), { mode: 0o700 });
+  writeFileSync(join(path, "overture/2026-10-29.0/europe-germany.parquet"), "incomplete", {
+    mode: 0o600,
+  });
+  mkdirSync(join(path, "osm"), { mode: 0o700 });
+  writeFileSync(join(path, "osm/europe-germany.osm.pbf"), "PBF fixture", { mode: 0o600 });
   expect(inspectOvertureLocalInputs(path, "europe/germany")).toEqual({
     downloadedRelease: "2026-10-21.0",
     osmAvailable: true,
@@ -67,13 +71,13 @@ it("selects the newest completed local region contract, ignoring partial pulls w
     downloadedRelease: null,
     osmAvailable: false,
   });
-  writeFileSync(newest, "changed size");
+  writeFileSync(newest, "changed size", { mode: 0o600 });
   expect(inspectOvertureLocalInputs(path, "europe/germany").downloadedRelease).toBe("2026-10-01.0");
 });
 it("does not follow a release directory symlink or accept traversal regions", () => {
   const path = root(),
     outside = root();
-  mkdirSync(join(path, "overture"));
+  mkdirSync(join(path, "overture"), { mode: 0o700 });
   symlinkSync(outside, join(path, "overture/2026-10-21.0"));
   expect(() => inspectOvertureLocalInputs(path, "europe/germany")).toThrow();
   expect(() => inspectOvertureLocalInputs(path, "../outside")).toThrow();

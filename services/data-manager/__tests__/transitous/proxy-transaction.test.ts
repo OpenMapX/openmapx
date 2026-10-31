@@ -41,24 +41,32 @@ afterEach(() => {
 function setup(candidateVars: Record<string, unknown>, currentVars: Record<string, unknown>) {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-proxy-transaction-"));
   const staging = join(tmp, "motis", "staging");
-  mkdirSync(join(staging, CANDIDATE_PROXY_DIRNAME, "conf"), { recursive: true });
-  writeFileSync(join(staging, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n");
-  writeFileSync(join(staging, "license.json"), "{}\n");
-  writeFileSync(join(staging, "demo.gtfs.zip"), "gtfs");
+  mkdirSync(join(staging, CANDIDATE_PROXY_DIRNAME, "conf"), { mode: 0o700, recursive: true });
+  writeFileSync(join(staging, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n", {
+    mode: 0o600,
+  });
+  writeFileSync(join(staging, "license.json"), "{}\n", { mode: 0o600 });
+  writeFileSync(join(staging, "demo.gtfs.zip"), "gtfs", { mode: 0o600 });
   writeFileSync(
     join(staging, TRANSIT_SOURCE_MANIFEST_FILENAME),
     '{"version":1,"generatedAt":"2026-01-01T00:00:00Z","sources":[]}\n',
+    { mode: 0o600 },
   );
-  writeFileSync(join(staging, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "candidate\n");
+  writeFileSync(join(staging, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "candidate\n", {
+    mode: 0o600,
+  });
   writeFileSync(
     join(staging, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"),
     `${JSON.stringify(candidateVars)}\n`,
+    { mode: 0o600 },
   );
   createCandidateManifest(staging, "epoch-1", "2026-01-01T00:00:00Z");
   const active = join(tmp, "motis-feed-proxy");
-  mkdirSync(join(active, "conf"), { recursive: true });
-  writeFileSync(join(active, "conf", "default.conf"), "old bytes\n");
-  writeFileSync(join(active, "feed-proxy-vars.json"), `${JSON.stringify(currentVars)}\n`);
+  mkdirSync(join(active, "conf"), { mode: 0o700, recursive: true });
+  writeFileSync(join(active, "conf", "default.conf"), "old bytes\n", { mode: 0o600 });
+  writeFileSync(join(active, "feed-proxy-vars.json"), `${JSON.stringify(currentVars)}\n`, {
+    mode: 0o600,
+  });
   return { staging, active };
 }
 

@@ -113,9 +113,9 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-trusted-runtime-"));
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { recursive: true, mode: 0o700 });
   // The whole checkout is mounted, as this release's manifest has it.
-  mkdirSync(join(root, "services"), { recursive: true });
+  mkdirSync(join(root, "services"), { mode: 0o755, recursive: true });
   // The deployment's user, which only a host render writes into .env.
   writeFileSync(join(infraDir, ".env"), deploymentUserEnv, { mode: 0o600 });
   select(infraDir, ["alpha"]);
@@ -1147,8 +1147,8 @@ describe("ops-agent trusted configuration runtime", () => {
     const paths = fixture();
     // A built-in that mounts a file of the release.
     const directory = join(paths.root, "services", "alpha");
-    mkdirSync(join(directory, "config"), { recursive: true });
-    writeFileSync(join(directory, "config", "alpha.yml"), "release: true\n");
+    mkdirSync(join(directory, "config"), { mode: 0o755, recursive: true });
+    writeFileSync(join(directory, "config", "alpha.yml"), "release: true\n", { mode: 0o644 });
     const alpha: services.LoadedService = {
       ...service("alpha"),
       manifest: {
@@ -1159,7 +1159,7 @@ describe("ops-agent trusted configuration runtime", () => {
     };
     const override = join(paths.infraDir, "overrides", "services", "alpha", "config", "alpha.yml");
     mkdirSync(dirname(override), { recursive: true, mode: 0o755 });
-    writeFileSync(override, "users: ['op:$2y$05$secret-hash']\n");
+    writeFileSync(override, "users: ['op:$2y$05$secret-hash']\n", { mode: 0o644 });
     chmodSync(override, 0o664);
     const runtime = createUnavailableRuntime();
     installTrustedConfigurationRuntime(runtime, {

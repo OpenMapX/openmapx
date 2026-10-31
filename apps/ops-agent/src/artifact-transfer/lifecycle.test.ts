@@ -39,6 +39,7 @@ it("runs expiry cleanup at startup and periodically, then stops observation on c
     const second = await create();
     now = Date.parse(second.expiresAt) + 1;
     await vi.advanceTimersByTimeAsync(15 * 60000);
+    await observer.mock.results[1]?.value;
     expect(await store.reservedBytes()).toBe(0);
     expect(observer).toHaveBeenCalledTimes(2);
     await app.close();

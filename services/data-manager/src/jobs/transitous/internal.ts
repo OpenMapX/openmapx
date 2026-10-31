@@ -186,8 +186,8 @@ export function ensureTransitousWorkdirs(
   gtfsDir: string,
   downloadsDir: string,
 ): void {
-  mkdirSync(gtfsDir, { recursive: true });
-  mkdirSync(downloadsDir, { recursive: true });
+  mkdirSync(gtfsDir, { recursive: true, mode: 0o700 });
+  mkdirSync(downloadsDir, { recursive: true, mode: 0o700 });
   const outDir = join(catalogDir, "out");
   const cacheDir = join(catalogDir, "downloads");
   if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });

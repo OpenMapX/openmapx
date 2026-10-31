@@ -25,7 +25,7 @@ function fixture() {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-transit-sources-"));
   const catalogDir = join(tmp, ".transitous-catalog");
   const overlayPath = join(tmp, "overrides", "feeds-overlay.json");
-  mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+  mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
   writeFileSync(
     join(catalogDir, "feeds", "de.json"),
     JSON.stringify({
@@ -46,8 +46,9 @@ function fixture() {
         },
       ],
     }),
+    { mode: 0o600 },
   );
-  mkdirSync(join(tmp, "motis", "live"), { recursive: true });
+  mkdirSync(join(tmp, "motis", "live"), { mode: 0o700, recursive: true });
   writeFileSync(
     join(tmp, "motis", "live", "transit-source-manifest.json"),
     JSON.stringify({
@@ -72,22 +73,25 @@ function fixture() {
         },
       ],
     }),
+    { mode: 0o600 },
   );
   const live = join(tmp, "motis", "live");
-  mkdirSync(join(live, ".openmapx-feed-proxy", "conf"), { recursive: true });
+  mkdirSync(join(live, ".openmapx-feed-proxy", "conf"), { mode: 0o700, recursive: true });
   writeFileSync(
     join(live, "config.yml"),
     JSON.stringify({
       timetable: { datasets: { "de-active-feed": { path: "de_active-feed.gtfs.zip" } } },
     }),
+    { mode: 0o600 },
   );
-  writeFileSync(join(live, "license.json"), "[]");
-  writeFileSync(join(live, "de_active-feed.gtfs.zip"), "synthetic timetable");
+  writeFileSync(join(live, "license.json"), "[]", { mode: 0o600 });
+  writeFileSync(join(live, "de_active-feed.gtfs.zip"), "synthetic timetable", { mode: 0o600 });
   writeFileSync(
     join(live, ".openmapx-feed-proxy", "conf", "default.conf"),
     "# no realtime feeds\n",
+    { mode: 0o600 },
   );
-  writeFileSync(join(live, ".openmapx-feed-proxy", "feed-proxy-vars.json"), "{}");
+  writeFileSync(join(live, ".openmapx-feed-proxy", "feed-proxy-vars.json"), "{}", { mode: 0o600 });
   createCandidateManifest(live, "epoch-live", "2026-07-30T00:00:00.000Z");
   return { dataDir: tmp, catalogDir, overlayPath };
 }
@@ -215,6 +219,7 @@ describe("transit source lifecycle", () => {
           },
         ],
       }),
+      { mode: 0o600 },
     );
     const manifestPath = join(
       fx.dataDir as string,
@@ -226,7 +231,7 @@ describe("transit source lifecycle", () => {
       sources: Array<{ originUrl?: string }>;
     };
     manifest.sources[0].originUrl = safeOriginUrl(rawUrl);
-    writeFileSync(manifestPath, JSON.stringify(manifest));
+    writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
     expect(listTransitSources({ ...fx }).sources).toContainEqual(
       expect.objectContaining({ id: "catalog:de:active-feed", lifecycle: "active" }),
     );
@@ -241,6 +246,7 @@ describe("transit source lifecycle", () => {
           { name: "fr-feed", spec: "gtfs", type: "http", url: "https://catalog.example/fr.zip" },
         ],
       }),
+      { mode: 0o600 },
     );
     const scoped = listTransitSources({ ...fx, countries: ["de"] });
     expect(scoped.sources.some((source) => source.region === "fr")).toBe(false);

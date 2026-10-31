@@ -41,7 +41,7 @@ function checkout() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-generation-"));
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { mode: 0o755, recursive: true });
   return { root, infraDir };
 }
 
@@ -442,6 +442,7 @@ it("reads only frozen generated service IDs even when a release overlay declares
   writeFileSync(
     join(infraDir, "docker-compose.release.yml"),
     "services:\n  app-api:\n    image: example/api\n  data-manager:\n    image: example/dm\n",
+    { mode: 0o644 },
   );
   expect(readAppliedComposeServiceIds(infraDir, generation.revisionId)).toEqual(["alpha"]);
   expect(() => readAppliedComposeServiceIds(infraDir, `cfg1_${"x".repeat(43)}`)).toThrow(

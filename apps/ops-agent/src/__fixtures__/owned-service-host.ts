@@ -37,14 +37,14 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const withCoordinator = options.withHardlinks || options.withCoordinator;
   const cleanupRoot = mkdtempSync(join(tmpdir(), "openmapx-owned-"));
   const root=join(cleanupRoot,...Array.from({length:options.nestedRootSegments??0},(_,index)=>`${index}${"x".repeat(79)}`));
-  mkdirSync(root,{recursive:true});
+  mkdirSync(root,{recursive:true,mode:0o755});
   chmodSync(root, 0o755);
   const infraDir = join(root, "infra/docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { recursive: true, mode: 0o700 });
   writeFileSync(join(infraDir, ".env"), `UID=${process.geteuid?.() ?? 0}\nGID=${process.getegid?.() ?? 0}\n`, { mode: 0o600 });
-  mkdirSync(join(root, "services"));
-  mkdirSync(join(root, "custom_integrations"));
-  writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+  mkdirSync(join(root, "services"), { mode: 0o755 });
+  mkdirSync(join(root, "custom_integrations"), { mode: 0o755 });
+  writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n", { mode: 0o644 });
   const loaded: services.LoadedService[] = (options.configurationHelperReleaseInventory ? [...services.RELEASE_BUILT_IN_SERVICE_IDS] : [
     "motis",
     "ops-agent",
@@ -78,8 +78,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     isBuiltIn: true,
   }));
   for (const service of loaded) {
-    mkdirSync(service.directory, { recursive: true });
-    writeFileSync(join(service.directory, "service.json"), JSON.stringify(service.manifest));
+    mkdirSync(service.directory, { recursive: true, mode: 0o755 });
+    writeFileSync(join(service.directory, "service.json"), JSON.stringify(service.manifest), { mode: 0o644 });
   }
   const releaseInventory = options.configurationHelperReleaseInventory ? await services.captureReleaseServiceAuthority(root) : undefined;
   const loadAuthority = createTrustedConfigurationAuthorityLoader({
@@ -222,6 +222,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
             digest: `sha256:${"b".repeat(64)}`,
           },
         }),
+        { mode: 0o644 },
       );
       return { directory: targetDir, commit: "1".repeat(40) };
     },

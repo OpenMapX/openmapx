@@ -170,34 +170,36 @@ function setupFixture(opts: FixtureOptions): {
   const stagingDir = join(tmp, "motis", "staging");
   const currentDir = join(tmp, "motis", "live");
   if (opts.staging) {
-    mkdirSync(join(stagingDir, "data"), { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
+    mkdirSync(join(stagingDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt", { mode: 0o600 });
     writeFileSync(
       join(stagingDir, IMPORT_MARKER_FILE),
       JSON.stringify({ finishedAt: "2026-05-01T00:00:00.000Z" }),
+      { mode: 0o600 },
     );
   }
   if (opts.stagingWithoutMarker) {
-    mkdirSync(join(stagingDir, "data"), { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
+    mkdirSync(join(stagingDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt", { mode: 0o600 });
   }
   if (opts.stagingJunk) {
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "leftover.log"), "junk");
+    mkdirSync(stagingDir, { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "leftover.log"), "junk", { mode: 0o600 });
   }
   if (opts.current) {
-    mkdirSync(join(currentDir, "data"), { recursive: true });
-    writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old");
+    mkdirSync(join(currentDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old", { mode: 0o600 });
   }
   if (opts.staging || opts.stagingWithoutMarker) {
     writeFileSync(
       join(stagingDir, "config.yml"),
       "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+      { mode: 0o600 },
     );
-    writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
-    writeFileSync(join(stagingDir, "license.json"), "{}\n");
+    writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "license.json"), "{}\n", { mode: 0o600 });
     writeFileSync(
       join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
       `${JSON.stringify({
@@ -221,11 +223,12 @@ function setupFixture(opts: FixtureOptions): {
           },
         ],
       })}\n`,
+      { mode: 0o600 },
     );
     const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
-    mkdirSync(join(proxy, "conf"), { recursive: true });
-    writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
-    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+    mkdirSync(join(proxy, "conf"), { mode: 0o700, recursive: true });
+    writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n", { mode: 0o600 });
+    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     const manifest = createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
     writeFileSync(
       join(stagingDir, "mobility-capabilities.json"),
@@ -239,6 +242,7 @@ function setupFixture(opts: FixtureOptions): {
         health: { rt: true },
         probes: [],
       })}\n`,
+      { mode: 0o600 },
     );
   }
   return {
@@ -302,8 +306,8 @@ function directorySnapshot(root: string): unknown[] {
 
 function readyFixture(layout: "rename" | "two-slot") {
   const fx = setupFixture({ staging: true, current: true });
-  mkdirSync(fx.previousDir, { recursive: true });
-  writeFileSync(join(fx.previousDir, "retained-timetable"), "older rollback data");
+  mkdirSync(fx.previousDir, { mode: 0o700, recursive: true });
+  writeFileSync(join(fx.previousDir, "retained-timetable"), "older rollback data", { mode: 0o600 });
   globalThis.fetch = vi.fn(async (input: unknown) => {
     const url = typeof input === "string" ? input : (input as Request | URL).toString();
     return jsonResponse(successfulBody(url));
@@ -317,7 +321,7 @@ describe("promotion directory snapshot", () => {
   it("closes a captured marker descriptor when reading fails", () => {
     tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-close-"));
     const marker = join(tmp, "marker");
-    writeFileSync(marker, "original marker");
+    writeFileSync(marker, "original marker", { mode: 0o600 });
     let descriptor: number | undefined;
     snapshotRace.afterAccess = (path, opened) => {
       if (path === marker && opened !== undefined) descriptor = opened;
@@ -335,13 +339,13 @@ describe("promotion directory snapshot", () => {
     tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-race-"));
     const root = tmp;
     const marker = join(root, "marker");
-    writeFileSync(marker, "original marker");
+    writeFileSync(marker, "original marker", { mode: 0o600 });
     const inode = statSync(marker).ino;
     snapshotRace.afterAccess = (path) => {
       if (path !== marker) return;
       snapshotRace.afterAccess = undefined;
       renameSync(marker, join(root, "captured"));
-      writeFileSync(marker, "replacement marker");
+      writeFileSync(marker, "replacement marker", { mode: 0o600 });
     };
     expect(directorySnapshot(tmp)).toContainEqual(["marker", inode, "file", "original marker"]);
   });
@@ -470,8 +474,8 @@ describe("promote stage", () => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
           renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
-          mkdirSync(ctx.motisDataDir);
-          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          mkdirSync(ctx.motisDataDir, { mode: 0o700 });
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement", { mode: 0o600 });
           externallyChanged = directorySnapshot(fx.dataDir);
         }
         return { changed: true, state: "stopped" };
@@ -493,8 +497,8 @@ describe("promote stage", () => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
           renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
-          mkdirSync(ctx.motisDataDir);
-          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          mkdirSync(ctx.motisDataDir, { mode: 0o700 });
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement", { mode: 0o600 });
           externallyChanged = directorySnapshot(fx.dataDir);
           throw new Error("staging stop timed out");
         }
@@ -673,6 +677,7 @@ describe("promote stage", () => {
           proxyVars: {},
         },
       })}\n`,
+      { mode: 0o600 },
     );
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
@@ -693,7 +698,9 @@ describe("promote stage", () => {
 
   it("rejects a duplicate epoch from authoritative two-slot state", async () => {
     const fx = setupFixture({ staging: true, current: true });
-    writeFileSync(join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME), "not current-contract json\n");
+    writeFileSync(join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME), "not current-contract json\n", {
+      mode: 0o600,
+    });
     const ctx = makeCtx({
       dataDir: fx.dataDir,
       runner: async () => {

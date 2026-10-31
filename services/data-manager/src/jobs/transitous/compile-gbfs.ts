@@ -410,8 +410,8 @@ export const run: StageFn = async (ctx) => {
         })),
     };
     const output = join(catalogDir, "out", "gbfs-source-index.json");
-    mkdirSync(join(catalogDir, "out"), { recursive: true });
-    atomicWriteJsonSync(output, index, { durability: "visibility" });
+    mkdirSync(join(catalogDir, "out"), { recursive: true, mode: 0o700 });
+    atomicWriteJsonSync(output, index, { durability: "visibility", mode: 0o600 });
     ctx.state.gbfsCompilation = {
       output,
       healthy: healthy.length,

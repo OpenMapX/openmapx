@@ -32,6 +32,11 @@ from the checkout root. Existing unsafe directories are refused rather than
 silently repaired. See the installation and upgrade guides for host-owned
 overrides and recovery boundaries.
 
+New prepared-data directories and metadata use explicit safe creation modes.
+If an existing dataset is reported as unsafe, verify its ownership and remove
+group/other write permissions from the reported paths before retrying. The
+panel does not silently change ownership or repair existing dataset permissions.
+
 Community service configuration schemas must not declare the reserved platform
 resource names `OPENMAPX_MEMORY_MIB`, `OPENMAPX_CPU_LIMIT` or
 `OPENMAPX_JAVA_HEAP_MIB`.

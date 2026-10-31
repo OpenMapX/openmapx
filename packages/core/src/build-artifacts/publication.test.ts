@@ -31,9 +31,9 @@ async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-artifact-publication-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const dataRoot = join(root, "data");
-  mkdirSync(join(dataRoot, "osrm-graph"), { recursive: true });
-  writeFileSync(join(dataRoot, "osrm-graph/old"), "old graph");
-  mkdirSync(join(dataRoot, ".openmapx-builds"));
+  mkdirSync(join(dataRoot, "osrm-graph"), { mode: 0o755, recursive: true });
+  writeFileSync(join(dataRoot, "osrm-graph/old"), "old graph", { mode: 0o644 });
+  mkdirSync(join(dataRoot, ".openmapx-builds"), { mode: 0o755 });
   const oldRecord = JSON.stringify({
     schemaVersion: 1,
     service: "osrm",
@@ -43,14 +43,14 @@ async function fixture() {
   });
   writeFileSync(join(dataRoot, ".openmapx-builds/osrm.json"), oldRecord, { mode: 0o600 });
   const source = join(root, "source");
-  mkdirSync(join(source, "osrm-graph"), { recursive: true });
+  mkdirSync(join(source, "osrm-graph"), { mode: 0o755, recursive: true });
   for (const file of [
     "region.osrm",
     "region.osrm.partition",
     "region.osrm.cells",
     "region.osrm.mldgr",
   ])
-    writeFileSync(join(source, "osrm-graph", file), `new ${file}`);
+    writeFileSync(join(source, "osrm-graph", file), `new ${file}`, { mode: 0o644 });
   const chunks: Buffer[] = [];
   await writeBuildBundle({
     dataRoot: source,
@@ -143,7 +143,7 @@ it("refuses a changed target before any rename or record write", async () => {
   const mod = await api(),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
-  writeFileSync(join(f.dataRoot, "osrm-graph/old"), "changed old graph");
+  writeFileSync(join(f.dataRoot, "osrm-graph/old"), "changed old graph", { mode: 0o644 });
   expect(
     await mod.publishValidatedBuild({
       ...f,
@@ -179,7 +179,7 @@ it("rejects undeclared staged files before beginning publication", async () => {
   const mod = await api(),
     f = await fixture();
   const expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
-  writeFileSync(join(f.stagingRoot, "osrm-graph/undeclared"), "extra");
+  writeFileSync(join(f.stagingRoot, "osrm-graph/undeclared"), "extra", { mode: 0o644 });
   expect(await mod.publishValidatedBuild({ ...f, expectedFingerprint })).toMatchObject({
     outcome: "not_committed",
     reason: "invalid",
@@ -221,8 +221,8 @@ it("keeps uncertain replacement fenced instead of overwriting a foreign inode du
     native = await vi.importActual<typeof import("node:fs")>("node:fs");
   vi.mocked(fs.renameSync).mockImplementation((source, target) => {
     if (fs.statSync(source).ino === newInode) {
-      mkdirSync(target);
-      writeFileSync(join(String(target), "foreign"), "foreign");
+      mkdirSync(target, { mode: 0o755 });
+      writeFileSync(join(String(target), "foreign"), "foreign", { mode: 0o644 });
       throw Error("External replacement during publication");
     }
     return native.renameSync(source, target);
@@ -272,7 +272,7 @@ it("rejects same-size staged mutation after hashing instead of recording the pre
       beforePublication: async () => {
         const path = join(f.stagingRoot, "osrm-graph/region.osrm"),
           bytes = readFileSync(path);
-        writeFileSync(path, Buffer.alloc(bytes.length, 120));
+        writeFileSync(path, Buffer.alloc(bytes.length, 120), { mode: 0o644 });
         return () => {};
       },
     }),

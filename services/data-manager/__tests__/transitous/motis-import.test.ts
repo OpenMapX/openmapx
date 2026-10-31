@@ -43,16 +43,23 @@ function stagingDirOf(dataDir: string): string {
 }
 
 function primeCandidate(stagingDir: string): void {
-  mkdirSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf"), { recursive: true });
-  writeFileSync(join(stagingDir, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n");
-  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
-  writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  mkdirSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf"), { mode: 0o700, recursive: true });
+  writeFileSync(join(stagingDir, "config.yml"), "timetable:\n  datasets:\n    demo: {}\n", {
+    mode: 0o600,
+  });
+  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs", { mode: 0o600 });
+  writeFileSync(join(stagingDir, "license.json"), "{}\n", { mode: 0o600 });
   writeFileSync(
     join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
     '{"version":1,"generatedAt":"2026-05-01T00:00:00Z","sources":[]}\n',
+    { mode: 0o600 },
   );
-  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "server {}\n");
-  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"), "{}\n");
+  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "conf", "default.conf"), "server {}\n", {
+    mode: 0o600,
+  });
+  writeFileSync(join(stagingDir, CANDIDATE_PROXY_DIRNAME, "feed-proxy-vars.json"), "{}\n", {
+    mode: 0o600,
+  });
   createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
 }
 
@@ -87,7 +94,7 @@ describe("motis-import stage", () => {
 
   it("skips when the staging config has not been generated", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-noconfig-"));
-    mkdirSync(stagingDirOf(tmp), { recursive: true });
+    mkdirSync(stagingDirOf(tmp), { mode: 0o700, recursive: true });
 
     const ctx = makeCtx({
       dataDir: tmp,

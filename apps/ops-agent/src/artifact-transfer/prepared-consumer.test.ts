@@ -23,7 +23,7 @@ async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-prepared-consumer-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const infra = join(root, "infra");
-  mkdirSync(join(infra, "data"), { recursive: true });
+  mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
   await control.provisionControlInstallation(infra);
   const installation = control.openControlInstallation({
     infraDir: infra,
@@ -57,9 +57,9 @@ async function fixture() {
       ],
     };
   const source = join(root, "source");
-  mkdirSync(join(source, "osrm-graph"), { recursive: true });
+  mkdirSync(join(source, "osrm-graph"), { mode: 0o755, recursive: true });
   const fs = await import("node:fs");
-  fs.writeFileSync(join(source, "osrm-graph/region.osrm"), payload);
+  fs.writeFileSync(join(source, "osrm-graph/region.osrm"), payload, { mode: 0o644 });
   const chunks: Buffer[] = [];
   await control.writeBuildBundle({
     dataRoot: source,

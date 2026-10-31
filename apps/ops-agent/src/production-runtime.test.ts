@@ -339,7 +339,7 @@ describe("assembled production service authority", () => {
     });
     const bin = join(host.root, "fake-bin"),
       trace = join(host.root, "docker-trace.jsonl");
-    mkdirSync(bin);
+    mkdirSync(bin, { mode: 0o755 });
     const docker = join(bin, "docker"),
       realDocker = execFileSync("which", ["docker"], { encoding: "utf8" }).trim();
     writeFileSync(
@@ -477,7 +477,7 @@ describe("assembled production service authority", () => {
     compose.services.motis.depends_on = {
       "data-manager": { condition: "service_started", required: true },
     };
-    writeFileSync(host.firstCompose, JSON.stringify(compose));
+    writeFileSync(host.firstCompose, JSON.stringify(compose), { mode: 0o644 });
     mkdirSync(join(host.infraDir, "data/ops-agent"), { recursive: true, mode: 0o700 });
     const installation = openControlInstallation({
         infraDir: host.infraDir,
@@ -929,6 +929,7 @@ describe("assembled lifecycle/removal exclusion", () => {
     writeFileSync(
       host.stack.composeReleasePath,
       "services:\n  motis:\n    depends_on:\n      community-live:\n        condition: service_started\n",
+      { mode: 0o644 },
     );
     const start = {
       kind: "service.start",

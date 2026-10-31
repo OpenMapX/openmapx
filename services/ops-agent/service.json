@@ -86,7 +86,7 @@
       "readOnly": false
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}/infra/docker",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker",
       "readOnly": true
     },
@@ -108,6 +108,11 @@
     {
       "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/catalog-pins",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/catalog-pins",
       "readOnly": false
     },
     {

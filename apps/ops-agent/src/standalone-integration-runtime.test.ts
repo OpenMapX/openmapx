@@ -41,8 +41,8 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       const root = mkdtempSync(join(tmpdir(), "openmapx-stage-consumer-"));
       cleanup.push(() => rmSync(root, { recursive: true, force: true }));
       const infra = join(root, "infra");
-      mkdirSync(join(infra, "data"), { recursive: true });
-      mkdirSync(join(root, "services"));
+      mkdirSync(join(infra, "data"), { recursive: true, mode: 0o700 });
+      mkdirSync(join(root, "services"), { mode: 0o755 });
       await control.provisionControlInstallation(infra);
       const installation = control.openControlInstallation({
         infraDir: infra,
@@ -185,16 +185,19 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
       writeFileSync(
         inspectionPath,
         JSON.stringify({ ...envelope, body: JSON.stringify(forgedRecord) }),
+        { mode: 0o644 },
       );
       try {
         await expect(
           dispatchOpsOperation(runtime, installing, makeContext(installing)),
         ).rejects.toThrow(/authentication/);
       } finally {
-        writeFileSync(inspectionPath, originalBytes);
+        writeFileSync(inspectionPath, originalBytes, { mode: 0o644 });
       }
       if (scenario === "upload-mutated") {
-        writeFileSync(join(root, "stages", stage.stageId, "content"), Buffer.from("changed"));
+        writeFileSync(join(root, "stages", stage.stageId, "content"), Buffer.from("changed"), {
+          mode: 0o644,
+        });
         await expect(
           dispatchOpsOperation(runtime, installing, makeContext(installing)),
         ).rejects.toThrow(/content changed/);
@@ -220,7 +223,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
         if (!workspace) throw Error("Missing actual shared publication journal");
         const path = join(staging, workspace, "publication.json"),
           record = JSON.parse(readFileSync(path, "utf8"));
-        writeFileSync(path, JSON.stringify({ ...record, outcome: "committed" }));
+        writeFileSync(path, JSON.stringify({ ...record, outcome: "committed" }), { mode: 0o644 });
         rmSync(join(root, "custom_integrations", "upload-fixture"), { recursive: true });
         await expect(dispatchOpsOperation(runtime, installing, installContext)).rejects.toThrow(
           /ENOENT|publication|changed|Published/i,
@@ -360,7 +363,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
 
       {
         const directory = join(root, "custom_integrations/upload-fixture");
-        mkdirSync(directory);
+        mkdirSync(directory, { mode: 0o755 });
         writeFileSync(
           join(directory, "manifest.json"),
           JSON.stringify({
@@ -371,6 +374,7 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
             quality: "community",
             domains: ["map-overlay"],
           }),
+          { mode: 0o644 },
         );
         const checkedInventory = await dispatchOpsOperation(
             replacement,
@@ -391,8 +395,10 @@ for (const scenario of ["normal", "upload-mutated", "forged-completion"] as cons
           allowed: true,
         });
         renameSync(directory, join(root, "original-directory"));
-        mkdirSync(directory);
-        writeFileSync(join(directory, "foreign.txt"), "preserve this foreign replacement");
+        mkdirSync(directory, { mode: 0o755 });
+        writeFileSync(join(directory, "foreign.txt"), "preserve this foreign replacement", {
+          mode: 0o644,
+        });
         const remove: OpsOperation = {
           kind: "integration.remove",
           transactionId,

@@ -13,13 +13,13 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-data-inventory-"));
   roots.push(root);
   const data = join(root, "infra/docker/data");
-  mkdirSync(join(data, "osm"), { recursive: true });
+  mkdirSync(join(data, "osm"), { mode: 0o755, recursive: true });
   return { root, data };
 }
 it("pages every extract with stable IDs and does not call unrecorded bytes verified", async () => {
   const { root, data } = fixture();
-  writeFileSync(join(data, "osm/z.osm.pbf"), "z");
-  writeFileSync(join(data, "osm/a.osm.pbf"), "aa");
+  writeFileSync(join(data, "osm/z.osm.pbf"), "z", { mode: 0o644 });
+  writeFileSync(join(data, "osm/a.osm.pbf"), "aa", { mode: 0o644 });
   const first = await inspectDataInventory(root, { osmLimit: 1, osmOffset: 0 }),
     second = await inspectDataInventory(root, { osmLimit: 1, osmOffset: 1 });
   expect(first.osm).toMatchObject({
@@ -43,7 +43,7 @@ it("reports empty prepared directories incomplete and database-backed stores unk
     "photon",
     "overpass",
   ])
-    mkdirSync(join(data, p), { recursive: true });
+    mkdirSync(join(data, p), { mode: 0o755, recursive: true });
   const inventory = await inspectDataInventory(root);
   for (const target of ["osrm", "otp", "tiles", "motis"])
     expect(inventory.builds.find((x) => x.target === target)).toMatchObject({
@@ -58,9 +58,9 @@ it("reports empty prepared directories incomplete and database-backed stores unk
 });
 it("reports legacy build records as unknown rather than verified readiness", async () => {
   const { root, data } = fixture();
-  mkdirSync(join(data, "otp-graph"));
-  writeFileSync(join(data, "otp-graph/graph.obj"), "graph");
-  mkdirSync(join(data, ".openmapx-builds"));
+  mkdirSync(join(data, "otp-graph"), { mode: 0o755 });
+  writeFileSync(join(data, "otp-graph/graph.obj"), "graph", { mode: 0o644 });
+  mkdirSync(join(data, ".openmapx-builds"), { mode: 0o755 });
   writeFileSync(
     join(data, ".openmapx-builds/otp.json"),
     JSON.stringify({
@@ -70,6 +70,7 @@ it("reports legacy build records as unknown rather than verified readiness", asy
       runtimeImages: { otp: "example.test/otp@sha256:" + "a".repeat(64) },
       toolImages: {},
     }),
+    { mode: 0o644 },
   );
   expect((await inspectDataInventory(root)).builds.find((x) => x.target === "otp")).toMatchObject({
     readiness: "unknown",
@@ -80,7 +81,7 @@ it("reports legacy build records as unknown rather than verified readiness", asy
 it("surfaces unsafe OSM directories as unavailable, without exposing host paths", async () => {
   const { root, data } = fixture();
   renameSync(join(data, "osm"), join(data, "saved"));
-  writeFileSync(join(data, "osm"), "not a directory");
+  writeFileSync(join(data, "osm"), "not a directory", { mode: 0o644 });
   const result = await inspectDataInventory(root);
   expect(result.osm).toMatchObject({ unavailable: true, items: [] });
   expect(JSON.stringify(result)).not.toContain(root);
@@ -92,16 +93,16 @@ it.each(["output", "source"] as const)(
     const { capturePreparedBuildEvidence, hashDataFile, osmArtifactId } = await import(
       "@openmapx/core/build-artifacts"
     );
-    mkdirSync(join(data, "osrm-graph"));
+    mkdirSync(join(data, "osrm-graph"), { mode: 0o755 });
     for (const file of [
       "region.osrm",
       "region.osrm.partition",
       "region.osrm.cells",
       "region.osrm.mldgr",
     ])
-      writeFileSync(join(data, "osrm-graph", file), "graph bytes");
+      writeFileSync(join(data, "osrm-graph", file), "graph bytes", { mode: 0o644 });
     const path = "osm/europe-germany.osm.pbf";
-    writeFileSync(join(data, path), "pbf bytes");
+    writeFileSync(join(data, path), "pbf bytes", { mode: 0o644 });
     const source = await hashDataFile(join(data, path));
     const record = await capturePreparedBuildEvidence({
       dataRoot: data,
@@ -134,7 +135,9 @@ it.each(["output", "source"] as const)(
         },
       ],
     });
-    writeFileSync(join(data, ".openmapx-builds/osrm.json"), JSON.stringify(record));
+    writeFileSync(join(data, ".openmapx-builds/osrm.json"), JSON.stringify(record), {
+      mode: 0o644,
+    });
     expect(
       (await inspectDataInventory(root)).builds.find((x) => x.target === "osrm"),
     ).toMatchObject({
@@ -145,7 +148,7 @@ it.each(["output", "source"] as const)(
     });
     const replaced = join(data, changed === "output" ? "osrm-graph/region.osrm" : path),
       bytes = changed === "output" ? "other bytes" : "new bytes";
-    writeFileSync(replaced + ".replacement", bytes);
+    writeFileSync(replaced + ".replacement", bytes, { mode: 0o644 });
     renameSync(replaced + ".replacement", replaced);
     expect(
       (await inspectDataInventory(root)).builds.find((x) => x.target === "osrm"),
@@ -158,7 +161,7 @@ it("invalidates a download fingerprint after same-size inode replacement", async
   const { lstatSync } = await import("node:fs");
   const name = "europe-germany.osm.pbf",
     path = join(data, "osm", name);
-  writeFileSync(path, "before");
+  writeFileSync(path, "before", { mode: 0o644 });
   writeFileSync(
     path + ".openmapx.json",
     JSON.stringify({
@@ -168,12 +171,13 @@ it("invalidates a download fingerprint after same-size inode replacement", async
       sha256: "c".repeat(64),
       ...fileIdentity(lstatSync(path, { bigint: true })),
     }),
+    { mode: 0o644 },
   );
   expect((await inspectDataInventory(root)).osm.items[0]).toMatchObject({
     fingerprintState: "verified",
     sourceFingerprint: "c".repeat(64),
   });
-  writeFileSync(path + ".replacement", "after!");
+  writeFileSync(path + ".replacement", "after!", { mode: 0o644 });
   renameSync(path + ".replacement", path);
   expect((await inspectDataInventory(root)).osm.items[0]).toMatchObject({
     fingerprintState: "stale",
@@ -183,7 +187,7 @@ it("invalidates a download fingerprint after same-size inode replacement", async
 it("does not silently truncate extracts at the previous first page", async () => {
   const { root, data } = fixture();
   for (let i = 0; i < 501; i++)
-    writeFileSync(join(data, "osm", `${String(i).padStart(4, "0")}.osm.pbf`), "x");
+    writeFileSync(join(data, "osm", `${String(i).padStart(4, "0")}.osm.pbf`), "x", { mode: 0o644 });
   const page = await inspectDataInventory(root, { osmOffset: 500, osmLimit: 50 });
   expect(page.osm).toMatchObject({ total: 501, offset: 500, unavailable: false });
   expect(page.osm.items.map((x) => x.filename)).toEqual(["0500.osm.pbf"]);
@@ -194,12 +198,13 @@ it("checks changed source evidence even outside the displayed OSM page", async (
     "@openmapx/core/build-artifacts"
   );
   const { lstatSync } = await import("node:fs");
-  mkdirSync(join(data, "otp-graph"));
-  writeFileSync(join(data, "otp-graph/graph.obj"), "graph");
-  for (let i = 0; i < 50; i++) writeFileSync(join(data, "osm", `a${i}.osm.pbf`), "x");
+  mkdirSync(join(data, "otp-graph"), { mode: 0o755 });
+  writeFileSync(join(data, "otp-graph/graph.obj"), "graph", { mode: 0o644 });
+  for (let i = 0; i < 50; i++)
+    writeFileSync(join(data, "osm", `a${i}.osm.pbf`), "x", { mode: 0o644 });
   const name = "zz.osm.pbf",
     path = join(data, "osm", name);
-  writeFileSync(path, "new source");
+  writeFileSync(path, "new source", { mode: 0o644 });
   writeFileSync(
     path + ".openmapx.json",
     JSON.stringify({
@@ -209,6 +214,7 @@ it("checks changed source evidence even outside the displayed OSM page", async (
       sha256: "d".repeat(64),
       ...fileIdentity(lstatSync(path, { bigint: true })),
     }),
+    { mode: 0o644 },
   );
   const record = await capturePreparedBuildEvidence({
     dataRoot: data,
@@ -223,7 +229,7 @@ it("checks changed source evidence even outside the displayed OSM page", async (
       artifactFingerprint: "0".repeat(64),
     },
   });
-  writeFileSync(join(data, ".openmapx-builds/otp.json"), JSON.stringify(record));
+  writeFileSync(join(data, ".openmapx-builds/otp.json"), JSON.stringify(record), { mode: 0o644 });
   const inventory = await inspectDataInventory(root);
   expect(inventory.osm.items).toHaveLength(50);
   expect(inventory.osm.items.some((item) => item.filename === name)).toBe(false);
@@ -235,7 +241,7 @@ it("checks changed source evidence even outside the displayed OSM page", async (
 it("reports a disappeared listed extract as unavailable, not an empty successful scan", async () => {
   const { root, data } = fixture(),
     file = join(data, "osm/vanishing.osm.pbf");
-  writeFileSync(file, "bytes");
+  writeFileSync(file, "bytes", { mode: 0o644 });
   const { AnchoredDirectory } = await import(
     "../../../packages/core/src/build-artifacts/filesystem"
   );
@@ -259,7 +265,7 @@ it("reports a disappeared listed extract as unavailable, not an empty successful
 it("preserves the legacy top-level extract fallback when managed OSM storage is absent", async () => {
   const { root, data } = fixture();
   rmSync(join(data, "osm"), { recursive: true });
-  writeFileSync(join(data, "legacy-latest.osm.pbf"), "legacy");
+  writeFileSync(join(data, "legacy-latest.osm.pbf"), "legacy", { mode: 0o644 });
   expect((await inspectDataInventory(root)).osm).toMatchObject({
     unavailable: false,
     total: 1,
