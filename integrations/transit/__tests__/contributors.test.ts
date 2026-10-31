@@ -116,7 +116,11 @@ it("credits no discarded discovery candidates when linked-stop pruning is empty"
       freshness: freshnessNow(),
     }),
   };
-  const out = await createPlaceTransit(ctx, orchestrator as never).getLinkedStops(50, 8, "Central");
+  const out = await createPlaceTransit(ctx, orchestrator as never).getLinkedStops({
+    lat: 50,
+    lng: 8,
+    name: "Central",
+  });
   expect(out.data).toEqual([]);
   expect(out.attributions).toEqual([]);
 });

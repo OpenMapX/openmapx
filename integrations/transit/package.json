@@ -17,6 +17,7 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-geocoding": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/place-ids": "workspace:^",
     "p-map": "7.1.1"
   }
 }

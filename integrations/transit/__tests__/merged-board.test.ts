@@ -60,12 +60,8 @@ async function board(
     getArrivals: fetch,
   } as unknown as TransitOrchestrator;
   const result = await createPlaceTransit(ctx, orchestrator).getMergedDepartures(
-    50.775,
-    6.084,
-    placeName,
+    { lat: 50.775, lng: 6.084, name: placeName, stopName: openedFor },
     60,
-    undefined,
-    openedFor,
   );
   return result.data;
 }

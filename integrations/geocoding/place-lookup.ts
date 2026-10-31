@@ -274,6 +274,9 @@ function toPlace(
     website: website ?? contactWebsite,
     openingHours: opening_hours,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
+    // Nominatim translates `name` for the requested language; OSM's own `name`
+    // tag is the local one.
+    ...(r.namedetails?.name?.trim() ? { localName: r.namedetails.name.trim() } : {}),
   });
 }
 

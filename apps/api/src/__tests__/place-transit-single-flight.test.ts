@@ -84,10 +84,10 @@ describe("station linked-stop single-flight", () => {
     });
     const { transit, downstream } = setup(search);
     const pending = Promise.all([
-      transit.getMergedRoutes(50, 7, "Central"),
-      transit.getMergedDepartures(50, 7, "Central", 30),
-      transit.getMergedAlerts(50, 7, "Central"),
-      transit.getMergedFacilities(50, 7, "Central"),
+      transit.getMergedRoutes({ lat: 50, lng: 7, name: "Central" }),
+      transit.getMergedDepartures({ lat: 50, lng: 7, name: "Central" }, 30),
+      transit.getMergedAlerts({ lat: 50, lng: 7, name: "Central" }),
+      transit.getMergedFacilities({ lat: 50, lng: 7, name: "Central" }),
     ]);
     try {
       await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
@@ -96,7 +96,7 @@ describe("station linked-stop single-flight", () => {
       expect(panels.map((result) => result.attributions)).toEqual([[], [], [], []]);
       expect(search).toHaveBeenCalledTimes(1);
       for (const fn of Object.values(downstream)) expect(fn).toHaveBeenCalledTimes(1);
-      const retained = await transit.getLinkedStops(50, 7, "Central");
+      const retained = await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
       expect(retained).toEqual({
         ...discovery,
         data: stops.map((stop) => ({ ...stop, contributors: discovery.attributions })),
@@ -122,8 +122,8 @@ describe("station linked-stop single-flight", () => {
       throw new Error("discovery unavailable");
     });
     const { transit } = setup(search);
-    const first = transit.getLinkedStops(50, 7, "Central");
-    const second = transit.getLinkedStops(50, 7, "Central");
+    const first = transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
+    const second = transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
     const settled = Promise.allSettled([first, second]);
     await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
     gate.resolve();
@@ -133,8 +133,8 @@ describe("station linked-stop single-flight", () => {
 
     const empty = emptyResult<TransitStop[]>([]);
     search.mockImplementation(async () => empty);
-    expect(await transit.getLinkedStops(50, 7, "Central")).toEqual(empty);
-    expect(await transit.getLinkedStops(50, 7, "Central")).toEqual(empty);
+    expect(await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" })).toEqual(empty);
+    expect(await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" })).toEqual(empty);
     expect(search).toHaveBeenCalledTimes(2);
   });
 });
@@ -153,8 +153,8 @@ describe("partial station discovery", () => {
     const search = vi.fn<TransitOrchestrator["searchByNameRaw"]>(async () => partial);
     const { transit } = setup(search);
 
-    const first = await transit.getLinkedStops(50, 7, "Central");
-    const second = await transit.getLinkedStops(50, 7, "Central");
+    const first = await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
+    const second = await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
 
     expect(first.freshness.isPartial).toBe(true);
     expect(second).toEqual(first);
@@ -167,12 +167,12 @@ describe("partial station discovery", () => {
   it("replaces an expired partial discovery with a complete one cached for a day", async () => {
     const search = vi.fn<TransitOrchestrator["searchByNameRaw"]>(async () => partial);
     const { transit } = setup(search);
-    await transit.getLinkedStops(50, 7, "Central");
+    await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
     for (const key of keysWith("place-stops-partial:")) values.delete(key);
 
     const complete = emptyResult(stops);
     search.mockImplementation(async () => complete);
-    const recovered = await transit.getLinkedStops(50, 7, "Central");
+    const recovered = await transit.getLinkedStops({ lat: 50, lng: 7, name: "Central" });
 
     expect(recovered.freshness.isPartial).toBeUndefined();
     expect(recovered.data.map((stop) => stop.id)).toEqual(["ms:test"]);
@@ -184,8 +184,8 @@ describe("partial station discovery", () => {
     const search = vi.fn<TransitOrchestrator["searchByNameRaw"]>(async () => partial);
     const { transit } = setup(search);
 
-    const routes = await transit.getMergedRoutes(50, 7, "Central");
-    const facilities = await transit.getMergedFacilities(50, 7, "Central");
+    const routes = await transit.getMergedRoutes({ lat: 50, lng: 7, name: "Central" });
+    const facilities = await transit.getMergedFacilities({ lat: 50, lng: 7, name: "Central" });
 
     expect(routes.freshness.isPartial).toBe(true);
     expect(facilities.freshness.isPartial).toBe(true);

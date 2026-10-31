@@ -35,6 +35,16 @@ describe.each([
     );
   });
 
+  it("sends the place's OSM object, whose local name links its stops", async () => {
+    const spy = vi
+      .spyOn(apiClient, "get")
+      .mockResolvedValue({ data: [], attributions: [] } as never);
+    const place = { ...makeSyntheticStopPlace(stop), ids: { ms: "breslauer", osm: "node/42" } };
+    const { result } = renderHook(() => useBoard(place, 30), { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy.mock.calls[0][1]).toMatchObject({ osm_id: "node/42" });
+  });
+
   it("sends no stop for a place not opened for one", async () => {
     const spy = vi
       .spyOn(apiClient, "get")

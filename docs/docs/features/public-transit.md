@@ -66,13 +66,17 @@ add updates; sources that already include realtime times do not need a second
 lookup. Similar station names alone do not make different source IDs
 interchangeable.
 
-A place's board starts by searching its stops by name. If a stop source does not
-answer, the board warns that departures may be missing instead of showing an
-empty board, and the place is looked up again within about a minute. If no
-source answers, the board shows a failure with a retry action. Departures that
-cannot be loaded for some of the place's stops get the same warning. Lines,
-alerts and facilities that cannot be loaded are left out rather than kept as
-"none", and are loaded again on a later visit or within about a minute.
+A place's board starts by searching its stops by name. It uses the place's name
+in its own language from OpenStreetMap, because transit sources name stops
+locally: a station shown as "Munich Central Station" is searched as "München
+Hauptbahnhof". A stop you opened, from search or a planned journey, is searched
+by its own name too. If a stop source does not answer, the board warns that
+departures may be missing instead of showing an empty board, and the place is
+looked up again within about a minute. If no source answers, the board shows a
+failure with a retry action. Departures that cannot be loaded for some of the
+place's stops get the same warning. Lines, alerts and facilities that cannot be
+loaded are left out rather than kept as "none", and are loaded again on a later
+visit or within about a minute.
 
 A place's stops can have different names, for example a main station and a bus
 stop beside it. A departure from a stop other than the place's main one shows

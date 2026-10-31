@@ -186,6 +186,21 @@ describe("name and coordinate lookup", () => {
   });
 });
 
+describe("local name", () => {
+  it("keeps OSM's own name when Nominatim translates the shown one", async () => {
+    stubResponse([
+      {
+        ...detail({ country_code: "de" }),
+        name: "Munich Central Station",
+        namedetails: { name: "München Hauptbahnhof", "name:en": "Munich Central Station" },
+      },
+    ]);
+    const place = await lookupByOsmRef("node", "2470201868", "osm:node/2470201868", "en");
+    expect(place.name).toBe("Munich Central Station");
+    expect(place.localName).toBe("München Hauptbahnhof");
+  });
+});
+
 describe("Overpass own address tags", () => {
   it.each([
     [
