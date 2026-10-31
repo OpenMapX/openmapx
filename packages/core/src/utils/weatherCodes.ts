@@ -114,6 +114,18 @@ const WMO_CODES: Record<number, CodeEntry> = {
     nightIcon: "extreme-night-sleet-fill",
     severity: "heavy",
   },
+  68: {
+    description: "Light rain and snow",
+    dayIcon: "partly-cloudy-day-sleet-fill",
+    nightIcon: "partly-cloudy-night-sleet-fill",
+    severity: "light",
+  },
+  69: {
+    description: "Rain and snow",
+    dayIcon: "overcast-day-sleet-fill",
+    nightIcon: "overcast-night-sleet-fill",
+    severity: "moderate",
+  },
   71: {
     description: "Slight snowfall",
     dayIcon: "partly-cloudy-day-snow-fill",
@@ -156,6 +168,18 @@ const WMO_CODES: Record<number, CodeEntry> = {
     nightIcon: "extreme-night-rain-fill",
     severity: "heavy",
   },
+  83: {
+    description: "Light rain and snow showers",
+    dayIcon: "partly-cloudy-day-sleet-fill",
+    nightIcon: "partly-cloudy-night-sleet-fill",
+    severity: "light",
+  },
+  84: {
+    description: "Rain and snow showers",
+    dayIcon: "overcast-day-sleet-fill",
+    nightIcon: "overcast-night-sleet-fill",
+    severity: "moderate",
+  },
   85: {
     description: "Slight snow showers",
     dayIcon: "partly-cloudy-day-snow-fill",
@@ -168,6 +192,18 @@ const WMO_CODES: Record<number, CodeEntry> = {
     nightIcon: "extreme-night-snow-fill",
     severity: "heavy",
   },
+  89: {
+    description: "Light hail showers",
+    dayIcon: "partly-cloudy-day-hail-fill",
+    nightIcon: "partly-cloudy-night-hail-fill",
+    severity: "moderate",
+  },
+  90: {
+    description: "Hail showers",
+    dayIcon: "overcast-day-hail-fill",
+    nightIcon: "overcast-night-hail-fill",
+    severity: "heavy",
+  },
   95: {
     description: "Thunderstorm",
     dayIcon: "thunderstorms-day-fill",
@@ -178,6 +214,12 @@ const WMO_CODES: Record<number, CodeEntry> = {
     description: "Thunderstorm with slight hail",
     dayIcon: "thunderstorms-day-overcast-fill",
     nightIcon: "thunderstorms-night-overcast-fill",
+    severity: "extreme",
+  },
+  97: {
+    description: "Heavy thunderstorm",
+    dayIcon: "thunderstorms-day-extreme-fill",
+    nightIcon: "thunderstorms-night-extreme-fill",
     severity: "extreme",
   },
   99: {

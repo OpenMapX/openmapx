@@ -54,6 +54,22 @@ export function WeatherLegend() {
   const allFrames = [...radarPastFrames, ...radarNowcastFrames];
   const availableSubLayers = WEATHER_SUB_LAYERS.filter(({ needsOwm }) => !needsOwm || owmAvailable);
   const showRadarControls = activeSubLayer === "radar" && allFrames.length > 0 && !radarUnavailable;
+  // Providers omit readings they do not report; a line shows only those present.
+  const detailLines = currentWeather
+    ? [
+        [
+          currentWeather.windSpeed != null &&
+            `${t("windSpeed")}: ${Math.round(currentWeather.windSpeed)} km/h`,
+          currentWeather.humidity != null && `${t("humidity")}: ${currentWeather.humidity}%`,
+        ],
+        [
+          currentWeather.pressure != null && `${t("pressure")}: ${currentWeather.pressure} hPa`,
+          currentWeather.cloudCover != null && `${t("cloudCover")}: ${currentWeather.cloudCover}%`,
+        ],
+      ]
+        .map((readings) => readings.filter(Boolean).join(" · "))
+        .filter(Boolean)
+    : [];
 
   return (
     <OverlayLegend
@@ -88,17 +104,16 @@ export function WeatherLegend() {
             </Box>
             {/* Detail lines — hidden on mobile for compact mode */}
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
-              <Typography sx={{ fontSize: 11.5, color: "text.secondary", mt: 0.25 }}>
-                {t("feelsLike")} {Math.round(currentWeather.feelsLike)}°C
-              </Typography>
-              <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
-                {t("windSpeed")}: {Math.round(currentWeather.windSpeed)} km/h · {t("humidity")}:{" "}
-                {currentWeather.humidity}%
-              </Typography>
-              <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
-                {t("pressure")}: {currentWeather.pressure} hPa · {t("cloudCover")}:{" "}
-                {currentWeather.cloudCover}%
-              </Typography>
+              {currentWeather.feelsLike != null && (
+                <Typography sx={{ fontSize: 11.5, color: "text.secondary", mt: 0.25 }}>
+                  {t("feelsLike")} {Math.round(currentWeather.feelsLike)}°C
+                </Typography>
+              )}
+              {detailLines.map((line) => (
+                <Typography key={line} sx={{ fontSize: 11.5, color: "text.secondary" }}>
+                  {line}
+                </Typography>
+              ))}
             </Box>
           </Box>
         </Box>
