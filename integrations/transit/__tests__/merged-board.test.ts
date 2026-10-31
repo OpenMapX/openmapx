@@ -148,6 +148,32 @@ describe("merged place board", () => {
     expect(rows[0].platform).toBe("4");
   });
 
+  it("folds a train one source lists twice under two trip ids", async () => {
+    const rows = await board({
+      "mo:central": [dep("mo:x1", "RE1 (26826)", "Aachen, Hbf", "17:08:00", { platform: "90" })],
+      "rmv:central": [
+        dep("rmv:a", "RE1", "Aachen Hbf", "17:08:00", { platform: "8" }),
+        dep("rmv:b", "RE 1 (RR", "Aachen Hbf", "17:08:00", { platform: "8" }),
+        dep("rmv:c", "RE1", "Aachen Hbf", "17:38:00", { platform: "8" }),
+      ],
+      "kvb:central": [dep("kvb:k", "RE1RRX", "Aachen Hbf", "17:08:00", { platform: "8" })],
+    });
+    expect(rows.map((row) => [row.scheduledAt.slice(11, 16), row.tripIds])).toEqual([
+      ["17:08", ["mo:x1", "rmv:a", "rmv:b", "kvb:k"]],
+      ["17:38", ["rmv:c"]],
+    ]);
+  });
+
+  it("keeps a source's two departures apart when their platforms differ", async () => {
+    const rows = await board({
+      "rmv:central": [
+        dep("rmv:a", "RE1", "Aachen Hbf", "17:08:00", { platform: "8" }),
+        dep("rmv:b", "RE1", "Aachen Hbf", "17:08:00", { platform: "9" }),
+      ],
+    });
+    expect(rows).toHaveLength(2);
+  });
+
   it("folds only exact repeats when a source gives no trip ids", async () => {
     const rows = await board({
       "tfl:central": [

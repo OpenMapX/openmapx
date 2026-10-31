@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mainStopKey, stopNameKey, stopNameSpecificity } from "../stop-names.js";
+import {
+  mainStopKey,
+  stopNameKey,
+  stopNameSpecificity,
+  withoutBracketedParts,
+} from "../stop-names.js";
 
 describe("stopNameKey", () => {
   it("gives one key to the spellings sources use for one stop", () => {
@@ -93,5 +98,20 @@ describe("mainStopKey", () => {
         ]),
       ),
     ).toBe(b);
+  });
+});
+
+describe("withoutBracketedParts", () => {
+  it("replaces closed bracketed parts and keeps unclosed brackets", () => {
+    expect(withoutBracketedParts("Frankfurt(Main)Hbf [Gleis 1-8]")).toBe("Frankfurt Hbf  ");
+    expect(withoutBracketedParts("A (b")).toBe("A (b");
+    expect(withoutBracketedParts("A [b] (c")).toBe("A   (c");
+  });
+
+  it("works in linear time on bracket-laden names", () => {
+    const started = performance.now();
+    stopNameKey(` ${"( ".repeat(50_000)}x`);
+    stopNameKey(` ${"[ ".repeat(50_000)}x`);
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });

@@ -33,7 +33,12 @@ import {
 } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
-import { mainStopKey, stopNameKey, stopNameSpecificity } from "./stop-names.js";
+import {
+  mainStopKey,
+  stopNameKey,
+  stopNameSpecificity,
+  withoutBracketedParts,
+} from "./stop-names.js";
 
 /** Preserve scalar ownership when a weaker row supplies a missing field. */
 function retainFieldReceipt(
@@ -139,6 +144,35 @@ function nameRowStops(
   function rank({ stop, key }: { stop: RowStop; key: string }): number {
     return (key === main ? 10_000 : 0) + (stop.stated ? 1_000 : 0) + stopNameSpecificity(key);
   }
+}
+
+/** A source's departure folded into a merged row. */
+interface FoldedDeparture {
+  stop: RowStop;
+  /** The linked stop's provider. */
+  provider: string;
+  tripId: string;
+  scheduledAt: string;
+  line: string;
+  headsign: string;
+  /** The planned platform, else the current one. */
+  platform?: string;
+}
+
+/**
+ * Whether a source's departure repeats one it already listed: the same
+ * scheduled time, line and direction, and the same platform where both state
+ * one. Two trains of a line can't leave in the same direction at the same
+ * minute, so this holds whatever trip ids the source gave each copy.
+ */
+function repeats(part: FoldedDeparture, dep: Departure): boolean {
+  const platform = dep.scheduledPlatform ?? dep.platform;
+  return (
+    part.scheduledAt === dep.scheduledAt &&
+    normalizeShortName(part.line) === normalizeShortName(dep.route.shortName) &&
+    headsignsCompatible(part.headsign, dep.headsign) &&
+    (!part.platform || !platform || part.platform === platform)
+  );
 }
 
 /** Extended Departure with optional feedTag (set by some providers like MOTIS). */
@@ -265,9 +299,8 @@ function hashKey(prefix: string, data: unknown): string {
 }
 
 function normalizeLinkName(name: string): string {
-  return name
+  return withoutBracketedParts(name, ["()"])
     .toLowerCase()
-    .replace(/\s*\([^)]*\)\s*/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -594,10 +627,7 @@ export function createPlaceTransit(
     const rows: MergedDeparture[] = [];
     const byKey = new Map<string, MergedDeparture[]>();
     // The stop, linked-stop provider and trip id of every departure folded into a row.
-    const folded = new Map<
-      MergedDeparture,
-      { stop: RowStop; provider: string; tripId: string }[]
-    >();
+    const folded = new Map<MergedDeparture, FoldedDeparture[]>();
     const allFresh: Freshness[] = [];
 
     function register(row: MergedDeparture, keys: string[]): void {
@@ -619,14 +649,10 @@ export function createPlaceTransit(
       if (dep.tripId && parts.some((part) => part.tripId === dep.tripId)) return true;
       const fromSameSource = parts.filter((part) => part.provider === stopProvider);
       if (fromSameSource.length > 0) {
-        // A source lists each departure once, so another of its rows is another
-        // departure; without trip ids only an exact repeat is the same one.
-        if (dep.tripId && fromSameSource.every((part) => part.tripId)) return false;
-        return (
-          row.scheduledAt === dep.scheduledAt &&
-          normalizeShortName(row.route.shortName) === normalizeShortName(dep.route.shortName) &&
-          (row.headsign ?? "") === (dep.headsign ?? "")
-        );
+        // Another row of the same source is another departure, such as the
+        // next train of a frequent line, unless it repeats one: some sources
+        // list a train twice under two trip ids (RMV's "RE1" and "RE 1 (RR").
+        return fromSameSource.some((part) => repeats(part, dep));
       }
       return matchedBy === "line"
         ? headsignsCompatible(row.headsign, dep.headsign)
@@ -750,10 +776,14 @@ export function createPlaceTransit(
           }
         }
 
-        const part = {
+        const part: FoldedDeparture = {
           stop: departureStop(dep, stops[i]),
           provider: stopProvider,
           tripId: dep.tripId ?? "",
+          scheduledAt: dep.scheduledAt,
+          line: dep.route.shortName,
+          headsign: dep.headsign,
+          platform: dep.scheduledPlatform ?? dep.platform,
         };
         if (!existing) {
           const entry: MergedDeparture = {

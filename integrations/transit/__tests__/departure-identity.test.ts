@@ -3,7 +3,12 @@ import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { VehicleJourney } from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
-import { headsignsCompatible, lineNamesCompatible } from "../dedup.js";
+import {
+  headsignsCompatible,
+  isTripNumber,
+  lineNamesCompatible,
+  normalizeShortName,
+} from "../dedup.js";
 import { createTransitOrchestrator } from "../orchestrator.js";
 
 describe("headsignsCompatible", () => {
@@ -34,6 +39,11 @@ describe("lineNamesCompatible", () => {
     ["ICE", "ICE 123"],
     ["Bus 73", "73"],
     ["S1", undefined],
+    ["RE1 (26826)", "RE 1 (RR"],
+    ["RE1", "RE1RRX"],
+    ["RE 1 (RRX)", "RE1"],
+    ["DB S11 (Zug-Nr. 33192)", "S11"],
+    ["RB48 (Zug-Nr. 17358)", "RB 48"],
   ])("treats %j and %j as one line", (a, b) => {
     expect(lineNamesCompatible(a, b)).toBe(true);
   });
@@ -42,8 +52,21 @@ describe("lineNamesCompatible", () => {
     ["S1", "S2"],
     ["RE1", "RB1"],
     ["U6", "U61"],
+    ["SEV S1", "S1"],
+    ["RE1", "RE11"],
   ])("keeps %j and %j apart", (a, b) => {
     expect(lineNamesCompatible(a, b)).toBe(false);
+  });
+});
+
+describe("line keys of bracket-laden names", () => {
+  it("are computed in linear time", () => {
+    const started = performance.now();
+    for (const name of [` ${"( ".repeat(50_000)})x`, `${"!(".repeat(50_000)}x`]) {
+      normalizeShortName(name);
+      isTripNumber(name);
+    }
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });
 

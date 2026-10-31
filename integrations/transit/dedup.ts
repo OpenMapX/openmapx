@@ -59,15 +59,39 @@ const SHORT_NAME_MODE_PREFIX_RE =
   /^(bus|tram|ferry|fähre|straßenbahn|u-bahn|s-bahn|metro|subway|sneltrein|sprinter)\s+/i;
 
 /**
- * Normalise a route short name for deduplication across providers.
- * - Strips parenthetical trip-number suffixes: "RB33 (Zug-Nr. 10323)" -> "RB33"
- * - Strips standalone mode-word prefixes: "Bus 73" -> "73"
+ * A railway operator's code before a line designation: the "DB" in ÖBB's
+ * "DB S11". Only known operators, so "SEV S1" (the rail replacement bus) keeps
+ * its own key.
+ */
+const SHORT_NAME_OPERATOR_PREFIX_RE = /^(DB|ÖBB|OEBB|SBB|NS)\s+(?=\p{L}+\s?\d)/iu;
+/** The Rhein-Ruhr-Express brand some sources append to RE lines: "RE1RRX", "RE 1 RRX". */
+const SHORT_NAME_BRAND_SUFFIX_RE = /(?<=\d)\s*RRX$/i;
+
+/**
+ * A name without a bracket at its end, closed ("RE1 (26826)") or cut off by
+ * the source ("RE 1 (RR"). Found from the last opening bracket rather than by
+ * a pattern, which would backtrack over every earlier bracket.
+ */
+function withoutTrailingBracket(name: string): string {
+  const open = name.lastIndexOf("(");
+  if (open < 0) return name;
+  const close = name.indexOf(")", open);
+  if (close !== -1 && close !== name.trimEnd().length - 1) return name;
+  return name.slice(0, open).trimEnd();
+}
+
+/**
+ * Comparison key for a route short name, equal for the ways sources write one
+ * line: "RE1", "RE 1", "RE1 (26826)", "RE 1 (RR" (cut off), "RE1RRX" and
+ * "RE1 (RRX)" share a key, as do "DB S11 (Zug-Nr. 33192)" and "S11", and
+ * "Bus 73" and "73". Not for display.
  */
 export function normalizeShortName(name: string): string {
-  let n = name.trim();
-  n = n.replace(/\s*\([^)]*\)\s*$/, ""); // drop "(...)" at end
+  let n = withoutTrailingBracket(name.trim()); // drop "(...)" at the end, closed or cut off
   n = n.replace(SHORT_NAME_MODE_PREFIX_RE, ""); // drop "Bus ", "Tram ", ...
-  return n.trim();
+  n = n.replace(SHORT_NAME_OPERATOR_PREFIX_RE, ""); // drop "DB " before "S11"
+  n = n.replace(SHORT_NAME_BRAND_SUFFIX_RE, ""); // drop "RRX" after "RE1"
+  return n.replace(/\s+/g, "").toLowerCase();
 }
 
 // Timestamp normalisation
@@ -152,12 +176,8 @@ export function headsignsCompatible(a: string | undefined, b: string | undefined
  * evidence either way.
  */
 export function lineNamesCompatible(a: string | undefined, b: string | undefined): boolean {
-  const na = normalizeShortName(a ?? "")
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  const nb = normalizeShortName(b ?? "")
-    .replace(/\s+/g, "")
-    .toLowerCase();
+  const na = normalizeShortName(a ?? "");
+  const nb = normalizeShortName(b ?? "");
   if (!na || !nb || na === nb) return true;
   const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
   return /^\p{L}+$/u.test(shorter) && longer.startsWith(shorter) && /\d/.test(longer);
@@ -176,10 +196,7 @@ export function lineNamesCompatible(a: string | undefined, b: string | undefined
  */
 export function isTripNumber(shortName: string): boolean {
   // Strip parenthetical suffix and whitespace
-  const n = shortName
-    .trim()
-    .replace(/\s*\([^)]*\)\s*$/, "")
-    .replace(/\s+/g, "");
+  const n = withoutTrailingBracket(shortName.trim()).replace(/\s+/g, "");
 
   // 5+ pure digits
   if (/^\d{5,}$/.test(n)) return true;

@@ -4,12 +4,23 @@
  * Used by hafas-mgate adapter, hafas provider, and db-vendo provider to avoid
  * duplicating departure/remark normalization logic.
  */
+import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import type {
   Departure,
   OccupancyLevel,
   TransportMode,
   TripRemark,
 } from "@openmapx/mobility-core/transit";
+
+/**
+ * The line riders know and the train number from an FPTF line. HAFAS
+ * endpoints write the number and their operator into the name ("DB S11
+ * (Zug-Nr. 33192)"); the operator is hafas-client's `productName`.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: FPTF line shape varies by provider
+export function fptfLineName(line: any): LineName {
+  return splitLineName(String(line?.name ?? line?.fahrtNr ?? ""), line?.productName);
+}
 
 /**
  * Maps FPTF product strings to internal TransportMode values.
@@ -163,11 +174,12 @@ export function normalizeFptfDeparture(d: any, prefix: string): Departure {
     delaySeconds !== undefined
       ? new Date(new Date(scheduledAt).getTime() + delaySeconds * 1000).toISOString()
       : undefined;
+  const lineName = fptfLineName(line);
   return {
     tripId: d.tripId ? `${prefix}${d.tripId}` : "",
     route: {
       id: `${prefix}${line.id ?? line.fahrtNr ?? ""}`,
-      shortName: line.name ?? line.fahrtNr ?? "",
+      shortName: lineName.name,
       longName: line.productName ?? line.name ?? "",
       mode,
       color: line.color?.bg?.replace(/^#/, "") ?? undefined,
@@ -180,6 +192,7 @@ export function normalizeFptfDeparture(d: any, prefix: string): Departure {
     canceled: d.cancelled ?? false,
     occupancy: mapFptfLoadFactor(d.loadFactor),
     remarks: normalizeRemarks(d.remarks),
+    ...(lineName.trainNumber ? { serviceInfo: { trainNumber: lineName.trainNumber } } : {}),
     // HAFAS boards include related stops' departures, each naming its own stop.
     ...(d.stop?.id && d.stop?.name
       ? { stop: { id: `${prefix}${d.stop.id}`, name: String(d.stop.name) } }

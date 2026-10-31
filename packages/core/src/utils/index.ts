@@ -120,6 +120,7 @@ export {
 } from "./formatting";
 export {
   FPTF_PRODUCT_MODE,
+  fptfLineName,
   mapFptfLoadFactor,
   mapProducts,
   normalizeFptfDeparture,
