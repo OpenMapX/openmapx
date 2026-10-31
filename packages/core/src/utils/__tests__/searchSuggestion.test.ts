@@ -624,6 +624,47 @@ describe("search suggestion primitives", () => {
     expect(textMatchScore(rome[0], "rom")).toBe(1);
   });
 
+  it("keeps the geocoder's category and OSM object when merging a notable place", () => {
+    const geocoderSource = { sourceId: "maptiler", name: "MapTiler" };
+    const [station] = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "wikidata:Q6456",
+          ids: { wikidata: "Q6456" },
+          label: "Hamburg Hauptbahnhof",
+          coordinates: [10.006389, 53.552778],
+          type: "poi",
+          fame: 1,
+          provider: "search-notable-places",
+          contributors: [{ sourceId: "wikidata", name: "Wikidata" }],
+        },
+        {
+          id: "maptiler:poi.28525889",
+          ids: { osm: "node/2459919677", wikidata: "Q6456" },
+          label: "Hamburg Hauptbahnhof",
+          coordinates: [10.0069, 53.5529],
+          type: "poi",
+          rawCategory: "railway station",
+          directOsmReference: {
+            source: "geocoding-maptiler",
+            recordId: "maptiler:poi.28525889",
+            osmRef: "node/2459919677",
+          },
+          provider: "geocoding-maptiler",
+          contributors: [geocoderSource],
+        },
+      ],
+      { query: "hamburg hauptbahnhof" },
+    );
+    expect(station).toMatchObject({
+      id: "wikidata:Q6456",
+      ids: { wikidata: "Q6456", osm: "node/2459919677" },
+      rawCategory: "railway station",
+      directOsmReference: { osmRef: "node/2459919677" },
+    });
+    expect(station.fieldContributors?.rawCategory).toEqual([geocoderSource]);
+  });
+
   it("keeps two villages of one name a few kilometres apart", () => {
     const merged = mergeAutocompleteSuggestions(
       [

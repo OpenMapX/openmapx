@@ -111,15 +111,22 @@ export function isLocalityOnlyAddress(place: Pick<Place, "addressEvidence">): bo
   return Object.keys(c).length > 0 && !(c.full || c.house || c.road || c.place || c.house_number);
 }
 
-/** Only the selected MapTiler feature's direct root reference may change lookup dispatch. */
+/**
+ * Only a MapTiler feature's direct root reference may change lookup dispatch:
+ * the selected feature's own, or that of the geocoder row a Wikidata place was
+ * merged with (see `mergeAutocompleteSuggestions`). A Wikidata place otherwise
+ * falls back to the OSM object found nearest by name, which for Hamburg
+ * Hauptbahnhof is its listed building rather than the station.
+ */
 export function directPlaceDetailsId(place: Place, isDataSourcePlace: boolean): string | null {
   if (place.primaryScheme === "coordinate") return null;
   const ref = place.directOsmReference;
   if (
     !isDataSourcePlace &&
-    place.primaryScheme === "maptiler" &&
     ref?.source === "geocoding-maptiler" &&
-    ref.recordId === place.id &&
+    (place.primaryScheme === "maptiler"
+      ? ref.recordId === place.id
+      : place.primaryScheme === "wikidata") &&
     /^(node|way|relation)\/[1-9]\d*$/.test(ref.osmRef) &&
     place.ids.osm === ref.osmRef
   ) {

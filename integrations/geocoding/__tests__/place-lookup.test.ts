@@ -165,6 +165,27 @@ describe("Nominatim detail evidence", () => {
   });
 });
 
+describe("name and coordinate lookup", () => {
+  it("prefers the object tagged as the Wikidata item over a nearer one", async () => {
+    const at = (osmId: number, lat: string, wikidata?: string) => ({
+      ...detail({ country_code: "de" }),
+      osm_type: "node",
+      osm_id: osmId,
+      lat,
+      lon: "13.41",
+      ...(wikidata ? { extratags: { wikidata } } : {}),
+    });
+    stubResponse([at(1, "52.5200"), at(2, "52.5210", "Q702"), at(3, "52.5205", "Q999")]);
+    expect((await lookupByNameAndCoords("Station", 52.52, 13.41, "wikidata:Q702"))?.ids.osm).toBe(
+      "node/2",
+    );
+    stubResponse([at(1, "52.5200"), at(2, "52.5210", "Q702")]);
+    expect((await lookupByNameAndCoords("Station", 52.52, 13.41, "maptiler:x"))?.ids.osm).toBe(
+      "node/1",
+    );
+  });
+});
+
 describe("Overpass own address tags", () => {
   it.each([
     [
