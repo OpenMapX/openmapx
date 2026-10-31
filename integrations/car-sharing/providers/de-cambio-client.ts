@@ -1,7 +1,6 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { CacheClient } from "@openmapx/mobility-core/cache";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
-import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Cambio car-sharing API client.
  * Station-based car-sharing in Germany and Belgium.
@@ -140,7 +139,6 @@ export const deCambioClient: RegionalCarSharingClient = {
   attribution: {
     label: "Cambio",
     url: "https://www.cambio-carsharing.de",
-    licensing: licensingFromDeclaration("ODbL", "https://opendatacommons.org/licenses/odbl/"),
   },
   search: searchDeCambio,
 };
