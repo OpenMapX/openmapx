@@ -113,7 +113,7 @@
   "dataSources": {
     "de-cambio": {
       "purpose": "Station-based car sharing in Germany and Belgium",
-      "dataSent": "Region code in URL path (matched by proximity to viewport center, up to 14 regions). No user location data sent directly",
+      "dataSent": "Region code in URL path (matched by proximity to the map view, up to 15 regions). No user location data sent directly",
       "dataReceived": "Station locations, vehicle counts, vehicle classes, addresses"
     },
     "de-stadtteilauto": {

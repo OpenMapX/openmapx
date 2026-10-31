@@ -113,7 +113,7 @@
   "dataSources": {
     "de-cambio": {
       "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",
-      "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnittszentrum, bis zu 14 Regionen). Keine Nutzerstandortdaten direkt gesendet",
+      "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnitt, bis zu 15 Regionen). Keine Nutzerstandortdaten direkt gesendet",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Adressen"
     },
     "de-stadtteilauto": {
