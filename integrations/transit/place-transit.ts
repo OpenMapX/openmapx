@@ -33,6 +33,7 @@ import {
 } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
+import { mainStopKey, stopNameKey, stopNameSpecificity } from "./stop-names.js";
 
 /** Preserve scalar ownership when a weaker row supplies a missing field. */
 function retainFieldReceipt(
@@ -60,6 +61,79 @@ function retainFieldReceipt(
     ...baseline,
     [field]: snapshotContributors(append ? (baseline[field] ?? []) : [], supplied),
   };
+}
+
+/** A stop a merged row was listed at, with the receipt for its name. */
+interface RowStop {
+  id: string;
+  name: string;
+  receipt: readonly Attribution[];
+  /** The source named this as the departure's own stop, not just the stop it asked about. */
+  stated: boolean;
+}
+
+/**
+ * The stop a departure leaves from: its own stop when the source states one,
+ * else the linked stop whose board listed it.
+ */
+function departureStop(dep: Departure, linked: TransitStop): RowStop {
+  if (dep.stop?.id && dep.stop.name) {
+    return {
+      id: dep.stop.id,
+      name: dep.stop.name,
+      receipt: contributorsForField(dep, "stop"),
+      stated: true,
+    };
+  }
+  return {
+    id: linked.id,
+    name: linked.name,
+    receipt: contributorsForField(linked, "name"),
+    stated: false,
+  };
+}
+
+/**
+ * Name the stop each merged row leaves from, and mark rows whose stop is not
+ * the place's main one when the board's stops have different names.
+ *
+ * Spellings of one name ("Köln Hbf", "Köln Hauptbahnhof") count as one stop.
+ * The main stop is the one named like the place (see {@link mainStopKey}). A
+ * row listed at the main stop by any source stays there, because a stop's
+ * board can include a whole station's departures. Otherwise a stop the source
+ * names as the departure's own wins over the stop it was asked about, then
+ * the most specifically named one.
+ */
+function nameRowStops(rows: { row: MergedDeparture; stops: RowStop[] }[], placeName: string): void {
+  const keyed = rows.map(({ row, stops }) => ({
+    row,
+    stops: stops.map((stop) => ({ stop, key: stopNameKey(stop.name) })),
+  }));
+  const rowsByKey = new Map<string, number>();
+  for (const { stops } of keyed) {
+    for (const key of new Set(stops.map((s) => s.key))) {
+      rowsByKey.set(key, (rowsByKey.get(key) ?? 0) + 1);
+    }
+  }
+  const main = rowsByKey.size > 1 ? mainStopKey(placeName, rowsByKey) : undefined;
+  for (const { row, stops } of keyed) {
+    let chosen: { stop: RowStop; key: string } | undefined;
+    for (const candidate of stops) {
+      if (!chosen || rank(candidate) > rank(chosen)) chosen = candidate;
+    }
+    if (!chosen) continue;
+    retainFieldReceipt(row, "stop", chosen.stop.receipt);
+    row.stop = { id: chosen.stop.id, name: chosen.stop.name };
+    row.contributors = snapshotContributors(row.contributors ?? [], chosen.stop.receipt);
+    if (main !== undefined && chosen.key !== main) {
+      retainFieldReceipt(row, "atOtherStop", chosen.stop.receipt);
+      row.atOtherStop = true;
+    }
+  }
+
+  function rank({ stop, key }: { stop: RowStop; key: string }): number {
+    return (key === main ? 10_000 : 0) + (stop.stated ? 1_000 : 0) + stopNameSpecificity(key);
+  }
 }
 
 /** Extended Departure with optional feedTag (set by some providers like MOTIS). */
@@ -313,8 +387,10 @@ export function createPlaceTransit(
     // Second-pass pruning: avoid linking by city token only.
     // Keep candidates that share at least one informative token from the place
     // name variants (tokens present in some, but not all, prelim candidates).
+    // Tokens are compared in expanded form, so "Köln Hbf" shares "hauptbahnhof"
+    // with a place or stop spelled "Köln Hauptbahnhof".
     const tokenFreq = new Map<string, number>();
-    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
+    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(expandSearchQuery(s.name))));
     for (const tokens of prelimTokenSets) {
       for (const t of tokens) {
         tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
@@ -323,7 +399,7 @@ export function createPlaceTransit(
 
     const placeTokens = new Set<string>();
     for (const q of normVariants) {
-      for (const t of tokenizeLinkName(q)) {
+      for (const t of tokenizeLinkName(expandSearchQuery(q))) {
         if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
         if (/^\d+$/.test(t)) continue;
         placeTokens.add(t);
@@ -487,12 +563,16 @@ export function createPlaceTransit(
    * several candidates, the one closest in time wins, so a frequent line keeps
    * one row per departure.
    *
+   * Each row names the stop it leaves from, and is marked when that is not the
+   * place's main stop (see {@link nameRowStops}).
+   *
    * Not cached — caller refetches every 30s for real-time data.
    */
   async function buildMergedTimetable(
     stops: TransitStop[],
     fetchFn: (stopId: string, minutes: number) => Promise<MobilityResult<Departure[]>>,
     minutes: number,
+    placeName: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
     if (stops.length === 0) return emptyResult<MergedDeparture[]>([], { hasRealtimeData: true });
 
@@ -501,8 +581,11 @@ export function createPlaceTransit(
     const partial = partialLookups(results, "timetable");
     const rows: MergedDeparture[] = [];
     const byKey = new Map<string, MergedDeparture[]>();
-    // The linked-stop provider and trip id of every departure folded into a row.
-    const folded = new Map<MergedDeparture, { provider: string; tripId: string }[]>();
+    // The stop, linked-stop provider and trip id of every departure folded into a row.
+    const folded = new Map<
+      MergedDeparture,
+      { stop: RowStop; provider: string; tripId: string }[]
+    >();
     const allFresh: Freshness[] = [];
 
     function register(row: MergedDeparture, keys: string[]): void {
@@ -655,7 +738,11 @@ export function createPlaceTransit(
           }
         }
 
-        const part = { provider: stopProvider, tripId: dep.tripId ?? "" };
+        const part = {
+          stop: departureStop(dep, stops[i]),
+          provider: stopProvider,
+          tripId: dep.tripId ?? "",
+        };
         if (!existing) {
           const entry: MergedDeparture = {
             ...dep,
@@ -675,6 +762,10 @@ export function createPlaceTransit(
       }
     }
 
+    nameRowStops(
+      rows.map((row) => ({ row, stops: (folded.get(row) ?? []).map((part) => part.stop) })),
+      placeName,
+    );
     const unique = rows.sort(
       (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
     );
@@ -697,6 +788,7 @@ export function createPlaceTransit(
       stopsRes.data,
       (id, min) => orchestrator.getDepartures(id, min),
       minutes,
+      name,
     );
     return {
       data: merged.data,
@@ -718,6 +810,7 @@ export function createPlaceTransit(
       stopsRes.data,
       (id, min) => orchestrator.getArrivals(id, min),
       minutes,
+      name,
     );
     return {
       data: merged.data,

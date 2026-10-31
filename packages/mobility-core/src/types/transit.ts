@@ -247,6 +247,12 @@ export interface Departure extends ContributingRecord {
   remarks?: TripRemark[];
   serviceInfo?: TransitServiceInfo;
   provenance?: TransitObservationProvenance;
+  /**
+   * The stop this departure leaves from, or an arrival reaches. Sources set it
+   * when they state it: a stop's board can include departures of related
+   * stops. A place's merged board sets it on every row.
+   */
+  stop?: { id: string; name: string };
 }
 
 export interface TransitObservationProvenance extends ContributingRecord {
@@ -806,4 +812,9 @@ export interface MergedDeparture extends Departure {
   providers: string[];
   /** All non-empty trip IDs collected from all providers (for fallback trip lookups). */
   tripIds?: string[];
+  /**
+   * True when the place's departures come from differently named stops and
+   * this one's stop is not the place's main stop, so riders need its name.
+   */
+  atOtherStop?: boolean;
 }

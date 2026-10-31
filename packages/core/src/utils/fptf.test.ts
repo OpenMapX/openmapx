@@ -30,3 +30,21 @@ describe("normalizeFptfDeparture occupancy", () => {
     expect(dep.occupancy).toBeUndefined();
   });
 });
+
+describe("normalizeFptfDeparture stop", () => {
+  it("names the stop a HAFAS departure leaves from, which can be a related station", () => {
+    const dep = normalizeFptfDeparture(
+      {
+        line: { name: "ICE 127", product: "nationalExpress" },
+        stop: { type: "stop", id: "8000207", name: "Köln Hbf" },
+      },
+      "oebb:",
+    );
+    expect(dep.stop).toEqual({ id: "oebb:8000207", name: "Köln Hbf" });
+  });
+
+  it("leaves the stop out when the departure names none", () => {
+    const dep = normalizeFptfDeparture({ line: { name: "RB 1", product: "regional" } }, "db:");
+    expect(dep.stop).toBeUndefined();
+  });
+});

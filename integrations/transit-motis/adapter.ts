@@ -356,6 +356,10 @@ export function normalizeStoptime(
     platform,
     scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
+    // A station's board includes its platforms' stop times, each naming its own stop.
+    ...(place.stopId && place.name
+      ? { stop: { id: `${instance.prefix}${place.stopId}`, name: place.name } }
+      : {}),
     provenance: {
       baselineSource: instance.provider === "ms" ? "transit-motis-local" : "transitous",
       instance: instance.provider,

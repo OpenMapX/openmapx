@@ -1751,6 +1751,7 @@
     "moreAlerts": "{count} weitere Meldung{count, plural, one {} other {en}}",
     "showMoreAlerts": "+{count} weitere Meldung{count, plural, one {} other {en}}",
     "activeServiceAlert": "Aktive Störungsmeldung für diese Linie",
+    "rowStop": "Haltestelle",
     "alertInfo": "Info",
     "alertWarning": "Warnung",
     "alertSevere": "Betriebsstörung",

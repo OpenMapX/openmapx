@@ -180,5 +180,9 @@ export function normalizeFptfDeparture(d: any, prefix: string): Departure {
     canceled: d.cancelled ?? false,
     occupancy: mapFptfLoadFactor(d.loadFactor),
     remarks: normalizeRemarks(d.remarks),
+    // HAFAS boards include related stops' departures, each naming its own stop.
+    ...(d.stop?.id && d.stop?.name
+      ? { stop: { id: `${prefix}${d.stop.id}`, name: String(d.stop.name) } }
+      : {}),
   };
 }

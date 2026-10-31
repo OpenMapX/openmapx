@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { TransitOrchestrator } from "../orchestrator.js";
 import { createPlaceTransit } from "../place-transit.js";
 
-function stop(id: string): TransitStop {
+function stop(id: string, name = "Central"): TransitStop {
   const [provider] = id.split(":");
-  return { id, provider, name: "Central", lat: 50.775, lng: 6.084, modes: ["rail"] };
+  return { id, provider, name, lat: 50.775, lng: 6.084, modes: ["rail"] };
 }
 
 function dep(
@@ -27,8 +27,15 @@ function dep(
   };
 }
 
-/** A board whose linked stops answer with the given departures, in stop order. */
-async function board(byStop: Record<string, Departure[]>) {
+/**
+ * A board whose linked stops answer with the given departures, in stop order.
+ * Stops are named "Central" unless `names` says otherwise.
+ */
+async function board(
+  byStop: Record<string, Departure[]>,
+  names: Record<string, string> = {},
+  placeName = "Central",
+) {
   const ctx = {
     cache: {
       get: async () => null,
@@ -37,7 +44,7 @@ async function board(byStop: Record<string, Departure[]>) {
     },
   } as unknown as IntegrationContext;
   const found: MobilityResult<TransitStop[]> = {
-    data: Object.keys(byStop).map(stop),
+    data: Object.keys(byStop).map((id) => stop(id, names[id])),
     attributions: [],
     freshness: freshnessNow(),
   };
@@ -54,7 +61,7 @@ async function board(byStop: Record<string, Departure[]>) {
   const result = await createPlaceTransit(ctx, orchestrator).getMergedDepartures(
     50.775,
     6.084,
-    "Central",
+    placeName,
     60,
   );
   return result.data;
@@ -150,5 +157,124 @@ describe("merged place board", () => {
       "2026-10-31T10:00:00Z",
       "2026-10-31T10:03:00Z",
     ]);
+  });
+});
+
+describe("place stop linking", () => {
+  it("keeps a stop abbreviating the station name when another source spells it out", async () => {
+    const rows = await board(
+      {
+        "ms:hbf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
+        "mo:hbf": [dep("mo:x1", "S11", "Bergisch Gladbach", "10:05:00")],
+        "mo:messe": [dep("mo:m1", "S6", "Essen Hbf", "10:07:00")],
+      },
+      { "ms:hbf": "Köln Hbf", "mo:hbf": "Köln Hauptbahnhof", "mo:messe": "Köln Messe" },
+      "Köln Hauptbahnhof",
+    );
+    expect(rows.map((row) => row.stop?.id)).toEqual(["ms:hbf", "mo:hbf"]);
+  });
+});
+
+describe("the stop a merged row leaves from", () => {
+  it("names each row's stop without marking any when sources only spell the station differently", async () => {
+    const rows = await board(
+      {
+        "ms:hbf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
+        "mo:hbf": [dep("mo:x1", "S11", "Bergisch Gladbach", "10:05:00")],
+        "hm:hbf": [dep("hm:y1", "ICE 315", "Frankfurt(M) Flughafen", "10:10:00")],
+      },
+      { "ms:hbf": "Köln Hbf", "mo:hbf": "Köln Hauptbahnhof", "hm:hbf": "Hauptbahnhof, Köln" },
+      "Köln Hauptbahnhof",
+    );
+    expect(rows.map((row) => row.stop)).toEqual([
+      { id: "ms:hbf", name: "Köln Hbf" },
+      { id: "mo:hbf", name: "Köln Hauptbahnhof" },
+      { id: "hm:hbf", name: "Hauptbahnhof, Köln" },
+    ]);
+    expect(rows.some((row) => row.atOtherStop)).toBe(false);
+  });
+
+  it("treats a parenthesised qualifier as the same stop", async () => {
+    const rows = await board(
+      {
+        "ms:hbf": [dep("ms:t1", "RE50", "Fulda", "10:00:00")],
+        "mo:hbf": [dep("mo:x1", "S8", "Wiesbaden Hbf", "10:05:00")],
+      },
+      { "ms:hbf": "Frankfurt(Main)Hbf", "mo:hbf": "Frankfurt Hauptbahnhof" },
+      "Frankfurt (Main) Hauptbahnhof",
+    );
+    expect(rows.some((row) => row.atOtherStop)).toBe(false);
+  });
+
+  it("marks rows leaving from a differently named stop of the place", async () => {
+    const rows = await board(
+      {
+        "ms:hbf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
+        "ms:breslauer": [dep("ms:b1", "250", "Bergisch Gladbach", "10:02:00")],
+      },
+      { "ms:hbf": "Köln Hbf", "ms:breslauer": "Köln Breslauer Platz/Hbf" },
+      "Köln Hauptbahnhof",
+    );
+    expect(rows.map((row) => [row.stop?.name, row.atOtherStop ?? false])).toEqual([
+      ["Köln Hbf", false],
+      ["Köln Breslauer Platz/Hbf", true],
+    ]);
+    expect(rows[1].fieldContributors?.stop).toBeDefined();
+  });
+
+  it("keeps a row at the main stop when another source lists it at a stop nearby", async () => {
+    // A stop's board can include the whole station's departures (HAFAS related stations).
+    const rows = await board(
+      {
+        "mo:hbf": [dep("mo:t1", "ICE 127", "Frankfurt(Main)Hbf", "10:00:00")],
+        "oebb:breslauer": [
+          dep("oebb:t1", "ICE 127", "Frankfurt(Main)Hbf", "10:00:00"),
+          dep("oebb:b1", "250", "Bergisch Gladbach", "10:02:00"),
+        ],
+      },
+      { "mo:hbf": "Köln Hbf", "oebb:breslauer": "Breslauer Platz/Hauptbahnhof, Köln" },
+      "Köln Hbf",
+    );
+    expect(
+      rows.map((row) => [row.route.shortName, row.stop?.name, row.atOtherStop ?? false]),
+    ).toEqual([
+      ["ICE 127", "Köln Hbf", false],
+      ["250", "Breslauer Platz/Hauptbahnhof, Köln", true],
+    ]);
+  });
+
+  it("uses the stop a source states for each departure over the stop it was asked about", async () => {
+    const rows = await board(
+      {
+        "oebb:breslauer": [
+          dep("oebb:t1", "ICE 127", "Frankfurt(Main)Hbf", "10:00:00", {
+            stop: { id: "oebb:8000207", name: "Köln Hbf" },
+          }),
+        ],
+        "db:hbf": [
+          dep("db:b1", "250", "Bergisch Gladbach", "10:02:00", {
+            stop: { id: "db:breslauer", name: "Köln Breslauer Platz/Hbf" },
+          }),
+        ],
+      },
+      { "oebb:breslauer": "Breslauer Platz/Hauptbahnhof, Köln", "db:hbf": "Köln Hbf" },
+      "Köln Hbf",
+    );
+    expect(rows.map((row) => [row.stop?.id, row.atOtherStop ?? false])).toEqual([
+      ["oebb:8000207", false],
+      ["db:breslauer", true],
+    ]);
+  });
+
+  it("takes the stop named most like the place as main when none is named exactly like it", async () => {
+    const rows = await board(
+      {
+        "ms:bf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
+        "ms:bus": [dep("ms:u1", "150", "Chorweiler", "10:01:00")],
+      },
+      { "ms:bf": "Köln Messe/Deutz Bf", "ms:bus": "Köln Messe/Deutz Ottoplatz Bussteig" },
+      "Köln Messe/Deutz",
+    );
+    expect(rows.map((row) => row.atOtherStop ?? false)).toEqual([false, true]);
   });
 });
