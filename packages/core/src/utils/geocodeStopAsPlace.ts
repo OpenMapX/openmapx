@@ -35,6 +35,11 @@ function collectStopIdentity(stop: TransitStop): {
   return { primaryScheme, ids };
 }
 
+/** The stop a place is opened for; a stop known only by name has no id. */
+function transitStopOf(stop: TransitStop): NonNullable<Place["transitStop"]> {
+  return stop.id ? { id: stop.id, name: stop.name } : { name: stop.name };
+}
+
 /** Builds a minimal synthetic Place for a transit stop (used when geocoding finds no match). */
 export function makeSyntheticStopPlace(stop: TransitStop): Place {
   const { primaryScheme, ids } = collectStopIdentity(stop);
@@ -59,6 +64,7 @@ export function makeSyntheticStopPlace(stop: TransitStop): Place {
     coordinates: [stop.lng, stop.lat],
     category: "station",
     rawCategory: "transit_stop",
+    transitStop: transitStopOf(stop),
   });
 }
 
@@ -142,6 +148,9 @@ export async function geocodeStopAsPlace(stop: TransitStop): Promise<Place | nul
       // Place reaching this function came through an explicit transit-stop
       // click/search flow.
       rawCategory: "transit_stop",
+      // The geocoded name can be a different one ("Bahnhof Köln Messe/Deutz");
+      // the board still treats the chosen stop as the main one.
+      transitStop: transitStopOf(stop),
     });
   } catch {
     return null;

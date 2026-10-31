@@ -389,6 +389,7 @@ function makePlace(link: ParsedDeepLink["place"]): Place | null {
     coordinates: link.coords,
     category: link.category,
     rawCategory: link.rawCategory,
+    ...(link.stopName ? { transitStop: { name: link.stopName } } : {}),
   });
 }
 
@@ -563,6 +564,8 @@ function encodePlace(params: URLSearchParams, place: Place): void {
   if (place.name) params.set("name", place.name);
   if (place.category) params.set("cat", place.category);
   if (place.rawCategory) params.set("raw", place.rawCategory);
+  // The stop it was opened for, so a reloaded or shared board keeps its main stop.
+  if (place.transitStop) params.set("stop", place.transitStop.name);
 }
 
 function encodeDirections(params: URLSearchParams): void {

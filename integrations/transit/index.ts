@@ -1365,12 +1365,14 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
+    const query = scalarQueries(req.query);
     const result = await placeTransit.getMergedDepartures(
       place.lat,
       place.lng,
       place.name,
       minutes,
-      scalarQueries(req.query).place_id,
+      query.place_id,
+      query.stop_name?.trim().slice(0, 200) || undefined,
     );
     reply.send(toEnvelope(result));
   });
@@ -1388,12 +1390,14 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
+    const query = scalarQueries(req.query);
     const result = await placeTransit.getMergedArrivals(
       place.lat,
       place.lng,
       place.name,
       minutes,
-      scalarQueries(req.query).place_id,
+      query.place_id,
+      query.stop_name?.trim().slice(0, 200) || undefined,
     );
     reply.send(toEnvelope(result));
   });

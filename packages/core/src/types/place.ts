@@ -180,4 +180,10 @@ export interface Place extends Identified, ContributingRecord {
   names?: Record<string, string>;
   /** Actual upstream records that supplied this place or individual properties. */
   provenance?: PlaceProvenance[];
+  /**
+   * The transit stop this place was opened for, such as a stop chosen in
+   * search or a journey's stop. The place's departure board treats it as its
+   * main stop, so departures from it stay unlabelled.
+   */
+  transitStop?: { id?: string; name: string };
 }

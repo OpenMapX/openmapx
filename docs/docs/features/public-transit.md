@@ -76,9 +76,11 @@ alerts and facilities that cannot be loaded are left out rather than kept as
 
 A place's stops can have different names, for example a main station and a bus
 stop beside it. A departure from a stop other than the place's main one shows
-that stop's name next to its line, so you know where to board. The main stop is
-the one named like the place. Different spellings of one name, such as
-"Köln Hbf" and "Köln Hauptbahnhof", count as one stop and are not labelled.
+that stop's name next to its line, so you know where to board. When you open a
+stop from search, the map or a planned journey, that stop is the main one;
+otherwise it is the stop named like the place. Different spellings of one name,
+such as "Köln Hbf" and "Köln Hauptbahnhof", count as one stop and are not
+labelled.
 
 ### Understanding timetable status
 

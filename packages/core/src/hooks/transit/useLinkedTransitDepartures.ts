@@ -14,7 +14,12 @@ export function useLinkedTransitDepartures(
   const enabled = isTransitEligiblePlace(place);
 
   const query = useQuery({
-    queryKey: ["linked-transit-departures", place?.id ?? place?.coordinates?.join(","), minutes],
+    queryKey: [
+      "linked-transit-departures",
+      place?.id ?? place?.coordinates?.join(","),
+      place?.transitStop?.name,
+      minutes,
+    ],
     queryFn: () => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
@@ -26,6 +31,8 @@ export function useLinkedTransitDepartures(
           name: p.name,
           place_id: p.id,
           minutes: String(minutes),
+          // The stop the place was opened for counts as its main stop.
+          ...(p.transitStop ? { stop_name: p.transitStop.name } : {}),
         },
       );
     },

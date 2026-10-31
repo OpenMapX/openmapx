@@ -1,5 +1,7 @@
+import type { Place } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitDetailsView } from "./TransitDetailsView";
@@ -99,6 +101,14 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
 vi.mock("@/lib/fareUtils", () => ({
   extractFareSummary: () => null,
   formatFare: () => "",
+}));
+
+const enrichment = vi.hoisted(() => ({ select: vi.fn() }));
+vi.mock("@/hooks/usePlaceEnrichment", () => ({
+  usePlaceEnrichment: () => ({
+    selectWithEnrichment: enrichment.select,
+    cancelEnrichment: vi.fn(),
+  }),
 }));
 
 vi.mock("@/integration-api/map/MapContext", () => ({
@@ -290,4 +300,24 @@ it.each([
   );
   expect(markup).toContain(expected);
   if (instance !== "otp") expect(markup).not.toContain("wheelchairNotSupported");
+});
+
+it("opens a journey's stop as that transit stop, so its board treats it as the main stop", () => {
+  render(
+    <TransitDetailsView
+      itinerary={makeItinerary([undefined])}
+      originLabel="A"
+      destinationLabel="B"
+      onBack={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByText("From 0"));
+  expect(enrichment.select).toHaveBeenCalledTimes(1);
+  const provisional = enrichment.select.mock.calls[0][0] as Place;
+  expect(provisional).toMatchObject({
+    name: "From 0",
+    rawCategory: "transit_stop",
+    transitStop: { id: "ms:de_DELFI_0", name: "From 0" },
+    ids: { ms: "de_DELFI_0" },
+  });
 });

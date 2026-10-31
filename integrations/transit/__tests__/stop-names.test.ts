@@ -70,6 +70,17 @@ describe("mainStopKey", () => {
     ).toBe(hbf);
   });
 
+  it("prefers the stop the place was opened for when it is on the board", () => {
+    const hbf = stopNameKey("Köln Hbf");
+    const bus = stopNameKey("Köln Breslauer Platz/Hbf");
+    const rows = new Map([
+      [hbf, 9],
+      [bus, 2],
+    ]);
+    expect(mainStopKey("Köln Hbf", rows, "Breslauer Platz/Hauptbahnhof, Köln")).toBe(bus);
+    expect(mainStopKey("Köln Hbf", rows, "Köln Ehrenfeld")).toBe(hbf);
+  });
+
   it("breaks a similarity tie by the number of departures", () => {
     const a = stopNameKey("Markt Nord");
     const b = stopNameKey("Markt Süd");

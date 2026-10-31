@@ -24,7 +24,10 @@ import {
   formatDistance,
   formatDuration,
   geocodeStopAsPlace,
+  makeSyntheticStopPlace,
   PANEL,
+  parseId,
+  resolveStopAsPlace,
   safeHref,
   tzOffsetLabel,
   usePlaceStore,
@@ -44,6 +47,7 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import type {
   MergedDeparture,
+  TransitStop,
   TransportMode,
   TripItinerary,
   TripLeg,
@@ -66,6 +70,7 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -227,24 +232,44 @@ export function TransitDetailsView({
   const fmt = useDateTimeFormat();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo } = useMap();
 
+  /**
+   * Open the stop a leg uses. With its source id it opens as that transit stop,
+   * like a stop chosen in search, so its board treats it as the main stop.
+   */
   function handleStopClick(name: string, lat: number, lng: number, stopId?: string) {
     flyTo([lng, lat], 16);
-    void geocodeStopAsPlace({ id: stopId ?? "", name, lat, lng, modes: [], provider: "" }).then(
-      (place) => {
-        setSelectedPlace(
-          place ??
-            ({
-              id: stopId || `place:${name}`,
-              name,
-              address: name,
-              coordinates: [lng, lat],
-            } as Place),
-        );
-        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-      },
-    );
+    if (stopId) {
+      const stop: TransitStop = {
+        id: stopId,
+        name,
+        lat,
+        lng,
+        modes: [],
+        provider: parseId(stopId)?.scheme ?? "",
+      };
+      // Opening the place card replaces this view, so let the enrichment finish.
+      selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop), {
+        continueOnUnmount: true,
+      });
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      return;
+    }
+    // Without a source id the stop can only be found by name.
+    void geocodeStopAsPlace({ id: "", name, lat, lng, modes: [], provider: "" }).then((place) => {
+      setSelectedPlace(
+        place ??
+          ({
+            id: `place:${name}`,
+            name,
+            address: name,
+            coordinates: [lng, lat],
+          } as Place),
+      );
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    });
   }
   // Resolve each offset label before formatting the time it gates: unlike
   // these helpers, `fmt.time({ timeZone })` throws (rather than degrading)
