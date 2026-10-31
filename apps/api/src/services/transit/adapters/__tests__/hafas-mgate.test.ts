@@ -192,7 +192,11 @@ describe("getDepartures", () => {
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
+    const { departures: deps } = await hafasMgateAdapter.getDepartures(
+      MOCK_ENTRY,
+      "oebb:8100002",
+      30,
+    );
 
     expect(deps).toHaveLength(1);
     expect(deps[0].tripId).toBe("oebb:trip-oebb-1");
@@ -226,7 +230,11 @@ describe("getDepartures", () => {
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
+    const { departures: deps } = await hafasMgateAdapter.getDepartures(
+      MOCK_ENTRY,
+      "oebb:8100002",
+      30,
+    );
 
     expect(deps).toHaveLength(1);
     expect(deps[0].delaySeconds).toBe(300);
@@ -280,7 +288,11 @@ describe("getArrivals", () => {
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const arrivals = await hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 60);
+    const { departures: arrivals } = await hafasMgateAdapter.getArrivals(
+      MOCK_ENTRY,
+      "oebb:8100002",
+      60,
+    );
 
     expect(arrivals).toHaveLength(1);
     expect(arrivals[0].tripId).toBe("oebb:trip-arr-1");
@@ -611,5 +623,28 @@ describe("planJourney", () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+describe("departure board age", () => {
+  it("reads HAFAS's realtime update time and leaves a cached answer's age unknown", async () => {
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
+    mockHafasClient.departures.mockResolvedValueOnce({
+      departures: [],
+      realtimeDataUpdatedAt: 1773133170,
+    });
+    mockHafasClient.departures.mockResolvedValueOnce({
+      departures: [],
+      realtimeDataUpdatedAt: null,
+    });
+
+    expect((await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30)).dataAsOf).toBe(
+      "2026-03-10T08:59:30.000Z",
+    );
+    expect(
+      (await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30)).dataAsOf,
+    ).toBeUndefined();
   });
 });

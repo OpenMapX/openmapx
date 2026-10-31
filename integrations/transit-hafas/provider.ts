@@ -7,8 +7,10 @@ import {
   productToMode,
 } from "@openmapx/core";
 import { journeysToTripPlan } from "@openmapx/mobility-core/fptf-journey";
+import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
+  DepartureBoard,
   GeoJSONLineString,
   ServiceAlert,
   TransitStop,
@@ -164,7 +166,7 @@ export async function getDepartures(
   inst: HafasInstance,
   stopId: string,
   minutes: number,
-): Promise<Departure[]> {
+): Promise<DepartureBoard> {
   try {
     const rawId = stripPrefix(stopId, inst);
     const params = new URLSearchParams({
@@ -173,11 +175,15 @@ export async function getDepartures(
       remarks: "true",
     });
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await fetchJson<{ departures?: any[] }>(
+    const data = await fetchJson<{ departures?: any[]; realtimeDataUpdatedAt?: number | null }>(
       `${inst.baseUrl}/stops/${rawId}/departures?${params}`,
     );
     if (!Array.isArray(data.departures)) throw new Error("malformed departures response");
-    return data.departures.map((d) => normalizeDeparture(d, inst));
+    const dataAsOf = upstreamDataAsOf(data.realtimeDataUpdatedAt);
+    return {
+      departures: data.departures.map((d) => normalizeDeparture(d, inst)),
+      ...(dataAsOf ? { dataAsOf } : {}),
+    };
   } catch {
     // A failed board must not read as "no departures"; callers decide how to degrade.
     throw new Error("HAFAS timetable unavailable");
@@ -188,7 +194,7 @@ export async function getArrivals(
   inst: HafasInstance,
   stopId: string,
   minutes: number,
-): Promise<Departure[]> {
+): Promise<DepartureBoard> {
   try {
     const rawId = stripPrefix(stopId, inst);
     const params = new URLSearchParams({
@@ -197,11 +203,15 @@ export async function getArrivals(
       remarks: "true",
     });
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await fetchJson<{ arrivals?: any[] }>(
+    const data = await fetchJson<{ arrivals?: any[]; realtimeDataUpdatedAt?: number | null }>(
       `${inst.baseUrl}/stops/${rawId}/arrivals?${params}`,
     );
     if (!Array.isArray(data.arrivals)) throw new Error("malformed arrivals response");
-    return data.arrivals.map((d) => normalizeDeparture(d, inst));
+    const dataAsOf = upstreamDataAsOf(data.realtimeDataUpdatedAt);
+    return {
+      departures: data.arrivals.map((d) => normalizeDeparture(d, inst)),
+      ...(dataAsOf ? { dataAsOf } : {}),
+    };
   } catch {
     // A failed board must not read as "no departures"; callers decide how to degrade.
     throw new Error("HAFAS timetable unavailable");

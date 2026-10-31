@@ -39,10 +39,12 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await dbVendo.getStop(id));
     },
     async getDepartures(id, min) {
-      return wrapRT(await dbVendo.getDepartures(id, min));
+      const board = await dbVendo.getDepartures(id, min);
+      return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async getArrivals(id, min) {
-      return wrapRT(await dbVendo.getArrivals(id, min));
+      const board = await dbVendo.getArrivals(id, min);
+      return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async searchStopsByName(q, limit, context) {
       return wrap(await dbVendo.searchByName(q, limit ?? 10, context?.signal));

@@ -41,10 +41,12 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await hafas.getStop(dbInst, stopId));
     },
     async getDepartures(stopId, minutes) {
-      return wrapRT(await hafas.getDepartures(dbInst, stopId, minutes));
+      const board = await hafas.getDepartures(dbInst, stopId, minutes);
+      return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async getArrivals(stopId, minutes) {
-      return wrapRT(await hafas.getArrivals(dbInst, stopId, minutes));
+      const board = await hafas.getArrivals(dbInst, stopId, minutes);
+      return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async searchStopsByName(query, limit, context) {
       return wrap(await hafas.searchByName(dbInst, query, limit ?? 10, context?.signal));

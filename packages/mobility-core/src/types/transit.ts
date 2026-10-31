@@ -792,6 +792,15 @@ export interface MergedRoute extends TransitRoute {
   hintStopId?: string;
 }
 
+/**
+ * A stop's departures or arrivals, with the time their realtime data was last
+ * updated upstream when the source states one (see `Freshness.dataAsOf`).
+ */
+export interface DepartureBoard {
+  departures: Departure[];
+  dataAsOf?: string;
+}
+
 /** A departure merged across multiple providers/stops. */
 export interface MergedDeparture extends Departure {
   providers: string[];

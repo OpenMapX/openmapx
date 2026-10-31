@@ -5,6 +5,7 @@ import {
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
   GeoJSONLineString,
@@ -305,8 +306,15 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const deps = (result as any).departures ?? result;
       if (!Array.isArray(deps)) throw new Error("malformed departures response");
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return deps.map((d: any) => normalizeDeparture(d, entry));
+      // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+      );
+      return {
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
+        departures: deps.map((d: any) => normalizeDeparture(d, entry)),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      };
     } catch {
       // A failed board must not read as "no departures".
       throw new Error("HAFAS timetable unavailable");
@@ -327,8 +335,14 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const arrs = (result as any).arrivals ?? result;
       if (!Array.isArray(arrs)) throw new Error("malformed arrivals response");
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return arrs.map((d: any) => normalizeDeparture(d, entry));
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+      );
+      return {
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
+        departures: arrs.map((d: any) => normalizeDeparture(d, entry)),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      };
     } catch {
       // A failed board must not read as "no departures".
       throw new Error("HAFAS timetable unavailable");

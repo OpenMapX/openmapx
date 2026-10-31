@@ -191,7 +191,7 @@ describe("getDepartures", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "vbb:900000009102", 30);
+    const { departures: deps } = await getDepartures(vbb, "vbb:900000009102", 30);
 
     expect(deps).toHaveLength(1);
     expect(deps[0].tripId).toBe("vbb:trip1");
@@ -239,7 +239,7 @@ describe("getDepartures", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
+    const { departures: deps } = await getDepartures(vbb, "stop1", 30);
 
     expect(deps[0].delaySeconds).toBe(120);
     // expectedAt should be scheduledAt + 120 seconds
@@ -271,7 +271,7 @@ describe("getArrivals", () => {
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db-hafas:8000105", 60);
+    const { departures: arrivals } = await getArrivals(db, "db-hafas:8000105", 60);
 
     expect(arrivals).toHaveLength(1);
     expect(arrivals[0].tripId).toBe("db-hafas:trip-arr");
@@ -854,7 +854,7 @@ describe("getDepartures edge cases", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
+    const { departures: deps } = await getDepartures(vbb, "stop1", 30);
 
     expect(deps[0].delaySeconds).toBeUndefined();
     expect(deps[0].expectedAt).toBeUndefined();
@@ -882,7 +882,7 @@ describe("getDepartures edge cases", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
+    const { departures: deps } = await getDepartures(vbb, "stop1", 30);
 
     expect(deps[0].remarks).toHaveLength(2);
     expect(deps[0].remarks?.[0].type).toBe("warning");
@@ -906,7 +906,7 @@ describe("getDepartures edge cases", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
+    const { departures: deps } = await getDepartures(vbb, "stop1", 30);
 
     expect(deps[0].route.color).toBe("FF0000");
   });
@@ -928,7 +928,7 @@ describe("getDepartures edge cases", () => {
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
+    const { departures: deps } = await getDepartures(vbb, "stop1", 30);
 
     expect(deps[0].route.shortName).toBe("12345");
     expect(deps[0].route.id).toContain("12345");
@@ -1130,5 +1130,28 @@ describe("planJourney edge cases", () => {
     expect(leg.to.stopId).toBeUndefined();
     expect(leg.route?.longName).toBe("S-Bahn");
     expect(leg.route?.color).toBe("00FF00");
+  });
+});
+
+describe("HAFAS departure board age", () => {
+  it("reads the response's realtime update time and leaves it unknown when absent", async () => {
+    const departure = {
+      tripId: "trip1",
+      direction: "Hamburg Hbf",
+      plannedWhen: "2026-03-10T10:00:00+01:00",
+      line: { id: "re1", name: "RE 1", product: "regional" },
+    };
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ departures: [departure], realtimeDataUpdatedAt: 1773133170 }),
+    );
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ departures: [departure], realtimeDataUpdatedAt: null }),
+    );
+
+    const { HAFAS_INSTANCES, getDepartures } = await loadModule();
+    const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
+
+    expect((await getDepartures(vbb, "vbb:1", 30)).dataAsOf).toBe("2026-03-10T08:59:30.000Z");
+    expect((await getDepartures(vbb, "vbb:1", 30)).dataAsOf).toBeUndefined();
   });
 });

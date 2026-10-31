@@ -80,9 +80,14 @@ alerts and facilities that cannot be loaded are left out rather than kept as
 can show a different time, including an early departure. Missing freshness
 information does not establish that a prediction is current.
 
-**Times may have changed** warns about known outdated predictions. Some sources,
-including current MOTIS/Transitous timetable wrappers, do not supply an upstream
-publication time, so the absence of this warning does not prove freshness.
+**Times may have changed** warns about known outdated predictions: the source's
+realtime data was more than 90 seconds old when OpenMapX fetched it. Only some
+sources state when they last updated their realtime data: HAFAS-based regional
+sources and Transport for London do. MOTIS/Transitous, Entur, OTP-based sources,
+the Swiss timetable and DB's own interface do not, and a board that combines
+sources only has an age when every realtime source on it states one. The absence
+of this warning therefore does not prove freshness.
+
 Platform changes show planned and current values when available; cancellations
 retain a clear label and struck-through times.
 

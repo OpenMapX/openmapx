@@ -40,8 +40,15 @@ export interface TransitProviderScaffold {
   readonly attribution: ManifestAttributionStore;
   /** Tag a result with manifest attribution and a non-realtime freshness stamp. */
   wrap<T>(data: T, sourceIds?: readonly string[]): MobilityResult<T>;
-  /** Tag a result with manifest attribution and a realtime freshness stamp. */
-  wrapRT<T>(data: T, sourceIds?: readonly string[]): MobilityResult<T>;
+  /**
+   * Tag a result with manifest attribution and a realtime freshness stamp.
+   * `dataAsOf` is when the upstream last updated the realtime data, when it says.
+   */
+  wrapRT<T>(
+    data: T,
+    sourceIds?: readonly string[],
+    options?: { dataAsOf?: string },
+  ): MobilityResult<T>;
   /**
    * Populate the attribution store from the integration manifest. Call once at
    * the top of `setup(ctx)`; equivalent to the repeated
@@ -61,14 +68,17 @@ export function defineTransitProvider(): TransitProviderScaffold {
     const captured = captureTransitContributors(data, receipts);
     return withAttribution(captured, transitDataContributors(captured), freshnessNow());
   };
-  const wrapRT = <T>(data: T, sourceIds?: readonly string[]): MobilityResult<T> => {
+  const wrapRT = <T>(
+    data: T,
+    sourceIds?: readonly string[],
+    options?: { dataAsOf?: string },
+  ): MobilityResult<T> => {
     const receipts = selected(sourceIds);
     const captured = captureTransitContributors(data, receipts);
-    return withAttribution(
-      captured,
-      transitDataContributors(captured),
-      freshnessNow({ hasRealtimeData: true }),
-    );
+    return withAttribution(captured, transitDataContributors(captured), {
+      ...freshnessNow({ hasRealtimeData: true }),
+      ...(options?.dataAsOf ? { dataAsOf: options.dataAsOf } : {}),
+    });
   };
 
   return {
