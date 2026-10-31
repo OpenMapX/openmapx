@@ -62,6 +62,7 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // Car Sharing
   "car-sharing": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   "de-cambio": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
+  "be-cambio": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   "de-stadtteilauto": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   "de-nw-wuppertal": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   "de-nw-bielefeld": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
