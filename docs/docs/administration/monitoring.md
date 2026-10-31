@@ -332,6 +332,8 @@ Open Data Manager's **Logs** drawer or run
 | `conditions classification failed, writing no overrides`             | Classification failure; do not infer closures from live-speed success                                                             |
 | `span cache save failed`                                             | Persistence permissions; a restart will lose unsaved cache state                                                                  |
 | `skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`      | Rebuild the graph-associated traffic/map artifacts through the normal maintenance workflow                                        |
+| `Traffic worker paused for Valhalla maintenance`                     | Graph maintenance is running; Valhalla and the traffic worker resume when it ends                                                 |
+| `Traffic worker still paused for Valhalla maintenance job`           | The maintenance is no longer running: see [Graph maintenance pauses](#graph-maintenance-pauses)                                   |
 
 ### Why a closure is not applied
 
@@ -368,6 +370,45 @@ start: restored`, or `changed`, `invalid` or `unverifiable` before a rebuild),
 `null` when classification ran.
 `endingBeforeRenewal` counts conditions left out because they end before the
 next lease renewal.
+
+### Graph maintenance pauses
+
+Rebuilding the traffic extract or applying predicted traffic is graph
+maintenance. The operations agent stops Valhalla, writes
+`infra/docker/data/valhalla/osm-pbf/.traffic-maintenance.json`, runs the
+Valhalla tools and starts Valhalla again. While that fence file exists, Data
+Manager keeps its service stopped (its health check fails) and logs
+`Traffic worker paused for Valhalla maintenance`. A rebuild takes a few
+minutes.
+
+If the agent itself is stopped during maintenance (an update recreating it, a
+crash or a reboot), its next start releases the fence and logs
+`Released the Valhalla traffic maintenance fence of interrupted job`. Data
+Manager then requests a fresh maintenance, which starts Valhalla again.
+
+Maintenance that failed on its own keeps the fence, and Valhalla stays stopped.
+The agent's next start logs `Kept the Valhalla traffic maintenance fence` and
+Data Manager repeats `Traffic worker still paused` every 30 minutes. Car,
+walking and cycling routes served by Valhalla fail or fall back to another
+router meanwhile. To recover:
+
+1. Find the failure in `pnpm openmapx services logs ops-agent` (the
+   `valhalla.traffic.maintain` entry) and repair its cause, such as a full disk
+   or a damaged graph.
+2. Move the fence and the generation manifests aside, so Data Manager requests
+   a full rebuild:
+
+   ```bash
+   cd infra/docker/data/valhalla/osm-pbf
+   mv .traffic-maintenance.json .traffic-maintenance.failed.json
+   for f in traffic-generations.json traffic-generations.unverified.json; do
+     [ -e "$f" ] && mv "$f" "$f.withdrawn"
+   done
+   ```
+
+3. Within seconds Data Manager logs `Traffic worker resumed` and
+   `traffic-extract: building`. Valhalla is healthy again once the agent logs
+   the `valhalla.traffic.maintain` result `success`.
 
 ### Closures on a planned trip
 

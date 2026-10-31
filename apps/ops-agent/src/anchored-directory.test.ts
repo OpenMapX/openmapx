@@ -142,3 +142,36 @@ describe.runIf(process.platform === "linux")("anchored directory descriptors", (
     ).toBe("{}\n");
   });
 });
+
+describe.each(modes)("anchored directory reads (%s)", (_mode, descriptorAnchorRoot) => {
+  it("reads a bounded regular file and reports an absent one", () => {
+    const { data, shared } = fixture();
+    writeFileSync(join(shared, ".traffic-maintenance.json"), "{}\n");
+    writeFileSync(join(shared, "large.json"), "x".repeat(65));
+    const directory = openAnchoredDirectory(data, ["valhalla", "osm-pbf"], {
+      descriptorAnchorRoot,
+    });
+    try {
+      expect(directory.readFile(".traffic-maintenance.json", 64)).toBe("{}\n");
+      expect(directory.readFile("absent.json", 64)).toBeNull();
+      expect(() => directory.readFile("large.json", 64)).toThrow("size limit");
+    } finally {
+      directory.close();
+    }
+  });
+
+  it("refuses a symlink or directory instead of reading through it", () => {
+    const { data, shared, sentinel } = fixture();
+    symlinkSync(sentinel, join(shared, ".traffic-maintenance.json"));
+    mkdirSync(join(shared, "nested"));
+    const directory = openAnchoredDirectory(data, ["valhalla", "osm-pbf"], {
+      descriptorAnchorRoot,
+    });
+    try {
+      expect(() => directory.readFile(".traffic-maintenance.json", 64)).toThrow();
+      expect(() => directory.readFile("nested", 64)).toThrow();
+    } finally {
+      directory.close();
+    }
+  });
+});

@@ -14,7 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
-import { createDockerRuntime, runContainedLogProcess, runContainedProcess } from "./docker-runtime";
+import {
+  createDockerRuntime,
+  recoverInterruptedTrafficMaintenance,
+  runContainedLogProcess,
+  runContainedProcess,
+} from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
 
 const context = () => ({
@@ -2027,4 +2032,210 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     },
     12_000,
   );
+});
+
+describe("recoverInterruptedTrafficMaintenance", () => {
+  const fingerprint = "b".repeat(64);
+  const fence = `${JSON.stringify({
+    schemaVersion: 1,
+    operationId: fingerprint,
+    plan: "rebuild-extract",
+    startedAt: "2026-10-30T15:44:08.055Z",
+  })}\n`;
+  const job = (
+    state: "failed" | "succeeded",
+    errorClass: "recovery_required" | "runtime" | undefined,
+    submittedAt = "2026-10-30T15:44:08.048Z",
+  ) => ({
+    operation: { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" } as OpsOperation,
+    fingerprint,
+    state,
+    ...(errorClass ? { errorClass } : {}),
+    submittedAt,
+  });
+  const withDataRoot = async (
+    files: Record<string, string>,
+    body: (dataRoot: string, shared: string) => Promise<void>,
+  ) => {
+    const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-fence-recovery-"));
+    const shared = join(dataRoot, "valhalla", "osm-pbf");
+    mkdirSync(shared, { recursive: true });
+    for (const [name, contents] of Object.entries(files)) {
+      writeFileSync(join(shared, name), contents);
+    }
+    try {
+      await body(dataRoot, shared);
+    } finally {
+      rmSync(dataRoot, { recursive: true, force: true });
+    }
+  };
+  const docker =
+    (calls: string[][], answers: { remaining?: string; running?: string } = {}) =>
+    async (_file: string, args: readonly string[]) => {
+      calls.push([...args]);
+      if (args[0] === "ps") return { stdout: answers.remaining ?? "", stderr: "" };
+      if (args[0] === "inspect") return { stdout: answers.running ?? "false\n", stderr: "" };
+      return { stdout: "", stderr: "" };
+    };
+
+  it("releases the fence of a job the agent was stopped in", async () => {
+    await withDataRoot(
+      {
+        ".traffic-maintenance.json": fence,
+        "traffic-generations.json": "{}\n",
+        "traffic-generations.unverified.json": "{}\n",
+      },
+      async (dataRoot, shared) => {
+        const calls: string[][] = [];
+        await expect(
+          recoverInterruptedTrafficMaintenance({
+            trafficDataRoot: dataRoot,
+            journalRecords: [
+              job("succeeded", undefined, "2026-10-29T05:00:00.000Z"),
+              job("failed", "recovery_required"),
+            ],
+            execFile: docker(calls),
+            descriptorAnchorRoot: null,
+          }),
+        ).resolves.toEqual({
+          state: "released",
+          operationId: fingerprint,
+          plan: "rebuild-extract",
+        });
+
+        expect(calls).toEqual([
+          ["rm", "-f", `openmapx-valhalla-maint-${"b".repeat(16)}`],
+          [
+            "ps",
+            "-a",
+            "--filter",
+            `name=^/openmapx-valhalla-maint-${"b".repeat(16)}$`,
+            "--format",
+            "{{.Names}}",
+          ],
+          ["stop", "--time", "1", "docker-valhalla-1"],
+          ["inspect", "--format", "{{.State.Running}}", "docker-valhalla-1"],
+        ]);
+        expect(calls.some((call) => call[0] === "start")).toBe(false);
+        expect(readdirSync(shared).sort()).toEqual([
+          `.traffic-maintenance.interrupted-${"b".repeat(16)}.json`,
+        ]);
+        expect(
+          readFileSync(
+            join(shared, `.traffic-maintenance.interrupted-${"b".repeat(16)}.json`),
+            "utf8",
+          ),
+        ).toBe(fence);
+      },
+    );
+  });
+
+  it("keeps the fence of a job that failed on its own", async () => {
+    await withDataRoot(
+      { ".traffic-maintenance.json": fence, "traffic-generations.json": "{}\n" },
+      async (dataRoot, shared) => {
+        const calls: string[][] = [];
+        await expect(
+          recoverInterruptedTrafficMaintenance({
+            trafficDataRoot: dataRoot,
+            journalRecords: [
+              job("failed", "recovery_required", "2026-10-28T05:00:00.000Z"),
+              job("failed", "runtime"),
+            ],
+            execFile: docker(calls),
+            descriptorAnchorRoot: null,
+          }),
+        ).resolves.toEqual({ state: "kept", reason: "its job failed on its own" });
+        expect(calls).toEqual([]);
+        expect(existsSync(join(shared, ".traffic-maintenance.json"))).toBe(true);
+        expect(existsSync(join(shared, "traffic-generations.json"))).toBe(true);
+      },
+    );
+  });
+
+  it("keeps a fence written long after the interrupted job it shares a fingerprint with", async () => {
+    await withDataRoot({ ".traffic-maintenance.json": fence }, async (dataRoot, shared) => {
+      const calls: string[][] = [];
+      await expect(
+        recoverInterruptedTrafficMaintenance({
+          trafficDataRoot: dataRoot,
+          // The fence's own (failed, since pruned) job is gone; an older
+          // interrupted rebuild with the same fingerprint is retained.
+          journalRecords: [job("failed", "recovery_required", "2026-10-20T05:00:00.000Z")],
+          execFile: docker(calls),
+          descriptorAnchorRoot: null,
+        }),
+      ).resolves.toEqual({ state: "kept", reason: "the journal holds no job for the fence" });
+      expect(calls).toEqual([]);
+      expect(existsSync(join(shared, ".traffic-maintenance.json"))).toBe(true);
+    });
+  });
+
+  it("keeps the fence when the journal holds no job for it", async () => {
+    await withDataRoot({ ".traffic-maintenance.json": fence }, async (dataRoot, shared) => {
+      await expect(
+        recoverInterruptedTrafficMaintenance({
+          trafficDataRoot: dataRoot,
+          journalRecords: [],
+          execFile: docker([]),
+          descriptorAnchorRoot: null,
+        }),
+      ).resolves.toEqual({ state: "kept", reason: "the journal holds no job for the fence" });
+      expect(existsSync(join(shared, ".traffic-maintenance.json"))).toBe(true);
+    });
+  });
+
+  it.each([
+    ["its maintenance container survives removal", { remaining: "openmapx-valhalla-maint-x\n" }],
+    ["Valhalla still runs", { running: "true\n" }],
+  ])("keeps the fence when %s", async (_case, answers) => {
+    await withDataRoot(
+      { ".traffic-maintenance.json": fence, "traffic-generations.json": "{}\n" },
+      async (dataRoot, shared) => {
+        await expect(
+          recoverInterruptedTrafficMaintenance({
+            trafficDataRoot: dataRoot,
+            journalRecords: [job("failed", "recovery_required")],
+            execFile: docker([], answers),
+            descriptorAnchorRoot: null,
+          }),
+        ).resolves.toMatchObject({ state: "kept" });
+        expect(existsSync(join(shared, ".traffic-maintenance.json"))).toBe(true);
+        expect(existsSync(join(shared, "traffic-generations.json"))).toBe(true);
+      },
+    );
+  });
+
+  it("does nothing without a fence", async () => {
+    await withDataRoot({ "traffic-generations.json": "{}\n" }, async (dataRoot, shared) => {
+      const calls: string[][] = [];
+      await expect(
+        recoverInterruptedTrafficMaintenance({
+          trafficDataRoot: dataRoot,
+          journalRecords: [job("failed", "recovery_required")],
+          execFile: docker(calls),
+          descriptorAnchorRoot: null,
+        }),
+      ).resolves.toEqual({ state: "none" });
+      expect(calls).toEqual([]);
+      expect(existsSync(join(shared, "traffic-generations.json"))).toBe(true);
+    });
+  });
+
+  it("refuses a fence replaced by a symlink", async () => {
+    await withDataRoot({}, async (dataRoot, shared) => {
+      const outside = join(dataRoot, "outside.json");
+      writeFileSync(outside, fence);
+      symlinkSync(outside, join(shared, ".traffic-maintenance.json"));
+      await expect(
+        recoverInterruptedTrafficMaintenance({
+          trafficDataRoot: dataRoot,
+          journalRecords: [job("failed", "recovery_required")],
+          execFile: docker([]),
+          descriptorAnchorRoot: null,
+        }),
+      ).rejects.toThrow();
+      expect(lstatSync(join(shared, ".traffic-maintenance.json")).isSymbolicLink()).toBe(true);
+    });
+  });
 });

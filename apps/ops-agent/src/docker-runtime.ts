@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
+  OPS_KIND_POLICIES,
   OPS_MAX_EVENT_MESSAGE_BYTES,
   OPS_MAX_FOLLOW_LOG_EVENTS,
   type OpsResultFor,
@@ -14,6 +15,7 @@ import {
   services,
 } from "@openmapx/core/server";
 import { openAnchoredDirectory } from "./anchored-directory";
+import type { PersistedOpsJob } from "./journal";
 import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
 const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
@@ -324,6 +326,143 @@ function parseStackStatus(stdout: string): OpsResultFor<"stack.status"> {
       return { serviceId: String(item.Service ?? item.Name ?? "unknown"), state };
     }),
   };
+}
+
+const TRAFFIC_MAINTENANCE_FENCE_MAX_BYTES = 4096;
+// A fence written later than its job's deadline after the job's submission is
+// not that job's.
+const TRAFFIC_MAINTENANCE_JOB_WINDOW_MS = OPS_KIND_POLICIES["valhalla.traffic.maintain"].timeoutMs;
+
+export interface TrafficMaintenanceRecoveryOptions {
+  /** Host-side data root shared with data-manager and Valhalla. */
+  trafficDataRoot: string;
+  /** The job journal as opened, which has already failed every interrupted job. */
+  journalRecords: readonly Pick<
+    PersistedOpsJob,
+    "operation" | "fingerprint" | "state" | "errorClass" | "submittedAt"
+  >[];
+  execFile?: ExecFile;
+  descriptorAnchorRoot?: string | null;
+}
+
+export type TrafficMaintenanceRecovery =
+  | { state: "none" }
+  | { state: "released"; operationId: string; plan: string }
+  | { state: "kept"; reason: string };
+
+/**
+ * Releases the durable maintenance fence a `valhalla.traffic.maintain` job
+ * left behind when the agent itself was stopped mid-job (an update recreating
+ * it, a crash, a reboot). Nothing else would: the fence keeps data-manager's
+ * worker quiesced, and only that worker asks for the next maintenance.
+ *
+ * Only an interrupted job is released. A job that failed on its own keeps its
+ * fence for an operator, since retrying a broken graph would only fail again.
+ * The fence names its job by fingerprint; the latest maintenance job with that
+ * fingerprint must have failed as `recovery_required`. Before releasing, the
+ * job's tool container must be gone and Valhalla stopped. The generation
+ * manifests are withdrawn, so the next inspection reports `not_ready` and the
+ * worker requests a fresh, coordinated maintenance. The fence is kept beside
+ * them as `.traffic-maintenance.interrupted-<id>.json`.
+ */
+export async function recoverInterruptedTrafficMaintenance(
+  options: TrafficMaintenanceRecoveryOptions,
+): Promise<TrafficMaintenanceRecovery> {
+  const execFile: ExecFile =
+    options.execFile ??
+    ((file, args, execOptions) =>
+      runContainedProcess(file, args, { ...execOptions, killGraceMs: KILL_GRACE_MS }));
+  const run = (args: readonly string[], timeout: number) =>
+    execFile("docker", args, {
+      signal: AbortSignal.timeout(timeout),
+      timeout,
+      maxBuffer: MAX_OUTPUT_BYTES,
+    });
+
+  if (!existsSync(join(options.trafficDataRoot, "valhalla", "osm-pbf"))) return { state: "none" };
+  const shared = openAnchoredDirectory(options.trafficDataRoot, ["valhalla", "osm-pbf"], {
+    ...(options.descriptorAnchorRoot !== undefined
+      ? { descriptorAnchorRoot: options.descriptorAnchorRoot }
+      : {}),
+  });
+  try {
+    const raw = shared.readFile(TRAFFIC_MAINTENANCE_FENCE, TRAFFIC_MAINTENANCE_FENCE_MAX_BYTES);
+    if (raw === null) return { state: "none" };
+    let fence: { operationId?: unknown; plan?: unknown; startedAt?: unknown };
+    try {
+      fence = JSON.parse(raw) as { operationId?: unknown; plan?: unknown; startedAt?: unknown };
+    } catch {
+      return { state: "kept", reason: "the fence is not readable" };
+    }
+    const operationId = fence.operationId;
+    if (typeof operationId !== "string" || !/^[0-9a-f]{64}$/.test(operationId)) {
+      return { state: "kept", reason: "the fence names no maintenance job" };
+    }
+    const job = options.journalRecords
+      .filter(
+        (record) =>
+          record.operation.kind === "valhalla.traffic.maintain" &&
+          record.fingerprint === operationId,
+      )
+      .sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
+    if (!job) return { state: "kept", reason: "the journal holds no job for the fence" };
+    // Every rebuild shares one fingerprint, and only interrupted jobs outlive
+    // the journal's retention: the fence must also have been written while
+    // this job could run, or it belongs to a later job already pruned.
+    const fenceStartedAt = typeof fence.startedAt === "string" ? Date.parse(fence.startedAt) : NaN;
+    const submittedAt = Date.parse(job.submittedAt);
+    if (
+      !Number.isFinite(fenceStartedAt) ||
+      fenceStartedAt < submittedAt ||
+      fenceStartedAt > submittedAt + TRAFFIC_MAINTENANCE_JOB_WINDOW_MS
+    ) {
+      return { state: "kept", reason: "the journal holds no job for the fence" };
+    }
+    if (job.state !== "failed" || job.errorClass !== "recovery_required") {
+      return {
+        state: "kept",
+        reason: `its job ${job.state === "failed" ? "failed on its own" : `is ${job.state}`}`,
+      };
+    }
+
+    const maintenanceContainer = `openmapx-valhalla-maint-${operationId.slice(0, 16)}`;
+    await run(["rm", "-f", maintenanceContainer], 30_000).catch(() => undefined);
+    const remaining = await run(
+      ["ps", "-a", "--filter", `name=^/${maintenanceContainer}$`, "--format", "{{.Names}}"],
+      10_000,
+    ).catch(() => null);
+    if (remaining?.stdout.trim() !== "") {
+      return { state: "kept", reason: "its maintenance container could not be removed" };
+    }
+    await run(["stop", "--time", "1", VALHALLA_CONTAINER], 30_000).catch(() => undefined);
+    const serving = await run(
+      ["inspect", "--format", "{{.State.Running}}", VALHALLA_CONTAINER],
+      10_000,
+    ).catch(() => null);
+    if (serving?.stdout.trim() !== "false") {
+      return { state: "kept", reason: "Valhalla could not be confirmed stopped" };
+    }
+
+    shared.replaceFile(
+      `.traffic-maintenance.interrupted-${operationId.slice(0, 16)}.json`,
+      raw,
+      0o644,
+    );
+    shared.removeFile(TRAFFIC_GENERATIONS_MANIFEST);
+    shared.removeFile(TRAFFIC_GENERATIONS_UNVERIFIED);
+    shared.removeFile(TRAFFIC_MAINTENANCE_FENCE);
+    return {
+      state: "released",
+      operationId,
+      // Written where data-manager can write too: only a plan-shaped value is echoed.
+      plan:
+        typeof fence.plan === "string" && /^[a-z][a-z-]{0,63}$/.test(fence.plan)
+          ? fence.plan
+          : "unknown",
+    };
+  } finally {
+    shared.close();
+  }
 }
 
 export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
