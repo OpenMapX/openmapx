@@ -71,6 +71,31 @@ describe("privacy preservation", () => {
     expect(query.params).toEqual(["admin-audit-attribution"]);
   });
 
+  it("also keeps rows through the statuses a caller names", () => {
+    const query = dialect.sqlToQuery(
+      preservationAllowsDeletion({
+        registrationId: "data-manager-trigger-attribution",
+        candidateTimestamp: sql.identifier("started_at"),
+        subjectIds: [sql.identifier("subject")],
+        blockingStatuses: ["held", "action_required"],
+      }),
+    );
+
+    expect(query.sql).toContain("preservation.status in ('held', 'action_required')");
+    expect(query.params).toEqual(["data-manager-trigger-attribution"]);
+  });
+
+  it("refuses a guard that no hold status could block", () => {
+    expect(() =>
+      preservationAllowsDeletion({
+        registrationId: "data-manager-trigger-attribution",
+        candidateTimestamp: sql.identifier("started_at"),
+        subjectIds: [sql.identifier("subject")],
+        blockingStatuses: [],
+      }),
+    ).toThrow("requires a blocking hold status");
+  });
+
   it("takes the transaction lock in a separate statement before retention work", async () => {
     const order: string[] = [];
     const transaction = {

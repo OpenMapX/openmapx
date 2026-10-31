@@ -74,7 +74,8 @@ export function parseDataManagerActor(triggeredBy: string | null): {
     return { userId: null, label: "Scheduled" };
   }
   if (triggeredBy === "bootstrap") return { userId: null, label: "Bootstrap" };
-  if (triggeredBy === "data-manager-auto-bump") {
+  // The data-manager stores its scheduled runs as `cron:<scheduler>`.
+  if (triggeredBy === "data-manager-auto-bump" || triggeredBy === "cron:data-manager-auto-bump") {
     return { userId: null, label: "Automatic version bump" };
   }
 

@@ -79,6 +79,7 @@ import {
   pruneAppLogs,
   pruneAuditLog,
   pruneCompletedJobs,
+  pruneDataManagerJobs,
   pruneExpiredVerifications,
 } from "./services/activity-retention";
 import {
@@ -679,6 +680,9 @@ const runRetention = () => {
   );
   void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Admin job prune failed"),
+  );
+  void pruneDataManagerJobs(JOB_RETENTION_DAYS).catch((err) =>
+    server.log.warn(err, "Data-manager job prune failed"),
   );
   void pruneAppLogs(APP_LOG_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Application log prune failed"),

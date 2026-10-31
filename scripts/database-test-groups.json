@@ -19,6 +19,7 @@
     "apps/api/src/routes/__tests__/reviews-keypair-postgres.test.ts",
     "apps/api/src/routes/__tests__/saved-import-postgres.test.ts",
     "apps/api/src/routes/__tests__/shares-postgres.test.ts",
+    "apps/api/src/services/__tests__/data-manager-job-retention-postgres.test.ts",
     "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
     "apps/api/src/services/__tests__/health-history.integration.test.ts",
     "apps/api/src/services/capability-bindings.test.ts",

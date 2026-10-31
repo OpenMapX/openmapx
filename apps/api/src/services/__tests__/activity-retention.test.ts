@@ -12,6 +12,13 @@ vi.mock("../../db/schema", () => ({
   },
   adminJob: { id: "jobId", createdBy: "jobCreatedBy", finishedAt: "jobFinishedAt" },
   appLog: { id: "appLogId", metadata: "appLogMetadata", createdAt: "appLogCreatedAt" },
+  dataManagerJobs: {
+    id: "dataManagerJobId",
+    kind: "dataManagerJobKind",
+    startedAt: "dataManagerJobStartedAt",
+    finishedAt: "dataManagerJobFinishedAt",
+    triggeredBy: "dataManagerJobTriggeredBy",
+  },
   verification: { id: "verificationId", expiresAt: "verificationExpiresAt" },
 }));
 vi.mock("drizzle-orm", async (importOriginal) => {
@@ -25,6 +32,7 @@ const {
   pruneAppLogs,
   pruneAuditLog,
   pruneCompletedJobs,
+  pruneDataManagerJobs,
   pruneExpiredVerifications,
 } = await import("../activity-retention.js");
 
@@ -98,6 +106,24 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
     expect(result).toBe(1);
     expect(lt).toHaveBeenCalledWith(expect.anything(), NOW);
   });
+});
+
+// Its deletion against PostgreSQL is data-manager-job-retention-postgres.test.ts's.
+describe("pruneDataManagerJobs retention guard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "days = %s is a no-op guard",
+    async (days) => {
+      expect(await pruneDataManagerJobs(days)).toBe(0);
+      expect(dbMock.db.delete).not.toHaveBeenCalled();
+      expect(console.warn).toHaveBeenCalled();
+    },
+  );
 });
 
 describe("parseRequiredRetentionDays", () => {
