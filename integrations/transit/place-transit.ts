@@ -13,6 +13,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
+import { platformChanged } from "@openmapx/mobility-core/platform";
 import { TTL as TTL_POLICY } from "@openmapx/mobility-core/policy";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type {
@@ -157,6 +158,8 @@ interface FoldedDeparture {
   headsign: string;
   /** The planned platform, else the current one. */
   platform?: string;
+  /** The departure as its source listed it. */
+  departure: Departure;
 }
 
 /**
@@ -173,6 +176,96 @@ function repeats(part: FoldedDeparture, dep: Departure): boolean {
     headsignsCompatible(part.headsign, dep.headsign) &&
     (!part.platform || !platform || part.platform === platform)
   );
+}
+
+/**
+ * The value `stated` by the most sources, counting each source once. A tie goes to
+ * the value more sources state by `tieBreak`, then to the first source's.
+ */
+function mostStated(
+  parts: readonly FoldedDeparture[],
+  stated: (departure: Departure) => string | undefined,
+  tieBreak?: (value: string) => number,
+): { value: string; departure: Departure } | undefined {
+  const sources = new Map<string, Set<string>>();
+  for (const { departure, provider } of parts) {
+    const value = stated(departure);
+    if (!value) continue;
+    const stating = sources.get(value) ?? new Set<string>();
+    stating.add(provider);
+    sources.set(value, stating);
+  }
+  let best: { value: string; departure: Departure; score: [number, number] } | undefined;
+  for (const { departure } of parts) {
+    const value = stated(departure);
+    if (!value) continue;
+    const score: [number, number] = [sources.get(value)?.size ?? 0, tieBreak?.(value) ?? 0];
+    if (
+      !best ||
+      score[0] > best.score[0] ||
+      (score[0] === best.score[0] && score[1] > best.score[1])
+    )
+      best = { value, departure, score };
+  }
+  return best && { value: best.value, departure: best.departure };
+}
+
+/**
+ * Set the platform a merged row shows. Sources number platforms differently:
+ * at Köln Messe/Deutz, Transitous passes on DELFI's internal numbers ("85")
+ * while the HAFAS sources give the track riders see ("2"), and for some trains
+ * Transitous pairs DELFI's planned number with the real current track.
+ *
+ * The planned platform is the one the most sources plan. A source's platform
+ * change counts when it moves the departure off both its own plan and that
+ * one, because a source that only knows the plan can't report it. Otherwise
+ * the current platform is the one the most sources give. A tie keeps the
+ * first source's.
+ */
+function choosePlatform(row: MergedDeparture, parts: readonly FoldedDeparture[]): void {
+  const stated = parts.filter((part) => part.departure.platform);
+  if (stated.length === 0) return;
+  const statingCurrent = (value: string) =>
+    new Set(stated.filter((part) => part.departure.platform === value).map((p) => p.provider)).size;
+  const plan = mostStated(stated, (d) => d.scheduledPlatform ?? d.platform, statingCurrent);
+  const changed = stated.filter(
+    ({ departure: d }) =>
+      platformChanged(d.scheduledPlatform, d.platform) && platformChanged(plan?.value, d.platform),
+  );
+  const current = mostStated(changed.length > 0 ? changed : stated, (d) => d.platform);
+  if (!current) return;
+  // Without a change, keep a scheduled platform only where a source states it.
+  const scheduled =
+    changed.length > 0
+      ? plan
+      : stated
+          .map(({ departure }) => departure)
+          .filter((d) => d.scheduledPlatform === current.value)
+          .map((departure) => ({ value: current.value, departure }))[0];
+  if (row.platform !== current.value) {
+    retainFieldReceipt(row, "platform", contributorsForField(current.departure, "platform"));
+    row.platform = current.value;
+    row.contributors = snapshotContributors(
+      row.contributors ?? [],
+      current.departure.contributors ?? [],
+    );
+  }
+  if (row.scheduledPlatform === scheduled?.value) return;
+  if (scheduled) {
+    retainFieldReceipt(
+      row,
+      "scheduledPlatform",
+      contributorsForField(scheduled.departure, "scheduledPlatform"),
+    );
+    row.scheduledPlatform = scheduled.value;
+    row.contributors = snapshotContributors(
+      row.contributors ?? [],
+      scheduled.departure.contributors ?? [],
+    );
+  } else {
+    retainFieldReceipt(row, "scheduledPlatform", []);
+    delete row.scheduledPlatform;
+  }
 }
 
 /** Extended Departure with optional feedTag (set by some providers like MOTIS). */
@@ -665,7 +758,8 @@ export function createPlaceTransit(
    * one row per departure.
    *
    * Each row names the stop it leaves from, and is marked when that is not the
-   * place's main stop (see {@link nameRowStops}).
+   * place's main stop (see {@link nameRowStops}), and the platform most likely
+   * right (see {@link choosePlatform}).
    *
    * Not cached — caller refetches every 30s for real-time data.
    */
@@ -756,11 +850,6 @@ export function createPlaceTransit(
         contributed = true;
         existing.delaySeconds = dep.delaySeconds;
       }
-      if (!existing.platform && dep.platform) {
-        retainFieldReceipt(existing, "platform", contributorsForField(dep, "platform"));
-        existing.platform = dep.platform;
-        contributed = true;
-      }
       if (dep.canceled && !existing.canceled) {
         retainFieldReceipt(existing, "canceled", contributorsForField(dep, "canceled"));
         existing.canceled = true;
@@ -841,6 +930,7 @@ export function createPlaceTransit(
           line: dep.route.shortName,
           headsign: dep.headsign,
           platform: dep.scheduledPlatform ?? dep.platform,
+          departure: dep,
         };
         if (!existing) {
           const entry: MergedDeparture = {
@@ -861,6 +951,7 @@ export function createPlaceTransit(
       }
     }
 
+    for (const row of rows) choosePlatform(row, folded.get(row) ?? []);
     nameRowStops(
       rows.map((row) => ({ row, stops: (folded.get(row) ?? []).map((part) => part.stop) })),
       placeName,

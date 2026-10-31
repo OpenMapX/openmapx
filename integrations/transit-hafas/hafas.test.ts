@@ -611,7 +611,8 @@ describe("getTrip", () => {
               plannedDeparture: "2026-03-10T10:06:00+01:00",
               arrival: "2026-03-10T10:05:00+01:00",
               departure: "2026-03-10T10:06:00+01:00",
-              platform: "4",
+              platform: "5",
+              plannedPlatform: "4",
               arrivalDelay: 60,
               cancelled: false,
             },
@@ -643,6 +644,9 @@ describe("getTrip", () => {
     if (!stop1) throw new Error("stop1 was undefined");
     expect(stop1.stopId).toBe("vbb:900000024101");
     expect(stop1.delaySeconds).toBe(60);
+    // A platform change keeps the planned platform beside the current one.
+    expect(stop1.platform).toBe("5");
+    expect(stop1.scheduledPlatform).toBe("4");
   });
 
   it("strips vbb: prefix before API call", async () => {

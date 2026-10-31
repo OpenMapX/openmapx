@@ -355,6 +355,7 @@ export async function getTrip(inst: HafasInstance, tripId: string): Promise<Vehi
         lat: s.stop?.location?.latitude ?? 0,
         lng: s.stop?.location?.longitude ?? 0,
         platform: s.platform ?? s.plannedPlatform ?? undefined,
+        scheduledPlatform: s.plannedPlatform ?? undefined,
         scheduledArrival: s.plannedArrival ?? undefined,
         scheduledDeparture: s.plannedDeparture ?? undefined,
         expectedArrival: s.arrival ?? undefined,

@@ -188,7 +188,10 @@ export function normalizeFptfDeparture(d: any, prefix: string): Departure {
     scheduledAt,
     expectedAt,
     delaySeconds,
-    platform: d.plannedPlatform ?? d.platform ?? undefined,
+    // hafas-client's `platform` is the current platform: the changed one when
+    // the source reports a change, else the planned one.
+    platform: d.platform ?? d.plannedPlatform ?? undefined,
+    scheduledPlatform: d.plannedPlatform ?? undefined,
     canceled: d.cancelled ?? false,
     occupancy: mapFptfLoadFactor(d.loadFactor),
     remarks: normalizeRemarks(d.remarks),

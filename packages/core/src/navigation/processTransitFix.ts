@@ -1,3 +1,4 @@
+import { platformChanged } from "@openmapx/mobility-core/platform";
 import type { TransitStep, TripItinerary } from "@openmapx/mobility-core/transit";
 import type { TransitLegCapture } from "./mobileProtocol";
 import { snapPreparedRoute } from "./routeMatcher";
@@ -416,8 +417,7 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
         const changedPlatform = capture?.stops[0];
         if (
           changedPlatform?.platform &&
-          changedPlatform.scheduledPlatform &&
-          changedPlatform.platform !== changedPlatform.scheduledPlatform
+          platformChanged(changedPlatform.scheduledPlatform, changedPlatform.platform)
         ) {
           emit({
             id: eventId(

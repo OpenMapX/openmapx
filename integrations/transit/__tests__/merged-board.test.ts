@@ -185,6 +185,85 @@ describe("merged place board", () => {
   });
 });
 
+describe("the platform a merged row shows", () => {
+  const re1 = (id: string, platform?: string, scheduledPlatform?: string) =>
+    dep(id, "RE1", "Aachen Hbf", "17:08:00", { platform, scheduledPlatform });
+  const platformOf = (rows: Departure[]) =>
+    rows.map((row) => [row.platform, row.scheduledPlatform]);
+
+  it("shows the platform most sources give over the first source's numbering", async () => {
+    // Transitous passes on DELFI's internal numbers at Köln Messe/Deutz.
+    const rows = await board({
+      "mo:central": [re1("mo:x", "85", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+      "kvb:central": [re1("kvb:x", "2", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["2", "2"]]);
+  });
+
+  it("shows a platform change one source reports", async () => {
+    const rows = await board({
+      "mo:central": [re1("mo:x", "85", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+      "kvb:central": [re1("kvb:x", "4", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["4", "2"]]);
+  });
+
+  it("takes the scheduled platform from the source whose platform it shows", async () => {
+    // Pairing "85" scheduled with "2" current would show a change that isn't one.
+    const rows = await board({
+      "mo:central": [re1("mo:x", "85", "85")],
+      "rmv:central": [re1("rmv:x", "2")],
+      "vsn:central": [re1("vsn:x", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["2", undefined]]);
+  });
+
+  it("doesn't show a change that is only one source's two numberings", async () => {
+    // Transitous can pair DELFI's planned "85" with the real current track.
+    const rows = await board({
+      "mo:central": [re1("mo:x", "2", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["2", "2"]]);
+  });
+
+  it("shows a change one source reports in its own numbering against the others' plan", async () => {
+    const rows = await board({
+      "mo:central": [re1("mo:x", "3", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["3", "2"]]);
+  });
+
+  it("doesn't show a change when a source only adds the platform's sections", async () => {
+    const rows = await board({
+      "mo:central": [re1("mo:x")],
+      "kvb:central": [re1("kvb:x", "10 A-B", "10")],
+    });
+    expect(platformOf(rows)).toEqual([["10 A-B", undefined]]);
+  });
+
+  it("counts a source once however many of its stops list the departure", async () => {
+    const rows = await board({
+      "mo:central": [re1("mo:x", "85", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+      "oebb:station": [re1("oebb:x", "2", "2")],
+      "kvb:central": [re1("kvb:x", "85", "85")],
+    });
+    expect(platformOf(rows)).toEqual([["85", "85"]]);
+  });
+
+  it("keeps the first source's platform when sources are split evenly", async () => {
+    const rows = await board({
+      "mo:central": [re1("mo:x", "85", "85")],
+      "oebb:central": [re1("oebb:x", "2", "2")],
+    });
+    expect(platformOf(rows)).toEqual([["85", "85"]]);
+  });
+});
+
 describe("place stop linking", () => {
   it("keeps a stop abbreviating the station name when another source spells it out", async () => {
     const rows = await board(
