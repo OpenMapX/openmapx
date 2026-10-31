@@ -1,7 +1,9 @@
 import { fetchJson } from "@openmapx/core";
+import { oldestDataAsOf, upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   AlertSeverity,
   Departure,
+  DepartureBoard,
   RouteStop,
   ServiceAlert,
   TransitStop,
@@ -260,9 +262,13 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
     .filter((a) => a.title);
 }
 
-export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
+/**
+ * Live arrival predictions at a stop. Each prediction carries the time TfL made
+ * it; the board's age is the oldest of them.
+ */
+export async function getDepartures(stopId: string, minutes: number): Promise<DepartureBoard> {
   const key = apiKey();
-  if (!key) return [];
+  if (!key) return { departures: [] };
 
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
@@ -273,35 +279,37 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
   );
   if (!Array.isArray(arrivals)) throw new Error("TfL timetable unavailable");
   const cutoff = minutes * 60;
-  return (
-    arrivals
-      // Filter to the requested time window
-      .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
-      // Sort ascending by arrival time
-      .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0))
-      .map(
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        (arr: any): Departure => {
-          // TfL only provides live arrival predictions — no separate scheduled time
-          const expectedAt: string =
-            arr.expectedArrival ??
-            new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
-          return {
-            tripId: arr.vehicleId ?? "",
-            route: {
-              id: `tfl:${arr.lineId ?? ""}`,
-              shortName: arr.lineName ?? arr.lineId ?? "",
-              longName: arr.lineName ?? "",
-              mode: mapTflMode(arr.modeName ?? ""),
-            },
-            headsign: arr.destinationName ?? arr.towards ?? "",
-            // TfL is real-time only; scheduledAt = expectedAt
-            scheduledAt: expectedAt,
-            expectedAt,
-            platform: arr.platformName ?? undefined,
-            canceled: false,
-          };
-        },
-      )
-  );
+  const inWindow = arrivals
+    // Filter to the requested time window
+    .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
+    // Sort ascending by arrival time
+    .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0));
+  const dataAsOf = oldestDataAsOf(inWindow.map((arr) => upstreamDataAsOf(arr.timestamp)));
+  return {
+    ...(dataAsOf ? { dataAsOf } : {}),
+    departures: inWindow.map(
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      (arr: any): Departure => {
+        // TfL only provides live arrival predictions — no separate scheduled time
+        const expectedAt: string =
+          arr.expectedArrival ??
+          new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
+        return {
+          tripId: arr.vehicleId ?? "",
+          route: {
+            id: `tfl:${arr.lineId ?? ""}`,
+            shortName: arr.lineName ?? arr.lineId ?? "",
+            longName: arr.lineName ?? "",
+            mode: mapTflMode(arr.modeName ?? ""),
+          },
+          headsign: arr.destinationName ?? arr.towards ?? "",
+          // TfL is real-time only; scheduledAt = expectedAt
+          scheduledAt: expectedAt,
+          expectedAt,
+          platform: arr.platformName ?? undefined,
+          canceled: false,
+        };
+      },
+    ),
+  };
 }

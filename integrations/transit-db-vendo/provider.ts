@@ -7,8 +7,10 @@ import {
   USER_AGENT_TRANSIT,
 } from "@openmapx/core";
 import { journeysToTripPlan } from "@openmapx/mobility-core/fptf-journey";
+import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
+  DepartureBoard,
   GeoJSONLineString,
   TransitStop,
   TransportMode,
@@ -175,7 +177,7 @@ export async function searchByName(
 
 // Departures & Arrivals
 
-export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
+export async function getDepartures(stopId: string, minutes: number): Promise<DepartureBoard> {
   const rawId = stripPrefix(stopId);
   try {
     // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -185,15 +187,20 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
       remarks: true,
     });
     if (!Array.isArray(data?.departures)) throw new Error("malformed departures response");
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    return data.departures.map((d: any) => normalizeDeparture(d));
+    // db-vendo-client does not fill realtimeDataUpdatedAt yet; use it once it does.
+    const dataAsOf = upstreamDataAsOf(data.realtimeDataUpdatedAt);
+    return {
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      departures: data.departures.map((d: any) => normalizeDeparture(d)),
+      ...(dataAsOf ? { dataAsOf } : {}),
+    };
   } catch {
     // A failed board must not read as "no departures"; callers decide how to degrade.
     throw new Error("DB timetable unavailable");
   }
 }
 
-export async function getArrivals(stopId: string, minutes: number): Promise<Departure[]> {
+export async function getArrivals(stopId: string, minutes: number): Promise<DepartureBoard> {
   const rawId = stripPrefix(stopId);
   try {
     // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -203,8 +210,13 @@ export async function getArrivals(stopId: string, minutes: number): Promise<Depa
       remarks: true,
     });
     if (!Array.isArray(data?.arrivals)) throw new Error("malformed arrivals response");
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    return data.arrivals.map((d: any) => normalizeDeparture(d));
+    // db-vendo-client does not fill realtimeDataUpdatedAt yet; use it once it does.
+    const dataAsOf = upstreamDataAsOf(data.realtimeDataUpdatedAt);
+    return {
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      departures: data.arrivals.map((d: any) => normalizeDeparture(d)),
+      ...(dataAsOf ? { dataAsOf } : {}),
+    };
   } catch {
     // A failed board must not read as "no departures"; callers decide how to degrade.
     throw new Error("DB timetable unavailable");

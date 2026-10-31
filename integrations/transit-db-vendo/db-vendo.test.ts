@@ -256,7 +256,7 @@ describe("getDepartures", () => {
     });
 
     const { getDepartures } = await loadModule();
-    const deps = await getDepartures("db:8000105", 30);
+    const { departures: deps } = await getDepartures("db:8000105", 30);
 
     expect(deps).toHaveLength(1);
     expect(deps[0].tripId).toBe("db:trip-1");
@@ -293,7 +293,7 @@ describe("getDepartures", () => {
     });
 
     const { getDepartures } = await loadModule();
-    const deps = await getDepartures("db:8000105", 30);
+    const { departures: deps } = await getDepartures("db:8000105", 30);
 
     expect(deps[0].delaySeconds).toBe(120);
     const scheduled = new Date(deps[0].scheduledAt).getTime();
@@ -316,7 +316,7 @@ describe("getDepartures", () => {
     });
 
     const { getDepartures } = await loadModule();
-    const deps = await getDepartures("db:8000105", 60);
+    const { departures: deps } = await getDepartures("db:8000105", 60);
 
     expect(deps[0].canceled).toBe(true);
   });
@@ -342,7 +342,7 @@ describe("getDepartures", () => {
     });
 
     const { getDepartures } = await loadModule();
-    const deps = await getDepartures("db:8000105", 30);
+    const { departures: deps } = await getDepartures("db:8000105", 30);
 
     expect(deps[0].route.mode).toBe("rail");
   });
@@ -370,7 +370,7 @@ describe("getArrivals", () => {
     });
 
     const { getArrivals } = await loadModule();
-    const arrivals = await getArrivals("db:8000105", 60);
+    const { departures: arrivals } = await getArrivals("db:8000105", 60);
 
     expect(arrivals).toHaveLength(1);
     expect(arrivals[0].tripId).toBe("db:trip-arr");

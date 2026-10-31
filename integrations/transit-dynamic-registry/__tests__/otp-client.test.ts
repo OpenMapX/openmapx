@@ -142,7 +142,7 @@ describe("generated dynamic OTP acquisition", () => {
         { id: family + ":feed:1", name: "Stop", lat: 48, lng: 9 },
       ]);
       expect(await f.adapter.searchByName!(f.entry, "Stop", 1)).toHaveLength(1);
-      const departures = await f.adapter.getDepartures(f.entry, f.entry.prefix + "feed:1", 10);
+      const { departures } = await f.adapter.getDepartures(f.entry, f.entry.prefix + "feed:1", 10);
       expect(departures).toMatchObject([
         {
           tripId: family + ":feed:trip",
@@ -209,18 +209,20 @@ describe("generated dynamic OTP acquisition", () => {
     const f = fixture("peatus", {
       data: { stop: { gtfsId: "feed:1", stoptimesWithoutPatterns: [c] } },
     });
-    const result = await f.adapter.getDepartures(f.entry, "peatus:feed:1", 10);
+    const { departures: result } = await f.adapter.getDepartures(f.entry, "peatus:feed:1", 10);
     expect(result[0].expectedAt).toBeUndefined();
     expect(result[0].delaySeconds).toBeUndefined();
     expect(result[0].canceled).toBe(false);
     const empty = fixture("trufi", { data: { quay: { id: "feed:1", estimatedCalls: [] } } });
-    expect(await empty.adapter.getDepartures(empty.entry, "trufi:feed:1", 10)).toEqual([]);
+    expect((await empty.adapter.getDepartures(empty.entry, "trufi:feed:1", 10)).departures).toEqual(
+      [],
+    );
   });
   it("filters alighting-only Transmodel calls and preserves explicit null vs empty errors", async () => {
     const f = fixture("trufi", {
       data: { quay: { id: "feed:1", estimatedCalls: [{ ...tmCall(), forBoarding: false }] } },
     });
-    expect(await f.adapter.getDepartures(f.entry, "trufi:feed:1", 10)).toEqual([]);
+    expect((await f.adapter.getDepartures(f.entry, "trufi:feed:1", 10)).departures).toEqual([]);
     const g = fixture("trufi", { data: { nearest: null } });
     await expect(g.adapter.getStopsNearby(g.entry, 48, 9, 100)).rejects.toThrow(
       "OTP invalid response",

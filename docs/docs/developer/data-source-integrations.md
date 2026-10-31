@@ -341,6 +341,16 @@ on the returned envelope, for example
 actual evidence time when serving stale/cached data; a new request time cannot
 make old data fresh.
 
+For transit departures, `dataAsOf` is when the upstream last updated the
+realtime data. The web marks a board stale when the source was more than 90
+seconds behind at `fetchedAt`; time the board then spends in caches or on screen
+is not counted. A response's
+generation time (for example SIRI `ResponseTimestamp`) or a static dataset's
+publication time does not qualify. Transit providers built with
+`defineTransitProvider` pass it as `wrapRT(data, sourceIds, { dataAsOf })`;
+`upstreamDataAsOf` reads Unix-second or ISO stamps and leaves missing or future
+ones unknown.
+
 ## How a request flows
 
 1. The user enables a category; the web app's `DataSourceLayer` reads the active

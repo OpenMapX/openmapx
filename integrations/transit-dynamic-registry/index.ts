@@ -97,12 +97,11 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         freshnessNow(),
       );
     };
-    const wrapRT = <T>(data: T) =>
-      withAttribution(
-        captureTransitContributors(data, entryAttribution),
-        entryAttribution,
-        freshnessNow({ hasRealtimeData: true }),
-      );
+    const wrapRT = <T>(data: T, dataAsOf?: string) =>
+      withAttribution(captureTransitContributors(data, entryAttribution), entryAttribution, {
+        ...freshnessNow({ hasRealtimeData: true }),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      });
 
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
@@ -143,7 +142,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         ? async (id, min) => {
             const fn = adapter.getDepartures;
             if (!fn) return wrapRT([]);
-            const departures = await fn(entry, id, min);
+            const { departures, dataAsOf } = await fn(entry, id, min);
             await assertPublication();
             assertNotRetired();
             return entry.protocol === "otpGraphQl"
@@ -156,7 +155,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
                     ),
                   }),
                 )
-              : wrapRT(departures);
+              : wrapRT(departures, dataAsOf);
           }
         : undefined,
       searchStopsByName: adapter.searchByName
