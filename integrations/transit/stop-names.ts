@@ -40,10 +40,17 @@ export function stopNameSpecificity(key: string): number {
 
 /**
  * The key, among the stop-name keys on a place's board, of the place's main
- * stop: the one named like the place, else the most similarly named one, with
- * ties going to the stop with more departures.
+ * stop: the stop the place was opened for when it is on the board, else the
+ * one named like the place, else the most similarly named one, with ties going
+ * to the stop with more departures.
  */
-export function mainStopKey(placeName: string, rowsByKey: Map<string, number>): string | undefined {
+export function mainStopKey(
+  placeName: string,
+  rowsByKey: Map<string, number>,
+  openedFor?: string,
+): string | undefined {
+  const openedKey = openedFor ? stopNameKey(openedFor) : undefined;
+  if (openedKey && rowsByKey.has(openedKey)) return openedKey;
   const placeKey = stopNameKey(placeName);
   if (rowsByKey.has(placeKey)) return placeKey;
   let best: string | undefined;

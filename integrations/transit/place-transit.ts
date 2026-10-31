@@ -98,13 +98,18 @@ function departureStop(dep: Departure, linked: TransitStop): RowStop {
  * the place's main one when the board's stops have different names.
  *
  * Spellings of one name ("Köln Hbf", "Köln Hauptbahnhof") count as one stop.
- * The main stop is the one named like the place (see {@link mainStopKey}). A
+ * The main stop is the one the place was opened for, such as a journey's stop,
+ * else the one named like the place (see {@link mainStopKey}). A
  * row listed at the main stop by any source stays there, because a stop's
  * board can include a whole station's departures. Otherwise a stop the source
  * names as the departure's own wins over the stop it was asked about, then
  * the most specifically named one.
  */
-function nameRowStops(rows: { row: MergedDeparture; stops: RowStop[] }[], placeName: string): void {
+function nameRowStops(
+  rows: { row: MergedDeparture; stops: RowStop[] }[],
+  placeName: string,
+  openedFor?: string,
+): void {
   const keyed = rows.map(({ row, stops }) => ({
     row,
     stops: stops.map((stop) => ({ stop, key: stopNameKey(stop.name) })),
@@ -115,7 +120,7 @@ function nameRowStops(rows: { row: MergedDeparture; stops: RowStop[] }[], placeN
       rowsByKey.set(key, (rowsByKey.get(key) ?? 0) + 1);
     }
   }
-  const main = rowsByKey.size > 1 ? mainStopKey(placeName, rowsByKey) : undefined;
+  const main = rowsByKey.size > 1 ? mainStopKey(placeName, rowsByKey, openedFor) : undefined;
   for (const { row, stops } of keyed) {
     let chosen: { stop: RowStop; key: string } | undefined;
     for (const candidate of stops) {
@@ -213,12 +218,17 @@ export interface PlaceTransit {
     name: string,
     placeId?: string,
   ): Promise<MobilityResult<MergedRoute[]>>;
+  /**
+   * `openedFor` names the stop the place was opened for, such as a journey's
+   * stop; departures from it count as the main stop's and stay unlabelled.
+   */
   getMergedDepartures(
     lat: number,
     lng: number,
     name: string,
     minutes: number,
     placeId?: string,
+    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>>;
   getMergedArrivals(
     lat: number,
@@ -226,6 +236,7 @@ export interface PlaceTransit {
     name: string,
     minutes: number,
     placeId?: string,
+    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>>;
   getMergedAlerts(
     lat: number,
@@ -573,6 +584,7 @@ export function createPlaceTransit(
     fetchFn: (stopId: string, minutes: number) => Promise<MobilityResult<Departure[]>>,
     minutes: number,
     placeName: string,
+    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
     if (stops.length === 0) return emptyResult<MergedDeparture[]>([], { hasRealtimeData: true });
 
@@ -765,6 +777,7 @@ export function createPlaceTransit(
     nameRowStops(
       rows.map((row) => ({ row, stops: (folded.get(row) ?? []).map((part) => part.stop) })),
       placeName,
+      openedFor,
     );
     const unique = rows.sort(
       (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
@@ -782,6 +795,7 @@ export function createPlaceTransit(
     name: string,
     minutes: number,
     placeId?: string,
+    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
     const stopsRes = await getLinkedStops(lat, lng, name, placeId);
     const merged = await buildMergedTimetable(
@@ -789,6 +803,7 @@ export function createPlaceTransit(
       (id, min) => orchestrator.getDepartures(id, min),
       minutes,
       name,
+      openedFor,
     );
     return {
       data: merged.data,
@@ -804,6 +819,7 @@ export function createPlaceTransit(
     name: string,
     minutes: number,
     placeId?: string,
+    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
     const stopsRes = await getLinkedStops(lat, lng, name, placeId);
     const merged = await buildMergedTimetable(
@@ -811,6 +827,7 @@ export function createPlaceTransit(
       (id, min) => orchestrator.getArrivals(id, min),
       minutes,
       name,
+      openedFor,
     );
     return {
       data: merged.data,

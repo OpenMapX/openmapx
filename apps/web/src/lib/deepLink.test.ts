@@ -43,6 +43,19 @@ describe("deepLink helpers", () => {
     });
   });
 
+  it("parses the transit stop a place was opened for", () => {
+    const parsed = parseDeepLinkSearch(
+      "?place=osm:node:9&at=50.94111,6.975984&name=Bf%20Deutz%2F%20Messe&raw=transit_stop&stop=K%C3%B6ln%20Messe%2FDeutz%20Bf",
+    );
+
+    expect(parsed.place).toMatchObject({
+      name: "Bf Deutz/ Messe",
+      rawCategory: "transit_stop",
+      stopName: "Köln Messe/Deutz Bf",
+    });
+    expect(paramsWithoutDeepLink("?stop=x&token=t").toString()).toBe("token=t");
+  });
+
   it("does not parse removed place coordinate aliases", () => {
     const parsed = parseDeepLinkSearch(
       "?place=osm:node:123&lat=52.517036&lng=13.38886&name=Berlin",

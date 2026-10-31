@@ -282,3 +282,26 @@ it.each([{ empty: false }, { empty: true }])(
     unmount();
   },
 );
+it("keeps the transit stop a place was opened for when OSM details arrive", () => {
+  state.nom = {
+    id: "osm:node/2",
+    primaryScheme: "osm",
+    ids: { osm: "node/2" },
+    name: "Bf Deutz/Messe / LANXESS arena",
+    coordinates: [6.98, 50.94],
+    address: "",
+  } as Place;
+  const selected = {
+    id: "osm:node/2",
+    primaryScheme: "osm",
+    ids: { osm: "node/2", mo: "de:05315:11907:4:13" },
+    name: "Bf Deutz/Messe / LANXESS arena, Deutz, Cologne, Germany",
+    coordinates: [6.98, 50.94],
+    address: "",
+    rawCategory: "transit_stop",
+    transitStop: { id: "mo:de:05315:11907:4:13", name: "Köln Bf Deutz/Messe LANXESS arena" },
+  } as Place;
+  const { result } = renderHook(() => useMergedPlace(selected));
+  expect(result.current.place?.name).toBe("Bf Deutz/Messe / LANXESS arena");
+  expect(result.current.place?.transitStop).toEqual(selected.transitStop);
+});

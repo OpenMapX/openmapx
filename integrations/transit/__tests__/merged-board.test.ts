@@ -35,6 +35,7 @@ async function board(
   byStop: Record<string, Departure[]>,
   names: Record<string, string> = {},
   placeName = "Central",
+  openedFor?: string,
 ) {
   const ctx = {
     cache: {
@@ -63,6 +64,8 @@ async function board(
     6.084,
     placeName,
     60,
+    undefined,
+    openedFor,
   );
   return result.data;
 }
@@ -263,6 +266,22 @@ describe("the stop a merged row leaves from", () => {
     expect(rows.map((row) => [row.stop?.id, row.atOtherStop ?? false])).toEqual([
       ["oebb:8000207", false],
       ["db:breslauer", true],
+    ]);
+  });
+
+  it("treats the stop the place was opened for as main, naming the station instead", async () => {
+    const rows = await board(
+      {
+        "ms:hbf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
+        "ms:breslauer": [dep("ms:b1", "250", "Bergisch Gladbach", "10:02:00")],
+      },
+      { "ms:hbf": "Köln Hbf", "ms:breslauer": "Köln Breslauer Platz/Hbf" },
+      "Köln Hauptbahnhof",
+      "Köln Breslauer Platz/Hbf",
+    );
+    expect(rows.map((row) => [row.stop?.name, row.atOtherStop ?? false])).toEqual([
+      ["Köln Hbf", true],
+      ["Köln Breslauer Platz/Hbf", false],
     ]);
   });
 

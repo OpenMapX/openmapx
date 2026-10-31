@@ -28,6 +28,7 @@ export const DEEPLINK_PARAMS = new Set([
   "name",
   "cat",
   "raw",
+  "stop",
   "mode",
   "bikeProfile",
   "bikeHillPreference",
@@ -89,6 +90,8 @@ export interface DeepLinkPlace {
   name: string;
   category?: string;
   rawCategory?: string;
+  /** Name of the transit stop the place was opened for (see `Place.transitStop`). */
+  stopName?: string;
 }
 
 export interface ParsedDeepLink {
@@ -432,6 +435,7 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
           name: params.get("name") ?? "",
           category: params.get("cat") ?? undefined,
           rawCategory: params.get("raw") ?? undefined,
+          stopName: params.get("stop") ?? undefined,
         }
       : undefined;
 
