@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mangroveGetReviews } from "../client.js";
-import { mangroveProvider } from "../provider.js";
+import { createMangroveProvider } from "../provider.js";
 import type { MangroveWirePayload, MangroveWireReview } from "../types.js";
 
 vi.mock("@openmapx/mangrove-client", async (importOriginal) => {
@@ -70,6 +70,7 @@ function wireReview(input: {
 }
 
 const mockedGetReviews = vi.mocked(mangroveGetReviews);
+const mangroveProvider = createMangroveProvider(() => undefined);
 
 describe("mangroveProvider place matching", () => {
   beforeEach(() => {
