@@ -23,7 +23,14 @@ import type {
   ServiceAlert,
   TransitStop,
 } from "@openmapx/mobility-core/transit";
-import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
+import {
+  bucketTimestamps,
+  headsignsCompatible,
+  isTripNumber,
+  lineNamesCompatible,
+  normalizeHeadsign,
+  normalizeShortName,
+} from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
 
@@ -466,12 +473,19 @@ export function createPlaceTransit(
   // Timetable merging (shared by departures & arrivals)
 
   /**
-   * Merge departures/arrivals from all linked stops using multi-key dedup.
+   * Merge departures/arrivals from all linked stops, folding each provider's
+   * copy of one departure into a single row.
    *
-   * Deduplication keys per entry:
-   *   k1 (primary):   normalizedShortName + scheduledAt
-   *   k2 (secondary): normalizedHeadsign + scheduledAt + platform
-   *   k3 (fallback):  normalizedHeadsign + scheduledAt (no platform)
+   * Candidate rows are found by keys in the departure's 2-minute bucket and the
+   * neighbouring one:
+   *   line:     normalizedShortName + bucket
+   *   headsign: normalizedHeadsign + bucket (+ platform when known)
+   * A key only proposes candidates. A row absorbs a departure when it is
+   * plausibly the same one: rows from the same source merge only for the same
+   * trip, a line match also needs a compatible headsign (the two directions of a
+   * line stay apart), and a headsign match also needs a compatible line. Of
+   * several candidates, the one closest in time wins, so a frequent line keeps
+   * one row per departure.
    *
    * Not cached — caller refetches every 30s for real-time data.
    */
@@ -485,8 +499,44 @@ export function createPlaceTransit(
     const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
     // A transport failure must not replace a cached timetable with a successful empty result.
     const partial = partialLookups(results, "timetable");
-    const byKey = new Map<string, MergedDeparture>();
+    const rows: MergedDeparture[] = [];
+    const byKey = new Map<string, MergedDeparture[]>();
+    // The linked-stop provider and trip id of every departure folded into a row.
+    const folded = new Map<MergedDeparture, { provider: string; tripId: string }[]>();
     const allFresh: Freshness[] = [];
+
+    function register(row: MergedDeparture, keys: string[]): void {
+      for (const key of keys) {
+        const rows = byKey.get(key);
+        if (!rows) byKey.set(key, [row]);
+        else if (!rows.includes(row)) rows.push(row);
+      }
+    }
+
+    function isSameDeparture(
+      row: MergedDeparture,
+      dep: DepartureWithFeed,
+      stopProvider: string,
+      matchedBy: "line" | "headsign",
+    ): boolean {
+      const parts = folded.get(row) ?? [];
+      // The same trip seen at two linked stops, e.g. a station and its platform.
+      if (dep.tripId && parts.some((part) => part.tripId === dep.tripId)) return true;
+      const fromSameSource = parts.filter((part) => part.provider === stopProvider);
+      if (fromSameSource.length > 0) {
+        // A source lists each departure once, so another of its rows is another
+        // departure; without trip ids only an exact repeat is the same one.
+        if (dep.tripId && fromSameSource.every((part) => part.tripId)) return false;
+        return (
+          row.scheduledAt === dep.scheduledAt &&
+          normalizeShortName(row.route.shortName) === normalizeShortName(dep.route.shortName) &&
+          (row.headsign ?? "") === (dep.headsign ?? "")
+        );
+      }
+      return matchedBy === "line"
+        ? headsignsCompatible(row.headsign, dep.headsign)
+        : lineNamesCompatible(row.route.shortName, dep.route.shortName);
+    }
 
     function mergeInto(
       existing: MergedDeparture,
@@ -581,50 +631,51 @@ export function createPlaceTransit(
         const [bucket0, bucket1] = bucketTimestamps(dep.scheduledAt);
         const normShort = normalizeShortName(dep.route.shortName);
         const normHeadsign = dep.headsign ? normalizeHeadsign(dep.headsign) : null;
+        // Line keys, then headsign keys ("trip:"-prefixed) for one bucket.
+        const keysIn = (bucket: string) => [
+          `${normShort}:${bucket}`,
+          ...(normHeadsign && dep.platform
+            ? [`trip:${normHeadsign}:${bucket}:${dep.platform}`]
+            : []),
+          ...(normHeadsign ? [`trip:${normHeadsign}:${bucket}`] : []),
+        ];
+        const ownKeys = keysIn(bucket0);
+        const lookupKeys = [...ownKeys, ...keysIn(bucket1)];
 
-        // Build all candidate keys (primary bucket + neighbor bucket)
-        const k1a = `${normShort}:${bucket0}`;
-        const k1b = `${normShort}:${bucket1}`;
-        const k2a =
-          normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket0}:${dep.platform}` : null;
-        const k2b =
-          normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket1}:${dep.platform}` : null;
-        const k3a = normHeadsign ? `trip:${normHeadsign}:${bucket0}` : null;
-        const k3b = normHeadsign ? `trip:${normHeadsign}:${bucket1}` : null;
+        const scheduled = Date.parse(dep.scheduledAt);
+        let existing: MergedDeparture | undefined;
+        let distance = Number.POSITIVE_INFINITY;
+        for (const key of lookupKeys) {
+          const matchedBy = key.startsWith("trip:") ? "headsign" : "line";
+          for (const row of byKey.get(key) ?? []) {
+            const gap = Math.abs(Date.parse(row.scheduledAt) - scheduled);
+            if (gap >= distance || !isSameDeparture(row, dep, stopProvider, matchedBy)) continue;
+            existing = row;
+            distance = gap;
+          }
+        }
 
-        // Look up in both buckets
-        const existing =
-          byKey.get(k1a) ??
-          byKey.get(k1b) ??
-          (k2a ? byKey.get(k2a) : undefined) ??
-          (k2b ? byKey.get(k2b) : undefined) ??
-          (k3a ? byKey.get(k3a) : undefined) ??
-          (k3b ? byKey.get(k3b) : undefined);
-
+        const part = { provider: stopProvider, tripId: dep.tripId ?? "" };
         if (!existing) {
           const entry: MergedDeparture = {
             ...dep,
             providers: feedProviders.length ? [...feedProviders] : [providerName],
             tripIds: dep.tripId ? [dep.tripId] : [],
           };
-          // Register under primary bucket keys only (neighbor is for lookup, not storage)
-          byKey.set(k1a, entry);
-          if (k2a) byKey.set(k2a, entry);
-          if (k3a) byKey.set(k3a, entry);
+          rows.push(entry);
+          folded.set(entry, [part]);
+          // Register under the departure's own bucket; the neighbour is for lookup only.
+          register(entry, ownKeys);
         } else {
-          // Register alias keys so future lookups from either bucket find this entry
-          if (!byKey.has(k1a)) byKey.set(k1a, existing);
-          if (!byKey.has(k1b)) byKey.set(k1b, existing);
-          if (k2a && !byKey.has(k2a)) byKey.set(k2a, existing);
-          if (k2b && !byKey.has(k2b)) byKey.set(k2b, existing);
-          if (k3a && !byKey.has(k3a)) byKey.set(k3a, existing);
-          if (k3b && !byKey.has(k3b)) byKey.set(k3b, existing);
+          // Alias keys let later lookups from either bucket find this row.
+          register(existing, lookupKeys);
+          folded.get(existing)?.push(part);
           mergeInto(existing, dep, feedProviders.length ? feedProviders : [providerName]);
         }
       }
     }
 
-    const unique = Array.from(new Set(byKey.values())).sort(
+    const unique = rows.sort(
       (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
     );
     return {

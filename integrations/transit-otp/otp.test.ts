@@ -116,7 +116,8 @@ describe("self-hosted generated OTP planning", () => {
       legs: [
         {
           mode: "bus",
-          tripId: "feed:trip",
+          tripId: "otp:feed:trip",
+          from: { stopId: "otp:feed:A" },
           cancelled: true,
           realtime: true,
           _intermediateStopCount: 1,
