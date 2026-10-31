@@ -327,11 +327,6 @@ closed codes `INVALID_QUERY`, `DOMAIN_DISABLED`, `CURSOR_EXPIRED`,
 `FRAME_UNAVAILABLE`, `UPSTREAM_INVALID_RESPONSE`, and
 `NORMALIZED_RESPONSE_TOO_LARGE`.
 
-The deprecated `GET /api/integrations/weather-open-meteo-air-quality/aqi`
-route preserves its nine-field body. It now advertises `Deprecation`, `Sunset`,
-and a canonical successor `Link`. Source-policy exclusion is intentionally HTTP
-503 with exactly `{ "message": "Open-Meteo air quality is disabled by data-use policy" }`.
-
 ## Internal data-manager service
 
 `services/data-manager/openapi.json` describes all explicit internal operations,

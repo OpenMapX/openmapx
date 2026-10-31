@@ -314,7 +314,7 @@ export interface AirQualityMetrics {
     | "incoherent-evidence"
     | "policy"
     | "quota";
-  compatibilityUse: "none" | "legacy-openaq" | "legacy-open-meteo";
+  compatibilityUse: "none" | "legacy-openaq";
   quotaTruncated: boolean;
   evidenceCount: number;
   latencyMs: number;
