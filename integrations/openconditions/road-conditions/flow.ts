@@ -1,5 +1,8 @@
 import type { RoadFlowSegment } from "@openmapx/integration-framework";
-import { readCapturedFieldContributors } from "@openmapx/mobility-core/contributors";
+import {
+  type FieldContributors,
+  readCapturedFieldContributors,
+} from "@openmapx/mobility-core/contributors";
 
 type Rec = Record<string, unknown>;
 
@@ -48,6 +51,25 @@ function confidence(v: unknown): RoadFlowSegment["confidence"] {
 }
 
 /**
+ * A segment's credits as the credits of changed data: OpenConditions projects
+ * the sources' readings onto the road graph's segments, fuses them and rates
+ * them against a baseline it keeps, so every value a segment shows is derived.
+ * Its geometry is the graph's own segment, drawn as it is, and the instance's
+ * own crowd reports changed nothing.
+ */
+function asDerived(fields: FieldContributors | undefined): FieldContributors | undefined {
+  if (fields === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(fields).map(([field, credits]) => [
+      field,
+      field === "geometry"
+        ? credits
+        : credits.map((c) => (c.sourceId === "crowd" ? c : { ...c, modified: true as const })),
+    ]),
+  );
+}
+
+/**
  * Maps one OpenConditions `/segments.geojson` feature to a `RoadFlowSegment`.
  * A base segment with no fused speed yet arrives with no speed properties at
  * all (the publisher omits null fields rather than sending them as `null`) —
@@ -67,7 +89,7 @@ function featureToRoadFlowSegment(feature: Rec, providerId: string): RoadFlowSeg
     id,
     ...(p["field_contributors"] === undefined
       ? {}
-      : { fieldContributors: readCapturedFieldContributors(p["field_contributors"]) }),
+      : { fieldContributors: asDerived(readCapturedFieldContributors(p["field_contributors"])) }),
     geometry: geometry as unknown as RoadFlowSegment["geometry"],
     ...(num(p["current_kph"]) !== undefined ? { currentSpeedKph: num(p["current_kph"]) } : {}),
     ...(num(p["free_flow_kph"]) !== undefined ? { freeFlowSpeedKph: num(p["free_flow_kph"]) } : {}),

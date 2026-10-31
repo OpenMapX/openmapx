@@ -5,6 +5,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { IntegrationContext } from "./context";
+import { asModifiedContributors } from "./contributors";
 import { dataSourceToAttribution } from "./manifest";
 
 /** Capture exact declared suppliers before each read, before any caller can cache the result. */
@@ -28,6 +29,7 @@ export function captureReviewProviderContributors(
   return {
     id: provider.id,
     name: provider.name,
+    ...(provider.aggregateComputed ? { aggregateComputed: true } : {}),
     async getReviews(subject, options) {
       const catalogue = capture();
       return (await provider.getReviews(subject, options)).map((review) =>
@@ -36,7 +38,10 @@ export function captureReviewProviderContributors(
     },
     async getAggregate(subject, options) {
       const catalogue = capture();
-      return stamp(await provider.getAggregate(subject, options), catalogue);
+      const aggregate = stamp(await provider.getAggregate(subject, options), catalogue);
+      return provider.aggregateComputed && aggregate.contributors
+        ? { ...aggregate, contributors: asModifiedContributors(aggregate.contributors) }
+        : aggregate;
     },
     ...(provider.submit ? { submit: provider.submit.bind(provider) } : {}),
     ...(provider.uploadImage ? { uploadImage: provider.uploadImage.bind(provider) } : {}),

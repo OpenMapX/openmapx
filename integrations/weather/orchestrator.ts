@@ -7,6 +7,7 @@ import type {
   WeatherResponse,
 } from "@openmapx/core";
 import {
+  asModifiedContributors,
   type ContributingRecord,
   captureIntegrationContributorCatalogue,
   captureResultContributors,
@@ -54,10 +55,13 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
         // runtime feed only after awaiting, so retain the exact lookup now.
         const catalogue = captureIntegrationContributorCatalogue(ctx, "weather");
         const response = await provider.getCurrentWeather(coords, options);
-        const contributors = resolveCapturedContributors(catalogue, integrationId, {
+        const resolved = resolveCapturedContributors(catalogue, integrationId, {
           contributors: response.contributors,
           sourceIds: [response.source],
         });
+        const contributors = provider.changesSourceData
+          ? asModifiedContributors(resolved)
+          : resolved;
         return withContributors(response, contributors);
       } catch {
         // fall through to next provider
@@ -79,7 +83,7 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
         // An adapter may identify its serving feed only in the response.
         if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
           continue;
-        return captureForecast(response, catalogue, integrationId);
+        return captureForecast(response, catalogue, integrationId, provider.changesSourceData);
       } catch {
         // fall through
       }
@@ -99,7 +103,7 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
         const response = await provider.getDailyForecast(coords, days, options);
         if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
           continue;
-        return captureForecast(response, catalogue, integrationId);
+        return captureForecast(response, catalogue, integrationId, provider.changesSourceData);
       } catch {
         // fall through
       }
@@ -111,11 +115,13 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
     response: WeatherForecastResponse<T>,
     catalogue: ReturnType<typeof captureIntegrationContributorCatalogue>,
     integrationId: string,
+    changesSourceData = false,
   ): WeatherForecastResponse<T> {
-    const envelope = resolveCapturedContributors(catalogue, integrationId, {
+    const resolved = resolveCapturedContributors(catalogue, integrationId, {
       contributors: response.contributors,
       sourceIds: response.source === null ? [] : [response.source],
     });
+    const envelope = changesSourceData ? asModifiedContributors(resolved) : resolved;
     const points = response.points.map((point) =>
       withContributors(point, captureResultContributors(point, envelope)),
     );

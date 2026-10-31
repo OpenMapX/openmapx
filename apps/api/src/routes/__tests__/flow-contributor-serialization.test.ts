@@ -38,10 +38,12 @@ it("preserves selected OC field receipts through real GeoJSON and projected-rout
   );
   receipt.name = "Changed catalogue";
   receipt.attributionText = "Changed notice";
+  // A segment's rated values are derived, and the notice survives serialization.
   const captured = {
     ...receipt,
     name: "Captured publisher",
     attributionText: "Original mandatory notice",
+    modified: true,
   };
   const app = Fastify();
   const provider = {

@@ -199,7 +199,6 @@ describe("parking-sites-openconditions", () => {
     expect(site!.attributions).toEqual([
       {
         sourceId: MOBIDATA,
-        modified: true,
         name: MOBIDATA_PROVIDER,
         attributionText: MOBIDATA_PROVIDER,
         url: "https://mobidata-bw.de",
@@ -220,7 +219,6 @@ describe("parking-sites-openconditions", () => {
       },
       {
         sourceId: OSM,
-        modified: true,
         name: "© OpenStreetMap contributors",
         attributionText: "© OpenStreetMap contributors",
         url: "https://www.openstreetmap.org/copyright",
@@ -241,7 +239,6 @@ describe("parking-sites-openconditions", () => {
       },
       {
         sourceId: MOBIDATA,
-        modified: true,
         name: `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
         licensing: {
           version: 1,
@@ -262,7 +259,6 @@ describe("parking-sites-openconditions", () => {
       // The rate's independent capture has no feature catalogue URL.
       {
         sourceId: MOBIDATA,
-        modified: true,
         name: MOBIDATA_PROVIDER,
         attributionText: MOBIDATA_PROVIDER,
         licensing: {
@@ -307,7 +303,6 @@ describe("parking-sites-openconditions", () => {
     expect(site.sources).toEqual([OSM, MOBIDATA]);
     expect(site.attributions).toContainEqual({
       sourceId: MOBIDATA,
-      modified: true,
       name: `${MOBIDATA_PROVIDER} – Stadt Karlsruhe`,
       licensing: {
         version: 1,

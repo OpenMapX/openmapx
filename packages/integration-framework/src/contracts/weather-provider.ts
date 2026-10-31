@@ -19,6 +19,12 @@ export type {
 export interface WeatherProvider {
   readonly id: string;
   readonly priority: number;
+  /**
+   * The service this provider reads documents that it changes the original
+   * data (computes values, fills gaps from other sources), so the credit says
+   * the data was modified, as a licence asking to keep such a notice requires.
+   */
+  readonly changesSourceData?: boolean;
 
   getCurrentWeather(coords: LngLat, options?: WeatherOptions): Promise<WeatherResponse>;
 
