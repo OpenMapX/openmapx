@@ -210,7 +210,10 @@ it to scroll back. Two things worth knowing about retention:
 
 Persisted application logs are pruned daily using
 `LEGAL_SERVER_LOG_RETENTION_DAYS` (30 days by default). Review the value against
-the deployment's published policy.
+the deployment's published policy. Entries about a person with an open
+data-subject request stay while that request still needs them, including while
+an operator still has to handle the logs for it: until they are captured for the
+response or the request is closed.
 
 New application-log entries pass through the same bounded sanitizer before the
 in-memory buffer and database. Request lifecycle entries contain only an internal

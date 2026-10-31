@@ -149,6 +149,9 @@ export async function pruneAppLogs(days: number): Promise<number> {
             registrationId: "application-logs",
             candidateTimestamp: appLog.createdAt,
             subjectIds: [sql`${appLog.metadata} ->> 'subjectId'`],
+            // An operator preserves this registration's rows by hand; the
+            // catalogue keeps them until 30 days after the request closes.
+            blockingStatuses: ["held", "action_required"],
           }),
         ),
       )
