@@ -158,6 +158,7 @@ import {
   type DawarichSubjectExportRouteOptions,
   registerDawarichSubjectExportRoute,
 } from "./dawarich-subject-export";
+import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
 import type { HistoricalPullJob, OpsJobJournal, PersistedOpsJob } from "./journal";
 import {
   type CoordinatorPullOwnershipObservation,
@@ -452,6 +453,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     requestTimeout: 0,
     connectionTimeout: DEFAULT_ADMISSION_TIMEOUT_MS,
   });
+  registerOpsIngressRateLimit(app);
   app.addHook("onRequest", async (request, reply) => {
     const streaming =
       (request.routeOptions.config as { artifactTransferBytes?: boolean }).artifactTransferBytes ===
@@ -1804,10 +1806,17 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   };
 
   app.setErrorHandler((error, request, reply) => {
-    const statusCode = (error as { statusCode?: number }).statusCode === 413 ? 413 : 400;
+    const limited = (error as { statusCode?: number }).statusCode === 429;
+    const statusCode = limited
+      ? 429
+      : (error as { statusCode?: number }).statusCode === 413
+        ? 413
+        : 400;
     return reply
       .code(statusCode)
-      .send(redactedOpsError(requestIdFromBody(request.body), "validation", error));
+      .send(
+        redactedOpsError(requestIdFromBody(request.body), limited ? "busy" : "validation", error),
+      );
   });
   app.get("/v1/protocol", async (request, reply) => {
     const requestId = validRequestId(request.headers["x-ops-request-id"]);

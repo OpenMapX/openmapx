@@ -1,17 +1,19 @@
 import { createHash } from "node:crypto";
-import {
+import filesystem, {
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -498,6 +500,57 @@ describe("readBackupManifest", () => {
     linkSync(manifest, hardlink);
     expect(() => readBackupManifest(hardlink)).toThrow(/private regular file/);
   });
+
+  it.each(["symlink", "regular file"] as const)(
+    "does not consume a %s substituted after observing the original manifest",
+    (replacement) => {
+      const dir = writeBackup("trusted", {
+        name: "trusted",
+        createdAt: "2026-04-19T00:00:00Z",
+        services: [],
+      });
+      const foreignDir = writeBackup("foreign", {
+        name: "foreign",
+        createdAt: "2026-04-19T00:00:00Z",
+        services: [],
+      });
+      const manifest = join(dir, "manifest.json"),
+        foreignManifest = join(foreignDir, "manifest.json"),
+        original = statSync(manifest),
+        nativeLstat = filesystem.lstatSync,
+        nativeFstat = filesystem.fstatSync;
+      let replaced = false;
+      // Perform real replacement after the native observation returns. The legacy
+      // reader observed a pathname; the fixed reader observes its already-open FD.
+      const replaceObservedManifest = (stat: { dev: number | bigint; ino: number | bigint }) => {
+        if (replaced || stat.dev !== original.dev || stat.ino !== original.ino) return;
+        replaced = true;
+        renameSync(manifest, join(dir, "original-manifest.json"));
+        if (replacement === "symlink") symlinkSync(foreignManifest, manifest);
+        else renameSync(foreignManifest, manifest);
+      };
+      const lstat = vi.spyOn(filesystem, "lstatSync").mockImplementation((path, options) => {
+        const stat = nativeLstat(path, options);
+        if (stat) replaceObservedManifest(stat);
+        return stat;
+      });
+      const fstat = vi.spyOn(filesystem, "fstatSync").mockImplementation((fd, options) => {
+        const stat = nativeFstat(fd, options);
+        replaceObservedManifest(stat);
+        return stat;
+      });
+      syncBuiltinESMExports();
+      try {
+        expect(readBackupManifest(manifest).name).toBe("trusted");
+        expect(replaced).toBe(true);
+        expect(JSON.parse(readFileSync(manifest, "utf8")).name).toBe("foreign");
+      } finally {
+        lstat.mockRestore();
+        fstat.mockRestore();
+        syncBuiltinESMExports();
+      }
+    },
+  );
 
   it("publishes a private manifest atomically and flushes temporary names", () => {
     const dir = join(tmp, "infra", "docker", "backups", "atomic");

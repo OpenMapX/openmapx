@@ -6,6 +6,7 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
+  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
@@ -209,16 +210,26 @@ export function isCompatiblePlatformVersion(
  * every field is shape-checked here rather than only at the sinks.
  */
 export function readBackupManifest(filePath: string): BackupManifest {
-  let manifestStat: ReturnType<typeof lstatSync>;
+  let fd: number;
   try {
-    manifestStat = lstatSync(filePath);
-  } catch {
+    fd = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      throw new Error(`Backup manifest is not a private regular file: ${filePath}`);
+    }
     throw new Error(`Backup manifest not found: ${filePath}`);
   }
-  if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || manifestStat.nlink !== 1) {
-    throw new Error(`Backup manifest is not a private regular file: ${filePath}`);
+  let raw: Partial<BackupManifest>;
+  try {
+    // Validate and consume the same inode even if the directory entry is replaced.
+    const manifestStat = fstatSync(fd);
+    if (!manifestStat.isFile() || manifestStat.nlink !== 1) {
+      throw new Error(`Backup manifest is not a private regular file: ${filePath}`);
+    }
+    raw = JSON.parse(readFileSync(fd, "utf-8")) as Partial<BackupManifest>;
+  } finally {
+    closeSync(fd);
   }
-  const raw = JSON.parse(readFileSync(filePath, "utf-8")) as Partial<BackupManifest>;
   if (
     !raw ||
     typeof raw.name !== "string" ||

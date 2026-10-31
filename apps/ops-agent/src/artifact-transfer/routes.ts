@@ -3,12 +3,14 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { verifyArtifactStreamCapability } from "@openmapx/core/ops";
 import type { FastifyInstance } from "fastify";
+import { registerOpsIngressRateLimit } from "../ingress-rate-limit";
 import { ArtifactTransferError } from "./errors";
 import type { ArtifactTransferStore } from "./store";
 export function registerArtifactTransferRoutes(
   app: FastifyInstance,
   options: { store: ArtifactTransferStore; apiToken: string; admissionsOpen?: () => boolean },
 ): void {
+  registerOpsIngressRateLimit(app);
   app.register(async (scoped) => {
     scoped.addContentTypeParser("application/octet-stream", (_request, payload, done) =>
       done(null, payload),
@@ -56,8 +58,8 @@ export function registerArtifactTransferRoutes(
         .code(
           error instanceof ArtifactTransferError
             ? error.statusCode
-            : (error as { statusCode?: number }).statusCode === 415
-              ? 415
+            : [415, 429].includes((error as { statusCode?: number }).statusCode ?? 0)
+              ? (error as { statusCode: number }).statusCode
               : 503,
         )
         .send({

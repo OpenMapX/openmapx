@@ -12,6 +12,7 @@
     "verify:traffic-maintenance": "tsx scripts/verify-traffic-maintenance.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.1",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
