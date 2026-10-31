@@ -1,7 +1,6 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { CacheClient } from "@openmapx/mobility-core/cache";
-import type { Licensing } from "@openmapx/mobility-core/licensing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 
 /**
@@ -9,18 +8,15 @@ import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobil
  * Each client handles fetching and mapping from one operator's API.
  */
 export interface RegionalCarSharingClient {
-  /** Unique identifier for this client (e.g., "de-cambio", "de-stadtteilauto"). */
+  /**
+   * Unique identifier for this client (e.g., "de-cambio", "de-stadtteilauto"). It is also
+   * the manifest `dataSources` entry its stations are credited under.
+   */
   readonly id: string;
   /** Human-readable name. */
   readonly name: string;
   /** Geographic regions this client covers (used for bbox pre-filtering). */
   readonly regions: { center: LngLat; radiusKm: number }[];
-  /** Attribution for data from this client. */
-  readonly attribution: {
-    label: string;
-    url: string;
-    licensing?: Licensing;
-  };
   /** Search for stations within the bounding box. */
   search(
     bbox: BoundingBox,

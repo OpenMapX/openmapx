@@ -136,9 +136,5 @@ export const deCambioClient: RegionalCarSharingClient = {
     center: [r.lng, r.lat] as LngLat,
     radiusKm: 50,
   })),
-  attribution: {
-    label: "Cambio",
-    url: "https://www.cambio-carsharing.de",
-  },
   search: searchDeCambio,
 };

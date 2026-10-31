@@ -52,13 +52,6 @@ interface DeStadtteilautoVehicle {
   equipment?: { id: string; displayName: string }[];
 }
 
-const ATTRIBUTION = {
-  label: "Stadtteilauto Münster",
-  url: "https://opendata.stadt-muenster.de",
-  license: "dl-de/by-2-0",
-  licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
-};
-
 /** Fetch + cache both endpoints, join vehicle metadata to stations. */
 async function fetchData(
   cache: CacheClient,
@@ -156,7 +149,6 @@ export const deStadtteilautoClient: RegionalCarSharingClient = {
   name: "Stadtteilauto Münster",
   // Münster center, ~20km radius covers all stations
   regions: [{ center: [7.626, 51.962] as LngLat, radiusKm: 20 }],
-  attribution: ATTRIBUTION,
   async search(
     bbox: BoundingBox,
     cache: CacheClient,

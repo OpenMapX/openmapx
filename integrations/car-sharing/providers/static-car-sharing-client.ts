@@ -1,6 +1,5 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
-import type { Licensing } from "@openmapx/mobility-core/licensing";
 /**
  * Factory for creating RegionalCarSharingClient from static data URLs.
  * Handles fetch, caching, and bbox filtering. Caller provides the parser.
@@ -15,7 +14,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 const HEADERS = { "User-Agent": USER_AGENT };
 
 export interface StaticCarSharingConfig {
-  /** Unique client ID. */
+  /** Unique client ID, also the manifest `dataSources` entry its stations are credited under. */
   id: string;
   /** Human-readable name. */
   name: string;
@@ -23,12 +22,6 @@ export interface StaticCarSharingConfig {
   url: string;
   /** Geographic regions this client covers. */
   regions: { center: LngLat; radiusKm: number }[];
-  /** Attribution for the data. */
-  attribution: {
-    label: string;
-    url: string;
-    licensing?: Licensing;
-  };
   /** Parse raw response body into stations. Only stations with valid coordinates should be returned. */
   parse(body: string): SharedMobilityStation[];
 }
@@ -78,7 +71,6 @@ export function createStaticCarSharingClient(
     id: config.id,
     name: config.name,
     regions: config.regions,
-    attribution: config.attribution,
     async search(
       bbox: BoundingBox,
       cache: CacheClient,

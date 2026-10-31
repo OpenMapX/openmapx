@@ -19,7 +19,6 @@ it("captures each explicit regional client owner before its parsed cache and mer
     name: "Cambio",
     url: "https://example.com",
     regions: [{ center: [13.4, 52.5], radiusKm: 20 }],
-    attribution: { label: "Cambio", url: "https://example.com" },
     parse: () => [
       {
         id: "de-cambio/region/station",
