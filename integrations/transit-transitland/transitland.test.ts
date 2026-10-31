@@ -159,4 +159,12 @@ describe("Transitland transit provider", () => {
     expect(stop).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it("reports a failed board as unavailable without the keyed request URL", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+
+    const failure = await getDepartures("tl:s-stop1").catch((error: unknown) => error);
+
+    expect((failure as Error).message).toBe("Transitland timetable unavailable");
+  });
 });

@@ -246,15 +246,16 @@ describe("getDepartures", () => {
     expect(mockHafasClient.departures).toHaveBeenCalledWith("8100002", expect.any(Object));
   });
 
-  it("returns empty array on error", async () => {
+  it("reports a failed board as unavailable instead of no departures", async () => {
     mockHafasClient.departures.mockRejectedValue(new Error("fail"));
 
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
 
-    expect(deps).toEqual([]);
+    await expect(hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30)).rejects.toThrow(
+      "HAFAS timetable unavailable",
+    );
   });
 });
 
@@ -299,15 +300,16 @@ describe("getArrivals", () => {
     expect(mockHafasClient.arrivals).toHaveBeenCalledWith("8100002", expect.any(Object));
   });
 
-  it("returns empty array on error", async () => {
+  it("reports a failed board as unavailable instead of no arrivals", async () => {
     mockHafasClient.arrivals.mockRejectedValue(new Error("fail"));
 
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const arrivals = await hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 30);
 
-    expect(arrivals).toEqual([]);
+    await expect(hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 30)).rejects.toThrow(
+      "HAFAS timetable unavailable",
+    );
   });
 });
 

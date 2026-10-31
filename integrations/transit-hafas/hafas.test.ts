@@ -209,14 +209,15 @@ describe("getDepartures", () => {
     expect(fetchUrl).not.toContain("vbb:");
   });
 
-  it("returns empty array on non-ok response", async () => {
+  it("reports a non-ok response as unavailable instead of no departures", async () => {
     mockFetch.mockResolvedValueOnce(mockNotOk());
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "vbb:900000009102", 30);
 
-    expect(deps).toEqual([]);
+    await expect(getDepartures(vbb, "vbb:900000009102", 30)).rejects.toThrow(
+      "HAFAS timetable unavailable",
+    );
   });
 
   it("computes expectedAt from scheduledAt + delay", async () => {
@@ -281,14 +282,15 @@ describe("getArrivals", () => {
     expect(fetchUrl).not.toContain("db-hafas%3A");
   });
 
-  it("returns empty array on non-ok response", async () => {
+  it("reports a non-ok response as unavailable instead of no arrivals", async () => {
     mockFetch.mockResolvedValueOnce(mockNotOk());
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db-hafas:8000105", 30);
 
-    expect(arrivals).toEqual([]);
+    await expect(getArrivals(db, "db-hafas:8000105", 30)).rejects.toThrow(
+      "HAFAS timetable unavailable",
+    );
   });
 });
 
@@ -826,14 +828,13 @@ describe("getStop edge cases", () => {
 // getDepartures edge cases
 
 describe("getDepartures edge cases", () => {
-  it("returns empty array on fetch error", async () => {
+  it("reports a fetch error as unavailable instead of no departures", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network error"));
 
     const { HAFAS_INSTANCES, getDepartures } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const deps = await getDepartures(vbb, "stop1", 30);
 
-    expect(deps).toEqual([]);
+    await expect(getDepartures(vbb, "stop1", 30)).rejects.toThrow("HAFAS timetable unavailable");
   });
 
   it("handles departure with missing delay", async () => {
@@ -937,14 +938,15 @@ describe("getDepartures edge cases", () => {
 // getArrivals edge cases
 
 describe("getArrivals edge cases", () => {
-  it("returns empty array on fetch error", async () => {
+  it("reports a fetch error as unavailable instead of no arrivals", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network error"));
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db-hafas:8000105", 30);
 
-    expect(arrivals).toEqual([]);
+    await expect(getArrivals(db, "db-hafas:8000105", 30)).rejects.toThrow(
+      "HAFAS timetable unavailable",
+    );
   });
 });
 

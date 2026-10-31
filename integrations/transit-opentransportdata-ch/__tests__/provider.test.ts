@@ -1007,6 +1007,36 @@ describe("transit-opentransportdata-ch provider", () => {
     );
   });
 
+  function failAlertFeeds(endpoints: string[]) {
+    const defaultImpl = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (endpoints.some((endpoint) => url.startsWith(endpoint))) {
+        return new Response("unavailable", { status: 503 });
+      }
+      if (!defaultImpl) throw new Error(`Unexpected request without default mock: ${url}`);
+      return defaultImpl(input, init);
+    });
+  }
+
+  it("keeps GTFS-SA stop alerts when the SIRI-SX feeds fail", async () => {
+    const provider = await loadProvider();
+    failAlertFeeds([SIRI_SX_UNPLANNED_ENDPOINT, SIRI_SX_ENDPOINT]);
+
+    const alerts = await provider.getStopAlerts("otdch:8507000");
+
+    expect(alerts.map((alert) => alert.title)).toContain("Accessibility disruption");
+  });
+
+  it("reports stop alerts as unavailable when every alert feed fails", async () => {
+    const provider = await loadProvider();
+    failAlertFeeds([GTFS_SA_ENDPOINT, SIRI_SX_UNPLANNED_ENDPOINT, SIRI_SX_ENDPOINT]);
+
+    await expect(provider.getStopAlerts("otdch:8507000")).rejects.toThrow(
+      "Swiss alert feeds unavailable",
+    );
+  });
+
   it("fills missing Swiss occupancy from the daily forecast dataset", async () => {
     const provider = await loadProvider();
     const defaultImpl = fetchMock.getMockImplementation();

@@ -10,7 +10,6 @@ import { journeysToTripPlan } from "@openmapx/mobility-core/fptf-journey";
 import type {
   Departure,
   GeoJSONLineString,
-  ServiceAlert,
   TransitStop,
   TransportMode,
   TripLeg,
@@ -185,10 +184,12 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
       results: Math.min(500, Math.max(50, minutes * 3)),
       remarks: true,
     });
+    if (!Array.isArray(data?.departures)) throw new Error("malformed departures response");
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    return (data.departures ?? []).map((d: any) => normalizeDeparture(d));
+    return data.departures.map((d: any) => normalizeDeparture(d));
   } catch {
-    return [];
+    // A failed board must not read as "no departures"; callers decide how to degrade.
+    throw new Error("DB timetable unavailable");
   }
 }
 
@@ -201,18 +202,13 @@ export async function getArrivals(stopId: string, minutes: number): Promise<Depa
       results: Math.min(500, Math.max(50, minutes * 3)),
       remarks: true,
     });
+    if (!Array.isArray(data?.arrivals)) throw new Error("malformed arrivals response");
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    return (data.arrivals ?? []).map((d: any) => normalizeDeparture(d));
+    return data.arrivals.map((d: any) => normalizeDeparture(d));
   } catch {
-    return [];
+    // A failed board must not read as "no departures"; callers decide how to degrade.
+    throw new Error("DB timetable unavailable");
   }
-}
-
-// Alerts
-
-export async function getStopAlerts(_stopId: string): Promise<ServiceAlert[]> {
-  // DB has no station-level alerts API. Remarks are now embedded in Departure.remarks.
-  return [];
 }
 
 // Journey Planning

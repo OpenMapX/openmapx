@@ -325,6 +325,28 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return null;
   }
 
+  /**
+   * The provider `resolveByPrefix` would pick for one lookup, or why there is
+   * none. `"unavailable"` means a provider that offers the lookup is in health
+   * cooldown, so an empty answer would be a guess. `null` means no allowed
+   * provider offers it, which makes "none" the real answer.
+   */
+  async function resolveLookup(
+    id: string,
+    offers: (provider: TransitProvider) => boolean,
+  ): Promise<TransitProvider | "unavailable" | null> {
+    const banned = await disallowedProviderIds();
+    const providers = collectProviders().sort((a, b) => a.priority - b.priority);
+    let coolingDown = false;
+    for (const provider of providers) {
+      if (!id.startsWith(provider.prefix)) continue;
+      if (banned.has(provider.id)) continue;
+      if (await providerHealth.isHealthy(provider.id)) return provider;
+      if (offers(provider)) coolingDown = true;
+    }
+    return coolingDown ? "unavailable" : null;
+  }
+
   /** Returns the priority for a provider name (lower = better). Useful for dedup. */
   function getProviderPriority(providerName: string): number {
     for (const p of collectProviders()) {
@@ -728,11 +750,20 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       : emptyResult<Departure[]>([]);
   }
 
+  /**
+   * Lines serving a stop. A provider failure, or a provider in cooldown, rejects
+   * instead of answering "no lines"; only a stop no allowed provider can
+   * describe answers empty.
+   */
   async function getRoutesForStop(stopId: string): Promise<MobilityResult<TransitRoute[]>> {
-    const provider = await resolveByPrefix(stopId);
+    const provider = await resolveLookup(stopId, (p) =>
+      Boolean(p.getRoutesForStop || p.getDepartures),
+    );
+    if (provider === "unavailable") throw new Error("Transit route source unavailable");
     if (!provider) return emptyResult<TransitRoute[]>([]);
 
     // Prefer provider-native route lookup when available.
+    let nativeEmpty: MobilityResult<TransitRoute[]> | undefined;
     if (provider.getRoutesForStop) {
       const fn = provider.getRoutesForStop.bind(provider);
       const outcome = await timed(
@@ -747,8 +778,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         // Keep old behavior: if provider route lookup returns nothing, derive
         // routes from departures as a fallback.
         if (result.data.length > 0 || !provider.getDepartures) return result;
+        nativeEmpty = result;
       } else if (!provider.getDepartures) {
-        return emptyResult<TransitRoute[]>([]);
+        throw new Error("Transit route source unavailable");
       }
     } else if (!provider.getDepartures) {
       return emptyResult<TransitRoute[]>([]);
@@ -766,7 +798,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       "getRoutesForStop.viaDepartures",
       () => boundDep(stopId, 720),
     );
-    if (!depOutcome.ok) return emptyResult<TransitRoute[]>([]);
+    if (!depOutcome.ok) {
+      // The native lookup's empty answer stands; only a lookup with no answer at all fails.
+      if (nativeEmpty) return nativeEmpty;
+      throw new Error("Transit route source unavailable");
+    }
     const depRes = depOutcome.value;
     const departures = depRes?.data;
     if (!departures) return emptyResult<TransitRoute[]>([]);
@@ -937,8 +973,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
+  /** Alerts for a stop; rejects when the provider that offers them fails or is in cooldown. */
   async function getStopAlerts(stopId: string): Promise<MobilityResult<ServiceAlert[]>> {
-    const provider = await resolveByPrefix(stopId);
+    const provider = await resolveLookup(stopId, (p) => Boolean(p.getAlertsForStop));
+    if (provider === "unavailable") throw new Error("Transit alert source unavailable");
     if (!provider?.getAlertsForStop)
       return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     const fn = provider.getAlertsForStop.bind(provider);
@@ -949,7 +987,8 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       "getAlertsForStop",
       () => fn(stopId),
     );
-    return outcome.ok ? outcome.value : emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
+    if (!outcome.ok) throw new Error("Transit alert source unavailable");
+    return outcome.value;
   }
 
   async function getRouteAlerts(routeId: string): Promise<MobilityResult<ServiceAlert[]>> {
@@ -1027,14 +1066,17 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       : emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
   }
 
+  /** Facilities at a stop; rejects when the provider that offers them fails or is in cooldown. */
   async function getFacilities(stopId: string): Promise<MobilityResult<Facility[]>> {
-    const provider = await resolveByPrefix(stopId);
+    const provider = await resolveLookup(stopId, (p) => Boolean(p.getFacilities));
+    if (provider === "unavailable") throw new Error("Transit facility source unavailable");
     if (!provider?.getFacilities) return emptyResult<Facility[]>([]);
     const fn = provider.getFacilities.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getFacilities", () =>
       fn(stopId),
     );
-    return outcome.ok ? outcome.value : emptyResult<Facility[]>([]);
+    if (!outcome.ok) throw new Error("Transit facility source unavailable");
+    return outcome.value;
   }
 
   async function reachabilityProvider(): Promise<TransitProvider | null> {

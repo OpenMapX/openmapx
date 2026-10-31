@@ -304,10 +304,12 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       );
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const deps = (result as any).departures ?? result;
+      if (!Array.isArray(deps)) throw new Error("malformed departures response");
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return (Array.isArray(deps) ? deps : []).map((d: any) => normalizeDeparture(d, entry));
+      return deps.map((d: any) => normalizeDeparture(d, entry));
     } catch {
-      return [];
+      // A failed board must not read as "no departures".
+      throw new Error("HAFAS timetable unavailable");
     }
   },
 
@@ -324,10 +326,12 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       );
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const arrs = (result as any).arrivals ?? result;
+      if (!Array.isArray(arrs)) throw new Error("malformed arrivals response");
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return (Array.isArray(arrs) ? arrs : []).map((d: any) => normalizeDeparture(d, entry));
+      return arrs.map((d: any) => normalizeDeparture(d, entry));
     } catch {
-      return [];
+      // A failed board must not read as "no departures".
+      throw new Error("HAFAS timetable unavailable");
     }
   },
 
