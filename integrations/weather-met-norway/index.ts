@@ -12,32 +12,59 @@ import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
 
-const SYMBOL_TO_WMO: Record<string, number> = {
+/**
+ * Every symbol in MET Norway's legend
+ * (https://github.com/metno/weathericons/blob/main/weather/legend.csv), keyed
+ * without its `_day`/`_night`/`_polartwilight` variant suffix. Normal-strength
+ * snow showers and thunder take the lighter WMO code because WMO's next step
+ * up is described as heavy. The legend's misspelt "lightssleet…" and
+ * "lightssnow…" IDs are what the API emits; the corrected spellings are kept
+ * in case MET fixes them.
+ */
+export const SYMBOL_TO_WMO: Readonly<Record<string, number>> = {
   clearsky: 0,
   fair: 1,
   partlycloudy: 2,
   cloudy: 3,
   fog: 45,
   lightrain: 61,
-  lightrainshowers: 61,
   rain: 63,
-  rainshowers: 63,
   heavyrain: 65,
-  heavyrainshowers: 65,
-  lightsleet: 66,
-  sleet: 67,
-  heavysleet: 67,
+  lightsleet: 68,
+  sleet: 69,
+  heavysleet: 69,
   lightsnow: 71,
-  lightsnowshowers: 71,
   snow: 73,
-  snowshowers: 73,
   heavysnow: 75,
-  heavysnowshowers: 75,
+  lightrainshowers: 80,
+  rainshowers: 81,
+  heavyrainshowers: 82,
+  lightsleetshowers: 83,
+  sleetshowers: 84,
+  heavysleetshowers: 84,
+  lightsnowshowers: 85,
+  snowshowers: 85,
+  heavysnowshowers: 86,
   lightrainandthunder: 95,
   rainandthunder: 95,
-  heavyrainandthunder: 96,
-  sleetandthunder: 96,
-  snowandthunder: 96,
+  heavyrainandthunder: 97,
+  lightsleetandthunder: 95,
+  sleetandthunder: 95,
+  heavysleetandthunder: 97,
+  lightsnowandthunder: 95,
+  snowandthunder: 95,
+  heavysnowandthunder: 97,
+  lightrainshowersandthunder: 95,
+  rainshowersandthunder: 95,
+  heavyrainshowersandthunder: 97,
+  lightssleetshowersandthunder: 95,
+  lightsleetshowersandthunder: 95,
+  sleetshowersandthunder: 95,
+  heavysleetshowersandthunder: 97,
+  lightssnowshowersandthunder: 95,
+  lightsnowshowersandthunder: 95,
+  snowshowersandthunder: 95,
+  heavysnowshowersandthunder: 97,
 };
 
 interface MetInstantDetails {
@@ -75,24 +102,62 @@ interface MetResponse {
   };
 }
 
-function parseSymbol(symbolCode: string): { wmo: number; isDay: boolean } {
-  let base = symbolCode;
-  let isDay = true;
-  if (base.endsWith("_day")) {
-    base = base.replace(/_day$/, "");
-  } else if (base.endsWith("_night")) {
-    base = base.replace(/_night$/, "");
-    isDay = false;
-  }
-  return { wmo: SYMBOL_TO_WMO[base] ?? 3, isDay };
+const VARIANT_SUFFIX = /_(day|night|polartwilight)$/;
+
+/** Polar twilight means the sun is below the horizon, so it reads as night. */
+export function parseMetSymbol(symbolCode: string): { wmo: number | undefined; isDay: boolean } {
+  const variant = VARIANT_SUFFIX.exec(symbolCode);
+  const base = variant ? symbolCode.slice(0, variant.index) : symbolCode;
+  return {
+    wmo: Object.hasOwn(SYMBOL_TO_WMO, base) ? SYMBOL_TO_WMO[base] : undefined,
+    isDay: !variant || variant[1] === "day",
+  };
 }
 
-function getBestSymbol(entry: MetTimeseriesEntry): string {
-  return (
-    entry.data.next_1_hours?.summary.symbol_code ??
-    entry.data.next_6_hours?.summary.symbol_code ??
-    "cloudy"
-  );
+function cloudCoverToWmo(cloudCover: number): number {
+  if (cloudCover < 25) return 0;
+  if (cloudCover < 75) return 2;
+  return 3;
+}
+
+/**
+ * An entry's symbol for its own next period. Without a known symbol, the
+ * forecast cloud cover is classified rather than guessing a condition.
+ */
+function entryConditions(entry: MetTimeseriesEntry): { wmo: number; isDay: boolean } {
+  const symbol =
+    entry.data.next_1_hours?.summary.symbol_code ?? entry.data.next_6_hours?.summary.symbol_code;
+  const parsed = symbol ? parseMetSymbol(symbol) : { wmo: undefined, isDay: true };
+  return {
+    wmo: parsed.wmo ?? cloudCoverToWmo(entry.data.instant.details.cloud_area_fraction),
+    isDay: parsed.isDay,
+  };
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * The precipitation each entry contributes to a sum without double counting.
+ * Hourly steps also carry overlapping `next_6_hours` totals, so an entry counts
+ * its `next_1_hours` amount, or its `next_6_hours` amount only when it has no
+ * hourly period (the later 6-hourly steps); a period starting inside one
+ * already counted is skipped.
+ */
+function countedPrecipitation(timeseries: MetTimeseriesEntry[]): Map<MetTimeseriesEntry, number> {
+  const counted = new Map<MetTimeseriesEntry, number>();
+  let coveredUntil = Number.NEGATIVE_INFINITY;
+  for (const entry of timeseries) {
+    const start = Date.parse(entry.time);
+    if (start < coveredUntil) continue;
+    if (entry.data.next_1_hours) {
+      counted.set(entry, entry.data.next_1_hours.details.precipitation_amount);
+      coveredUntil = start + HOUR_MS;
+    } else if (entry.data.next_6_hours) {
+      counted.set(entry, entry.data.next_6_hours.details.precipitation_amount);
+      coveredUntil = start + 6 * HOUR_MS;
+    }
+  }
+  return counted;
 }
 
 function fetchCompact(coords: LngLat): Promise<MetResponse> {
@@ -110,12 +175,7 @@ const metNorwayProvider: WeatherProvider = {
     if (!entry) throw new Error("No timeseries data from MET Norway");
 
     const d = entry.data.instant.details;
-    const symbol = getBestSymbol(entry);
-    const { wmo, isDay } = parseSymbol(symbol);
-    const precip =
-      entry.data.next_1_hours?.details.precipitation_amount ??
-      entry.data.next_6_hours?.details.precipitation_amount ??
-      0;
+    const { wmo, isDay } = entryConditions(entry);
 
     const isImperial = options?.units === "imperial";
     const windMultiplier = isImperial ? 2.237 : 3.6; // m/s → mph or km/h
@@ -124,13 +184,13 @@ const metNorwayProvider: WeatherProvider = {
       location: coords,
       current: {
         temperature: isImperial ? (d.air_temperature * 9) / 5 + 32 : d.air_temperature,
-        feelsLike: isImperial ? (d.air_temperature * 9) / 5 + 32 : d.air_temperature,
         humidity: d.relative_humidity,
         pressure: d.air_pressure_at_sea_level,
         windSpeed: d.wind_speed * windMultiplier,
         windDirection: d.wind_from_direction,
         windGusts: d.wind_speed_of_gust != null ? d.wind_speed_of_gust * windMultiplier : undefined,
-        precipitation: precip,
+        // A next_6_hours total is not a current amount.
+        precipitation: entry.data.next_1_hours?.details.precipitation_amount,
         cloudCover: d.cloud_area_fraction,
         weatherCode: wmo,
         isDay,
@@ -155,7 +215,7 @@ const metNorwayProvider: WeatherProvider = {
       if (results.length >= hours) break;
 
       const d = entry.data.instant.details;
-      const { wmo } = parseSymbol(entry.data.next_1_hours.summary.symbol_code);
+      const { wmo } = entryConditions(entry);
 
       results.push({
         time: entry.time,
@@ -182,6 +242,7 @@ const metNorwayProvider: WeatherProvider = {
     const isImperial = options?.units === "imperial";
     const windMultiplier = isImperial ? 2.237 : 3.6;
 
+    const counted = countedPrecipitation(data.properties.timeseries);
     const byDate = new Map<string, MetTimeseriesEntry[]>();
     for (const entry of data.properties.timeseries) {
       const date = entry.time.slice(0, 10);
@@ -200,14 +261,12 @@ const metNorwayProvider: WeatherProvider = {
       let maxWind = 0;
 
       for (const entry of entries) {
+        precipSum += counted.get(entry) ?? 0;
         const temp = entry.data.instant.details.air_temperature;
         if (temp < minTemp) minTemp = temp;
         if (temp > maxTemp) maxTemp = temp;
         if (entry.data.instant.details.wind_speed > maxWind) {
           maxWind = entry.data.instant.details.wind_speed;
-        }
-        if (entry.data.next_1_hours) {
-          precipSum += entry.data.next_1_hours.details.precipitation_amount;
         }
         if (entry.data.next_6_hours?.details) {
           const d6 = entry.data.next_6_hours.details;
@@ -219,7 +278,7 @@ const metNorwayProvider: WeatherProvider = {
       }
 
       const middayEntry = entries.find((e) => e.time.includes("T12:")) ?? entries[0];
-      const { wmo } = parseSymbol(getBestSymbol(middayEntry));
+      const { wmo } = entryConditions(middayEntry);
 
       const convertTemp = (c: number) => (isImperial ? (c * 9) / 5 + 32 : c);
 

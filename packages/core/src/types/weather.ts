@@ -6,16 +6,18 @@ export interface WeatherOptions {
   units?: "metric" | "imperial";
 }
 
+/** Readings a provider does not report are absent, never zero-filled. */
 export interface CurrentWeather {
   temperature: number;
-  feelsLike: number;
-  humidity: number;
-  pressure: number;
-  windSpeed: number;
-  windDirection: number;
+  /** Apparent temperature, only from providers that compute one. */
+  feelsLike?: number;
+  humidity?: number;
+  pressure?: number;
+  windSpeed?: number;
+  windDirection?: number;
   windGusts?: number;
-  precipitation: number;
-  cloudCover: number;
+  precipitation?: number;
+  cloudCover?: number;
   weatherCode: number;
   isDay: boolean;
   time: string;
