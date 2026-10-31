@@ -546,13 +546,18 @@ export async function lookupByNameAndCoords(
   const results = await fetchNominatim<NominatimDetailResult[]>(url, lang);
   if (results.length === 0) return null;
 
-  // Pick the result closest to the geocoder's coordinates
+  // A Wikidata place prefers the objects tagged as that item, so Leipzig
+  // Hauptbahnhof resolves to its station rather than a nearer stop position.
+  // Among the rest, the result closest to the geocoder's coordinates wins.
+  const qid = originalId.startsWith("wikidata:") ? originalId.slice("wikidata:".length) : null;
+  const isItem = (r: NominatimDetailResult) => qid !== null && r.extratags?.wikidata === qid;
   const best = results
     .map((r) => ({
       r,
+      item: isItem(r),
       dist: haversineMeters(lat, lng, Number.parseFloat(r.lat), Number.parseFloat(r.lon)),
     }))
-    .sort((a, b) => a.dist - b.dist)[0];
+    .sort((a, b) => Number(b.item) - Number(a.item) || a.dist - b.dist)[0];
 
   if (best.dist > MAX_DISTANCE_M) return null;
 

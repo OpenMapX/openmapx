@@ -172,6 +172,26 @@ export function isTransitName(name: string): boolean {
   return NAME_KEYWORD_TOKENS.some((kw) => containsTokenSequence(tokens, kw));
 }
 
+/** OSM tag values that mark transit infrastructure in operation. */
+const TRANSIT_OSM_TAGS: Readonly<Record<string, readonly string[]>> = {
+  public_transport: ["station", "stop_position", "platform", "stop_area"],
+  railway: ["station", "halt", "stop", "tram_stop"],
+  building: ["train_station"],
+  amenity: ["bus_station", "ferry_terminal"],
+  aerialway: ["station"],
+};
+
+/**
+ * Whether a place's OSM tags mark it as a station or stop. A station's main
+ * OSM object can be its building, whose main tag is something else, e.g.
+ * Hamburg Hauptbahnhof's listed building (`historic=heritage`,
+ * `building=train_station`).
+ */
+export function hasTransitOsmTags(tags: Readonly<Record<string, string>> | undefined): boolean {
+  if (!tags) return false;
+  return Object.entries(TRANSIT_OSM_TAGS).some(([key, values]) => values.includes(tags[key] ?? ""));
+}
+
 /**
  * Returns true only when `place` represents actual transit infrastructure and
  * the linked-transit hooks should fire.
@@ -182,10 +202,11 @@ export function isTransitName(name: string): boolean {
  *
  * Decision order:
  *  1. Hard gates: null, coordinate-pin, missing coords/name → false
- *  2. rawCategory present → keyword whitelist
- *  3. category present → same keyword whitelist (handles map-click values like
+ *  2. OSM tags marking a station or stop → true
+ *  3. rawCategory present → keyword whitelist
+ *  4. category present → same keyword whitelist (handles map-click values like
  *     "station", "bus_stop", "railway" from MapTiler feature properties)
- *  4. Neither present → reject (addresses and other non-transit places)
+ *  5. Neither present → reject (addresses and other non-transit places)
  */
 export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place) return false;
@@ -198,6 +219,9 @@ export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place.coordinates || !place.name) return false;
   // External data source places (e.g. EV charging) are never transit infrastructure
   if (place.dataSourceDetail) return false;
+  // The OSM object describes its transport function even when its main
+  // category is another one, such as a listed station building ("Heritage").
+  if (hasTransitOsmTags(place.osmTags)) return true;
 
   if (place.rawCategory !== undefined) {
     return isTransitRawCategory(place.rawCategory);

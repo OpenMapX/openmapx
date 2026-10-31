@@ -782,6 +782,21 @@ function providerIds(item: AutocompleteResult): string[] {
   return providers;
 }
 
+/**
+ * Fields describing what a place is that a stronger duplicate may lack: a
+ * notable-places row for Hamburg Hauptbahnhof has no category, while the
+ * geocoder's row for it says "railway station" and names its OSM object.
+ * Address fields travel together so a label and its evidence stay paired.
+ */
+const DESCRIPTIVE_FIELD_GROUPS = [
+  ["rawCategory"],
+  ["directOsmReference"],
+  ["transitStop"],
+  ["presetIconKey"],
+  ["iconPath"],
+  ["address", "addressEvidence"],
+] as const satisfies readonly (readonly (keyof AutocompleteResult)[])[];
+
 function mergeDuplicate(
   stronger: AutocompleteResult,
   weaker: AutocompleteResult,
@@ -803,7 +818,13 @@ function mergeDuplicate(
       : stronger.searchMatch;
   const ids =
     stronger.ids || weaker.ids ? { ...(weaker.ids ?? {}), ...(stronger.ids ?? {}) } : undefined;
+  const filled = DESCRIPTIVE_FIELD_GROUPS.filter(
+    (group) =>
+      group.every((field) => stronger[field] === undefined) &&
+      group.some((field) => weaker[field] !== undefined),
+  ).flat();
   const retainedWeaker =
+    filled.length > 0 ||
     fame > (stronger.fame ?? 0) ||
     searchMatch !== stronger.searchMatch ||
     Object.entries(ids ?? {}).some(
@@ -834,8 +855,15 @@ function mergeDuplicate(
     if (value !== undefined)
       capture(`ids.${scheme}`, stronger.ids?.[scheme] === value ? stronger : weaker);
   }
+  const fromWeaker: Partial<AutocompleteResult> = {};
+  for (const field of filled) {
+    if (weaker[field] === undefined) continue;
+    Object.assign(fromWeaker, { [field]: weaker[field] });
+    capture(field, weaker);
+  }
   return {
     ...stronger,
+    ...fromWeaker,
     ...(stronger.contributors === undefined &&
     weaker.contributors === undefined &&
     stronger.fieldContributors === undefined &&
