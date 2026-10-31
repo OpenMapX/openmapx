@@ -62,6 +62,18 @@ export type TideDatum = "MLLW" | "chart_datum" | "gauge_zero" | "sensor_referenc
  */
 export type TideTimeZone = "lst_ldt" | "iso_offset";
 
+/**
+ * Where the `events` and `curve` heights come from.
+ *
+ * - `prediction`: the network's harmonic tide predictions, which model the
+ *   astronomical tide only and leave out wind set-up and storm surge.
+ * - `observation`: measured water levels, which include wind and surge; any
+ *   high and low events are derived from the measurements.
+ *
+ * `currentLevel` is always a measurement.
+ */
+export type TideHeightSource = "prediction" | "observation";
+
 export interface TidesPayload extends ContributingRecord {
   /** Captured ownership for independently acquired station, predictions and observations. */
   fieldContributors?: FieldContributors;
@@ -71,6 +83,7 @@ export interface TidesPayload extends ContributingRecord {
   datum: TideDatum;
   units: "english";
   timeZone: TideTimeZone;
+  heightSource: TideHeightSource;
   currentLevel?: WaterLevelObservation;
   met?: MetObservation;
 }

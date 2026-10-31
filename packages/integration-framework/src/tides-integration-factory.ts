@@ -73,7 +73,7 @@ export interface TidesIntegrationConfig<S extends TideStationBase> {
 
   /**
    * Key segment for `nearest:` cache entries. Change it when entries cached by
-   * earlier code would carry wrong values. Defaults to `datum-v1`.
+   * earlier code would carry wrong values. Defaults to `height-source-v1`.
    */
   readonly nearestCacheGeneration?: string;
 
@@ -156,7 +156,7 @@ export function createTidesIntegration<S extends TideStationBase>(
       // client, so a cached response that spans midnight UTC would land
       // yesterday's events under today's label until the TTL expires.
       const dayKey = new Date().toISOString().slice(0, 10);
-      const generation = config.nearestCacheGeneration ?? "datum-v1";
+      const generation = config.nearestCacheGeneration ?? "height-source-v1";
       const cacheKey = `nearest:${generation}:${round4(lat)},${round4(lng)}:${dayKey}`;
       const cached = await ctx.cache.get<TidesPayload | { notFound: true }>(cacheKey);
       if (cached) {

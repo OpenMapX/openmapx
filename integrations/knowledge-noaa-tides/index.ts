@@ -138,6 +138,7 @@ async function buildTidesResponse(
     datum: "MLLW",
     units: "english",
     timeZone: "lst_ldt",
+    heightSource: "prediction",
     currentLevel: live.currentLevel,
     met: live.met,
   };
@@ -198,7 +199,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      const cacheKey = `tides:height-source-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
       const cached = await ctx.cache.get<TidesResponse | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in cached) {
@@ -249,7 +250,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!stationParam && lat && lng) {
       const latNum = Number.parseFloat(lat);
       const lngNum = Number.parseFloat(lng);
-      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      const cacheKey = `tides:height-source-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
       await ctx.cache.set(cacheKey, withContributors(result, captured), PREDICTIONS_CACHE_TTL);
     }
 

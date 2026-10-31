@@ -158,7 +158,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `tides:datum-v1:${station.code}:${dayKey}`;
+  const cacheKey = `tides:height-source-v1:${station.code}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
@@ -185,6 +185,7 @@ async function buildTidesResponse(
     datum: "chart_datum",
     units: "english",
     timeZone: "iso_offset",
+    heightSource: "prediction",
   };
   await ctx.cache.set(cacheKey, result, TIDES_TTL);
   return result;
