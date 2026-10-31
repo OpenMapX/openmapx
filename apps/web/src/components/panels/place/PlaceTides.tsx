@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import type {
   MetObservation,
   TideCurvePoint,
+  TideDatum,
   TideEvent,
   TidesResponse,
   WaterLevelObservation,
@@ -17,6 +18,13 @@ import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
+
+const DATUM_NOTE: Record<TideDatum, string> = {
+  MLLW: "datumNoteMllw",
+  chart_datum: "datumNoteChartDatum",
+  gauge_zero: "datumNoteGaugeZero",
+  sensor_reference: "datumNoteSensorReference",
+};
 
 /**
  * Presentation-only tide content. Mounted inside an `ExpandableDetailRow`
@@ -127,7 +135,7 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
       {/* Attribution — rendered via the shared builder (SectionAttribution). */}
       <SectionAttribution attributions={contributorsForRecordFields(data, displayedFields)} />
       <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-        {t("datumNote")}
+        {t(DATUM_NOTE[data.datum])}
       </Typography>
     </Box>
   );

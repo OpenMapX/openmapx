@@ -20,7 +20,13 @@ import {
  * place near a CHS station.
  *
  * Values are converted from meters (the IWLS unit) to feet for the shared
- * tide response consumed by `PlaceTidesContent`.
+ * tide response consumed by `PlaceTidesContent`, and stay above chart datum.
+ * The CHS station pages that publish the same series state "Height of tide
+ * is the vertical distance between the surface of the sea and chart datum"
+ * (https://www.tides.gc.ca/en/stations/07735), and IWLS station metadata
+ * lists conversions away from it (`datums: [{ code: "CGVD2013", offset: -2.88 }]`).
+ * Timestamps are UTC: "All dates are in ISO 8601 format UTC"
+ * (https://api-iwls.dfo-mpo.gc.ca/v3/api-docs).
  *
  * Free + commercial use under Open Government Licence — Canada 2.0.
  *
@@ -251,7 +257,7 @@ async function buildTidesResponse(
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
   // High/low events + curve are deterministic; cache 6h.
-  const cacheKey = `tides:contributors-v1:${station.id}:${dayKey}`;
+  const cacheKey = `tides:datum-v1:${station.id}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) {
     return station.hasWlo
@@ -281,9 +287,9 @@ async function buildTidesResponse(
     },
     events,
     curve,
-    datum: "MLLW",
+    datum: "chart_datum",
     units: "english",
-    timeZone: "lst_ldt",
+    timeZone: "iso_offset",
     currentLevel,
   };
   const acquired = station.hasWlo ? withCurrentLevel(result, currentLevel) : result;

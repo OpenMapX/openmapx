@@ -309,11 +309,13 @@ export type {
 export type {
   MetObservation,
   TideCurvePoint,
+  TideDatum,
   TideEvent,
   TideProvider,
   TideResponseStation,
   TidesPayload,
   TidesResponse,
+  TideTimeZone,
   WaterLevelObservation,
 } from "./tides";
 export type {

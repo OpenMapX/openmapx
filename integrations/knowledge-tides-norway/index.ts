@@ -17,8 +17,12 @@ import {
  * tide predictions (PRE) and observations (OBS) for ~30 permanent stations
  * along Norway + Svalbard.
  *
- * Values are converted from centimeters (Sehavnivå's unit, referenced to
- * chart datum CD) to feet for the shared tide response.
+ * Values are converted from centimeters to feet for the shared tide response
+ * and stay above chart datum, the reference every request selects with
+ * `refcode=CD`. The API form at https://vannstand.kartverket.no/tideapi_en.html
+ * labels that choice "Chart datum" (alongside "Mean sea level" and "NN2000"),
+ * and responses echo `<reflevelcode>CD</reflevelcode>`. Timestamps carry
+ * their UTC offset, e.g. `time="2026-10-31T09:14:00+01:00"` with `dst=0`.
  *
  * Free + commercial use under NLOD 2.0.
  *
@@ -154,7 +158,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `tides:contributors-v1:${station.code}:${dayKey}`;
+  const cacheKey = `tides:datum-v1:${station.code}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
@@ -178,9 +182,9 @@ async function buildTidesResponse(
     },
     events,
     curve,
-    datum: "MLLW",
+    datum: "chart_datum",
     units: "english",
-    timeZone: "lst_ldt",
+    timeZone: "iso_offset",
   };
   await ctx.cache.set(cacheKey, result, TIDES_TTL);
   return result;

@@ -150,7 +150,7 @@ export function createTidesIntegration<S extends TideStationBase>(
       // client, so a cached response that spans midnight UTC would land
       // yesterday's events under today's label until the TTL expires.
       const dayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = `nearest:contributors-v2:${round4(lat)},${round4(lng)}:${dayKey}`;
+      const cacheKey = `nearest:datum-v1:${round4(lat)},${round4(lng)}:${dayKey}`;
       const cached = await ctx.cache.get<TidesPayload | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in cached) {
