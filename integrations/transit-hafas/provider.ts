@@ -1,6 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import {
   fetchJson,
+  fptfLineName,
   mapProducts,
   normalizeFptfDeparture,
   normalizeRemarks,
@@ -278,7 +279,7 @@ function legToTripLeg(leg: any, inst: HafasInstance): TripLeg {
     route: isWalking
       ? undefined
       : {
-          shortName: line.name ?? "",
+          shortName: line.name ? fptfLineName(line).name : "",
           longName: line.productName ?? line.name ?? "",
           color: line.color?.bg?.replace(/^#/, "") ?? undefined,
         },
@@ -371,7 +372,7 @@ export async function getTrip(inst: HafasInstance, tripId: string): Promise<Vehi
 
     return {
       id: `${inst.prefix}${trip.id ?? rawId}`,
-      name: trip.line?.name ?? trip.direction ?? "",
+      name: (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
       provider: inst.id as VehicleJourney["provider"],
       remarks: normalizeRemarks(trip.remarks),
       stops,
@@ -411,7 +412,7 @@ export async function getRadar(inst: HafasInstance, bbox: BBox): Promise<Vehicle
         lng: m.location?.longitude ?? 0,
         bearing: typeof m.bearing === "number" ? m.bearing : undefined,
         speed: typeof m.speed === "number" ? m.speed : undefined,
-        label: m.line?.name ?? undefined,
+        label: m.line?.name ? fptfLineName(m.line).name : undefined,
         updatedAt: new Date().toISOString(),
       }),
     );

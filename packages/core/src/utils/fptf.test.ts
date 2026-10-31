@@ -48,3 +48,27 @@ describe("normalizeFptfDeparture stop", () => {
     expect(dep.stop).toBeUndefined();
   });
 });
+
+describe("normalizeFptfDeparture line name", () => {
+  it("shows the line riders know and keeps the train number apart", () => {
+    const dep = normalizeFptfDeparture(
+      {
+        line: {
+          name: "DB S11 (Zug-Nr. 33192)",
+          fahrtNr: "33192",
+          productName: "DB",
+          product: "suburban",
+        },
+      },
+      "oebb:",
+    );
+    expect(dep.route.shortName).toBe("S11");
+    expect(dep.serviceInfo?.trainNumber).toBe("33192");
+  });
+
+  it("leaves a plain line name and sets no train number", () => {
+    const dep = normalizeFptfDeparture({ line: { name: "RE1", product: "regional" } }, "vsn:");
+    expect(dep.route.shortName).toBe("RE1");
+    expect(dep.serviceInfo).toBeUndefined();
+  });
+});

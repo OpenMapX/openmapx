@@ -669,6 +669,39 @@ describe("MOTIS stop time's own stop", () => {
   });
 });
 
+describe("MOTIS line names", () => {
+  it("takes the train number out of a regional line's display name", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: { scheduledDeparture: "2026-10-31T17:08:00Z" },
+        mode: "REGIONAL_RAIL",
+        displayName: "RE1 (26826)",
+        routeShortName: "RE1",
+        tripShortName: "026826",
+      } as never,
+      "departure",
+    );
+    expect(departure.route.shortName).toBe("RE1");
+    expect(departure.serviceInfo?.trainNumber).toBe("26826");
+  });
+
+  it("keeps a long-distance train's display name, whose route name is a bare number", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: { scheduledDeparture: "2026-10-31T17:08:00Z" },
+        mode: "HIGHSPEED_RAIL",
+        displayName: "ICE 203",
+        routeShortName: "43",
+      } as never,
+      "departure",
+    );
+    expect(departure.route.shortName).toBe("ICE 203");
+    expect(departure.serviceInfo).toBeUndefined();
+  });
+});
+
 describe("MOTIS timetable transport evidence", () => {
   beforeEach(() => mocks.stoptimes.mockReset());
   it.each([getDepartures, getArrivals])(

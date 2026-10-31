@@ -1,5 +1,6 @@
 import {
   type BBox,
+  fptfLineName,
   mapProducts,
   normalizeFptfDeparture,
   productToMode,
@@ -250,7 +251,7 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
     route: isWalking
       ? undefined
       : {
-          shortName: line.name ?? "",
+          shortName: line.name ? fptfLineName(line).name : "",
           longName: line.productName ?? line.name ?? "",
           color: line.color?.bg?.replace(/^#/, "") ?? undefined,
         },
@@ -464,7 +465,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
           : undefined;
       return {
         id: `${entry.prefix}${trip.id ?? raw}`,
-        name: trip.line?.name ?? trip.direction ?? "",
+        name: (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
         provider: entry.slug,
         remarks: remarks?.length ? remarks : undefined,
         stops,
@@ -507,7 +508,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
             lat: m.location.latitude as number,
             lng: m.location.longitude as number,
             // HAFAS does not return bearing or speed in the radar response
-            label: m.line?.name ?? m.direction,
+            label: (m.line?.name ? fptfLineName(m.line).name : undefined) ?? m.direction,
             currentStopId: m.nextStopovers?.[0]?.stop?.id
               ? `${entry.prefix}${m.nextStopovers[0].stop.id as string}`
               : undefined,

@@ -34,6 +34,11 @@ describe("lineNamesCompatible", () => {
     ["ICE", "ICE 123"],
     ["Bus 73", "73"],
     ["S1", undefined],
+    ["RE1 (26826)", "RE 1 (RR"],
+    ["RE1", "RE1RRX"],
+    ["RE 1 (RRX)", "RE1"],
+    ["DB S11 (Zug-Nr. 33192)", "S11"],
+    ["RB48 (Zug-Nr. 17358)", "RB 48"],
   ])("treats %j and %j as one line", (a, b) => {
     expect(lineNamesCompatible(a, b)).toBe(true);
   });
@@ -42,6 +47,8 @@ describe("lineNamesCompatible", () => {
     ["S1", "S2"],
     ["RE1", "RB1"],
     ["U6", "U61"],
+    ["SEV S1", "S1"],
+    ["RE1", "RE11"],
   ])("keeps %j and %j apart", (a, b) => {
     expect(lineNamesCompatible(a, b)).toBe(false);
   });

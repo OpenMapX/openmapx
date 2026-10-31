@@ -1,4 +1,5 @@
 import {
+  fptfLineName,
   mapFptfLoadFactor,
   mapProducts,
   normalizeFptfDeparture,
@@ -287,7 +288,7 @@ function legToTripLeg(leg: any): TripLeg {
     route: isWalking
       ? undefined
       : {
-          shortName: line.name ?? "",
+          shortName: line.name ? fptfLineName(line).name : "",
           longName: line.productName ?? line.name ?? "",
           color: line.color?.bg?.replace(/^#/, "") ?? undefined,
         },
@@ -551,7 +552,7 @@ export async function getTrip(tripId: string): Promise<VehicleJourney | null> {
 
     return {
       id: `${PREFIX}${trip.id ?? rawId}`,
-      name: trip.line?.name ?? trip.direction ?? "",
+      name: (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
       provider: "db",
       remarks: normalizeRemarks(trip.remarks),
       stops,

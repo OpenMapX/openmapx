@@ -82,6 +82,12 @@ otherwise it is the stop named like the place. Different spellings of one name,
 such as "Köln Hbf" and "Köln Hauptbahnhof", count as one stop and are not
 labelled.
 
+Lines appear under the name riders know, such as "S11" or "RE1". Some sources
+write the train number or their operator into the line's name ("DB S11
+(Zug-Nr. 33192)"); the number then appears in the trip's details instead. A
+train that two sources, or one source twice, list under different spellings
+shows as one departure.
+
 ### Understanding timetable status
 
 **Scheduled time** identifies explicitly timetable-only service. A prediction

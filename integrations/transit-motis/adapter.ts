@@ -27,6 +27,7 @@ import {
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
+import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { motisMode } from "@openmapx/mobility-core/motis-radar";
@@ -298,6 +299,21 @@ export async function searchByName(
  * Compute a Departure from a MOTIS StopTime entry.
  * Handles both departures (arriveBy=false) and arrivals (arriveBy=true).
  */
+/**
+ * The line riders know and the train number. MOTIS's `displayName` appends the
+ * train number to regional lines ("RE1 (26826)") but is the only good name for
+ * long-distance trains, whose route short name is a bare number ("ICE 203").
+ */
+function motisLineName(service: {
+  displayName?: string | null;
+  routeShortName?: string | null;
+  tripShortName?: string | null;
+}): LineName {
+  return splitLineName(
+    service.displayName ?? service.routeShortName ?? service.tripShortName ?? "",
+  );
+}
+
 export function normalizeStoptime(
   instance: MotisInstance,
   st: StopTime,
@@ -329,6 +345,7 @@ export function normalizeStoptime(
 
   const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
   const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
+  const lineName = motisLineName(st);
 
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
@@ -343,7 +360,7 @@ export function normalizeStoptime(
             st.routeId,
           )
         : "",
-      shortName: st.displayName ?? st.routeShortName ?? st.tripShortName ?? "",
+      shortName: lineName.name,
       longName: st.routeLongName ?? "",
       mode: motisMode(st.mode),
       color: st.routeColor?.replace(/^#/, "") ?? undefined,
@@ -356,6 +373,7 @@ export function normalizeStoptime(
     platform,
     scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
+    ...(lineName.trainNumber ? { serviceInfo: { trainNumber: lineName.trainNumber } } : {}),
     // A station's board includes its platforms' stop times, each naming its own stop.
     ...(place.stopId && place.name
       ? { stop: { id: `${instance.prefix}${place.stopId}`, name: place.name } }
@@ -712,7 +730,8 @@ function mapAlternatives(instance: MotisInstance, alternatives: Leg[][]): Transi
       startTime: transit.startTime,
       endTime: transit.endTime,
       tripId: transit.tripId ? `${instance.prefix}${transit.tripId}` : undefined,
-      routeShortName: transit.displayName ?? transit.routeShortName ?? undefined,
+      routeShortName:
+        transit.displayName || transit.routeShortName ? motisLineName(transit).name : undefined,
     });
   }
   return out;
@@ -837,7 +856,7 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
     },
     route: isTransit
       ? {
-          shortName: leg.displayName ?? leg.routeShortName ?? leg.tripShortName ?? "",
+          shortName: motisLineName(leg).name,
           longName: leg.routeLongName ?? "",
           color: leg.routeColor?.replace(/^#/, "") ?? undefined,
           textColor: leg.routeTextColor?.replace(/^#/, "") ?? undefined,
