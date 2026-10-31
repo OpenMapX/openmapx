@@ -186,4 +186,10 @@ export interface Place extends Identified, ContributingRecord {
    * main stop, so departures from it stay unlabelled.
    */
   transitStop?: { id?: string; name: string };
+  /**
+   * The name in the place's own language (OSM's `name` tag), when it is known
+   * and `name` may be a translation: "München Hauptbahnhof" for "Munich
+   * Central Station". Transit sources name stops locally.
+   */
+  localName?: string;
 }

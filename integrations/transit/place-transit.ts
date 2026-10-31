@@ -205,51 +205,54 @@ function resolveProviderNames(providers: TransitProvider[], ids: string[]): stri
   return names;
 }
 
-export interface PlaceTransit {
-  getLinkedStops(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<TransitStop[]>>;
-  getMergedRoutes(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<MergedRoute[]>>;
+/** A place whose transit stops a board links, as the client knows it. */
+export interface PlaceQuery {
+  lat: number;
+  lng: number;
+  /** The name shown to the user, which may be a translation. */
+  name: string;
+  /** The client's id for the place. */
+  placeId?: string;
+  /** The place's OSM object ("node/123"); its local name links the stops. */
+  osmRef?: string;
   /**
-   * `openedFor` names the stop the place was opened for, such as a journey's
-   * stop; departures from it count as the main stop's and stay unlabelled.
+   * The transit stop the place was opened for, such as a journey's stop: its
+   * name also links stops, and its departures count as the main stop's.
    */
+  stopName?: string;
+}
+
+export interface PlaceTransit {
+  getLinkedStops(place: PlaceQuery): Promise<MobilityResult<TransitStop[]>>;
+  getMergedRoutes(place: PlaceQuery): Promise<MobilityResult<MergedRoute[]>>;
   getMergedDepartures(
-    lat: number,
-    lng: number,
-    name: string,
+    place: PlaceQuery,
     minutes: number,
-    placeId?: string,
-    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>>;
-  getMergedArrivals(
-    lat: number,
-    lng: number,
-    name: string,
-    minutes: number,
-    placeId?: string,
-    openedFor?: string,
-  ): Promise<MobilityResult<MergedDeparture[]>>;
-  getMergedAlerts(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<ServiceAlert[]>>;
-  getMergedFacilities(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<Facility[]>>;
+  getMergedArrivals(place: PlaceQuery, minutes: number): Promise<MobilityResult<MergedDeparture[]>>;
+  getMergedAlerts(place: PlaceQuery): Promise<MobilityResult<ServiceAlert[]>>;
+  getMergedFacilities(place: PlaceQuery): Promise<MobilityResult<Facility[]>>;
+}
+
+export interface PlaceTransitOptions {
+  /**
+   * The local name of an OSM object ("node/123"): OSM's `name` tag, which is
+   * how transit sources name a station. Translated names such as "Munich
+   * Central Station" don't find "München Hbf".
+   */
+  lookupLocalName?: (osmRef: string) => Promise<string | undefined>;
+}
+
+/** The names that link a place's stops, and the identity of its cached links. */
+interface PlaceLink {
+  lat: number;
+  lng: number;
+  /** Search names: the local name (else the shown one) and the opened stop's. */
+  names: string[];
+  /** The name the place's main stop is named like. */
+  placeName: string;
+  openedFor?: string;
+  cacheId: string;
 }
 
 /** Build a deterministic cache key from prefix + data. */
@@ -279,11 +282,82 @@ function tokenizeLinkName(name: string): string[] {
   return norm.split(" ").filter((t) => t.length > 0);
 }
 
-/** Canonical cache id from place coordinates + name (synonyms normalised). */
-function placeCacheId(lat: number, lng: number, name: string, placeId?: string): string {
-  if (placeId) return placeId;
-  const canonicalName = expandSearchQuery(name).toLowerCase().replace(/\s+/g, "-");
-  return `${lat.toFixed(5)}_${lng.toFixed(5)}_${canonicalName}`;
+/** A name's canonical form, so "Köln Hbf" and "Köln Hauptbahnhof" are one. */
+function canonicalLinkName(name: string): string {
+  return expandSearchQuery(name).toLowerCase().replace(/\s+/g, "-");
+}
+
+/**
+ * Cache identity of a place's links: the place, and the names that linked its
+ * stops, so a board found by one name never stands in for another name's.
+ */
+function placeCacheId(lat: number, lng: number, names: string[], placeId?: string): string {
+  const place = placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}`;
+  return [place, ...names.map(canonicalLinkName)].join("|");
+}
+
+const OSM_REF = /^(node|way|relation)\/[1-9]\d*$/;
+
+/**
+ * The stops a place's name links: within 1 km and named similarly to the name
+ * or one of its spellings, and, when the candidates differ in other words,
+ * sharing one of those words with the name, so a stop isn't linked by its
+ * city's name alone.
+ */
+function linkByName(
+  candidates: TransitStop[],
+  lat: number,
+  lng: number,
+  name: string,
+): TransitStop[] {
+  const normVariants = getQueryVariants(name)
+    .map((v) => normalizeLinkName(v))
+    .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+
+  // First-pass candidates: distance + fuzzy name match against any query variant.
+  const prelim = candidates.filter((stop) => {
+    if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
+    const stopNorm = normalizeLinkName(stop.name);
+    if (!stopNorm) return false;
+    let best = 0;
+    for (const q of normVariants) {
+      const score = diceSimilarity(stopNorm, q);
+      if (score > best) best = score;
+    }
+    return best >= MIN_NAME_DICE;
+  });
+  if (prelim.length === 0) return [];
+
+  // Second-pass pruning: avoid linking by city token only.
+  // Keep candidates that share at least one informative token from the place
+  // name variants (tokens present in some, but not all, prelim candidates).
+  // Tokens are compared in expanded form, so "Köln Hbf" shares "hauptbahnhof"
+  // with a place or stop spelled "Köln Hauptbahnhof".
+  const tokenFreq = new Map<string, number>();
+  const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(expandSearchQuery(s.name))));
+  for (const tokens of prelimTokenSets) {
+    for (const t of tokens) {
+      tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+    }
+  }
+
+  const placeTokens = new Set<string>();
+  for (const q of normVariants) {
+    for (const t of tokenizeLinkName(expandSearchQuery(q))) {
+      if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
+      if (/^\d+$/.test(t)) continue;
+      placeTokens.add(t);
+    }
+  }
+
+  const informativeTokens = Array.from(placeTokens).filter((t) => {
+    const count = tokenFreq.get(t) ?? 0;
+    return count > 0 && count < prelim.length;
+  });
+
+  return informativeTokens.length === 0
+    ? prelim
+    : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
 }
 
 interface CachedStopsEnvelope {
@@ -297,8 +371,45 @@ interface CachedStopsEnvelope {
 export function createPlaceTransit(
   ctx: IntegrationContext,
   orchestrator: TransitOrchestrator,
+  options: PlaceTransitOptions = {},
 ): PlaceTransit {
   const cache = ctx.cache;
+
+  /** The OSM object's local name, cached like the links; unknown when the lookup fails. */
+  async function localNameOf(osmRef: string | undefined): Promise<string | undefined> {
+    const lookup = options.lookupLocalName;
+    if (!lookup || !osmRef || !OSM_REF.test(osmRef)) return undefined;
+    try {
+      const found = await cache.withCache<{ name?: string }>(
+        hashKey("transit:osm-local-name", { osmRef }),
+        TTL.placeStops,
+        async () => {
+          const name = (await lookup(osmRef))?.trim();
+          return name ? { name } : {};
+        },
+      );
+      return found.name;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function linkFor(place: PlaceQuery): Promise<PlaceLink> {
+    const placeName = (await localNameOf(place.osmRef)) ?? place.name;
+    const names: string[] = [];
+    for (const name of [placeName, place.stopName]) {
+      if (name && !names.some((n) => canonicalLinkName(n) === canonicalLinkName(name)))
+        names.push(name);
+    }
+    return {
+      lat: place.lat,
+      lng: place.lng,
+      names,
+      placeName,
+      openedFor: place.stopName,
+      cacheId: placeCacheId(place.lat, place.lng, names, place.placeId),
+    };
+  }
 
   /**
    * Find all transit stops that belong to a given OSM place.
@@ -311,13 +422,12 @@ export function createPlaceTransit(
    * where no stop search answered rejects, so an outage never becomes a cached
    * "this place has no stops".
    */
-  async function getLinkedStops(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<TransitStop[]>> {
-    const id = placeCacheId(lat, lng, name, placeId);
+  async function getLinkedStops(place: PlaceQuery): Promise<MobilityResult<TransitStop[]>> {
+    return linkedStops(await linkFor(place));
+  }
+
+  async function linkedStops(link: PlaceLink): Promise<MobilityResult<TransitStop[]>> {
+    const id = link.cacheId;
     const key = hashKey("transit:place-stops", { id });
     const partialKey = hashKey("transit:place-stops-partial", { id });
     // All four station-panel requests share this discovery, including cold misses.
@@ -329,7 +439,7 @@ export function createPlaceTransit(
         const recent = await cache.get<CachedStopsEnvelope>(partialKey).catch(() => null);
         if (recent) return recent;
         const writer = (await cache.captureWriter?.()) ?? cache;
-        const discovered = await discoverLinkedStops(lat, lng, name);
+        const discovered = await discoverLinkedStops(link.lat, link.lng, link.names);
         if (discovered.freshness.isPartial) {
           await writer.set(partialKey, discovered, TTL.partialDiscovery).catch(() => {});
         }
@@ -348,7 +458,7 @@ export function createPlaceTransit(
   async function discoverLinkedStops(
     lat: number,
     lng: number,
-    name: string,
+    names: string[],
   ): Promise<CachedStopsEnvelope> {
     // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
     // providers from distant regions don't contribute stops that share stop-database
@@ -357,7 +467,7 @@ export function createPlaceTransit(
     const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
     // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
     // providers indexing either form are found, then deduplicate by stop id.
-    const variants = getQueryVariants(name);
+    const variants = [...new Set(names.flatMap((name) => getQueryVariants(name)))];
     const settled = await Promise.allSettled(
       variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
     );
@@ -374,59 +484,10 @@ export function createPlaceTransit(
         seen.add(s.id);
         return true;
       });
-    const normVariants = variants
-      .map((v) => normalizeLinkName(v))
-      .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
-
-    // First-pass candidates: distance + fuzzy name match against any query variant.
-    const prelim = raw.filter((stop) => {
-      if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-      const stopNorm = normalizeLinkName(stop.name);
-      if (!stopNorm) return false;
-      let best = 0;
-      for (const q of normVariants) {
-        const score = diceSimilarity(stopNorm, q);
-        if (score > best) best = score;
-      }
-      return best >= MIN_NAME_DICE;
-    });
-
-    if (prelim.length === 0) {
-      return { stops: [], attributions: [], freshness };
-    }
-
-    // Second-pass pruning: avoid linking by city token only.
-    // Keep candidates that share at least one informative token from the place
-    // name variants (tokens present in some, but not all, prelim candidates).
-    // Tokens are compared in expanded form, so "Köln Hbf" shares "hauptbahnhof"
-    // with a place or stop spelled "Köln Hauptbahnhof".
-    const tokenFreq = new Map<string, number>();
-    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(expandSearchQuery(s.name))));
-    for (const tokens of prelimTokenSets) {
-      for (const t of tokens) {
-        tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
-      }
-    }
-
-    const placeTokens = new Set<string>();
-    for (const q of normVariants) {
-      for (const t of tokenizeLinkName(expandSearchQuery(q))) {
-        if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
-        if (/^\d+$/.test(t)) continue;
-        placeTokens.add(t);
-      }
-    }
-
-    const informativeTokens = Array.from(placeTokens).filter((t) => {
-      const count = tokenFreq.get(t) ?? 0;
-      return count > 0 && count < prelim.length;
-    });
-
-    const linked =
-      informativeTokens.length === 0
-        ? prelim
-        : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
-
+    // Each name links the stops it would link alone, e.g. the station's local
+    // name and the name of the stop the place was opened for.
+    const kept = new Set(names.flatMap((name) => linkByName(raw, lat, lng, name)));
+    const linked = raw.filter((stop) => kept.has(stop));
     return { stops: linked, attributions: contributorsForRecords(linked), freshness };
   }
 
@@ -439,13 +500,9 @@ export function createPlaceTransit(
    * - Same route from DB + iRail -> providers: ["db", "irail"], keep entry with color data
    * - Same route from 3 DB bus platforms -> providers: ["db"] (one entry)
    */
-  async function getMergedRoutes(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<MergedRoute[]>> {
-    const cacheId = placeCacheId(lat, lng, name, placeId);
+  async function getMergedRoutes(place: PlaceQuery): Promise<MobilityResult<MergedRoute[]>> {
+    const link = await linkFor(place);
+    const cacheId = link.cacheId;
     const key = hashKey("transit:place-routes", { id: cacheId });
     interface CachedRoutes {
       routes: MergedRoute[];
@@ -461,7 +518,7 @@ export function createPlaceTransit(
       };
     }
 
-    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
       const envelope: CachedRoutes = {
@@ -790,20 +847,17 @@ export function createPlaceTransit(
   }
 
   async function getMergedDepartures(
-    lat: number,
-    lng: number,
-    name: string,
+    place: PlaceQuery,
     minutes: number,
-    placeId?: string,
-    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
-    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const link = await linkFor(place);
+    const stopsRes = await linkedStops(link);
     const merged = await buildMergedTimetable(
       stopsRes.data,
       (id, min) => orchestrator.getDepartures(id, min),
       minutes,
-      name,
-      openedFor,
+      link.placeName,
+      link.openedFor,
     );
     return {
       data: merged.data,
@@ -814,20 +868,17 @@ export function createPlaceTransit(
   }
 
   async function getMergedArrivals(
-    lat: number,
-    lng: number,
-    name: string,
+    place: PlaceQuery,
     minutes: number,
-    placeId?: string,
-    openedFor?: string,
   ): Promise<MobilityResult<MergedDeparture[]>> {
-    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const link = await linkFor(place);
+    const stopsRes = await linkedStops(link);
     const merged = await buildMergedTimetable(
       stopsRes.data,
       (id, min) => orchestrator.getArrivals(id, min),
       minutes,
-      name,
-      openedFor,
+      link.placeName,
+      link.openedFor,
     );
     return {
       data: merged.data,
@@ -843,18 +894,14 @@ export function createPlaceTransit(
    * Fetch alerts for all linked stops and deduplicate by alert id.
    * Cached 60 seconds.
    */
-  async function getMergedAlerts(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<ServiceAlert[]>> {
+  async function getMergedAlerts(place: PlaceQuery): Promise<MobilityResult<ServiceAlert[]>> {
+    const link = await linkFor(place);
     interface CachedAlerts {
       alerts: ServiceAlert[];
       attributions: Attribution[];
       freshness: Freshness;
     }
-    const cacheId = placeCacheId(lat, lng, name, placeId);
+    const cacheId = link.cacheId;
     const key = hashKey("transit:place-alerts", { id: cacheId });
     const cached = await cache.get<CachedAlerts>(key);
     if (cached) {
@@ -865,7 +912,7 @@ export function createPlaceTransit(
       };
     }
 
-    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
       const envelope: CachedAlerts = {
@@ -927,18 +974,14 @@ export function createPlaceTransit(
    * Fetch facilities for all linked stops and deduplicate by facility id.
    * Cached 24 hours.
    */
-  async function getMergedFacilities(
-    lat: number,
-    lng: number,
-    name: string,
-    placeId?: string,
-  ): Promise<MobilityResult<Facility[]>> {
+  async function getMergedFacilities(place: PlaceQuery): Promise<MobilityResult<Facility[]>> {
+    const link = await linkFor(place);
     interface CachedFacilities {
       facilities: Facility[];
       attributions: Attribution[];
       freshness: Freshness;
     }
-    const cacheId = placeCacheId(lat, lng, name, placeId);
+    const cacheId = link.cacheId;
     const key = hashKey("transit:place-facilities", { id: cacheId });
     const cached = await cache.get<CachedFacilities>(key);
     if (cached) {
@@ -949,7 +992,7 @@ export function createPlaceTransit(
       };
     }
 
-    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
       const envelope: CachedFacilities = {
