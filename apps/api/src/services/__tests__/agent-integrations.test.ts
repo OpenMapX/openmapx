@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDbMock, type DbMock } from "../../test/db.js";
+import type { JobContext } from "../job-runner";
 
 const dbMock: DbMock = createDbMock();
 
@@ -11,9 +12,55 @@ vi.mock("../ops-client", () => ({
     (namespace: string, identity: string) => `opk1_${namespace}:${identity}`,
   ),
   executeAndWait: vi.fn(),
+  OpsObservationPending: class OpsObservationPending extends Error {},
 }));
 
-import { executeAndWait } from "../ops-client";
+import { createApiOpsClient, executeAndWait } from "../ops-client";
+
+vi.mock("../admin-job-ops", () => ({
+  executeAdminJobOperation: vi.fn((_ctx, operation, _namespace, options) =>
+    executeAndWait(createApiOpsClient(), operation, options.operationKey, { signal: undefined }),
+  ),
+}));
+vi.mock("../admin-job-projection", () => ({
+  readProjection: (result: { opsProjection: unknown }) => result.opsProjection,
+}));
+
+import { executeAdminJobOperation } from "../admin-job-ops";
+
+function jobContext(): JobContext {
+  const operations = Object.fromEntries(
+    ["intg-one", "intg-two"].map((id) => [
+      id,
+      {
+        operationKey: id,
+        kind: "catalogIntegration.publish",
+        attempt: { apiJobId: "extension-job" },
+        operation: {
+          kind: "catalogIntegration.publish",
+          integrationId: id,
+          source: { kind: "artifact", url: ARTIFACT, sha256: SHA },
+        },
+      },
+    ]),
+  );
+  return {
+    jobId: "extension-job",
+    payload: {},
+    signal: new AbortController().signal,
+    log: vi.fn(),
+    setProgress: vi.fn(),
+    checkpoint: vi.fn(),
+    checkpointResult: {
+      opsProjection: {
+        operations,
+        steps: Object.fromEntries(
+          Object.keys(operations).map((key) => [key, { operationKey: key }]),
+        ),
+      },
+    },
+  };
+}
 
 let integrations: typeof import("../agent-integrations.js");
 beforeAll(async () => {
@@ -76,14 +123,20 @@ function agentAnswers(
       read += 1;
       return answer as never;
     }
-    if (request.kind === "integration.settle") {
+    if (request.kind === "catalogIntegration.publish")
+      return {
+        integrationId: request.integrationId,
+        transactionId: request.integrationId === "intg-two" ? OTHER : PENDING,
+        manifestSha256: SHA,
+      } as never;
+    if (request.kind === "catalogIntegration.settle") {
       return {
         integrationId: request.integrationId,
         outcome: request.outcome,
         changed: true,
       } as never;
     }
-    if (request.kind === "integration.adopt") return adopt(request) as never;
+    if (request.kind === "catalogIntegration.adopt") return adopt(request) as never;
     throw new Error(`unexpected ${request.kind}`);
   });
 }
@@ -118,19 +171,19 @@ describe("agent integration client", () => {
           source: { kind: "artifact", url: ARTIFACT, sha256: SHA },
           extensionId: "bundle-x",
         },
-        { operationKey: "opk1_key" },
+        { ctx: jobContext(), operationKey: "opk1_key" },
       ),
     ).resolves.toMatchObject({ integrationId: "intg-other", transactionId: PENDING });
-    expect(executeMock).toHaveBeenCalledWith(
-      {},
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "extension-job" }),
       {
-        kind: "integration.publish",
+        kind: "catalogIntegration.publish",
         integrationId: "intg-one",
         source: { kind: "artifact", url: ARTIFACT, sha256: SHA },
         extensionId: "bundle-x",
       },
-      "opk1_key",
-      { signal: undefined },
+      "extension.catalog.publish",
+      { operationKey: "opk1_key" },
     );
   });
 
@@ -140,7 +193,7 @@ describe("agent integration client", () => {
       () =>
         integrations.settleIntegration(
           { integrationId: "intg-one", transactionId: PENDING, outcome: "commit" },
-          { operationKey: "opk1_key" },
+          { ctx: jobContext(), operationKey: "opk1_key" },
         ),
       { integrationId: "intg-two", outcome: "commit", changed: true },
     ],
@@ -149,14 +202,17 @@ describe("agent integration client", () => {
       () =>
         integrations.removeIntegration(
           { integrationId: "intg-one", extensionId: "bundle-x" },
-          { operationKey: "opk1_key" },
+          { ctx: jobContext(), operationKey: "opk1_key" },
         ),
       { integrationId: "intg-two", removed: true },
     ],
     [
       "adopt",
       () =>
-        integrations.adoptIntegration({ integrationId: "intg-one" }, { operationKey: "opk1_key" }),
+        integrations.adoptIntegration(
+          { integrationId: "intg-one" },
+          { ctx: jobContext(), operationKey: "opk1_key" },
+        ),
       { integrationId: "intg-two", status: "recorded", reason: null },
     ],
   ])("refuses a %s answer about a different integration", async (_kind, call, answer) => {
@@ -173,13 +229,35 @@ describe("agent integration client", () => {
     await expect(
       integrations.settleIntegration(
         { integrationId: "intg-one", transactionId: PENDING, outcome: "commit" },
-        { operationKey: "opk1_key" },
+        { ctx: jobContext(), operationKey: "opk1_key" },
       ),
     ).rejects.toThrow(/different integration change/);
   });
 });
 
 describe("recoverAgentIntegrations", () => {
+  it("keeps contextless startup recovery observation-only", async () => {
+    agentAnswers([
+      snapshot([{ integrationId: "intg-one", pending: { transactionId: PENDING } }], ["intg-old"]),
+    ]);
+    const log = silentLog();
+    const outcome = await integrations.recoverAgentIntegrations({ log });
+    expect(requests("catalogIntegration.settle")).toEqual([]);
+    expect(requests("catalogIntegration.adopt")).toEqual([]);
+    expect(outcome.committed).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("original administrative job"));
+  });
+
+  it("refuses to settle another job's pending publication", async () => {
+    agentAnswers([snapshot([{ integrationId: "intg-one", pending: { transactionId: PENDING } }])]);
+    const ctx = jobContext();
+    ctx.jobId = "another-job";
+    await expect(
+      integrations.recoverAgentIntegrations({ ctx, log: silentLog() }),
+    ).rejects.toThrow();
+    expect(requests("catalogIntegration.settle")).toEqual([]);
+  });
+
   it("commits a pending transaction the row records and rolls back any other", async () => {
     agentAnswers([
       snapshot([
@@ -192,17 +270,20 @@ describe("recoverAgentIntegrations", () => {
     dbMock.queueSelect([{ lastTransactionId: `itx1_${"f".repeat(24)}` }]);
     dbMock.queueSelect([]);
 
-    const outcome = await integrations.recoverAgentIntegrations({ log: silentLog() });
+    const outcome = await integrations.recoverAgentIntegrations({
+      ctx: jobContext(),
+      log: silentLog(),
+    });
 
-    expect(requests("integration.settle")).toEqual([
+    expect(requests("catalogIntegration.settle")).toEqual([
       {
-        kind: "integration.settle",
+        kind: "catalogIntegration.settle",
         integrationId: "intg-one",
         transactionId: PENDING,
         outcome: "commit",
       },
       {
-        kind: "integration.settle",
+        kind: "catalogIntegration.settle",
         integrationId: "intg-two",
         transactionId: OTHER,
         outcome: "rollback",
@@ -219,9 +300,14 @@ describe("recoverAgentIntegrations", () => {
     dbMock.queueSelect([]);
     dbMock.queueSelect([]);
 
-    const outcome = await integrations.recoverAgentIntegrations({ log: silentLog() });
+    const outcome = await integrations.recoverAgentIntegrations({
+      ctx: jobContext(),
+      log: silentLog(),
+    });
 
-    expect(requests("integration.settle").map((request) => request.outcome)).toEqual(["rollback"]);
+    expect(requests("catalogIntegration.settle").map((request) => request.outcome)).toEqual([
+      "rollback",
+    ]);
     // Adoption reads what the rollback left.
     expect(requests("installedIntegrations.inspect")).toHaveLength(2);
     expect(outcome.rolledBack).toEqual(["intg-one"]);
@@ -237,13 +323,14 @@ describe("recoverAgentIntegrations", () => {
       { id: "intg-old", managedByExtension: null },
     ]);
 
-    await integrations.recoverAgentIntegrations({ log: silentLog() });
+    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
 
     const kinds = executeMock.mock.calls.map(([, operation]) => (operation as Request).kind);
     expect(kinds).toEqual([
       "installedIntegrations.inspect",
-      "integration.settle",
-      "integration.adopt",
+      "catalogIntegration.publish",
+      "catalogIntegration.settle",
+      "catalogIntegration.adopt",
     ]);
   });
 
@@ -264,11 +351,11 @@ describe("recoverAgentIntegrations", () => {
     ]);
     const log = silentLog();
 
-    const outcome = await integrations.recoverAgentIntegrations({ log });
+    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("integration.adopt")).toEqual([
+    expect(requests("catalogIntegration.adopt")).toEqual([
       {
-        kind: "integration.adopt",
+        kind: "catalogIntegration.adopt",
         integrationId: "intg-one",
         extensionId: "bundle-x",
         source: { kind: "artifact", url: ARTIFACT, sha256: SHA },
@@ -299,11 +386,11 @@ describe("recoverAgentIntegrations", () => {
     ]);
     const log = silentLog();
 
-    const outcome = await integrations.recoverAgentIntegrations({ log });
+    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("integration.adopt")).toEqual([
-      { kind: "integration.adopt", integrationId: "intg-gone" },
-      { kind: "integration.adopt", integrationId: "intg-one", extensionId: "bundle-x" },
+    expect(requests("catalogIntegration.adopt")).toEqual([
+      { kind: "catalogIntegration.adopt", integrationId: "intg-gone" },
+      { kind: "catalogIntegration.adopt", integrationId: "intg-one", extensionId: "bundle-x" },
     ]);
     expect(outcome.adopted).toEqual([]);
     expect(outcome.needsReinstall.map((entry) => entry.integrationId)).toEqual([
@@ -315,19 +402,19 @@ describe("recoverAgentIntegrations", () => {
     );
   });
 
-  it("gives every adoption attempt its own key, so a failed download is retried", async () => {
+  it("keeps adoption on the original job step instead of assigning a new attempt key", async () => {
     agentAnswers([snapshot([], ["intg-one"])]);
     dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
     dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
 
-    await integrations.recoverAgentIntegrations({ log: silentLog() });
-    await integrations.recoverAgentIntegrations({ log: silentLog() });
+    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
+    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
 
     const keys = executeMock.mock.calls
-      .filter(([, operation]) => (operation as Request).kind === "integration.adopt")
+      .filter(([, operation]) => (operation as Request).kind === "catalogIntegration.adopt")
       .map(([, , key]) => key);
     expect(keys).toHaveLength(2);
-    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[0]).toBe(keys[1]);
   });
 
   it("never fails recovery when one adoption fails", async () => {
@@ -343,7 +430,7 @@ describe("recoverAgentIntegrations", () => {
     ]);
     const log = silentLog();
 
-    const outcome = await integrations.recoverAgentIntegrations({ log });
+    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
     expect(outcome.adopted).toEqual(["intg-two"]);
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("could not adopt"));
@@ -354,9 +441,9 @@ describe("recoverAgentIntegrations", () => {
     dbMock.queueSelect([]);
     const log = silentLog();
 
-    await integrations.recoverAgentIntegrations({ log });
+    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("integration.adopt")).toEqual([]);
+    expect(requests("catalogIntegration.adopt")).toEqual([]);
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("custom_integrations/stray"));
   });
 
@@ -368,9 +455,12 @@ describe("recoverAgentIntegrations", () => {
     ]);
     dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
 
-    const outcome = await integrations.recoverAgentIntegrations({ log: silentLog() });
+    const outcome = await integrations.recoverAgentIntegrations({
+      ctx: jobContext(),
+      log: silentLog(),
+    });
 
-    expect(requests("integration.adopt")).toEqual([]);
+    expect(requests("catalogIntegration.adopt")).toEqual([]);
     expect(outcome).toEqual({ committed: [], rolledBack: [], adopted: [], needsReinstall: [] });
   });
 });

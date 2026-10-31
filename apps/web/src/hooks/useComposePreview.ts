@@ -6,5 +6,5 @@ import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 
 export function useComposePreview() {
   const { client, apiUrl } = useActivityClient();
-  return useQuery(serviceAdminQueries(client, apiUrl).compose());
+  return useQuery(serviceAdminQueries(client, apiUrl).composeDocument());
 }

@@ -6,8 +6,8 @@ import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
 afterEach(() => vi.unstubAllGlobals());
 describe("complete generated administration operations", () => {
-  it("exposes all25canonical operation keys", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(25);
+  it("exposes all38canonical operation keys", () => {
+    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(38);
     for (const key of Object.keys(dataManagerAdminOperations))
       expect(sdk).toHaveProperty(key, expect.any(Function));
   });
@@ -22,13 +22,38 @@ describe("complete generated administration operations", () => {
       )
       .mockResolvedValueOnce(Response.json({ ok: false, reason: "out-of-scope" }, { status: 422 }));
     vi.stubGlobal("fetch", fetch);
-    const accepted = await sdk.postApiDataManagerTransitSync({ countries: ["de"] }, { client });
+    const accepted = await sdk.postApiDataManagerTransitSync(
+      {
+        countries: ["de"],
+        preflightId: "00000000-0000-4000-8000-000000000001",
+        fingerprint: "a".repeat(64),
+      },
+      { client },
+    );
     expect(sdk.unwrapAdminResponse(accepted).jobId).toBe("job");
-    expect(JSON.parse(fetch.mock.calls[0]?.[1].body)).toEqual({ countries: ["de"] });
-    const conflict = await sdk.postApiDataManagerTransitSync({}, { client });
+    expect(JSON.parse(fetch.mock.calls[0]?.[1].body)).toMatchObject({
+      countries: ["de"],
+      preflightId: "00000000-0000-4000-8000-000000000001",
+      fingerprint: "a".repeat(64),
+    });
+    const conflict = await sdk.postApiDataManagerTransitSync(
+      {
+        countries: ["de"],
+        preflightId: "00000000-0000-4000-8000-000000000001",
+        fingerprint: "a".repeat(64),
+      },
+      { client },
+    );
     expect(conflict.status).toBe(409);
     expect(() => sdk.unwrapAdminResponse(conflict)).toThrow(ApiClientError);
-    const rejected = await sdk.postApiDataManagerTransitSync({}, { client });
+    const rejected = await sdk.postApiDataManagerTransitSync(
+      {
+        countries: ["de"],
+        preflightId: "00000000-0000-4000-8000-000000000001",
+        fingerprint: "a".repeat(64),
+      },
+      { client },
+    );
     expect(rejected.status).toBe(422);
   });
   it.each([400, 401, 403, 404, 429, 500])(

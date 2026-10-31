@@ -1,0 +1,6 @@
+ALTER TABLE "installed_integration" ALTER COLUMN "repository" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "installed_extension" ADD COLUMN "installation_kind" text DEFAULT 'catalog' NOT NULL;--> statement-breakpoint
+ALTER TABLE "installed_extension" ADD COLUMN "provenance" jsonb;--> statement-breakpoint
+ALTER TABLE "installed_extension" ADD COLUMN "last_operation_id" text;--> statement-breakpoint
+ALTER TABLE "installed_extension" ADD CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone'));--> statement-breakpoint
+ALTER TABLE "installed_extension" ADD CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false));

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { hostControlConfigured } from "../services/deployment-mode";
 import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { writeAuditLog } from "../utils/audit-log";
@@ -39,6 +40,7 @@ function isExactSystemUpdateBody(body: unknown): boolean {
 
 const HOST_MUTATING_JOB_TYPES = [
   "system.update",
+  "platform.apply",
   "system.diagnostics",
   "service.start",
   "service.stop",
@@ -63,7 +65,7 @@ async function deploymentState(durableIdentity: string) {
       deployment: {
         dockerAvailable: inspection.dockerReachable,
         composeRendered: inspection.composeReady,
-        hostControlConfigured: inspection.maintenanceReady,
+        hostControlConfigured: hostControlConfigured(),
         maintenanceReady: inspection.maintenanceReady,
       },
       inspection,
@@ -73,7 +75,7 @@ async function deploymentState(durableIdentity: string) {
       deployment: {
         dockerAvailable: false,
         composeRendered: false,
-        hostControlConfigured: false,
+        hostControlConfigured: hostControlConfigured(),
         maintenanceReady: false,
       },
       inspection: { release: {}, services: [] },
@@ -154,6 +156,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
                 properties: {
                   configuredSelector: { type: "string" },
                   currentReleaseId: { type: "string" },
+                  selectedReleaseId: { type: "string" },
                   availableReleaseId: { type: "string" },
                   currentVersion: { type: "string" },
                   availableVersion: { type: "string" },
@@ -276,11 +279,14 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         return { error: "A maintenance operation is already active", jobId: active.id };
       }
       const admin = getAdminSession(request);
+      if (admin.user.id === "loopback" || admin.session.impersonatedBy)
+        return reply.code(403).send({ error: "A real full administrator session is required" });
       const createBackup = request.body?.createBackup !== false;
       const jobId = await jobRunner.enqueue(
         "system.update",
         {
           operation: "apply",
+          workflow: "guarded-release",
           createBackup,
           releaseId: request.body.releaseId,
           expectedDigest: request.body.expectedDigest,

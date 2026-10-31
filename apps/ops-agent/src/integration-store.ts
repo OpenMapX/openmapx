@@ -443,9 +443,9 @@ export class IntegrationStore {
   }
 
   async inspect(
-    operation: Extract<OpsOperation, { kind: "integration.inspect" }>,
+    operation: Extract<OpsOperation, { kind: "catalogIntegration.inspect" }>,
     signal: AbortSignal,
-  ): Promise<OpsResultFor<"integration.inspect">> {
+  ): Promise<OpsResultFor<"catalogIntegration.inspect">> {
     let staged: Staged;
     try {
       staged = await this.stage(operation.source, signal);
@@ -471,10 +471,11 @@ export class IntegrationStore {
   }
 
   publish(
-    operation: Extract<OpsOperation, { kind: "integration.publish" }>,
+    operation: Extract<OpsOperation, { kind: "catalogIntegration.publish" }>,
     signal: AbortSignal,
-  ): Promise<OpsResultFor<"integration.publish">> {
+  ): Promise<OpsResultFor<"catalogIntegration.publish">> {
     return this.serialize(async () => {
+      signal?.throwIfAborted();
       const { integrationId } = operation;
       const source = canonicalSource(operation.source);
       const extensionId = operation.extensionId ?? null;
@@ -483,6 +484,7 @@ export class IntegrationStore {
       if (record?.pending) throw new OpsAgentBusyError();
       this.assertOwner(integrationId, record, extensionId);
       const staged = await this.stage(source, signal);
+      signal.throwIfAborted();
       let prepared: IntegrationRecord | null = null;
       try {
         if (staged.integrationId !== integrationId) {
@@ -546,9 +548,11 @@ export class IntegrationStore {
   }
 
   settle(
-    operation: Extract<OpsOperation, { kind: "integration.settle" }>,
-  ): Promise<OpsResultFor<"integration.settle">> {
+    operation: Extract<OpsOperation, { kind: "catalogIntegration.settle" }>,
+    signal?: AbortSignal,
+  ): Promise<OpsResultFor<"catalogIntegration.settle">> {
     return this.serialize(async () => {
+      signal?.throwIfAborted();
       const { integrationId, transactionId, outcome } = operation;
       const record = this.readRecord(integrationId);
       const pending = record?.pending;
@@ -568,9 +572,11 @@ export class IntegrationStore {
   }
 
   remove(
-    operation: Extract<OpsOperation, { kind: "integration.remove" }>,
-  ): Promise<OpsResultFor<"integration.remove">> {
+    operation: Extract<OpsOperation, { kind: "catalogIntegration.remove" }>,
+    signal?: AbortSignal,
+  ): Promise<OpsResultFor<"catalogIntegration.remove">> {
     return this.serialize(async () => {
+      signal?.throwIfAborted();
       const { integrationId } = operation;
       const extensionId = operation.extensionId ?? null;
       const target = this.target(integrationId);
@@ -593,10 +599,11 @@ export class IntegrationStore {
    * fetched, which a later attempt may retry.
    */
   adopt(
-    operation: Extract<OpsOperation, { kind: "integration.adopt" }>,
+    operation: Extract<OpsOperation, { kind: "catalogIntegration.adopt" }>,
     signal: AbortSignal,
-  ): Promise<OpsResultFor<"integration.adopt">> {
+  ): Promise<OpsResultFor<"catalogIntegration.adopt">> {
     return this.serialize(async () => {
+      signal?.throwIfAborted();
       const { integrationId } = operation;
       const source = operation.source ? canonicalSource(operation.source) : undefined;
       const extensionId = operation.extensionId ?? null;
@@ -720,10 +727,15 @@ export class IntegrationStore {
 }
 
 export function installIntegrationRuntime(runtime: OpsRuntime, store: IntegrationStore): void {
-  runtime["integration.inspect"] = (operation, context) => store.inspect(operation, context.signal);
-  runtime["integration.publish"] = (operation, context) => store.publish(operation, context.signal);
-  runtime["integration.settle"] = (operation) => store.settle(operation);
-  runtime["integration.remove"] = (operation) => store.remove(operation);
-  runtime["integration.adopt"] = (operation, context) => store.adopt(operation, context.signal);
+  runtime["catalogIntegration.inspect"] = (operation, context) =>
+    store.inspect(operation, context.signal);
+  runtime["catalogIntegration.publish"] = (operation, context) =>
+    store.publish(operation, context.signal);
+  runtime["catalogIntegration.settle"] = (operation, context) =>
+    store.settle(operation, context.signal);
+  runtime["catalogIntegration.remove"] = (operation, context) =>
+    store.remove(operation, context.signal);
+  runtime["catalogIntegration.adopt"] = (operation, context) =>
+    store.adopt(operation, context.signal);
   runtime["installedIntegrations.inspect"] = () => store.list();
 }

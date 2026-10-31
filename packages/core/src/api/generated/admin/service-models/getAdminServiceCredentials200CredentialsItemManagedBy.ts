@@ -6,4 +6,5 @@ export type GetAdminServiceCredentials200CredentialsItemManagedBy =
 
 export const GetAdminServiceCredentials200CredentialsItemManagedBy = {
   "dawarich-provisioning": "dawarich-provisioning",
+  transitcredentials: "transit.credentials",
 } as const;

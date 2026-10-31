@@ -62,7 +62,14 @@ export function useServiceConfigSave(id: string) {
     (client, config: Record<string, unknown>) => {
       const body = sdk.adminServiceConfigUpdateSchema.safeParse({ config });
       if (!body.success) throw new Error("Invalid service configuration");
-      return serviceOrThrow(sdk.updateAdminServiceConfig(id, body.data, { client }));
+      return serviceOrThrow(
+        sdk.updateAdminServiceConfig(
+          id,
+          body.data,
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
+      );
     },
   );
 }
@@ -77,12 +84,28 @@ export function useSetServiceCredential(id: string) {
   return useServiceWrite(
     { kind: "credentials", serviceId: id },
     (client, { key, value }: { key: string; value: string }) =>
-      serviceOrThrow(sdk.setAdminServiceCredential(id, key, { value }, { client })),
+      serviceOrThrow(
+        sdk.setAdminServiceCredential(
+          id,
+          key,
+          { value },
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
+      ),
   );
 }
 export function useDeleteServiceCredential(id: string) {
   return useServiceWrite({ kind: "credentials", serviceId: id }, (client, key: string) =>
-    serviceOrThrow(sdk.deleteAdminServiceCredential(id, key, undefined, { client })),
+    serviceOrThrow(
+      sdk.deleteAdminServiceCredential(
+        id,
+        key,
+        { "idempotency-key": crypto.randomUUID() },
+        undefined,
+        { client },
+      ),
+    ),
   );
 }
 export function useServiceHealthCheck() {
@@ -92,11 +115,30 @@ export function useServiceHealthCheck() {
 }
 export function useServiceSelectionSave() {
   return useServiceWrite({ kind: "catalog" }, (client, selectedRoots: string[]) =>
-    serviceOrThrow(sdk.setAdminServiceSelection({ selectedRoots }, { client })),
+    serviceOrThrow(
+      sdk.setAdminServiceSelection(
+        { selectedRoots },
+        { "idempotency-key": crypto.randomUUID() },
+        { client },
+      ),
+    ),
   );
 }
 export function useServicesBulkAction() {
   return useServiceWrite({ kind: "catalog" }, (client, body: AdminServicesBulkAction) =>
     serviceOrThrow(sdk.runAdminServicesBulkAction(body, { client })),
+  );
+}
+export function useServiceImageStage() {
+  return useServiceWrite(
+    { kind: "catalog" },
+    (client, values: { serviceIds: string[]; idempotencyKey: string }) =>
+      serviceOrThrow(
+        sdk.pullAdminServiceImages(
+          { serviceIds: values.serviceIds },
+          { "idempotency-key": values.idempotencyKey },
+          { client },
+        ),
+      ),
   );
 }

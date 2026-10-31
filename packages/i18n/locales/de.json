@@ -3787,6 +3787,15 @@
     },
     "catalogue": {
       "entries": {
+        "platform-configuration-previews": {
+          "category": "Metadaten zur Vorschau der Plattformkonfiguration",
+          "purpose": "Eine Konfigurationsänderung einem Administratorkonto zuordnen und sicher wiederherstellen",
+          "source": "Von diesem Konto erstellte Plattformvorschauen",
+          "retention": "Unbenutzte Vorschauen laufen nach zehn Minuten ab. Aktive oder unklare Änderungen bleiben für die Wiederherstellung erhalten. Abgeschlossene Datensätze können nach Abschluss des Auftrags und seiner Belege sowie nach Ablauf der Aufbewahrungsfrist gelöscht werden. Eine Kontolöschung entfernt freigegebene Zuordnungsdaten.",
+          "safeRepresentation": "Nur Zeitangaben und eine pseudonyme Vorschaureferenz. Konfigurationswerte, Nachweise, Host-Fingerabdrücke und Auftragsreferenzen werden zurückgehalten.",
+          "portabilityExclusion": "Betriebliche Konfigurationsmetadaten sind keine übertragbaren Kontoinhalte",
+          "rightsOfOthers": "Konfigurationswerte und Angaben über andere Personen erfordern eine Prüfung durch den Betreiber"
+        },
         "account-profile": {
           "category": "Kontoprofil",
           "purpose": "Ihr OpenMapX-Konto bereitstellen und schützen",
@@ -4634,7 +4643,106 @@
     "unknown": "Unbekannt",
     "expires": "Läuft am {date} ab",
     "verified": "Verifiziert",
-    "unverified": "Nicht verifiziert"
+    "unverified": "Nicht verifiziert",
+    "workflows": {
+      "party": "Geprüfte Person",
+      "reasonableDoubtCode": "Code für begründete Zweifel",
+      "identityOutcome": "Ergebnis der Identitätsprüfung",
+      "identityEvidence": "Identitätsnachweis",
+      "chooseEvidence": "Gültigen Nachweis dieses Falls auswählen",
+      "authorityEvidence": "Vertretungsnachweis",
+      "deliveryAuthorized": "Vertretung darf die Antwort erhalten",
+      "approveAuthority": "Vertretungsbefugnis bestätigen",
+      "recordIdentityReview": "Prüfung des besonderen Nachweises speichern",
+      "assignee": "Zuständige Person",
+      "unassigned": "Nicht zugewiesen",
+      "moreOperators": "Weitere berechtigte Personen",
+      "assignTask": "Zuweisung speichern",
+      "taskDecision": "Aufgabenergebnis",
+      "reasonCode": "Begründungscode",
+      "redactionCode": "Schwärzungscode",
+      "recordCount": "Anzahl geprüfter Datensätze",
+      "recordTaskDecision": "Aufgabenentscheidung speichern",
+      "caseDecisions": "Fristen und Fallentscheidungen",
+      "originalDueAt": "Ursprüngliche Frist",
+      "currentDueAt": "Aktuelle Frist",
+      "extendedUntil": "Antwortfrist verlängern bis (Ortszeit)",
+      "extensionNotifiedAt": "Tatsächlich benachrichtigt am (Ortszeit)",
+      "extensionReason": "Begründungscode der Verlängerung",
+      "recordExtension": "Mitgeteilte Verlängerung speichern",
+      "caseDecision": "Fallentscheidung",
+      "decisionReason": "Begründungscode der Entscheidung",
+      "recordCaseDecision": "Fallentscheidung speichern",
+      "confirmRefusal": "Ablehnung bestätigen",
+      "refusalHelp": "Die Ablehnung wird als abschließende Entscheidung gespeichert und sperrt den Zugriff auf Fallarchive. Erst nach der erforderlichen Prüfung bestätigen.",
+      "cancel": "Abbrechen",
+      "attachments": "Verschlüsselte Nachweise und Ergänzungen",
+      "attachmentFailed": "Die Aktion für den Anhang ist fehlgeschlagen. Fall aktualisieren und aktuelle Sitzung vor einem neuen bewussten Versuch prüfen.",
+      "attachmentHelp": "Bis zu 25 MiB: PDF, Text, CSV, JSON, PNG oder JPEG. Neue Dateien benötigen eine Rechteprüfung. Identitäts- und Vertretungsnachweise werden nicht exportiert. Bei Bedarf eine separat geschwärzte Ersatzdatei hochladen.",
+      "attachmentFile": "Anhang auswählen",
+      "attachmentPurpose": "Zweck des Anhangs",
+      "provenanceSource": "Code der Herkunftsquelle",
+      "uploadAttachment": "Anhang verschlüsselt hochladen",
+      "rightsReviewReason": "Begründungscode der Rechteprüfung",
+      "download": "Herunterladen",
+      "approved": "Für Export freigeben",
+      "rejected": "Für Export ablehnen",
+      "deleteAttachment": "Anhang löschen",
+      "backupUnavailable": "Vertrauenswürdiges Backupinventar oder Prüfung nicht verfügbar. Vorhandene Ergebnisse sind veraltet; neue Prüfungen erst nach Aktualisierung.",
+      "backupSelection": "Aufbewahrtes Backup auswählen",
+      "chooseBackup": "Backup auswählen",
+      "recordBackupReview": "Vertrauenswürdiges Backup prüfen",
+      "omissionsUnavailable": "Auslassungswarnungen konnten nicht geladen werden. Die Erstellung bleibt an die serverseitige Prüfung gebunden.",
+      "omissionsAccepted": "Genau diese Warnungen wurden bestätigt",
+      "omissionReason": "Begründungscode zur Bestätigung der Auslassung",
+      "acceptDisplayedWarnings": "Angezeigte Warnungsprüfsumme bestätigen",
+      "downloadUnavailable": "Download ist mit dieser Browser- oder Clientkonfiguration nicht verfügbar. Eine unterstützte Sitzung mit Cookies am selben Ursprung oder einen Browser mit Dateispeicherung verwenden.",
+      "resumeUnavailable": "Der Tab konnte den Auslieferungsvorgang nicht speichern. Sobald Tabspeicher verfügbar ist, einen neuen bewussten Vorgang starten.",
+      "browserOwnsDownload": "Der Browser steuert diese Übertragung. Auslieferungsstatus aktualisieren; ein Klick bestätigt keine Auslieferung.",
+      "checkDeliveryStatus": "Auslieferungsstatus am Server prüfen. Jeder neue Versuch erfordert eine neue ausdrückliche Verifizierung.",
+      "downloadCanceled": "Es wurde keine Übertragung gestartet. Zum Herunterladen einen Dateispeicherort auswählen.",
+      "artifactNotAuthorized": "Auslieferung nicht verfügbar: Archiv, Fall oder Identitäts- bzw. Vertretungsbefugnis ist derzeit nicht geeignet.",
+      "expiresAt": "Gültig bis",
+      "deliveryChannel": "Auslieferungskanal",
+      "assisted": "Unterstützte Auslieferung an betroffene Person",
+      "representative": "Auslieferung an berechtigte Vertretung",
+      "deliveryReason": "Begründungscode der Auslieferung",
+      "completeReauthentication": "Verifizierung der neuen Anmeldung abschließen",
+      "startAssistedDelivery": "Archiv bestätigen und erneut anmelden",
+      "versionConflict": "Eine andere Person hat diesen Fall geändert. Ihr Entwurf bleibt erhalten. Den aktualisierten Fall prüfen und mit einer neuen Vorgangskennung bestätigen.",
+      "generationBlocked": "Die Erstellung erfordert bestätigte Identität, abgeschlossene Quellaufgaben und aktuelle Freigabebereitschaft.",
+      "caseEvents": "Aufbewahrte Fallereignisse",
+      "outcomes": {
+        "verified": "Durch besonderen Nachweis bestätigt",
+        "failed": "Fehlgeschlagen",
+        "clarification": "Klärung erforderlich"
+      },
+      "taskStates": {
+        "complete": "Abgeschlossen",
+        "not_applicable": "Nicht anwendbar",
+        "operator_review": "Manuelle Prüfung",
+        "retryable": "Quellaufgabe erneut ausführbar",
+        "canceled": "Abgebrochen"
+      },
+      "caseStates": {
+        "clarification_needed": "Klärung erforderlich",
+        "operator_review": "Manuelle Prüfung",
+        "refused": "Abgelehnt"
+      },
+      "purposes": {
+        "identity_evidence": "Identitätsnachweis",
+        "representative_authority": "Vertretungsnachweis",
+        "processor_response": "Antwort eines Auftragsverarbeiters",
+        "operator_supplement": "Manuelle Ergänzung"
+      },
+      "authorityOutcome": "Entscheidung zur Vertretungsbefugnis",
+      "recordAuthorityReview": "Entscheidung zur Vertretungsbefugnis speichern",
+      "authorityOutcomes": {
+        "pending": "Ausstehend",
+        "approved": "Bestätigt",
+        "rejected": "Abgelehnt"
+      }
+    }
   },
   "adminSearchIndex": {
     "title": "Suche nach OSM-Codes und Aliasnamen",
@@ -4695,5 +4803,19 @@
     "delay": "+{delay}",
     "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
     "estimateExplanation": "Die zusätzliche Zeit wird geschätzt, indem diese Route mit und ohne aktuelle Verkehrsgeschwindigkeiten verglichen wird. Tatsächliche Verzögerungen können abweichen."
+  },
+  "passwordSetup": {
+    "title": "Passwort auswählen",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "savePassword": "Passwort speichern",
+    "requirements": "Es gelten die Passwortanforderungen deiner Instanz.",
+    "saved": "Passwort gespeichert.",
+    "verificationSeparate": "Die E-Mail-Verifizierung ist ein separater Schritt. Folge der Verifizierungs-E-Mail, falls dein Konto noch nicht verifiziert ist.",
+    "missingLink": "Dieser Einrichtungslink fehlt oder ist ungültig. Fordere eine neue Einladung oder einen Link zum Zurücksetzen des Passworts an.",
+    "expiredLink": "Dieser Einrichtungslink ist abgelaufen oder wurde bereits verwendet. Fordere einen neuen an.",
+    "failed": "Das Passwort konnte nicht gespeichert werden. Prüfe die Passwortanforderungen oder fordere einen neuen Link an.",
+    "originChanged": "Die API hat sich geändert. Öffne den ursprünglichen Link erneut, bevor du dein Passwort festlegst.",
+    "back": "Zurück zu OpenMapX"
   }
 }

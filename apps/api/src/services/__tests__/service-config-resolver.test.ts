@@ -158,3 +158,44 @@ describe("resolveAllServiceConfigs", () => {
     expect(envKeys.get("test") ?? []).toEqual([]);
   });
 });
+
+describe("typed render settings and host ownership", () => {
+  it("materializes public numeric resources while retaining legacy host expressions", async () => {
+    process.env.SERVICE_TEST_OPENMAPX_MEMORY_MIB = "4096";
+    selectLimitMock.mockResolvedValueOnce([{ config: { OPENMAPX_MEMORY_MIB: 1024 } }]);
+    const input = {
+      id: "test",
+      isBuiltIn: true,
+      configSchema: {
+        properties: { OPENMAPX_MEMORY_MIB: { type: "integer", minimum: 16, maximum: 1048576 } },
+      },
+      containerMemory: "${LOCAL_AI_MEMORY:-8g}",
+    };
+    const resolved = await resolveAllServiceConfigs([input]);
+    expect(resolved.values.get("test")).toEqual({ OPENMAPX_MEMORY_MIB: 4096 });
+    expect(resolved.envKeys.has("test")).toBe(false);
+    delete process.env.SERVICE_TEST_OPENMAPX_MEMORY_MIB;
+    process.env.SERVICE_TEST_HOST_MEMORY = "16g";
+    selectLimitMock.mockResolvedValueOnce([{ config: { OPENMAPX_MEMORY_MIB: 1024 } }]);
+    const legacy = await resolveAllServiceConfigs([
+      { ...input, containerMemory: "${SERVICE_TEST_HOST_MEMORY:-8g}" },
+    ]);
+    expect(legacy.values.get("test")).toEqual({});
+    expect(legacy.envKeys.has("test")).toBe(false);
+  });
+  it("locks direct host knobs and retains their actual manifest interpolation", async () => {
+    process.env.SERVICE_TEST_ORIGINAL_THREADS = "8";
+    selectLimitMock.mockResolvedValueOnce([{ config: { THREADS: 4 } }]);
+    const input = {
+      id: "test",
+      isBuiltIn: true,
+      configSchema: { properties: { THREADS: { type: "integer" } } },
+      containerEnv: { THREADS: "${SERVICE_TEST_ORIGINAL_THREADS:-2}" },
+    };
+    expect(await resolveServiceConfigWithSources(input)).toMatchObject({
+      THREADS: { value: "8", source: "env", manifestExpression: true },
+    });
+    selectLimitMock.mockResolvedValueOnce([{ config: { THREADS: 4 } }]);
+    expect((await resolveAllServiceConfigs([input])).values.get("test")).toEqual({});
+  });
+});

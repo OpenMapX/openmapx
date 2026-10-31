@@ -5,11 +5,11 @@ import type { JobContext } from "../job-runner.js";
 // which asserts on this at import time.
 process.env.BETTER_AUTH_SECRET ||= "admin-ops-authority-test-stub-secret";
 
-const executeAdminJobOperation = vi.fn();
 const dockerComposeAction = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
 const applyTrustedConfiguration = vi.fn();
 const executeAndWait = vi.fn();
 const registryGet = vi.fn();
+const executeAdminJobOperation = vi.fn().mockResolvedValue({ changed: true });
 
 vi.mock("../admin-job-ops.js", () => ({
   executeAdminJobOperation: (...args: unknown[]) => executeAdminJobOperation(...args),
@@ -25,6 +25,13 @@ vi.mock("../ops-client.js", async (importActual) => ({
   ...(await importActual<typeof import("../ops-client.js")>()),
   createApiOpsClient: () => ({}),
   executeAndWait: (...args: unknown[]) => executeAndWait(...args),
+}));
+vi.mock("../service-preparation", () => ({
+  prepareServiceGeneration: async () => {
+    const prepared = await applyTrustedConfiguration();
+    await executeAndWait();
+    return prepared;
+  },
 }));
 vi.mock("../service-registry.js", () => ({
   getServiceRegistry: () => ({ get: registryGet }),
@@ -60,14 +67,13 @@ function context(): JobContext {
 
 describe("admin service authority split", () => {
   it("keeps enabled built-ins on typed ops-agent lifecycle", async () => {
-    registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
-    const ctx = context();
-    await serviceStop("redis", ctx);
+    registryGet.mockReturnValue({ manifest: { id: "motis" }, enabled: true, isBuiltIn: true });
+    await serviceStop("motis", context());
     expect(executeAdminJobOperation).toHaveBeenCalledWith(
-      ctx,
-      { kind: "service.stop", serviceId: "redis" },
+      expect.objectContaining({ jobId: "job-123" }),
+      { kind: "service.stop", serviceId: "motis" },
       "admin-job.service.stop",
-      { durableIdentity: "redis" },
+      { durableIdentity: "motis" },
     );
     expect(dockerComposeAction).not.toHaveBeenCalled();
   });
@@ -88,17 +94,27 @@ describe("admin service authority split", () => {
       "admin-job.service.restart",
       { durableIdentity: "community-weather" },
     );
+    expect(ctx.checkpoint).toHaveBeenCalledBefore(executeAdminJobOperation);
+    expect(dockerComposeAction).not.toHaveBeenCalled();
   });
 
-  it("denies disabled services before either authority boundary", async () => {
+  it("passes disabled known-service Stop to agent ownership policy but still denies Restart", async () => {
     registryGet.mockReturnValue({
       manifest: { id: "community-weather" },
       enabled: false,
       isBuiltIn: false,
     });
-    await expect(serviceStop("community-weather", context())).rejects.toThrow("is disabled");
-    expect(executeAdminJobOperation).not.toHaveBeenCalled();
+    await serviceStop("community-weather", context());
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      expect.anything(),
+      { kind: "service.stop", serviceId: "community-weather" },
+      "admin-job.service.stop",
+      { durableIdentity: "community-weather" },
+    );
+    executeAdminJobOperation.mockClear();
+    await expect(serviceRestart("community-weather", context())).rejects.toThrow("is disabled");
     expect(dockerComposeAction).not.toHaveBeenCalled();
+    expect(executeAdminJobOperation).not.toHaveBeenCalled();
   });
 
   it("denies unknown services before any operation is submitted", async () => {
@@ -123,7 +139,13 @@ describe("admin service authority split", () => {
       expect(executeAdminJobOperation).toHaveBeenCalledOnce();
       expect(executeAdminJobOperation).toHaveBeenCalledWith(
         ctx,
-        { kind, serviceId: "redis" },
+        {
+          kind,
+          serviceId: "redis",
+          ...(["service.start", "service.recreate"].includes(kind)
+            ? { expectedConfigurationRevisionId: `cfg1_${"r".repeat(43)}` }
+            : {}),
+        },
         namespace,
         { durableIdentity: "redis" },
       );
@@ -172,24 +194,20 @@ describe("admin service authority split", () => {
       label: "apply",
       failure: "docker compose up --force-recreate exited with 1",
     },
-  ])(
-    "keeps the legacy $label failure wording and logs no success when the agent fails",
-    async ({ run, failure }) => {
-      registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
-      executeAdminJobOperation.mockRejectedValue(new Error("raw agent detail"));
-      const ctx = context();
+  ])("propagates the $label failure without claiming successful completion", async ({ run }) => {
+    registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
+    executeAdminJobOperation.mockRejectedValue(new Error("raw agent detail"));
+    const ctx = context();
 
-      const error = await run()("redis", ctx).then(
-        () => undefined,
-        (caught: unknown) => caught,
-      );
+    const error = await run()("redis", ctx).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
 
-      expect(error).toEqual(new Error(failure));
-      expect((error as Error).message).not.toContain("raw agent detail");
-      expect(ctx.log).not.toHaveBeenCalledWith(
-        expect.stringMatching(/ (started|stopped|restarted)\.$/),
-      );
-      expect(ctx.log).not.toHaveBeenCalledWith(expect.stringContaining("configuration applied"));
-    },
-  );
+    expect(error).toEqual(new Error("raw agent detail"));
+    expect(ctx.log).not.toHaveBeenCalledWith(
+      expect.stringMatching(/ (started|stopped|restarted)\.$/),
+    );
+    expect(ctx.log).not.toHaveBeenCalledWith(expect.stringContaining("configuration applied"));
+  });
 });

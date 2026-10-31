@@ -111,33 +111,34 @@ linked to producer data through the data-manager. The full workflow — regions,
 hardlinks, authenticated feeds — lives in
 [Preparing data](../install/preparing-data.md).
 
-| Command                            | Description                                                                                                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `data download <kind> [region]`    | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`. |
-| `data build <kind> [region]`       | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tileserver`.                                                                              |
-| `data convert <kind> [region]`     | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2).                                                                                                               |
-| `data update [region]`             | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`.                   |
-| `data sync`                        | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes.                           |
-| `data source list`                 | List requested and active transit sources together with origin, region, and lifecycle state.                                                                                                     |
-| `data source add <url>`            | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`.                                                              |
-| `data source remove <sourceId>`    | Disable a desired source and queue a sync. Catalog sources remain known and can be re-enabled.                                                                                                   |
-| `data source enable <sourceId>`    | Re-enable a disabled catalog source and queue a sync.                                                                                                                                            |
-| `data export <service> <bundle>`   | Write a built artifact (`tileserver`, `osrm`, `otp`, `pelias`, `motis`) and its checksummed manifest as a tar bundle. `-` streams to stdout.                                                     |
-| `data import <bundle>`             | Verify a bundle from `data export` (`-` reads stdin), check its runtime images match this host, swap it in, then render and link.                                                                |
-| `data link`                        | Re-render the hardlink plan from the current selection, then apply and prune it.                                                                                                                 |
-| `data status`                      | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly.                                                                                         |
-| `data clean <target>`              | Remove local data for one type alias (e.g. `osm`, `gtfs`, `fonts`, `osrm-graph`) or `all`.                                                                                                       |
-| `data generate-api-keys`           | Write the Transitous API-key template to `infra/docker/secrets/transitous-api-keys/api-keys.json`, keeping set values. Flags: `--repo-url <url>`, `--output <path>`.                             |
-| `data overture-sync [region]`      | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild.                                                                   |
-| `data overture-pull [region]`      | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract.                                                                   |
-| `data overture-ingest [region]`    | Verify the regional release contract and ingest its Overture Places snapshot into PostGIS.                                                                                                       |
-| `data overture-conflate [region]`  | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction.             |
-| `data overture-status`             | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error.                                                                                              |
-| `data overture-extract [region]`   | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use).                                                                                    |
-| `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically.                                                                                 |
-| `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                               |
-| `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                             |
-| `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                  |
+| Command                            | Description                                                                                                                                                                                                                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data download <kind> [region]`    | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`.                                                                                 |
+| `data build <kind> [region]`       | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tileserver`.                                                                                                                                                              |
+| `data convert <kind> [region]`     | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2).                                                                                                                                                                                               |
+| `data update [region]`             | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`.                                                                                                   |
+| `data sync`                        | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes.                                                                                                           |
+| `data source list`                 | List requested and active transit sources together with origin, region, and lifecycle state.                                                                                                                                                                                     |
+| `data source add <url>`            | Add an operator source and queue a sync. Required: `--name`, `--region`, `--attribution`, plus `--license-spdx` or `--license-url`.                                                                                                                                              |
+| `data source remove <sourceId>`    | Remove an operator source's saved metadata and queue a sync. Catalog sources cannot be removed.                                                                                                                                                                                  |
+| `data source disable <sourceId>`   | Reversibly disable a catalog or operator source and queue a sync; its metadata is retained.                                                                                                                                                                                      |
+| `data source enable <sourceId>`    | Re-enable a disabled catalog source and queue a sync.                                                                                                                                                                                                                            |
+| `data export <service> <bundle>`   | Write a built artifact (`tileserver`, `osrm`, `otp`, `pelias`, `motis`) and its checksummed manifest as a tar bundle. `-` streams to stdout.                                                                                                                                     |
+| `data import <bundle>`             | Verify a bundle from `data export` (`-` reads stdin), check its runtime images match this host, journal-publish it and apply the current generation's hardlinks without rendering or starting consumers.                                                                         |
+| `data link`                        | Re-render the hardlink plan from the current selection, then apply and prune it.                                                                                                                                                                                                 |
+| `data status`                      | Show the data-manager's tracked dataset inventory. Flag: `--offline` scans `infra/docker/data` directly.                                                                                                                                                                         |
+| `data clean <target>`              | Remove local data for one type alias (e.g. `osm`, `gtfs`, `fonts`, `osrm-graph`) or `all`.                                                                                                                                                                                       |
+| `data generate-api-keys`           | Write the Transitous API-key template to `infra/docker/secrets/transitous-api-keys/api-keys.json`, preserving existing values and orphaned keys from the exact cached pins. Flags: `--proposal <id>`, `--output <path>`. No upstream acquisition or mutable repository override. |
+| `data overture-sync [region]`      | Run the release-pinned regional refresh: pull and atomic ingest, then start the independently retryable OSM↔GERS link rebuild.                                                                                                                                                   |
+| `data overture-pull [region]`      | Resolve exact Overture Places assets through STAC, pull a regional Parquet snapshot, and write its validated release contract.                                                                                                                                                   |
+| `data overture-ingest [region]`    | Verify and ingest the newest completed local regional Places snapshot into PostGIS. Pull a partition first; recovery does not discover a different upstream release.                                                                                                             |
+| `data overture-conflate [region]`  | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction.                                                                                             |
+| `data overture-status`             | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error.                                                                                                                                                                              |
+| `data overture-extract [region]`   | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use).                                                                                                                                                                    |
+| `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically.                                                                                                                                                                 |
+| `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                                                                                                               |
+| `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
+| `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing
@@ -271,24 +272,27 @@ probe, and when `docker compose ps` prints something other than Compose's JSON.
 
 ## `transitous`
 
-Inspect the active [Transitous](https://github.com/public-transport/transitous)
-catalog pin or propose a new one.
+Manage the paired [Transitous](https://github.com/public-transport/transitous),
+Transitland Atlas and MobilityData GBFS catalog pins used by the data-manager.
+The managed pair is selected atomically under `infra/docker/catalog-pins/`.
 
-| Command           | Description                                                                                                                                                                                                                                               |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transitous show` | Print the release's pin, the pin in effect, an approved pin and a proposal.                                                                                                                                                                               |
-| `transitous bump` | Fetch the upstream Transitous pin, summarize changes, and write a proposal into the operations agent's state, `infra/docker/state/ops-agent/transitous/proposed.json`. Flags: `--yes` (skip the confirmation prompt), `--branch <name>` (default `main`). |
+| Command           | Description                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transitous show` | Print the currently selected pair, including its generation ID.                                                                                                  |
+| `transitous bump` | Ask the installed data-manager to resolve a paired proposal. Flags: `--yes` (skip confirmation), `--branch <name>` (default `main`). Active pins stay unchanged. |
 
-`transitous bump` reads from a catalog clone the data-manager maintains, so run a
-transit sync once (`pnpm openmapx data sync`) before the first bump. The command
-does not change the pin in effect or switch the running graph. Review the
-proposal and validate an inactive MOTIS slot before activation; restarting the
-data-manager does not activate the proposal. See
-[MOTIS operations profiles](../administration/motis-operations-profiles.md).
+Review the proposal in **Admin → Transit → Catalog pins**. Inspect the source,
+country, URL and licensing changes; configure any newly required feed credentials;
+then validate the inactive MOTIS slot. Activation requires passing, unexpired
+validation, acknowledgement of the exact diff and final confirmation. It promotes
+the tested dataset and selects its pair under the same retained operation.
+Scheduled auto-bumps also create proposals and cannot approve them.
 
-The MobilityData GBFS registry pin and the transport-apis catalog pin are the
-release's. No CLI command changes them: maintainers update them in the
-repository, see [Catalog pins](../guides/transit-engines.md#catalog-pins).
+The MobilityData GBFS registry is part of the reviewed managed pair.
+`transitous show` reads back that active pair and its generation ID; bump,
+validation or a Data Manager restart alone does not activate a proposal.
+The transport-apis catalog pin remains release-owned; maintainers update it in
+the repository. See [Catalog pins](../guides/transit-engines.md#catalog-pins).
 
 ## Where to go next
 

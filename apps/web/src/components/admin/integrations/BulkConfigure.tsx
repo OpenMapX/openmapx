@@ -245,6 +245,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
             integrationId={data.id}
             schema={data.manifest.configSchema}
             resolvedConfig={data.resolvedConfig}
+            ownership={data.ownership}
           />
         </Box>
       )}
@@ -262,6 +263,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
           </Typography>
           <CredentialsTable
             integrationId={data.id}
+            configurationRevision={data.configurationRevision}
             secretsConfigured={data.secretsConfigured}
             credentials={secretCredentials}
           />
@@ -274,10 +276,12 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
 function CredentialsTable({
   integrationId,
   secretsConfigured,
+  configurationRevision,
   credentials,
 }: {
   integrationId: string;
   secretsConfigured: boolean;
+  configurationRevision?: string;
   credentials: CredentialStatus[];
 }) {
   const admin = useIntegrationAdmin();
@@ -290,9 +294,19 @@ function CredentialsTable({
     retry: false,
     mutationFn: async (key: string) => {
       try {
-        await admin.deleteCredential(integrationId, key);
+        const applied = await admin.deleteCredential(
+          integrationId,
+          key,
+          configurationRevision ?? "",
+        );
         void admin.refresh();
-        if (owner.active) showToast("Credential deleted");
+        if (owner.active)
+          showToast(
+            applied.runtime === "applied"
+              ? "Credential deleted and active"
+              : "Credential removal saved; provider activation is pending or failed",
+            applied.runtime === "applied" ? "success" : "info",
+          );
       } catch (err) {
         if (owner.active) showToast(err instanceof Error ? err.message : "Delete failed", "error");
         throw err;
@@ -388,7 +402,12 @@ function CredentialsTable({
                       size="small"
                       variant="outlined"
                       onClick={() => setDialogField(cred)}
-                      disabled={!secretsConfigured}
+                      disabled={
+                        !secretsConfigured ||
+                        !configurationRevision ||
+                        cred.ownership?.writable === false ||
+                        ["env", "config.json"].includes(cred.source)
+                      }
                     >
                       {hasVaultCredential(cred) ? "Rotate" : "Set"}
                     </Button>
@@ -398,7 +417,12 @@ function CredentialsTable({
                           size="small"
                           color="error"
                           onClick={() => deleteMutation.mutate(cred.key)}
-                          disabled={deleteMutation.isPending}
+                          disabled={
+                            deleteMutation.isPending ||
+                            !configurationRevision ||
+                            cred.ownership?.writable === false ||
+                            ["env", "config.json"].includes(cred.source)
+                          }
                         >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
@@ -417,6 +441,7 @@ function CredentialsTable({
           onClose={() => setDialogField(null)}
           integrationId={integrationId}
           credentialKey={dialogField.key}
+          expectedRevision={configurationRevision}
           title={dialogField.title}
           description={dialogField.description}
           setup={dialogField.setup}

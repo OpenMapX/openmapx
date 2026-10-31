@@ -1,6 +1,12 @@
 import z from "zod/v4";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import {
+  configurationSourceOwnedSchema,
+  configurationVersionConflictSchema,
+} from "../configuration-ownership";
+import { integrationApplyReceiptSchema } from "./application";
+import {
+  adminIntegrationBindingDeleteSchema,
   adminIntegrationBindingParamsSchema,
   adminIntegrationBindingSetSchema,
   adminIntegrationBindingsSchema,
@@ -13,6 +19,7 @@ import {
   adminIntegrationDetailSchema,
   adminIntegrationEmptyMutationSchema,
   adminIntegrationEnvVarsSchema,
+  adminIntegrationIdempotencyHeadersSchema,
   adminIntegrationImportFailureSchema,
   adminIntegrationParamsSchema,
   adminIntegrationRefParamsSchema,
@@ -22,8 +29,11 @@ import {
   adminIntegrationValidationErrorSchema,
   adminIntegrationVaultUnavailableSchema,
 } from "./common";
+import { configurationMigrationOperations } from "./configuration-migration";
+import { credentialTransferOperations } from "./credential-transfer";
 import {
   adminCredentialsSchema,
+  adminIntegrationCredentialDeleteSchema,
   adminIntegrationCredentialSetSchema,
   adminIntegrationCredentialsSchema,
   adminIntegrationCredentialTestRequestSchema,
@@ -36,6 +46,7 @@ import {
   adminIntegrationHealthSweepSchema,
 } from "./health";
 import { adminOverviewSchema } from "./overview";
+import { standaloneIntegrationAdminOperations } from "./standalone-integrations";
 
 const common = adminCommonResponses;
 const missing = { ...common, 404: adminJson(httpErrorSchema) };
@@ -44,13 +55,21 @@ const mutation = {
   params: adminIntegrationParamsSchema,
   body: adminIntegrationEmptyMutationSchema,
 };
-const reloaded = { ...missing, 200: adminJson(adminIntegrationReloadResultSchema) };
-/** Not applied, for a reason the operator can fix (a service-file override render may not use). */
+const reloaded = {
+  ...missing,
+  200: adminJson(adminIntegrationReloadResultSchema),
+  409: adminJson(
+    z.union([httpErrorSchema, configurationSourceOwnedSchema, configurationVersionConflictSchema]),
+  ),
+};
 const notApplied = { 409: adminJson(httpErrorSchema) };
-const ok = adminJson(z.strictObject({ ok: z.literal(true) }));
+const _ok = adminJson(z.strictObject({ ok: z.literal(true) }));
 
 /** Complete integration/credential/overview family. Authentication metadata never enforces access. */
 export const integrationAdminOperations = {
+  ...configurationMigrationOperations,
+  ...credentialTransferOperations,
+  ...standaloneIntegrationAdminOperations,
   listAdminIntegrations: {
     method: "GET",
     path: "/api/admin/integrations",
@@ -80,12 +99,22 @@ export const integrationAdminOperations = {
     method: "POST",
     path: "/api/admin/integrations/import",
     auth: "admin",
-    request: { body: adminIntegrationConfigImportSchema },
+    request: {
+      body: adminIntegrationConfigImportSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
     responses: {
       ...common,
       400: configErrors,
       200: adminJson(adminIntegrationConfigImportedSchema),
-      409: adminJson(adminIntegrationImportFailureSchema),
+      409: adminJson(
+        z.union([
+          adminIntegrationImportFailureSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
     },
   },
   runAdminIntegrationHealthChecks: {
@@ -106,27 +135,38 @@ export const integrationAdminOperations = {
     method: "PATCH",
     path: "/api/admin/integrations/:id/config",
     auth: "admin",
-    request: { params: adminIntegrationParamsSchema, body: adminIntegrationConfigPatchSchema },
+    request: {
+      params: adminIntegrationParamsSchema,
+      body: adminIntegrationConfigPatchSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+    },
     responses: {
       ...missing,
       ...notApplied,
       400: configErrors,
       200: adminJson(adminIntegrationConfigUpdatedSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
     },
   },
   enableAdminIntegration: {
     method: "POST",
     path: "/api/admin/integrations/:id/enable",
     auth: "admin",
-    request: mutation,
-    responses: { ...reloaded, ...notApplied },
+    request: { ...mutation, headers: adminIntegrationIdempotencyHeadersSchema },
+    responses: reloaded,
   },
   disableAdminIntegration: {
     method: "POST",
     path: "/api/admin/integrations/:id/disable",
     auth: "admin",
-    request: mutation,
-    responses: { ...reloaded, ...notApplied },
+    request: { ...mutation, headers: adminIntegrationIdempotencyHeadersSchema },
+    responses: reloaded,
   },
   getAdminIntegrationHealth: {
     method: "GET",
@@ -165,9 +205,21 @@ export const integrationAdminOperations = {
     auth: "admin",
     request: {
       params: adminIntegrationBindingParamsSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
       body: adminIntegrationBindingSetSchema,
     },
-    responses: { ...common, 200: ok, 503: adminJson(httpErrorSchema) },
+    responses: {
+      ...common,
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
+      503: adminJson(httpErrorSchema),
+      200: adminJson(integrationApplyReceiptSchema),
+    },
   },
   deleteAdminIntegrationBinding: {
     method: "DELETE",
@@ -175,9 +227,21 @@ export const integrationAdminOperations = {
     auth: "admin",
     request: {
       params: adminIntegrationBindingParamsSchema,
-      body: adminIntegrationEmptyMutationSchema,
+      headers: adminIntegrationIdempotencyHeadersSchema,
+      body: adminIntegrationBindingDeleteSchema,
     },
-    responses: { ...common, 200: ok },
+    responses: {
+      ...common,
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
+      503: adminJson(httpErrorSchema),
+      200: adminJson(integrationApplyReceiptSchema),
+    },
   },
   listAdminCredentials: {
     method: "GET",
@@ -207,11 +271,20 @@ export const integrationAdminOperations = {
     path: "/api/admin/credentials/:integrationId/:key",
     auth: "admin",
     request: {
+      headers: adminIntegrationIdempotencyHeadersSchema,
       params: adminIntegrationCredentialParamsSchema,
       body: adminIntegrationCredentialSetSchema,
     },
     responses: {
-      ...reloaded,
+      ...missing,
+      200: adminJson(integrationApplyReceiptSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
       503: adminJson(z.union([httpErrorSchema, adminIntegrationVaultUnavailableSchema])),
     },
   },
@@ -220,10 +293,22 @@ export const integrationAdminOperations = {
     path: "/api/admin/credentials/:integrationId/:key",
     auth: "admin",
     request: {
+      headers: adminIntegrationIdempotencyHeadersSchema,
       params: adminIntegrationCredentialParamsSchema,
-      body: adminIntegrationEmptyMutationSchema,
+      body: adminIntegrationCredentialDeleteSchema,
     },
-    responses: reloaded,
+    responses: {
+      ...missing,
+      200: adminJson(integrationApplyReceiptSchema),
+      409: adminJson(
+        z.union([
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+          configurationVersionConflictSchema,
+        ]),
+      ),
+      503: adminJson(httpErrorSchema),
+    },
   },
   getAdminOverview: {
     method: "GET",

@@ -57,10 +57,79 @@
       "mountAt": "/var/lib/postgresql/16/main",
       "backup": false
     },
-    { "name": "openmapx-nominatim-flatnode", "mountAt": "/nominatim/flatnode", "backup": false }
+    {
+      "name": "openmapx-nominatim-flatnode",
+      "mountAt": "/nominatim/flatnode",
+      "backup": false
+    }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 8080, "host": 8088, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 8080,
+        "host": 8088,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "geocoding" }
+  "ui": {
+    "category": "geocoding"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "THREADS": {
+        "type": "integer",
+        "title": "Import threads",
+        "minimum": 1,
+        "maximum": 256
+      },
+      "REPLICATION_UPDATE_INTERVAL": {
+        "type": "integer",
+        "title": "Replication interval (seconds)",
+        "minimum": 60,
+        "maximum": 604800
+      },
+      "IMPORT_STYLE": {
+        "type": "string",
+        "title": "Import style",
+        "enum": ["full", "admin", "street", "address"],
+        "description": "Import-time setting. Requires rebuilding the Nominatim database; applying configuration alone does not rebuild data."
+      },
+      "REVERSE_ONLY": {
+        "type": "boolean",
+        "title": "Reverse only",
+        "description": "Import-time setting. Requires rebuilding the Nominatim database; applying configuration alone does not rebuild data."
+      },
+      "IMPORT_WIKIPEDIA": {
+        "type": "boolean",
+        "title": "Import wikipedia",
+        "description": "Import-time setting. Requires rebuilding the Nominatim database; applying configuration alone does not rebuild data."
+      },
+      "IMPORT_US_POSTCODES": {
+        "type": "boolean",
+        "title": "Import us postcodes",
+        "description": "Import-time setting. Requires rebuilding the Nominatim database; applying configuration alone does not rebuild data."
+      },
+      "IMPORT_GB_POSTCODES": {
+        "type": "boolean",
+        "title": "Import gb postcodes",
+        "description": "Import-time setting. Requires rebuilding the Nominatim database; applying configuration alone does not rebuild data."
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

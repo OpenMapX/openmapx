@@ -67,3 +67,13 @@ describe("env defaults", () => {
     });
   });
 });
+
+it("uses finite deployment feed countries when the country environment is omitted", () => {
+  const env = { MOTIS_FEED_ALLOW_LIST: "de_demo,de_other,at_local,invalid" };
+  expect(resolveTransitousCountries(undefined, env)).toEqual({
+    values: ["at", "de"],
+    sourceEnv: "MOTIS_FEED_ALLOW_LIST",
+  });
+  expect(resolveTransitousCountries("ch", env)).toEqual({ values: ["ch"] });
+  expect(resolveTransitousCountries(undefined, {})).toEqual({ values: [] });
+});

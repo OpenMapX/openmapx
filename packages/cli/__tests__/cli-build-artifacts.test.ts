@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   existsSync,
   lstatSync,
@@ -80,6 +81,8 @@ function seedOsrmBuild(root: string): void {
   const graph = join(dataDir(root), "osrm-graph");
   mkdirSync(join(graph, "region.osrm.cells.d"), { recursive: true });
   writeFileSync(join(graph, "region.osrm"), "GRAPH");
+  for (const name of ["region.osrm.partition", "region.osrm.cells", "region.osrm.mldgr"])
+    writeFileSync(join(graph, name), name);
   writeFileSync(join(graph, "region.osrm.cells.d", "part"), "CELLS");
   writeFileSync(join(graph, "segment-speeds.csv"), "");
   writeFileSync(join(graph, "region.osm.pbf"), "PBF");
@@ -163,14 +166,141 @@ describe("build provenance", () => {
 });
 
 describe("build bundles", () => {
+  it.each(["import", "export"] as const)(
+    "refuses a live target owner before CLI %s publication",
+    async (action) => {
+      seedOsrmBuild(buildHost);
+      const bundle = join(tmp, "owned.tar");
+      await exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "osrm",
+        bundle,
+        rootDir: buildHost,
+      });
+      const control = await import("@openmapx/core/build-artifacts"),
+        ops = await import("@openmapx/core/ops");
+      const targetHost = action === "import" ? serveHost : buildHost;
+      const infraDir = join(targetHost, "infra/docker");
+      await control.provisionControlInstallation(infraDir);
+      const installation = control.openControlInstallation({
+        infraDir,
+        role: "host-cli",
+        serviceIds: ["osrm", "motis"],
+      });
+      let lease: import("@openmapx/core/build-artifacts").TargetLeaseAuthority | undefined;
+      try {
+        const admittedAt = Date.now(),
+          deadlineAt = admittedAt + 60000,
+          operation = { kind: "service.build" as const, serviceId: "osrm" },
+          operationFingerprint = ops.opsOperationFingerprint(operation),
+          execution = {
+            executor: "host-cli" as const,
+            principal: "host-cli" as const,
+            executionId: randomUUID(),
+            operationKey: ops.createControlRootOperationKey({
+              notAfter: deadlineAt,
+              nonce: randomBytes(16),
+            }),
+            operationFingerprint,
+            deadlineAt,
+            fingerprint: ops.executionFingerprint({
+              kind: operation.kind,
+              operationFingerprint,
+              deadlineAt,
+            }),
+          },
+          authority = control.retainAdmittedControlExecution(installation, {
+            execution,
+            kind: operation.kind,
+            operation,
+            admittedAt,
+            requestedDeadlineAt: deadlineAt,
+            serviceIds: ["osrm"],
+          });
+        lease = await control.acquireArtifactTargetLease({
+          dataRoot: dataDir(targetHost),
+          serviceIds: ["osrm"],
+          owner: authority,
+        });
+        await expect(
+          action === "import"
+            ? importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning })
+            : exportBuildBundle({
+                runningServices: noneRunning,
+                serviceId: "osrm",
+                bundle: join(tmp, "busy-export.tar"),
+                rootDir: buildHost,
+              }),
+        ).rejects.toThrow(/busy|lease|owned/i);
+        if (action === "import")
+          expect(existsSync(join(dataDir(serveHost), "osrm-graph/region.osrm"))).toBe(false);
+        else expect(existsSync(join(tmp, "busy-export.tar"))).toBe(false);
+      } finally {
+        if (lease) control.closeArtifactTargetLeaseHandle(lease);
+        control.closeControlInstallation(installation);
+      }
+    },
+    60000,
+  );
+  it("retains imported source provenance with fresh local output identities", async () => {
+    seedOsrmBuild(buildHost);
+    const { artifactFingerprint } = await import("@openmapx/core/build-artifacts");
+    const initial = await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle: join(tmp, "first.tar"),
+      rootDir: buildHost,
+    });
+    const sourceFingerprints = [{ id: "a".repeat(64), sha256: "b".repeat(64), sizeBytes: 3 }];
+    writeBuildRecord(
+      {
+        ...osrmRecord(),
+        schemaVersion: 2,
+        sourceFingerprints,
+        artifactFingerprint: artifactFingerprint(initial.files),
+      },
+      buildHost,
+    );
+    const path = join(tmp, "v2.tar");
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle: path,
+      rootDir: buildHost,
+    });
+    await importBuildBundle({ bundle: path, rootDir: serveHost, runningServices: noneRunning });
+    expect(readBuildRecord("osrm", serveHost)).toMatchObject({
+      schemaVersion: 2,
+      sourceFingerprints,
+    });
+    const evidence = JSON.parse(
+      readFileSync(join(dataDir(serveHost), ".openmapx-builds/osrm.evidence.json"), "utf8"),
+    );
+    expect(evidence.record.sourceFingerprints).toEqual(sourceFingerprints);
+    expect(
+      evidence.files.find((file: { path: string }) => file.path === "osrm-graph/region.osrm"),
+    ).toMatchObject({
+      sizeBytes: 5,
+      inode: String(lstatSync(join(dataDir(serveHost), "osrm-graph/region.osrm")).ino),
+    });
+  }, 60000);
+
   it("round-trips a build to another host, dropping staged inputs and recording provenance", async () => {
     seedOsrmBuild(buildHost);
     const bundle = join(tmp, "osrm.tar");
-    const exported = await exportBuildBundle({ serviceId: "osrm", bundle, rootDir: buildHost });
+    const exported = await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle,
+      rootDir: buildHost,
+    });
 
     expect(exported.files.map((file) => file.path)).toEqual([
       "osrm-graph/region.osrm",
+      "osrm-graph/region.osrm.cells",
       "osrm-graph/region.osrm.cells.d/part",
+      "osrm-graph/region.osrm.mldgr",
+      "osrm-graph/region.osrm.partition",
       "osrm-graph/segment-speeds.csv",
     ]);
 
@@ -189,14 +319,20 @@ describe("build bundles", () => {
     expect(readFileSync(join(liveGraph, "region.osrm.cells.d", "part"), "utf-8")).toBe("CELLS");
     expect(existsSync(join(liveGraph, "region.osm.pbf"))).toBe(false);
     expect(existsSync(join(dataDir(serveHost), ".openmapx-import"))).toBe(false);
-    expect(readBuildRecord("osrm", serveHost)).toEqual(osrmRecord());
-  });
+    expect(readBuildRecord("osrm", serveHost)).toMatchObject({ ...osrmRecord(), schemaVersion: 2 });
+    // Real private-journal export and import each fsync their retained ownership.
+  }, 60000);
 
   it("refuses a bundle built for a different runtime image", async () => {
     seedOsrmBuild(buildHost);
     const otherServe = makeHost("serve-other", DIGEST_B);
     const bundle = join(tmp, "osrm.tar");
-    await exportBuildBundle({ serviceId: "osrm", bundle, rootDir: buildHost });
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle,
+      rootDir: buildHost,
+    });
 
     await expect(
       importBuildBundle({ bundle, rootDir: otherServe, runningServices: noneRunning }),
@@ -207,7 +343,12 @@ describe("build bundles", () => {
   it("refuses to swap while a consumer is running", async () => {
     seedOsrmBuild(buildHost);
     const bundle = join(tmp, "osrm.tar");
-    await exportBuildBundle({ serviceId: "osrm", bundle, rootDir: buildHost });
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle,
+      rootDir: buildHost,
+    });
 
     await expect(
       importBuildBundle({
@@ -221,14 +362,23 @@ describe("build bundles", () => {
   it("rejects a bundle whose contents no longer match its manifest", async () => {
     seedOsrmBuild(buildHost);
     const bundle = join(tmp, "osrm.tar");
-    await exportBuildBundle({ serviceId: "osrm", bundle, rootDir: buildHost });
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle,
+      rootDir: buildHost,
+    });
 
     const unpacked = join(tmp, "unpacked");
     mkdirSync(unpacked);
     execFileSync("tar", ["-xf", bundle, "-C", unpacked]);
     writeFileSync(join(unpacked, "osrm-graph", "region.osrm"), "TAMPERED");
     const tampered = join(tmp, "tampered.tar");
-    execFileSync("tar", ["-cf", tampered, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", tampered, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle: tampered, rootDir: serveHost, runningServices: noneRunning }),
@@ -238,14 +388,23 @@ describe("build bundles", () => {
   it("rejects extra entries the manifest does not list", async () => {
     seedOsrmBuild(buildHost);
     const bundle = join(tmp, "osrm.tar");
-    await exportBuildBundle({ serviceId: "osrm", bundle, rootDir: buildHost });
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "osrm",
+      bundle,
+      rootDir: buildHost,
+    });
 
     const unpacked = join(tmp, "unpacked");
     mkdirSync(unpacked);
     execFileSync("tar", ["-xf", bundle, "-C", unpacked]);
     writeFileSync(join(unpacked, "osrm-graph", "extra"), "X");
     const padded = join(tmp, "padded.tar");
-    execFileSync("tar", ["-cf", padded, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", padded, "-C", unpacked, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle: padded, rootDir: serveHost, runningServices: noneRunning }),
@@ -275,11 +434,15 @@ describe("build bundles", () => {
     );
     symlinkSync(outside, join(crafted, "osrm-graph"));
     const bundle = join(tmp, "crafted.tar");
-    execFileSync("tar", ["-cf", bundle, "-C", crafted, BUNDLE_MANIFEST_DIR, "osrm-graph"]);
+    execFileSync(
+      "tar",
+      ["--no-xattrs", "-cf", bundle, "-C", crafted, BUNDLE_MANIFEST_DIR, "osrm-graph"],
+      { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+    );
 
     await expect(
       importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning }),
-    ).rejects.toThrow(/Refusing symlink in build artifact: osrm-graph/);
+    ).rejects.toThrow(/Unsupported tar type/);
     expect(existsSync(join(dataDir(serveHost), "osrm-graph"))).toBe(false);
   });
 
@@ -288,7 +451,12 @@ describe("build bundles", () => {
     const previous = process.env.INIT_CWD;
     process.env.INIT_CWD = tmp;
     try {
-      await exportBuildBundle({ serviceId: "osrm", bundle: "relative.tar", rootDir: buildHost });
+      await exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "osrm",
+        bundle: "relative.tar",
+        rootDir: buildHost,
+      });
       expect(existsSync(join(tmp, "relative.tar"))).toBe(true);
       await importBuildBundle({
         bundle: "relative.tar",
@@ -309,14 +477,24 @@ describe("build bundles", () => {
     writeBuildRecord({ ...osrmRecord(), service: "motis", runtimeImages: {} }, buildHost);
 
     await expect(
-      exportBuildBundle({ serviceId: "motis", bundle: join(tmp, "m.tar"), rootDir: buildHost }),
+      exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "motis",
+        bundle: join(tmp, "m.tar"),
+        rootDir: buildHost,
+      }),
     ).rejects.toThrow(/without --import/);
   });
 
   it("requires a build record before exporting", async () => {
     mkdirSync(join(dataDir(buildHost), "osrm-graph"), { recursive: true });
     await expect(
-      exportBuildBundle({ serviceId: "osrm", bundle: join(tmp, "x.tar"), rootDir: buildHost }),
+      exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "osrm",
+        bundle: join(tmp, "x.tar"),
+        rootDir: buildHost,
+      }),
     ).rejects.toThrow(/No build record for "osrm"/);
   });
 
@@ -324,50 +502,75 @@ describe("build bundles", () => {
     seedOsrmBuild(buildHost);
     symlinkSync("/etc/passwd", join(dataDir(buildHost), "osrm-graph", "link"));
     await expect(
-      exportBuildBundle({ serviceId: "osrm", bundle: join(tmp, "x.tar"), rootDir: buildHost }),
+      exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "osrm",
+        bundle: join(tmp, "x.tar"),
+        rootDir: buildHost,
+      }),
     ).rejects.toThrow(/Refusing symlink in build artifact: osrm-graph\/link/);
   });
 
-  it("exports an aliased MOTIS live dir as the directory it points at", async () => {
+  it("requires rebuilding legacy MOTIS output before exporting generated credentials", async () => {
     const data = dataDir(buildHost);
-    mkdirSync(join(data, "motis", "slots", "A", "data"), { recursive: true });
-    writeFileSync(join(data, "motis", "slots", "A", "config.yml"), "osm: x.osm.pbf\n");
-    writeFileSync(join(data, "motis", "slots", "A", "data", "tt.bin"), "TT");
-    symlinkSync(join(data, "motis", "slots", "A"), join(data, "motis", "live"));
-    mkdirSync(join(data, "motis-feed-proxy", "conf"), { recursive: true });
-    writeFileSync(join(data, "motis-feed-proxy", "conf", "default.conf"), "server {}\n");
+    mkdirSync(join(data, "motis/slots/A/data"), { recursive: true });
+    symlinkSync("slots/A", join(data, "motis/live"));
+    mkdirSync(join(data, "motis-feed-proxy/conf"), { recursive: true });
+    writeFileSync(join(data, "motis-feed-proxy/conf/default.conf"), "secret-api-key");
     writeBuildRecord(motisRecord(), buildHost);
-
-    const bundle = join(tmp, "motis.tar");
-    await exportBuildBundle({ serviceId: "motis", bundle, rootDir: buildHost });
-    await importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning });
-
-    const live = join(dataDir(serveHost), "motis", "live");
-    expect(readFileSync(join(live, "data", "tt.bin"), "utf-8")).toBe("TT");
-    expect(readFileSync(join(live, "config.yml"), "utf-8")).toBe("osm: x.osm.pbf\n");
-    expect(existsSync(join(dataDir(serveHost), "motis-feed-proxy", "conf", "default.conf"))).toBe(
-      true,
-    );
+    await expect(
+      exportBuildBundle({
+        runningServices: noneRunning,
+        serviceId: "motis",
+        bundle: join(tmp, "motis.tar"),
+        rootDir: buildHost,
+      }),
+    ).rejects.toThrow(/retained portable source metadata/);
   });
 
-  it("imports MOTIS into the active slot when the serving host uses the slot layout", async () => {
+  it("keeps the active MOTIS slot unchanged until target credential materialization exists", async () => {
     const source = dataDir(buildHost);
-    mkdirSync(join(source, "motis", "live", "data"), { recursive: true });
-    writeFileSync(join(source, "motis", "live", "data", "tt.bin"), "NEW");
+    mkdirSync(join(source, "motis/live/data"), { recursive: true });
     mkdirSync(join(source, "motis-feed-proxy"), { recursive: true });
+    writeFileSync(join(source, "motis/live/data/tt.bin"), "NEW");
+    writeFileSync(
+      join(source, "motis/live/portable-sources.json"),
+      JSON.stringify({ version: 1, sourceFingerprints: [], credentialRequirements: [] }),
+    );
     writeBuildRecord(motisRecord(), buildHost);
     const bundle = join(tmp, "motis.tar");
-    await exportBuildBundle({ serviceId: "motis", bundle, rootDir: buildHost });
-
+    await exportBuildBundle({
+      runningServices: noneRunning,
+      serviceId: "motis",
+      bundle,
+      rootDir: buildHost,
+    });
     const target = dataDir(serveHost);
-    const slotA = join(target, "motis", "slots", "A");
+    const slotA = join(target, "motis/slots/A");
     mkdirSync(join(slotA, "data"), { recursive: true });
-    writeFileSync(join(slotA, "data", "tt.bin"), "OLD");
-    symlinkSync(slotA, join(target, "motis", "live"));
-
-    await importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning });
-
-    expect(lstatSync(join(target, "motis", "live")).isSymbolicLink()).toBe(true);
-    expect(readFileSync(join(slotA, "data", "tt.bin"), "utf-8")).toBe("NEW");
+    writeFileSync(join(slotA, "data/tt.bin"), "OLD");
+    symlinkSync(slotA, join(target, "motis/live"));
+    await expect(
+      importBuildBundle({ bundle, rootDir: serveHost, runningServices: noneRunning }),
+    ).rejects.toThrow(/generated destination configuration/);
+    expect(lstatSync(join(target, "motis/live")).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(slotA, "data/tt.bin"), "utf8")).toBe("OLD");
   });
+});
+
+it("validates the manifest before invoking any legacy extraction hook", async () => {
+  const bundle = join(tmp, "invalid.tar");
+  writeFileSync(bundle, Buffer.alloc(1024));
+  let extracted = false;
+  await expect(
+    importBuildBundle({
+      bundle,
+      rootDir: serveHost,
+      runningServices: noneRunning,
+      tar: async () => {
+        extracted = true;
+      },
+    }),
+  ).rejects.toThrow();
+  expect(extracted, "untrusted archive reached extract-first tar hook").toBe(false);
 });

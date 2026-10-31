@@ -1,6 +1,8 @@
 import { credentialSetupSchema } from "@openmapx/extension-contracts/integration";
 import z from "zod/v4";
 import { adminCountSchema, adminTimestampSchema } from "../admin";
+import { configurationOwnershipSchema } from "../configuration-ownership";
+import { integrationApplyReceiptSchema, integrationRuntimeEvidenceSchema } from "./application";
 import { adminIntegrationHealthStatusSchema } from "./health";
 
 /** Winning effective layer; vault audit metadata is retained independently. */
@@ -25,6 +27,7 @@ export const adminIntegrationCredentialSchema = z.strictObject({
   title: z.string(),
   description: z.string().optional(),
   source: adminIntegrationCredentialSourceSchema,
+  ownership: configurationOwnershipSchema.optional(),
   sharedSecretName: z.string().optional(),
   setup: adminIntegrationCredentialSetupSchema.optional(),
   updatedAt: adminTimestampSchema.optional(),
@@ -46,9 +49,15 @@ export const adminIntegrationCredentialsSchema = z.strictObject({
   integrationId: z.string(),
   name: z.string(),
   credentials: z.array(adminIntegrationCredentialSchema),
+  configurationRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  runtime: integrationRuntimeEvidenceSchema.nullable(),
+  application: integrationApplyReceiptSchema.nullable(),
   secretsConfigured: z.boolean(),
 });
-export const adminIntegrationCredentialSetSchema = z.strictObject({
+export const adminIntegrationCredentialDeleteSchema = z.strictObject({
+  expectedRevision: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export const adminIntegrationCredentialSetSchema = adminIntegrationCredentialDeleteSchema.extend({
   // Check whitespace without transforming the actual credential bytes.
   value: z.string().refine((value) => value.trim().length > 0, "value must be a non-empty string"),
 });

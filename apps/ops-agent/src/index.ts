@@ -1,13 +1,12 @@
 import { constants, existsSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
+import { loadControlStartup } from "@openmapx/core/build-artifacts";
+import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
-import { retireStaleTransitousApproval } from "@openmapx/transitous-core/pins";
 import {
-  createAdministrativeRuntime,
   createDefaultFixedCli,
-  createDefaultReleaseEffects,
   inspectBackupAuthority,
   inspectDataTypeAuthority,
   inspectReleaseAuthority,
@@ -15,18 +14,22 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { AGENT_HANDOFF_LABEL, isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
-import {
-  CommunityRepositoryStore,
-  installCommunityRepositoryRuntime,
-} from "./community-repositories";
+import { installPreparedImportRuntime } from "./artifact-transfer/import-runtime";
+import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
+import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
+import { ArtifactTransferStore, artifactTransferPrivateRoot } from "./artifact-transfer/store";
+import { startOpsAgentServer } from "./bootstrap";
+import { CommunityRepositoryStore } from "./community-repositories";
 import { loadOpsAgentConfig } from "./config";
+import { configurationHandoffPendingMaintenanceIds } from "./configuration-maintenance-store";
+import { createDataTransitTrustedOpsDataSource } from "./data-transit-resource-source";
 import {
   createDockerDawarichCollector,
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
 import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
-import { createDockerRuntime, runContainedProcess } from "./docker-runtime";
-import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
+import { runContainedProcess } from "./docker-runtime";
+import { IntegrationStore } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
 import { createProductionRegistryResourceClaimer } from "./policy";
@@ -36,21 +39,24 @@ import {
   janitorPrivacyBackupScratch,
   probePrivacyBackupRuntime,
 } from "./privacy-backup-runtime";
-import { buildOpsAgentServer } from "./server";
+import {
+  createProductionOpsRuntime,
+  productionOwnedServices,
+  productionReleaseEffects,
+} from "./production-runtime";
 import { agentLogLine, describeServiceFilesAtStart } from "./service-files-at-start";
+import { installStandaloneIntegrationRuntime } from "./standalone-integration-runtime";
 import {
   afterValidatedServiceAuthority,
   resolveBootstrapEnabledServiceIds,
 } from "./startup-authority";
-import { createTransitousLockRuntime } from "./transitous-lock-runtime";
 import {
   initializeTrustedConfigurationRuntime,
-  installTrustedConfigurationRuntime,
   readTrustedEnabledServiceIds,
 } from "./trusted-config-runtime";
 import {
   createFileTrustedOpsDataSource,
-  initializeTrustedSnapshotDirectory,
+  initializeTerminalClaimCleanup,
 } from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
@@ -195,11 +201,9 @@ async function main(): Promise<void> {
     // nothing reads the earlier files again. A failure stops the agent, so a
     // self-update rolls back to the agent that still uses them.
     if (services.configurationMigrationPending(paths.infraDir)) {
-      process.stderr.write("Moving the applied configuration into the agent's state directory\n");
-      await createDefaultFixedCli(config.rootDir)(["compose", "render"], {
-        signal: AbortSignal.timeout(10 * 60_000),
-        emitLog: (_stream, message) => process.stderr.write(`${message}\n`),
-      });
+      process.stderr.write(
+        "Applied configuration migration requires a host render before mutations\n",
+      );
     }
     // Compose interpolates infra/docker/.env into every service; one that is
     // not the operator's alone is refused by every stack command.
@@ -284,17 +288,37 @@ async function main(): Promise<void> {
       retry.unref();
     }
     const journal = await openOpsJobJournal(config.journalFile);
-    // After a self-update this agent starts before anything has rendered with
-    // its code, so the state directories it opens may not exist yet.
     await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
       services.prepareAgentStateDirectories(paths.infraDir),
     );
-    await initializeTrustedSnapshotDirectory(config.trustedConfigDirectory, {
-      allowedUids: [uid],
-      expectedGid: gid,
-      token: apiToken,
-      journalRecords: journal.records(),
+    const controlStartup = loadControlStartup({
+      infraDir: paths.infraDir,
+      role: "ops-agent",
+      serviceIds: [...builtInServices, ...communityServices].map((s) => s.manifest.id),
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
+    if (controlStartup.reason) console.error(controlStartup.reason);
+    if (controlStartup.installation) {
+      try {
+        await initializeManagedCatalogPins({
+          rootDir: config.rootDir,
+          installation: controlStartup.installation,
+        });
+      } catch {
+        console.error(
+          "Paired catalog initialization unavailable; preserve original ownership and reconcile before transit operations",
+        );
+      }
+    }
+    const terminalClaimCleanup = await initializeTerminalClaimCleanup(
+      config.trustedConfigDirectory,
+      {
+        allowedUids: [uid],
+        expectedGid: gid,
+        token: apiToken,
+        journalRecords: journal.records(),
+      },
+    );
     await initializeTrustedConfigurationRuntime(paths.infraDir);
     const authorityLoader = createTrustedConfigurationAuthorityLoader({
       ...authorityOptions,
@@ -304,47 +328,6 @@ async function main(): Promise<void> {
     for (const { integrationId, problem } of initialAuthority.integrationProblems ?? []) {
       process.stderr.write(`Integration "${integrationId}" is not loaded: ${problem}\n`);
     }
-    // The policy binds each trusted-configuration claim to this revision, and
-    // the runtime commits only while the authority still has it: both must
-    // derive it the same way.
-    const authorizedRevision = (authority: { revisionId: string }) =>
-      `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`;
-    const runtime = createDockerRuntime({
-      stack: paths,
-      // The overlay is used only as this user's own file, as everywhere else.
-      fileExists: (path) =>
-        path === paths.composeReleasePath ? services.ownedStateFilePresent(path) : existsSync(path),
-      trafficDataRoot: join(paths.infraDir, "data"),
-    });
-    installTrustedConfigurationRuntime(runtime, {
-      services: initialAuthority.services,
-      integrationSchemas: initialAuthority.integrationSchemas,
-      loadAuthority: async () => {
-        const authority = await authorityLoader();
-        return { ...authority, revisionId: authorizedRevision(authority) };
-      },
-      infraDir: paths.infraDir,
-      legacyTraefikDynamicMounted: async () => {
-        try {
-          return await containerMounts(services.legacyTraefikDynamicDirectory(paths.infraDir));
-        } catch {
-          return undefined;
-        }
-      },
-      containerBindMounts: () =>
-        services.readContainerBindMounts(
-          async (args) =>
-            (
-              await runContainedProcess("docker", args, {
-                signal: AbortSignal.timeout(30_000),
-                timeout: 30_000,
-                maxBuffer: 4 * 1024 * 1024,
-              })
-            ).stdout,
-        ),
-    });
-    installCommunityRepositoryRuntime(runtime, communityRepositories);
-    installIntegrationRuntime(runtime, integrationStore);
     // The managed timeline endpoint is registered only when the trusted
     // service selection explicitly enables `dawarich-app`.  Its request path,
     // container name and collector script remain fixed; every call re-checks
@@ -362,55 +345,89 @@ async function main(): Promise<void> {
     const dawarichCollector = dawarichInspector
       ? createDockerDawarichCollector({ inspect: dawarichInspector })
       : undefined;
+    const releaseMigration = await services.migrateLegacyReleaseState(paths.infraDir);
+    if (releaseMigration)
+      for (const problem of releaseMigration.problems) process.stderr.write(`${problem}\n`);
     const administrativeCli = createDefaultFixedCli(config.rootDir);
-    const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli, {
-      afterHandoffSettled: async () => {
-        await retireLegacyAgentState(legacyState);
-        await retireLegacyWriter();
-      },
-      // What stayed behind in the earlier releases' store, and why; also in
-      // the render's output when the render migrated it.
-      onLegacyReleaseMigration: (migration) => {
-        for (const problem of migration.problems) process.stderr.write(`${problem}\n`);
-      },
-    });
-    await releaseEffects.initialize?.();
-    // A release that ships a different Transitous pin takes over from a pin
-    // approved under an earlier one; the auto-bump proposes again through its
-    // canary.
-    const retiredPin = retireStaleTransitousApproval(paths.infraDir);
-    if (retiredPin) {
-      process.stderr.write(
-        `Retired the approved Transitous pin ${retiredPin.approval.ref} (approved by ${retiredPin.approval.lockedBy} at ${retiredPin.approval.lockedAt} over the release pin ${retiredPin.approval.releasePin}): this release pins ${retiredPin.release.ref}\n`,
-      );
-    }
-    createTransitousLockRuntime(runtime, { rootDir: config.rootDir });
-    createAdministrativeRuntime(runtime, {
+    const runtime = await createProductionOpsRuntime({
       rootDir: config.rootDir,
+      stack: paths,
+      loadAuthority: authorityLoader,
+      communityRepositories,
+      integrationStore,
+      releaseRuntimeOptions: {
+        afterHandoffSettled: async () => {
+          await retireLegacyAgentState(legacyState);
+          await retireLegacyWriter();
+        },
+        onLegacyReleaseMigration: (migration) => {
+          for (const problem of migration.problems) process.stderr.write(`${problem}\n`);
+        },
+      },
       runFixedCli: administrativeCli,
-      releaseEffects,
-      loadBuildAuthority: async () =>
-        (await authorityLoader()).services.map((service) => ({
-          serviceId: service.manifest.id,
-          enabled: service.enabled,
-          isBuiltIn: service.isBuiltIn,
-          ...(service.manifest.buildCommand ? { buildCommand: service.manifest.buildCommand } : {}),
-        })),
+      candidateSource: {
+        directory: config.trustedConfigDirectory,
+        token: apiToken,
+        ownerUid: uid,
+        ownerGid: gid,
+      },
     });
-    const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
-    if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
-      throw new Error("Invalid BACKUP_RETENTION_DAYS");
-    }
-    const runBackupRetention = () =>
-      void pruneBackupRetention(config.rootDir, retentionDays, administrativeCli).catch(() => {
-        process.stderr.write("Scheduled backup retention failed\n");
+    const replacementInProgress = () => {
+      if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
+      try {
+        const handoff = readAgentHandoff(config.rootDir);
+        return handoff !== null && !isTerminalHandoff(handoff.phase);
+      } catch {
+        return true;
+      }
+    };
+    const transferPolicy = loadArtifactTransferPolicy();
+    const artifactTransfers =
+      "policy" in transferPolicy && controlStartup.installation
+        ? new ArtifactTransferStore({
+            dataRoot: join(paths.infraDir, "data", ".openmapx-transfers"),
+            privateRoot: artifactTransferPrivateRoot(
+              paths.infraDir,
+              existsSync("/run/secrets/openmapx-control-verifiers"),
+            ),
+            token: apiToken,
+            policy: transferPolicy.policy,
+            admissionsOpen: () => !replacementInProgress(),
+          })
+        : undefined;
+    if (artifactTransfers) {
+      installArtifactTransferRuntime(runtime, artifactTransfers);
+      installPreparedImportRuntime(runtime, artifactTransfers, {
+        rootDir: config.rootDir,
+        infraDir: paths.infraDir,
+        stack: paths,
+        ownedServices: productionOwnedServices(runtime),
+        loadAuthority: authorityLoader,
       });
-    runBackupRetention();
-    setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
+    } else if ("reason" in transferPolicy) console.error(transferPolicy.reason);
+    if (controlStartup.installation)
+      installStandaloneIntegrationRuntime(runtime, {
+        rootDir: config.rootDir,
+        store: artifactTransfers,
+      });
+    const releaseEffects = productionReleaseEffects(runtime);
+    const runBackupRetention = () => {
+      void Promise.resolve()
+        .then(() => {
+          const retentionDays = services.readAppliedPlatformValues(
+            paths.infraDir,
+          ).backupRetentionDays;
+          return pruneBackupRetention(config.rootDir, retentionDays, administrativeCli);
+        })
+        .catch(() => {
+          process.stderr.write("Scheduled backup retention failed\n");
+        });
+    };
     const policyAuthority = async () => {
       const authority = await authorityLoader();
       return {
-        revisionId: authorizedRevision(authority),
+        revisionId: `${authority.revisionId.slice(0, 48)}-${loadConfiguredResourceAuthority().revisionId}`,
+        configurationAuthorityRevision: authority.revisionId,
         services: authority.services.map((service) => ({
           serviceId: service.manifest.id,
           enabled: service.enabled,
@@ -421,68 +438,96 @@ async function main(): Promise<void> {
       };
     };
     const initialPolicyAuthority = await policyAuthority();
-    const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
-      resourceClaimer: createProductionRegistryResourceClaimer({
-        services: initialPolicyAuthority.services,
-        integrationIds: initialPolicyAuthority.integrationIds,
-        loadAuthority: policyAuthority,
-        enabledServiceIds: (authorityServices) => {
-          const trusted = readTrustedEnabledServiceIds(
-            paths.infraDir,
-            authorityServices.map((service) => service.selectionAuthority),
-          );
-          return trusted ?? bootstrapEnabledServiceIds;
-        },
-        trustedData: createFileTrustedOpsDataSource({
-          directory: config.trustedConfigDirectory,
-          token: apiToken,
-          allowedUids: [uid],
-          expectedGid: gid,
+    await startOpsAgentServer(
+      {
+        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        resourceClaimer: createProductionRegistryResourceClaimer({
+          services: initialPolicyAuthority.services,
+          integrationIds: initialPolicyAuthority.integrationIds,
+          loadAuthority: policyAuthority,
+          ownedServices: productionOwnedServices(runtime),
+          serviceMetadata: (authorityServices) =>
+            authorityServices.map((service) => ({
+              serviceId: service.serviceId,
+              isBuiltIn: service.isBuiltIn,
+              buildable: !!service.selectionAuthority.manifest.buildCommand,
+              creationDependencies: services.serviceCreationDependencyIds(
+                authorityServices.map((value) => value.selectionAuthority),
+                [service.serviceId],
+              ),
+            })),
+          enabledServiceIds: (authorityServices) => {
+            const trusted = readTrustedEnabledServiceIds(
+              paths.infraDir,
+              authorityServices.map((service) => service.selectionAuthority),
+            );
+            return trusted ?? bootstrapEnabledServiceIds;
+          },
+          trustedData: createDataTransitTrustedOpsDataSource(
+            controlStartup.installation,
+            createFileTrustedOpsDataSource({
+              directory: config.trustedConfigDirectory,
+              token: apiToken,
+              allowedUids: [uid],
+              expectedGid: gid,
+            }),
+          ),
+          resourceAuthority: {
+            allowBackup: (kind, backupId, serviceIds) =>
+              inspectBackupAuthority(config.rootDir, kind, backupId, serviceIds),
+            allowRegion: (_kind, regionId) =>
+              loadConfiguredResourceAuthority().regions.has(regionId),
+            allowCountry: (_kind, countryCode) =>
+              loadConfiguredResourceAuthority().countries.has(countryCode),
+            allowDataType: async (dataTypeId) =>
+              inspectDataTypeAuthority((await authorityLoader()).services, dataTypeId),
+            allowCatalogRevision: () => false,
+            allowRelease: (_kind, releaseId) => inspectReleaseAuthority(config.rootDir, releaseId),
+            allowUpdateJobId: (updateJobId) =>
+              /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(updateJobId),
+          },
         }),
-        resourceAuthority: {
-          allowBackup: (kind, backupId, serviceIds) =>
-            inspectBackupAuthority(config.rootDir, kind, backupId, serviceIds),
-          allowRegion: (_kind, regionId) => loadConfiguredResourceAuthority().regions.has(regionId),
-          allowCountry: (_kind, countryCode) =>
-            loadConfiguredResourceAuthority().countries.has(countryCode),
-          allowDataType: async (dataTypeId) =>
-            inspectDataTypeAuthority((await authorityLoader()).services, dataTypeId),
-          allowCatalogRevision: (kind, revisionId) =>
-            kind === "data.generateApiKeys" && revisionId === "transitous-fixed-v1",
-          allowRelease: (_kind, releaseId) => inspectReleaseAuthority(config.rootDir, releaseId),
-          allowUpdateJobId: (updateJobId) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(updateJobId),
-        },
-      }),
-      journal,
-      runtime,
-      replacementInProgress: () => {
-        try {
-          const handoff = readAgentHandoff(config.rootDir);
-          return handoff !== null && !isTerminalHandoff(handoff.phase);
-        } catch {
-          // An unreadable record fails release operations, not every operation.
-          return false;
-        }
-      },
-      audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
-      ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
-      privacyBackupHealth: () =>
-        probePrivacyBackupRuntime({
-          ...privacyBackupRuntimeOptions,
-          enabled: privacyBackupExtraction?.enabled === true,
-        }),
-      ...(dawarichCollector && dawarichInspector
-        ? {
-            dawarichExport: {
-              enabled: true,
-              inspectRuntime: dawarichInspector,
-              runCollector: dawarichCollector,
-            },
+        journal,
+        controlInstallation: controlStartup.installation,
+        terminalClaimCleanup,
+        runtime,
+        artifactTransfers,
+        replacementInProgress: () => {
+          if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
+          try {
+            const handoff = readAgentHandoff(config.rootDir);
+            return handoff !== null && !isTerminalHandoff(handoff.phase);
+          } catch {
+            // Unknown legacy replacement retains the existing mutation/drain
+            // boundary; inspection and health remain reachable.
+            return true;
           }
-        : {}),
-    });
-    await app.listen({ host: config.host, port: config.port });
+        },
+        audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
+        ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
+        privacyBackupHealth: () =>
+          probePrivacyBackupRuntime({
+            ...privacyBackupRuntimeOptions,
+            enabled: privacyBackupExtraction?.enabled === true,
+          }),
+        ...(dawarichCollector && dawarichInspector
+          ? {
+              dawarichExport: {
+                enabled: true,
+                inspectRuntime: dawarichInspector,
+                runCollector: dawarichCollector,
+              },
+            }
+          : {}),
+      },
+      releaseEffects,
+      { host: config.host, port: config.port },
+      () => {
+        runBackupRetention();
+        const retentionTimer = setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
+        retentionTimer.unref();
+      },
+    );
   });
 }
 

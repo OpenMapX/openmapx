@@ -309,6 +309,83 @@
       "when": 1793180460338,
       "tag": "0043_mangrove_encrypted_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793180460339,
+      "tag": "0042_admin_data_execution",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793187169774,
+      "tag": "0043_admin_auth_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793189162695,
+      "tag": "0044_admin_account_invariant",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793193370839,
+      "tag": "0045_admin_reauthentication",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793195693647,
+      "tag": "0046_admin_account_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793203302497,
+      "tag": "0047_admin_integration_application",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793227919397,
+      "tag": "0048_admin_transit_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793271038219,
+      "tag": "0049_admin_integration_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793275863684,
+      "tag": "0050_admin_legacy_integration_adoption",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793319100728,
+      "tag": "0051_platform_configuration_preview",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793391977411,
+      "tag": "0052_admin_configuration_migration",
+      "breakpoints": true
     }
   ]
 }

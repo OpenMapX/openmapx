@@ -181,3 +181,21 @@ describe("MOTIS capacity preflight", () => {
     expect(result.warnings.join(" ")).toMatch(/conservative defaults/);
   });
 });
+it("treats the actual schedule and artifact identities as aliases of one allowed feed", () => {
+  const policy = resolveOperationsProfile({ countries: ["de"], feedAllowList: ["de_demo_test"] });
+  const result = runMotisPreflight({
+    policy,
+    feedCount: 1,
+    osmAvailable: false,
+    capacity: {
+      freeDiskBytes: 10 ** 15,
+      slotMemoryGb: 16,
+      slotCpu: 4,
+      fileDescriptorLimit: 65536,
+      buildTimeoutHours: 12,
+    },
+    selectedFeedIds: ["de_demo_test", "de_demo.test"],
+    selectedSources: [{ id: "de_demo_test", artifactId: "de_demo.test" }],
+  });
+  expect(result.blockers.filter((message) => message.includes("allow-list"))).toEqual([]);
+});

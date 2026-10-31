@@ -1,0 +1,2589 @@
+import { createHash, createHmac, hkdfSync, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  constants as C,
+  closeSync,
+  createReadStream,
+  fstatSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  statfsSync,
+  writeSync,
+} from "node:fs";
+import { type FileHandle, open } from "node:fs/promises";
+import { join } from "node:path";
+import { Readable, Writable } from "node:stream";
+import {
+  AnchoredDirectory,
+  acknowledgeControlRetention,
+  artifactFingerprint,
+  assertArtifactTargetLeaseExecution,
+  executionAuthorityState,
+  inspectArtifactTargetLeaseChildSettlement,
+  lookupControlChildPhaseBinding,
+  parseBundleManifest,
+  readGenerationHardlinksOwnerPlan,
+  type ValidatedBuildBundle,
+  validateBuildBundle,
+  verifyRetainedArtifactTargetRootRelease,
+} from "@openmapx/core/build-artifacts";
+import {
+  type ArtifactFilePublicationResult,
+  assertKnownArtifactStageReceipt,
+  cleanupRestoredArtifactPublication,
+  inspectArtifactPublication,
+  inspectUnstartedArtifactImport,
+  originalArtifactImportOperation,
+  originalArtifactValidationOperation,
+} from "@openmapx/core/build-artifacts/publication";
+import {
+  type ArtifactImportPreview,
+  type ArtifactStageClaim,
+  artifactImportPreviewSchema,
+  artifactStageClaimSchema,
+  type ClaimTransferStage,
+  type CreateTransferStage,
+  canonicalJson,
+  createTransferStageSchema,
+  opsOperationFingerprint,
+  type StageClaimIdentity,
+  type StageClaimSettlement,
+  type StageInspectionBinding,
+  stageClaimSettlementSchema,
+  stageInspectionBindingSchema,
+  type TransferPurpose,
+  type TransferStage,
+  transferStageSchema,
+} from "@openmapx/core/ops";
+import {
+  assertIntegrationPublicationJournal,
+  closeIntegrationPublicationJournal,
+  createIntegrationPublicationJournal,
+  describeIntegrationPreparationRoot,
+  describeIntegrationPublication,
+  describePreparedIntegration,
+  discardIntegrationPreparation,
+  type IntegrationArtifactPreparationContext,
+  type IntegrationPublication,
+  type IntegrationPublicationJournal,
+  prepareIntegrationArtifact,
+  restorePreparedIntegration,
+} from "@openmapx/integration-framework/installer";
+import z from "zod/v4";
+import type { OpsExecutionContext } from "../runtime";
+import {
+  type StandaloneInspectionRecord,
+  type StandaloneOwnershipRecord,
+  type StandaloneTransactionRecord,
+  standaloneInspectionRecordSchema,
+  standaloneOwnershipRecordSchema,
+  standaloneTransactionRecordSchema,
+} from "../standalone-integration-records";
+import { acquireArtifactByteOwner } from "./byte-owner";
+import { inspectStageCleanup, removeStageCleanup } from "./cleanup";
+import { ArtifactTransferError } from "./errors";
+import {
+  type ArtifactTransferPolicy,
+  DEFAULT_TRANSFER_POLICY,
+  purposeByteLimit,
+  transferPolicyRevision,
+} from "./policy";
+
+/** A consumer borrows the already-open descriptor; destroying its stream must
+ * not close the descriptor before the store's final identity verification. */
+async function* claimedFileBytes(file: FileHandle, signal: AbortSignal, bytes: number) {
+  let position = 0;
+  for (;;) {
+    signal.throwIfAborted();
+    const buffer = Buffer.alloc(64 * 1024),
+      { bytesRead } = await file.read(buffer, 0, buffer.length, position);
+    if (!bytesRead) break;
+    position += bytesRead;
+    if (position > bytes) failed(409, "Artifact consumer exceeded its immutable byte count");
+    yield buffer.subarray(0, bytesRead);
+  }
+  if (position !== bytes) failed(409, "Artifact consumer byte count changed");
+}
+const id = z.uuid();
+const integrationClaimRecordSchema = z.strictObject({
+  claim: artifactStageClaimSchema,
+  settlement: stageClaimSettlementSchema.nullable(),
+  preparation: z.record(z.string(), z.unknown()).nullable(),
+  transactionId: z.uuid().nullable(),
+  receiptDelivered: z.boolean().default(false),
+});
+const metaSchema = z.strictObject({
+  stage: transferStageSchema,
+  ownerId: z.string().min(1).max(128),
+  operationKey: z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/),
+  createdAt: z.number().safe().int(),
+  policyRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  declaredBytes: z.number().safe().int().nonnegative().nullable(),
+  expectedSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
+  reservedBytes: z.number().safe().int().nonnegative(),
+  directory: z.strictObject({ dev: z.string(), ino: z.string() }),
+  content: z
+    .strictObject({
+      dev: z.string(),
+      ino: z.string(),
+      size: z.string(),
+      mtimeNs: z.string(),
+      ctimeNs: z.string(),
+    })
+    .nullable(),
+  integrationInspection: stageInspectionBindingSchema.nullable().default(null),
+  importPreview: z
+    .strictObject({
+      preview: artifactImportPreviewSchema,
+      targetFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      preparationId: z.uuid(),
+    })
+    .nullable()
+    .default(null),
+  claims: z.array(integrationClaimRecordSchema).max(8).default([]),
+  attempts: z
+    .array(
+      z.strictObject({
+        attemptId: z.uuid(),
+        openedAt: z.number().int().safe(),
+        deadlineAt: z.number().int().safe(),
+      }),
+    )
+    .max(32),
+});
+type Meta = z.infer<typeof metaSchema>;
+type StreamInput = {
+  stageId: string;
+  ownerId: string;
+  purpose: TransferPurpose;
+  attemptId: string;
+  deadlineAt: number;
+  signal?: AbortSignal;
+};
+function failed(
+  status: ConstructorParameters<typeof ArtifactTransferError>[0],
+  message: string,
+): never {
+  throw new ArtifactTransferError(status, message);
+}
+function absent(error: unknown) {
+  return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+function same(a: { dev: string; ino: string }, b: { dev: bigint; ino: bigint }) {
+  return a.dev === String(b.dev) && a.ino === String(b.ino);
+}
+
+/** One filesystem store for metadata, reservations and body ownership. Public IDs never become paths without UUID validation. */
+export class ArtifactTransferStore {
+  readonly policy: ArtifactTransferPolicy;
+  readonly revision: string;
+  private readonly key: Buffer;
+  private readonly data: AnchoredDirectory;
+  private readonly records: AnchoredDirectory;
+  private readonly integrationRecords: AnchoredDirectory;
+  private readonly byteOwners: AnchoredDirectory;
+  private readonly byteOperations = new Set<Promise<void>>();
+  private readonly purposeOwners = new Set<string>();
+  private readonly integrationJournals = new Map<string, IntegrationPublicationJournal>();
+  private readonly streams = new Map<
+    string,
+    {
+      ownerId: string;
+      controller: AbortController;
+      kind: "bytes" | "purpose";
+      closed: Promise<void>;
+    }
+  >();
+  private draining = false;
+  private readonly capacity: () => { bytes: number; inodes: number };
+  private readonly now: () => number;
+  constructor(options: {
+    dataRoot: string;
+    privateRoot: string;
+    token: string;
+    policy?: ArtifactTransferPolicy;
+    capacity?: () => { bytes: number; inodes: number };
+    now?: () => number;
+    admissionsOpen?: () => boolean;
+  }) {
+    this.policy = options.policy ?? DEFAULT_TRANSFER_POLICY;
+    this.revision = transferPolicyRevision(this.policy);
+    this.now = options.now ?? Date.now;
+    this.admissionsOpen = options.admissionsOpen ?? (() => true);
+    this.key = Buffer.from(
+      hkdfSync("sha256", options.token, "openmapx-artifact-transfer-v1", "stage-metadata", 32),
+    );
+    mkdirSync(options.dataRoot, { recursive: true, mode: 0o700 });
+    mkdirSync(options.privateRoot, { recursive: true, mode: 0o700 });
+    this.data = new AnchoredDirectory(options.dataRoot, undefined, true);
+    this.records = new AnchoredDirectory(options.privateRoot, undefined, true);
+    this.integrationRecords = this.records.directory("integrations", true, true);
+    this.byteOwners = this.records.directory("byte-owners", true, true);
+    this.capacity =
+      options.capacity ??
+      (() => {
+        const fs = statfsSync(this.data.anchor, { bigint: true });
+        const bytes = Number(fs.bavail * fs.bsize),
+          inodes = Number(fs.ffree);
+        if (!Number.isSafeInteger(bytes) || !Number.isSafeInteger(inodes))
+          throw Error("Unknown capacity");
+        return { bytes, inodes };
+      });
+  }
+  private readonly admissionsOpen: () => boolean;
+  get activeStreams() {
+    return this.streams.size + this.purposeOwners.size;
+  }
+  close() {
+    if (this.streams.size || this.purposeOwners.size) throw Error("Transfer streams still owned");
+    for (const journal of this.integrationJournals.values())
+      closeIntegrationPublicationJournal(journal);
+    this.integrationJournals.clear();
+    this.byteOwners.close();
+    this.integrationRecords.close();
+    this.records.close();
+    this.data.close();
+    this.key.fill(0);
+  }
+  private admit() {
+    if (this.draining || !this.admissionsOpen())
+      failed(503, "Artifact transfer admission is draining");
+  }
+  private ownStream(
+    stageId: string,
+    ownerId: string,
+    controller: AbortController,
+    kind: "bytes" | "purpose",
+  ) {
+    let closed!: () => void;
+    const entry = {
+      ownerId,
+      controller,
+      kind,
+      closed: new Promise<void>((resolve) => {
+        closed = resolve;
+      }),
+    };
+    this.streams.set(stageId, entry);
+    return () => {
+      if (this.streams.get(stageId) !== entry)
+        throw Error("Original artifact stream owner changed");
+      this.streams.delete(stageId);
+      closed();
+    };
+  }
+  async drainByteStreams(): Promise<void> {
+    this.draining = true;
+    const owned = [...this.streams.values()].filter((entry) => entry.kind === "bytes");
+    for (const entry of owned)
+      entry.controller.abort(new ArtifactTransferError(503, "Artifact byte stream is closing"));
+    await Promise.all([...owned.map((entry) => entry.closed), ...this.byteOperations]);
+  }
+  private async withByteOwner<T>(stageId: string, run: () => Promise<T>): Promise<T> {
+    id.parse(stageId);
+    this.admit();
+    let done!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+    this.byteOperations.add(pending);
+    let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+    try {
+      owner = await acquireArtifactByteOwner(this.byteOwners.name(stageId));
+      return await run();
+    } finally {
+      try {
+        await owner?.release();
+      } finally {
+        this.byteOperations.delete(pending);
+        done();
+      }
+    }
+  }
+  private lock<T>(run: () => T): T {
+    let guard: AnchoredDirectory;
+    try {
+      mkdirSync(this.records.name("writer"), { mode: 0o700 });
+      guard = this.records.directory("writer");
+    } catch {
+      failed(503, "Artifact transfer state is busy or unavailable");
+    }
+    try {
+      return run();
+    } finally {
+      const stat = { dev: String(guard.stat.dev), ino: String(guard.stat.ino) };
+      guard.close();
+      this.records.removeDirectory("writer", stat);
+    }
+  }
+  private load(stageId: string): Meta {
+    id.parse(stageId);
+    try {
+      const outer = z
+        .strictObject({ body: z.string().max(30000), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+        .parse(JSON.parse(this.records.read(`${stageId}.json`, 65536).toString("utf8")));
+      const actual = createHmac("sha256", this.key).update(outer.body).digest();
+      if (!timingSafeEqual(actual, Buffer.from(outer.mac, "hex")))
+        throw Error("Stage metadata authentication failed");
+      const meta = metaSchema.parse(JSON.parse(outer.body));
+      if (meta.stage.stageId !== stageId) throw Error("Stage identity changed");
+      return meta;
+    } catch (error) {
+      if (absent(error)) failed(404, "Artifact stage not found");
+      throw error;
+    }
+  }
+  private save(meta: Meta) {
+    const body = canonicalJson(metaSchema.parse(meta));
+    this.records.write(
+      `${meta.stage.stageId}.json`,
+      JSON.stringify({ body, mac: createHmac("sha256", this.key).update(body).digest("hex") }),
+    );
+  }
+  private all(): Meta[] {
+    return this.records
+      .listBounded(10005)
+      .filter((name) => /^[a-f0-9-]{36}\.json$/.test(name))
+      .map((name) => this.load(name.slice(0, -5)));
+  }
+  private directory(meta: Meta): AnchoredDirectory {
+    const directory = this.data.directory(meta.stage.stageId, false, true);
+    if (!same(meta.directory, directory.stat)) {
+      directory.close();
+      failed(409, "Artifact stage storage changed");
+    }
+    return directory;
+  }
+  private owned(stageId: string, ownerId: string, purpose?: TransferPurpose): Meta {
+    const meta = this.load(stageId);
+    if (meta.ownerId !== ownerId || (purpose !== undefined && meta.stage.purpose !== purpose))
+      failed(404, "Artifact stage not found");
+    const directory = this.directory(meta);
+    directory.close();
+    return meta;
+  }
+  private alive(meta: Meta) {
+    if (Date.parse(meta.stage.expiresAt) <= this.now()) failed(410, "Artifact stage expired");
+    if (meta.policyRevision !== this.revision)
+      failed(409, "Artifact transfer policy changed; create a new stage");
+  }
+  private checkCapacity(additional: number, records = this.all()) {
+    let available: { bytes: number; inodes: number };
+    try {
+      available = this.capacity();
+    } catch {
+      failed(507, "Artifact transfer free capacity is unavailable");
+    }
+    const pending = records.reduce(
+      (sum, m) => sum + Math.max(0, m.reservedBytes - m.stage.bytes),
+      0,
+    );
+    const headroom = Math.max(1024 ** 3, Math.ceil(additional * 0.05));
+    if (
+      !Number.isSafeInteger(available.bytes) ||
+      !Number.isSafeInteger(available.inodes) ||
+      available.bytes < additional + pending + headroom ||
+      available.inodes < records.length * 3 + 16
+    )
+      failed(507, "Insufficient artifact transfer capacity");
+    if (
+      records.reduce((sum, m) => sum + m.reservedBytes, 0) + additional >
+      this.policy.maxStageBytes
+    )
+      failed(507, "Artifact stage quota exceeded");
+  }
+  async reservedBytes() {
+    return this.lock(() => this.all().reduce((sum, m) => sum + m.reservedBytes, 0));
+  }
+  async transferCapabilities() {
+    let freeBytes: number | null = null,
+      freeInodes: number | null = null;
+    try {
+      const available = this.capacity();
+      if (Number.isSafeInteger(available.bytes) && available.bytes >= 0)
+        freeBytes = available.bytes;
+      if (Number.isSafeInteger(available.inodes) && available.inodes >= 0)
+        freeInodes = available.inodes;
+    } catch {
+      /* Unknown capacity remains unavailable; never infer space. */
+    }
+    const { maxUploadBytes, maxExpandedBytes, maxStageBytes, stageMs, downloadRetentionMs } =
+      this.policy;
+    return {
+      limits: { maxUploadBytes, maxExpandedBytes, maxStageBytes, stageMs, downloadRetentionMs },
+      freeBytes,
+      freeInodes,
+      reservedBytes: await this.reservedBytes(),
+    };
+  }
+  async createStage(raw: CreateTransferStage): Promise<TransferStage> {
+    const input = createTransferStageSchema.parse(raw);
+    this.admit();
+    return this.lock(() => {
+      const records = this.all();
+      const existing = records.find(
+        (m) => m.ownerId === input.ownerId && m.operationKey === input.operationKey,
+      );
+      if (existing) {
+        if (
+          existing.stage.purpose !== input.purpose ||
+          existing.stage.direction !== input.direction ||
+          existing.declaredBytes !== (input.declaredBytes ?? null) ||
+          existing.expectedSha256 !== (input.expectedSha256 ?? null)
+        )
+          failed(409, "Artifact stage key conflicts with retained intent");
+        return existing.stage;
+      }
+      const owned = records.filter((m) => m.ownerId === input.ownerId);
+      if (owned.filter((m) => m.createdAt > this.now() - 60000).length >= 10)
+        failed(429, "Artifact stage admission rate exceeded");
+      if (
+        owned.filter((m) => m.stage.cleanup !== "complete").length >=
+        this.policy.maxRetainedStagesPerPrincipal
+      )
+        failed(429, "Artifact stage retention quota exceeded");
+      if (records.length >= 10000) failed(507, "Artifact stage metadata capacity exceeded");
+      const limit = purposeByteLimit(this.policy, input.purpose);
+      const reserved = input.declaredBytes ?? Math.min(1024 ** 3, limit);
+      if (reserved > limit) failed(413, "Artifact stage exceeds purpose limit");
+      this.checkCapacity(reserved, records);
+      const stage: TransferStage = {
+        stageId: randomUUID(),
+        purpose: input.purpose,
+        direction: input.direction,
+        state: "created",
+        bytes: 0,
+        sha256: null,
+        expiresAt: new Date(this.now() + this.policy.stageMs).toISOString(),
+        cleanup: "pending",
+      };
+      const directory = this.data.directory(stage.stageId, true, true);
+      try {
+        this.save({
+          stage,
+          ownerId: input.ownerId,
+          operationKey: input.operationKey,
+          createdAt: this.now(),
+          policyRevision: this.revision,
+          declaredBytes: input.declaredBytes ?? null,
+          expectedSha256: input.expectedSha256 ?? null,
+          reservedBytes: reserved,
+          directory: { dev: String(directory.stat.dev), ino: String(directory.stat.ino) },
+          content: null,
+          attempts: [],
+          integrationInspection: null,
+          importPreview: null,
+          claims: [],
+        });
+      } finally {
+        directory.close();
+      }
+      return stage;
+    });
+  }
+  async getStage(input: {
+    stageId: string;
+    ownerId: string;
+    purpose: TransferPurpose;
+  }): Promise<TransferStage> {
+    return this.lock(() => this.owned(input.stageId, input.ownerId, input.purpose).stage);
+  }
+  async listStages(input: { ownerId: string; limit: number; offset: number }) {
+    return this.lock(() => {
+      const records = this.all()
+        .filter((m) => m.ownerId === input.ownerId && m.stage.cleanup !== "complete")
+        .sort((a, b) => b.createdAt - a.createdAt);
+      return {
+        items: records.slice(input.offset, input.offset + input.limit).map((m) => m.stage),
+        total: records.length,
+        limit: input.limit,
+        offset: input.offset,
+      };
+    });
+  }
+  async deleteStage(input: { stageId: string; ownerId: string }): Promise<void> {
+    return this.cleanupStage(input, "expired");
+  }
+  private async cleanupStage(
+    input: { stageId: string; ownerId: string },
+    terminalState: "expired" | "failed",
+  ): Promise<void> {
+    this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId);
+      if (
+        meta.stage.state === "claimed" ||
+        meta.stage.state === "validating" ||
+        meta.stage.state === "uploading" ||
+        meta.claims.some(
+          (record) => !record.settlement || record.settlement.outcome === "unknown",
+        ) ||
+        this.streams.has(input.stageId)
+      )
+        failed(409, "Artifact stage is owned by unfinished work");
+      const dir = this.directory(meta);
+      try {
+        const roots = dir.listBounded(9);
+        for (const name of roots) {
+          if (name === "content") {
+            const current = dir.fileIdentity(name);
+            if (
+              !meta.content ||
+              current.dev !== meta.content.dev ||
+              current.ino !== meta.content.ino
+            )
+              failed(409, "Artifact cleanup content changed");
+            continue;
+          }
+          const record = meta.claims.find((entry) => name === `prepared-${entry.claim.claimId}`);
+          const original = z
+            .object({ directory: z.object({ dev: z.string(), ino: z.string() }) })
+            .safeParse(record?.preparation);
+          if (!record || record.claim.use !== "validate-build" || !original.success)
+            failed(409, "Unrecognized artifact stage content");
+          const child = dir.directory(name, false, true);
+          try {
+            if (!same(original.data.directory, child.stat))
+              failed(409, "Prepared cleanup root changed");
+          } finally {
+            child.close();
+          }
+        }
+        const tree = inspectStageCleanup(dir, {
+          remaining: Math.min(
+            this.policy.maxEntries * Math.max(1, meta.claims.length) + 32,
+            Math.floor(this.policy.memoryBudgetBytes / 2048),
+          ),
+          maxDepth: this.policy.maxPathDepth + 3,
+        });
+        // Retain an authenticated cleanup intent before deletion. Failed cleanup
+        // keeps quota charged; a retry can remove only the remaining owned tree.
+        meta.stage.cleanup = "failed";
+        this.save(meta);
+        removeStageCleanup(dir, tree);
+        meta.stage.cleanup = "complete";
+        meta.stage.state = terminalState;
+        meta.reservedBytes = 0;
+        meta.content = null;
+        this.save(meta);
+      } catch (error) {
+        meta.stage.cleanup = "failed";
+        this.save(meta);
+        throw error;
+      } finally {
+        dir.close();
+      }
+    });
+  }
+  /** Expiry never grants authority to terminate an owner or discard unknown
+   * work. Purpose consumers must first settle their actual retained claims. */
+  async reconcileTransferStages(input: { signal: AbortSignal }) {
+    const summary = { expired: 0, removed: 0, cleanupFailed: 0 };
+    const stages = this.lock(() => {
+      const names = this.records
+        .listBounded(10005)
+        .filter((name) => /^[a-f0-9-]{36}\.json$/.test(name))
+        .sort();
+      let after = "";
+      try {
+        const cursor = z
+          .strictObject({ body: z.string().max(128), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+          .parse(JSON.parse(this.records.read("sweep-cursor.json", 1024).toString("utf8")));
+        if (
+          !timingSafeEqual(
+            createHmac("sha256", this.key).update(cursor.body).digest(),
+            Buffer.from(cursor.mac, "hex"),
+          )
+        )
+          throw Error("Artifact sweep cursor authentication failed");
+        after = z.strictObject({ after: z.string().max(64) }).parse(JSON.parse(cursor.body)).after;
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      const ordered = [
+        ...names.filter((name) => name > after),
+        ...names.filter((name) => name <= after),
+      ].slice(0, 1000);
+      const entries = ordered.map((name) => this.load(name.slice(0, -5)));
+      const body = JSON.stringify({ after: ordered.at(-1) ?? "" });
+      this.records.write(
+        "sweep-cursor.json",
+        JSON.stringify({ body, mac: createHmac("sha256", this.key).update(body).digest("hex") }),
+      );
+      return entries.map((meta) => ({
+        stageId: meta.stage.stageId,
+        ownerId: meta.ownerId,
+        expiresAt: meta.stage.expiresAt,
+        cleanup: meta.stage.cleanup,
+      }));
+    });
+    for (const stage of stages) {
+      input.signal.throwIfAborted();
+      if (stage.cleanup === "complete") {
+        if (this.now() >= Date.parse(stage.expiresAt) + 7 * 86400000)
+          this.lock(() => {
+            const meta = this.owned(stage.stageId, stage.ownerId);
+            if (
+              meta.stage.cleanup !== "complete" ||
+              meta.reservedBytes !== 0 ||
+              this.streams.has(stage.stageId) ||
+              meta.claims.some(
+                (entry) =>
+                  !entry.settlement ||
+                  entry.settlement.outcome === "unknown" ||
+                  (meta.stage.purpose === "prepared-artifact" &&
+                    ["validate-build", "import-build"].includes(entry.claim.use) &&
+                    !entry.receiptDelivered),
+              )
+            )
+              return;
+            let dir: AnchoredDirectory | undefined;
+            try {
+              dir = this.directory(meta);
+              if (dir.listBounded(1).length) throw Error("Completed artifact stage is not empty");
+            } catch (error) {
+              if (!absent(error)) throw error;
+            } finally {
+              dir?.close();
+            }
+            if (dir) this.data.removeDirectory(stage.stageId, meta.directory);
+            // A completed stage cannot admit another stream. Its UUID is never
+            // reused, and every original attempt has outlived its bounded clock.
+            try {
+              this.byteOwners.removeFile(stage.stageId);
+            } catch (error) {
+              if (!absent(error)) throw error;
+            }
+            this.records.removeFile(`${stage.stageId}.json`);
+          });
+        continue;
+      }
+      // The Linux kernel lease proves the old byte owner has actually exited.
+      // Only a partial UPLOAD without any host-purpose claim is recoverable this
+      // way; downloads/exports and publication claims require their own proof.
+      if (
+        process.platform === "linux" &&
+        !this.streams.has(stage.stageId) &&
+        !this.purposeOwners.has(stage.stageId)
+      ) {
+        let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+        try {
+          owner = await acquireArtifactByteOwner(this.byteOwners.name(stage.stageId));
+          const orphan = this.lock(() => {
+            const meta = this.owned(stage.stageId, stage.ownerId);
+            if (
+              meta.stage.direction === "upload" &&
+              ["uploading", "failed"].includes(meta.stage.state) &&
+              !meta.claims.length &&
+              !this.streams.has(stage.stageId)
+            ) {
+              meta.stage.state = "failed";
+              this.save(meta);
+              return true;
+            }
+            const current = meta.claims.at(-1);
+            if (
+              meta.stage.purpose === "prepared-artifact" &&
+              ["validating", "failed"].includes(meta.stage.state) &&
+              current?.claim.use === "validate-build" &&
+              (!current.settlement || current.settlement.outcome === "failed") &&
+              !this.purposeOwners.has(stage.stageId) &&
+              meta.claims
+                .slice(0, -1)
+                .every((entry) => entry.settlement && entry.settlement.outcome !== "unknown")
+            ) {
+              // This fixed purpose can write only its private extraction tree.
+              // The whole validation method held the same kernel descriptor.
+              current.settlement = {
+                outcome: "failed",
+                receiptId: current.claim.identity.executionId,
+              };
+              meta.stage.state = "failed";
+              this.save(meta);
+              return true;
+            }
+            return false;
+          });
+          if (orphan) {
+            await this.cleanupStage(stage, "failed");
+            summary.removed++;
+            continue;
+          }
+        } catch {
+          /* A live or unverifiable kernel owner retains bytes and quota. */
+        } finally {
+          await owner?.release();
+        }
+      }
+      if (Date.parse(stage.expiresAt) > this.now()) continue;
+      // Reacquire and revalidate immediately before each deletion. No expiry
+      // snapshot or external execution status can substitute for purpose proof.
+      const eligible = this.lock(() => {
+        const meta = this.owned(stage.stageId, stage.ownerId);
+        return (
+          !["uploading", "validating", "claimed"].includes(meta.stage.state) &&
+          !this.streams.has(stage.stageId) &&
+          meta.claims.every(
+            (record) => record.settlement && record.settlement.outcome !== "unknown",
+          )
+        );
+      });
+      if (!eligible) continue;
+      summary.expired++;
+      try {
+        await this.deleteStage(stage);
+        summary.removed++;
+      } catch {
+        summary.cleanupFailed++;
+      }
+    }
+    return summary;
+  }
+  private start(
+    input: StreamInput,
+    upload: boolean,
+    exporting = false,
+  ): { meta: Meta; controller: AbortController; done: () => void; touch: () => void } {
+    this.admit();
+    const meta = this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, input.purpose);
+      this.alive(meta);
+      id.parse(input.attemptId);
+      if (!Number.isSafeInteger(input.deadlineAt) || input.deadlineAt <= this.now())
+        failed(410, "Artifact stream deadline expired");
+      if (meta.attempts.some((attempt) => attempt.attemptId === input.attemptId))
+        failed(409, "Artifact stream attempt was already consumed");
+      if (meta.attempts.length >= 32) failed(429, "Artifact stream attempt limit exceeded");
+      if (this.streams.has(input.stageId))
+        failed(409, "Artifact stage already has an active stream");
+      if (
+        this.streams.size >= this.policy.maxConcurrentTransfers ||
+        [...this.streams.values()].filter((s) => s.ownerId === input.ownerId).length >=
+          this.policy.maxConcurrentTransfersPerPrincipal
+      )
+        failed(429, "Artifact stream concurrency limit exceeded");
+      if (
+        upload
+          ? meta.stage.direction !== (exporting ? "download" : "upload") ||
+            meta.stage.state !== "created"
+          : meta.stage.direction !== "download" || meta.stage.state !== "ready"
+      )
+        failed(409, "Artifact stage is not available for this stream");
+      meta.attempts.push({
+        attemptId: input.attemptId,
+        openedAt: this.now(),
+        deadlineAt: Math.min(
+          input.deadlineAt,
+          this.now() + this.policy.transferMs,
+          Date.parse(meta.stage.expiresAt),
+        ),
+      });
+      if (upload) meta.stage.state = "uploading";
+      this.save(meta);
+      return meta;
+    });
+    const controller = new AbortController();
+    const releaseStream = this.ownStream(input.stageId, input.ownerId, controller, "bytes");
+    let idle: ReturnType<typeof setTimeout>;
+    const touch = () => {
+      clearTimeout(idle);
+      idle = setTimeout(
+        () =>
+          controller.abort(new ArtifactTransferError(410, "Artifact stream idle deadline expired")),
+        this.policy.idleMs,
+      );
+      idle.unref?.();
+    };
+    const duration = Math.min(
+      this.policy.transferMs,
+      input.deadlineAt - this.now(),
+      Date.parse(meta.stage.expiresAt) - this.now(),
+    );
+    const total = setTimeout(
+      () => controller.abort(new ArtifactTransferError(410, "Artifact stream deadline expired")),
+      Math.max(1, duration),
+    );
+    total.unref?.();
+    const abort = () => controller.abort(input.signal?.reason);
+    input.signal?.addEventListener("abort", abort, { once: true });
+    if (input.signal?.aborted) abort();
+    touch();
+    return {
+      meta,
+      controller,
+      touch,
+      done: () => {
+        clearTimeout(total);
+        clearTimeout(idle);
+        input.signal?.removeEventListener("abort", abort);
+        releaseStream();
+      },
+    };
+  }
+  async upload(
+    input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+  ): Promise<TransferStage> {
+    return this.writeContent(input, false);
+  }
+  private async writeContent(
+    input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+    exporting: boolean,
+  ): Promise<TransferStage> {
+    return this.withByteOwner(input.stageId, () => this.writeOwnedContent(input, exporting));
+  }
+  private async writeOwnedContent(
+    input: StreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+    exporting: boolean,
+  ): Promise<TransferStage> {
+    const lifetime = this.start(input, true, exporting);
+    let fd: number | undefined,
+      dir: AnchoredDirectory | undefined,
+      reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let complete = false;
+    const meta = lifetime.meta;
+    const expectedBytes = meta.declaredBytes ?? input.contentLength;
+    try {
+      if (
+        input.contentLength !== undefined &&
+        (!Number.isSafeInteger(input.contentLength) ||
+          input.contentLength < 0 ||
+          input.contentLength > purposeByteLimit(this.policy, meta.stage.purpose))
+      )
+        failed(413, "Artifact content length exceeds purpose limit");
+      if (
+        input.contentLength !== undefined &&
+        meta.declaredBytes !== null &&
+        input.contentLength !== meta.declaredBytes
+      )
+        failed(422, "Artifact length does not match admitted stage");
+      dir = this.directory(meta);
+      fd = openSync(dir.name("content"), C.O_WRONLY | C.O_CREAT | C.O_EXCL | C.O_NOFOLLOW, 0o600);
+      const opened = fstatSync(fd, { bigint: true });
+      meta.content = {
+        dev: String(opened.dev),
+        ino: String(opened.ino),
+        size: String(opened.size),
+        mtimeNs: String(opened.mtimeNs),
+        ctimeNs: String(opened.ctimeNs),
+      };
+      // The immutable upload proof is finalized only at EOF. Retain its inode
+      // now so a contained failed upload can clean only the file it created.
+      this.lock(() => this.save(meta));
+      reader = input.body.getReader();
+      const hash = createHash("sha256");
+      let bytes = 0;
+      while (true) {
+        lifetime.controller.signal.throwIfAborted();
+        const part = await this.readChunk(reader, lifetime.controller.signal);
+        if (part.done) break;
+        if (part.value.byteLength > 8 * 1024 ** 2)
+          failed(413, "Artifact stream chunk exceeds queue limit");
+        const next = bytes + part.value.byteLength;
+        const limit = expectedBytes ?? purposeByteLimit(this.policy, meta.stage.purpose);
+        if (!Number.isSafeInteger(next) || next > limit)
+          failed(413, "Artifact stream exceeds admitted byte limit");
+        if (next > meta.reservedBytes)
+          this.lock(() => {
+            const current = this.load(meta.stage.stageId);
+            const reserved = Math.min(limit, Math.ceil(next / 1024 ** 3) * 1024 ** 3);
+            this.checkCapacity(reserved - current.reservedBytes);
+            meta.reservedBytes = reserved;
+            current.reservedBytes = reserved;
+            this.save(current);
+          });
+        let written = 0;
+        while (written < part.value.byteLength)
+          written += writeSync(fd, part.value, written, part.value.byteLength - written);
+        hash.update(part.value);
+        bytes = next;
+        meta.stage.bytes = bytes;
+        this.lock(() => {
+          this.checkCapacity(0);
+          this.save(meta);
+        });
+        lifetime.touch();
+      }
+      lifetime.controller.signal.throwIfAborted();
+      if (expectedBytes !== undefined && bytes !== expectedBytes)
+        failed(422, "Artifact stream length mismatch");
+      const sha256 = hash.digest("hex");
+      if (meta.expectedSha256 !== null && sha256 !== meta.expectedSha256)
+        failed(422, "Artifact stream digest mismatch");
+      fsyncSync(fd);
+      const stat = fstatSync(fd, { bigint: true });
+      if (!stat.isFile() || stat.nlink !== 1n || stat.size !== BigInt(bytes))
+        failed(409, "Artifact content changed");
+      meta.content = {
+        dev: String(stat.dev),
+        ino: String(stat.ino),
+        size: String(stat.size),
+        mtimeNs: String(stat.mtimeNs),
+        ctimeNs: String(stat.ctimeNs),
+      };
+      meta.stage.sha256 = sha256;
+      meta.stage.state = "uploaded";
+      meta.reservedBytes = bytes;
+      this.lock(() => {
+        dir!.check();
+        dir!.fileIdentity("content");
+        this.save(meta);
+      });
+      complete = true;
+      return meta.stage;
+    } catch (error) {
+      meta.stage.state = "failed";
+      try {
+        this.lock(() => this.save(meta));
+      } catch {}
+      throw error;
+    } finally {
+      try {
+        if (reader) {
+          if (!complete) await reader.cancel(lifetime.controller.signal.reason).catch(() => {});
+          reader.releaseLock();
+        }
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+        dir?.close();
+        lifetime.done();
+      }
+    }
+  }
+  /** The installed fixed producer writes into this private download; a public
+   * upload can never populate a download stage or assert it ready. */
+  async writePreparedExport(
+    context: OpsExecutionContext,
+    produce: (target: Writable, signal: AbortSignal) => Promise<{ artifactFingerprint: string }>,
+  ) {
+    const operation = context.claim.operation,
+      authority = context.controlAuthority,
+      lease = context.ownedTargetLease;
+    if (operation.kind !== "artifactTransfer.export" || !authority || !lease)
+      throw Error("Original prepared export owner required");
+    const owner = executionAuthorityState(authority);
+    if (
+      owner.kind !== operation.kind ||
+      owner.installation.installation.role !== "ops-agent" ||
+      context.execution.principal !== "api" ||
+      canonicalJson(owner.execution) !== canonicalJson(context.execution) ||
+      opsOperationFingerprint(operation) !== context.execution.operationFingerprint
+    )
+      throw Error("Original prepared export execution differs");
+    assertArtifactTargetLeaseExecution(lease, context.execution);
+    const stage = await this.createStage({
+      ownerId: operation.ownerId,
+      purpose: "prepared-artifact",
+      direction: "download",
+      operationKey: context.execution.operationKey,
+    });
+    if (stage.state === "ready" && stage.sha256)
+      return {
+        stageId: stage.stageId,
+        sha256: stage.sha256,
+        bytes: stage.bytes,
+        expiresAt: stage.expiresAt,
+      };
+    if (stage.state !== "created") failed(409, "Original export requires recovery");
+    const abort = new AbortController(),
+      signal = AbortSignal.any([context.signal, abort.signal]);
+    const stream = new TransformStream<Uint8Array, Uint8Array>(),
+      writer = stream.writable.getWriter();
+    const target = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        void (async () => {
+          for (let offset = 0; offset < chunk.length; offset += 65536) {
+            signal.throwIfAborted();
+            await writer.write(chunk.subarray(offset, offset + 65536));
+          }
+        })().then(() => done(), done);
+      },
+      final(done) {
+        void writer.close().then(() => done(), done);
+      },
+      destroy(error, done) {
+        void writer
+          .abort(error)
+          .catch(() => {})
+          .then(() => done(error));
+      },
+    });
+    target.on("error", () => {});
+    let work: Promise<unknown>[] = [];
+    try {
+      const writing = this.writeContent(
+        {
+          stageId: stage.stageId,
+          ownerId: operation.ownerId,
+          purpose: "prepared-artifact",
+          attemptId: randomUUID(),
+          deadlineAt: context.execution.deadlineAt,
+          body: stream.readable,
+          signal,
+        },
+        true,
+      ).catch((error) => {
+        abort.abort(error);
+        target.destroy(error);
+        throw error;
+      });
+      const generating = produce(target, signal)
+        .then((result) => {
+          if (result.artifactFingerprint !== operation.expectedArtifactFingerprint)
+            throw Error("Prepared export source changed");
+          return result;
+        })
+        .catch((error) => {
+          abort.abort(error);
+          target.destroy(error);
+          throw error;
+        });
+      work = [writing, generating];
+      await Promise.all(work);
+      signal.throwIfAborted();
+      assertArtifactTargetLeaseExecution(lease, context.execution);
+      return this.lock(() => {
+        const meta = this.owned(stage.stageId, operation.ownerId, "prepared-artifact");
+        if (meta.stage.state !== "uploaded" || !meta.stage.sha256)
+          failed(409, "Export bytes are not finalized");
+        meta.stage.state = "ready";
+        meta.stage.expiresAt = new Date(
+          Math.min(Date.parse(meta.stage.expiresAt), this.now() + this.policy.downloadRetentionMs),
+        ).toISOString();
+        this.save(meta);
+        return {
+          stageId: meta.stage.stageId,
+          sha256: meta.stage.sha256,
+          bytes: meta.stage.bytes,
+          expiresAt: meta.stage.expiresAt,
+        };
+      });
+    } catch (error) {
+      abort.abort(error);
+      target.destroy(error instanceof Error ? error : new Error("Prepared export failed"));
+      await Promise.allSettled(work);
+      this.lock(() => {
+        const meta = this.owned(stage.stageId, operation.ownerId, "prepared-artifact");
+        if (meta.stage.state !== "ready") {
+          meta.stage.state = "failed";
+          this.save(meta);
+        }
+      });
+      throw error;
+    }
+  }
+  private async readChunk(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal) {
+    let abort: () => void = () => {};
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          abort = () => reject(signal.reason ?? Error("Artifact stream aborted"));
+          signal.addEventListener("abort", abort, { once: true });
+          if (signal.aborted) abort();
+        }),
+      ]);
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+  async openDownload<T>(
+    input: StreamInput,
+    consume: (input: {
+      body: ReadableStream<Uint8Array>;
+      signal: AbortSignal;
+      headers: Headers;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.withByteOwner(input.stageId, () => this.readOwnedDownload(input, consume));
+  }
+  private async readOwnedDownload<T>(
+    input: StreamInput,
+    consume: (input: {
+      body: ReadableStream<Uint8Array>;
+      signal: AbortSignal;
+      headers: Headers;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const lifetime = this.start(input, false);
+    let file: FileHandle | undefined,
+      dir: AnchoredDirectory | undefined,
+      body: ReadableStream<Uint8Array> | undefined;
+    try {
+      if (!lifetime.meta.stage.sha256) failed(409, "Artifact download digest is unavailable");
+      const sha256 = lifetime.meta.stage.sha256;
+      dir = this.directory(lifetime.meta);
+      file = await open(dir.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      const stat = await file.stat({ bigint: true });
+      if (
+        !lifetime.meta.content ||
+        !stat.isFile() ||
+        stat.nlink !== 1n ||
+        !same(lifetime.meta.content, stat) ||
+        String(stat.size) !== lifetime.meta.content.size ||
+        String(stat.mtimeNs) !== lifetime.meta.content.mtimeNs ||
+        String(stat.ctimeNs) !== lifetime.meta.content.ctimeNs
+      )
+        failed(409, "Artifact content changed");
+      const source = createReadStream("", {
+        fd: file.fd,
+        autoClose: false,
+        highWaterMark: 1024 * 1024,
+        signal: lifetime.controller.signal,
+      });
+      const upstream = (Readable.toWeb(source) as ReadableStream<Uint8Array>).getReader();
+      let eof = false;
+      body = new ReadableStream<Uint8Array>(
+        {
+          pull: async (controller) => {
+            try {
+              const chunk = await this.readChunk(upstream, lifetime.controller.signal);
+              if (chunk.done) {
+                eof = true;
+                controller.close();
+                upstream.releaseLock();
+              } else {
+                lifetime.touch();
+                controller.enqueue(chunk.value);
+              }
+            } catch (error) {
+              controller.error(error);
+            }
+          },
+          cancel: async (reason) => {
+            await upstream.cancel(reason).catch(() => {});
+            upstream.releaseLock();
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const result = await consume({
+        body,
+        signal: lifetime.controller.signal,
+        headers: new Headers({
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(stat.size),
+          "Content-Disposition": 'attachment; filename="openmapx-artifact.tar"',
+          "X-Artifact-Sha256": sha256,
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        }),
+      });
+      lifetime.controller.signal.throwIfAborted();
+      if (!eof) failed(409, "Artifact download consumer did not complete");
+      const after = await file.stat({ bigint: true });
+      if (
+        after.size !== stat.size ||
+        after.mtimeNs !== stat.mtimeNs ||
+        after.ctimeNs !== stat.ctimeNs
+      )
+        failed(409, "Artifact content changed during download");
+      dir.check();
+      return result;
+    } finally {
+      try {
+        if (body && !body.locked) await body.cancel().catch(() => {});
+        await file?.close();
+      } finally {
+        dir?.close();
+        lifetime.done();
+      }
+    }
+  }
+  /** Local, fixed prepared consumer. The descriptor-derived path never crosses HTTP. */
+  async reservePreparedMaterialization(input: { stageId: string; ownerId: string }) {
+    // Fixed upper bound for the offline MOTIS producer and its separate proxy
+    // consumer copy. No request may choose or reduce this reservation.
+    const allowance = 64 * 1024 * 1024;
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      if (!["ready", "claimed"].includes(meta.stage.state)) failed(409, "Validated stage required");
+      const preparation = [...meta.claims]
+        .reverse()
+        .find(
+          (entry) =>
+            entry.claim.use === "validate-build" && entry.settlement?.outcome === "validated",
+        )?.preparation;
+      if (preparation?.serviceId !== "motis" || typeof preparation.expandedBytes !== "number")
+        failed(409, "Validated MOTIS source required");
+      const required =
+        meta.stage.bytes + preparation.expandedBytes + this.policy.maxManifestBytes + allowance;
+      this.checkCapacity(Math.max(0, required - meta.reservedBytes));
+      meta.reservedBytes = Math.max(required, meta.reservedBytes);
+      this.save(meta);
+    });
+  }
+  async withPreparedArtifact<T>(
+    input: { stageId: string; ownerId: string },
+    consume: (source: {
+      stage: TransferStage;
+      preparationId: string;
+      stagingRoot: string;
+      bundle: ValidatedBuildBundle;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const meta = this.lock(() => this.owned(input.stageId, input.ownerId, "prepared-artifact"));
+    if (meta.stage.state !== "claimed") this.alive(meta);
+    if (!["ready", "claimed"].includes(meta.stage.state) || !meta.stage.sha256)
+      failed(409, "Validate the prepared archive first");
+    const entry = [...meta.claims]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.claim.use === "validate-build" &&
+          entry.settlement?.outcome === "validated" &&
+          entry.preparation?.manifestDigest,
+      );
+    if (!entry?.preparation) failed(409, "Prepared validation receipt is unavailable");
+    const preparation = z
+      .strictObject({
+        version: z.literal(1),
+        directory: z.strictObject({ dev: z.string(), ino: z.string() }),
+        manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        artifactFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        archiveSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        serviceId: z.string().min(1).max(64),
+        expandedBytes: z.number().safe().int().nonnegative(),
+      })
+      .parse(entry.preparation);
+    if (
+      preparation.archiveSha256 !== meta.stage.sha256 ||
+      entry.claim.sha256 !== meta.stage.sha256 ||
+      entry.settlement?.outcome !== "validated" ||
+      entry.settlement.inspection.validationFingerprint !== preparation.artifactFingerprint
+    )
+      failed(409, "Prepared validation receipt differs");
+    const directory = this.directory(meta),
+      prepared = directory.directory(`prepared-${entry.claim.claimId}`, false, true);
+    try {
+      const bytes = prepared.read("manifest.json", this.policy.maxManifestBytes),
+        manifestDigest = createHash("sha256").update(bytes).digest("hex");
+      if (
+        manifestDigest !== entry.preparation.manifestDigest ||
+        canonicalJson({ dev: String(prepared.stat.dev), ino: String(prepared.stat.ino) }) !==
+          canonicalJson(entry.preparation.directory)
+      )
+        failed(409, "Prepared validation changed");
+      const manifest = parseBundleManifest(bytes.toString("utf8"));
+      if (
+        manifest.service !== preparation.serviceId ||
+        artifactFingerprint(manifest.files) !== preparation.artifactFingerprint
+      )
+        failed(409, "Prepared service changed");
+      // Recheck the original immutable upload as well as the extracted manifest.
+      const content = directory.fileIdentity("content"),
+        fd = openSync(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      try {
+        const stat = fstatSync(fd, { bigint: true });
+        if (
+          !meta.content ||
+          !same(content, stat) ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs
+        )
+          failed(409, "Prepared upload changed");
+      } finally {
+        closeSync(fd);
+      }
+      const result = await consume({
+        stage: meta.stage,
+        preparationId: entry.claim.claimId,
+        stagingRoot: join(this.data.path, input.stageId, `prepared-${entry.claim.claimId}`),
+        bundle: {
+          manifest,
+          manifestSha256: manifestDigest,
+          archiveSha256: meta.stage.sha256,
+          expandedBytes: Number(entry.preparation.expandedBytes),
+          artifactFingerprint: String(entry.preparation.artifactFingerprint),
+        },
+      });
+      prepared.check();
+      directory.check();
+      return result;
+    } finally {
+      prepared.close();
+      directory.close();
+    }
+  }
+  saveImportPreview(input: {
+    stageId: string;
+    ownerId: string;
+    preparationId: string;
+    targetFingerprint: string;
+    preview: ArtifactImportPreview;
+  }) {
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      this.alive(meta);
+      if (
+        meta.stage.state !== "ready" ||
+        meta.stage.sha256 !== input.preview.sha256 ||
+        input.preview.stageId !== input.stageId
+      )
+        failed(409, "Prepared preview source changed");
+      meta.importPreview = {
+        preview: artifactImportPreviewSchema.parse(input.preview),
+        targetFingerprint: input.targetFingerprint,
+        preparationId: input.preparationId,
+      };
+      this.save(meta);
+      return input.preview;
+    });
+  }
+  readImportPreview(input: {
+    stageId: string;
+    ownerId: string;
+    previewFingerprint: string;
+    expectedSha256: string;
+    expectedCurrentRevisionId: string | null;
+  }) {
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, "prepared-artifact");
+      this.alive(meta);
+      const retained = meta.importPreview;
+      if (
+        !retained ||
+        retained.preview.fingerprint !== input.previewFingerprint ||
+        retained.preview.sha256 !== input.expectedSha256 ||
+        retained.preview.currentRevisionId !== input.expectedCurrentRevisionId ||
+        Date.parse(retained.preview.expiresAt) <= this.now() ||
+        retained.preview.blockers.length
+      )
+        failed(409, "Preview is stale or blocked; refresh compatibility checks");
+      return retained;
+    });
+  }
+  async completePreparedImport(
+    context: OpsExecutionContext,
+    claim: ArtifactStageClaim,
+    result: ArtifactFilePublicationResult & { followUp?: "complete" | "failed" },
+  ) {
+    const operation = this.preparedContext(context),
+      authority = context.controlAuthority,
+      lease = context.ownedTargetLease;
+    if (operation.kind !== "artifactTransfer.import" || !authority || !lease)
+      failed(409, "Original import owner required");
+    const publication = inspectArtifactPublication(authority);
+    if (
+      !publication ||
+      publication.stageId !== operation.stageId ||
+      publication.archiveSha256 !== operation.expectedSha256 ||
+      publication.phase !== "committed" ||
+      result.outcome !== "committed" ||
+      result.artifactFingerprint !== publication.artifactFingerprint
+    )
+      failed(409, "Committed publication evidence required");
+    const plan = readGenerationHardlinksOwnerPlan(authority);
+    if (plan.reservation) {
+      const binding = lookupControlChildPhaseBinding(authority, plan.reservation),
+        settlement = binding
+          ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
+          : null;
+      if (
+        (!binding && result.followUp !== "failed") ||
+        (binding &&
+          (result.followUp === "failed"
+            ? !settlement ||
+              settlement.outcome === "unknown" ||
+              settlement.publication === "unknown"
+            : settlement?.outcome !== "committed" || settlement.publication !== "committed"))
+      )
+        failed(409, "Original hardlink child is not settled");
+    }
+    return this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, "prepared-artifact"),
+        entry = meta.claims.find((entry) => entry.claim.claimId === claim.claimId);
+      if (
+        !entry ||
+        entry.claim.use !== "import-build" ||
+        canonicalJson(entry.claim.identity) !==
+          canonicalJson({
+            executionId: context.execution.executionId,
+            operationKey: context.execution.operationKey,
+            fingerprint: context.execution.fingerprint,
+            executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+          })
+      )
+        failed(409, "Import claim changed");
+      entry.settlement = { outcome: "consumed", receiptId: context.execution.executionId };
+      meta.stage.state = "consumed";
+      this.save(meta);
+      return meta.stage;
+    });
+  }
+  async containPreparedValidation(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactValidationOperation(authority);
+    if (this.purposeOwners.has(operation.stageId) || this.streams.has(operation.stageId))
+      throw Error("Validation still owns its private files");
+    const owner = await acquireArtifactByteOwner(this.byteOwners.name(operation.stageId));
+    try {
+      const failed = this.lock(() => {
+        const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+          entry = meta.claims.find(
+            (value) =>
+              value.claim.use === "validate-build" &&
+              value.claim.identity.executionId === authority.execution.executionId &&
+              value.claim.identity.operationKey === authority.execution.operationKey &&
+              value.claim.identity.fingerprint === authority.execution.fingerprint,
+          );
+        return meta.stage.state === "failed" && entry?.settlement?.outcome === "failed";
+      });
+      if (!failed) throw Error("Original private validation failure required");
+      await this.cleanupStage(operation, "failed");
+      return await this.recoverPreparedValidation(authority);
+    } finally {
+      await owner?.release();
+    }
+  }
+  async confirmPreparedReceipt(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+    input: Parameters<typeof acknowledgeControlRetention>[1],
+    token: string,
+  ) {
+    const owner = executionAuthorityState(authority),
+      operation =
+        owner.kind === "artifactTransfer.import"
+          ? originalArtifactImportOperation(authority)
+          : originalArtifactValidationOperation(authority);
+    if (
+      input.operationKey !== authority.execution.operationKey ||
+      input.fingerprint !== authority.execution.fingerprint ||
+      input.originRootKey !== owner.origin?.rootKey
+    )
+      throw Error("Original prepared receipt required");
+    assertKnownArtifactStageReceipt(authority);
+    acknowledgeControlRetention(owner.installation.installation, input, token);
+    this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (value) =>
+            value.claim.identity.executionId === authority.execution.executionId &&
+            value.claim.identity.operationKey === authority.execution.operationKey &&
+            value.claim.identity.fingerprint === authority.execution.fingerprint,
+        );
+      if (!entry?.settlement || entry.settlement.outcome === "unknown")
+        throw Error("Prepared purpose receipt unresolved");
+      entry.receiptDelivered = true;
+      this.save(meta);
+    });
+  }
+  async recoverPreparedValidation(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactValidationOperation(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact");
+      const entry = meta.claims.find(
+        (entry) =>
+          entry.claim.use === "validate-build" &&
+          entry.claim.identity.executionId === authority.execution.executionId &&
+          entry.claim.identity.operationKey === authority.execution.operationKey &&
+          entry.claim.identity.fingerprint === authority.execution.fingerprint,
+      );
+      if (
+        entry?.settlement?.outcome === "validated" &&
+        entry.preparation &&
+        entry.claim.sha256 === meta.stage.sha256 &&
+        entry.claim.sha256 === entry.settlement.inspection.sha256 &&
+        entry.preparation.archiveSha256 === meta.stage.sha256 &&
+        entry.preparation.artifactFingerprint === entry.settlement.inspection.validationFingerprint
+      )
+        return { ...meta.stage, state: "ready" as const, cleanup: "pending" as const };
+      if (
+        !entry ||
+        entry.settlement?.outcome !== "failed" ||
+        meta.stage.state !== "failed" ||
+        meta.stage.cleanup !== "complete" ||
+        meta.reservedBytes !== 0 ||
+        this.streams.has(operation.stageId) ||
+        this.purposeOwners.has(operation.stageId)
+      )
+        throw Error("Original validation remains unresolved");
+      return meta.stage;
+    });
+  }
+  async completeRecoveredPreparedImport(
+    context: OpsExecutionContext,
+    result: ArtifactFilePublicationResult & { followUp: "complete" | "failed" },
+  ) {
+    const operation = this.preparedContext(context);
+    if (operation.kind !== "artifactTransfer.import") failed(409, "Original import required");
+    const claim = this.lock(
+      () =>
+        this.owned(operation.stageId, operation.ownerId).claims.find(
+          (entry) =>
+            entry.claim.use === "import-build" &&
+            entry.claim.identity.executionId === context.execution.executionId &&
+            entry.claim.identity.operationKey === context.execution.operationKey &&
+            entry.claim.identity.fingerprint === context.execution.fingerprint,
+        )?.claim,
+    );
+    if (!claim) failed(409, "Original import claim unavailable");
+    return this.completePreparedImport(context, claim, result);
+  }
+  async releaseUnstartedPreparedImport(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = inspectUnstartedArtifactImport(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact");
+      const entry = meta.claims.find(
+        (entry) =>
+          entry.claim.use === "import-build" &&
+          entry.claim.identity.executionId === authority.execution.executionId &&
+          entry.claim.identity.operationKey === authority.execution.operationKey &&
+          entry.claim.identity.fingerprint === authority.execution.fingerprint &&
+          entry.claim.sha256 === operation.expectedSha256,
+      );
+      if (!entry || entry.settlement) return;
+      entry.settlement = { outcome: "released", evidence: "no_effect" };
+      // Offline MOTIS generation may have created private, unpublished files.
+      // Keep that inert candidate deletable, rather than pretending it is the
+      // original validation projection for another import.
+      meta.stage.state = "failed";
+      this.save(meta);
+    });
+  }
+  async releaseRestoredPreparedImport(context: OpsExecutionContext) {
+    this.preparedContext(context);
+    if (!context.controlAuthority) failed(409, "Original import required");
+    return this.releaseRestoredArtifactClaim(context.controlAuthority);
+  }
+  async reconcileReleasedPreparedImport(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const publication = inspectArtifactPublication(authority);
+    if (publication?.phase === "restored") return this.releaseRestoredArtifactClaim(authority);
+    if (!publication) return this.releaseUnstartedPreparedImport(authority);
+  }
+  private async releaseRestoredArtifactClaim(
+    authority: import("@openmapx/core/build-artifacts").VerifiedExecutionAuthority,
+  ) {
+    const operation = originalArtifactImportOperation(authority),
+      context = { execution: authority.execution };
+    const publication = inspectArtifactPublication(authority);
+    if (
+      !publication ||
+      publication.phase !== "restored" ||
+      publication.stageId !== operation.stageId ||
+      publication.archiveSha256 !== operation.expectedSha256
+    )
+      failed(409, "Restored original publication required");
+    verifyRetainedArtifactTargetRootRelease(authority);
+    const retained = this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (record) =>
+            record.claim.use === "import-build" &&
+            record.claim.identity.executionId === context.execution.executionId &&
+            record.claim.identity.operationKey === context.execution.operationKey &&
+            record.claim.identity.fingerprint === context.execution.fingerprint,
+        );
+      return entry?.settlement?.outcome === "released" && entry.settlement.evidence === "restored"
+        ? meta.stage
+        : null;
+    });
+    if (retained) return retained; // Historical replay cannot change a later stage owner.
+    cleanupRestoredArtifactPublication(authority);
+    return this.lock(() => {
+      const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
+        entry = meta.claims.find(
+          (record) =>
+            record.claim.use === "import-build" &&
+            record.claim.identity.executionId === context.execution.executionId &&
+            record.claim.identity.operationKey === context.execution.operationKey &&
+            record.claim.identity.fingerprint === context.execution.fingerprint &&
+            Date.parse(record.claim.identity.executionDeadlineAt) === context.execution.deadlineAt,
+        );
+      if (
+        !entry ||
+        (entry.settlement &&
+          !(entry.settlement.outcome === "released" && entry.settlement.evidence === "restored"))
+      )
+        failed(409, "Original import claim recovery differs");
+      entry.settlement = { outcome: "released", evidence: "restored" };
+      meta.stage.state = Date.parse(meta.stage.expiresAt) > this.now() ? "ready" : "expired";
+      this.save(meta);
+      return meta.stage;
+    });
+  }
+  private preparedContext(context: OpsExecutionContext) {
+    if (!context.controlAuthority) throw Error("Prepared artifact execution authority required");
+    const authority = executionAuthorityState(context.controlAuthority),
+      operation = context.claim.operation;
+    if (
+      (operation.kind !== "artifactTransfer.validate" &&
+        operation.kind !== "artifactTransfer.import") ||
+      authority.kind !== operation.kind ||
+      authority.installation.installation.role !== "ops-agent" ||
+      context.execution.principal !== "api" ||
+      canonicalJson(authority.execution) !== canonicalJson(context.execution) ||
+      opsOperationFingerprint(operation) !== authority.execution.operationFingerprint
+    )
+      throw Error("Original prepared artifact execution required");
+    return operation;
+  }
+  async validatePreparedArtifact(context: OpsExecutionContext): Promise<TransferStage> {
+    const operation = this.preparedContext(context);
+    if (operation.kind !== "artifactTransfer.validate") failed(409, "Original validation required");
+    if (this.purposeOwners.has(operation.stageId)) failed(409, "Validation is still owned");
+    this.purposeOwners.add(operation.stageId);
+    let owner: Awaited<ReturnType<typeof acquireArtifactByteOwner>> = null;
+    try {
+      owner = await acquireArtifactByteOwner(this.byteOwners.name(operation.stageId));
+      return await this.validateOwnedPreparedArtifact(context);
+    } finally {
+      try {
+        await owner?.release();
+      } finally {
+        this.purposeOwners.delete(operation.stageId);
+      }
+    }
+  }
+  private async validateOwnedPreparedArtifact(
+    context: OpsExecutionContext,
+  ): Promise<TransferStage> {
+    const operation = this.preparedContext(context);
+    const stage = this.lock(
+      () => this.owned(operation.stageId, operation.ownerId, "prepared-artifact").stage,
+    );
+    if (!stage.sha256) failed(409, "Prepared upload is incomplete");
+    const identity = {
+      executionId: context.execution.executionId,
+      operationKey: context.execution.operationKey,
+      fingerprint: context.execution.fingerprint,
+      executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+    };
+    const claim = await this.claimStage(
+      {
+        stageId: operation.stageId,
+        ownerId: operation.ownerId,
+        purpose: "prepared-artifact",
+        use: "validate-build",
+        identity,
+        expectedSha256: stage.sha256,
+      },
+      context,
+    );
+    const previous = this.lock(
+      () =>
+        this.owned(claim.stageId, claim.ownerId).claims.find(
+          (record) => record.claim.claimId === claim.claimId,
+        )!,
+    );
+    if (previous.settlement) {
+      if (
+        previous.settlement.outcome !== "validated" ||
+        !previous.preparation ||
+        stage.state !== "ready"
+      )
+        failed(409, "Prepared validation has already settled");
+      const directory = this.directory(this.lock(() => this.owned(claim.stageId, claim.ownerId))),
+        prepared = directory.directory(`prepared-${claim.claimId}`, false, true);
+      try {
+        if (
+          canonicalJson({ dev: String(prepared.stat.dev), ino: String(prepared.stat.ino) }) !==
+            canonicalJson(previous.preparation.directory) ||
+          createHash("sha256")
+            .update(prepared.read("manifest.json", this.policy.maxManifestBytes))
+            .digest("hex") !== previous.preparation.manifestDigest
+        )
+          failed(409, "Prepared validation source changed");
+      } finally {
+        prepared.close();
+        directory.close();
+      }
+      return stage;
+    }
+    const directory = this.directory(this.lock(() => this.owned(claim.stageId, claim.ownerId)));
+    let prepared: AnchoredDirectory | undefined;
+    let created = false;
+    try {
+      // An unexplained extraction from an earlier process is recovery work, never
+      // permission to erase it or rerun a fresh validation identity.
+      mkdirSync(directory.name(`prepared-${claim.claimId}`), { mode: 0o700 });
+      created = true;
+      fsyncSync(directory.fd);
+      prepared = directory.directory(`prepared-${claim.claimId}`, false, true);
+      const extracted = prepared;
+      this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (!entry || entry.settlement || current.stage.state !== "validating")
+          failed(409, "Prepared validation owner changed");
+        entry.preparation = {
+          version: 1,
+          state: "extracting",
+          directory: { dev: String(extracted.stat.dev), ino: String(extracted.stat.ino) },
+        };
+        this.save(current);
+      });
+      const result = await this.withStageFile(
+        { claim, signal: context.signal },
+        async (file, signal) => {
+          const source = claimedFileBytes(file, signal, claim.bytes);
+          try {
+            return await validateBuildBundle({
+              source: Readable.from(source),
+              stagingRoot: extracted,
+              limits: this.policy,
+              signal,
+              reservePayload: (reservation) =>
+                this.lock(() => {
+                  const current = this.owned(claim.stageId, claim.ownerId),
+                    entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+                  if (!entry || entry.settlement || current.stage.state !== "validating")
+                    failed(409, "Prepared validation owner changed");
+                  const required =
+                    current.reservedBytes + reservation.expandedBytes + reservation.manifestBytes;
+                  if (!Number.isSafeInteger(required))
+                    failed(413, "Prepared stage capacity overflow");
+                  this.checkCapacity(Math.max(0, required - current.reservedBytes));
+                  if (this.capacity().inodes < reservation.entries + this.all().length * 3 + 16)
+                    failed(507, "Insufficient artifact inode capacity");
+                  current.reservedBytes = Math.max(required, current.reservedBytes);
+                  this.save(current);
+                }),
+            });
+          } finally {
+            await source.return(undefined);
+          }
+        },
+      );
+      if (result.archiveSha256 !== claim.sha256) failed(409, "Prepared archive digest changed");
+      const manifest = canonicalJson(result.manifest),
+        manifestDigest = createHash("sha256").update(manifest).digest("hex");
+      if (Buffer.byteLength(manifest) > this.policy.maxManifestBytes)
+        failed(413, "Prepared manifest is too large");
+      context.signal.throwIfAborted();
+      if (context.execution.deadlineAt <= this.now())
+        failed(410, "Prepared validation deadline expired");
+      extracted.write("manifest.json", manifest, true);
+      return this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (!entry || entry.settlement || current.stage.state !== "validating")
+          failed(409, "Prepared validation owner changed");
+        context.signal.throwIfAborted();
+        if (context.execution.deadlineAt <= this.now())
+          failed(410, "Prepared validation deadline expired");
+        const inspection = {
+          inspectionId: randomUUID(),
+          stageId: claim.stageId,
+          sha256: claim.sha256,
+          bytes: claim.bytes,
+          policyRevision: this.revision,
+          validationFingerprint: result.artifactFingerprint,
+          expiresAt: new Date(
+            Math.min(this.now() + 600000, Date.parse(current.stage.expiresAt)),
+          ).toISOString(),
+        };
+        entry.preparation = {
+          version: 1,
+          directory: { dev: String(extracted.stat.dev), ino: String(extracted.stat.ino) },
+          manifestDigest,
+          artifactFingerprint: result.artifactFingerprint,
+          archiveSha256: result.archiveSha256,
+          serviceId: result.manifest.service,
+          expandedBytes: result.expandedBytes,
+        };
+        entry.settlement = { outcome: "validated", inspection };
+        current.stage.state = "ready";
+        this.save(current);
+        return current.stage;
+      });
+    } catch (error) {
+      if (!created)
+        throw new ArtifactTransferError(409, "Prepared extraction requires original recovery");
+      this.lock(() => {
+        const current = this.owned(claim.stageId, claim.ownerId),
+          entry = current.claims.find((record) => record.claim.claimId === claim.claimId);
+        if (entry && !entry.settlement) {
+          entry.settlement = { outcome: "failed", receiptId: context.execution.executionId };
+          current.stage.state = "failed";
+          this.save(current);
+        }
+      });
+      throw error;
+    } finally {
+      prepared?.close();
+      directory.close();
+    }
+  }
+  private integrationContext(context: OpsExecutionContext) {
+    if (!context.controlAuthority) throw Error("Integration execution authority is required");
+    const authority = executionAuthorityState(context.controlAuthority);
+    const operation = context.claim.operation;
+    if (
+      authority.installation.installation.role !== "ops-agent" ||
+      authority.execution.principal !== "api" ||
+      canonicalJson(authority.execution) !== canonicalJson(context.execution) ||
+      authority.kind !== operation.kind ||
+      opsOperationFingerprint(operation) !== authority.execution.operationFingerprint ||
+      ![
+        "integration.inspectInstall",
+        "integration.install",
+        "integration.settle",
+        "integration.inventory",
+        "integration.inspectOwnership",
+        "integration.remove",
+      ].includes(operation.kind)
+    )
+      throw Error("Integration execution authority does not match the retained operation");
+    return operation;
+  }
+  standaloneInstallationId(context: OpsExecutionContext): string {
+    this.integrationContext(context);
+    return executionAuthorityState(context.controlAuthority!).installation.installation
+      .installationId;
+  }
+  private readIntegrationRecord<T>(name: string, schema: z.ZodType<T>): T {
+    const outer = z
+      .strictObject({ body: z.string().max(65536), mac: z.string().regex(/^[a-f0-9]{64}$/) })
+      .parse(JSON.parse(this.integrationRecords.read(name, 131072).toString("utf8")));
+    const expected = createHmac("sha256", this.key)
+      .update("openmapx-standalone-record-v1\0")
+      .update(name)
+      .update("\0")
+      .update(outer.body)
+      .digest();
+    if (!timingSafeEqual(expected, Buffer.from(outer.mac, "hex")))
+      throw Error("Standalone integration record authentication failed");
+    return schema.parse(JSON.parse(outer.body));
+  }
+  private writeIntegrationRecord(name: string, value: unknown, exclusive: boolean): void {
+    if (exclusive && this.integrationRecords.listBounded(2049).length >= 2048)
+      failed(507, "Integration purpose journal capacity reached");
+    const body = canonicalJson(value);
+    if (Buffer.byteLength(body) > 65536) failed(413, "Standalone integration record is too large");
+    this.integrationRecords.write(
+      name,
+      JSON.stringify({
+        body,
+        mac: createHmac("sha256", this.key)
+          .update("openmapx-standalone-record-v1\0")
+          .update(name)
+          .update("\0")
+          .update(body)
+          .digest("hex"),
+      }),
+      exclusive,
+    );
+  }
+  readStandaloneInspection(
+    context: OpsExecutionContext,
+    inspectionId: string,
+  ): StandaloneInspectionRecord {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context);
+    if (operation.kind !== "integration.install" || operation.inspectionId !== inspectionId)
+      throw Error("Standalone inspection read execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `inspection-${id.parse(inspectionId)}.json`,
+        standaloneInspectionRecordSchema,
+      );
+      if (record.installationId !== installationId || record.ownerId !== operation.ownerId)
+        throw Error("Standalone inspection owner mismatch");
+      return record;
+    });
+  }
+  retainStandaloneInspection(
+    context: OpsExecutionContext,
+    input: StandaloneInspectionRecord,
+  ): void {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context),
+      record = standaloneInspectionRecordSchema.parse(input);
+    if (
+      operation.kind !== "integration.inspectInstall" ||
+      record.installationId !== installationId ||
+      record.ownerId !== operation.ownerId ||
+      canonicalJson(record.source) !== canonicalJson(operation.source)
+    )
+      throw Error("Standalone inspection producer mismatch");
+    this.lock(() =>
+      this.writeIntegrationRecord(
+        `inspection-${record.inspection.inspectionId}.json`,
+        record,
+        true,
+      ),
+    );
+  }
+  readStandaloneTransaction(
+    context: OpsExecutionContext,
+    transactionId: string,
+  ): StandaloneTransactionRecord {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context);
+    if (
+      (operation.kind !== "integration.install" || operation.operationId !== transactionId) &&
+      (operation.kind !== "integration.settle" || operation.transactionId !== transactionId)
+    )
+      throw Error("Standalone transaction read execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `transaction-${id.parse(transactionId)}.json`,
+        standaloneTransactionRecordSchema,
+      );
+      if (
+        record.installationId !== installationId ||
+        record.inspection.installationId !== installationId ||
+        (operation.kind === "integration.install" && record.ownerId !== operation.ownerId)
+      )
+        throw Error("Standalone transaction ownership mismatch");
+      return record;
+    });
+  }
+  retainStandaloneTransaction(
+    context: OpsExecutionContext,
+    input: StandaloneTransactionRecord,
+    publication?: IntegrationPublication,
+  ): void {
+    const installationId = this.standaloneInstallationId(context),
+      operation = this.integrationContext(context),
+      record = standaloneTransactionRecordSchema.parse(input);
+    if (
+      record.installationId !== installationId ||
+      record.inspection.installationId !== installationId
+    )
+      throw Error("Standalone transaction installation mismatch");
+    if (operation.kind === "integration.install") {
+      if (
+        operation.operationId !== record.transactionId ||
+        operation.ownerId !== record.ownerId ||
+        operation.inspectionId !== record.inspection.inspection.inspectionId ||
+        operation.expectedContentDigest !== record.inspection.inspection.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.installExecution)
+      )
+        throw Error("Standalone transaction producer mismatch");
+    } else if (
+      operation.kind !== "integration.settle" ||
+      operation.transactionId !== record.transactionId ||
+      operation.expectedContentDigest !== record.inspection.inspection.contentDigest
+    )
+      throw Error("Standalone transaction settlement mismatch");
+    if (publication) {
+      assertIntegrationPublicationJournal(publication, this.standalonePublicationJournal(context));
+      record.publication = describeIntegrationPublication(publication);
+    } else if (operation.kind !== "integration.install" || record.publication !== null)
+      throw Error("Actual standalone publication producer required");
+    this.lock(() => {
+      const name = `transaction-${record.transactionId}.json`;
+      let previous: StandaloneTransactionRecord | null = null;
+      try {
+        previous = this.readIntegrationRecord(name, standaloneTransactionRecordSchema);
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      if (previous) {
+        const { publication: _old, ...old } = previous,
+          { publication: _new, ...next } = record;
+        if (canonicalJson(old) !== canonicalJson(next))
+          throw Error("Immutable standalone transaction changed");
+        if (!publication) throw Error("Standalone transaction already exists");
+      }
+      this.writeIntegrationRecord(name, record, previous === null);
+    });
+  }
+  standalonePendingInventory() {
+    return this.lock(() => {
+      const entries: Array<{
+        integrationId: string;
+        version: string | null;
+        contentDigest: string | null;
+        valid: boolean;
+        denialReason: string;
+        pendingTransactionId: string;
+      }> = [];
+      for (const name of this.integrationRecords.listBounded(2048)) {
+        if (/^ownership-[a-f0-9-]{36}\.json$/.test(name)) {
+          const record = this.readIntegrationRecord(name, standaloneOwnershipRecordSchema);
+          if (!["committed", "restored"].includes(record.phase))
+            entries.push({
+              integrationId: record.integrationId,
+              version: record.componentVersion,
+              contentDigest: record.contentDigest,
+              valid: false,
+              pendingTransactionId: record.transactionId,
+              denialReason: `Transaction ${record.transactionId} holds this component. Reconcile its original Activity job.`,
+            });
+        } else if (/^transaction-[a-f0-9-]{36}\.json$/.test(name)) {
+          const record = this.readIntegrationRecord(name, standaloneTransactionRecordSchema);
+          if (
+            !record.publication ||
+            !["committed", "restored"].includes(record.publication.outcome)
+          )
+            entries.push({
+              integrationId: record.inspection.inspection.integrationId,
+              version: record.inspection.inspection.version,
+              contentDigest: record.inspection.inspection.contentDigest,
+              valid: false,
+              pendingTransactionId: record.transactionId,
+              denialReason: `Transaction ${record.transactionId} holds this component. Reconcile its original Activity job.`,
+            });
+        }
+      }
+      return entries;
+    });
+  }
+  readStandaloneOwnership(
+    context: OpsExecutionContext,
+    transactionId: string,
+  ): StandaloneOwnershipRecord {
+    const installationId = this.standaloneInstallationId(context),
+      op = this.integrationContext(context);
+    if (
+      (op.kind !== "integration.inspectOwnership" || op.operationId !== transactionId) &&
+      (op.kind !== "integration.remove" || op.transactionId !== transactionId) &&
+      (op.kind !== "integration.settle" || op.transactionId !== transactionId)
+    )
+      throw Error("Ownership execution mismatch");
+    return this.lock(() => {
+      const record = this.readIntegrationRecord(
+        `ownership-${id.parse(transactionId)}.json`,
+        standaloneOwnershipRecordSchema,
+      );
+      if (
+        record.installationId !== installationId ||
+        (op.kind === "integration.inspectOwnership" && record.ownerId !== op.ownerId)
+      )
+        throw Error("Ownership installation or actor mismatch");
+      return record;
+    });
+  }
+  retainStandaloneOwnership(context: OpsExecutionContext, input: StandaloneOwnershipRecord): void {
+    const record = standaloneOwnershipRecordSchema.parse(input),
+      installationId = this.standaloneInstallationId(context),
+      op = this.integrationContext(context);
+    if (record.installationId !== installationId) throw Error("Ownership installation mismatch");
+    if (op.kind === "integration.inspectOwnership") {
+      if (
+        op.operationId !== record.transactionId ||
+        op.integrationId !== record.integrationId ||
+        op.ownerId !== record.ownerId ||
+        op.expectedContentDigest !== record.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.inspectionExecution) ||
+        record.phase !== "inspected"
+      )
+        throw Error("Ownership inspection producer mismatch");
+    } else if (op.kind === "integration.remove") {
+      if (
+        op.transactionId !== record.transactionId ||
+        op.expectedContentDigest !== record.contentDigest ||
+        canonicalJson(context.execution) !== canonicalJson(record.removeExecution) ||
+        !["remove_requested", "removed"].includes(record.phase)
+      )
+        throw Error("Removal producer mismatch");
+    } else if (
+      op.kind !== "integration.settle" ||
+      op.transactionId !== record.transactionId ||
+      op.expectedContentDigest !== record.contentDigest ||
+      op.decision !== record.decision
+    )
+      throw Error("Ownership settlement producer mismatch");
+    this.lock(() => {
+      const name = `ownership-${record.transactionId}.json`;
+      let previous: StandaloneOwnershipRecord | null = null;
+      try {
+        previous = this.readIntegrationRecord(name, standaloneOwnershipRecordSchema);
+      } catch (error) {
+        if (!absent(error)) throw error;
+      }
+      if (previous) {
+        const { phase: _p, decision: _d, removeExecution: _e, ...before } = previous,
+          { phase: _n, decision: _nd, removeExecution: _ne, ...after } = record;
+        if (
+          canonicalJson(before) !== canonicalJson(after) ||
+          (previous.removeExecution &&
+            canonicalJson(previous.removeExecution) !== canonicalJson(record.removeExecution)) ||
+          (previous.decision && previous.decision !== record.decision) ||
+          (["committed", "restored"].includes(previous.phase) &&
+            canonicalJson(previous) !== canonicalJson(record))
+        )
+          throw Error("Immutable ownership transaction changed");
+      }
+      this.writeIntegrationRecord(name, record, previous === null);
+    });
+  }
+  standalonePublicationJournal(context: OpsExecutionContext): IntegrationPublicationJournal {
+    this.standaloneInstallationId(context);
+    const operation = this.integrationContext(context);
+    const transactionId =
+      operation.kind === "integration.install"
+        ? operation.operationId
+        : operation.kind === "integration.settle"
+          ? operation.transactionId
+          : null;
+    if (!transactionId) throw Error("Expected standalone publication execution");
+    let journal = this.integrationJournals.get(transactionId);
+    if (!journal) {
+      journal = createIntegrationPublicationJournal({
+        directory: this.integrationRecords,
+        coordination: this.records,
+        key: this.key,
+        transactionId,
+      });
+      this.integrationJournals.set(transactionId, journal);
+    }
+    return journal;
+  }
+  async claimStage(
+    input: ClaimTransferStage,
+    context?: OpsExecutionContext,
+  ): Promise<ArtifactStageClaim> {
+    if (!context) failed(409, "Artifact purpose consumer is not installed for this operation");
+    const operation = ["artifactTransfer.validate", "artifactTransfer.import"].includes(
+      context.claim.operation.kind,
+    )
+      ? this.preparedContext(context)
+      : this.integrationContext(context);
+    this.admit();
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId, input.purpose);
+      const identity = {
+        executionId: context.execution.executionId,
+        operationKey: context.execution.operationKey,
+        fingerprint: context.execution.fingerprint,
+        executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+      };
+      if (
+        input.purpose !==
+          (["artifactTransfer.validate", "artifactTransfer.import"].includes(operation.kind)
+            ? "prepared-artifact"
+            : "integration-artifact") ||
+        canonicalJson(input.identity) !== canonicalJson(identity)
+      )
+        failed(409, "Artifact claim execution mismatch");
+      const prior = meta.claims.find(
+        (entry) => canonicalJson(entry.claim.identity) === canonicalJson(identity),
+      );
+      if (prior) {
+        if (prior.claim.use !== input.use || prior.claim.sha256 !== input.expectedSha256)
+          failed(409, "Artifact claim replay mismatch");
+        return prior.claim;
+      }
+      this.alive(meta);
+      context.signal.throwIfAborted();
+      if (context.execution.deadlineAt <= this.now())
+        failed(410, "Artifact claim execution expired");
+      if (
+        meta.stage.direction !== "upload" ||
+        !meta.content ||
+        !meta.stage.sha256 ||
+        meta.stage.sha256 !== input.expectedSha256 ||
+        meta.claims.length >= 8
+      )
+        failed(409, "Artifact content is not available for this claim");
+      if (operation.kind === "artifactTransfer.validate") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.stageId !== input.stageId ||
+          input.use !== "validate-build" ||
+          !["uploaded", "ready"].includes(meta.stage.state) ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Prepared validation claim mismatch");
+        if (
+          this.all().filter((record) => record.stage.state === "validating").length >=
+          this.policy.maxConcurrentArchiveJobs
+        )
+          failed(429, "Archive validation concurrency limit exceeded");
+      } else if (operation.kind === "artifactTransfer.import") {
+        const preview = meta.importPreview;
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.stageId !== input.stageId ||
+          input.use !== "import-build" ||
+          meta.stage.state !== "ready" ||
+          !preview ||
+          preview.preview.fingerprint !== operation.previewFingerprint ||
+          preview.preview.sha256 !== operation.expectedSha256 ||
+          preview.preview.currentRevisionId !== operation.expectedCurrentRevisionId ||
+          preview.preview.blockers.length ||
+          Date.parse(preview.preview.expiresAt) <= this.now() ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Prepared import preview mismatch");
+      } else if (operation.kind === "integration.inspectInstall") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          operation.source.kind !== "uploaded-artifact" ||
+          operation.source.stageId !== input.stageId ||
+          operation.source.expectedSha256 !== input.expectedSha256 ||
+          input.use !== "inspect-integration" ||
+          !["uploaded", "ready"].includes(meta.stage.state) ||
+          meta.claims.some((record) => record.settlement === null)
+        )
+          failed(409, "Integration inspection claim mismatch");
+      } else if (operation.kind === "integration.install") {
+        if (
+          operation.ownerId !== input.ownerId ||
+          input.use !== "install-integration" ||
+          meta.stage.state !== "ready" ||
+          !meta.integrationInspection ||
+          !input.inspection ||
+          canonicalJson(meta.integrationInspection) !== canonicalJson(input.inspection) ||
+          operation.inspectionId !== meta.integrationInspection.inspectionId ||
+          operation.expectedContentDigest !== meta.integrationInspection.validationFingerprint ||
+          Date.parse(meta.integrationInspection.expiresAt) <= this.now()
+        )
+          failed(409, "Integration installation inspection mismatch");
+      } else failed(409, "This operation cannot claim uploaded bytes");
+      // A prepared copy does not excuse mutation of its pinned upload. Check
+      // the original descriptor tuple again before granting installation.
+      const directory = this.directory(meta);
+      let fd: number | undefined;
+      try {
+        directory.fileIdentity("content");
+        fd = openSync(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+        const stat = fstatSync(fd, { bigint: true });
+        if (
+          !meta.content ||
+          !stat.isFile() ||
+          stat.nlink !== 1n ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs
+        )
+          failed(409, "Artifact content changed since upload");
+        directory.check();
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+        directory.close();
+      }
+      const claim: ArtifactStageClaim = {
+        claimId: randomUUID(),
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+        use: input.use,
+        identity,
+        sha256: meta.stage.sha256,
+        bytes: meta.stage.bytes,
+      };
+      meta.claims.push({
+        claim,
+        settlement: null,
+        preparation:
+          operation.kind === "integration.install"
+            ? (meta.claims.find(
+                (record) =>
+                  record.settlement?.outcome === "validated" &&
+                  record.settlement.inspection.inspectionId === operation.inspectionId,
+              )?.preparation ?? null)
+            : null,
+        transactionId: operation.kind === "integration.install" ? operation.operationId : null,
+        receiptDelivered: false,
+      });
+      meta.stage.state = ["inspect-integration", "validate-build"].includes(input.use)
+        ? "validating"
+        : "claimed";
+      this.save(meta);
+      return claim;
+    });
+  }
+  async inspectClaim(input: {
+    stageId: string;
+    ownerId: string;
+    identity: StageClaimIdentity;
+  }): Promise<{ claim: ArtifactStageClaim; settlement: StageClaimSettlement | null } | null> {
+    return this.lock(() => {
+      const meta = this.owned(input.stageId, input.ownerId);
+      const entry = meta.claims.find(
+        (record) => canonicalJson(record.claim.identity) === canonicalJson(input.identity),
+      );
+      return entry ? { claim: entry.claim, settlement: entry.settlement } : null;
+    });
+  }
+  async validateIntegrationArtifact(
+    context: OpsExecutionContext,
+    preparation: IntegrationArtifactPreparationContext,
+  ) {
+    const operation = this.integrationContext(context);
+    if (
+      operation.kind !== "integration.inspectInstall" ||
+      operation.source.kind !== "uploaded-artifact"
+    )
+      throw Error("Expected an uploaded integration inspection execution");
+    const identity = {
+      executionId: context.execution.executionId,
+      operationKey: context.execution.operationKey,
+      fingerprint: context.execution.fingerprint,
+      executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+    };
+    const claim = await this.claimStage(
+      {
+        stageId: operation.source.stageId,
+        ownerId: operation.ownerId,
+        purpose: "integration-artifact",
+        use: "inspect-integration",
+        identity,
+        expectedSha256: operation.source.expectedSha256,
+      },
+      context,
+    );
+    const prior = this.lock(
+      () =>
+        this.owned(claim.stageId, claim.ownerId).claims.find(
+          (record) => record.claim.claimId === claim.claimId,
+        )!,
+    );
+    if (prior.settlement) {
+      if (prior.settlement.outcome !== "validated" || !prior.preparation)
+        failed(409, "Integration validation has already settled");
+      const root = describeIntegrationPreparationRoot(preparation);
+      discardIntegrationPreparation(preparation);
+      return {
+        claim,
+        inspection: prior.settlement.inspection,
+        prepared: await restorePreparedIntegration({
+          rootDir: root,
+          receipt: prior.preparation,
+          signal: context.signal,
+        }),
+      };
+    }
+    try {
+      const prepared = await this.withClaimedIntegrationArtifact(
+        { claim, signal: context.signal },
+        async (input) =>
+          prepareIntegrationArtifact(
+            {
+              source: input.source,
+              expectedSha256: input.sha256,
+              maxArtifactBytes: 200 * 1024 ** 2,
+              maxExpandedBytes: 200 * 1024 ** 2,
+              signal: input.signal,
+            },
+            preparation,
+          ),
+      );
+      const receipt = describePreparedIntegration(prepared);
+      const inspection: StageInspectionBinding = {
+        inspectionId: randomUUID(),
+        stageId: claim.stageId,
+        sha256: claim.sha256,
+        bytes: claim.bytes,
+        policyRevision: this.revision,
+        validationFingerprint: prepared.contentDigest,
+        expiresAt: new Date(
+          Math.min(
+            this.now() + 600000,
+            Date.parse(this.lock(() => this.load(claim.stageId).stage.expiresAt)),
+          ),
+        ).toISOString(),
+      };
+      this.lock(() => {
+        const meta = this.owned(claim.stageId, claim.ownerId);
+        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        if (record.settlement || meta.stage.state !== "validating")
+          failed(409, "Integration validation ownership changed");
+        record.preparation = receipt;
+        record.settlement = { outcome: "validated", inspection };
+        meta.integrationInspection = inspection;
+        meta.stage.state = "ready";
+        this.save(meta);
+      });
+      return { claim, inspection, prepared };
+    } catch (error) {
+      this.lock(() => {
+        const meta = this.owned(claim.stageId, claim.ownerId);
+        const record = meta.claims.find((entry) => entry.claim.claimId === claim.claimId)!;
+        if (!record.settlement) {
+          record.settlement = { outcome: "failed", receiptId: claim.claimId };
+          meta.stage.state = "failed";
+          this.save(meta);
+        }
+      });
+      throw error;
+    }
+  }
+  async claimIntegrationArtifactInstall(
+    context: OpsExecutionContext,
+    inspection: StageInspectionBinding,
+  ) {
+    const operation = this.integrationContext(context);
+    if (operation.kind !== "integration.install")
+      throw Error("Expected integration install execution");
+    return this.claimStage(
+      {
+        stageId: inspection.stageId,
+        ownerId: operation.ownerId,
+        purpose: "integration-artifact",
+        use: "install-integration",
+        identity: {
+          executionId: context.execution.executionId,
+          operationKey: context.execution.operationKey,
+          fingerprint: context.execution.fingerprint,
+          executionDeadlineAt: new Date(context.execution.deadlineAt).toISOString(),
+        },
+        expectedSha256: inspection.sha256,
+        inspection,
+      },
+      context,
+    );
+  }
+  async settleIntegrationArtifact(
+    context: OpsExecutionContext,
+    claim: ArtifactStageClaim,
+    publication: IntegrationPublication,
+  ): Promise<TransferStage> {
+    const operation = this.integrationContext(context);
+    assertIntegrationPublicationJournal(publication, this.standalonePublicationJournal(context));
+    const receipt = describeIntegrationPublication(publication);
+    if (
+      operation.kind !== "integration.settle" ||
+      operation.transactionId !== receipt.transactionId ||
+      operation.expectedContentDigest !== receipt.preparation.contentDigest ||
+      (operation.decision === "commit"
+        ? receipt.outcome !== "committed"
+        : receipt.outcome !== "restored")
+    )
+      throw Error("Integration publication has not settled under this original execution");
+    return this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, "integration-artifact");
+      const record = meta.claims.find(
+        (entry) => canonicalJson(entry.claim) === canonicalJson(claim),
+      );
+      if (
+        !record ||
+        record.claim.use !== "install-integration" ||
+        record.transactionId !== receipt.transactionId ||
+        !record.preparation ||
+        canonicalJson(record.preparation) !== canonicalJson(receipt.preparation)
+      )
+        failed(409, "Integration stage publication ownership mismatch");
+      const settlement: StageClaimSettlement =
+        operation.decision === "commit"
+          ? { outcome: "consumed", receiptId: receipt.transactionId }
+          : { outcome: "released", evidence: "restored" };
+      if (record.settlement) {
+        if (canonicalJson(record.settlement) !== canonicalJson(settlement))
+          failed(409, "Integration stage already settled differently");
+        return meta.stage;
+      }
+      if (meta.stage.state !== "claimed")
+        failed(409, "Integration stage is not held by its original installation");
+      record.settlement = settlement;
+      meta.stage.state =
+        operation.decision === "commit"
+          ? "consumed"
+          : Date.parse(meta.stage.expiresAt) > this.now()
+            ? "ready"
+            : "expired";
+      this.save(meta);
+      return meta.stage;
+    });
+  }
+  async settleStageClaim(_input: {
+    claim: ArtifactStageClaim;
+    settlement: StageClaimSettlement;
+  }): Promise<TransferStage> {
+    failed(409, "Artifact purpose consumer is not installed");
+  }
+  async withStageFile<T>(
+    input: { claim: ArtifactStageClaim; signal: AbortSignal },
+    run: (file: FileHandle, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const claim = artifactStageClaimSchema.parse(input.claim);
+    const meta = this.lock(() => {
+      const meta = this.owned(claim.stageId, claim.ownerId, claim.purpose);
+      const record = meta.claims.find(
+        (entry) => canonicalJson(entry.claim) === canonicalJson(claim),
+      );
+      if (
+        !record ||
+        record.settlement ||
+        !["validating", "claimed"].includes(meta.stage.state) ||
+        this.streams.has(claim.stageId)
+      )
+        failed(409, "Artifact claim is not an active purpose consumer");
+      if (
+        this.streams.size >= this.policy.maxConcurrentTransfers ||
+        [...this.streams.values()].filter((entry) => entry.ownerId === claim.ownerId).length >=
+          this.policy.maxConcurrentTransfersPerPrincipal
+      )
+        failed(429, "Artifact consumer concurrency limit exceeded");
+      return meta;
+    });
+    const controller = new AbortController();
+    const abort = () => controller.abort(input.signal.reason);
+    input.signal.addEventListener("abort", abort, { once: true });
+    if (input.signal.aborted) abort();
+    const timer = setTimeout(
+      () => controller.abort(new ArtifactTransferError(410, "Artifact claim deadline expired")),
+      Math.max(1, Date.parse(claim.identity.executionDeadlineAt) - this.now()),
+    );
+    timer.unref?.();
+    const releaseStream = this.ownStream(claim.stageId, claim.ownerId, controller, "purpose");
+    let directory: AnchoredDirectory | undefined, file: FileHandle | undefined;
+    try {
+      controller.signal.throwIfAborted();
+      directory = this.directory(meta);
+      file = await open(directory.name("content"), C.O_RDONLY | C.O_NOFOLLOW | C.O_NONBLOCK);
+      const verify = async () => {
+        const stat = await file!.stat({ bigint: true });
+        if (
+          !meta.content ||
+          !stat.isFile() ||
+          stat.nlink !== 1n ||
+          !same(meta.content, stat) ||
+          String(stat.size) !== meta.content.size ||
+          String(stat.mtimeNs) !== meta.content.mtimeNs ||
+          String(stat.ctimeNs) !== meta.content.ctimeNs ||
+          canonicalJson({ dev: meta.content.dev, ino: meta.content.ino }) !==
+            canonicalJson(directory!.fileIdentity("content"))
+        )
+          failed(409, "Artifact content changed");
+        directory!.check();
+      };
+      await verify();
+      const result = await run(file, controller.signal);
+      await verify();
+      return result;
+    } finally {
+      try {
+        await file?.close();
+        directory?.close();
+      } finally {
+        clearTimeout(timer);
+        input.signal.removeEventListener("abort", abort);
+        releaseStream();
+      }
+    }
+  }
+  async withClaimedIntegrationArtifact<T>(
+    input: { claim: ArtifactStageClaim; signal: AbortSignal },
+    run: (input: {
+      source: AsyncIterable<Uint8Array>;
+      signal: AbortSignal;
+      bytes: number;
+      sha256: string;
+    }) => Promise<T>,
+  ): Promise<T> {
+    if (input.claim.purpose !== "integration-artifact" || input.claim.use !== "inspect-integration")
+      failed(409, "Expected integration inspection claim");
+    return this.withStageFile(input, async (file, signal) => {
+      const source = claimedFileBytes(file, signal, input.claim.bytes);
+      try {
+        return await run({ source, signal, bytes: input.claim.bytes, sha256: input.claim.sha256 });
+      } finally {
+        await source.return(undefined);
+      }
+    });
+  }
+}
+
+/** Fixed agent-private location; never a browser-selected path. */
+export function artifactTransferPrivateRoot(infraDir: string, container = false): string {
+  return container
+    ? "/var/lib/openmapx/control-private/artifact-transfers"
+    : join(infraDir, "control-private", "ops-agent", "artifact-transfers");
+}

@@ -131,3 +131,49 @@ describe("vector basemap selection", () => {
     expect(env.mapStyleUrl).toBe("/tiles");
   });
 });
+
+describe("managed runtime values", () => {
+  it("reads managed values from each server invocation rather than a build-time NEXT_PUBLIC literal", () => {
+    expect(
+      buildClientEnv(undefined, {
+        NEXT_PUBLIC_TRAFFIC_MIN_ZOOM: "8",
+        NEXT_PUBLIC_TILES_URL: "/runtime-a/tiles.json",
+      }),
+    ).toMatchObject({ trafficMinZoom: 8, tilesUrl: "/runtime-a/tiles.json" });
+    expect(
+      buildClientEnv(undefined, {
+        NEXT_PUBLIC_TRAFFIC_MIN_ZOOM: "12",
+        NEXT_PUBLIC_TILES_URL: "/runtime-b/tiles.json",
+      }),
+    ).toMatchObject({ trafficMinZoom: 12, tilesUrl: "/runtime-b/tiles.json" });
+  });
+  it.each([undefined, "", "1.5", "25", "-1", "NaN", "Infinity", "8junk"])(
+    "omits invalid raster minimum zoom %s",
+    (value) => {
+      expect(buildClientEnv(undefined, { NEXT_PUBLIC_TRAFFIC_MIN_ZOOM: value })).not.toHaveProperty(
+        "trafficMinZoom",
+      );
+    },
+  );
+  it("preserves same-origin URL defaults and rejects unsafe runtime URL overrides", () => {
+    expect(
+      buildClientEnv(undefined, {
+        NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL: "/local-dem/tiles.json",
+        NEXT_PUBLIC_MAP_STYLE_URL: "/tiles",
+        NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE: "/traffic/{z}/{x}/{y}.png",
+      }),
+    ).toMatchObject({
+      terrainDemTilejsonUrl: "/local-dem/tiles.json",
+      mapStyleUrl: "/tiles",
+      trafficTileUrlTemplate: "/traffic/{z}/{x}/{y}.png",
+    });
+    const env = buildClientEnv(undefined, {
+      NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL: "//evil.test/tiles.json",
+      NEXT_PUBLIC_MAP_STYLE_URL: "https://u:p@evil.test/tiles",
+      NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE: "/x/{arbitrary}",
+    });
+    expect(env.mapStyleUrl).toBe("");
+    expect(env.terrainDemTilejsonUrl).toContain("/api/mapterhorn/tiles.json");
+    expect(env.trafficTileUrlTemplate).toBe("/api/traffic/flow/{z}/{x}/{y}.png");
+  });
+});

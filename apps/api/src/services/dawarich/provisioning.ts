@@ -497,6 +497,7 @@ async function executeProvision(
   input: ManagedDawarichProvisioningInput,
   dependencies: ManagedDawarichProvisioningDependencies,
 ): Promise<ManagedDawarichProvisioningResult> {
+  await dependencies.getRuntimeState();
   const context = await resolveContext(input, dependencies);
   let clients = await matchingClients(dependencies, input.headers);
   if (clients.length > 1) {
@@ -644,6 +645,7 @@ export async function rotateManagedDawarichOidcSecret(
   dependencies: ManagedDawarichProvisioningDependencies = defaultDependencies,
 ): Promise<ManagedDawarichProvisioningResult> {
   return dependencies.withLock(async () => {
+    await dependencies.getRuntimeState();
     const context = await resolveContext(input, dependencies);
     const clients = await matchingClients(dependencies, input.headers);
     if (clients.length !== 1) {
@@ -688,6 +690,8 @@ async function readEffectiveServiceConfig(serviceId: string): Promise<Record<str
     id: service.manifest.id,
     configSchema: service.manifest.configSchema,
     containerEnv: service.manifest.container.environment,
+    containerMemory: service.manifest.container.memory,
+    isBuiltIn: service.isBuiltIn,
   });
 }
 
@@ -708,6 +712,14 @@ async function getDefaultRuntimeState(): Promise<ManagedDawarichRuntimeState> {
   const installed = SERVICE_IDS.every((serviceId) => Boolean(registry.get(serviceId)));
   const selected = installed && SERVICE_IDS.every((serviceId) => registry.get(serviceId)?.enabled);
   const ps = await dockerComposePs();
+  if (
+    ps.some(
+      (row) =>
+        SERVICE_IDS.includes(row.service as (typeof SERVICE_IDS)[number]) &&
+        row.state === "unknown",
+    )
+  )
+    throw new ManagedDawarichProvisioningError("DAWARICH_PROVISIONING_FAILED");
   const running =
     selected &&
     SERVICE_IDS.every((serviceId) =>

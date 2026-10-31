@@ -23,6 +23,11 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: 0 }),
 }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useOptionalEnv: () => ({
+    apiUrl: "https://api.test",
+    trafficTileUrlTemplate: "https://api.test/traffic/{z}/{x}/{y}.png",
+  }),
+
   useEnv: () => ({
     apiUrl: "https://api.test",
     trafficTileUrlTemplate: "https://api.test/traffic/{z}/{x}/{y}.png",

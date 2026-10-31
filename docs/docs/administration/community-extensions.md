@@ -61,6 +61,43 @@ Select an entry, inspect the preview and confirm the installation. For an
 extension outside a catalog, use **Install from URL** with its `extension.json`
 URL. Direct URL installs always have community trust.
 
+## Standalone integrations
+
+Use **Extensions → Install integration** for a declarative integration that has
+no `extension.json` bundle. Choose an HTTPS repository and optional ref, an HTTPS
+artifact URL with its SHA-256, or a local `.tar.gz` archive. Archives are limited
+to 200 MiB compressed and expanded. Symbolic links, executable community modules,
+incompatible protocols and unsafe archive paths are rejected.
+
+**Review source** prepares the exact bytes without replacing the installed
+integration. Check the integration ID, version, content digest and resolved Git
+commit before installing. Reviews expire after ten minutes; review again if one
+expires. Uploads remain private to the administrator who created them.
+
+Installation runs as an Activity job and records community trust plus the actual
+source provenance. The agent holds the component and uploaded artifact while the
+API reloads the integration and records ownership. A confirmed failure restores
+the original directory; an uncertain result keeps the original transaction held
+for reconciliation. Closing the dialog only stops observation. Cancellation can
+remain pending until restoration is confirmed. Retrying the same request observes
+its existing job instead of installing twice.
+
+In **Local integrations**, the inventory includes CLI-installed directories,
+standalone owners, invalid legacy content and missing local files, independently
+of catalog availability. **Adopt** records the reviewed content under a community
+owner. Without authenticated provenance, its source remains `legacy_unknown`;
+adoption does not invent a repository URL or grant verified trust.
+
+**Remove** requires confirmation of the reviewed content digest. The agent keeps
+the original directory in quarantine until reload and ownership bookkeeping
+complete. If CLI already removed the files, removal verifies their absence under
+the same component lock before cleaning up the remaining standalone records.
+A changed directory or foreign/catalog owner blocks the action. Invalid executable
+legacy entries stay inert and require host inspection rather than privileged
+execution or automatic deletion. Pending transactions show their original
+Activity reference; an unknown result keeps the component held for reconciliation.
+Standalone parents use this view rather than bundle update/uninstall controls.
+
 The same operations are available on the CLI:
 
 ```bash

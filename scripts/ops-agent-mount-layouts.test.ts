@@ -13,17 +13,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
+  createControlRootOperationKey,
   OpsClient,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
+  opsExecutionBudget,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, describe, expect, it } from "vitest";
-import {
-  createDurableOpsKey,
-  executeTrustedConfigurationAndWait,
-} from "../apps/api/src/services/ops-client";
+import { waitForOpsResult } from "../apps/api/src/services/ops-client";
 import {
   consumePublishedTrustedConfiguration,
   publishTrustedConfigurationSnapshot,
@@ -46,9 +45,9 @@ import {
  *   from the host too, apart from those, so what the agent would read from it
  *   is absent, not empty.
  *
- * Each run starts the agent, commits a configuration change through it as
- * app-api would, with a service file override, runs its fixed CLI's check
- * and render, reads the stack's status and a handoff record, and inspects
+ * Each run starts the agent, commits a sealed configuration change through
+ * the supported local bearer root with a service file override, runs its fixed
+ * CLI's check and render, reads the stack's status and a handoff record, and inspects
  * what its self-update helper would mount.
  *
  * Runs only on Linux where `OPENMAPX_TEST_AGENT_IMAGE` names a built image of
@@ -61,7 +60,7 @@ const roots: string[] = [];
 const containers: string[] = [];
 const OVERRIDE_MARK = "# openmapx-ci: an operator's override";
 
-const RUNTIME_DIRECTORIES = ["state", "data", "secrets", "backups"] as const;
+const RUNTIME_DIRECTORIES = ["state", "data", "secrets", "backups", "catalog-pins"] as const;
 /** The stack's network, which `docker compose up` of the generation creates. */
 const COMPOSE_NETWORK = `${services.STACK_PROJECT}_openmapx`;
 
@@ -81,6 +80,18 @@ function layoutMounts(layout: "checkout" | "narrow", root: string) {
           target: join(infra, name),
           readOnly: false,
         })),
+        ...["data-manager", "host-cli"].flatMap((role) => [
+          {
+            source: join(infra, "control-private/hidden-key"),
+            target: join(infra, `secrets/control-${role}.key`),
+            readOnly: true,
+          },
+          {
+            source: join(infra, "control-private/empty"),
+            target: join(infra, `control-private/${role}`),
+            readOnly: true,
+          },
+        ]),
       ];
 }
 
@@ -158,7 +169,7 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       for (const name of readdirSync(join(root, "infra"))) {
         if (name !== "docker") rmSync(join(root, "infra", name), { recursive: true, force: true });
       }
-      const keep = new Set([".env", "overrides", ...RUNTIME_DIRECTORIES]);
+      const keep = new Set([".env", "overrides", "control-private", ...RUNTIME_DIRECTORIES]);
       for (const name of readdirSync(join(root, "infra", "docker"))) {
         if (!keep.has(name))
           rmSync(join(root, "infra", "docker", name), { recursive: true, force: true });
@@ -282,28 +293,38 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       return { id, baseUrl: `http://127.0.0.1:${port}` };
     }
 
+    /** A truthful timed local bearer root, without inventing an API job parent. */
+    function localRootIdentity(kind: OpsOperationKind) {
+      const requestedDeadlineAt = Date.now() + opsExecutionBudget(kind).processMs;
+      return {
+        operationKey: createControlRootOperationKey({
+          notAfter: requestedDeadlineAt,
+          nonce: randomBytes(16),
+        }),
+        execution: { requestedDeadlineAt },
+      };
+    }
+
     async function operate<K extends OpsOperationKind>(
       agent: Agent,
       operation: Extract<OpsOperation, { kind: K }>,
+      identity = localRootIdentity(operation.kind),
     ): Promise<OpsResultFor<K>> {
-      const submitted = await agent.client.execute(operation, {
-        operationKey: `opk1_${randomBytes(18).toString("base64url")}`,
+      const submitted = await agent.client.execute<K>(operation, identity);
+      if (submitted.execution === "sync") return submitted.value;
+      return waitForOpsResult<K>(agent.client, operation.kind, submitted, {
+        execution: identity.execution,
+        observerDeadlineAt: identity.execution.requestedDeadlineAt,
       });
-      if (submitted.execution === "sync") return submitted.value as OpsResultFor<K>;
-      for (;;) {
-        const status = await agent.client.status(operation.kind, submitted.operationId);
-        if (status.state === "succeeded") return status.result as OpsResultFor<K>;
-        if (status.state !== "queued" && status.state !== "running") {
-          throw new Error(`${operation.kind} ended ${status.state}: ${await agent.logs()}`);
-        }
-        await new Promise((done) => setTimeout(done, 250));
-      }
     }
 
-    /** A configuration change app-api publishes and the agent commits. */
+    /** The actual sealed configuration body and current source witness over agent HTTP. */
     async function commit(root: string, agent: Agent, name: string): Promise<void> {
       const infra = join(root, "infra", "docker");
-      const operationKey = createDurableOpsKey("stack.render", name);
+      const inspected = await agent.client.execute({ kind: "configuration.sources.inspect" });
+      if (inspected.execution !== "sync") throw Error("Expected a synchronous source inspection");
+      const identity = localRootIdentity("stack.render");
+      const { operationKey } = identity;
       const before = services.currentConfigurationGeneration(infra);
       const sealed = await publishTrustedConfigurationSnapshot({
         directory: services.agentStatePaths(infra).trustedConfig,
@@ -315,6 +336,8 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           kind: "stack.render",
           revisionId,
           expectedCurrentRevisionId: before,
+          expectedSourceRevision: inspected.value.sourceRevision,
+          coordinatorMode: "require-running",
         }),
         payload: {
           domain: `${name}.example.test`,
@@ -324,16 +347,14 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         },
       });
       const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-        executeTrustedConfigurationAndWait(
-          agent.client,
-          sealed.operation as Parameters<typeof executeTrustedConfigurationAndWait>[1],
-          operationKey,
-        ),
+        operate(agent, sealed.operation, identity),
       );
+      expect(consumed.submission.status, await agent.logs()).toBe("fulfilled");
       const result =
         consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
       expect(result, `${JSON.stringify(result)}\n${await agent.logs()}`).toMatchObject({
         outcome: "committed",
+        revisionId: sealed.operation.revisionId,
       });
       expect(services.currentConfigurationGeneration(infra)).not.toBe(before);
     }
@@ -380,7 +401,16 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           expect(listing.stdout.split("\n").filter(Boolean)).toEqual([
             "infra",
             "docker",
-            ...[".env", "backups", "data", "overrides", "secrets", "state"],
+            ...[
+              ".env",
+              "backups",
+              "catalog-pins",
+              "control-private",
+              "data",
+              "overrides",
+              "secrets",
+              "state",
+            ],
           ]);
           for (const absent of ["services", "packages", "apps", "integrations", ".git"]) {
             const probe = await agent.exec("test", "-e", join(root, absent));

@@ -13,8 +13,20 @@ export const serviceSelectionFixture: AdminServiceSelection = {
   selectionFilePath: "/synthetic/selection.json",
 };
 export const serviceDataFixture: OpsResultFor<"data.inspect"> = {
-  osm: { found: false },
-  builds: [{ target: "valhalla", built: false }],
+  osm: { items: [], total: 0, limit: 50, offset: 0, unavailable: false },
+  builds: [
+    {
+      target: "valhalla",
+      built: false,
+      readiness: "missing",
+      reason: "No prepared output",
+      sizeBytes: null,
+      sourceFingerprints: [],
+      buildRecordVersion: null,
+      region: null,
+      runtimeImages: {},
+    },
+  ],
   motisTransitous: {
     configFound: false,
     datasetCount: 0,

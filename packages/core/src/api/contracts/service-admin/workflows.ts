@@ -22,6 +22,20 @@ export const adminServiceComposeStartedSchema = z.strictObject({
   stdout: z.string(),
   hardlinks: adminServiceHardlinksSchema,
 });
+export const ADMIN_COMPOSE_REVISION_HEADER = "x-openmapx-current-configuration";
+export const adminComposeRenderInputSchema = z.strictObject({
+  expectedCurrentRevisionId: z
+    .string()
+    .regex(/^cfg1_[A-Za-z0-9_-]{43}$/)
+    .nullable(),
+  confirmed: z.literal(true),
+});
+export const adminComposePreviewHeadersSchema = z.object({
+  [ADMIN_COMPOSE_REVISION_HEADER]: z.union([
+    z.literal("none"),
+    z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/),
+  ]),
+});
 export const adminDawarichSecretStateSchema = z.enum(["missing", "consistent", "conflict"]);
 export const adminDawarichStatusSchema = z.strictObject({
   installed: z.boolean(),

@@ -36,6 +36,11 @@ beforeAll(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
+const reviewed = {
+  countries: ["de"],
+  preflightId: "00000000-0000-4000-8000-000000000001",
+  fingerprint: "a".repeat(64),
+};
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -76,7 +81,7 @@ describe("POST /data-manager/transit/sync", () => {
       method: "POST",
       url: "/data-manager/transit/sync",
       headers: { authorization: "Bearer service-token" },
-      payload: { idempotencyKey: "abc-123" },
+      payload: { ...reviewed, idempotencyKey: "abc-123" },
     });
 
     expect(res.statusCode).toBe(202);
@@ -110,7 +115,7 @@ describe("POST /data-manager/transit/sync", () => {
       method: "POST",
       url: "/data-manager/transit/sync",
       headers: { authorization: "Bearer service-token" },
-      payload: {},
+      payload: reviewed,
     });
 
     expect(res.statusCode).toBe(409);
@@ -128,7 +133,7 @@ describe("POST /data-manager/transit/sync", () => {
         method: "POST",
         url: "/data-manager/transit/sync",
         headers: { authorization: "Bearer service-token" },
-        payload: {},
+        payload: reviewed,
       });
 
       expect(res.statusCode).toBe(500);
@@ -150,7 +155,7 @@ describe("POST /data-manager/transit/sync", () => {
       method: "POST",
       url: "/data-manager/transit/sync",
       headers: { authorization: "Bearer service-token" },
-      payload: {},
+      payload: reviewed,
     });
 
     expect(res.statusCode).toBe(500);

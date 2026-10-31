@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../community-repositories", () => ({ readCommunityServices: vi.fn() }));
+vi.mock("../community-service-inventory", () => ({ readCommunityServices: vi.fn() }));
 
-import { readCommunityServices } from "../community-repositories";
+import { readCommunityServices } from "../community-service-inventory";
 
 const readMock = vi.mocked(readCommunityServices);
 

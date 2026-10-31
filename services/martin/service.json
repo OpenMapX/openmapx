@@ -22,14 +22,29 @@
     },
     "command": ["--config", "/etc/martin/martin.yaml"],
     "restart": "unless-stopped",
-    "dependsOn": [{ "service": "postgis", "condition": "service_healthy" }]
+    "dependsOn": [
+      {
+        "service": "postgis",
+        "condition": "service_healthy"
+      }
+    ]
   },
   "provides": ["tile-server"],
   "bindMounts": [
-    { "source": "config/martin.yaml", "target": "/etc/martin/martin.yaml", "readOnly": true }
+    {
+      "source": "config/martin.yaml",
+      "target": "/etc/martin/martin.yaml",
+      "readOnly": true
+    }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 3000, "host": 3002, "bindAddress": "127.0.0.1" }],
+    "hostPorts": [
+      {
+        "container": 3000,
+        "host": 3002,
+        "bindAddress": "127.0.0.1"
+      }
+    ],
     "proxy": {
       "enabled": true,
       "pathPrefix": "/martin",
@@ -43,5 +58,26 @@
       ]
     }
   },
-  "ui": { "category": "tiles" }
+  "ui": {
+    "category": "tiles"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

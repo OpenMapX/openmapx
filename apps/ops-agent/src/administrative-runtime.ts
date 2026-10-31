@@ -1,3 +1,11 @@
+import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
+import { installDataWorkflowRuntime, resolveDataDefaultRegion } from "./data-workflow-runtime";
+
+export {
+  type ConfiguredResourceAuthority,
+  loadConfiguredResourceAuthority,
+} from "./configured-resource-authority";
+
 import { createHash, randomUUID } from "node:crypto";
 import {
   accessSync,
@@ -18,9 +26,28 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  bindControlChildPhase,
+  closeControlInstallation,
+  consumeControlChildDispatch,
+  fixedCliArguments as coreFixedCliArguments,
+  isFixedSingleDataCommand,
+  issueControlChildPhase,
+  openFixedChildInstallation,
+  prepareFixedControlChild,
+  readFixedCliSpawnIntent,
+  readFixedSingleDataPlan,
+  retainFixedCliSpawnIntent,
+  verifyControlEffectSettlement,
+} from "@openmapx/core/build-artifacts";
+import {
+  compareServiceBuildOrder,
+  createServiceBatchResult,
+  type ExecutionRef,
+  executionRefSchema,
   OPS_MAX_BACKUP_ID_LENGTH,
   OPS_MAX_BACKUP_INVENTORY_ENTRIES,
   OPS_PUBLIC_ERROR_MESSAGES,
+  type OpsOperationKind,
   type OpsResultFor,
 } from "@openmapx/core/ops";
 import { atomicWrite, durableUnlink, fsyncDirectory } from "@openmapx/core/release-files";
@@ -40,13 +67,16 @@ import {
   listDescriptorAnchoredDirectory,
   readDescriptorAnchoredUtf8,
 } from "./descriptor-file";
-import { runContainedProcess } from "./docker-runtime";
+import { runContainedProcess, runContainedStreamingProcess } from "./docker-runtime";
 import { strictReadFile } from "./durable-files";
+import { safeProcessDiagnostic } from "./process-output";
 import { createImageInspection } from "./release-images";
 import {
   OpsAgentBusyError,
   type OpsExecutionContext,
+  OpsExecutionFailure,
   OpsHostUpdateRequiredError,
+  OpsNotWiredError,
   type OpsRuntime,
 } from "./runtime";
 
@@ -85,7 +115,7 @@ const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
 const MAX_RELEASE_STORE_BYTES = MAX_RELEASE_STORE_ENTRIES * MAX_RELEASE_MANIFEST_BYTES;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
+const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 const DATA_TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
   osm: ["osm-pbf"],
@@ -99,7 +129,11 @@ const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 type BackupKind = "backup.create" | "backup.restore" | "backup.delete";
 type BackupInventoryEntry = OpsResultFor<"backup.list">["backups"][number];
 
-interface FixedCliOptions {
+export interface FixedCliOptions {
+  operationKind?: OpsOperationKind;
+  execution?: ExecutionRef;
+  controlAssertion?: string;
+  parentAssertion?: string;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
 }
@@ -175,6 +209,7 @@ type ReleaseTransactionPhase =
 export interface ParsedBackupManifest {
   name: string;
   createdAt: string;
+  expiresAt?: string;
   openmapxVersion: string;
   formatVersion: 2;
   manifestDigest: string;
@@ -218,53 +253,6 @@ interface DataAuthorityService {
 
 export function inspectRegionAuthority(regionId: string): boolean {
   return loadConfiguredResourceAuthority().regions.has(regionId);
-}
-
-const COUNTRY_ID = /^[A-Z]{2,3}$/;
-
-export interface ConfiguredResourceAuthority {
-  revisionId: string;
-  regions: ReadonlySet<string>;
-  countries: ReadonlySet<string>;
-}
-
-function exactConfiguredIds(
-  raw: string | undefined,
-  pattern: RegExp,
-  maximumLength: number,
-): string[] {
-  const values = (raw ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (
-    values.length > 64 ||
-    values.some((value) => value.length > maximumLength || !pattern.test(value)) ||
-    new Set(values).size !== values.length
-  ) {
-    throw new Error("Resource authority configuration rejected");
-  }
-  return values.sort();
-}
-
-export function loadConfiguredResourceAuthority(
-  env: NodeJS.ProcessEnv = process.env,
-): ConfiguredResourceAuthority {
-  const regions = exactConfiguredIds(
-    env.OPENMAPX_ALLOWED_REGIONS ?? "europe/germany",
-    REGION_ID,
-    128,
-  );
-  const countries = exactConfiguredIds(env.OPENMAPX_ALLOWED_COUNTRIES ?? "DE", COUNTRY_ID, 3);
-  const digest = createHash("sha256")
-    .update("openmapx-resource-authority-v1\0")
-    .update(JSON.stringify({ regions, countries }))
-    .digest("hex");
-  return {
-    revisionId: `resources-${digest}`,
-    regions: new Set(regions),
-    countries: new Set(countries),
-  };
 }
 
 export function inspectDataTypeAuthority(
@@ -363,6 +351,8 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
     throw new Error("Backup authority rejected");
   }
   if (raw.formatVersion !== 2) throw new Error("Backup authority rejected");
+  if (raw.expiresAt !== undefined)
+    coreServices.backupRetentionExpiry(String(raw.createdAt), 36500, raw.expiresAt);
   const seenServices = new Set<string>();
   let volumeCount = 0;
   const services = raw.services.map((value) => {
@@ -451,6 +441,7 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   return {
     name: backupId,
     createdAt: new Date(raw.createdAt).toISOString(),
+    ...(raw.expiresAt !== undefined ? { expiresAt: String(raw.expiresAt) } : {}),
     openmapxVersion: raw.openmapxVersion,
     formatVersion: 2,
     manifestDigest: createHash("sha256").update(contents).digest("hex"),
@@ -543,6 +534,7 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
     backups.push({
       backupId: entry.name,
       createdAt: manifest.createdAt,
+      ...(manifest.expiresAt ? { expiresAt: manifest.expiresAt } : {}),
       platformVersion: manifest.openmapxVersion,
       manifestDigest: manifest.manifestDigest,
       formatVersion: manifest.formatVersion,
@@ -665,7 +657,7 @@ function emitLines(
   contents: string,
 ): void {
   for (const line of contents.split(/\r?\n/).filter(Boolean)) {
-    emitLog(stream, line);
+    emitLog(stream, safeProcessDiagnostic(line));
   }
 }
 
@@ -761,7 +753,14 @@ function immutableWrite(path: string, contents: string, owner: number | undefine
 function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
   const root = backupRoot(rootDir);
   mkdirSync(root, { recursive: true, mode: 0o700 });
-  return acquireStoreLock(root, BACKUP_STORE_LOCK_NAME);
+  return acquireStoreLock(
+    root,
+    BACKUP_STORE_LOCK_NAME,
+    {},
+    Date.now,
+    false,
+    coreServices.BACKUP_STORE_LOCK_TTL_MS,
+  );
 }
 
 export async function pruneBackupRetention(
@@ -774,6 +773,11 @@ export async function pruneBackupRetention(
   }
   const lock = await acquireBackupStoreLock(rootDir);
   try {
+    if (
+      coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
+        .backupRetentionDays !== retentionDays
+    )
+      throw Error("Backup retention changed before the scheduled prune");
     await runFixedCli(["backup", "prune", "--retention-days", String(retentionDays)], {
       signal: new AbortController().signal,
       emitLog: () => {},
@@ -866,7 +870,14 @@ export function createAgentHandoffBindings(rootDir: string, options: { uid?: num
   };
   return {
     stackArgs: bindings.stackArgs,
-    restoreOverlay: bindings.restoreOverlay,
+    // Task08.3 installs the guarded helper. A parent observation cannot
+    // authorize this detached process or its rollback after the parent exits.
+    assertAvailable: (): never => {
+      throw new OpsNotWiredError();
+    },
+    restoreOverlay: (_previousOverlay: string | null): never => {
+      throw new OpsNotWiredError();
+    },
     withStoreLock: bindings.withStoreLock,
     releasePins: (releaseId: string, digest: string) => {
       const manifest = loadStored(releaseId, digest);
@@ -875,12 +886,9 @@ export function createAgentHandoffBindings(rootDir: string, options: { uid?: num
         helperImage: manifest.images["privacy-backup"],
       };
     },
-    writeOverlay: (releaseId: string, digest: string) =>
-      coreServices.writeReleaseComposeArtifacts(
-        loadStored(releaseId, digest),
-        bindings.repositoryPaths.infraDir,
-        { uid },
-      ),
+    writeOverlay: (_releaseId: string, _digest: string): never => {
+      throw new OpsNotWiredError();
+    },
   };
 }
 
@@ -970,7 +978,7 @@ export function createDefaultReleaseEffects(
     (async (args: readonly string[], context: FixedCliOptions) => {
       const result = await runContainedProcess("docker", args, {
         signal: context.signal,
-        timeout: MAX_CLI_DURATION_MS,
+        timeout: remainingCliTime(context),
         maxBuffer: MAX_CLI_OUTPUT_BYTES,
       });
       emitLines(context.emitLog, "stdout", result.stdout);
@@ -1023,7 +1031,9 @@ export function createDefaultReleaseEffects(
     return readOverlay();
   };
   const configurationIdentity = () =>
-    releaseDigest(JSON.stringify(coreServices.releaseSelection()));
+    releaseDigest(
+      JSON.stringify(coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"))),
+    );
   const selectionReceipts = (): coreServices.ReleaseSelectionReceipts => {
     if (!existsSync(paths.selections)) return {};
     return coreServices.parseReleaseSelectionReceipts(
@@ -1043,12 +1053,13 @@ export function createDefaultReleaseEffects(
         "Checked release is unavailable, changed or belongs to another configuration; check again",
       );
     coreServices.validateResolvedSelection(
-      coreServices.releaseSelection(),
+      coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker")),
       manifest,
       receipt.ociDigest,
     );
   };
   const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
+    const configured = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
     const state = readState();
     const latest = readReleasePointer(paths.latest, true);
     const candidates = manifestNames();
@@ -1057,8 +1068,21 @@ export function createDefaultReleaseEffects(
     const current = state.releaseId ? loadManifest(state.releaseId) : undefined;
     const available = availableReleaseId ? loadManifest(availableReleaseId) : undefined;
     const receipt = availableReleaseId ? selectionReceipts()[availableReleaseId] : undefined;
+    let selectedReleaseId: string | undefined;
+    const overlay = coreServices.releaseStatePaths(infraDir).overlay;
+    try {
+      const stats = lstatSync(overlay);
+      if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1 || stats.size > 64 * 1024)
+        throw Error("Unsafe release selection");
+      selectedReleaseId =
+        coreServices.parseReleaseComposeSelection(strictReadFile(overlay, 64 * 1024)).release ??
+        undefined;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     return {
-      configuredSelector: process.env.OPENMAPX_RELEASE ?? "main",
+      configuredSelector: configured.kind === "local" ? "local" : configured.selector,
+      ...(selectedReleaseId ? { selectedReleaseId } : {}),
       ...(state.releaseId ? { currentReleaseId: state.releaseId } : {}),
       ...(current?.product ? { currentVersion: current.product.version } : {}),
       ...(availableReleaseId ? { availableReleaseId } : {}),
@@ -1103,6 +1127,7 @@ export function createDefaultReleaseEffects(
     digest: string;
     serviceIds: string[];
     updateJobId?: string;
+    execution?: ExecutionRef;
     previousOverlay: string | null;
     previousState: string | null;
   }
@@ -1161,6 +1186,7 @@ export function createDefaultReleaseEffects(
     ) {
       throw new Error("Release transaction rejected");
     }
+    if (value.execution !== undefined) executionRefSchema.parse(value.execution);
     const transaction = value as unknown as ReleaseTransaction;
     const manifest = loadManifest(transaction.releaseId);
     if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
@@ -1218,11 +1244,17 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
+    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
+    context = { ...context, execution: transaction.execution };
+    remainingCliTime(context);
     await writeTransaction({ ...transaction, phase: "rollback_overlay" });
+    remainingCliTime(context);
     if (transaction.previousOverlay === null) durableUnlink(paths.overlay);
     else atomicWrite(paths.overlay, transaction.previousOverlay);
     await writeTransaction({ ...transaction, phase: "rollback_services" });
+    remainingCliTime(context);
     await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
+    remainingCliTime(context);
     if (transaction.previousState === null) durableUnlink(paths.state);
     else atomicWrite(paths.state, transaction.previousState);
     durableUnlink(paths.transaction);
@@ -1231,6 +1263,9 @@ export function createDefaultReleaseEffects(
     transaction: ReleaseTransaction,
     context: FixedCliOptions,
   ): Promise<void> => {
+    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
+    context = { ...context, execution: transaction.execution };
+    remainingCliTime(context);
     const manifest = loadManifest(transaction.releaseId);
     // The transaction's digest was taken from the exact bytes authorized when
     // the apply was admitted. Reopening by release ID would otherwise let a
@@ -1243,12 +1278,15 @@ export function createDefaultReleaseEffects(
       await requireCurrentAgent(manifest, context);
     }
     if (transaction.phase === "prepared") {
+      remainingCliTime(context);
       coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
     }
     if (transaction.phase === "overlay_written") {
+      remainingCliTime(context);
       coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
+      remainingCliTime(context);
       await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
@@ -1265,6 +1303,7 @@ export function createDefaultReleaseEffects(
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
       }
+      remainingCliTime(context);
       publishState(transaction);
       transaction = { ...transaction, phase: "state_published" };
       await writeTransaction(transaction);
@@ -1278,6 +1317,7 @@ export function createDefaultReleaseEffects(
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
       }
+      remainingCliTime(context);
       durableUnlink(paths.transaction);
       return;
     }
@@ -1343,9 +1383,8 @@ export function createDefaultReleaseEffects(
     initialize,
     validateCandidate,
     resolve: async (context) => {
-      await initialize();
       manifestNames();
-      const selection = coreServices.releaseSelection();
+      const selection = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
       if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
       const image = selection.manifestImage;
       const pulled = await runDocker(["pull", image], context);
@@ -1416,7 +1455,6 @@ export function createDefaultReleaseEffects(
       }
     },
     pull: async (releaseId, context) => {
-      await initialize();
       const manifest = loadManifest(releaseId);
       const names = [
         "api",
@@ -1429,15 +1467,20 @@ export function createDefaultReleaseEffects(
       ] as const;
       for (const [index, name] of names.entries()) {
         context.emitLog("stdout", `Downloading ${name} image (${index + 1}/${names.length})`);
-        await runDocker(["pull", manifest.images[name]], context);
+        if (runtimeOptions.runDocker) await runDocker(["pull", manifest.images[name]], context);
+        else
+          await runContainedStreamingProcess("docker", ["pull", manifest.images[name]], {
+            signal: context.signal,
+            timeout: remainingCliTime(context),
+            onLine: context.emitLog,
+            redact: safeProcessDiagnostic,
+          });
       }
     },
     inspect: async () => {
-      await initialize();
       return inspectRelease();
     },
     inspectSystem: async (context) => {
-      await initialize();
       const release = await inspectRelease();
       const manifest = release.availableReleaseId
         ? loadManifest(release.availableReleaseId)
@@ -1587,6 +1630,7 @@ export function createDefaultReleaseEffects(
           ...(updateJobId ? { updateJobId } : {}),
           previousOverlay,
           previousState,
+          ...(context.execution ? { execution: context.execution } : {}),
         };
         await writeTransaction(transaction);
         if (afterHandoff) {
@@ -1623,7 +1667,7 @@ export function createDefaultReleaseEffects(
       await reconcileHandoff();
       await validateCandidate(request.releaseId, request.expectedDigest);
       const manifest = loadManifest(request.releaseId);
-      const silent = { signal: context.signal, emitLog: () => undefined };
+      const silent = { ...context, emitLog: () => undefined };
       const existing = readAgentHandoff(rootDir);
       if (existing?.handoffId === request.handoffId) {
         return { handoffId: request.handoffId, replaced: true };
@@ -1692,7 +1736,6 @@ export function createDefaultReleaseEffects(
       };
     },
     runtimeInspect: async () => {
-      await initialize();
       const state = readState();
       return {
         ...(state.releaseId ? { releaseId: state.releaseId } : {}),
@@ -1716,6 +1759,18 @@ function fixedCliEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.Proce
  * `cli.mjs` sits next to the agent's entry; in development the agent runs from
  * `src/` and the CLI runs from source under tsx.
  */
+function remainingCliTime(options: FixedCliOptions): number {
+  if (options.signal.aborted) throw new OpsExecutionFailure("runtime", {});
+  if (!options.execution) {
+    if (options.operationKind) throw new Error("Managed execution context is required");
+    return MAX_CLI_DURATION_MS;
+  }
+  const execution = executionRefSchema.parse(options.execution);
+  const remaining = execution.deadlineAt - Date.now();
+  if (remaining <= 0) throw new OpsExecutionFailure("timeout", {});
+  return remaining;
+}
+
 export function createDefaultFixedCli(
   _rootDir: string,
   entry: string = process.argv[1] ?? "",
@@ -1732,14 +1787,49 @@ export function createDefaultFixedCli(
         join(runtimeRoot, "packages", "cli", "src", "index.ts"),
       ];
   return async (args, options) => {
-    const result = await runContainedProcess(executable as string, [...prefix, ...args], {
+    const timeout = remainingCliTime(options);
+    const env = fixedCliEnvironment();
+    const platform = coreServices.readAppliedPlatformConfiguration(join(_rootDir, "infra/docker"));
+    if (platform?.defaultRegion?.source === "database")
+      env.OPENMAPX_REGION =
+        coreServices.resolvePlatformConfiguration({ saved: platform, env }).values.defaultRegion ??
+        undefined;
+    for (const key of [
+      "OPENMAPX_CONTROL_EXECUTION",
+      "OPENMAPX_CONTROL_DELEGATION",
+      "OPENMAPX_PARENT_EXECUTION",
+    ])
+      delete env[key];
+    if (options.execution) {
+      const encoded = JSON.stringify(executionRefSchema.parse(options.execution));
+      if (Buffer.byteLength(encoded) > 2048) throw new Error("Execution context exceeds budget");
+      env.OPENMAPX_CONTROL_EXECUTION = encoded;
+      if (options.controlAssertion || options.parentAssertion) {
+        if (options.controlAssertion && options.parentAssertion)
+          throw Error("Ambiguous CLI authority");
+        const assertion = (options.controlAssertion ?? options.parentAssertion)!;
+        const installation = openFixedChildInstallation({
+          infraDir: join(_rootDir, "infra/docker"),
+          assertion,
+          container: existsSync("/run/secrets/openmapx-control-verifiers"),
+        });
+        try {
+          readFixedCliSpawnIntent(installation, options.execution, args);
+        } finally {
+          closeControlInstallation(installation);
+        }
+        if (options.controlAssertion) env.OPENMAPX_CONTROL_DELEGATION = assertion;
+        else env.OPENMAPX_PARENT_EXECUTION = assertion;
+      }
+    } else if (options.controlAssertion || options.parentAssertion)
+      throw new Error("Execution context is required");
+    await runContainedStreamingProcess(executable as string, [...prefix, ...args], {
+      env,
       signal: options.signal,
-      timeout: MAX_CLI_DURATION_MS,
-      maxBuffer: MAX_CLI_OUTPUT_BYTES,
-      env: fixedCliEnvironment(),
+      timeout,
+      onLine: options.emitLog,
+      redact: safeProcessDiagnostic,
     });
-    emitLines(options.emitLog, "stdout", result.stdout);
-    emitLines(options.emitLog, "stderr", result.stderr);
   };
 }
 
@@ -1760,11 +1850,12 @@ export function createAdministrativeRuntime(
     context.emitLog("stderr", held);
     throw new OpsHostUpdateRequiredError();
   };
-  const buildArgs = (serviceId: string, regionId?: string): string[] => [
+  const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
     "services",
     "build",
     serviceId,
     ...(regionId ? ["--region", regionId] : []),
+    ...(motisImport && serviceId === "motis" ? ["--import"] : []),
   ];
   const loadBuildable = async (): Promise<BuildAuthorityService[]> => {
     const authority = [...(await loadBuildAuthority())];
@@ -1784,29 +1875,86 @@ export function createAdministrativeRuntime(
           typeof service.buildCommand === "string" &&
           service.buildCommand.length > 0,
       )
-      .sort((left, right) => left.serviceId.localeCompare(right.serviceId));
+      .sort((left, right) => compareServiceBuildOrder(left.serviceId, right.serviceId));
   };
   runtime["service.build"] = async (operation, context) => {
+    if (operation.motisImport && operation.serviceId !== "motis")
+      throw Error("MOTIS import requires a MOTIS build");
     const buildable = await loadBuildable();
     if (!buildable.some((service) => service.serviceId === operation.serviceId)) {
       throw new Error("Build authority rejected");
     }
-    await runFixedCli(buildArgs(operation.serviceId, operation.regionId), context);
+    await runFixedCli(
+      buildArgs(
+        operation.serviceId,
+        operation.regionId ?? resolveDataDefaultRegion(runtime),
+        operation.motisImport,
+      ),
+      context,
+    );
     return { completed: true };
   };
   runtime["services.buildAll"] = async (operation, context) => {
+    const plan = await loadBuildable();
+    if (operation.motisImport && !plan.some((service) => service.serviceId === "motis"))
+      throw Error("MOTIS import requires enabled MOTIS");
+    const serviceIds = plan.map((service) => service.serviceId);
     const completedServiceIds: string[] = [];
     const failedServiceIds: string[] = [];
-    for (const service of await loadBuildable()) {
-      if (context.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const batch = (skipped: string[]) =>
+      createServiceBatchResult(serviceIds, completedServiceIds, failedServiceIds, skipped);
+    if (plan.length === 0) throw new OpsExecutionFailure("runtime", { serviceBatch: batch([]) });
+    for (const [index, service] of plan.entries()) {
+      let attempted = false;
+      let stop: OpsExecutionFailure | undefined;
       try {
-        await runFixedCli(buildArgs(service.serviceId, operation.regionId), context);
+        context.signal.throwIfAborted();
+        attempted = true;
+        await runFixedCli(
+          buildArgs(
+            service.serviceId,
+            operation.regionId ?? resolveDataDefaultRegion(runtime),
+            operation.motisImport,
+          ),
+          context,
+        );
         completedServiceIds.push(service.serviceId);
       } catch (error) {
-        failedServiceIds.push(service.serviceId);
-        if (operation.failFast) throw error;
+        if (
+          context.signal.aborted ||
+          (error instanceof Error && error.name === "AbortError") ||
+          (error instanceof OpsExecutionFailure && error.errorClass !== "runtime")
+        ) {
+          stop = new OpsExecutionFailure(
+            error instanceof OpsExecutionFailure
+              ? error.errorClass
+              : Date.now() >= context.execution.deadlineAt
+                ? "timeout"
+                : "recovery_required",
+            {
+              ...(error instanceof OpsExecutionFailure ? error.failureResult : {}),
+              serviceBatch: batch(serviceIds.slice(index + (attempted ? 1 : 0))),
+            },
+          );
+        } else {
+          failedServiceIds.push(service.serviceId);
+          if (operation.failFast)
+            stop = new OpsExecutionFailure("runtime", {
+              ...(error instanceof OpsExecutionFailure ? error.failureResult : {}),
+              serviceBatch: batch(serviceIds.slice(index + 1)),
+            });
+        }
       }
+      const serviceBatch = stop?.failureResult.serviceBatch ?? batch(serviceIds.slice(index + 1));
+      try {
+        await context.checkpointServiceBatch?.(serviceBatch);
+      } catch {
+        throw new OpsExecutionFailure("recovery_required", { serviceBatch });
+      }
+      if (stop) throw stop;
     }
+    if (failedServiceIds.length > 0)
+      throw new OpsExecutionFailure("runtime", { serviceBatch: batch([]) });
     return { completedServiceIds, failedServiceIds };
   };
   runtime["backup.list"] = async () => inspectBackupInventory(options.rootDir);
@@ -1814,8 +1962,8 @@ export function createAdministrativeRuntime(
     const lock = await acquireBackupStoreLock(options.rootDir);
     try {
       await runFixedCli(["backup", "create", "--name", operation.backupId], {
-        signal: context.signal,
-        emitLog: context.emitLog,
+        ...context,
+        operationKind: context.claim.operation.kind,
       });
     } finally {
       lock.release();
@@ -1845,7 +1993,7 @@ export function createAdministrativeRuntime(
           ...(operation.serviceIds?.length ? ["--services", ...operation.serviceIds] : []),
           ...(operation.stopRunning ? ["--stop-running"] : []),
         ],
-        { signal: context.signal, emitLog: context.emitLog },
+        { ...context, operationKind: context.claim.operation.kind },
       );
       if (inspectBackupManifestDigest(options.rootDir, operation.backupId) !== digest) {
         throw new Error("Backup authority rejected");
@@ -1859,109 +2007,119 @@ export function createAdministrativeRuntime(
     const lock = await acquireBackupStoreLock(options.rootDir);
     try {
       await runFixedCli(["backup", "delete", operation.backupId], {
-        signal: context.signal,
-        emitLog: context.emitLog,
+        ...context,
+        operationKind: context.claim.operation.kind,
       });
     } finally {
       lock.release();
     }
     return { backupId: operation.backupId };
   };
-  runtime["data.inspect"] = async () => inspectDataInventory(options.rootDir);
+  runtime["data.inspect"] = async (operation) => inspectDataInventory(options.rootDir, operation);
+  async function runMatchingDataCommand(
+    operation: import("@openmapx/core/ops").OpsOperation,
+    context: import("./runtime").OpsExecutionContext,
+  ): Promise<void> {
+    if (!isFixedSingleDataCommand(operation.kind) || !context.controlAuthority)
+      throw new OpsHostUpdateRequiredError();
+    const plan = readFixedSingleDataPlan(context.controlAuthority),
+      bound = await bindControlChildPhase(context.controlAuthority, plan.rootReservation);
+    const publicKey = prepareFixedControlChild(context.controlAuthority, plan.delegationId);
+    retainFixedCliSpawnIntent(context.controlAuthority, {
+      delegationId: plan.delegationId,
+      execution: bound.execution,
+      operation,
+      args: coreFixedCliArguments(operation),
+      reservations: plan.cliReservations,
+    });
+    const issued = await issueControlChildPhase(context.controlAuthority, {
+      phase: "data-workflow",
+      ordinal: 0,
+      childPublicKey: publicKey,
+    });
+    consumeControlChildDispatch(issued.dispatchTicket);
+    await runFixedCli(coreFixedCliArguments(operation), {
+      ...context,
+      execution: bound.execution,
+      parentAssertion: issued.assertion,
+      operationKind: operation.kind,
+    });
+    const child = openFixedChildInstallation({
+      infraDir: join(options.rootDir, "infra/docker"),
+      assertion: issued.assertion,
+      container: existsSync("/run/secrets/openmapx-control-verifiers"),
+    });
+    try {
+      verifyControlEffectSettlement(child, bound.execution);
+    } finally {
+      closeControlInstallation(child);
+    }
+  }
   runtime["data.downloadOsm"] = async (operation, context) => {
-    await runFixedCli(
-      ["data", "download", "osm", ...(operation.regionId ? [operation.regionId] : [])],
-      { signal: context.signal, emitLog: context.emitLog },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
-  runtime["data.downloadFonts"] = async (_operation, context) => {
-    await runFixedCli(["data", "download", "fonts"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
+  runtime["data.downloadFonts"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
     return { completed: true };
   };
-  runtime["data.update"] = async (operation, context) => {
-    await runFixedCli(
-      [
-        "data",
-        "update",
-        ...(operation.regionId ? [operation.regionId] : []),
-        ...(operation.countryCodes?.length
-          ? ["--countries", operation.countryCodes.join(",")]
-          : []),
-        ...(operation.failFast ? ["--fail-fast"] : []),
-      ],
-      { signal: context.signal, emitLog: context.emitLog },
-    );
-    return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
-  };
+  // Full Update owns its target-free data phase and one guarded finalization phase.
+  installDataWorkflowRuntime(runtime, { rootDir: options.rootDir, runFixedCli });
   runtime["data.convertOverpass"] = async (operation, context) => {
-    await runFixedCli(
-      ["data", "convert", "overpass", ...(operation.regionId ? [operation.regionId] : [])],
-      { signal: context.signal, emitLog: context.emitLog },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, ...(operation.regionId ? { resourceId: operation.regionId } : {}) };
   };
   runtime["data.link"] = async (_operation, context) => {
     await runFixedCli(["data", "link"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true };
   };
   runtime["data.clean"] = async (operation, context) => {
     await runFixedCli(["data", "clean", operation.dataTypeId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { completed: true, resourceId: operation.dataTypeId };
   };
-  runtime["data.generateApiKeys"] = async (_operation, context) => {
-    await runFixedCli(["data", "generate-api-keys"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
-    return { completed: true };
+  // Historical decoding is retained; remote admission is forbidden. Never run
+  // the host-owned file command from a browser/job, including old pending work.
+  runtime["data.generateApiKeys"] = async () => {
+    throw new OpsNotWiredError();
   };
   runtime["data.overtureSync"] = async (operation, context) => {
-    await runFixedCli(["data", "overture-sync", operation.regionId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overturePull"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overtureIngest"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
+    return { completed: true, resourceId: operation.regionId };
+  };
+  runtime["data.overtureExtract"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.overtureConflate"] = async (operation, context) => {
-    await runFixedCli(
-      [
-        "data",
-        "overture-conflate",
-        operation.regionId,
-        ...(operation.restart ? ["--restart"] : []),
-      ],
-      { signal: context.signal, emitLog: context.emitLog },
-    );
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
   runtime["data.searchIndexBuild"] = async (operation, context) => {
-    await runFixedCli(["data", "search-index", "build", operation.regionId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
+    await runMatchingDataCommand(operation, context);
     return { completed: true, resourceId: operation.regionId };
   };
-  runtime["data.notablePlacesBuild"] = async (_operation, context) => {
-    await runFixedCli(["data", "notable-places", "build"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
+  runtime["data.notablePlacesBuild"] = async (operation, context) => {
+    await runMatchingDataCommand(operation, context);
     return { completed: true };
   };
   runtime["system.diagnostics"] = async (_operation, context) => {
     await runFixedCli(["check"], {
-      signal: context.signal,
-      emitLog: context.emitLog,
+      ...context,
+      operationKind: context.claim.operation.kind,
     });
     return { ok: true, checks: [] };
   };

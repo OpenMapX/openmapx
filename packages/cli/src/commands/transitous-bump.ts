@@ -1,27 +1,62 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import type { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
+import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { GbfsCatalogLock, TransitousLock } from "@openmapx/core/catalog-pins/types";
+import { transitBumpResultSchema } from "@openmapx/core/data-manager-contracts";
+import * as dm from "@openmapx/core/data-manager-sdk";
 import {
-  activeTransitousPin,
-  readTransitousApproval,
-  readTransitousProposal,
-  releaseTransitousPin,
-  transitousStatePaths,
-  writeTransitousProposal,
-} from "@openmapx/transitous-core/pins";
+  diffCatalogFeeds,
+  parseRefShaPair,
+  resolveGbfsCatalogCandidate,
+} from "@openmapx/transitous-core";
 import type { Command } from "commander";
-import { execa } from "execa";
+import { dataManagerUrl } from "../lib/data-manager-url";
+import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
-const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
+export const resolveGbfsCandidate = resolveGbfsCatalogCandidate;
 
-export function transitousPinIsCurrent(
-  lock: TransitousLock | null,
+export function combinedPinsAreCurrent(
+  transitous: TransitousLock | null,
+  gbfs: GbfsCatalogLock | null,
   transitousSha: string,
+  gbfsCommit: string,
 ): boolean {
-  return (lock ? parseRefShaPair(lock.ref).sha : null) === transitousSha;
+  return (
+    (transitous ? parseRefShaPair(transitous.ref).sha : null) === transitousSha &&
+    gbfs?.commit === gbfsCommit
+  );
+}
+
+/** Stage and replace the compatible Transitous/MobilityData pin set together. */
+export function writeCombinedCatalogLocks(
+  repoRoot: string,
+  transitous: TransitousLock,
+  gbfs: GbfsCatalogLock,
+  operations: {
+    write?: typeof writeFileSync;
+    rename?: typeof renameSync;
+    remove?: typeof unlinkSync;
+  } = {},
+): void {
+  void repoRoot;
+  void transitous;
+  void gbfs;
+  void operations;
+  throw new Error("Catalog pin activation requires validated paired approval");
+}
+
+/** Write a reviewable pin-set proposal without mutating active lockfiles. */
+export function writeCombinedCatalogLockProposal(
+  repoRoot: string,
+  transitous: TransitousLock,
+  gbfs: GbfsCatalogLock,
+): void {
+  void repoRoot;
+  void transitous;
+  void gbfs;
+  throw new Error("Catalog proposals require the installed paired review workflow");
 }
 
 export interface FeedFile {
@@ -37,146 +72,11 @@ export interface FeedDiffSummary {
   licenseChanges: Array<{ region: string; source: string }>;
 }
 
-function gitArgs(catalogDir: string, ...rest: string[]): string[] {
-  return ["-c", `safe.directory=${catalogDir}`, "-C", catalogDir, ...rest];
-}
-
-async function runGit(catalogDir: string, args: string[]): Promise<string> {
-  const result = await execa("git", gitArgs(catalogDir, ...args), { stdio: "pipe" });
-  return result.stdout.trim();
-}
-
-async function listFeedsAtRevision(
-  catalogDir: string,
-  sha: string,
-): Promise<Map<string, FeedFile>> {
-  const out = new Map<string, FeedFile>();
-  let listing: string;
-  try {
-    listing = await runGit(catalogDir, ["ls-tree", "--name-only", `${sha}:feeds`]);
-  } catch {
-    return out;
-  }
-  for (const line of listing.split("\n")) {
-    const name = line.trim();
-    if (!name.endsWith(".json")) continue;
-    const region = name.replace(/\.json$/i, "");
-    let raw: string;
-    try {
-      raw = await runGit(catalogDir, ["show", `${sha}:feeds/${name}`]);
-    } catch {
-      continue;
-    }
-    try {
-      out.set(region, JSON.parse(raw) as FeedFile);
-    } catch {
-      // Skip malformed feed files — we don't want a single broken JSON file to
-      // block a catalog bump on otherwise fine regions.
-    }
-  }
-  return out;
-}
-
 export function diffFeedFiles(
   oldFeeds: Map<string, FeedFile>,
   newFeeds: Map<string, FeedFile>,
 ): FeedDiffSummary {
-  const oldRegions = new Set(oldFeeds.keys());
-  const newRegions = new Set(newFeeds.keys());
-  const addedRegions = [...newRegions].filter((region) => !oldRegions.has(region)).sort();
-  const removedRegions = [...oldRegions].filter((region) => !newRegions.has(region)).sort();
-  const modifiedRegions: string[] = [];
-  let addedSources = 0;
-  let removedSources = 0;
-  const licenseChanges: FeedDiffSummary["licenseChanges"] = [];
-
-  for (const region of newRegions) {
-    if (!oldRegions.has(region)) {
-      addedSources += (newFeeds.get(region)?.sources ?? []).length;
-      continue;
-    }
-    const oldNames = new Set(
-      (oldFeeds.get(region)?.sources ?? [])
-        .map((source) => source.name)
-        .filter((name): name is string => typeof name === "string"),
-    );
-    const newNames = new Set(
-      (newFeeds.get(region)?.sources ?? [])
-        .map((source) => source.name)
-        .filter((name): name is string => typeof name === "string"),
-    );
-    let regionChanged = false;
-    for (const name of newNames) {
-      if (!oldNames.has(name)) {
-        addedSources++;
-        regionChanged = true;
-      }
-    }
-    for (const name of oldNames) {
-      if (!newNames.has(name)) {
-        removedSources++;
-        regionChanged = true;
-      }
-    }
-    const oldByName = new Map(
-      (oldFeeds.get(region)?.sources ?? []).flatMap((source) =>
-        source.name ? [[source.name, source] as const] : [],
-      ),
-    );
-    for (const source of newFeeds.get(region)?.sources ?? []) {
-      if (!source.name || !oldByName.has(source.name)) continue;
-      const previous = oldByName.get(source.name);
-      if (JSON.stringify(previous?.license ?? null) !== JSON.stringify(source.license ?? null)) {
-        licenseChanges.push({ region, source: source.name });
-        regionChanged = true;
-      }
-    }
-    if (regionChanged) modifiedRegions.push(region);
-  }
-  for (const region of removedRegions) {
-    removedSources += (oldFeeds.get(region)?.sources ?? []).length;
-  }
-  modifiedRegions.sort();
-  return {
-    addedRegions,
-    removedRegions,
-    modifiedRegions,
-    addedSources,
-    removedSources,
-    licenseChanges: licenseChanges.sort((a, b) =>
-      `${a.region}/${a.source}`.localeCompare(`${b.region}/${b.source}`),
-    ),
-  };
-}
-
-function printDiffSummary(summary: FeedDiffSummary): void {
-  log.info(
-    `  added regions:    ${summary.addedRegions.length}${summary.addedRegions.length > 0 ? `  (${summary.addedRegions.join(", ")})` : ""}`,
-  );
-  log.info(
-    `  removed regions:  ${summary.removedRegions.length}${summary.removedRegions.length > 0 ? `  (${summary.removedRegions.join(", ")})` : ""}`,
-  );
-  log.info(
-    `  modified regions: ${summary.modifiedRegions.length}${summary.modifiedRegions.length > 0 ? `  (${summary.modifiedRegions.join(", ")})` : ""}`,
-  );
-  log.info(`  added sources:    ${summary.addedSources}`);
-  log.info(`  removed sources:  ${summary.removedSources}`);
-  log.info(
-    `  license changes:  ${summary.licenseChanges.length}${summary.licenseChanges.length > 0 ? `  (${summary.licenseChanges.map((entry) => `${entry.region}/${entry.source}`).join(", ")})` : ""}`,
-  );
-}
-
-async function readSubmoduleSha(catalogDir: string, ref: string, path: string): Promise<string> {
-  // `git ls-tree <ref> <path>` returns a line like:
-  //   160000 commit <sha>\t<path>
-  // for a submodule entry. We pull that SHA out explicitly because
-  // `rev-parse <ref>:<path>` resolves the tree, not the gitlink target.
-  const output = await runGit(catalogDir, ["ls-tree", ref, path]);
-  const match = output.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i);
-  if (!match) {
-    throw new Error(`Could not resolve submodule SHA for "${path}" at ${ref}`);
-  }
-  return match[1];
+  return diffCatalogFeeds(oldFeeds, newFeeds);
 }
 
 async function promptConfirm(question: string): Promise<boolean> {
@@ -193,15 +93,17 @@ async function promptConfirm(question: string): Promise<boolean> {
   }
 }
 
-async function resolveLockedBy(): Promise<string> {
-  try {
-    const result = await execa("git", ["config", "user.email"], { stdio: "pipe" });
-    const email = result.stdout.trim();
-    if (email) return email;
-  } catch {
-    // ignore — fall through to env var
-  }
-  return process.env.USER ?? "unknown";
+export async function proposeReviewedCatalog(branch: string) {
+  const transport = constrainCliDataManagerTransport(
+    dm.createDataManagerTransport({
+      ...cliAcquisitionOptions(),
+      baseUrl: dataManagerUrl(),
+      authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    }),
+  );
+  return transitBumpResultSchema.parse(
+    dm.unwrapDataManagerResponse(await dm.proposeTransitBump({ branch }, { transport })),
+  );
 }
 
 export function registerTransitousCommands(program: Command): void {
@@ -209,113 +111,35 @@ export function registerTransitousCommands(program: Command): void {
 
   transitous
     .command("bump")
-    .description(
-      "Fetch the upstream Transitous pin, summarize feed changes, and write a reviewable inactive-slot proposal",
-    )
+    .description("Create a paired Transitous/GBFS proposal through the installed Data Manager")
     .option("--yes", "Skip the interactive confirmation prompt", false)
     .option("--branch <name>", "Branch to track (default: main)", "main")
     .action(async (options: { yes: boolean; branch: string }) => {
-      const paths = repoPaths();
-      const catalogDir = join(paths.infraDir, "data", TRANSITOUS_CATALOG_DIR);
-      if (!existsSync(join(catalogDir, ".git"))) {
-        log.err(
-          `Transitous catalog not found at ${catalogDir}. Run the data-manager once (e.g. via \`pnpm openmapx data download gtfs\`) so it clones the catalog, then retry.`,
-        );
-        process.exit(1);
-      }
-
-      log.dim(`Fetching origin/${options.branch} in ${catalogDir}...`);
-      try {
-        await execa("git", gitArgs(catalogDir, "fetch", "origin", options.branch), {
-          stdio: "pipe",
-        });
-      } catch (err) {
-        log.err(`git fetch failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-
-      const newSha = await runGit(catalogDir, ["rev-parse", `origin/${options.branch}`]);
-      const newSubmoduleSha = await readSubmoduleSha(
-        catalogDir,
-        `origin/${options.branch}`,
-        "transitland-atlas",
-      );
-
-      const existing = activeTransitousPin(paths.infraDir);
-      const lockedBy = await resolveLockedBy();
-      if (transitousPinIsCurrent(existing, newSha)) {
-        log.ok(`Already pinned to Transitous ${newSha.slice(0, 12)} — nothing to do.`);
+      if (
+        !options.yes &&
+        !(await promptConfirm("Create a paired catalog proposal for review? [y/N]"))
+      )
         return;
-      }
-
-      log.info(`New ref: ${options.branch}@${newSha}`);
-      log.info(`New transitland-atlas: ${newSubmoduleSha}`);
-
-      if (existing) {
-        const previousSha = parseRefShaPair(existing.ref).sha;
-        log.info(`Diff vs current pin ${previousSha.slice(0, 12)}:`);
-        const [oldFeeds, newFeeds] = await Promise.all([
-          listFeedsAtRevision(catalogDir, previousSha),
-          listFeedsAtRevision(catalogDir, newSha),
-        ]);
-        printDiffSummary(diffFeedFiles(oldFeeds, newFeeds));
-      } else {
-        log.dim("(no previous pin — printing full feed inventory)");
-        const feeds = await listFeedsAtRevision(catalogDir, newSha);
-        const sourceCount = [...feeds.values()].reduce(
-          (sum, feed) => sum + (feed.sources?.length ?? 0),
-          0,
+      const proposal = await proposeReviewedCatalog(options.branch);
+      if (!proposal.unchanged) {
+        log.ok(`Proposal created: ${proposal.proposalId}`);
+        log.info(`Transitous: ${proposal.ref}`);
+        log.dim(
+          "Review the complete Transitous/GBFS diff in Admin → Transit, then validate the inactive MOTIS slot before activation.",
         );
-        log.info(`  regions: ${feeds.size}, sources: ${sourceCount}`);
       }
-
-      if (!options.yes) {
-        const ok = await promptConfirm("Write this pin as an inactive-slot proposal? [y/N]");
-        if (!ok) {
-          log.info("Aborted — no lockfile changes.");
-          return;
-        }
-      }
-
-      const lock: TransitousLock = {
-        ref: `${options.branch}@${newSha}`,
-        submodules: { "transitland-atlas": newSubmoduleSha },
-        lockedAt: new Date().toISOString(),
-        lockedBy,
-        comment:
-          "Pinned commit of public-transport/transitous consumed by services/data-manager. Bump via `pnpm openmapx transitous bump`.",
-      };
-      // The agent's state, which the host CLI shares as the same user. This
-      // command writes neither the pin in effect nor a pin the repository
-      // tracks.
-      writeTransitousProposal(paths.infraDir, lock);
-
-      log.ok(`Proposed Transitous catalog pin → ${transitousStatePaths(paths.infraDir).proposed}`);
-      log.dim("Review diffs and validate an inactive MOTIS slot before activating the proposal.");
     });
 
   transitous
     .command("show")
-    .description("Print the release's Transitous pin, the pin in effect, and any proposal")
+    .description("Print the active paired Transitous/GBFS pin generation")
     .action(() => {
       const paths = repoPaths();
-      const release = releaseTransitousPin();
-      const approval = readTransitousApproval(paths.infraDir);
-      const proposal = readTransitousProposal(paths.infraDir);
-      console.log(
-        JSON.stringify(
-          {
-            release,
-            active: activeTransitousPin(paths.infraDir),
-            approved: approval,
-            ...(approval && approval.releasePin !== release.ref
-              ? { approvedFor: "an earlier release; this release's pin takes over" }
-              : {}),
-            proposed: proposal,
-          },
-          null,
-          2,
-        ),
-      );
+      const pins = readCatalogPinSet(paths.root);
+      if (!pins) {
+        log.warn("Paired catalog pins are not initialized; run the managed bump workflow");
+        return;
+      }
+      console.log(JSON.stringify(pins, null, 2));
     });
 }

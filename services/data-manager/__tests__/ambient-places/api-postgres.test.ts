@@ -7,6 +7,7 @@ import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
 } from "../../src/jobs/search-index/schema.js";
+import { installDisposableDataAdmission } from "../helpers/data-admission-fixture.js";
 import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
 const request = {
@@ -19,6 +20,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   () => {
     it("rejects competing API instances without aborting the winning repeatable-read build", async () => {
       const pg = await startPostgis();
+      const closeAdmission = await installDisposableDataAdmission(pg.sql);
       const barrier = postgres(pg.connectionString, { max: 1 });
       const coldSql = postgres(pg.connectionString, { max: 2 });
       const cold = Fastify();
@@ -88,6 +90,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await barrier.end({ timeout: 2 });
         await a.close();
         await b.close();
+        closeAdmission();
         await pg.stop();
       }
     }, 120_000);

@@ -276,6 +276,10 @@ describe("required database test gate", () => {
         process.execPath,
         [join(temp, "scripts/test-database.mjs"), "ingestion"],
         {
+          env: {
+            ...process.env,
+            DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
+          },
           cwd: temp,
           encoding: "utf8",
           timeout: 5000,

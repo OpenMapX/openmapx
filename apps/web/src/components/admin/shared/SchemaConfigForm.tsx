@@ -15,6 +15,8 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
+import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -53,6 +55,8 @@ interface SchemaProperty {
   default?: unknown;
   enum?: string[];
   format?: string;
+  minimum?: number;
+  maximum?: number;
   "x-openmapx-secret"?: boolean;
   readOnly?: boolean;
   "x-openmapx-setup"?: CredentialSetup;
@@ -65,6 +69,8 @@ export interface SchemaConfigField {
   type: string;
   enum?: string[];
   format?: string;
+  minimum?: number;
+  maximum?: number;
   default?: unknown;
   setup?: CredentialSetup;
 }
@@ -92,6 +98,12 @@ export function buildConfigDiff(
   for (const key of changedKeys) {
     const field = fields.find((candidate) => candidate.key === key);
     const value = values[key];
+    if (
+      field?.format &&
+      (OPERATOR_STRING_FORMATS as readonly string[]).includes(field.format) &&
+      (typeof value !== "string" || !validOperatorString(value, field.format))
+    )
+      throw Error(`${field.title} has an invalid format`);
     if (field && isStructuredField(field)) {
       try {
         diff[key] = JSON.parse(String(value));
@@ -134,6 +146,8 @@ export function extractConfigFields(
       type: def?.type ?? "string",
       enum: def?.enum,
       format: def?.format,
+      minimum: def?.minimum,
+      maximum: def?.maximum,
       default: def?.default,
       setup: readCredentialSetup(def),
     }));
@@ -148,6 +162,7 @@ export interface SchemaConfigFormProps {
   excludeKeys?: readonly string[];
   /** Optional env-var-prefix hint banner (services use `SERVICE_<ID>_<KEY>`). */
   envPrefix?: string;
+  ownership?: Record<string, ConfigurationOwnership>;
   /** Persist the changed-keys diff. Throw to surface an inline error. */
   onSave: (diff: Record<string, unknown>) => Promise<void>;
   /** Optional second action that also applies the change. */
@@ -167,6 +182,7 @@ export function SchemaConfigForm({
   resolvedConfig,
   excludeKeys,
   envPrefix,
+  ownership,
   onSave,
   onSaveAndApply,
   applyLabel = "Save & apply",
@@ -182,12 +198,16 @@ export function SchemaConfigForm({
     const initial: Record<string, unknown> = {};
     for (const field of fields) {
       const entry = resolvedConfig[field.key];
-      if (entry?.source !== "env") {
+      if (
+        entry?.source !== "env" &&
+        entry?.source !== "config.json" &&
+        ownership?.[field.key]?.writable !== false
+      ) {
         initial[field.key] = toFormValue(field, entry?.value ?? field.default ?? "");
       }
     }
     return initial;
-  }, [fields, resolvedConfig]);
+  }, [fields, resolvedConfig, ownership]);
 
   const [values, setValues] = useState<Record<string, unknown>>(computeInitialValues);
   const [pending, setPending] = useState<"save" | "apply" | null>(null);
@@ -215,19 +235,26 @@ export function SchemaConfigForm({
     const orig: Record<string, unknown> = {};
     for (const field of fields) {
       const entry = resolvedConfig[field.key];
-      if (entry?.source !== "env") {
+      if (
+        entry?.source !== "env" &&
+        entry?.source !== "config.json" &&
+        ownership?.[field.key]?.writable !== false
+      ) {
         orig[field.key] = toFormValue(field, entry?.value ?? field.default ?? "");
       }
     }
     return orig;
-  }, [fields, resolvedConfig]);
+  }, [fields, resolvedConfig, ownership]);
 
   const changedKeys = useMemo(
     () =>
       Object.keys(values).filter(
-        (k) => comparable(values[k]) !== comparable(originalValues[k] ?? ""),
+        (k) =>
+          !["env", "config.json"].includes(resolvedConfig[k]?.source ?? "") &&
+          ownership?.[k]?.writable !== false &&
+          comparable(values[k]) !== comparable(originalValues[k] ?? ""),
       ),
-    [values, originalValues],
+    [values, originalValues, resolvedConfig, ownership],
   );
 
   const saving = pending !== null;
@@ -290,7 +317,10 @@ export function SchemaConfigForm({
       {fields.map((field) => {
         const entry = resolvedConfig[field.key];
         const source: ConfigFieldSource = entry?.source ?? "default";
-        const isEnvOverridden = source === "env";
+        const isEnvOverridden =
+          source === "env" ||
+          source === "config.json" ||
+          ownership?.[field.key]?.writable === false;
         const displayValue = isEnvOverridden ? toFormValue(field, entry?.value) : values[field.key];
 
         return (
@@ -310,7 +340,13 @@ export function SchemaConfigForm({
               </Tooltip>
               {isEnvOverridden && (
                 <Chip
-                  label="env override"
+                  label={
+                    source === "config.json"
+                      ? "host file"
+                      : source === "env"
+                        ? "env override"
+                        : "host owned"
+                  }
                   size="small"
                   color="success"
                   sx={{ fontSize: "0.7rem" }}
@@ -322,13 +358,24 @@ export function SchemaConfigForm({
                 {field.description}
               </Typography>
             )}
+            {isEnvOverridden && (
+              <Typography variant="caption" color="text.secondary">
+                {source === "config.json"
+                  ? "Controlled by the host config file. Remove the host override, refresh, then save."
+                  : `Controlled by the host environment${ownership?.[field.key]?.envVar ? ` (${ownership[field.key].envVar})` : ""}. Remove the override, refresh, then save.`}
+              </Typography>
+            )}
             {field.setup && <CredentialSetupGuide setup={field.setup} />}
             {field.type === "boolean" ? (
               <FormControlLabel
                 control={
                   <Switch
                     size="small"
-                    checked={Boolean(displayValue)}
+                    checked={
+                      typeof displayValue === "string"
+                        ? ["true", "1"].includes(displayValue.toLowerCase())
+                        : Boolean(displayValue)
+                    }
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [field.key]: e.target.checked }))
                     }
@@ -389,12 +436,19 @@ export function SchemaConfigForm({
                 }}
                 disabled={isEnvOverridden || saving}
                 type={
-                  field.type === "number" || field.type === "integer"
+                  !isEnvOverridden && (field.type === "number" || field.type === "integer")
                     ? "number"
                     : field.format === "url"
                       ? "url"
                       : "text"
                 }
+                slotProps={{
+                  htmlInput: {
+                    min: field.minimum,
+                    max: field.maximum,
+                    step: field.type === "integer" ? 1 : "any",
+                  },
+                }}
                 placeholder={field.default !== undefined ? String(field.default) : undefined}
                 sx={{ maxWidth: 480 }}
               />

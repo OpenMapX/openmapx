@@ -25,6 +25,7 @@ export const detail: AdminIntegrationDetail = {
     customMetadata: { retained: ["full", 1] },
   },
   resolvedConfig: {},
+  configurationRevision: "a".repeat(64),
   dependencyStatus: [],
   secretsConfigured: true,
   credentialStatus: [

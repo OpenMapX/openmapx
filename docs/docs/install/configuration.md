@@ -673,7 +673,23 @@ so the catalogue stays in sync with the live manifests.
 
 ## Where to go next
 
-- [Getting started](./getting-started.md) for first deployment.
-- [Managing services](./managing-services.md) for applying configuration.
-- [Preparing data](./preparing-data.md) for targeted data preparation.
-- [Requirements](./requirements.md) for host and storage planning.
+- **[How it works](../overview/how-it-works.md)** — the service/integration model
+  these variables wire together.
+- **[Requirements](./requirements.md)** — host prerequisites and hardware sizing
+  for the engines you enable.
+- **[Getting started](./getting-started.md)**, **[Preparing data](./preparing-data.md)**,
+  and **[Managing services](./managing-services.md)** — the step-by-step
+  deployment, data-build, and lifecycle walkthroughs.
+
+### Changing release selection
+
+The default remains `main` before the first named preview exists. For deliberately published prereleases, set `preview` after the first publication. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then explicitly reselect with `pnpm openmapx compose release` or clear it when intentionally leaving release mode.
+
+### Generating configuration from the admin panel
+
+Saving settings and generating a configuration are separate from replacing
+containers. The Compose page's **Generate configuration** checks the preview
+revision, commits the current desired settings and prepares hardlinks without
+starting services. Use the guarded service Apply/Update or protected Settings
+workflow when container replacement is required. Host environment overrides retain
+their ownership and cannot be overwritten through this generation action.

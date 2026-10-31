@@ -1,30 +1,126 @@
 import { randomUUID } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { OpsOperation } from "@openmapx/core/ops";
-import { describe, expect, it, vi } from "vitest";
-import { createDockerRuntime, runContainedLogProcess, runContainedProcess } from "./docker-runtime";
+import { services } from "@openmapx/core/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
+import { testExecution } from "./__fixtures__/execution";
+import {
+  createDockerRuntime,
+  runContainedLogProcess,
+  runContainedProcess,
+  runContainedStreamingProcess,
+} from "./docker-runtime";
 import { dispatchOpsOperation } from "./runtime";
 
-const context = () => ({
+const preparedRoots: string[] = [];
+afterEach(() => {
+  for (const root of preparedRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+async function preparedStack(ids = ["motis", "postgis", "redis"]) {
+  const root = mkdtempSync(join(tmpdir(), "omx-docker-prepared-")),
+    infraDir = join(root, "infra/docker");
+  preparedRoots.push(root);
+  mkdirSync(infraDir, { mode: 0o755, recursive: true });
+  const loaded: services.LoadedService[] = ids.map((id) => ({
+    manifest: {
+      id,
+      name: id,
+      version: "1.0.0",
+      quality: "built-in",
+      container: { image: `example/${id}`, tag: "1" },
+    },
+    directory: join(root, "services", id),
+    enabled: true,
+    isBuiltIn: true,
+  }));
+  const generation = await services.commitConfigurationGeneration({
+    infraDir,
+    services: loaded,
+    input: {
+      domain: "fixture.invalid",
+      selectedRoots: loaded.map((s) => s.manifest.id),
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+  });
+  return {
+    revisionId: generation.revisionId,
+    stack: {
+      infraDir,
+      composePath: services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE),
+      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
+    },
+  };
+}
+
+/** The unit adapter boundary returns Docker's config read from the real generated inputs. */
+function readPreparedDockerConfig(
+  stack: { composePath: string; composeReleasePath: string },
+  file: string,
+  args: readonly string[],
+) {
+  expect(file).toBe("docker");
+  expect(args.slice(-3)).toEqual(["config", "--format", "json"]);
+  const serviceDefinitions: Record<string, unknown> = {};
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] !== "-f") continue;
+    const path = args[++index];
+    expect(
+      [stack.composePath, stack.composeReleasePath]
+        .filter(existsSync)
+        .map((path) => realpathSync(path)),
+    ).toContain(realpathSync(path!));
+    const configuration = parseYaml(readFileSync(path!, "utf8")) as {
+      services: Record<string, unknown>;
+    };
+    Object.assign(serviceDefinitions, configuration.services);
+  }
+  expect(Object.keys(serviceDefinitions).length).toBeGreaterThan(0);
+  return { stdout: JSON.stringify({ services: serviceDefinitions }), stderr: "" };
+}
+
+const ownedSnapshot = (serviceId = "redis") => ({
+  serviceId,
+  containerId: "a".repeat(64),
+  state: "running" as const,
+  provenance: {
+    project: "docker",
+    composeWorkingDirectory: "/trusted",
+    composeConfigFiles: ["/trusted/compose.yml"],
+    imageId: `sha256:${"b".repeat(64)}`,
+  },
+});
+const ownedServices = {
+  inspectOwnedServices: async () => ["redis", "motis", "postgis"].map(ownedSnapshot),
+};
+const context = (serviceId = "redis") => ({
+  execution: testExecution(),
   signal: new AbortController().signal,
   emitLog: () => undefined,
   claim: {
     fingerprint: "f".repeat(64),
     operation: { kind: "docker.status" } as const,
     source: "registry" as const,
-    capability: { revisionId: "registry-v1", values: {} },
+    capability: {
+      revisionId: "registry-v1",
+      values: { ownedService: JSON.stringify(ownedSnapshot(serviceId)) },
+    },
   },
 });
 
@@ -509,11 +605,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             const previous = await point(live);
             const candidate = await point(staging);
             const infra = join(root, `${layout}-${scenario}-infra`);
-            mkdirSync(infra);
+            mkdirSync(infra, { mode: 0o755 });
             const compose = join(infra, "compose.yml");
             const release = join(infra, "release.yml");
-            writeFileSync(join(infra, ".env"), "");
-            writeFileSync(release, "services: {}\n");
+            writeFileSync(join(infra, ".env"), "", { mode: 0o644 });
+            writeFileSync(release, "services: {}\n", { mode: 0o644 });
             const service = (name: string, path: string) => `  ${name}:
     image: ${image}
     container_name: ${name}
@@ -535,6 +631,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             writeFileSync(
               compose,
               `name: omx-canary-${randomUUID()}\nservices:\n${service("motis", live)}${service("motis-staging", staging)}`,
+              { mode: 0o644 },
             );
             const prefix = [
               "compose",
@@ -796,29 +893,133 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     240_000,
   );
 
+  it("starts a coordinator stack explicitly while preserving Data Manager and the executing agent", async () => {
+    const prepared = await preparedStack(["motis", "postgis", "data-manager", "ops-agent"]),
+      calls: string[][] = [];
+    const runtime = createDockerRuntime({
+      stack: prepared.stack,
+      fileExists: existsSync,
+      ownedServices,
+      execFile: async (_file, args) => {
+        calls.push([...args]);
+        return {
+          stdout: JSON.stringify({
+            services: {
+              motis: { depends_on: { "data-manager": {} } },
+              "data-manager": {},
+              postgis: {},
+              "ops-agent": {},
+            },
+          }),
+          stderr: "",
+        };
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
+      context(),
+    );
+    const starts = calls
+      .filter((args) => args.includes("up"))
+      .map((args) => args.slice(args.indexOf("up")));
+    expect(starts).toEqual([
+      ["up", "-d", "--no-recreate", "--no-deps", "motis", "postgis", "data-manager", "ops-agent"],
+      ["up", "-d", "--no-deps", "motis", "postgis"],
+    ]);
+    expect(starts.filter((args) => !args.includes("--no-recreate")).flat()).not.toContain(
+      "data-manager",
+    );
+    expect(starts.filter((args) => !args.includes("--no-recreate")).flat()).not.toContain(
+      "ops-agent",
+    );
+  });
+
+  it("names only the frozen generated closure when a release overlay declares disabled services", async () => {
+    const prepared = await preparedStack(),
+      calls: string[][] = [];
+    writeFileSync(
+      prepared.stack.composeReleasePath,
+      "services:\n  app-api:\n    image: example/api:1\n  data-manager:\n    image: example/data:1\n",
+      { mode: 0o600 },
+    );
+    const runtime = createDockerRuntime({
+      stack: prepared.stack,
+      fileExists: existsSync,
+      ownedServices,
+      execFile: async (file, args, options) => {
+        calls.push([...args]);
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
+        return { stdout: "", stderr: "" };
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "stack.start", expectedConfigurationRevisionId: prepared.revisionId },
+      context(),
+    );
+    expect(calls.find((args) => args.includes("up"))?.slice(-6)).toEqual([
+      "up",
+      "-d",
+      "--no-deps",
+      "motis",
+      "postgis",
+      "redis",
+    ]);
+  });
+
   it.each([
-    { kind: "stack.start" },
-    { kind: "service.start", serviceId: "postgis" },
-    { kind: "service.stop", serviceId: "postgis" },
+    { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
+    {
+      kind: "service.start",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
+    { kind: "service.stop", serviceId: "motis" },
     { kind: "service.restart", serviceId: "postgis" },
-    { kind: "service.recreate", serviceId: "postgis" },
-    { kind: "service.recreateIsolated", serviceId: "postgis" },
+    {
+      kind: "service.recreate",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
+    {
+      kind: "service.recreateIsolated",
+      serviceId: "postgis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    },
     { kind: "service.remove", serviceId: "postgis" },
   ] satisfies OpsOperation[])("allows the built-in shutdown grace for $kind", async (operation) => {
+    const prepared = await preparedStack();
+    const bound: OpsOperation =
+      operation.kind === "stack.start"
+        ? { kind: operation.kind, expectedConfigurationRevisionId: prepared.revisionId }
+        : operation.kind === "service.start" ||
+            operation.kind === "service.recreate" ||
+            operation.kind === "service.recreateIsolated"
+          ? {
+              kind: operation.kind,
+              serviceId: operation.serviceId,
+              expectedConfigurationRevisionId: prepared.revisionId,
+            }
+          : operation;
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/trusted",
-        composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => false,
-      execFile: async (_file, _args, options) => {
+      ownedServices,
+      execFile: async (file, args, options) => {
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         expect(options.timeout).toBe(600_000);
         expect(options.signal.aborted).toBe(false);
         return { stdout: "", stderr: "" };
       },
     });
-    await expect(dispatchOpsOperation(runtime, operation, context())).resolves.toEqual({
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        bound,
+        context("serviceId" in operation ? operation.serviceId : "redis"),
+      ),
+    ).resolves.toEqual({
       changed: true,
     });
   });
@@ -827,7 +1028,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     [{ kind: "docker.status" }, 5_000],
     [{ kind: "stack.status" }, 120_000],
     [{ kind: "service.logs", serviceId: "postgis", tail: 10 }, 120_000],
-    [{ kind: "service.pull", serviceId: "postgis" }, 600_000],
+    [{ kind: "service.restart", serviceId: "postgis" }, 600_000],
   ] satisfies [OpsOperation, number][])(
     "preserves the execution budget for %j",
     async (operation, timeout) => {
@@ -838,28 +1039,34 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile: async (_file, _args, options) => {
           expect(options.timeout).toBe(timeout);
           return { stdout: "", stderr: "" };
         },
       });
-      await dispatchOpsOperation(runtime, operation, context());
+      await dispatchOpsOperation(
+        runtime,
+        operation,
+        context("serviceId" in operation ? operation.serviceId : "redis"),
+      );
     },
   );
 
   it("terminates aggregate recreation work exactly at the whole-command deadline", async () => {
+    const prepared = await preparedStack(),
+      entered = Promise.withResolvers<void>();
     vi.useFakeTimers();
     const completed: number[] = [];
     let terminated = false;
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/trusted",
-        composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => false,
-      execFile: (_file, _args, options) =>
-        new Promise((resolve, reject) => {
+      ownedServices,
+      execFile: async (file, args, options) => {
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
+        return new Promise((resolve, reject) => {
+          entered.resolve();
           const deadline = setTimeout(() => {
             terminated = true;
             for (const timer of steps) clearTimeout(timer);
@@ -874,15 +1081,21 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
               }
             }, delay),
           );
-        }),
+        });
+      },
     });
     try {
       const result = dispatchOpsOperation(
         runtime,
-        { kind: "service.recreate", serviceId: "postgis" },
+        {
+          kind: "service.recreate",
+          serviceId: "postgis",
+          expectedConfigurationRevisionId: prepared.revisionId,
+        },
         context(),
       );
       const rejected = expect(result).rejects.toThrow("Contained process failed");
+      await entered.promise;
       await vi.advanceTimersByTimeAsync(599_999);
       expect(completed).toEqual([300_000]);
       expect(terminated).toBe(false);
@@ -897,42 +1110,45 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   });
 
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
+    const prepared = await preparedStack();
+    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n", { mode: 0o644 });
+    writeFileSync(join(prepared.stack.infraDir, ".env"), "", { mode: 0o644 });
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
-      stack: {
-        infraDir: "/stack",
-        composePath: "/stack/state/ops-agent/configuration/current/docker-compose.generated.yml",
-        composeReleasePath: "/stack/docker-compose.release.yml",
-      },
+      stack: prepared.stack,
       fileExists: () => true,
-      execFile: async (file, args) => {
+      execFile: async (file, args, options) => {
         calls.push({ file, args });
+        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
         return { stdout: "ok\n", stderr: "" };
       },
     });
 
     await dispatchOpsOperation(
       runtime,
-      { kind: "service.recreate", serviceId: "motis" },
+      {
+        kind: "service.recreate",
+        serviceId: "motis",
+        expectedConfigurationRevisionId: prepared.revisionId,
+      },
       context(),
     );
     await dispatchOpsOperation(
       runtime,
-      { kind: "service.recreateIsolated", serviceId: "motis" },
+      {
+        kind: "service.recreateIsolated",
+        serviceId: "motis",
+        expectedConfigurationRevisionId: prepared.revisionId,
+      },
       context(),
     );
-    const stack = [
-      "compose",
-      "--env-file",
-      "/stack/.env",
-      "-f",
-      "/stack/state/ops-agent/configuration/current/docker-compose.generated.yml",
-      "-f",
-      "/stack/docker-compose.release.yml",
-    ];
-    expect(calls).toEqual([
+    const stack = services.stackComposeArgs(prepared.stack, () => true);
+    expect(calls.filter((call) => call.args.includes("up"))).toEqual([
       { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "motis"] },
       { file: "docker", args: [...stack, "up", "-d", "--force-recreate", "--no-deps", "motis"] },
+    ]);
+    expect(calls.filter((call) => call.args.includes("config"))).toEqual([
+      { file: "docker", args: [...stack, "config", "--format", "json"] },
     ]);
   });
 
@@ -946,6 +1162,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return {
@@ -957,8 +1174,17 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
     await dispatchOpsOperation(runtime, { kind: "motis.staging.restart" }, context());
     await dispatchOpsOperation(runtime, { kind: "motis.primary.stop" }, context());
-    expect(calls).toEqual([
-      ["restart", "motis-staging"],
+    await dispatchOpsOperation(runtime, { kind: "motis.primary.restart" }, context());
+    expect(calls.at(-1)!.slice(-5)).toEqual(["up", "-d", "--force-recreate", "--no-deps", "motis"]);
+    expect(calls[0]).toContain("compose");
+    expect(calls[0]!.slice(-5)).toEqual([
+      "up",
+      "-d",
+      "--force-recreate",
+      "--no-deps",
+      "motis-staging",
+    ]);
+    expect(calls.slice(1, -1)).toEqual([
       ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],
       ["stop", "motis"],
       ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],
@@ -988,6 +1214,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile,
       });
 
@@ -1119,7 +1346,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
   });
 
-  it("owns the container and path for data-manager capacity and feed-proxy effects", async () => {
+  it("owns the capacity path and refuses feed-proxy effects without an original transit claim", async () => {
     const calls: string[][] = [];
     const runtime = createDockerRuntime({
       stack: {
@@ -1128,6 +1355,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         return {
@@ -1148,15 +1376,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         { kind: "feedProxy.validateAndReload", candidateId: "feedproxy-1" },
         context(),
       ),
-    ).resolves.toEqual({ candidateId: "feedproxy-1", reloaded: true });
+    ).rejects.toThrow("Original owned transit resource claim required");
 
-    // The caller supplied neither a container nor a path, and the proxy is
-    // validated before it is reloaded.
-    expect(calls).toEqual([
-      ["exec", "postgis", "df", "-Pk", "/var/lib/postgresql"],
-      ["exec", "motis-feed-proxy", "nginx", "-t"],
-      ["exec", "motis-feed-proxy", "nginx", "-s", "reload"],
-    ]);
+    // Capacity owns its fixed path. A bare candidate ID cannot authorize proxy effects;
+    // actual owned-candidate positives live in data-transit-resource-source.test.ts.
+    expect(calls).toEqual([["exec", "postgis", "df", "-Pk", "/var/lib/postgresql"]]);
   });
 
   describe("Valhalla traffic effects", () => {
@@ -1175,6 +1399,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         execFile: execFile as never,
       });
 
@@ -1190,6 +1415,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -1271,9 +1497,9 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-planted-"));
         const dataRoot = join(root, "data");
         const shared = join(dataRoot, "valhalla", "osm-pbf");
-        mkdirSync(shared, { recursive: true });
+        mkdirSync(shared, { mode: 0o755, recursive: true });
         const sentinel = join(root, "sentinel");
-        writeFileSync(sentinel, "untouched");
+        writeFileSync(sentinel, "untouched", { mode: 0o644 });
         // The temporary name the agent used to write, and the manifest itself.
         symlinkSync(sentinel, join(shared, `traffic-generations.json.${"f".repeat(64)}.tmp`));
         symlinkSync(sentinel, join(shared, "traffic-generations.json"));
@@ -1326,8 +1552,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-swapped-"));
       const dataRoot = join(root, "data");
       const outside = join(root, "outside");
-      mkdirSync(join(outside, "osm-pbf"), { recursive: true });
-      mkdirSync(dataRoot);
+      mkdirSync(join(outside, "osm-pbf"), { mode: 0o755, recursive: true });
+      mkdirSync(dataRoot, { mode: 0o755 });
       symlinkSync(outside, join(dataRoot, "valhalla"));
       try {
         const runtime = createDockerRuntime({
@@ -1367,6 +1593,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             calls.push([...args]);
@@ -1416,6 +1643,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
+          ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
@@ -1488,7 +1716,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     it("requires a coherent maintenance generation manifest before reporting ready", async () => {
       const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-inspect-"));
       const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-      mkdirSync(sharedDir, { recursive: true });
+      mkdirSync(sharedDir, { mode: 0o755, recursive: true });
       const runtime = createDockerRuntime({
         stack: {
           infraDir: "/trusted",
@@ -1496,6 +1724,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
+        ownedServices,
         trafficDataRoot: dataRoot,
         execFile: async (_file, args) => ({
           stdout:
@@ -1522,6 +1751,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           waysToEdgesGeneration: generation,
           completedAt: new Date().toISOString(),
         }),
+        { mode: 0o644 },
       );
       await expect(
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
@@ -1533,7 +1763,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     it("reports a manifest the watchdog is re-checking as inconclusive, not as a rebuild", async () => {
       const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-unverified-"));
       const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
-      mkdirSync(sharedDir, { recursive: true });
+      mkdirSync(sharedDir, { mode: 0o755, recursive: true });
       const calls: string[][] = [];
       const runtime = createDockerRuntime({
         stack: {
@@ -1548,7 +1778,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           return { stdout: "100\n", stderr: "" };
         },
       });
-      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}");
+      writeFileSync(join(sharedDir, "traffic-generations.unverified.json"), "{}", { mode: 0o644 });
 
       await expect(
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
@@ -1600,12 +1830,19 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: "", stderr: "" }),
     });
     await expect(
       dispatchOpsOperation(
         runtime,
-        { expectedCurrentRevisionId: null, kind: "stack.render", revisionId: "revision_1" },
+        {
+          expectedCurrentRevisionId: null,
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running",
+          kind: "stack.render",
+          revisionId: `cfg1_${"a".repeat(43)}`,
+        },
         context(),
       ),
     ).rejects.toMatchObject({
@@ -1615,7 +1852,15 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       dispatchOpsOperation(runtime, { kind: "stack.stop" }, context()),
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
     await expect(
-      dispatchOpsOperation(runtime, { kind: "service.update", serviceId: "app-api" }, context()),
+      dispatchOpsOperation(
+        runtime,
+        {
+          kind: "service.update",
+          serviceId: "app-api",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
+        context(),
+      ),
     ).rejects.toMatchObject({ name: "OpsNotWiredError" });
   });
 
@@ -1702,6 +1947,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async (_file, args) => {
         calls.push([...args]);
         if (args.includes("ps")) {
@@ -1769,16 +2015,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
   it("follows one fixed service with a bounded duration and typed event emitter", async () => {
     const emitted: Array<{ stream: "stdout" | "stderr"; message: string }> = [];
     const followLogs = vi.fn(async (_file, args, options) => {
-      expect(args).toEqual([
-        "compose",
-        "-f",
-        "/trusted/compose.yml",
-        "logs",
-        "-f",
-        "--no-color",
-        "--tail=20",
-        "redis",
-      ]);
+      expect(args).toEqual(["logs", "--follow", "--tail=20", "a".repeat(64)]);
       expect(options.timeout).toBe(3_000);
       options.onLine("stdout", "ready");
       options.onLine("stderr", "bounded warning");
@@ -1791,6 +2028,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: "", stderr: "" }),
       followLogs,
     });
@@ -1816,6 +2054,37 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     ]);
   });
 
+  it.each(["credentials", "encoded-budget"])(
+    "bounds snapshot %s through the production adapter",
+    async (kind) => {
+      const stdout =
+        kind === "credentials"
+          ? "Authorization: Be\rar\rer\rsnapshot-secret-value\nready\n"
+          : Array.from({ length: 1000 }, () => `newest-${'"'.repeat(900)}\n`).join("");
+      expect(Buffer.byteLength(stdout)).toBeLessThan(1024 * 1024);
+      const runtime = createDockerRuntime({
+        stack: {
+          infraDir: "/trusted",
+          composePath: "/trusted/compose.yml",
+          composeReleasePath: "/trusted/release.yml",
+        },
+        fileExists: () => false,
+        ownedServices,
+        execFile: async () => ({ stdout, stderr: "" }),
+      });
+      const result = await dispatchOpsOperation(
+        runtime,
+        { kind: "service.logs", serviceId: "redis", tail: 1000 },
+        context(),
+      );
+      expect(JSON.stringify(result)).not.toContain("snapshot-secret-value");
+      expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(1024 * 1024);
+      expect(result.lines.length).toBeLessThanOrEqual(1000);
+      if (kind === "credentials") expect(result.lines).toContain("ready");
+      else expect(result.truncated).toBe(true);
+    },
+  );
+
   it("bounds snapshot log lines in UTF-8 bytes and reports truncation", async () => {
     const runtime = createDockerRuntime({
       stack: {
@@ -1824,6 +2093,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: async () => ({ stdout: `${"😀".repeat(1_500)}\nsecond\nthird\n`, stderr: "" }),
     });
     const result = await dispatchOpsOperation(
@@ -1960,6 +2230,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
+      ownedServices,
       execFile: (_file, _args, options) =>
         runContainedProcess(process.execPath, ["-e", script, ready, marker], {
           ...options,
@@ -1968,8 +2239,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     });
     const operation = dispatchOpsOperation(
       runtime,
-      { kind: "service.stop", serviceId: "postgis" },
-      { ...context(), signal: controller.signal },
+      { kind: "service.stop", serviceId: "motis" },
+      { ...context("motis"), signal: controller.signal },
     );
     const rejected = expect(operation).rejects.toThrow("Contained process failed");
     try {
@@ -1988,7 +2259,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     }
   });
 
-  it.each(["action", "follow"] as const)(
+  it.each(["action", "follow", "stream"] as const)(
     "contains a residual TERM-ignoring descendant for %s authority",
     async (kind) => {
       const root = mkdtempSync(join(tmpdir(), "openmapx-contained-group-"));
@@ -2013,18 +2284,134 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
               maxBuffer: 1_024,
               killGraceMs: 20,
             })
-          : runContainedLogProcess(process.execPath, ["-e", parentScript], {
-              signal: new AbortController().signal,
-              timeout: 5_000,
-              maxBuffer: 1_024,
-              onLine: () => undefined,
-            });
+          : kind === "stream"
+            ? runContainedStreamingProcess(process.execPath, ["-e", parentScript], {
+                signal: new AbortController().signal,
+                timeout: 5000,
+                killGraceMs: 20,
+                onLine: () => undefined,
+                redact: (x) => x,
+              })
+            : runContainedLogProcess(process.execPath, ["-e", parentScript], {
+                signal: new AbortController().signal,
+                timeout: 5_000,
+                maxBuffer: 1_024,
+                onLine: () => undefined,
+              });
 
-      await expect(operation).rejects.toThrow(/Contained .*process failed/);
+      await expect(operation).rejects.toThrow(/Contained .*process failed|Operation failed/);
       await new Promise((resolve) => setTimeout(resolve, 2_500));
       expect(existsSync(marker)).toBe(false);
       rmSync(root, { recursive: true, force: true });
     },
     12_000,
   );
+});
+
+describe("durable streaming process containment", () => {
+  it("does not kill a noisy successful child when projection fails", async () => {
+    const diagnostics = await runContainedStreamingProcess(
+      process.execPath,
+      [
+        "-e",
+        "for(let i=0;i<2048;i++) console.log('x'.repeat(1024));console.error('last-diagnostic');",
+      ],
+      {
+        signal: new AbortController().signal,
+        timeout: 5000,
+        onLine: () => {
+          throw Error("projection failed");
+        },
+        redact: (x) => x,
+      },
+    );
+    expect(diagnostics).toMatchObject({
+      truncated: true,
+      tail: expect.arrayContaining([{ stream: "stderr", message: "last-diagnostic" }]),
+    });
+    expect(Buffer.byteLength(JSON.stringify(diagnostics))).toBeLessThanOrEqual(16 * 1024);
+  });
+  it.each(["abort", "deadline"] as const)(
+    "contains descendants on explicit %s with short safe errors",
+    async (mode) => {
+      const root = mkdtempSync(join(tmpdir(), "openmapx-stream-containment-"));
+      const ready = join(root, "ready");
+      const marker = join(root, "marker");
+      const script = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});spawn(process.execPath,['-e', ${JSON.stringify("process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(process.argv[1],'ready');setTimeout(()=>require('node:fs').writeFileSync(process.argv[2],'late'),5000);setInterval(()=>{},1000)")},process.argv[1],process.argv[2]],{stdio:'ignore'});console.error('password=private');setInterval(()=>{},1000);`;
+      const controller = new AbortController();
+      const completion = runContainedStreamingProcess(
+        process.execPath,
+        ["-e", script, ready, marker],
+        {
+          signal: controller.signal,
+          timeout: mode === "deadline" ? 3500 : 10_000,
+          killGraceMs: 20,
+          onLine: () => undefined,
+          redact: (x) => x,
+        },
+      );
+      const rejected = expect(completion).rejects.toMatchObject({
+        name: "OpsExecutionFailure",
+        errorClass: mode === "deadline" ? "timeout" : "runtime",
+      });
+      try {
+        await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 3000 });
+        if (mode === "abort") controller.abort();
+        await rejected;
+        const failure = await completion.catch((x) => x);
+        expect(JSON.stringify(failure.failureResult)).not.toContain("private");
+        await new Promise((resolve) => setTimeout(resolve, 5100));
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        controller.abort();
+        await rejected;
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+it("streams the actual default fixed Docker human output without the JSON collector limit", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-fixed-docker-"));
+  const ready = join(root, "ready");
+  const release = join(root, "release");
+  writeFileSync(
+    join(root, "docker"),
+    `#!${process.execPath}\nconst{writeFileSync,existsSync}=require('node:fs');console.log('phase-one');writeFileSync(${JSON.stringify(ready)},'ready');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(release)})){clearInterval(timer);process.stdout.write('x'.repeat(2*1024*1024)+'\\nlast-diagnostic\\n');}},5);`,
+    { mode: 0o644 },
+  );
+  chmodSync(join(root, "docker"), 0o700);
+  vi.stubEnv("PATH", root + delimiter + process.env.PATH);
+  const seen: string[] = [];
+  const runtime = createDockerRuntime({
+    stack: {
+      infraDir: root,
+      composePath: join(root, "compose.yml"),
+      composeReleasePath: join(root, "release.yml"),
+    },
+    fileExists: () => false,
+  });
+  const completion = dispatchOpsOperation(
+    runtime,
+    { kind: "service.restart", serviceId: "redis" },
+    {
+      ...context(),
+      emitLog: (_s, line) => {
+        seen.push(line);
+      },
+    },
+  );
+  void completion.catch(() => undefined);
+  try {
+    await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+    await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
+    writeFileSync(release, "go", { mode: 0o644 });
+    await expect(completion).resolves.toEqual({ changed: true });
+    expect(seen).toContain("last-diagnostic");
+  } finally {
+    writeFileSync(release, "go", { mode: 0o644 });
+    await completion.catch(() => undefined);
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

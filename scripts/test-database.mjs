@@ -24,7 +24,14 @@ export function createDatabaseTestCommand(group = "all", env = process.env) {
       );
     }
   }
-  if (group !== "ingestion" && !env.DATABASE_URL?.trim()) {
+  if (
+    !env.DATABASE_URL?.trim() &&
+    !(
+      group === "ingestion" &&
+      env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL?.trim() &&
+      env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL?.trim()
+    )
+  ) {
     throw new Error("DATABASE_URL must identify an owned, migrated disposable database");
   }
   return {
@@ -38,6 +45,10 @@ export function createDatabaseTestCommand(group = "all", env = process.env) {
     env: {
       ...env,
       OPENMAPX_RUN_DATABASE_TESTS: "1",
+      OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL:
+        env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL ?? env.DATABASE_URL,
+      OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL:
+        env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL ?? env.DATABASE_URL,
       OPENMAPX_RUN_RESTORE_DATABASE_TESTS: requiresBackup ? "1" : "0",
     },
   };

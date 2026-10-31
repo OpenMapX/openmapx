@@ -223,7 +223,9 @@ describe("private Transitous runner", () => {
     const { catalogDir, stagingDir } = fixture();
     const killed: number[] = [];
     const originalKill = process.kill;
-    (process as { kill: unknown }).kill = ((pid: number) => {
+    (process as { kill: unknown }).kill = ((pid: number, signal?: string | number) => {
+      if (signal === 0)
+        throw Object.assign(Error("Synthetic process group has exited"), { code: "ESRCH" });
       killed.push(pid);
     }) as typeof process.kill;
 

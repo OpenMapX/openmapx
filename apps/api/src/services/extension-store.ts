@@ -727,7 +727,11 @@ export async function listInstalledExtensions(): Promise<InstalledExtensionView[
     arr.push({ kind: c.kind, componentId: c.componentId });
     byExt.set(c.extensionId, arr);
   }
-  return rows.map((r) => ({ ...r, components: byExt.get(r.id) ?? [] }));
+  // Standalone parents have no distributable extension manifest. Their exact
+  // ownership/removal controls live in the independent Local integrations view.
+  return rows
+    .filter((r) => r.installationKind !== "standalone")
+    .map((r) => ({ ...r, components: byExt.get(r.id) ?? [] }));
 }
 
 export { PLATFORM_VERSION };

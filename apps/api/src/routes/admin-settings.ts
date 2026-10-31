@@ -73,23 +73,25 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       });
     }
 
-    for (const { key, value } of toWrite) {
-      await db
-        .insert(systemSettings)
-        .values({
-          key,
-          value: value as never,
-          updatedBy: adminSession.user.id,
-        })
-        .onConflictDoUpdate({
-          target: systemSettings.key,
-          set: {
+    await db.transaction(async (transaction) => {
+      for (const { key, value } of toWrite) {
+        await transaction
+          .insert(systemSettings)
+          .values({
+            key,
             value: value as never,
-            updatedAt: new Date(),
             updatedBy: adminSession.user.id,
-          },
-        });
-    }
+          })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: {
+              value: value as never,
+              updatedAt: new Date(),
+              updatedBy: adminSession.user.id,
+            },
+          });
+      }
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -110,7 +112,13 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     await refreshDataUsePolicy();
 
     const groups = await resolveSettings();
-    return { ok: true, groups };
+    return {
+      ok: true,
+      groups,
+      ...(toWrite.some((v) => defsByKey.get(v.key)?.group === "auth")
+        ? { authPolicyApplication: "pending" as const }
+        : {}),
+    };
   });
 
   app.post(
@@ -236,26 +244,34 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       let imported = 0;
       const skipped: string[] = [];
 
+      const toWrite: Array<{ key: string; value: unknown }> = [];
       for (const [key, value] of Object.entries(settings)) {
         if (!allowedKeys.has(key)) continue;
         const def = defsByKey.get(key);
         if (!def || !matchesDeclaredType(def, value)) {
+          if (def?.group === "auth")
+            return reply.code(400).send({ error: "Invalid authentication policy draft" });
           skipped.push(key);
           continue;
         }
-        await db
-          .insert(systemSettings)
-          .values({ key, value: value as never, updatedBy: adminSession.user.id })
-          .onConflictDoUpdate({
-            target: systemSettings.key,
-            set: {
-              value: value as never,
-              updatedAt: new Date(),
-              updatedBy: adminSession.user.id,
-            },
-          });
-        imported++;
+        toWrite.push({ key, value });
       }
+      await db.transaction(async (transaction) => {
+        for (const { key, value } of toWrite) {
+          await transaction
+            .insert(systemSettings)
+            .values({ key, value: value as never, updatedBy: adminSession.user.id })
+            .onConflictDoUpdate({
+              target: systemSettings.key,
+              set: {
+                value: value as never,
+                updatedAt: new Date(),
+                updatedBy: adminSession.user.id,
+              },
+            });
+        }
+      });
+      imported = toWrite.length;
 
       await writeAuditLog({
         actorId: adminSession.user.id,
@@ -267,7 +283,14 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       });
 
       invalidateMapSettings();
-      return { ok: true, imported, skipped };
+      return {
+        ok: true,
+        imported,
+        skipped,
+        ...(toWrite.some((v) => defsByKey.get(v.key)?.group === "auth")
+          ? { authPolicyApplication: "pending" as const }
+          : {}),
+      };
     },
   );
 

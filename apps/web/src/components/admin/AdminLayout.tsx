@@ -1,6 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useCallback, useState } from "react";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { useHydrated } from "@/lib/useHydrated";
@@ -20,7 +21,7 @@ interface AdminUser {
 interface AdminLayoutProps {
   children: React.ReactNode;
   user: AdminUser;
-  selfHosted?: boolean;
+  selfHosted?: boolean | null;
 }
 
 export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutProps) {
@@ -70,7 +71,17 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
                     py: { xs: 2, lg: 2.5 },
                   }}
                 >
-                  {children}
+                  {hydrated ? (
+                    children
+                  ) : (
+                    <Box
+                      role="status"
+                      aria-label="Loading administration"
+                      sx={{ display: "flex", justifyContent: "center", py: 6 }}
+                    >
+                      <CircularProgress size={24} />
+                    </Box>
+                  )}
                 </Box>
               </Box>
             </Box>

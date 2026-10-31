@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
 import { DOCUMENT_PATH, generateDocument } from "./document.js";
 
 try {
@@ -8,10 +9,14 @@ try {
       throw new Error(
         "Data-manager OpenAPI differs. Run pnpm data-manager:openapi:generate and commit the result.",
       );
-    console.log("Data-manager OpenAPI is current (48 operations).");
+    console.log(
+      `Data-manager OpenAPI is current (${Object.keys(dataManagerOperations).length} operations).`,
+    );
   } else {
     await writeFile(DOCUMENT_PATH, document);
-    console.log("Wrote services/data-manager/openapi.json (48 operations).");
+    console.log(
+      `Wrote services/data-manager/openapi.json (${Object.keys(dataManagerOperations).length} operations).`,
+    );
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

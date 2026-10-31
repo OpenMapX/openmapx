@@ -6,16 +6,6 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
-    "./pins": {
-      "types": "./src/pins.ts",
-      "default": "./src/pins.ts"
-    }
-  },
   "sideEffects": false,
   "dependencies": {
     "@openmapx/mobility-formats": "workspace:^",
@@ -28,5 +18,19 @@
     "@types/node": "^26.6.6",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./pins": {
+      "types": "./src/pins.ts",
+      "default": "./src/pins.ts"
+    },
+    "./feed-credentials": {
+      "types": "./src/feed-credentials.ts",
+      "default": "./src/feed-credentials.ts"
+    }
   }
 }

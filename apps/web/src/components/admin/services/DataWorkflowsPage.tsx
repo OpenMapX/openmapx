@@ -1,15 +1,11 @@
 "use client";
 
 import BuildIcon from "@mui/icons-material/Build";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StorageIcon from "@mui/icons-material/Storage";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -40,13 +36,13 @@ import type { AdminOperationContract } from "../operations/adminOperationsApi";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
+import { ArtifactTransfersSection } from "./ArtifactTransfersSection";
+import { DataInventorySection } from "./DataInventorySection";
 import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
 import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
 import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
 
-type OsmInfo = AdminServiceData["osm"];
-type BuildStatus = AdminServiceData["builds"][number];
 type MotisTransitousStatus = AdminServiceData["motisTransitous"];
 
 /** Overture and search operations have their own maintenance sections below. */
@@ -65,19 +61,6 @@ function formatDate(iso: string): string {
     minute: "2-digit",
   });
 }
-
-const BUILD_LABELS: Record<string, string> = {
-  valhalla: "Valhalla",
-  osrm: "OSRM",
-  otp: "OpenTripPlanner",
-  motis: "MOTIS",
-  motisFeedProxy: "MOTIS Feed Proxy",
-  tiles: "Tile Server",
-  pelias: "Pelias",
-  nominatim: "Nominatim",
-  photon: "Photon",
-  overpass: "Overpass",
-};
 
 function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
@@ -170,203 +153,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
             </Grid>
           ))}
       </Grid>
-    </Paper>
-  );
-}
-
-function OsmSection({ osm }: { osm: OsmInfo }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <StorageIcon color="primary" />
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 600,
-          }}
-        >
-          OSM Planet Data
-        </Typography>
-      </Stack>
-      {osm.found ? (
-        <Stack spacing={1}>
-          <Stack
-            direction="row"
-            spacing={2}
-            useFlexGap
-            sx={{
-              flexWrap: "wrap",
-            }}
-          >
-            <Box>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                File
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  fontFamily: "monospace",
-                }}
-              >
-                {osm.filename}
-              </Typography>
-            </Box>
-            {osm.region && (
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Region
-                </Typography>
-                <Typography variant="body2">{osm.region}</Typography>
-              </Box>
-            )}
-            {osm.sizeBytes && (
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Size
-                </Typography>
-                <Typography variant="body2">{formatBytes(osm.sizeBytes)}</Typography>
-              </Box>
-            )}
-            {osm.modifiedAt && (
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Downloaded
-                </Typography>
-                <Typography variant="body2">{formatDate(osm.modifiedAt)}</Typography>
-              </Box>
-            )}
-          </Stack>
-          <Chip
-            icon={<CheckCircleIcon />}
-            label="OSM PBF present"
-            color="success"
-            size="small"
-            sx={{ width: "fit-content" }}
-          />
-        </Stack>
-      ) : (
-        <Alert severity="warning" sx={{ mb: 1 }}>
-          No OSM PBF file found in the data directory. Queue an OSM download above.
-        </Alert>
-      )}
-    </Paper>
-  );
-}
-
-function BuildsSection({ builds }: { builds: BuildStatus[] }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <BuildIcon color="primary" />
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 600,
-          }}
-        >
-          Service Build Inventory
-        </Typography>
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-          }}
-        >
-          Read-only view of which services have populated their data dirs
-        </Typography>
-      </Stack>
-      <Grid container spacing={2}>
-        {builds.map((b) => (
-          <Grid key={b.target} size={{ xs: 12, sm: 6, md: 4 }}>
-            <Card variant="outlined">
-              <CardContent sx={{ pb: "12px !important" }}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{
-                    alignItems: "center",
-                    mb: 1,
-                  }}
-                >
-                  {b.built ? (
-                    <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                  ) : (
-                    <HelpOutlineIcon fontSize="small" sx={{ color: "text.disabled" }} />
-                  )}
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 600,
-                    }}
-                  >
-                    {BUILD_LABELS[b.target] ?? b.target}
-                  </Typography>
-                </Stack>
-                {b.builtAt && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "text.secondary",
-                      display: "block",
-                    }}
-                  >
-                    Built {formatDate(b.builtAt)}
-                  </Typography>
-                )}
-                {!b.built && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "text.secondary",
-                      display: "block",
-                    }}
-                  >
-                    Not built
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-      <Alert severity="info" sx={{ mt: 2 }}>
-        Each service builds its own indexes/graphs on first start. Trigger rebuilds from the service
-        catalog or queue data update/build operations.
-      </Alert>
     </Paper>
   );
 }
@@ -596,9 +382,10 @@ export function DataWorkflowsPage() {
 }
 function DataWorkflowsView() {
   const { apiUrl, client } = useActivityClient();
+  const [osmOffset, setOsmOffset] = useState(0);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    ...serviceAdminQueries(client, apiUrl).data(),
+    ...serviceAdminQueries(client, apiUrl).data({ osmLimit: 50, osmOffset }),
     refetchInterval: 30_000,
   });
 
@@ -642,7 +429,8 @@ function DataWorkflowsView() {
       </Box>
       <Stack spacing={2}>
         <DataOperationsSection apiUrl={apiUrl} />
-        <OsmSection osm={data.osm} />
+        <DataInventorySection osm={data.osm} builds={data.builds} onPageChange={setOsmOffset} />
+        <ArtifactTransfersSection apiUrl={apiUrl} />
         <OvertureMaintenance apiUrl={apiUrl} />
         <SearchIndexMaintenance apiUrl={apiUrl} />
         <AmbientPlacesMaintenance apiUrl={apiUrl} />
@@ -650,7 +438,6 @@ function DataWorkflowsView() {
         <TransitSourcesSection apiUrl={apiUrl} />
         <MotisTransitousSection status={data.motisTransitous} />
         <SharedMobilityPolicySection apiUrl={apiUrl} />
-        <BuildsSection builds={data.builds} />
       </Stack>
     </Box>
   );

@@ -146,7 +146,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     try {
       const { searchTransitCatalog } = await import("../services/transit-catalog/index.js");
       const sources = await searchTransitCatalog(req.query.search, req.query.country);
-      return { sources, total: sources.length };
+      const limit = req.query.limit ?? 50,
+        offset = req.query.offset ?? 0;
+      return {
+        sources: sources.slice(offset, offset + limit),
+        total: sources.length,
+        limit,
+        offset,
+      };
     } catch (error) {
       return reply.code(502).send({ error: (error as Error).message });
     }
@@ -382,7 +389,44 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(result.status).send(result.data);
     },
   );
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitSourcesSourceIdDisable",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
+      const result = await dm.disableTransitSource(
+        req.params.sourceId,
+        { ...req.body, triggeredBy },
+        dataManagerOptions(),
+      );
+      if (result.status === 202) {
+        const body = result.data;
+        await writeAuditLog({
+          actorId: auth.kind === "session" ? auth.userId : null,
+          targetId: req.params.sourceId,
+          targetType: "transit-source",
+          action: "transit.source.disable",
+          details: { jobId: body.jobId ?? null },
+          request: req,
+        });
+      }
+      return reply.code(result.status).send(result.data);
+    },
+  );
 
+  registerDataManagerAdminRoute(app, "getApiDataManagerTransitProfile", async (_req, reply) => {
+    const result = await dm.getTransitProfile(dataManagerOptions());
+    return reply.code(result.status).send(result.data);
+  });
+  registerDataManagerAdminRoute(
+    app,
+    "postApiDataManagerTransitSyncPreflight",
+    async (req, reply) => {
+      const result = await dm.inspectTransitSyncPreflight(req.body, dataManagerOptions());
+      return reply.code(result.status).send(result.data);
+    },
+  );
   registerDataManagerAdminRoute(app, "postApiDataManagerTransitSync", async (req, reply) => {
     const auth = await authenticateDataManager(req);
 
@@ -392,6 +436,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       {
         idempotencyKey: body.idempotencyKey,
         countries: body.countries,
+        preflightId: body.preflightId,
+        fingerprint: body.fingerprint,
         triggeredBy,
       },
       dataManagerOptions(),
@@ -505,6 +551,21 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       },
     },
   );
+
+  registerDataManagerAdminRoute(app, "getApiDataManagerOvertureRecovery", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "token")
+      return reply
+        .code(403)
+        .send({ error: "Overture recovery inspection requires an admin session" });
+    const response = await dm.getOvertureRecovery(
+      { region: req.query.region },
+      dataManagerOptions(),
+    );
+    reply.header("cache-control", "no-store");
+    reply.code(response.status);
+    return response.data;
+  });
 
   registerDataManagerAdminRoute(app, "getApiDataManagerOvertureStatus", async (req, reply) => {
     const auth = await authenticateDataManager(req);

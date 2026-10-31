@@ -4,6 +4,7 @@ import type { GetApiDataManagerTransitSourcesLifecycle } from "./getApiDataManag
 import type { GetApiDataManagerTransitSourcesOrigin } from "./getApiDataManagerTransitSourcesOrigin";
 
 export type GetApiDataManagerTransitSourcesParams = {
+  country?: string;
   search?: string;
   lifecycle?: GetApiDataManagerTransitSourcesLifecycle;
   origin?: GetApiDataManagerTransitSourcesOrigin;

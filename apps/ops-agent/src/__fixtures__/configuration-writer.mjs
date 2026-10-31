@@ -1,10 +1,13 @@
 import { once } from "node:events";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { opsOperationFingerprint } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
+import { closeControlInstallation, observeConfigurationSources, openControlInstallation, provisionControlInstallation } from "@openmapx/core/build-artifacts";
 import { renderComposeForRepo } from "../../../../packages/cli/src/commands/compose";
 import { createUnavailableRuntime, dispatchOpsOperation } from "../runtime";
-import { installTrustedConfigurationRuntime } from "../trusted-config-runtime";
+import { testExecution } from "./execution";
+import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./configuration-runtime";
 
 const [root, mode, letter, expected, hold] = process.argv.slice(2);
 const infraDir = join(root, "infra/docker");
@@ -58,9 +61,17 @@ try {
       integrationConfigs: [],
       serviceSecrets: [],
     };
+    mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
+    await provisionControlInstallation(infraDir);
+    const installation = openControlInstallation({ infraDir, role: "ops-agent", serviceIds: ["alpha"] });
+    let source;
+    try { source = observeConfigurationSources({ installation, infraDir, services: [service], authorityRevision: "registry-v1", env: {} }); }
+    finally { closeControlInstallation(installation); }
     const operation = {
       kind: "stack.render",
       revisionId: `cfg1_${letter.repeat(43)}`,
+      expectedSourceRevision: source.sourceRevision,
+      coordinatorMode: "ensure-running",
       // This synthetic writer captures its initial baseline before entering the
       // held activation schedule. Explicit values model stale compensation.
       expectedCurrentRevisionId: expected
@@ -71,6 +82,8 @@ try {
     };
     if (hold === "captured") await barrier();
     result = await dispatchOpsOperation(runtime, operation, {
+      // Adapter identity only; this native fixture proves writer exclusion, not admission.
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog() {},
       claim: {
@@ -79,7 +92,7 @@ try {
         source: "trusted-data",
         capability: {
           revisionId: operation.revisionId,
-          values: {},
+          values: { authorityRevision: "registry-v1" },
           trustedConfiguration: payload,
         },
       },

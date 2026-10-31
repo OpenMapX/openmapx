@@ -1,8 +1,23 @@
+import {
+  createServiceBatchResult,
+  type OpsResultFor,
+  serviceBatchResultSchema,
+} from "@openmapx/core/ops";
 import { assertValidBackupName } from "./admin-cli";
+import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
+import { JobOwnershipLost } from "./admin-job-state";
 import { getAdminOperation, parseAdminOperationInput } from "./admin-operation-catalog";
 import { assertKnownServiceIds, assertRegion } from "./admin-operation-input";
 import type { JobContext } from "./job-runner";
+import { ApiOpsError, OpsObservationPending } from "./ops-client";
+import { checkpointServiceBatch, finishServiceBatch } from "./service-batch-result";
+import {
+  applyCoordinatorService,
+  prepareServiceGeneration,
+  publishServiceGeneration,
+  updatePreparedService,
+} from "./service-preparation";
 
 type BackupOperation = "create" | "restore" | "delete";
 type BulkServiceAction = "start" | "stop" | "restart" | "update" | "build";
@@ -117,6 +132,8 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
     all?: boolean;
     region?: string;
     continueOnError?: boolean;
+    noDeps?: boolean;
+    motisImport?: boolean;
   };
 
   const action = payload.action;
@@ -125,33 +142,63 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
   assertKnownServiceIds(serviceIds);
 
   if (action === "build") {
+    if (payload.motisImport && payload.all !== true && !serviceIds.includes("motis"))
+      throw Error("MOTIS import requires a MOTIS build");
     const region = nonEmptyString(payload.region);
     if (region) assertRegion(region);
     if (payload.all === true || serviceIds.length === 0) {
-      const result = await executeAdminJobOperation(
+      let result: OpsResultFor<"services.buildAll">;
+      try {
+        result = await executeAdminJobOperation(
+          ctx,
+          {
+            kind: "services.buildAll",
+            ...(payload.motisImport ? { motisImport: true } : {}),
+            ...(region ? { regionId: region } : {}),
+            ...(payload.continueOnError === false ? { failFast: true } : {}),
+          },
+          "admin-job.services.build-all",
+        );
+      } catch (error) {
+        const batch = serviceBatchResultSchema.safeParse(
+          error instanceof ApiOpsError ? error.failureResult?.serviceBatch : undefined,
+        );
+        if (batch.success) {
+          if (ctx.signal.aborted) await checkpointServiceBatch(ctx, batch.data);
+          else await finishServiceBatch(ctx, batch.data);
+        }
+        throw error;
+      }
+      const serviceBatch = await finishServiceBatch(
         ctx,
-        {
-          kind: "services.buildAll",
-          ...(region ? { regionId: region } : {}),
-          ...(payload.continueOnError === false ? { failFast: true } : {}),
-        },
-        "admin-job.services.build-all",
+        createServiceBatchResult(
+          [...result.completedServiceIds, ...result.failedServiceIds],
+          result.completedServiceIds,
+          result.failedServiceIds,
+          [],
+        ),
       );
       return {
         action,
         completedServiceIds: result.completedServiceIds,
         failedServiceIds: result.failedServiceIds,
+        serviceBatch,
       };
     } else {
+      createServiceBatchResult(serviceIds, [], [], serviceIds);
       const completedServiceIds: string[] = [];
       const failedServiceIds: string[] = [];
       for (const [index, serviceId] of serviceIds.entries()) {
+        let attempted = false;
         try {
+          ctx.signal.throwIfAborted();
+          attempted = true;
           await executeAdminJobOperation(
             ctx,
             {
               kind: "service.build",
               serviceId,
+              ...(payload.motisImport && serviceId === "motis" ? { motisImport: true } : {}),
               ...(region ? { regionId: region } : {}),
             },
             "admin-job.service.build",
@@ -159,29 +206,113 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
           );
           completedServiceIds.push(serviceId);
         } catch (error) {
+          // continueOnError applies only to settled failures. An unknown child
+          // or lost ownership cannot authorize the next mutation in the batch.
+          if (
+            error instanceof OpsObservationPending ||
+            error instanceof JobObservationPending ||
+            error instanceof JobOwnershipLost ||
+            (error instanceof ApiOpsError &&
+              (error.errorClass === "recovery_required" || error.errorClass === "timeout")) ||
+            (error instanceof Error && error.name === "AbortError") ||
+            ctx.signal.aborted
+          ) {
+            await checkpointServiceBatch(
+              ctx,
+              createServiceBatchResult(
+                serviceIds,
+                completedServiceIds,
+                failedServiceIds,
+                serviceIds.slice(index + (attempted ? 1 : 0)),
+              ),
+            );
+            throw error;
+          }
           failedServiceIds.push(serviceId);
-          if (payload.continueOnError !== true) throw error;
+          if (payload.continueOnError !== true)
+            await finishServiceBatch(
+              ctx,
+              createServiceBatchResult(
+                serviceIds,
+                completedServiceIds,
+                failedServiceIds,
+                serviceIds.slice(index + 1),
+              ),
+            );
           await ctx.log(`Build failed for ${serviceId}`, "stderr");
         }
+        await checkpointServiceBatch(
+          ctx,
+          createServiceBatchResult(
+            serviceIds,
+            completedServiceIds,
+            failedServiceIds,
+            serviceIds.slice(index + 1),
+          ),
+        );
         await ctx.setProgress(Math.round(((index + 1) / serviceIds.length) * 100));
       }
-      return { action, completedServiceIds, failedServiceIds };
+      const serviceBatch = await finishServiceBatch(
+        ctx,
+        createServiceBatchResult(serviceIds, completedServiceIds, failedServiceIds, []),
+      );
+      return { action, completedServiceIds, failedServiceIds, serviceBatch };
     }
   } else {
     if (serviceIds.length === 0) {
       throw new Error(`Bulk action "${action}" requires one or more services`);
     }
     const completedServiceIds: string[] = [];
+    let revisionId =
+      action === "start"
+        ? (await prepareServiceGeneration(ctx, "bulk-start", { coordinatorMode: "ensure-running" }))
+            .revisionId
+        : undefined;
+    let ordinarySeedPublished = false;
+    if (action === "update") {
+      const { prepareServiceUpdateBatch } = await import("./service-update-batch");
+      revisionId = (await prepareServiceUpdateBatch(ctx)).initialRevisionId;
+    }
     const kind = `service.${action}` as
       | "service.start"
       | "service.stop"
       | "service.restart"
       | "service.update";
     for (const [index, serviceId] of serviceIds.entries()) {
-      await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {
-        durableIdentity: serviceId,
-      });
+      if (kind === "service.start") {
+        await executeAdminJobOperation(
+          ctx,
+          { kind, serviceId, expectedConfigurationRevisionId: revisionId! },
+          `admin-job.service.${action}`,
+          { durableIdentity: serviceId },
+        );
+      } else if (kind === "service.update") {
+        if (serviceId !== "data-manager" && !ordinarySeedPublished) {
+          revisionId = (
+            await publishServiceGeneration(ctx, "bulk-update", {
+              coordinatorMode: "ensure-running",
+              expectedCurrentRevisionId: revisionId!,
+            })
+          ).revisionId;
+          ordinarySeedPublished = true;
+        }
+        const updated =
+          serviceId === "data-manager"
+            ? await applyCoordinatorService(ctx, index, revisionId!)
+            : await updatePreparedService(ctx, serviceId, revisionId!, payload.noDeps === true);
+        revisionId = updated.revisionId;
+      } else
+        await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {
+          durableIdentity: serviceId,
+        });
       completedServiceIds.push(serviceId);
+      if (action === "update")
+        await ctx.checkpoint({
+          ...ctx.checkpointResult,
+          action,
+          completedServiceIds: [...completedServiceIds],
+          failedServiceIds: [],
+        });
       await ctx.setProgress(Math.round(((index + 1) / serviceIds.length) * 100));
     }
     return { action, completedServiceIds, failedServiceIds: [] };

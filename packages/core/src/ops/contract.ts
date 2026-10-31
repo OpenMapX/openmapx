@@ -2,35 +2,136 @@ import {
   canonicalExtensionLocator,
   extensionLocatorSchema,
 } from "@openmapx/extension-contracts/extension";
-import z from "zod/v4";
+import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
+import {
+  catalogProposalInputSchema,
+  catalogProposalSchema,
+  catalogProposalSummarySchema,
+} from "../catalog-pins/proposal-schemas";
+import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
+import { catalogPinSetSchema } from "../catalog-pins/schemas";
+import { platformConfigurationSchema } from "../services/platform-configuration";
+import {
+  artifactTransferOperationSchemas,
+  artifactTransferResultSchemas,
+} from "./artifact-transfer";
+import {
+  backupPrunePreviewSchema,
+  backupPruneProofSchema,
+  backupPruneResultSchema,
+} from "./backup-prune";
+import {
+  configurationHandoffInspectionSchema,
+  configurationHandoffInspectOperationSchema,
+  configurationHandoffPreparedSchema,
+  configurationHandoffPrepareOperationSchema,
+} from "./configuration-handoff-records";
+import {
+  configurationGenerationRevisionSchema,
+  configurationHardlinksApplyOperationSchema,
+  integrationConfigApplyOperationSchema,
+  serviceConfigApplyOperationSchema,
+  serviceIdSchema,
+  serviceRecreateIsolatedOperationSchema,
+  serviceRecreateOperationSchema,
+  serviceSelectionApplyOperationSchema,
+  stableIdSchema,
+  stackRenderOperationSchema,
+  vaultApplyOperationSchema,
+} from "./configuration-operation-records";
+import { configurationApplyResultSchema } from "./configuration-result-records";
+import { dataInspectionResultSchema } from "./data-inventory-records";
+import { dataWorkflowReceiptSchema } from "./job-evidence";
+import {
+  standaloneIntegrationOperationSchemas,
+  standaloneIntegrationResultSchemas,
+} from "./standalone-integrations";
 
-export const OPS_PROTOCOL_VERSION = 1 as const;
-export const OPS_MAX_LOG_TAIL = 2_000;
+export { configurationGenerationRevisionSchema } from "./configuration-operation-records";
+
+import z from "zod/v4";
+import {
+  pairedPinApprovalInputSchema,
+  pairedPinApprovalResultSchema,
+} from "./catalog-pin-approval";
+import {
+  configurationMaintenanceDecisionSchema,
+  configurationMaintenancePrepareSchema,
+  configurationMaintenanceReceiptSchema,
+  configurationMaintenanceSettleSchema,
+} from "./configuration-maintenance";
+import {
+  configurationHardlinksPreviewSchema,
+  configurationSourcesInspectionSchema,
+  coordinatorModeSchema,
+} from "./configuration-preparation-records";
+import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
+import {
+  type HistoricalServicePullResult,
+  historicalServicePullResultSchema,
+  servicePullOperationSchema,
+  servicePullResultSchema,
+} from "./service-operation-records";
+import { hardlinkApplySummarySchema, serviceActionsSchema } from "./service-results";
+
+export const OPS_PROTOCOL_VERSION = 2 as const;
+export const OPS_MAX_LOG_TAIL = 1_000;
 export const OPS_MAX_EVENT_MESSAGE_BYTES = 4_096;
 export const OPS_MAX_EVENT_BATCH = 100;
 export const OPS_MAX_FOLLOW_LOG_EVENTS = 2_000;
 export const OPS_MAX_RESULT_BYTES = 1024 * 1024;
-export const OPS_MAX_HTTP_RESPONSE_BYTES = OPS_MAX_RESULT_BYTES + 16 * 1024;
+export const OPS_MAX_HTTP_RESPONSE_BYTES = OPS_MAX_RESULT_BYTES + 32 * 1024;
 export const OPS_MAX_REQUEST_TTL_MS = 30_000;
 export const OPS_MAX_CLOCK_SKEW_MS = 5_000;
 export const OPS_MAX_BACKUP_ID_LENGTH = 128;
 export const OPS_MAX_BACKUP_INVENTORY_ENTRIES = 128;
 
 export const OPS_OPERATION_KINDS = [
+  "integration.inventory",
+  "integration.inspectOwnership",
+  "integration.remove",
+  "integration.inspectInstall",
+  "integration.install",
+  "integration.settle",
+  "artifactTransfer.create",
+  "artifactTransfer.validate",
+  "artifactTransfer.previewImport",
+  "artifactTransfer.export",
+  "artifactTransfer.capabilities",
+  "artifactTransfer.import",
+  "artifactTransfer.list",
+  "artifactTransfer.inspect",
+  "artifactTransfer.delete",
+  "artifactTransfer.claim",
+  "artifactTransfer.inspectClaim",
+  "artifactTransfer.settle",
+  "controlRetention.acknowledge",
   "docker.status",
   "stack.status",
+  "services.inspect",
   "stack.render",
   "configuration.inspect",
   "configuration.hardlinks.inspect",
+  "configuration.sources.inspect",
+  "configuration.hardlinks.preview",
+  "configuration.hardlinks.apply",
+  "configurationMaintenance.prepare",
+  "configurationMaintenance.inspect",
+  "configurationMaintenance.decide",
+  "configurationMaintenance.settle",
+  "configurationHandoff.prepare",
+  "configurationHandoff.inspect",
   "configuration.failure.inspect",
   "stack.start",
   "stack.stop",
   "service.start",
   "service.stop",
   "service.restart",
+  "coreService.restart",
   "service.recreate",
   "service.recreateIsolated",
   "service.pull",
+  "service.image.stage",
   "service.remove",
   "service.update",
   "service.build",
@@ -41,6 +142,7 @@ export const OPS_OPERATION_KINDS = [
   "release.resolve",
   "release.pull",
   "release.inspect",
+  "release.clear",
   "release.apply",
   "appApi.replace",
   "appApi.runtime.inspect",
@@ -50,6 +152,8 @@ export const OPS_OPERATION_KINDS = [
   "backup.create",
   "backup.restore",
   "backup.delete",
+  "backup.prune.preview",
+  "backup.prune",
   "system.diagnostics",
   "system.inspect",
   "system.update",
@@ -58,11 +162,11 @@ export const OPS_OPERATION_KINDS = [
   "serviceRepository.settle",
   "serviceRepository.remove",
   "communityServices.inspect",
-  "integration.inspect",
-  "integration.publish",
-  "integration.settle",
-  "integration.remove",
-  "integration.adopt",
+  "catalogIntegration.inspect",
+  "catalogIntegration.publish",
+  "catalogIntegration.settle",
+  "catalogIntegration.remove",
+  "catalogIntegration.adopt",
   "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
@@ -78,6 +182,9 @@ export const OPS_OPERATION_KINDS = [
   "data.clean",
   "data.generateApiKeys",
   "data.overtureSync",
+  "data.overturePull",
+  "data.overtureIngest",
+  "data.overtureExtract",
   "data.overtureConflate",
   "data.searchIndexBuild",
   "data.notablePlacesBuild",
@@ -92,6 +199,8 @@ export const OPS_OPERATION_KINDS = [
   "valhalla.traffic.maintain",
   "valhalla.traffic.refreshWaysToEdges",
   "postgis.capacity.inspect",
+  "catalogPins.inspect",
+  "transitCredentials.inspect",
   "transitousLock.inspect",
   "transitousLock.propose",
   "transitousLock.approve",
@@ -141,10 +250,40 @@ const asyncEffect = (
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000 + 30_000;
 
 export const OPS_KIND_POLICIES = {
+  "integration.inventory": sync("api", 60_000, 1024 * 1024),
+  "integration.inspectOwnership": asyncEffect("api", 10 * 60_000),
+  "integration.remove": asyncEffect("api", 10 * 60_000),
+  "integration.inspectInstall": asyncEffect("api", 10 * 60_000),
+  "integration.install": asyncEffect("api", 10 * 60_000),
+  "integration.settle": asyncEffect("api", 60_000),
+  "artifactTransfer.create": sync("api", 30_000),
+  "artifactTransfer.validate": asyncEffect("api", 72 * 3600_000),
+  "artifactTransfer.previewImport": sync("api", 120_000, 768 * 1024),
+  "artifactTransfer.import": asyncEffect("api", 72 * 3600_000),
+  "artifactTransfer.export": asyncEffect("api", 72 * 3600_000),
+  "artifactTransfer.capabilities": sync("api", 120_000),
+  "artifactTransfer.list": sync("api", 30_000),
+  "artifactTransfer.inspect": sync("api", 30_000),
+  "artifactTransfer.delete": sync("api", 30_000),
+  "artifactTransfer.claim": sync("api", 30_000),
+  "artifactTransfer.inspectClaim": sync("api", 30_000),
+  "artifactTransfer.settle": sync("api", 30_000),
+
+  "controlRetention.acknowledge": sync("api", 15_000),
   "docker.status": sync("api", 5_000),
   "stack.status": sync("api", 15_000, 256 * 1024),
+  "services.inspect": sync("api", 15_000, 512 * 1024),
   "configuration.inspect": sync("api", 15_000),
   "configuration.hardlinks.inspect": sync("api", 15_000, 1024 * 1024),
+  "configuration.sources.inspect": sync("api", 15_000, 128 * 1024),
+  "configuration.hardlinks.preview": sync("api", 15_000, 32 * 1024),
+  "configuration.hardlinks.apply": asyncEffect("api", 10 * 60_000),
+  "configurationMaintenance.prepare": asyncEffect("api", 3600_000, 65536),
+  "configurationMaintenance.inspect": sync("api", 15_000, 65536),
+  "configurationMaintenance.decide": asyncEffect("api", 60_000, 65536),
+  "configurationMaintenance.settle": asyncEffect("api", 60_000, 65536),
+  "configurationHandoff.prepare": asyncEffect("api", 3600_000, 65536),
+  "configurationHandoff.inspect": sync("api", 15_000, 65536),
   "configuration.failure.inspect": sync("api", 15_000),
   "stack.render": asyncEffect("api", 120_000),
   "stack.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
@@ -152,19 +291,22 @@ export const OPS_KIND_POLICIES = {
   "service.start": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.stop": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
+  "coreService.restart": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.recreate": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.recreateIsolated": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.pull": asyncEffect("api", 15 * 60_000),
+  "service.image.stage": asyncEffect("api", 15 * 60000, 16384),
   "service.remove": asyncEffect("api", LIFECYCLE_TIMEOUT_MS),
   "service.update": asyncEffect("api", 15 * 60_000),
-  "service.build": asyncEffect("api", 30 * 60_000),
-  "services.buildAll": asyncEffect("api", 30 * 60_000, 16 * 1024),
+  "service.build": asyncEffect("api", 12 * 3600_000),
+  "services.buildAll": asyncEffect("api", 24 * 3600_000, 64 * 1024),
   "service.logs": sync("api", 30_000, 1024 * 1024),
   "service.logs.follow": asyncEffect("api", 15 * 60_000, 64 * 1024),
   "dawarich.provisioning.inspect": sync("api", 30_000),
   "release.resolve": asyncEffect("api", 2 * 60_000),
   "release.pull": asyncEffect("api", 15 * 60_000),
   "release.inspect": sync("api", 30_000, 256 * 1024),
+  "release.clear": asyncEffect("api", 30_000),
   "release.apply": asyncEffect("api", 30 * 60_000),
   "appApi.replace": asyncEffect("api", 10 * 60_000),
   "appApi.runtime.inspect": sync("api", 30_000),
@@ -174,37 +316,42 @@ export const OPS_KIND_POLICIES = {
   "backup.create": asyncEffect("api", 30 * 60_000),
   "backup.restore": asyncEffect("api", 30 * 60_000),
   "backup.delete": asyncEffect("api", 5 * 60_000),
+  "backup.prune.preview": sync("api", 30_000, 128 * 1024),
+  "backup.prune": asyncEffect("api", 5 * 60_000, 16384),
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
-  "system.update": asyncEffect("api", 30 * 60_000),
+  "system.update": asyncEffect("api", 48 * 3600_000),
   "serviceRepository.inspect": asyncEffect("api", 5 * 60_000, 1024 * 1024),
   "serviceRepository.publish": asyncEffect("api", 10 * 60_000),
   "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
   "serviceRepository.remove": asyncEffect("api", 5 * 60_000),
   "communityServices.inspect": sync("api", 15_000, 1024 * 1024),
-  "integration.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
-  "integration.publish": asyncEffect("api", 10 * 60_000),
-  "integration.settle": asyncEffect("api", 5 * 60_000),
-  "integration.remove": asyncEffect("api", 5 * 60_000),
-  "integration.adopt": asyncEffect("api", 10 * 60_000),
+  "catalogIntegration.inspect": asyncEffect("api", 5 * 60_000, 256 * 1024),
+  "catalogIntegration.publish": asyncEffect("api", 10 * 60_000),
+  "catalogIntegration.settle": asyncEffect("api", 5 * 60_000),
+  "catalogIntegration.remove": asyncEffect("api", 5 * 60_000),
+  "catalogIntegration.adopt": asyncEffect("api", 10 * 60_000),
   "installedIntegrations.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
   "serviceConfig.apply": asyncEffect("api", 2 * 60_000),
   "integrationConfig.apply": asyncEffect("api", 2 * 60_000),
   "vault.apply": asyncEffect("api", 2 * 60_000),
-  "data.inspect": sync("api", 30_000, 256 * 1024),
-  "data.downloadOsm": asyncEffect("api", 30 * 60_000),
-  "data.downloadFonts": asyncEffect("api", 15 * 60_000),
-  "data.update": asyncEffect("api", 30 * 60_000),
-  "data.convertOverpass": asyncEffect("api", 30 * 60_000),
+  "data.inspect": sync("api", 30_000, OPS_MAX_RESULT_BYTES),
+  "data.downloadOsm": asyncEffect("api", 24 * 3600_000),
+  "data.downloadFonts": asyncEffect("api", 24 * 3600_000),
+  "data.update": asyncEffect("api", 24 * 3600_000),
+  "data.convertOverpass": asyncEffect("api", 24 * 3600_000),
   "data.link": asyncEffect("api", 10 * 60_000),
   "data.clean": asyncEffect("api", 10 * 60_000),
   "data.generateApiKeys": asyncEffect("api", 10 * 60_000),
-  "data.overtureSync": asyncEffect("api", 30 * 60_000),
-  "data.overtureConflate": asyncEffect("api", 30 * 60_000),
-  "data.searchIndexBuild": asyncEffect("api", 30 * 60_000),
-  "data.notablePlacesBuild": asyncEffect("api", 30 * 60_000),
+  "data.overtureSync": asyncEffect("api", 24 * 3600_000),
+  "data.overturePull": asyncEffect("api", 24 * 3600_000),
+  "data.overtureIngest": asyncEffect("api", 24 * 3600_000),
+  "data.overtureExtract": asyncEffect("api", 24 * 3600_000),
+  "data.overtureConflate": asyncEffect("api", 24 * 3600_000),
+  "data.searchIndexBuild": asyncEffect("api", 24 * 3600_000),
+  "data.notablePlacesBuild": asyncEffect("api", 24 * 3600_000),
   "motis.staging.restart": asyncEffect("data-manager", 2 * 60_000),
   "motis.staging.stop": asyncEffect("data-manager", 2 * 60_000),
   "motis.primary.restart": asyncEffect("data-manager", 2 * 60_000),
@@ -216,25 +363,24 @@ export const OPS_KIND_POLICIES = {
   "valhalla.traffic.maintain": asyncEffect("data-manager", 30 * 60_000),
   "valhalla.traffic.refreshWaysToEdges": asyncEffect("data-manager", 30 * 60_000),
   "postgis.capacity.inspect": sync("data-manager", 30_000),
-  "transitousLock.inspect": sync("data-manager", 30_000),
+  "transitCredentials.inspect": sync("api", 120_000, 768 * 1024),
+  "catalogPins.inspect": sync("api", 30_000, 768 * 1024),
+  "transitousLock.inspect": sync("data-manager", 30_000, 768 * 1024),
   "transitousLock.propose": sync("data-manager", 30_000),
-  "transitousLock.approve": sync("data-manager", 30_000),
+  "transitousLock.approve": asyncEffect("data-manager", 120_000, 4096),
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
   // Read-only, for the admin panel: the pins, never a proposal or a change.
   "transitousPin.inspect": sync("api", 30_000),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
+/** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
+export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean {
+  return (
+    OPS_KIND_POLICIES[kind].execution === "async" &&
+    !["service.logs.follow", "system.diagnostics", "serviceRepository.inspect"].includes(kind)
+  );
+}
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);
-const serviceIdSchema = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9][a-z0-9-]*$/);
-const stableIdSchema = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 const backupIdSchema = z
   .string()
   .min(1)
@@ -325,17 +471,42 @@ const kindOnly = <T extends OpsOperationKind>(kind: T) => z.strictObject({ kind:
 const serviceOperation = <T extends OpsOperationKind>(kind: T) =>
   z.strictObject({ kind: z.literal(kind), serviceId: serviceIdSchema });
 
-export const configurationGenerationRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-
 export const opsOperationSchema = z.discriminatedUnion("kind", [
+  ...standaloneIntegrationOperationSchemas,
+  ...artifactTransferOperationSchemas,
+  z.strictObject({
+    kind: z.literal("controlRetention.acknowledge"),
+    originRootKey: operationKeySchema,
+    operationKey: operationKeySchema,
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    terminalDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    proof: z.string().min(1).max(4096),
+  }),
   kindOnly("docker.status"),
   kindOnly("stack.status"),
+  kindOnly("services.inspect"),
   kindOnly("configuration.inspect"),
+  kindOnly("configuration.sources.inspect"),
+  configurationMaintenancePrepareSchema,
+  configurationHandoffPrepareOperationSchema,
+  configurationHandoffInspectOperationSchema,
   z.strictObject({
-    kind: z.literal("stack.render"),
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+    kind: z.literal("configurationMaintenance.inspect"),
+    maintenanceId: z.uuid(),
+    candidateId: z.uuid(),
   }),
+  configurationMaintenanceDecisionSchema,
+  configurationMaintenanceSettleSchema,
+  z.strictObject({
+    kind: z.literal("configuration.hardlinks.preview"),
+    candidateId: z.uuid(),
+    revisionId: configurationGenerationRevisionSchema,
+    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+    expectedSourceRevision: z.uuid(),
+    coordinatorMode: coordinatorModeSchema,
+  }),
+  configurationHardlinksApplyOperationSchema,
+  stackRenderOperationSchema,
   // The hardlink plan of the named, applied configuration generation. Fails if
   // another generation has been applied since. Data-manager applies it: only
   // its mounts confine the links and prunes to the data root.
@@ -350,24 +521,48 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("configuration.failure.inspect"),
     attemptedRevisionId: configurationGenerationRevisionSchema,
   }),
-  kindOnly("stack.start"),
+  z.strictObject({
+    kind: z.literal("stack.start"),
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   kindOnly("stack.stop"),
-  serviceOperation("service.start"),
+  z.strictObject({
+    kind: z.literal("service.start"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   serviceOperation("service.stop"),
   serviceOperation("service.restart"),
-  serviceOperation("service.recreate"),
-  serviceOperation("service.recreateIsolated"),
-  serviceOperation("service.pull"),
+  z.strictObject({
+    kind: z.literal("coreService.restart"),
+    serviceId: z.enum(["app-api", "traefik"]),
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
+  serviceRecreateOperationSchema,
+  serviceRecreateIsolatedOperationSchema,
+  servicePullOperationSchema,
+  z.strictObject({
+    kind: z.literal("service.image.stage"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+  }),
   serviceOperation("service.remove"),
-  serviceOperation("service.update"),
+  z.strictObject({
+    kind: z.literal("service.update"),
+    serviceId: serviceIdSchema,
+    expectedConfigurationRevisionId: configurationGenerationRevisionSchema,
+    noDeps: z.boolean().optional(),
+  }),
   z.strictObject({
     kind: z.literal("service.build"),
     serviceId: serviceIdSchema,
     regionId: regionIdSchema.optional(),
+    motisImport: z.boolean().optional(),
   }),
   z.strictObject({
     kind: z.literal("services.buildAll"),
     regionId: regionIdSchema.optional(),
+    motisImport: z.boolean().optional(),
     failFast: z.boolean().optional(),
   }),
   z.strictObject({
@@ -385,6 +580,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("release.resolve"),
   z.strictObject({ kind: z.literal("release.pull"), releaseId: stableIdSchema }),
   kindOnly("release.inspect"),
+  z.strictObject({ kind: z.literal("release.clear"), releaseId: stableIdSchema }),
   z.strictObject({ kind: z.literal("release.apply"), releaseId: stableIdSchema }),
   z.strictObject({
     kind: z.literal("appApi.replace"),
@@ -408,6 +604,8 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     stopRunning: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("backup.delete"), backupId: backupIdSchema }),
+  z.strictObject({ kind: z.literal("backup.prune.preview") }),
+  z.strictObject({ kind: z.literal("backup.prune"), proof: backupPruneProofSchema }),
   kindOnly("system.diagnostics"),
   kindOnly("system.inspect"),
   z.strictObject({
@@ -452,25 +650,28 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("communityServices.inspect"),
   // Fetches an integration archive into staging, validates it and discards it.
   // Validation problems are part of the result, not a failure.
-  z.strictObject({ kind: z.literal("integration.inspect"), source: integrationSourceSchema }),
+  z.strictObject({
+    kind: z.literal("catalogIntegration.inspect"),
+    source: integrationSourceSchema,
+  }),
   // Installs the archive as `<integration store>/<integrationId>`. The previous
   // copy is kept until the transaction is settled. Without `extensionId` the
   // operator installs it (the host CLI). The owner is bookkeeping, not a
   // boundary: app-api and the fixed CLI share the `api` principal.
   z.strictObject({
-    kind: z.literal("integration.publish"),
+    kind: z.literal("catalogIntegration.publish"),
     integrationId: serviceIdSchema,
     source: integrationSourceSchema,
     extensionId: serviceIdSchema.optional(),
   }),
   z.strictObject({
-    kind: z.literal("integration.settle"),
+    kind: z.literal("catalogIntegration.settle"),
     integrationId: serviceIdSchema,
     transactionId: integrationTransactionIdSchema,
     outcome: z.enum(["commit", "rollback"]),
   }),
   z.strictObject({
-    kind: z.literal("integration.remove"),
+    kind: z.literal("catalogIntegration.remove"),
     integrationId: serviceIdSchema,
     extensionId: serviceIdSchema.optional(),
   }),
@@ -478,37 +679,22 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   // when its files match `source` fetched again; anything else needs a
   // reinstall. Without a source nothing can be verified.
   z.strictObject({
-    kind: z.literal("integration.adopt"),
+    kind: z.literal("catalogIntegration.adopt"),
     integrationId: serviceIdSchema,
     extensionId: serviceIdSchema.optional(),
     source: integrationSourceSchema.optional(),
   }),
   kindOnly("installedIntegrations.inspect"),
-  z.strictObject({
-    kind: z.literal("serviceSelection.apply"),
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
+  serviceSelectionApplyOperationSchema,
   kindOnly("serviceSelection.inspect"),
+  serviceConfigApplyOperationSchema,
+  integrationConfigApplyOperationSchema,
+  vaultApplyOperationSchema,
   z.strictObject({
-    kind: z.literal("serviceConfig.apply"),
-    serviceId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
+    kind: z.literal("data.inspect"),
+    osmLimit: z.number().int().min(1).max(500).optional(),
+    osmOffset: z.number().int().min(0).max(1000000).optional(),
   }),
-  z.strictObject({
-    kind: z.literal("integrationConfig.apply"),
-    integrationId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
-  z.strictObject({
-    kind: z.literal("vault.apply"),
-    serviceId: serviceIdSchema,
-    revisionId: stableIdSchema,
-    expectedCurrentRevisionId: configurationGenerationRevisionSchema.nullable(),
-  }),
-  kindOnly("data.inspect"),
   z.strictObject({ kind: z.literal("data.downloadOsm"), regionId: regionIdSchema.optional() }),
   kindOnly("data.downloadFonts"),
   z.strictObject({
@@ -522,6 +708,9 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("data.clean"), dataTypeId: stableIdSchema }),
   z.strictObject({ kind: z.literal("data.generateApiKeys"), catalogRevisionId: stableIdSchema }),
   z.strictObject({ kind: z.literal("data.overtureSync"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overturePull"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overtureIngest"), regionId: regionIdSchema }),
+  z.strictObject({ kind: z.literal("data.overtureExtract"), regionId: regionIdSchema }),
   z.strictObject({
     kind: z.literal("data.overtureConflate"),
     regionId: regionIdSchema,
@@ -546,38 +735,74 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("postgis.capacity.inspect"),
   // The catalog lock lives under the repository's `infra/docker/`, which only
   // the operations agent may write. Callers name a pinned ref, never a path.
-  kindOnly("transitousLock.inspect"),
+  kindOnly("catalogPins.inspect"),
+  z.strictObject({
+    kind: z.literal("transitCredentials.inspect"),
+    proposalId: z.uuid().optional(),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
+  z.strictObject({
+    kind: z.literal("transitousLock.inspect"),
+    proposalId: z.uuid().optional(),
+    offset: z.number().int().min(0).max(4096).optional(),
+  }),
   z.strictObject({
     kind: z.literal("transitousLock.propose"),
-    ref: transitousRefSchema,
-    submodules: transitousSubmodulesSchema,
-    lockedBy: actorLabelSchema,
-    comment: z.string().min(1).max(512).optional(),
+    ...catalogProposalInputSchema.shape,
   }),
-  z.strictObject({
-    kind: z.literal("transitousLock.approve"),
-    // The exact ref being activated, so an approval cannot land on a proposal
-    // that changed after the reviewer read it.
-    ref: transitousRefSchema,
-    approvedBy: actorLabelSchema,
-  }),
+  pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
   kindOnly("transitousPin.inspect"),
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
+export type TrustedConfigurationApplyOperation = Extract<
+  OpsOperation,
+  {
+    kind:
+      | "stack.render"
+      | "serviceSelection.apply"
+      | "serviceConfig.apply"
+      | "integrationConfig.apply"
+      | "vault.apply";
+  }
+>;
+export function isTrustedConfigurationApplyOperation(
+  operation: OpsOperation,
+): operation is TrustedConfigurationApplyOperation {
+  return [
+    "stack.render",
+    "serviceSelection.apply",
+    "serviceConfig.apply",
+    "integrationConfig.apply",
+    "vault.apply",
+  ].includes(operation.kind);
+}
 
-const opsRequestSchema = z.strictObject({
-  version: z.literal(OPS_PROTOCOL_VERSION),
-  requestId: requestIdSchema,
-  operationKey: operationKeySchema,
-  issuedAt: timestampSchema,
-  expiresAt: timestampSchema,
-  operation: opsOperationSchema,
-});
+const opsRequestSchema = z
+  .strictObject({
+    version: z.union([z.literal(1), z.literal(OPS_PROTOCOL_VERSION)]),
+    requestId: requestIdSchema,
+    operationKey: operationKeySchema,
+    issuedAt: timestampSchema,
+    expiresAt: timestampSchema,
+    operation: opsOperationSchema,
+    execution: z
+      .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
+      .optional(),
+  })
+  .refine(
+    (request) => request.version === 2 || request.execution === undefined,
+    "Version1 cannot carry execution authority",
+  );
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
-  return OPS_KIND_POLICIES[kind].role === role;
+  // Decode retained historical records, but never admit a new remote file writer.
+  if (kind === "data.generateApiKeys") return false;
+  return (
+    OPS_KIND_POLICIES[kind].role === role ||
+    (role === "data-manager" && kind === "catalogPins.inspect")
+  );
 }
 
 export type OpsErrorClass =
@@ -592,8 +817,10 @@ export type OpsErrorClass =
   | "conflict"
   | "not_found"
   | "not_wired"
+  | "control_upgrade_required"
   | "recovery_required"
   | "host_update_required"
+  | "configuration_prerequisite"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -605,8 +832,12 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   timeout: "Operation timed out",
   busy: "Operations service is busy",
   conflict: "Operation key conflicts with an existing operation",
+  configuration_prerequisite:
+    "Apply or update Data Manager before changing instance configuration.",
   not_found: "Operation was not found",
   not_wired: "Operation is not available",
+  control_upgrade_required:
+    "Update the API or CLI client to persist a timed control root before submitting this mutation.",
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
     "Host update required: the operations agent or its backup helper could not be updated from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
@@ -680,7 +911,11 @@ export async function authorizeOpsResources(
 ): Promise<boolean> {
   if ("serviceId" in operation) {
     if (
-      NEVER_MANAGE.has(operation.serviceId) ||
+      (NEVER_MANAGE.has(operation.serviceId) &&
+        operation.kind !== "coreService.restart" &&
+        operation.kind !== "service.logs" &&
+        operation.kind !== "service.logs.follow" &&
+        operation.kind !== "service.image.stage") ||
       !(await allowed(policy.allowService?.(operation.kind, operation.serviceId)))
     )
       return false;
@@ -755,6 +990,9 @@ export async function authorizeOpsResources(
       return true;
     }
     case "data.overtureSync":
+    case "data.overturePull":
+    case "data.overtureIngest":
+    case "data.overtureExtract":
     case "data.overtureConflate":
     case "data.searchIndexBuild":
       return allowed(policy.allowRegion?.(operation.kind, operation.regionId));
@@ -794,6 +1032,7 @@ const backupInventoryEntry = z
   .strictObject({
     backupId: backupIdSchema,
     createdAt: timestampSchema,
+    expiresAt: timestampSchema.optional(),
     platformVersion: z.string().min(1).max(64).optional(),
     /** Present when the agent could authenticate the exact manifest bytes. */
     manifestDigest: z
@@ -845,86 +1084,16 @@ const repositoryPending = z.strictObject({
   previousCommit: gitCommitSchema.nullable(),
   recovery: repositoryRecoverySchema,
 });
-export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
-  z.strictObject({
-    outcome: z.literal("committed"),
-    revisionId: configurationGenerationRevisionSchema,
-    enabledServiceIds: z.array(serviceIdSchema).max(256),
-    followUp: z.enum(["complete", "failed"]),
-    cleanupFailed: z.boolean(),
-  }),
-  z.strictObject({
-    outcome: z.literal("not_committed"),
-    reason: z.enum(["conflict", "busy", "failed"]),
-    currentRevisionId: configurationGenerationRevisionSchema.nullable().optional(),
-    cleanupFailed: z.boolean(),
-  }),
-]);
-export type ConfigurationApplyResult = z.infer<typeof configurationApplyResultSchema>;
+
+export {
+  type ConfigurationApplyResult,
+  configurationApplyResultSchema,
+} from "./configuration-result-records";
+
 const revision = configurationApplyResultSchema;
 const data = z.strictObject({
   completed: z.literal(true),
   resourceId: resourceIdSchema.optional(),
-});
-const nonnegativeSafeInteger = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-const boundedInventoryString = z.string().max(2_048);
-const nullableInventoryString = boundedInventoryString.nullable();
-const motisGbfsSource = z.strictObject({
-  sourceId: boundedInventoryString,
-  country: boundedInventoryString,
-  status: z.enum(["configured", "excluded"]),
-  observation: z.enum(["validated", "unknown"]),
-  errorClass: boundedInventoryString.optional(),
-  lastObservedSuccess: boundedInventoryString.optional(),
-  lastErrorAt: boundedInventoryString.optional(),
-  dataAge: z.literal("unknown"),
-});
-const motisTransitousInventory = z.strictObject({
-  configFound: z.boolean(),
-  datasetCount: nonnegativeSafeInteger,
-  realtimeFeedCount: nonnegativeSafeInteger,
-  gbfsFeedCount: nonnegativeSafeInteger,
-  feedProxyUrlCount: nonnegativeSafeInteger,
-  gbfsProxyUrl: nullableInventoryString,
-  feedProxyMode: z.enum(["none", "self-hosted", "transitous-cloud", "mixed"]),
-  feedProxyConfigFound: z.boolean(),
-  feedProxyVarsFound: z.boolean(),
-  feedProxyFeedCount: nonnegativeSafeInteger,
-  capabilityState: z.enum(["healthy", "stale", "missing", "error"]),
-  capabilityError: boundedInventoryString.optional(),
-  activeEpoch: nullableInventoryString,
-  candidateEpoch: nullableInventoryString,
-  testedAt: nullableInventoryString,
-  configHash: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .nullable(),
-  licenseHash: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .nullable(),
-  rentalProviderCount: nonnegativeSafeInteger,
-  rentalProviderGroupCount: nonnegativeSafeInteger,
-  rollbackAvailable: z.boolean(),
-  operationsProfile: z.enum(["regional-assisted", "regional-sovereign", "planet", "unknown"]),
-  activeSlot: z.enum(["A", "B"]).nullable(),
-  previousHealthySlot: z.enum(["A", "B"]).nullable(),
-  preflightState: z.enum(["passed", "blocked", "missing"]),
-  preflightRequiredDiskBytes: nonnegativeSafeInteger.nullable(),
-  preflightFreeDiskBytes: nonnegativeSafeInteger.nullable(),
-  pinProposalPending: z.boolean(),
-  crowdsourceState: z.literal("disabled-pending-review"),
-  gbfsCatalog: z.strictObject({
-    state: z.enum(["active", "missing", "error"]),
-    commit: nullableInventoryString,
-    lockedAt: nullableInventoryString,
-    registryRows: nonnegativeSafeInteger,
-    registryAdded: nonnegativeSafeInteger,
-    transitousPreferred: nonnegativeSafeInteger,
-    quarantined: nonnegativeSafeInteger,
-    validationFailed: nonnegativeSafeInteger,
-    sources: z.array(motisGbfsSource).max(500),
-  }),
 });
 const systemCoreServiceId = z.enum([
   "app-api",
@@ -940,9 +1109,23 @@ const pinnedImageReference = z
   .regex(/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/);
 
 export const OPS_RESULT_SCHEMAS = {
+  ...standaloneIntegrationResultSchemas,
+  ...artifactTransferResultSchemas,
+  "controlRetention.acknowledge": z.strictObject({ acknowledged: z.literal(true) }),
   "docker.status": z.strictObject({
     reachable: z.boolean(),
     version: z.string().max(128).optional(),
+  }),
+  "services.inspect": z.strictObject({
+    services: z
+      .array(
+        z.strictObject({
+          serviceId: serviceIdSchema,
+          state: serviceRuntimeState,
+          actions: serviceActionsSchema,
+        }),
+      )
+      .max(256),
   }),
   "stack.status": z.strictObject({
     services: z
@@ -970,12 +1153,22 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
+  "configuration.sources.inspect": configurationSourcesInspectionSchema,
+  "configuration.hardlinks.preview": configurationHardlinksPreviewSchema,
+  "configuration.hardlinks.apply": hardlinkApplySummarySchema,
+  "configurationMaintenance.prepare": configurationMaintenanceReceiptSchema,
+  "configurationHandoff.prepare": configurationHandoffPreparedSchema,
+  "configurationHandoff.inspect": configurationHandoffInspectionSchema,
+  "configurationMaintenance.inspect": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.decide": configurationMaintenanceReceiptSchema,
+  "configurationMaintenance.settle": configurationMaintenanceReceiptSchema,
   "configuration.failure.inspect": z.strictObject({
     attemptedRevisionId: configurationGenerationRevisionSchema,
     problem: z.string().min(1).max(4_096).nullable(),
   }),
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
+    platform: platformConfigurationSchema.optional(),
     integrationConfigDigests: z
       .array(
         z.strictObject({
@@ -991,15 +1184,32 @@ export const OPS_RESULT_SCHEMAS = {
   "service.start": changed,
   "service.stop": changed,
   "service.restart": changed,
+  "coreService.restart": z.strictObject({
+    changed: z.literal(true),
+    serviceId: z.enum(["app-api", "traefik"]),
+  }),
   "service.recreate": changed,
   "service.recreateIsolated": changed,
-  "service.pull": changed,
+  "service.pull": servicePullResultSchema,
   "service.remove": changed,
-  "service.update": changed,
+  "service.update": z.strictObject({
+    changed: z.literal(true),
+    revisionId: configurationGenerationRevisionSchema,
+  }),
   "service.build": completed,
   "services.buildAll": z.strictObject({
     completedServiceIds: z.array(serviceIdSchema).max(256),
     failedServiceIds: z.array(serviceIdSchema).max(256),
+  }),
+  "service.image.stage": z.strictObject({
+    revisionId: configurationGenerationRevisionSchema,
+    requestedReference: serviceImageReferenceSchema,
+    stagedReference: serviceImageReferenceSchema,
+    imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    releaseSelectionDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
   }),
   "service.logs": z.strictObject({
     lines: z
@@ -1033,6 +1243,7 @@ export const OPS_RESULT_SCHEMAS = {
   "release.pull": release,
   "release.inspect": z.strictObject({
     currentReleaseId: stableIdSchema.optional(),
+    selectedReleaseId: stableIdSchema.optional(),
     availableReleaseId: stableIdSchema.optional(),
     configuredSelector: z.string().max(128).optional(),
     currentVersion: z.string().max(128).optional(),
@@ -1042,6 +1253,7 @@ export const OPS_RESULT_SCHEMAS = {
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
   }),
+  "release.clear": z.strictObject({ releaseId: stableIdSchema, cleared: z.literal(true) }),
   "release.apply": release,
   "appApi.replace": z.strictObject({ updateJobId: stableIdSchema, replaced: z.boolean() }),
   "appApi.runtime.inspect": z.strictObject({
@@ -1061,6 +1273,8 @@ export const OPS_RESULT_SCHEMAS = {
   "backup.create": backup,
   "backup.restore": backup,
   "backup.delete": backup,
+  "backup.prune.preview": backupPrunePreviewSchema,
+  "backup.prune": backupPruneResultSchema,
   "system.diagnostics": z.strictObject({
     ok: z.boolean(),
     checks: z
@@ -1149,27 +1363,27 @@ export const OPS_RESULT_SCHEMAS = {
       )
       .max(256),
   }),
-  "integration.inspect": z.strictObject({
+  "catalogIntegration.inspect": z.strictObject({
     integrationId: serviceIdSchema.nullable(),
     valid: z.boolean(),
     problems: z.array(z.string().max(1_024)).max(64),
     manifest: serviceManifestObjectSchema.nullable(),
   }),
-  "integration.publish": z.strictObject({
+  "catalogIntegration.publish": z.strictObject({
     integrationId: serviceIdSchema,
     transactionId: integrationTransactionIdSchema,
     manifestSha256: sha256Schema,
   }),
-  "integration.settle": z.strictObject({
+  "catalogIntegration.settle": z.strictObject({
     integrationId: serviceIdSchema,
     outcome: z.enum(["commit", "rollback"]),
     changed: z.boolean(),
   }),
-  "integration.remove": z.strictObject({
+  "catalogIntegration.remove": z.strictObject({
     integrationId: serviceIdSchema,
     removed: z.boolean(),
   }),
-  "integration.adopt": z.strictObject({
+  "catalogIntegration.adopt": z.strictObject({
     integrationId: serviceIdSchema,
     status: z.enum(["recorded", "needs_reinstall"]),
     reason: z.string().max(1_024).nullable(),
@@ -1199,49 +1413,18 @@ export const OPS_RESULT_SCHEMAS = {
   "serviceConfig.apply": revision,
   "integrationConfig.apply": revision,
   "vault.apply": revision,
-  "data.inspect": z.strictObject({
-    osm: z.strictObject({
-      found: z.boolean(),
-      filename: z
-        .string()
-        .min(1)
-        .max(255)
-        .regex(/^[^/\\]+$/)
-        .optional(),
-      sizeBytes: nonnegativeSafeInteger.optional(),
-      modifiedAt: timestampSchema.optional(),
-      region: boundedInventoryString.optional(),
-    }),
-    builds: z
-      .array(
-        z.strictObject({
-          target: z.enum([
-            "valhalla",
-            "osrm",
-            "otp",
-            "motis",
-            "motisFeedProxy",
-            "tiles",
-            "pelias",
-            "nominatim",
-            "photon",
-            "overpass",
-          ]),
-          built: z.boolean(),
-          builtAt: timestampSchema.optional(),
-        }),
-      )
-      .max(10),
-    motisTransitous: motisTransitousInventory,
-  }),
+  "data.inspect": dataInspectionResultSchema,
   "data.downloadOsm": data,
   "data.downloadFonts": data,
-  "data.update": data,
+  "data.update": data.extend({ dataWorkflow: dataWorkflowReceiptSchema.optional() }),
   "data.convertOverpass": data,
   "data.link": data,
   "data.clean": data,
   "data.generateApiKeys": data,
   "data.overtureSync": data,
+  "data.overturePull": data,
+  "data.overtureIngest": data,
+  "data.overtureExtract": data,
   "data.overtureConflate": data,
   "data.searchIndexBuild": data,
   "data.notablePlacesBuild": data,
@@ -1264,15 +1447,61 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "valhalla.traffic.refreshWaysToEdges": changed,
   "postgis.capacity.inspect": z.strictObject({ availableBytes: z.number().int().nonnegative() }),
+  "transitCredentials.inspect": z.strictObject({
+    consumedCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable()
+      .optional(),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+    requiredKeys: z.array(z.string().min(1).max(1024)).max(1000),
+    hostCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    owner: z.enum(["vault", "file", "environment", "unset"]),
+    editable: z.boolean(),
+    reason: z.string().max(512).nullable(),
+    configuredKeys: z.array(z.string().min(1).max(1024)).max(10000),
+    retainedKeys: z.array(z.string().min(1).max(1024)).max(10000),
+    appliedCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+  }),
+  "catalogPins.inspect": z
+    .strictObject({
+      active: catalogPinSetSchema.nullable(),
+      catalogRevisionId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .nullable(),
+    })
+    .refine(
+      (value) => value.catalogRevisionId === (value.active?.generationId ?? null),
+      "Catalog pair/revision mismatch",
+    ),
   "transitousLock.inspect": z.strictObject({
     active: transitousLockRecordSchema.nullable(),
     proposed: transitousLockRecordSchema.nullable(),
+    proposal: catalogProposalSchema.nullable().optional(),
+    validationInputs: catalogRuntimeInputsSchema.optional(),
+    validationBlocker: z.string().max(1024).optional(),
+    page: z
+      .strictObject({
+        proposals: z.array(catalogProposalSummarySchema).max(100),
+        total: z.number().int().min(0).max(4096),
+        offset: z.number().int().min(0).max(4096),
+        nextOffset: z.number().int().min(0).max(4096).nullable(),
+      })
+      .optional(),
   }),
-  "transitousLock.propose": z.strictObject({ ref: transitousRefSchema, proposed: z.literal(true) }),
-  "transitousLock.approve": z.strictObject({
-    ref: transitousRefSchema,
-    lockedAt: timestampSchema,
+  "transitousLock.propose": z.strictObject({
+    proposalId: z.uuid(),
+    catalogRevisionId: z.string().regex(/^[a-f0-9]{64}$/),
+    proposed: z.literal(true),
   }),
+  "transitousLock.approve": pairedPinApprovalResultSchema,
   "transitousPin.inspect": z.strictObject({
     /** The pin the release ships. */
     release: transitousLockRecordSchema,
@@ -1289,6 +1518,19 @@ export const OPS_RESULT_SCHEMAS = {
 } as const satisfies Record<OpsOperationKind, z.ZodType>;
 
 export type OpsResultFor<K extends OpsOperationKind> = z.infer<(typeof OPS_RESULT_SCHEMAS)[K]>;
+export type OpsObservedResultFor<K extends OpsOperationKind> = K extends "service.pull"
+  ? OpsResultFor<K> | HistoricalServicePullResult
+  : OpsResultFor<K>;
+/** Status observation only. Fresh execution/settlement continues to use the
+ * strict parseOpsResult/parseBoundedOpsResult above the runtime boundary. */
+export function parseObservedOpsResult<K extends OpsOperationKind>(
+  kind: K,
+  value: unknown,
+): OpsObservedResultFor<K> {
+  if (kind === "service.pull" && historicalServicePullResultSchema.safeParse(value).success)
+    return historicalServicePullResultSchema.parse(value) as OpsObservedResultFor<K>;
+  return parseBoundedOpsResult(kind, value) as OpsObservedResultFor<K>;
+}
 export function parseOpsResult<K extends OpsOperationKind>(
   kind: K,
   value: unknown,
@@ -1326,7 +1568,15 @@ const errorClass = z.enum(
   Object.keys(OPS_PUBLIC_ERROR_MESSAGES) as [OpsErrorClass, ...OpsErrorClass[]],
 );
 const jobStatus = z.strictObject({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
+  admittedAt: z.number().int().nonnegative().safe().optional(),
+  deadlineAt: z.number().int().nonnegative().safe().optional(),
+  fingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  diagnostics: processDiagnosticsSchema.optional(),
+  failureResult: opsFailureResultSchema.optional(),
   operationId: operationIdSchema,
   operationKey: operationKeySchema,
   kind: operationKindSchema,
@@ -1345,10 +1595,35 @@ const jobStatus = z.strictObject({
 export type OpsJobStatus = z.infer<typeof jobStatus>;
 export function parseOpsJobStatus(input: unknown): OpsJobStatus {
   const status = jobStatus.parse(input);
+  if (
+    status.version === 1 &&
+    (status.admittedAt !== undefined ||
+      status.deadlineAt !== undefined ||
+      status.fingerprint !== undefined ||
+      status.diagnostics !== undefined ||
+      status.failureResult !== undefined)
+  )
+    throw new Error("Invalid compatibility identity");
+  if (
+    status.version === 2 &&
+    (status.admittedAt === undefined ||
+      status.deadlineAt === undefined ||
+      status.fingerprint === undefined ||
+      status.deadlineAt <= status.admittedAt)
+  )
+    throw new Error("Invalid execution identity");
+  if (status.failureResult !== undefined && !["failed", "timed_out"].includes(status.state))
+    throw new Error("Invalid failure evidence");
+  if (
+    status.failureResult &&
+    new TextEncoder().encode(JSON.stringify(status.failureResult)).byteLength >
+      OPS_KIND_POLICIES[status.kind].maxResultBytes
+  )
+    throw new Error("Failure evidence exceeds budget");
   if (status.state === "succeeded") {
     if (status.result === undefined || status.errorClass !== undefined)
       throw new Error("Invalid operation status");
-    parseOpsResult(status.kind, status.result);
+    parseObservedOpsResult(status.kind, status.result);
   } else if (status.state === "failed" || status.state === "timed_out") {
     if (status.result !== undefined || status.errorClass === undefined)
       throw new Error("Invalid operation status");
@@ -1369,7 +1644,7 @@ export type OpsJobStatusFor<K extends OpsOperationKind> =
     })
   | (OpsJobStatusBase<K> & {
       state: "succeeded";
-      result: OpsResultFor<K>;
+      result: OpsObservedResultFor<K>;
       errorClass?: never;
     })
   | (OpsJobStatusBase<K> & {
@@ -1389,7 +1664,7 @@ export function parseOpsJobStatusForKind<K extends OpsOperationKind>(
   }
   return {
     ...status,
-    ...(status.result === undefined ? {} : { result: parseOpsResult(kind, status.result) }),
+    ...(status.result === undefined ? {} : { result: parseObservedOpsResult(kind, status.result) }),
   } as OpsJobStatusFor<K>;
 }
 const stateEvent = z.strictObject({
@@ -1436,11 +1711,34 @@ export function parseOpsEventBatch(
 }
 
 export interface OpsAdmission {
+  version?: 1 | 2;
+  admittedAt?: number;
+  deadlineAt?: number;
+  fingerprint?: string;
   execution: "async";
   operationId: string;
   operationKey: string;
   kind: OpsOperationKind;
   state: OpsJobState;
+}
+const legacyAdmission = z.strictObject({
+  execution: z.literal("async"),
+  operationId: operationIdSchema,
+  operationKey: operationKeySchema,
+  kind: operationKindSchema,
+  state: jobState,
+});
+const executionAdmission = legacyAdmission
+  .extend({
+    version: z.literal(2),
+    admittedAt: z.number().int().nonnegative().safe(),
+    deadlineAt: z.number().int().nonnegative().safe(),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .refine((value) => value.deadlineAt > value.admittedAt);
+/** The historical admission had no inner version. Both forms remain exact, disjoint schemas. */
+export function parseOpsAdmission(input: unknown): OpsAdmission {
+  return z.union([legacyAdmission, executionAdmission]).parse(input);
 }
 export interface OpsSyncResult<K extends OpsOperationKind = OpsOperationKind> {
   execution: "sync";
@@ -1486,7 +1784,7 @@ export function opsResourceId(operation: OpsOperation): string {
   if ("serviceId" in operation) return operation.serviceId;
   if ("backupId" in operation && operation.backupId) return operation.backupId;
   if ("preparedRunId" in operation) return operation.preparedRunId;
-  if ("candidateId" in operation) return operation.candidateId;
+  if ("candidateId" in operation && operation.candidateId) return operation.candidateId;
   if ("repository" in operation) return operation.repository;
   if ("extensionId" in operation && operation.extensionId) return operation.extensionId;
   if ("integrationId" in operation) return operation.integrationId;

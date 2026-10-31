@@ -21,6 +21,8 @@ import {
   type GitShallowCloneOptions,
   gitShallowCloneSnapshot,
 } from "@openmapx/core/server";
+import type { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
+import type { OwnedServiceResolver } from "./owned-services";
 import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 import { readCommunityRepository } from "./trusted-configuration-authority";
@@ -534,6 +536,9 @@ export class CommunityRepositoryStore {
 
   remove(
     operation: Extract<OpsOperation, { kind: "serviceRepository.remove" }>,
+    signal: AbortSignal = AbortSignal.timeout(15_000),
+    owned?: OwnedServiceResolver,
+    expectedServiceIds?: readonly string[],
   ): Promise<OpsResultFor<"serviceRepository.remove">> {
     return this.serialize(async () => {
       const { repository, extensionId } = operation;
@@ -542,6 +547,37 @@ export class CommunityRepositoryStore {
       this.assertOwner(repository, record, extensionId);
       const checkout = this.checkout(repository);
       const existed = existsSync(checkout) || record !== null;
+      if (existed) {
+        const authority = await this.options.loadAuthority();
+        const ids = new Set(
+          authority.services
+            .filter(
+              (service) =>
+                !service.isBuiltIn &&
+                (service.directory === checkout ||
+                  service.directory.startsWith(`${checkout}${sep}`)),
+            )
+            .map((service) => service.manifest.id),
+        );
+        if (
+          expectedServiceIds &&
+          JSON.stringify([...ids].sort()) !== JSON.stringify([...expectedServiceIds].sort())
+        )
+          throw new Error("Repository service authority changed while waiting");
+        if (ids.size > 0) {
+          if (!owned) throw new Error("Owned service cleanup inspection required before removal");
+          const inventory = owned.inspectInventory
+            ? await owned.inspectInventory(signal)
+            : { services: await owned.inspectOwnedServices(signal), unverifiedServiceIds: [] };
+          if (inventory.unverifiedServiceIds.some((id) => ids.has(id)))
+            throw new Error(
+              "Owned container provenance requires host cleanup before repository removal",
+            );
+          if (inventory.services.some((container) => ids.has(container.serviceId)))
+            throw new Error("Owned containers require cleanup before repository removal");
+        }
+      }
+      signal.throwIfAborted();
       rmSync(checkout, { recursive: true, force: true });
       if (existsSync(this.community)) syncDirectory(this.community);
       if (record) this.deleteRecord(repository);
@@ -597,12 +633,26 @@ export class CommunityRepositoryStore {
 export function installCommunityRepositoryRuntime(
   runtime: OpsRuntime,
   store: CommunityRepositoryStore,
+  owned: OwnedServiceResolver,
+  lifecycle: ServiceLifecycleExclusion,
 ): void {
   runtime["serviceRepository.inspect"] = (operation, context) =>
     store.inspect(operation, context.signal);
   runtime["serviceRepository.publish"] = (operation, context) =>
     store.publish(operation, context.signal);
   runtime["serviceRepository.settle"] = (operation) => store.settle(operation);
-  runtime["serviceRepository.remove"] = (operation) => store.remove(operation);
+  runtime["serviceRepository.remove"] = async (operation, context) => {
+    const authority = await store.list();
+    const ids = authority.services
+      .filter((service) => service.repository === operation.repository)
+      .map((service) => {
+        const id = service.manifest.id;
+        if (typeof id !== "string") throw new Error("Repository service authority unavailable");
+        return id;
+      });
+    return lifecycle.run(ids, context.signal, () =>
+      store.remove(operation, context.signal, owned, ids),
+    );
+  };
   runtime["communityServices.inspect"] = () => store.list();
 }

@@ -1,17 +1,28 @@
 import type { FastifyInstance } from "fastify";
 import { adminRoute } from "./admin";
+import { adminAccountsRoute } from "./admin-accounts";
 import { adminActivityRoute } from "./admin-activity";
+import { adminArtifactTransfersRoute } from "./admin-artifact-transfers";
+import { adminBackupMaintenanceRoute } from "./admin-backup-maintenance";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
+import { adminConfigurationMigrationRoute } from "./admin-configuration-migration";
 import { adminCoverageRoute } from "./admin-coverage";
+import { adminCredentialTransferRoute } from "./admin-credential-transfer";
 import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
 import { adminJobEventsRoute } from "./admin-job-events";
 import { adminOperationsRoute } from "./admin-operations";
+import { adminPlatformRoute } from "./admin-platform";
+import { adminReauthenticationRoute } from "./admin-reauthentication";
+import { adminReleaseControlsRoute } from "./admin-release-controls";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
+import { adminStandaloneIntegrationsRoute } from "./admin-standalone-integrations";
 import { adminSystemRoute } from "./admin-system";
+import { adminTransitCredentialsRoute } from "./admin-transit-credentials";
+import { adminTransitPinsRoute } from "./admin-transit-pins";
 import { ambientPlacesRoute } from "./ambient-places";
 import { attributionRoute } from "./attribution";
 import { authRoute } from "./auth";
@@ -73,6 +84,10 @@ export async function registerCoreRoutes(
   options: CoreRouteOptions,
 ): Promise<void> {
   await server.register(authRoute, options);
+  await server.register(adminAccountsRoute, { prefix: "/api" });
+  await server.register(adminConfigurationMigrationRoute, { prefix: "/api" });
+  await server.register(adminCredentialTransferRoute, { prefix: "/api" });
+  await server.register(adminReauthenticationRoute, { prefix: "/api" });
 
   await server.register(metaRoute);
 
@@ -113,6 +128,10 @@ export async function registerCoreRoutes(
   await server.register(statusRoute, { prefix: "/api" });
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
+  await server.register(adminPlatformRoute, { prefix: "/api" });
+  await server.register(adminArtifactTransfersRoute, { prefix: "/api" });
+  await server.register(adminTransitCredentialsRoute, { prefix: "/api" });
+  await server.register(adminTransitPinsRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });
   await server.register(adminCoverageRoute, { prefix: "/api" });
   await server.register(adminActivityRoute, { prefix: "/api" });
@@ -121,7 +140,10 @@ export async function registerCoreRoutes(
   await server.register(dataManagerRoute, { prefix: "/api" });
   await server.register(adminSettingsRoute, { prefix: "/api" });
   await server.register(adminExtensionsRoute, { prefix: "/api" });
+  await server.register(adminStandaloneIntegrationsRoute, { prefix: "/api" });
   await server.register(adminCacheRoute, { prefix: "/api" });
+  await server.register(adminReleaseControlsRoute, { prefix: "/api" });
+  await server.register(adminBackupMaintenanceRoute, { prefix: "/api" });
   await server.register(adminSystemRoute, { prefix: "/api" });
   await server.register(attributionRoute, { prefix: "/api" });
 

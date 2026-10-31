@@ -18,6 +18,8 @@ import { serviceAdminQueries, serviceOrThrow } from "./serviceAdmin";
 import { useServiceJobRegistration } from "./serviceAdminJobs";
 
 let apiUrl = "http://admin.test";
+const acquisition = { state: "available", reason: null };
+
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
 function pending<T>() {
@@ -85,8 +87,10 @@ describe("admin-owned accepted service jobs", () => {
     async (status) => {
       const initial = pending<Response>();
       const oldResponse = Response.json({
+        acquisition,
         services: [],
-        summary: { running: 0, stopped: 2, total: 2 },
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { unknown: 0, running: 0, stopped: 2, total: 2 },
       });
       let completed = false;
       let reads = 0;
@@ -99,7 +103,12 @@ describe("admin-owned accepted service jobs", () => {
         expect(path).toBe("/api/admin/services");
         signals.push(init.signal);
         if (++reads === 1) return initial.promise;
-        return Response.json({ services: [], summary: { running: 2, stopped: 0, total: 2 } });
+        return Response.json({
+          acquisition,
+          services: [],
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          summary: { unknown: 0, running: 2, stopped: 0, total: 2 },
+        });
       });
       const { qc } = mount();
       await waitFor(() => expect(reads).toBe(1));
@@ -126,7 +135,8 @@ describe("admin-owned accepted service jobs", () => {
         expect(screen.queryByText("0")).toBeNull();
         expect(reads).toBe(2);
         for (const data of publications)
-          if (data !== undefined) expect(data).toMatchObject({ summary: { running: 2 } });
+          if (data !== undefined)
+            expect(data).toMatchObject({ summary: { unknown: 0, running: 2 } });
       } finally {
         initial.resolve(oldResponse);
         unsubscribe();
@@ -151,8 +161,10 @@ describe("admin-owned accepted service jobs", () => {
         }
         expect(path).toBe("/api/admin/services");
         return Response.json({
+          acquisition,
           services: [],
-          summary: { running: completed ? 2 : 0, stopped: 0, total: 2 },
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          summary: { unknown: 0, running: completed ? 2 : 0, stopped: 0, total: 2 },
         });
       });
       const { qc, view, rerender } = mount();
@@ -186,7 +198,12 @@ describe("admin-owned accepted service jobs", () => {
         );
       }
       listReads++;
-      return Response.json({ services: [], summary: { running: 0, stopped: 0, total: 1 } });
+      return Response.json({
+        acquisition,
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { unknown: 0, running: 0, stopped: 0, total: 1 },
+      });
     });
     const { qc } = mount();
     await screen.findByText("0");
@@ -210,7 +227,12 @@ describe("admin-owned accepted service jobs", () => {
         observed.push(url);
         return Response.json(job());
       }
-      return Response.json({ services: [], summary: { running: 0, stopped: 0, total: 0 } });
+      return Response.json({
+        acquisition,
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { unknown: 0, running: 0, stopped: 0, total: 0 },
+      });
     });
     const { view, rerender } = mount();
     await screen.findByText("0");
@@ -228,7 +250,12 @@ describe("admin-owned accepted service jobs", () => {
       const path = new URL(url).pathname;
       if (path.endsWith("/action")) return Response.json({ ok: true, jobId: "job-1" });
       if (path.startsWith("/api/admin/jobs/")) return Response.json(job());
-      return Response.json({ services: [], summary: { running: 0, stopped: 0, total: 0 } });
+      return Response.json({
+        acquisition,
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { unknown: 0, running: 0, stopped: 0, total: 0 },
+      });
     });
     const { qc } = mount();
     await screen.findByText("0");
@@ -239,6 +266,39 @@ describe("admin-owned accepted service jobs", () => {
     fireEvent.click(screen.getByText("Queue"));
     await waitFor(() => expect(qc.getQueryState(first)?.isInvalidated).toBe(true));
     expect(qc.getQueryState(second)?.isInvalidated).toBe(false);
+    expect(qc.getQueryState(["admin", "services", apiUrl, "list"])?.isInvalidated).toBe(false);
+  });
+  it("keeps observation after a failed public status with retained unknown outcome", async () => {
+    let reads = 0;
+    vi.stubGlobal("fetch", (url: string) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/action")) return Response.json({ ok: true, jobId: "job-1" });
+      if (path.startsWith("/api/admin/jobs/")) {
+        reads++;
+        return Response.json(
+          job({
+            status: "failed",
+            result: {
+              observation: {
+                state: "unknown",
+                reason: "transport",
+                nextCheckAt: "2026-10-28T09:00:00Z",
+              },
+            },
+          }),
+        );
+      }
+      return Response.json({
+        acquisition,
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { running: 0, stopped: 0, unknown: 0, total: 0 },
+      });
+    });
+    const { qc } = mount();
+    await screen.findByText("0");
+    fireEvent.click(screen.getByText("Queue"));
+    await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2), { timeout: 3000 });
     expect(qc.getQueryState(["admin", "services", apiUrl, "list"])?.isInvalidated).toBe(false);
   });
 });

@@ -13,14 +13,16 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
-import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useState } from "react";
+import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import {
   type TransitStateSummary,
   useRestartMotis,
-  useSyncTransit,
   useTransitJobDetail,
 } from "@/lib/admin/transitHooks";
 
@@ -93,27 +95,14 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 
 export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
   const showToast = useAdminToast();
-  const syncMutation = useSyncTransit();
+  const [syncReview, setSyncReview] = useState(false);
+  const { apiUrl } = useEnv();
+  const qc = useQueryClient();
   const restartMutation = useRestartMotis();
 
   const inflight = state.currentJob;
 
-  const onSync = () => {
-    syncMutation.mutate(
-      {},
-      {
-        onSuccess: (result) => {
-          if (result?.jobId) showToast(`Sync queued (${result.jobId.slice(0, 8)}…)`, "success");
-          else showToast("Sync queued", "success");
-        },
-        onError: (err) =>
-          showToast(
-            adminErrorMessage(err, err instanceof Error ? err.message : "Failed to queue sync"),
-            "error",
-          ),
-      },
-    );
-  };
+  const onSync = () => setSyncReview(true);
 
   const onRestart = () => {
     restartMutation.mutate(undefined, {
@@ -128,6 +117,18 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
+      {syncReview && (
+        <TransitSyncDialog
+          apiUrl={apiUrl}
+          onClose={() => setSyncReview(false)}
+          onQueued={(jobId) => {
+            setSyncReview(false);
+            showToast(`Sync queued (${jobId.slice(0, 8)}…)`, "success");
+            void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
+          }}
+        />
+      )}
+
       <Stack
         direction="row"
         spacing={1}
@@ -166,7 +167,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               variant="contained"
               startIcon={<PlayArrowIcon fontSize="small" />}
               onClick={onSync}
-              disabled={syncMutation.isPending}
+              disabled={syncReview}
             >
               Run sync now
             </Button>

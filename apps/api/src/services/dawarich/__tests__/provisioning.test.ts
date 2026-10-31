@@ -1115,3 +1115,22 @@ describe("rotateManagedDawarichOidcSecret", () => {
     expect(result.audit.hostname).toBe("history.example.test");
   });
 });
+
+it("refuses provisioning before any mutation when runtime acquisition fails", async () => {
+  const h = createHarness();
+  h.dependencies.getRuntimeState = vi.fn().mockRejectedValue(new Error("agent unavailable"));
+  await expect(
+    provisionManagedDawarich(
+      {
+        headers: HEADERS,
+        actorId: ACTOR,
+        controllerDomain: "maps.example.test",
+        publicHost: "timeline.example.test",
+      },
+      h.dependencies,
+    ),
+  ).rejects.toThrow("agent unavailable");
+  expect(h.createClient).not.toHaveBeenCalled();
+  expect(h.setSecret).not.toHaveBeenCalled();
+  expect(h.mergeConfig).not.toHaveBeenCalled();
+});

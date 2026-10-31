@@ -10,6 +10,42 @@ import {
   trustedConfigurationQueueFits,
 } from "./trusted-config";
 
+it("accepts exactly 524288 serialized sealed UTF-8 bytes and rejects the next byte", () => {
+  const input = payload();
+  input.serviceSecrets = [
+    {
+      serviceId: "motis",
+      values: {
+        ...Object.fromEntries(
+          Array.from({ length: 8 }, (_, i) => [`TOKEN_${i}`, "x".repeat(60000)]),
+        ),
+        PAD: "",
+      },
+    },
+  ];
+  const seal = () =>
+    sealTrustedConfigurationSnapshot({
+      role: "api",
+      operationKey: "opk1_0123456789abcdef",
+      operationForRevision: (revisionId) => ({
+        kind: "stack.render",
+        revisionId,
+        expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running",
+      }),
+      payload: input,
+      token,
+      issuedAtMs: now,
+      nonce: "nonce_0123456789abcdef",
+    });
+  const remaining = OPS_TRUSTED_CONFIG_MAX_BYTES - seal().bytes.length;
+  input.serviceSecrets[0]!.values.PAD = "x".repeat(remaining);
+  expect(seal().bytes.length).toBe(524288);
+  input.serviceSecrets[0]!.values.PAD += "x";
+  expect(() => seal()).toThrow();
+});
+
 const token = Buffer.alloc(32, 0x2a).toString("base64url");
 const now = Date.parse("2026-08-24T08:00:00.000Z");
 
@@ -29,6 +65,26 @@ function payload(): TrustedConfigurationPayload {
 }
 
 describe("trusted configuration snapshot protocol", () => {
+  it("refuses to seal a read-only hardlink preview as a generation apply", () => {
+    expect(() =>
+      sealTrustedConfigurationSnapshot({
+        role: "api",
+        operationKey: "opk1_candidatekind123456",
+        token,
+        issuedAtMs: now,
+        nonce: "nonce_candidate_kind_123456",
+        payload: payload(),
+        operationForRevision: (revisionId) => ({
+          kind: "configuration.hardlinks.preview",
+          candidateId: "031d2b04-4494-443b-8a70-5d1c44b4d951",
+          revisionId,
+          expectedCurrentRevisionId: null,
+          expectedSourceRevision: "d1daa4b7-1c11-47e7-88af-5442be6a3ae7",
+          coordinatorMode: "require-running",
+        }),
+      }),
+    ).toThrow();
+  });
   it("uses one retained queue budget for ready, claimed, and in-flight reservations", () => {
     expect(
       trustedConfigurationQueueFits({
@@ -78,6 +134,8 @@ describe("trusted configuration snapshot protocol", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running" as const,
         kind: "stack.render",
         revisionId,
       }),
@@ -107,6 +165,8 @@ describe("trusted configuration snapshot protocol", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running" as const,
         kind: "serviceConfig.apply",
         serviceId: "redis",
         revisionId,
@@ -139,6 +199,8 @@ describe("trusted configuration snapshot protocol", () => {
       {
         operation: {
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running" as const,
           kind: "serviceConfig.apply" as const,
           serviceId: "postgis",
           revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
@@ -156,6 +218,8 @@ describe("trusted configuration snapshot protocol", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running" as const,
           kind: "stack.render",
           revisionId,
         }),
@@ -184,6 +248,8 @@ describe("trusted configuration snapshot protocol", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId: string) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running" as const,
         kind: "stack.render" as const,
         revisionId,
       }),
@@ -227,6 +293,8 @@ describe("trusted configuration snapshot protocol", () => {
         operationKey: "opk1_0123456789abcdef",
         operation: {
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running" as const,
           kind: "stack.render",
           revisionId: "cfg1_0123456789abcdef0123456789abcdef0123456789a",
         },
@@ -251,6 +319,8 @@ describe("trusted configuration snapshot protocol", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running" as const,
           kind: "stack.render",
           revisionId,
         }),
@@ -290,6 +360,8 @@ describe("trusted configuration snapshot protocol", () => {
           operationKey: "opk1_0123456789abcdef",
           operationForRevision: (revisionId) => ({
             expectedCurrentRevisionId: null,
+            expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+            coordinatorMode: "ensure-running" as const,
             kind: "stack.render",
             revisionId,
           }),
@@ -306,6 +378,8 @@ describe("trusted configuration snapshot protocol", () => {
         operationKey: "opk1_0123456789abcdef",
         operationForRevision: (revisionId) => ({
           expectedCurrentRevisionId: null,
+          expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+          coordinatorMode: "ensure-running" as const,
           kind: "stack.render",
           revisionId,
         }),
@@ -324,6 +398,8 @@ describe("trusted configuration snapshot protocol", () => {
       operationKey: "opk1_0123456789abcdef",
       operationForRevision: (revisionId: string) => ({
         expectedCurrentRevisionId: null,
+        expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+        coordinatorMode: "ensure-running" as const,
         kind: "stack.render" as const,
         revisionId,
       }),

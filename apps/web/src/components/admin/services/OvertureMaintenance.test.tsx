@@ -31,6 +31,11 @@ describe("OvertureMaintenance", () => {
     expect(markup).toContain("europe/germany");
     expect(markup).toContain("Full sync");
     expect(markup).toContain("Resume links");
+    expect(markup).toContain("Restart links from scratch");
+    expect(markup).toContain("Advanced recovery");
+    expect(markup).toContain("Download release partition");
+    expect(markup).toContain("Ingest downloaded partition");
+    expect(markup).toContain("Extract OSM features");
     expect(markup).toContain("completed");
     expect(markup).not.toContain("completed · complete");
   });

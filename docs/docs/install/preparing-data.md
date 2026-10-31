@@ -80,7 +80,7 @@ stop/build/start sequence for routine feed updates.
 Use IDs from `data source list` to disable or re-enable catalog entries:
 
 ```bash
-pnpm openmapx data source remove catalog:de:vbb
+pnpm openmapx data source disable catalog:de:vbb
 pnpm openmapx data source enable catalog:de:vbb
 ```
 
@@ -95,9 +95,10 @@ pnpm openmapx data source add https://example.org/agency-gtfs.zip \
 ```
 
 The URL above is a placeholder; supply a real feed you may use and its actual
-license. `--license-url` is available instead of an SPDX identifier. Add, remove,
-and enable changes queue a new candidate; failure retains the previous live
-sources. Independent backups remain useful for disaster recovery.
+license. `--license-url` is available instead of an SPDX identifier. Add, disable,
+remove and enable changes queue a new candidate; failure retains the previous live
+sources. Disable preserves metadata and can be reversed. Remove is available only
+for operator sources and deletes their saved metadata. Independent backups remain useful for disaster recovery.
 
 Operator URLs must be public HTTP(S) endpoints on default ports and contain no
 credentials. Private, loopback, link-local, and reserved targets are rejected,
@@ -119,9 +120,11 @@ pnpm openmapx data generate-api-keys
 pnpm openmapx data sync --countries de
 ```
 
-Regeneration keeps existing required values and removes obsolete keys. Keep
-this file private; it is mounted into data-manager and the private runner,
-not distributed as ordinary source data. An optional age key is described in
+Generation reads the exact active paired pins and cached catalog without
+refreshing upstream. Use `--proposal <id>` to prepare credentials for a retained
+proposal. Existing values and orphaned keys are preserved; no values are printed.
+Keep this file private: Data Manager reads it from its read-only directory mount,
+and credential-bearing runner inputs stay private. It is not ordinary source data. An optional age key is described in
 `infra/docker/secrets/README.md`.
 
 ### Map glyphs
@@ -201,8 +204,15 @@ pnpm openmapx data search-index build europe/germany
 pnpm openmapx data search-index status
 pnpm openmapx data notable-places build
 pnpm openmapx data notable-places status
-pnpm openmapx data overture-sync europe/germany
-pnpm openmapx data overture-status
+
+# Regional or planet Overture Places synchronization and conflation
+pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
+pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog
+pnpm openmapx data overture-ingest [region]   # ingest the newest completed local partition
+pnpm openmapx data overture-conflate [region] # rebuild OSM <-> Overture GERS entity links
+pnpm openmapx data overture-status            # inspect active and staging Overture snapshots
+pnpm openmapx data overture-extract [region]  # extract regional POIs from OSM PBF
+
 ```
 
 `overture-sync` runs the pull, ingest, and conflation sequence. Individual
@@ -215,6 +225,26 @@ format 2 search index and Overture conflation before publishing Planet in the
 admin panel. This is a substantial preparation workload. The
 [global publication runbook](../developer/ambient-places-publication.md#planet-preparation-restart-and-deployment)
 covers checkpoints, capacity, and recovery.
+
+## Inspecting prepared data
+
+**Services → Data workflows** lists every local OSM extract with pagination,
+its recorded region, size and source fingerprint. Downloads record SHA-256
+evidence during their checksum pass. Builds and imports record their output
+hashes and local file identities; refreshing this page does not hash datasets.
+
+Prepared service data distinguishes **ready**, **missing**, **incomplete**,
+**stale** and **unknown**. Empty directories do not establish readiness. A
+changed source or output invalidates its recorded evidence, including a
+replacement with the same byte size. Legacy build records without source hashes
+remain unknown until rebuilt or imported with current evidence. MOTIS also
+requires its candidate manifest and imported outputs.
+
+These checks describe prepared artifacts, rather than live routing or database
+health. Services such as Valhalla, Pelias, Nominatim, Photon and Overpass remain
+unknown when authoritative runtime evidence is unavailable. An inspection or
+permission failure is shown as unavailable; it is never presented as an empty
+successful inventory.
 
 ## Sharing data with hardlinks
 
@@ -258,20 +288,24 @@ pnpm --silent openmapx data export tileserver - \
 
 Stop the target consumers before streaming. Export also refuses running
 consumers on the build host. Import needs temporary space on the same filesystem
-for `data/.openmapx-import/` plus old and new outputs. Run it as the serving
+for a private `data/.openmapx-import-<stage>/` directory plus old and new outputs. Run it as the serving
 owner whose UID/GID match the containers. Relative paths are resolved from the
 invocation directory.
 
-| Service      | Bundled directories                | Excluded inputs        |
-| ------------ | ---------------------------------- | ---------------------- |
-| `tileserver` | `tile-mbtiles/`                    | None                   |
-| `osrm`       | `osrm-graph/`                      | Staged PBF             |
-| `otp`        | `otp-graph/`                       | PBF and ZIP inputs     |
-| `pelias`     | `pelias/`, including Elasticsearch | `openstreetmap/` input |
-| `motis`      | `motis/live/`, `motis-feed-proxy/` | None                   |
+| Service      | Bundled directories                    | Excluded inputs                                     |
+| ------------ | -------------------------------------- | --------------------------------------------------- |
+| `tileserver` | `tile-mbtiles/`                        | None                                                |
+| `osrm`       | `osrm-graph/`                          | Staged PBF                                          |
+| `otp`        | `otp-graph/`                           | PBF and ZIP inputs                                  |
+| `pelias`     | `pelias/`, including Elasticsearch     | `openstreetmap/` input                              |
+| `motis`      | Portable compiled candidate and recipe | Credentials and generated proxy/configuration files |
 
-MOTIS export requires a build performed with `--import`, tying its import output
-to the runtime image. Stop both MOTIS slots on each host:
+MOTIS export requires a retained portable recipe and compiled candidate from a
+build performed with `--import`, tied to the runtime image. The destination needs
+the same approved paired catalog pins and required managed credentials. Import
+materializes private configuration offline from destination secrets, preserves
+slot aliases and does not inherit the source's successful health check. Stop both
+MOTIS slots on each host:
 
 ```bash
 pnpm openmapx services build motis --region europe/germany --import
@@ -279,8 +313,11 @@ pnpm openmapx data export motis motis-germany.tar
 ```
 
 Valhalla, Nominatim, and Overpass have no supported artifact-bundle workflow.
-If import reports that the artifact was installed but linking failed, fix the
-reported cause and run `data link` before starting its consumers.
+Import applies the already-current generation's hardlink plan without rendering,
+pulling images or starting consumers. A nonempty plan needs Data Manager running.
+If publication commits but linking fails or remains unknown, keep consumers
+stopped and inspect the original operation before starting them. See
+[Move prepared data between instances](./managing-services.md#move-prepared-data-between-instances).
 
 ## Checking what you have
 
@@ -329,7 +366,55 @@ before deleting anything you cannot regenerate.
 
 ## Where to go next
 
-Use [Requirements](./requirements.md) for capacity planning and the individual
-[routing](../guides/routing-engines.md), [geocoding](../guides/geocoders.md),
-[transit](../guides/transit-engines.md), and [tile](../guides/map-tiles.md) guides
-for readiness checks.
+- **[Requirements](./requirements.md)** — how region size and engine choice drive
+  the RAM and disk you'll need before you start downloading.
+- **[How it works](../overview/how-it-works.md)** — the service/integration model
+  and how the data-manager fits into a running deployment.
+
+## Transfer limits and storage
+
+Artifact transfers use private stages managed by the operations agent. Uploading
+bytes does not validate or install them. The server records the received size and
+SHA-256; an interrupted or ambiguous upload must be inspected before starting a
+new transfer. Deleting a stage cannot interrupt an unfinished installation.
+
+The default limits are 1 TiB uploaded, 2 TiB expanded and 4 TiB across retained
+stages, with two simultaneous transfers and one per administrator. Integration
+archives have a separate 200 MiB limit; encrypted instance migration files have a
+64 MiB limit. Disk admission reserves the actual declared upload size, not the
+expansion ceiling, and requires at least 1 GiB of additional free headroom. Unknown
+free capacity blocks admission. A successful upload stays `uploaded` until its
+purpose-specific validator accepts it.
+
+Operators can supply `infra/docker/artifact-transfer-policy.json`, mounted
+read-only into the agent. Its optional `artifactTransfer` object accepts the
+published deployment limits. For example, a smaller installation can use:
+
+```json
+{
+  "artifactTransfer": {
+    "maxUploadBytes": 17179869184,
+    "maxExpandedBytes": 34359738368,
+    "maxEntryBytes": 34359738368,
+    "maxStageBytes": 68719476736,
+    "maxEntries": 10000,
+    "maxManifestBytes": 8388608,
+    "maxConcurrentTransfers": 1,
+    "maxConcurrentTransfersPerPrincipal": 1,
+    "maxConcurrentArchiveJobs": 1,
+    "memoryBudgetBytes": 268435456
+  }
+}
+```
+
+The supported agent manifest allocates 1 GiB of memory. Larger metadata or
+concurrency limits require a matching declared and actual memory allocation;
+invalid or incompatible policy disables transfers rather than silently weakening
+limits. A missing policy file uses the defaults.
+
+Streams have a five-minute idle limit and a 72-hour total limit, shortened by an
+owning job's earlier deadline. Stages expire after 96 hours, while unfinished or
+unknown publication work retains its ownership. The shipped Traefik HTTPS
+entrypoint permits 72-hour reads and writes without request buffering. These are
+entrypoint-wide settings; ordinary API body limits and authentication still apply.
+Custom ingress deployments must preserve streaming and compatible timeouts.

@@ -36,13 +36,35 @@ const at = "2026-10-21T10:00:00.000Z";
 const inventory = {
   fetchedAt: at,
   osm: {
-    found: true,
-    filename: "synthetic.osm.pbf",
-    sizeBytes: 42,
-    modifiedAt: at,
-    region: "test",
+    items: [
+      {
+        artifactId: "a".repeat(64),
+        filename: "synthetic.osm.pbf",
+        region: "test",
+        sizeBytes: 42,
+        modifiedAt: at,
+        sourceFingerprint: null,
+        fingerprintState: "missing",
+      },
+    ],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    unavailable: false,
   },
-  builds: [{ target: "motis", built: true, builtAt: at }],
+  builds: [
+    {
+      target: "motis",
+      built: false,
+      readiness: "unknown",
+      reason: "Synthetic readiness unavailable",
+      sizeBytes: null,
+      sourceFingerprints: [],
+      buildRecordVersion: null,
+      region: null,
+      runtimeImages: {},
+    },
+  ],
   motisTransitous: {
     configFound: true,
     datasetCount: 1,
@@ -142,7 +164,7 @@ class Boundary extends Component<{ children: ReactNode }, { crashed: boolean }> 
 function InventoryStatus() {
   const { client, apiUrl } = useActivityClient();
   const { data } = useQuery(serviceAdminQueries(client, apiUrl).data());
-  return <output>{data?.osm.region}</output>;
+  return <output>{data?.osm.items[0]?.region}</output>;
 }
 function setup(
   handler?: (url: URL, init: RequestInit) => Response | Promise<Response> | undefined,
@@ -151,6 +173,23 @@ function setup(
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = new URL(input);
     requests.push({ url, init });
+    if (url.pathname.endsWith("/overture/recovery"))
+      return Response.json({
+        region: "europe/germany",
+        busy: false,
+        osmAvailable: true,
+        downloadedRelease: "2026-10-21.0",
+        installedRelease: "2026-10-21.0",
+        actions: Object.fromEntries(
+          [
+            "overture-pull",
+            "overture-ingest",
+            "overture-extract",
+            "overture-conflate",
+            "overture-restart",
+          ].map((id) => [id, { allowed: true, reason: null }]),
+        ),
+      });
     const result = handler?.(url, init);
     if (result) return result;
     if (url.pathname.startsWith("/api/admin/jobs/"))
@@ -340,7 +379,7 @@ function embedded(kind: string, origin = apiUrl) {
   if (kind === "search-index-build") return <SearchIndexMaintenance apiUrl={origin} />;
   return <NotablePlacesMaintenance apiUrl={origin} />;
 }
-async function queueEmbedded(kind: string) {
+async function queueEmbedded(kind: string, confirmPreview = true) {
   if (kind.startsWith("overture") || kind === "search-index-build") {
     const region = await screen.findByLabelText("Region");
     fireEvent.change(region, { target: { value: "europe/germany" } });
@@ -353,14 +392,19 @@ async function queueEmbedded(kind: string) {
         : kind === "search-index-build"
           ? "Build index"
           : "Build now";
-  fireEvent.click(await screen.findByRole("button", { name: queue }));
+  const queueButton = await screen.findByRole("button", { name: queue });
+  await waitFor(() => expect(queueButton).not.toBeDisabled());
+  fireEvent.click(queueButton);
+  if (!confirmPreview) return;
   const confirm =
     kind === "overture-sync"
-      ? "Start full sync"
+      ? "Run operation"
       : kind === "overture-conflate"
         ? "Resume"
         : "Start build";
-  fireEvent.click(await screen.findByRole("button", { name: confirm }));
+  fireEvent.click(
+    await within(await screen.findByRole("dialog")).findByRole("button", { name: confirm }),
+  );
 }
 describe("embedded operation callers", () => {
   it.each(["success", "failed", "canceled"] as const)(
@@ -488,9 +532,11 @@ describe("embedded operation callers", () => {
         fireEvent.change(await screen.findByLabelText("Region"), {
           target: { value: "new/region" },
         });
-      fireEvent.click(await screen.findByRole("button", { name: queue }));
+      const queueButton = await screen.findByRole("button", { name: queue });
+      await waitFor(() => expect(queueButton).not.toBeDisabled());
+      fireEvent.click(queueButton);
       await act(async () => deferred.resolve(Response.json({ ok: true, jobId: "job-1" })));
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
       expect(toast).not.toHaveBeenCalled();
       expect(calls.filter((r) => r.url.pathname.includes("/jobs/"))).toHaveLength(0);
     },
@@ -564,7 +610,7 @@ describe("backup dialog and input ownership", () => {
           target: { value: "new-service" },
         });
       await act(async () => deferred.resolve(Response.json({ ok: true, jobId: "job-1" })));
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
       if (kind === "restore")
         expect(screen.getByLabelText("Service IDs (optional)")).toHaveValue("new-service");
       expect(toast).not.toHaveBeenCalled();
@@ -594,7 +640,13 @@ describe("accepted jobs refresh concrete workflows", () => {
         if (url.pathname.endsWith("/services/data"))
           return Response.json({
             ...inventory,
-            osm: { ...inventory.osm, region: `generation-${done.size}` },
+            osm: {
+              ...inventory.osm,
+              items: inventory.osm.items.map((item) => ({
+                ...item,
+                region: `generation-${done.size}`,
+              })),
+            },
           });
         return undefined;
       });
@@ -660,7 +712,13 @@ describe("accepted jobs refresh concrete workflows", () => {
         if (url.pathname.endsWith("/services/data"))
           return Response.json({
             ...inventory,
-            osm: { ...inventory.osm, region: changed ? "should-not-refresh" : "original" },
+            osm: {
+              ...inventory.osm,
+              items: inventory.osm.items.map((item) => ({
+                ...item,
+                region: changed ? "should-not-refresh" : "original",
+              })),
+            },
           });
         return undefined;
       });
@@ -691,7 +749,13 @@ describe("accepted jobs refresh concrete workflows", () => {
       if (url.pathname.endsWith("/services/data"))
         return Response.json({
           ...inventory,
-          osm: { ...inventory.osm, region: done ? "refreshed" : "original" },
+          osm: {
+            ...inventory.osm,
+            items: inventory.osm.items.map((item) => ({
+              ...item,
+              region: done ? "refreshed" : "original",
+            })),
+          },
         });
       return undefined;
     });
@@ -720,7 +784,13 @@ describe("accepted jobs refresh concrete workflows", () => {
     const calls = setup((url) => {
       if (url.pathname.endsWith("/run")) return deferred.promise;
       if (url.pathname.endsWith("/services/data"))
-        return Response.json({ ...inventory, osm: { ...inventory.osm, region: url.origin } });
+        return Response.json({
+          ...inventory,
+          osm: {
+            ...inventory.osm,
+            items: inventory.osm.items.map((item) => ({ ...item, region: url.origin })),
+          },
+        });
       return undefined;
     });
     const { view, rerender } = mount(
@@ -808,7 +878,7 @@ describe("wire intent, validation, polling and policy", () => {
     expect(calls.find((r) => r.init.method === "DELETE")?.url.pathname).toBe(
       "/api/admin/services/backups/unsafe%2Fname%20%25%3F",
     );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
   it.each([
     "create",
@@ -859,7 +929,7 @@ describe("wire intent, validation, polling and policy", () => {
       fireEvent.click((await screen.findAllByLabelText("Fan-out rollback"))[0] as HTMLElement);
     } else {
       mount(embedded(kind));
-      await queueEmbedded(kind);
+      await queueEmbedded(kind, !kind.startsWith("overture"));
     }
     if (kind === "policy") await screen.findByText("Synthetic refused");
     else await waitFor(() => expect(toast).toHaveBeenCalledWith("Synthetic refused", "error"));
@@ -906,7 +976,7 @@ describe("wire intent, validation, polling and policy", () => {
     });
     const { qc } = mount(<DataWorkflowsPage />);
     await screen.findByText("1 schedule dataset(s)");
-    expect(qc.getQueryData(["admin", "services", apiUrl, "data"])).toEqual(inventory);
+    expect(qc.getQueryData(["admin", "services", apiUrl, "data", "50", "0"])).toEqual(inventory);
     expect(await screen.findByText(/called motis; skipped fallback/)).toBeInTheDocument();
     const toggle = screen.getAllByLabelText("Fan-out rollback")[0] as HTMLElement;
     expect(toggle).not.toBeChecked();
@@ -923,7 +993,13 @@ describe("wire intent, validation, polling and policy", () => {
       let reads = 0;
       setup((url) =>
         url.pathname.endsWith("/services/data")
-          ? Response.json({ ...inventory, osm: { ...inventory.osm, region: `poll-${++reads}` } })
+          ? Response.json({
+              ...inventory,
+              osm: {
+                ...inventory.osm,
+                items: inventory.osm.items.map((item) => ({ ...item, region: `poll-${++reads}` })),
+              },
+            })
           : undefined,
       );
       mount(<DataWorkflowsPage />);
@@ -955,7 +1031,7 @@ describe("pending form inputs and malformed operation acceptance", () => {
       target: { value: "replacement" },
     });
     await act(async () => deferred.resolve(Response.json({ ok: true, jobId: "job-1" })));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("Service IDs (optional)")).toHaveValue("replacement");
     expect(toast).not.toHaveBeenCalled();
   });
@@ -967,7 +1043,7 @@ describe("pending form inputs and malformed operation acceptance", () => {
       fireEvent.click(screen.getByRole("button", { name: "Queue Update data" }));
       fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
       await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.any(String), "error"));
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
       expect(toast).not.toHaveBeenCalledWith("invented");
     },
   );
@@ -1173,7 +1249,7 @@ it.each(["restore", "delete"])(
       screen.getByRole("button", { name: kind === "restore" ? "Restore" : "Delete" }),
     );
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.any(String), "error"));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(calls.filter((r) => r.url.pathname.includes("/jobs/"))).toHaveLength(0);
   },
 );

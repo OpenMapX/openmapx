@@ -27,9 +27,11 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { clearAdminReleaseSelection } from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { activityJobQueryOptions, useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -57,6 +59,7 @@ interface ImageStatus {
 interface ReleaseStatus {
   configuredSelector?: string;
   currentReleaseId?: string;
+  selectedReleaseId?: string;
   availableReleaseId?: string;
   currentVersion?: string;
   availableVersion?: string;
@@ -175,6 +178,12 @@ export function SystemMaintenance() {
     releaseId: string;
     expectedDigest: string;
   } | null>(null);
+  const [pinToClear, setPinToClear] = useState<{
+    releaseId: string;
+    key: string;
+    origin: string;
+  } | null>(null);
+  const [clearConfirmation, setClearConfirmation] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [createBackup, setCreateBackup] = useState(true);
   const [trackedJob, setTrackedJob] = useState<TrackedJob | null>(null);
@@ -205,7 +214,7 @@ export function SystemMaintenance() {
   }, [rejections]);
 
   const statusQuery = useQuery<SystemStatus>({
-    queryKey: ["admin", "system"],
+    queryKey: ["admin", "system", apiUrl],
     queryFn: async () => {
       const response = await fetch(`${apiUrl}/api/admin/system`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to load system maintenance status");
@@ -307,8 +316,30 @@ export function SystemMaintenance() {
     },
   });
 
+  const clearPin = useMutation({
+    mutationFn: async (fixed: NonNullable<typeof pinToClear>) => {
+      if (fixed.origin !== apiUrl)
+        throw Error("API origin changed; inspect the release selection again");
+      const result = await serviceOrThrow(
+        clearAdminReleaseSelection(
+          { expectedReleaseId: fixed.releaseId, confirmation: "CLEAR RELEASE PIN" },
+          { "idempotency-key": fixed.key },
+          { client },
+        ),
+      );
+      return { id: result.jobId, label: "Release pin clear", path: "release/clear" };
+    },
+    onSuccess: (job) => {
+      setTrackedJob(job);
+      setPinToClear(null);
+      setClearConfirmation("");
+      showToast("Release pin clear queued");
+    },
+    onError: (error) =>
+      showToast(error instanceof Error ? error.message : "Unable to clear release pin", "error"),
+  });
   const status = statusQuery.data;
-  const active = Boolean(trackedJob || queueJob.isPending);
+  const active = Boolean(trackedJob || queueJob.isPending || clearPin.isPending);
   const waiting = (path: SubmissionPath) => Boolean(rejections[path]?.until);
   const rejectionAlert = (rejection: SubmissionRejection) => (
     <Alert key={rejection.path} severity="warning" sx={{ minWidth: 0 }}>
@@ -396,6 +427,9 @@ export function SystemMaintenance() {
           Current release: {status?.release?.currentReleaseId ?? "unknown"}
         </Typography>
         <Typography variant="body2">
+          Selected pin: {status?.release?.selectedReleaseId ?? "none or unavailable"}
+        </Typography>
+        <Typography variant="body2">
           Checked release: {status?.release?.availableReleaseId ?? "not checked"}
         </Typography>
         {status?.release?.availableDigest && (
@@ -406,8 +440,22 @@ export function SystemMaintenance() {
         <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
           Check reads the configured release manifest without downloading images or restarting
           services. Update downloads that exact checked release before replacing any container.
-          Change channels in the host configuration.
+          Change the configured channel under Platform configuration in Settings. Clearing the pin
+          preserves that channel and all running containers; the next configuration action may
+          resolve the configured channel again.
         </Typography>
+        <Button
+          disabled={active || !status?.release?.selectedReleaseId}
+          onClick={() => {
+            const releaseId = status?.release?.selectedReleaseId;
+            if (releaseId) {
+              setPinToClear({ releaseId, key: crypto.randomUUID(), origin: apiUrl });
+              setClearConfirmation("");
+            }
+          }}
+        >
+          Clear selected release pin
+        </Button>
       </Paper>
 
       {hostUpdateRequired && (
@@ -604,6 +652,52 @@ export function SystemMaintenance() {
       </Paper>
 
       <Dialog
+        open={pinToClear !== null}
+        onClose={clearPin.isPending ? undefined : () => setPinToClear(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Clear release selection</DialogTitle>
+        <DialogContent>
+          <Stack sx={{ gap: 2, pt: 1, overflowWrap: "anywhere" }}>
+            <Typography>
+              Clear selected pin {pinToClear?.releaseId}. Images, running containers, release
+              evidence and the configured channel remain unchanged. Clearing does not select local
+              images.
+            </Typography>
+            <Typography>
+              Finish any pending data-manager update before clearing a release pin. If the selected
+              pin changes, check it again.
+            </Typography>
+            <TextField
+              label="Clear confirmation"
+              value={clearConfirmation}
+              onChange={(event) => setClearConfirmation(event.target.value)}
+              helperText="Type CLEAR RELEASE PIN"
+              autoComplete="off"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={clearPin.isPending} onClick={() => setPinToClear(null)}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            disabled={
+              clearPin.isPending ||
+              clearConfirmation !== "CLEAR RELEASE PIN" ||
+              pinToClear?.origin !== apiUrl
+            }
+            onClick={() => {
+              if (pinToClear) clearPin.mutate(pinToClear);
+            }}
+          >
+            Clear release pin
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
         open={dialogOpen}
         onClose={active ? undefined : () => setDialogOpen(false)}
         maxWidth="sm"
@@ -617,9 +711,9 @@ export function SystemMaintenance() {
               {candidateToApply?.expectedDigest}
             </Typography>
             <Alert severity="info">
-              Images are downloaded before any container is replaced. The operations agent updates
-              first when the release changes it, then Data Manager and Web; API updates last and
-              briefly interrupts this page.
+              Images are downloaded before containers are replaced. Services update in dependency
+              order, with the operations agent last. API or proxy updates may briefly interrupt this
+              page; reconnect to follow the original job.
             </Alert>
             {rejections["updates/apply"] && rejectionAlert(rejections["updates/apply"])}
             <FormControlLabel

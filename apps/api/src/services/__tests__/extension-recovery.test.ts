@@ -138,7 +138,9 @@ describe("warnAboutLegacyInstallJournals", () => {
       recovery.warnAboutLegacyInstallJournals(directory, warn);
 
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("verifies the integrations"));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("original publication and administrative job identity"),
+      );
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining(`.extension-install-journal-${"a".repeat(24)}.json`),
       );

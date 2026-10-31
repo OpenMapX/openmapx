@@ -2,8 +2,14 @@ import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   account,
+  accountActionReceipt,
+  accountMailOutbox,
+  adminActionReauthentication,
   adminAuditLog,
   adminJob,
+  authPolicyApplication,
+  authPolicyState,
+  configurationMigrationPreview,
   dataDisclosureEvent,
   dataExportReauthentication,
   dataManagerOfflinePackageArtifactReferences,
@@ -18,6 +24,7 @@ import {
   dataSubjectRequestTask,
   installedExtension,
   installedIntegration,
+  integrationApplicationReceipt,
   integrationSecret,
   labeledPlace,
   mangroveKeypair,
@@ -31,12 +38,14 @@ import {
   passkey,
   personalTimelineConnection,
   personalVehicle,
+  platformConfigurationPreview,
   savedList,
   savedPlace,
   serviceSecret,
   session,
   shareLink,
   systemSettings,
+  transitCredentialPreview,
   twoFactor,
   user,
   verification,
@@ -335,6 +344,30 @@ export async function* streamOpenMapxRegistrationRecords(
           map: ({ id, ...row }) => ({ sessionDigest: pseudonymousIdentifier(id), ...row }),
         },
       );
+      yield* emit(
+        database
+          .select({
+            id: adminActionReauthentication.id,
+            purpose: adminActionReauthentication.purpose,
+            state: adminActionReauthentication.state,
+            createdAt: adminActionReauthentication.createdAt,
+            expiresAt: adminActionReauthentication.expiresAt,
+            completedAt: adminActionReauthentication.completedAt,
+            consumedAt: adminActionReauthentication.consumedAt,
+          })
+          .from(adminActionReauthentication)
+          .where(
+            and(
+              eq(adminActionReauthentication.actorId, context.userId),
+              lte(adminActionReauthentication.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(adminActionReauthentication.id)),
+        {
+          policyCodes: ["session-token-redacted"],
+          map: ({ id, ...row }) => ({ challengeDigest: pseudonymousIdentifier(id), ...row }),
+        },
+      );
       return;
     case "auth-passkeys":
       yield* emit(
@@ -392,6 +425,29 @@ export async function* streamOpenMapxRegistrationRecords(
           .where(and(eq(user.id, context.userId), lte(verification.createdAt, cutoff)))
           .orderBy(asc(verification.id)),
         { policyCodes: ["challenge-redacted"] },
+      );
+      yield* emit(
+        database
+          .select({
+            id: accountMailOutbox.id,
+            kind: accountMailOutbox.kind,
+            state: accountMailOutbox.state,
+            createdAt: accountMailOutbox.createdAt,
+            expiresAt: accountMailOutbox.expiresAt,
+            finishedAt: accountMailOutbox.finishedAt,
+          })
+          .from(accountMailOutbox)
+          .where(
+            and(
+              eq(accountMailOutbox.userId, context.userId),
+              lte(accountMailOutbox.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(accountMailOutbox.id)),
+        {
+          policyCodes: ["challenge-redacted"],
+          map: ({ id, ...row }) => ({ mailDigest: pseudonymousIdentifier(id), ...row }),
+        },
       );
       return;
     case "auth-oauth-resources": {
@@ -760,6 +816,128 @@ export async function* streamOpenMapxRegistrationRecords(
           }),
         },
       );
+      yield* emit(
+        database
+          .select({ id: authPolicyApplication.key, createdAt: authPolicyApplication.createdAt })
+          .from(authPolicyApplication)
+          .where(
+            and(
+              eq(authPolicyApplication.actorId, context.userId),
+              lte(authPolicyApplication.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(authPolicyApplication.key)),
+        {
+          map: (row) => ({
+            recordId: `policy-application-${pseudonymousIdentifier(String(row.id))}`,
+            actor: "subject",
+            action: "auth.policy.apply",
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            id: authPolicyState.id,
+            revision: authPolicyState.revision,
+            createdAt: authPolicyState.activatedAt,
+          })
+          .from(authPolicyState)
+          .where(
+            and(
+              eq(authPolicyState.activatedBy, context.userId),
+              lte(authPolicyState.activatedAt, cutoff),
+            ),
+          )
+          .orderBy(asc(authPolicyState.id)),
+        {
+          map: (row) => ({
+            recordId: `policy-owner-${pseudonymousIdentifier(String(row.id))}`,
+            actor: "subject",
+            action: "auth.policy.current-owner",
+            revision: row.revision,
+            createdAt: row.createdAt,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            key: accountActionReceipt.key,
+            action: accountActionReceipt.action,
+            createdAt: accountActionReceipt.createdAt,
+            mailRequested: accountActionReceipt.mailRequested,
+          })
+          .from(accountActionReceipt)
+          .where(
+            and(
+              or(
+                eq(accountActionReceipt.actorId, context.userId),
+                eq(accountActionReceipt.targetId, context.userId),
+              ),
+              lte(accountActionReceipt.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(accountActionReceipt.key)),
+        {
+          policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
+          map: ({ key, ...row }) => ({
+            recordId: `account-action-${pseudonymousIdentifier(key)}`,
+            ...row,
+          }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            operationId: integrationApplicationReceipt.operationId,
+            integrationId: integrationApplicationReceipt.integrationId,
+            capability: integrationApplicationReceipt.capability,
+            createdAt: integrationApplicationReceipt.createdAt,
+            database: sql<string>`${integrationApplicationReceipt.result}->>'database'`,
+            runtime: sql<string>`${integrationApplicationReceipt.result}->>'runtime'`,
+          })
+          .from(integrationApplicationReceipt)
+          .where(
+            and(
+              eq(integrationApplicationReceipt.actorId, context.userId),
+              lte(integrationApplicationReceipt.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(integrationApplicationReceipt.operationId)),
+        {
+          policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
+          map: ({ operationId, ...row }) => ({
+            recordId: `integration-application-${pseudonymousIdentifier(operationId)}`,
+            ...row,
+          }),
+        },
+      );
+      return;
+    case "platform-configuration-previews":
+      yield* emit(
+        database
+          .select({
+            id: platformConfigurationPreview.id,
+            createdAt: platformConfigurationPreview.createdAt,
+            expiresAt: platformConfigurationPreview.expiresAt,
+            consumedAt: platformConfigurationPreview.consumedAt,
+            retiredAt: platformConfigurationPreview.retiredAt,
+          })
+          .from(platformConfigurationPreview)
+          .where(
+            and(
+              eq(platformConfigurationPreview.actorId, context.userId),
+              lte(platformConfigurationPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(platformConfigurationPreview.id)),
+        {
+          policyCodes: ["configuration-intent-redacted", "rights-of-others"],
+          map: ({ id, ...row }) => ({ ...row, previewDigest: pseudonymousIdentifier(id) }),
+        },
+      );
       return;
     case "admin-jobs-attribution":
       yield* emit(
@@ -858,6 +1036,48 @@ export async function* streamOpenMapxRegistrationRecords(
           )
           .orderBy(asc(serviceSecret.id)),
         { policyCodes: ["secret-value-redacted"] },
+      );
+      yield* emit(
+        database
+          .select({
+            id: transitCredentialPreview.id,
+            createdAt: transitCredentialPreview.createdAt,
+            expiresAt: transitCredentialPreview.expiresAt,
+            consumedAt: transitCredentialPreview.consumedAt,
+          })
+          .from(transitCredentialPreview)
+          .where(
+            and(
+              eq(transitCredentialPreview.actorId, context.userId),
+              lte(transitCredentialPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(transitCredentialPreview.id)),
+        {
+          policyCodes: ["secret-value-redacted"],
+          map: ({ id, ...row }) => ({ ...row, proposalDigest: pseudonymousIdentifier(id) }),
+        },
+      );
+      yield* emit(
+        database
+          .select({
+            id: configurationMigrationPreview.id,
+            kind: configurationMigrationPreview.kind,
+            createdAt: configurationMigrationPreview.createdAt,
+            expiresAt: configurationMigrationPreview.expiresAt,
+          })
+          .from(configurationMigrationPreview)
+          .where(
+            and(
+              eq(configurationMigrationPreview.actorId, context.userId),
+              lte(configurationMigrationPreview.createdAt, cutoff),
+            ),
+          )
+          .orderBy(asc(configurationMigrationPreview.id)),
+        {
+          policyCodes: ["secret-value-redacted"],
+          map: ({ id, ...row }) => ({ ...row, proposalDigest: pseudonymousIdentifier(id) }),
+        },
       );
       return;
     case "system-setting-attribution":

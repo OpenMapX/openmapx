@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
-import { db } from "../db";
+import { currentAccountMutation } from "../account/account-context";
+import { currentAuthDatabase } from "../account/auth-database";
 import { adminAuditLog } from "../db/schema";
 import { appLogger } from "../services/app-logger.js";
 import { safeErrorClass, sanitizeLogMetadata } from "./safe-log-fields.js";
@@ -29,20 +30,23 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
   const userAgent = isLoopback ? `${baseUa ?? "unknown"} (loopback)` : baseUa;
 
   try {
-    await db.insert(adminAuditLog).values({
-      id: randomUUID(),
-      actorId: isLoopback ? null : (entry.actorId ?? null),
-      targetId: entry.targetId ?? null,
-      targetType: entry.targetType ?? null,
-      action: entry.action,
-      details:
-        entry.details === null || entry.details === undefined
-          ? null
-          : sanitizeLogMetadata(entry.details),
-      ipAddress: entry.request?.ip ?? null,
-      userAgent,
-    });
+    await currentAuthDatabase()
+      .insert(adminAuditLog)
+      .values({
+        id: randomUUID(),
+        actorId: isLoopback ? null : (entry.actorId ?? null),
+        targetId: entry.targetId ?? null,
+        targetType: entry.targetType ?? null,
+        action: entry.action,
+        details:
+          entry.details === null || entry.details === undefined
+            ? null
+            : { ...sanitizeLogMetadata(entry.details) },
+        ipAddress: entry.request?.ip ?? null,
+        userAgent,
+      });
   } catch (err) {
+    if (currentAccountMutation()) throw err;
     // Audit log failures must never break the main operation
     appLogger.add({
       level: "error",

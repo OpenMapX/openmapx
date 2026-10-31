@@ -9,8 +9,14 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
-import { CANDIDATE_PROXY_DIRNAME, createCandidateManifest } from "./candidate.js";
-import { GTFS_ARCHIVE_RE } from "./internal.js";
+import {
+  createMotisPinnedBlobReader,
+  PORTABLE_MOTIS_FILENAME,
+  producePortableMotisRecipe,
+} from "@openmapx/core/build-artifacts/motis-portable";
+import { parseFeedCredentialMapJson } from "@openmapx/transitous-core/feed-credentials";
+import { CANDIDATE_PROXY_DIRNAME, createCandidateManifestAsync } from "./candidate.js";
+import { GTFS_ARCHIVE_RE, resolveTransitousApiKeysPath } from "./internal.js";
 import { readTransitSourceManifest, TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
 
@@ -47,6 +53,12 @@ function linkOrCopy(src: string, dest: string): void {
   } catch {
     copyFileSync(src, dest);
   }
+}
+
+/** Metadata is rewritten in place by catalog tools; it must never share candidate inodes. */
+function copyMetadata(src: string, dest: string): void {
+  if (existsSync(dest)) rmSync(dest, { force: true });
+  copyFileSync(src, dest);
 }
 
 /** Extract the GTFS archive filenames + OSM extract a MOTIS `config.yml` references. */
@@ -89,10 +101,10 @@ export const run: StageFn = async (ctx) => {
     const { gtfs, osm } = parseConfigInputs(configText);
 
     const stagingDir = ctx.motisStagingDataDir;
-    mkdirSync(stagingDir, { recursive: true });
+    mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
 
     // config.yml — the import-time entrypoint.
-    linkOrCopy(configSrc, join(stagingDir, "config.yml"));
+    copyMetadata(configSrc, join(stagingDir, "config.yml"));
 
     // GTFS/NeTEx archives the config references — hardlinked from the build output.
     const linkedFeeds: string[] = [];
@@ -148,10 +160,10 @@ export const run: StageFn = async (ctx) => {
     if (!existsSync(licenseSrc)) {
       return finish("error", `required attribution artifact missing at ${licenseSrc}`);
     }
-    linkOrCopy(licenseSrc, join(stagingDir, "license.json"));
+    copyMetadata(licenseSrc, join(stagingDir, "license.json"));
     const sourceIndexSrc = join(outDir, "gbfs-source-index.json");
     if (existsSync(sourceIndexSrc)) {
-      linkOrCopy(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
+      copyMetadata(sourceIndexSrc, join(stagingDir, "gbfs-source-index.json"));
     }
     const transitSourceManifest = join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
     if (!existsSync(transitSourceManifest)) {
@@ -160,7 +172,7 @@ export const run: StageFn = async (ctx) => {
         `required transit source manifest missing at ${transitSourceManifest}`,
       );
     }
-    linkOrCopy(transitSourceManifest, join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME));
+    copyMetadata(transitSourceManifest, join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME));
 
     const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
     if (!existsSync(proxyCandidateSrc)) {
@@ -205,12 +217,47 @@ export const run: StageFn = async (ctx) => {
       );
     }
 
-    const manifest = createCandidateManifest(
+    const manifest = await createCandidateManifestAsync(
       stagingDir,
       ctx.jobId,
       ctx.now(),
       ctx.operationsPolicy,
+      ctx.abortSignal,
     );
+
+    // Only the successful real assembly may retain a portable recipe. Unsupported
+    // host/operator sources remain usable locally, with an explicit export prerequisite.
+    rmSync(join(stagingDir, PORTABLE_MOTIS_FILENAME), { force: true });
+    let portableRecipeWritten = false;
+    if (ctx.state.catalogPins && missingFeeds.length === 0 && osmSource !== "missing") {
+      try {
+        const pins = {
+          transitousCommit: ctx.state.catalogPins.transitous.ref.split("@").at(-1) ?? "",
+          atlasCommit: ctx.state.catalogPins.transitous.submodules["transitland-atlas"] ?? "",
+        };
+        const keysPath = resolveTransitousApiKeysPath(ctx.apiKeysPath);
+        const credentials = existsSync(keysPath)
+          ? parseFeedCredentialMapJson(readFileSync(keysPath, "utf8"))
+          : {};
+        await producePortableMotisRecipe({
+          stagingDir,
+          pins,
+          credentials,
+          readBlob: createMotisPinnedBlobReader(
+            ctx.state.catalogDir ?? ctx.catalogDir,
+            pins,
+            ctx.abortSignal,
+          ),
+          signal: ctx.abortSignal,
+        });
+        portableRecipeWritten = true;
+      } catch {
+        ctx.abortSignal.throwIfAborted();
+        ctx.logger.warn(
+          "assemble-staging: portable export unavailable; supported pinned nonsecret source metadata and destination credential bindings are required",
+        );
+      }
+    }
 
     const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
     return finish(
@@ -227,6 +274,13 @@ export const run: StageFn = async (ctx) => {
         osm: osm ?? null,
         osmSource,
         candidateEpoch: manifest.epoch,
+        portableRecipeWritten,
+        ...(!portableRecipeWritten
+          ? {
+              portableExportPrerequisite:
+                "Rebuild with supported pinned, nonsecret source metadata and credential bindings",
+            }
+          : {}),
         configHash: manifest.artifacts.config.sha256,
         licenseHash: manifest.artifacts.license.sha256,
       },

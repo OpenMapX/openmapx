@@ -462,7 +462,24 @@ polling.
 
 ## Where to go next
 
-Use [Services](./services-administration.md) for lifecycle actions,
-[Users](./users-and-access.md) for access controls and
-[Backup and restore](./backup-and-restore.md) for recovery. See
-[Configuration](../install/configuration.md) for traffic and retention variables.
+- **[Admin panel](./admin-panel.md)** — the Overview dashboard and how access is
+  gated.
+- **[Services administration](./services-administration.md)** — container
+  lifecycle and the per-service log drawer.
+- **[Public transit](../features/public-transit.md)** — the transit pipeline the
+  provider-health table belongs to.
+- **[Users and access](./users-and-access.md)** — the roles and accounts the audit
+  log attributes actions to.
+- **[Backup and restore](./backup-and-restore.md)** — protecting the database the
+  audit log and persisted logs live in.
+- **[Configuration](../install/configuration.md)** — `OPENCONDITIONS_URL`,
+  `TRAFFIC_LIVE_CRON`, `TRAFFIC_CONDITIONS_STALE_MS` and `TRAFFIC_VALHALLA_URL`,
+  the knobs behind the live road-conditions cycle.
+
+### Configuration-only jobs
+
+Compose generation, image staging, release-pin clearing and backup pruning use
+retained Activity jobs. A lost response should be retried with the same request
+key. Pending observation means the original outcome is still being checked; it
+does not authorize a replacement operation. A generated revision can be committed
+while hardlink application fails, and generation alone does not restart containers.

@@ -17,12 +17,23 @@
     "tag": "v7.11.0",
     "digest": "sha256:7174871a9ecd1343fc0dcb0a0d11848a0b634677de40f9b80ed2ce6b64308080",
     "expose": [4000],
-    "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
+    "environment": {
+      "PELIAS_CONFIG": "/code/pelias.json"
+    },
     "restart": "unless-stopped",
     "dependsOn": [
-      { "service": "elasticsearch", "condition": "service_healthy" },
-      { "service": "pelias-placeholder", "condition": "service_started" },
-      { "service": "pelias-pip", "condition": "service_started" }
+      {
+        "service": "elasticsearch",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "pelias-placeholder",
+        "condition": "service_started"
+      },
+      {
+        "service": "pelias-pip",
+        "condition": "service_started"
+      }
     ]
   },
   "buildCommand": "openmapx services build pelias",
@@ -45,12 +56,50 @@
   },
   "provides": ["geocoder"],
   "produces": [
-    { "type": "pelias-placeholder-data", "sourceDir": "data/pelias/placeholder" },
-    { "type": "pelias-whosonfirst-data", "sourceDir": "data/pelias/whosonfirst" }
+    {
+      "type": "pelias-placeholder-data",
+      "sourceDir": "data/pelias/placeholder"
+    },
+    {
+      "type": "pelias-whosonfirst-data",
+      "sourceDir": "data/pelias/whosonfirst"
+    }
   ],
-  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "bindMounts": [
+    {
+      "source": "config/pelias.json",
+      "target": "/code/pelias.json"
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 4000, "host": 4300, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 4000,
+        "host": 4300,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "geocoding" }
+  "ui": {
+    "category": "geocoding"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

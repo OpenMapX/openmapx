@@ -8,19 +8,24 @@ import {
   OPS_KIND_POLICIES,
   OPS_MAX_EVENT_BATCH,
   OPS_MAX_EVENT_MESSAGE_BYTES,
+  OPS_MAX_EXECUTION_MS,
   OPS_PUBLIC_ERROR_MESSAGES,
   OpsClient,
   OpsClientError,
   type OpsErrorClass,
   type OpsEventBatch,
+  type OpsFailureResult,
   type OpsJobStatusFor,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
   type OpsSubmitResult,
+  opsKindRequiresControlAuthority,
   PRIVACY_BACKUP_TAR_MEDIA_TYPE,
   type PrivacyBackupSubjectExportRequest,
+  parseOpsResult,
   privacyBackupSubjectExportRequestSchema,
+  type TrustedConfigurationApplyOperation,
 } from "@openmapx/core/ops";
 import {
   DAWARICH_TAR_MEDIA_TYPE,
@@ -29,7 +34,7 @@ import {
 } from "@openmapx/core/privacy";
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
-const MAX_WAIT_TIMEOUT_MS = 30 * 60_000 + 5_000;
+const MAX_WAIT_TIMEOUT_MS = OPS_MAX_EXECUTION_MS + 30_000;
 const MAX_STREAM_EVENTS = 2_000;
 const MAX_STREAM_BYTES = 1024 * 1024;
 const MAX_TRANSIENT_STATUS_ATTEMPTS = 3;
@@ -38,13 +43,34 @@ const AMBIGUOUS_ADMISSION_RECOVERY_MS = 2_000;
 export type ApiOpsClient = Pick<OpsClient, "execute" | "status" | "events" | "cancel" | "lookup">;
 
 export class ApiOpsError extends Error {
-  constructor(readonly errorClass: OpsErrorClass) {
+  constructor(
+    readonly errorClass: OpsErrorClass,
+    readonly failureResult?: OpsFailureResult,
+  ) {
     super(
-      errorClass === "host_update_required"
-        ? OPS_PUBLIC_ERROR_MESSAGES.host_update_required
+      errorClass === "host_update_required" ||
+        errorClass === "control_upgrade_required" ||
+        errorClass === "configuration_prerequisite"
+        ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
         : "Operations request failed",
     );
     this.name = "ApiOpsError";
+  }
+}
+
+/** Observation ended without authoritative settlement. Only status/lookup may be retried. */
+export class OpsObservationPending extends Error {
+  constructor(
+    readonly identity: { kind: OpsOperationKind; operationKey: string; operationId?: string },
+    readonly reason:
+      | "transport"
+      | "observer_deadline"
+      | "recovery_required"
+      | "unavailable"
+      | "invalid_identity",
+  ) {
+    super("Operations observation is pending");
+    this.name = "OpsObservationPending";
   }
 }
 
@@ -293,6 +319,10 @@ async function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
 export interface WaitForOpsResultOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
+  observerDeadlineAt?: number;
+  onStatus?: (status: OpsJobStatusFor<OpsOperationKind>) => void | Promise<void>;
+  execution?: { requestedDeadlineAt: number };
+  parentAssertion?: string;
   pollIntervalMs?: number;
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -305,41 +335,79 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
   options: WaitForOpsResultOptions = {},
 ): Promise<OpsResultFor<K>> {
   if (admission.kind !== kind) throw new ApiOpsError("runtime");
-  const timeoutMs =
-    options.timeoutMs ?? Math.min(OPS_KIND_POLICIES[kind].timeoutMs + 5_000, MAX_WAIT_TIMEOUT_MS);
+  const timeoutMs = options.timeoutMs ?? OPS_KIND_POLICIES[kind].timeoutMs + 5_000;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   validatePositiveBounded(timeoutMs, MAX_WAIT_TIMEOUT_MS, "operations wait timeout");
   validatePositiveBounded(pollIntervalMs, 10_000, "operations poll interval");
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
-  const deadline = now() + timeoutMs;
+  const deadline = options.observerDeadlineAt ?? now() + timeoutMs;
+  if (!Number.isSafeInteger(deadline) || deadline < 0 || deadline - now() > MAX_WAIT_TIMEOUT_MS)
+    throw new Error("Invalid observer deadline");
+  const identity = {
+    kind,
+    operationKey: admission.operationKey,
+    operationId: admission.operationId,
+  };
+  const pending = (reason: OpsObservationPending["reason"]): never => {
+    throw new OpsObservationPending(identity, reason);
+  };
+  const observer = new AbortController();
+  const observerTimer = setTimeout(() => observer.abort(), Math.max(1, deadline - now()));
+  observerTimer.unref?.();
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, observer.signal])
+    : observer.signal;
+  const observerExpired = () => signal.aborted || now() >= deadline;
+  const observeSleep = async (ms: number) => {
+    try {
+      await sleep(ms, signal);
+    } catch {
+      pending(observerExpired() ? "observer_deadline" : "transport");
+    }
+  };
   let transientStatusAttempts = 0;
 
-  while (true) {
-    throwIfAborted(options.signal);
-    if (now() >= deadline) throw new ApiOpsError("timeout");
-    let status: OpsJobStatusFor<K>;
-    try {
-      status = await client.status(kind, admission.operationId, { signal: options.signal });
-      transientStatusAttempts = 0;
-    } catch (error) {
-      if (isTransientTransportError(error) && !options.signal?.aborted) {
-        transientStatusAttempts += 1;
-        if (transientStatusAttempts < MAX_TRANSIENT_STATUS_ATTEMPTS && now() < deadline) {
-          await sleep(Math.min(pollIntervalMs, Math.max(1, deadline - now())), options.signal);
-          continue;
+  try {
+    while (true) {
+      if (observerExpired()) pending("observer_deadline");
+      let status: OpsJobStatusFor<K>;
+      try {
+        status = await client.status(kind, admission.operationId, { signal });
+        transientStatusAttempts = 0;
+      } catch (error) {
+        if (isTransientTransportError(error) && !observerExpired()) {
+          transientStatusAttempts += 1;
+          if (transientStatusAttempts < MAX_TRANSIENT_STATUS_ATTEMPTS && now() < deadline) {
+            await observeSleep(Math.min(pollIntervalMs, Math.max(1, deadline - now())));
+            continue;
+          }
         }
+        if (isTransientTransportError(error))
+          pending(observerExpired() ? "observer_deadline" : "transport");
+        return pending("unavailable");
       }
-      translateError(error);
+      if (observerExpired()) pending("observer_deadline");
+      if (
+        status.kind !== kind ||
+        status.operationId !== admission.operationId ||
+        status.operationKey !== admission.operationKey ||
+        (admission.fingerprint !== undefined && status.fingerprint !== admission.fingerprint) ||
+        (admission.deadlineAt !== undefined && status.deadlineAt !== admission.deadlineAt)
+      )
+        pending("invalid_identity");
+      await options.onStatus?.(status);
+      if (status.state === "succeeded") return parseOpsResult(kind, status.result);
+      if (status.state === "failed" || status.state === "timed_out") {
+        if (status.errorClass === "recovery_required") pending("recovery_required");
+        throw new ApiOpsError(status.errorClass, status.failureResult);
+      }
+      const remaining = deadline - now();
+      if (remaining <= 0) pending("observer_deadline");
+      await observeSleep(Math.min(pollIntervalMs, remaining));
     }
-    if (status.operationKey !== admission.operationKey) throw new ApiOpsError("runtime");
-    if (status.state === "succeeded") return status.result;
-    if (status.state === "failed" || status.state === "timed_out") {
-      throw new ApiOpsError(status.errorClass);
-    }
-    const remaining = deadline - now();
-    if (remaining <= 0) throw new ApiOpsError("timeout");
-    await sleep(Math.min(pollIntervalMs, remaining), options.signal);
+  } finally {
+    clearTimeout(observerTimer);
   }
 }
 
@@ -477,11 +545,15 @@ export async function executeAndWait<K extends OpsOperationKind>(
   options: WaitForOpsResultOptions = {},
 ): Promise<OpsResultFor<K>> {
   throwIfAborted(options.signal);
+  if (opsKindRequiresControlAuthority(operation.kind) && !options.parentAssertion) {
+    throw new ApiOpsError("control_upgrade_required");
+  }
   try {
     const submitted = await submitOpsOperationWithRecovery(client, operation, operationKey, {
       signal: options.signal,
+      execution: options.execution,
+      parentAssertion: options.parentAssertion,
     });
-    throwIfAborted(options.signal);
     if (submitted.execution === "sync") return submitted.value;
     return await waitForOpsResult(client, operation.kind, submitted, options);
   } catch (error) {
@@ -497,13 +569,20 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
     signal?: AbortSignal;
     admissionAlreadyAttempted?: boolean;
     recoveryTimeoutMs?: number;
+    execution?: { requestedDeadlineAt: number };
+    parentAssertion?: string;
   } = {},
 ): Promise<OpsSubmitResult<K>> {
   let firstError: unknown;
   if (!options.admissionAlreadyAttempted) {
     throwIfAborted(options.signal);
     try {
-      return await client.execute(operation, { operationKey, signal: options.signal });
+      return await client.execute(operation, {
+        operationKey,
+        signal: options.signal,
+        execution: options.execution,
+        parentAssertion: options.parentAssertion,
+      });
     } catch (error) {
       firstError = error;
     }
@@ -529,24 +608,40 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
       try {
         const status = await client.lookup(operation, operationKey, {
           signal: recoverySignal,
+          execution: options.execution,
         });
+        if (status.kind !== operation.kind || status.operationKey !== operationKey)
+          throw new OpsObservationPending(
+            { kind: operation.kind, operationKey },
+            "invalid_identity",
+          );
         return {
           execution: "async",
+          version: status.version,
           operationId: status.operationId,
           operationKey: status.operationKey,
           kind: operation.kind,
           state: status.state,
+          ...(status.version === 2
+            ? {
+                admittedAt: status.admittedAt,
+                deadlineAt: status.deadlineAt,
+                fingerprint: status.fingerprint,
+              }
+            : {}),
         } as OpsSubmitResult<K>;
       } catch (lookupError) {
+        if (lookupError instanceof OpsObservationPending) throw lookupError;
         const lookupClass = errorClass(lookupError);
         if (lookupClass !== "not_found" && !isTransientTransportError(lookupError)) {
-          translateError(lookupError);
+          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "unavailable");
         }
-        if (recoverySignal.aborted) throw new ApiOpsError("timeout");
+        if (recoverySignal.aborted)
+          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
         try {
           await defaultSleep(250, recoverySignal);
         } catch {
-          throw new ApiOpsError("timeout");
+          throw new OpsObservationPending({ kind: operation.kind, operationKey }, "transport");
         }
       }
     }
@@ -556,7 +651,7 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
 /** A failed transport/status is never evidence that a configuration did not commit. */
 export async function executeTrustedConfigurationAndWait(
   client: ApiOpsClient,
-  operation: Extract<OpsOperation, { revisionId: string }>,
+  operation: TrustedConfigurationApplyOperation,
   operationKey: string,
   options: WaitForOpsResultOptions = {},
 ): Promise<ConfigurationApplyResult | { outcome: "unknown"; reason: "transport_or_result" }> {

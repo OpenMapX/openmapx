@@ -1,9 +1,13 @@
+export { serviceBatchResultSchema } from "../../ops/service-results";
+export * from "./account-admin/index";
 export * from "./activity-admin";
+export * from "./configuration-ownership";
 export * from "./data-manager-admin/index";
 export * from "./extension-admin/index";
 export * from "./garage";
 export * from "./integration-admin/index";
 export * from "./operation";
+export * from "./privacy-admin/index";
 export * from "./runtime-metadata";
 export * from "./saved/index";
 export * from "./service-admin/index";

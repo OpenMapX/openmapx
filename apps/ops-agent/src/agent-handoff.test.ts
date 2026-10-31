@@ -381,7 +381,7 @@ describe("agent handoff helper container", () => {
     ],
   };
 
-  it("runs the agent image with only the socket and checkout, no network and no privileges", () => {
+  it("runs the agent image with isolated control material, no network and no privileges", () => {
     const args = agentHandoffRunArgs(facts, "/srv/openmapx", "handoff-1");
     expect(args.slice(0, 3)).toEqual(["run", "--detach", "--rm"]);
     expect(args).toEqual(
@@ -401,7 +401,11 @@ describe("agent handoff helper container", () => {
         "DOCKER_CONFIG=/tmp/docker",
       ]),
     );
-    expect(args.filter((arg) => arg === "--mount")).toHaveLength(2);
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(9);
+    for (const role of ["ops-agent", "data-manager", "host-cli"])
+      expect(args).toContain(
+        `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
+      );
     expect(args).not.toContain("HOSTNAME");
     expect(args).not.toContain("DOCKER_CONFIG");
     // Only names: Docker copies each value from the agent's own environment.
@@ -428,6 +432,16 @@ describe("agent handoff helper container", () => {
       "type=bind,source=/srv/openmapx/infra/docker/data,target=/srv/openmapx/infra/docker/data",
       "type=bind,source=/srv/openmapx/infra/docker/secrets,target=/srv/openmapx/infra/docker/secrets",
       "type=bind,source=/srv/openmapx/infra/docker/backups,target=/srv/openmapx/infra/docker/backups",
+      ...["ops-agent", "data-manager", "host-cli"].map(
+        (role) =>
+          `type=bind,source=/srv/openmapx/infra/docker/control-private/hidden-key,target=/srv/openmapx/infra/docker/secrets/control-${role}.key,readonly`,
+      ),
+      ...["data-manager", "host-cli"].map(
+        (role) =>
+          `type=bind,source=/srv/openmapx/infra/docker/control-private/empty,target=/srv/openmapx/infra/docker/control-private/${role},readonly`,
+      ),
+      "type=bind,source=/srv/openmapx/infra/docker/control-private/ops-agent,target=/var/lib/openmapx/control-private",
+      "type=bind,source=/srv/openmapx/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly",
     ]);
     expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
   });

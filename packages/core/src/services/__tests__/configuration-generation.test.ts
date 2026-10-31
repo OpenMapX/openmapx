@@ -1,10 +1,21 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { composePathHost, installedCompose } from "../__fixtures__/compose-path-host";
 import {
   type ConfigurationInput,
   commitConfigurationGeneration,
+  initializeConfigurationGenerations,
   readAppliedConfiguration,
   readAppliedServiceIds,
   renderConfiguration,
@@ -12,6 +23,7 @@ import {
 } from "../configuration-generation";
 import {
   CURRENT_CONFIGURATION,
+  configurationGenerationBasePath,
   readDesiredSelection,
   readServiceSelectionFile,
   serviceSelectionPath,
@@ -29,7 +41,7 @@ function checkout() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-generation-"));
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { mode: 0o755, recursive: true });
   return { root, infraDir };
 }
 
@@ -69,6 +81,29 @@ function input(overrides: Partial<ConfigurationInput> = {}): ConfigurationInput 
 }
 
 describe("configuration generations", () => {
+  it("carries opaque managed credential revision through unrelated CLI renders", async () => {
+    const { infraDir } = checkout();
+    const revision = "b".repeat(64);
+    await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input({ transitCredentialsRevision: revision } as Partial<ConfigurationInput>),
+    });
+    expect(readAppliedConfiguration(infraDir)).toHaveProperty(
+      "transitCredentialsRevision",
+      revision,
+    );
+    await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input(readAppliedConfiguration(infraDir)),
+    });
+    expect(readAppliedConfiguration(infraDir)).toHaveProperty(
+      "transitCredentialsRevision",
+      revision,
+    );
+  });
+
   it("gives each application a fresh identity even when content repeats", async () => {
     const { root, infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
@@ -237,6 +272,67 @@ describe("desired selection", () => {
 });
 
 describe("stack compose arguments", () => {
+  it("adds fixed bases to existing generations without modifying their bytes and rejects forged bases", async () => {
+    const host = await composePathHost();
+    roots.push(host.root);
+    const composeHash = host.hash(host.firstCompose),
+      secretHash = host.hash(host.secretFile(host.firstCompose));
+    const base = configurationGenerationBasePath(host.infraDir, host.first.revisionId);
+    rmSync(base);
+    expect(() => host.currentArgs()).toThrow();
+    await initializeConfigurationGenerations(host.infraDir);
+    expect(realpathSync(base)).toBe(realpathSync(join(host.infraDir, CURRENT_CONFIGURATION)));
+    expect(host.currentArgs()).toContain(base);
+    expect(host.hash(host.firstCompose)).toBe(composeHash);
+    expect(host.hash(host.secretFile(host.firstCompose))).toBe(secretHash);
+    rmSync(base);
+    symlinkSync("current", base);
+    expect(() => host.currentArgs()).toThrow("Unsafe generation Compose base");
+    await expect(initializeConfigurationGenerations(host.infraDir)).rejects.toThrow(
+      "Unsafe generation Compose base",
+    );
+    expect(host.hash(host.firstCompose)).toBe(composeHash);
+    expect(host.hash(host.secretFile(host.firstCompose))).toBe(secretHash);
+  });
+
+  it.runIf(installedCompose)(
+    "resolves real rendered current and retained paths without redirecting generation secrets",
+    async () => {
+      const host = await composePathHost();
+      roots.push(host.root);
+      const originalBytes = host.hash(host.firstCompose),
+        originalSecret = host.hash(host.secretFile(host.firstCompose));
+      const oldArgs = host.currentArgs();
+      for (const noEnv of [false, true]) {
+        const result = host.config(oldArgs, noEnv);
+        expect(result.status, "real Compose must validate production-rendered env_file paths").toBe(
+          0,
+        );
+        if (!result.model) throw Error("Real Compose fixture acquisition failed");
+        expect(Object.values(host.pathChecks(result.model, host.firstCompose)).every(Boolean)).toBe(
+          true,
+        );
+      }
+      await host.commit("second");
+      const nextCompose = realpathSync(host.stack.composePath);
+      expect(host.sameFile(host.secretFile(host.firstCompose), host.secretFile(nextCompose))).toBe(
+        false,
+      );
+      for (const [args, file] of [
+        [oldArgs, host.firstCompose],
+        [host.retainedArgs(), host.firstCompose],
+        [host.currentArgs(), nextCompose],
+      ] as const) {
+        const result = host.config(args);
+        expect(result.status).toBe(0);
+        if (!result.model) throw Error("Real Compose fixture acquisition failed");
+        expect(Object.values(host.pathChecks(result.model, file)).every(Boolean)).toBe(true);
+      }
+      expect(host.hash(host.firstCompose)).toBe(originalBytes);
+      expect(host.hash(host.secretFile(host.firstCompose))).toBe(originalSecret);
+    },
+  );
+
   it("addresses the stack as one project with the deployment environment", () => {
     const paths = {
       infraDir: "/stack",
@@ -258,4 +354,98 @@ describe("stack compose arguments", () => {
       `/stack/${CURRENT_CONFIGURATION}/docker-compose.generated.yml`,
     ]);
   });
+});
+
+it("retains closed platform ownership through a generation without exporting secrets", async () => {
+  const { infraDir } = checkout();
+  const platform = {
+    version: 1 as const,
+    domain: { source: "database" as const, value: "adopted.example.test" },
+    defaultRegion: { source: "database" as const, value: "europe/germany" },
+  };
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({ domain: "adopted.example.test", platform }),
+  });
+  expect(readAppliedConfiguration(infraDir).platform).toEqual(platform);
+  const config = JSON.parse(
+    readFileSync(join(infraDir, CURRENT_CONFIGURATION, "resolved-config.generated.json"), "utf8"),
+  );
+  expect(config.platform).toEqual(platform);
+  expect(config).not.toHaveProperty("serviceSecrets");
+});
+
+it("keeps host-owned Compose interpolation equivalent to legacy generations", () => {
+  const { infraDir } = checkout();
+  const manifest = service("alpha");
+  manifest.manifest.container.environment = {
+    ORIGIN: "https://${DOMAIN:-localhost}",
+    ACME: "${ACME_EMAIL:-admin@example.com}",
+  };
+  const before = renderConfiguration({ infraDir, services: [manifest], input: input() });
+  const after = renderConfiguration({
+    infraDir,
+    services: [manifest],
+    input: input({
+      platform: { version: 1, domain: { source: "host" }, acmeEmail: { source: "host" } },
+    }),
+  });
+  expect(after.rendered.composeYaml).toBe(before.rendered.composeYaml);
+});
+
+it("applied selector and retention follow the current generation and explicit return to host", async () => {
+  const { infraDir } = checkout();
+  const { readAppliedPlatformValues, readAppliedReleaseSelection } = await import(
+    "../configuration-generation"
+  );
+  const env = { OPENMAPX_RELEASE: "main", BACKUP_RETENTION_DAYS: "30" };
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({
+      platform: {
+        version: 1,
+        releaseSelector: { source: "database", value: "preview" },
+        backupRetentionDays: { source: "database", value: 60 },
+      },
+    }),
+  });
+  expect(readAppliedReleaseSelection(infraDir, env)).toMatchObject({ kind: "preview" });
+  expect(readAppliedPlatformValues(infraDir, env).backupRetentionDays).toBe(60);
+  await commitConfigurationGeneration({
+    infraDir,
+    services,
+    input: input({
+      platform: {
+        version: 1,
+        releaseSelector: { source: "host" },
+        backupRetentionDays: { source: "host" },
+      },
+    }),
+  });
+  expect(readAppliedReleaseSelection(infraDir, env)).toMatchObject({ kind: "main" });
+  expect(
+    readAppliedPlatformValues(infraDir, { ...env, BACKUP_RETENTION_DAYS: "45" })
+      .backupRetentionDays,
+  ).toBe(45);
+});
+
+it("reads only frozen generated service IDs even when a release overlay declares disabled services", async () => {
+  const { infraDir } = checkout(),
+    generation = await commitConfigurationGeneration({
+      infraDir,
+      services,
+      input: input({ selectedRoots: ["alpha"] }),
+    });
+  const { readAppliedComposeServiceIds } = await import("../configuration-generation");
+  writeFileSync(
+    join(infraDir, "docker-compose.release.yml"),
+    "services:\n  app-api:\n    image: example/api\n  data-manager:\n    image: example/dm\n",
+    { mode: 0o644 },
+  );
+  expect(readAppliedComposeServiceIds(infraDir, generation.revisionId)).toEqual(["alpha"]);
+  expect(() => readAppliedComposeServiceIds(infraDir, `cfg1_${"x".repeat(43)}`)).toThrow(
+    /revision/,
+  );
 });

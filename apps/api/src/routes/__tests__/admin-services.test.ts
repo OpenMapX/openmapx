@@ -1,3 +1,4 @@
+import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
@@ -97,11 +98,20 @@ vi.mock("../../utils/rate-limit.js", () => ({
   tilePublicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 
-// Resolve service config (service config GET uses this)
+// Route-only fixture: the installed coherent ownership reader owns acquisition.
+// Its source/DB invariants are tested in prospective-configuration tests.
 const mockResolveServiceConfigWithSources = vi.fn().mockResolvedValue({});
 vi.mock("../../services/service-config-resolver.js", () => ({
   resolveServiceConfigWithSources: (...args: unknown[]) =>
     mockResolveServiceConfigWithSources(...args),
+}));
+
+vi.mock("../../services/configuration-ownership-view.js", async (importActual) => ({
+  ...(await importActual<typeof import("../../services/configuration-ownership-view.js")>()),
+  inspectServiceConfiguration: async (...args: unknown[]) => ({
+    resolved: await mockResolveServiceConfigWithSources(...args),
+    ownership: {},
+  }),
 }));
 
 const mockRestoreServiceConfig = vi.fn().mockResolvedValue(true);
@@ -117,8 +127,10 @@ vi.mock("../../services/trusted-config-operations.js", () => ({
 }));
 
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
-vi.mock("@openmapx/core/server", () => ({
+vi.mock("@openmapx/core/server", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/server")>()),
   services: {
+    ...(await original<typeof import("@openmapx/core/server")>()).services,
     getProvidedCapabilityNames: vi.fn().mockReturnValue([]),
     serviceConfigEnvPrefix: vi.fn().mockReturnValue("SERVICE_ID"),
   },
@@ -210,18 +222,34 @@ afterEach(() => {
   vi.clearAllMocks();
   mockRegistryGet.mockReset();
   mockRegistryGet.mockReturnValue(null);
+  vi.mocked(applyTrustedConfiguration)
+    .mockReset()
+    .mockResolvedValue({ jobId: "job-secret", revisionId: `cfg1_${"a".repeat(43)}` } as never);
 });
 
 describe("GET /admin/services", () => {
   it("returns running/stopped summary with normalised service fields", async () => {
     mockRegistryList.mockReturnValueOnce([MOCK_SERVICE_RUNNING, MOCK_SERVICE_STOPPED]);
-    mockDockerComposePs.mockResolvedValueOnce([{ service: "motis", state: "running" }]);
+    mockExecuteAndWait.mockResolvedValueOnce({
+      services: [
+        {
+          serviceId: "motis",
+          state: "running",
+          actions: Object.fromEntries(
+            SERVICE_ACTIONS.map((action) => [
+              action,
+              { available: false, execution: "direct", reason: "unavailable", workflow: null },
+            ]),
+          ),
+        },
+      ],
+    });
 
     const res = await app.inject({ method: "GET", url: "/admin/services" });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.summary).toEqual({ running: 1, stopped: 1, total: 2 });
+    expect(body.summary).toEqual({ running: 1, stopped: 1, unknown: 0, total: 2 });
     expect(body.services).toHaveLength(2);
     const motis = body.services.find((s: { id: string }) => s.id === "motis");
     expect(motis).toMatchObject({ id: "motis", status: "running", enabled: true });
@@ -231,13 +259,13 @@ describe("GET /admin/services", () => {
 
   it("returns empty summary when registry has no services", async () => {
     mockRegistryList.mockReturnValueOnce([]);
-    mockDockerComposePs.mockResolvedValueOnce([]);
+    mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
 
     const res = await app.inject({ method: "GET", url: "/admin/services" });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.summary).toEqual({ running: 0, stopped: 0, total: 0 });
+    expect(body.summary).toEqual({ running: 0, stopped: 0, unknown: 0, total: 0 });
     expect(body.services).toHaveLength(0);
   });
 
@@ -370,7 +398,21 @@ describe("GET /admin/services/:id", () => {
 
   it("returns service detail with docker status", async () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
-    mockDockerComposePs.mockResolvedValueOnce([{ service: "motis", state: "running" }]);
+    mockRegistryList.mockReturnValueOnce([MOCK_SERVICE_RUNNING]);
+    mockExecuteAndWait.mockResolvedValueOnce({
+      services: [
+        {
+          serviceId: "motis",
+          state: "running",
+          actions: Object.fromEntries(
+            SERVICE_ACTIONS.map((action) => [
+              action,
+              { available: false, execution: "direct", reason: "unavailable", workflow: null },
+            ]),
+          ),
+        },
+      ],
+    });
 
     const res = await app.inject({ method: "GET", url: "/admin/services/motis" });
 
@@ -381,6 +423,21 @@ describe("GET /admin/services/:id", () => {
 });
 
 describe("GET /admin/services/:id/logs", () => {
+  it("passes disabled registered service logs to the agent ownership decision", async () => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_COMMUNITY_RUNNING, enabled: false });
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/services/community-weather/logs?lines=20",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+      "community-weather",
+      expect.anything(),
+      expect.objectContaining({ tail: 20 }),
+    );
+  });
+
   it("streams community logs through the same typed operation as built-ins", async () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_COMMUNITY_RUNNING);
 
@@ -416,28 +473,19 @@ describe("GET /admin/services/:id/logs", () => {
     expect(mockDockerComposeLogs).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["abc", 200],
-    ["99999", 1000],
-    ["-5", 1],
-  ])("clamps lines=%s to a safe tail value", async (lines, tail) => {
-    mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
-
-    await app.inject({
-      method: "GET",
-      url: `/admin/services/motis/logs?lines=${lines}`,
-      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
-    });
-
-    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
-      "motis",
-      expect.anything(),
-      expect.objectContaining({
-        tail,
-        operationKey: expect.stringMatching(/^opk1_[A-Za-z0-9_-]{43}$/),
-      }),
-    );
-  });
+  it.each(["abc", "99999", "-5"])(
+    "rejects invalid lines=%s before starting a log reader",
+    async (lines) => {
+      mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
+      const response = await app.inject({
+        method: "GET",
+        url: `/admin/services/motis/logs?lines=${lines}`,
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+    },
+  );
 
   it("uses one key for the same admin intent so a changed log payload conflicts at the agent", async () => {
     mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
@@ -451,6 +499,38 @@ describe("GET /admin/services/:id/logs", () => {
 });
 
 describe("POST /admin/services/:id/action", () => {
+  it.each(["app-api", "traefik"])("queues the dedicated %s restart workflow", async (id) => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id });
+    mockExecuteAndWait.mockResolvedValueOnce({
+      services: [
+        { serviceId: id, actions: { restart: { available: true, workflow: "core-restart" } } },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/admin/services/${id}/action`,
+      payload: { action: "restart" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.core-restart",
+      { service: id },
+      fakeSession.user.id,
+    );
+  });
+
+  it("does not queue an unavailable core restart", async () => {
+    mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "app-api" });
+    mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/app-api/action",
+      payload: { action: "restart" },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+
   it("enqueues action, writes audit log, and returns jobId", async () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
     mockGetAdminSession.mockReturnValue(fakeSession);
@@ -523,8 +603,22 @@ describe("GET /admin/services/selection", () => {
 });
 
 describe("POST /admin/services/check", () => {
-  it("runs docker ps, writes audit log, and returns statuses", async () => {
-    mockDockerComposePs.mockResolvedValueOnce([{ service: "motis", state: "running" }]);
+  it("reads owned inventory, writes audit log, and returns statuses", async () => {
+    mockRegistryList.mockReturnValueOnce([MOCK_SERVICE_RUNNING]);
+    mockExecuteAndWait.mockResolvedValueOnce({
+      services: [
+        {
+          serviceId: "motis",
+          state: "running",
+          actions: Object.fromEntries(
+            SERVICE_ACTIONS.map((action) => [
+              action,
+              { available: false, execution: "direct", reason: "unavailable", workflow: null },
+            ]),
+          ),
+        },
+      ],
+    });
     mockGetAdminSession.mockReturnValue(fakeSession);
 
     const res = await app.inject({ method: "POST", url: "/admin/services/check" });
@@ -610,6 +704,7 @@ describe("service credentials", () => {
       const res = await app.inject({
         method: "GET",
         url: "/admin/services/openconditions-ingest/config",
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -624,7 +719,7 @@ describe("service credentials", () => {
 
   describe("POST /admin/services/:id/config", () => {
     it.each(["unknown", "committed", "not_committed"] as const)(
-      "restores saved overrides only with proven non-commit (%s)",
+      "leaves failed configuration reconciliation to the retained producer (%s)",
       async (outcome) => {
         const error = new TrustedConfigurationApplyError({
           ...(outcome === "unknown"
@@ -645,13 +740,20 @@ describe("service credentials", () => {
         const res = await app.inject({
           method: "POST",
           url: "/admin/services/openconditions-ingest/config",
+          headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
           payload: { config: {} },
         });
         expect(res.statusCode).toBe(500);
-        expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+        expect(mockRestoreServiceConfig).not.toHaveBeenCalled();
+        expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: "serviceConfig.apply",
+            serviceId: "openconditions-ingest",
+          }),
+        );
       },
     );
-    it("answers an apply the operator can fix with its reason, after restoring what was saved", async () => {
+    it("answers an apply the operator can fix with its reason without route-owned writes", async () => {
       const problem =
         "infra/docker/overrides/services/martin/config/martin.yaml can't be used: it is a symbolic link. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
       vi.mocked(applyTrustedConfiguration).mockRejectedValueOnce(
@@ -667,11 +769,13 @@ describe("service credentials", () => {
       const res = await app.inject({
         method: "POST",
         url: "/admin/services/openconditions-ingest/config",
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
         payload: { config: {} },
       });
       expect(res.statusCode).toBe(409);
       expect(res.json()).toEqual({ error: problem });
-      expect(mockRestoreServiceConfig).toHaveBeenCalledTimes(1);
+      expect(mockRestoreServiceConfig).not.toHaveBeenCalled();
+      expect(mockMergeServiceConfig).not.toHaveBeenCalled();
     });
     it("persists only the route-validated update through the atomic writer", async () => {
       mockValidateConfigBody.mockReturnValueOnce({
@@ -682,18 +786,35 @@ describe("service credentials", () => {
       const res = await app.inject({
         method: "POST",
         url: "/admin/services/openconditions-ingest/config",
+        headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
         payload: { config: { RATE_LIMIT_MAX: 240, UNKNOWN: "discarded" } },
       });
 
       expect(res.statusCode).toBe(200);
-      expect(mockMergeServiceConfig).toHaveBeenCalledWith("openconditions-ingest", {
-        RATE_LIMIT_MAX: 240,
-      });
+      expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "serviceConfig.apply",
+          overlay: expect.objectContaining({
+            changes: [
+              {
+                kind: "service-config",
+                serviceId: "openconditions-ingest",
+                set: { RATE_LIMIT_MAX: 240 },
+                unset: [],
+              },
+            ],
+          }),
+        }),
+      );
+      expect(mockMergeServiceConfig).not.toHaveBeenCalled();
       expect(mockDbSelect).not.toHaveBeenCalled();
     });
   });
 
   it("GET lists declared secret fields with vault/missing status + setup guide", async () => {
+    mockResolveServiceConfigWithSources.mockResolvedValueOnce({
+      NY_511_API_KEY: { value: "synthetic-configured-sentinel", source: "vault" },
+    });
     mockListServiceSecrets.mockResolvedValue([
       { key: "NY_511_API_KEY", updatedAt: new Date("2026-06-26T10:00:00Z"), updatedBy: "u1" },
     ]);
@@ -798,37 +919,48 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       payload: { value: "secret-123" },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockSetServiceSecret).toHaveBeenCalledWith(
-      "openconditions-ingest",
-      "NY_511_API_KEY",
-      "secret-123",
-      fakeSession.user.id,
+    expect(mockSetServiceSecret).not.toHaveBeenCalled();
+    expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "vault.apply",
+        followUp: "service-apply",
+        overlay: expect.objectContaining({
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: "openconditions-ingest",
+              key: "NY_511_API_KEY",
+              action: "set",
+              value: "secret-123",
+            },
+          ],
+        }),
+      }),
     );
-    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.apply",
-      { service: "openconditions-ingest", configurationKind: "vault" },
-      fakeSession.user.id,
-    );
-    expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "service.credential.set" }),
     );
   });
 
-  it("PUT returns needsRender (no apply) when Docker is unavailable", async () => {
+  it("PUT delegates readiness checks to the retained producer during an outage", async () => {
     mockIsDockerAvailable.mockResolvedValue(false);
 
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       payload: { value: "secret-123" },
     });
 
-    expect(res.json()).toEqual({ ok: true, needsRender: true });
+    expect(res.json()).toEqual({ ok: true, jobId: "job-secret" });
+    expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "vault.apply" }),
+    );
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
   });
 
@@ -836,6 +968,7 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/RATE_LIMIT_MAX",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       payload: { value: "x" },
     });
 
@@ -847,6 +980,7 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/..%2F..%2Fescaped",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       payload: { value: "x" },
     });
 
@@ -860,6 +994,7 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
       payload: { value: "secret-123" },
     });
 
@@ -871,14 +1006,26 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/admin/services/openconditions-ingest/credentials/NY_511_API_KEY",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "NY_511_API_KEY");
-    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.apply",
-      { service: "openconditions-ingest", configurationKind: "vault" },
-      fakeSession.user.id,
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+    expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "vault.apply",
+        followUp: "service-apply",
+        overlay: expect.objectContaining({
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: "openconditions-ingest",
+              key: "NY_511_API_KEY",
+              action: "delete",
+            },
+          ],
+        }),
+      }),
     );
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "service.credential.delete" }),
@@ -889,6 +1036,7 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/admin/services/openconditions-ingest/credentials/..%2F..%2Fescaped",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
     });
 
     expect(res.statusCode).toBe(400);
@@ -901,6 +1049,7 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/admin/services/openconditions-ingest/credentials/RATE_LIMIT_MAX",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
     });
 
     expect(res.statusCode).toBe(400);
@@ -915,10 +1064,25 @@ describe("service credentials", () => {
     const res = await app.inject({
       method: "DELETE",
       url: "/admin/services/openconditions-ingest/credentials/LEGACY_KEY",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "LEGACY_KEY");
+    expect(mockDeleteServiceSecret).not.toHaveBeenCalled();
+    expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overlay: expect.objectContaining({
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: "openconditions-ingest",
+              key: "LEGACY_KEY",
+              action: "delete",
+            },
+          ],
+        }),
+      }),
+    );
   });
 });
 
@@ -939,4 +1103,136 @@ describe("explicit destructive selection intent", () => {
     expect(applyTrustedConfiguration).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).not.toHaveBeenCalled();
   });
+});
+
+describe("resource reset transport", () => {
+  it("uses the original sealed producer's unset for an explicitly cleared built-in resource", async () => {
+    mockRegistryGet.mockReturnValue({
+      isBuiltIn: true,
+      enabled: true,
+      manifest: {
+        id: "redis",
+        configSchema: {
+          type: "object",
+          properties: { OPENMAPX_MEMORY_MIB: { type: "integer", minimum: 16, maximum: 1048576 } },
+        },
+      },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/redis/config",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+      payload: { config: { OPENMAPX_MEMORY_MIB: null } },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(applyTrustedConfiguration).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        overlay: expect.objectContaining({
+          changes: [
+            { kind: "service-config", serviceId: "redis", set: {}, unset: ["OPENMAPX_MEMORY_MIB"] },
+          ],
+        }),
+      }),
+    );
+  });
+});
+
+describe("service presets and option boundaries", () => {
+  it("reports exact roots, effective dependencies and missing preset members", async () => {
+    mockRegistryList.mockReturnValueOnce([
+      {
+        ...MOCK_SERVICE_RUNNING,
+        manifest: {
+          ...MOCK_SERVICE_RUNNING.manifest,
+          container: {
+            ...MOCK_SERVICE_RUNNING.manifest.container,
+            dependsOn: [{ service: "postgis", condition: "service_started" }],
+          },
+        },
+      },
+      { ...MOCK_SERVICE_STOPPED, manifest: { ...MOCK_SERVICE_STOPPED.manifest, id: "postgis" } },
+    ]);
+    const result = await app.inject({ url: "/admin/services/presets" });
+    expect(result.statusCode).toBe(200);
+    expect(result.json().presets.find((preset: { id: string }) => preset.id === "transit")).toEqual(
+      {
+        id: "transit",
+        rootIds: ["motis", "motis-feed-proxy", "otp"],
+        effectiveIds: ["motis", "postgis"],
+        missingIds: ["motis-feed-proxy", "otp"],
+      },
+    );
+  });
+  it("expands and deduplicates preset roots server-side while preserving update options", async () => {
+    mockRegistryGet.mockImplementation((id: string) =>
+      ["osrm", "valhalla"].includes(id) ? MOCK_SERVICE_STOPPED : null,
+    );
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "update", serviceIds: ["osrm"], presetIds: ["routing"], noDeps: true },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "service.bulk",
+      expect.objectContaining({ action: "update", serviceIds: ["osrm", "valhalla"], noDeps: true }),
+      expect.any(String),
+    );
+  });
+  it.each(["unknown", "__proto__"])("rejects unknown preset %s before enqueue", async (id) => {
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "start", presetIds: [id] },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+  it("rejects MOTIS import without a MOTIS build before enqueue", async () => {
+    mockRegistryGet.mockReturnValue(MOCK_SERVICE_STOPPED);
+    const result = await app.inject({
+      method: "POST",
+      url: "/admin/services/bulk-action",
+      payload: { action: "build", serviceIds: ["valhalla"], motisImport: true },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+});
+
+it.each([
+  "lines=0",
+  "lines=1001",
+  "lines=-1",
+  "lines=1.5",
+  "follow=maybe",
+  "maxDurationSeconds=0",
+  "maxDurationSeconds=901",
+  "extra=true",
+])("rejects malformed log query %s before stream admission", async (query) => {
+  mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
+  const result = await app.inject({
+    url: `/admin/services/motis/logs?${query}`,
+    headers: { "idempotency-key": "log-query-check-001" },
+  });
+  expect(result.statusCode).toBe(400);
+  expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+});
+it("forwards exact snapshot and duration options through the registered log route", async () => {
+  mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
+  const result = await app.inject({
+    url: "/admin/services/motis/logs?lines=500&follow=false&maxDurationSeconds=30",
+    headers: { "idempotency-key": "log-query-snapshot-001" },
+  });
+  expect(result.statusCode).toBe(200);
+  expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+    "motis",
+    expect.anything(),
+    expect.objectContaining({
+      tail: 500,
+      follow: false,
+      maxDurationSeconds: 30,
+      operationKey: expect.any(String),
+    }),
+  );
 });

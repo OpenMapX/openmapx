@@ -5,24 +5,35 @@ import {
   ambientPlacesStatusSchema,
   ambientRegionSchema,
 } from "../../../services/data-manager/contracts/ambient";
-import { acceptedSchema, okSchema } from "../../../services/data-manager/contracts/common";
+import {
+  acceptedSchema,
+  okSchema,
+  regionBodySchema,
+} from "../../../services/data-manager/contracts/common";
 import { uncachedResponseHeadersSchema } from "../../../services/data-manager/contracts/headers";
 import {
   notablePlacesStatusSchema,
   searchIndexStatusSchema,
 } from "../../../services/data-manager/contracts/indexes";
-import { overtureStatusSchema } from "../../../services/data-manager/contracts/overture";
+import {
+  overtureRecoverySchema,
+  overtureStatusSchema,
+} from "../../../services/data-manager/contracts/overture";
 import {
   addTransitSourceRequestSchema,
   transitBumpResultSchema,
   transitConflictSchema,
   transitMutationRequestSchema,
+  transitPreflightSelectionSchema,
+  transitPreflightStaleSchema,
+  transitProfileSchema,
   transitScopeRejectedSchema,
+  transitSourceActionErrorSchema,
   transitSourceListSchema,
   transitSourceMutationResultSchema,
   transitSourcesQuerySchema,
   transitSyncAcceptedSchema,
-  transitSyncRequestSchema,
+  transitSyncPreflightSchema,
 } from "../../../services/data-manager/contracts/transit";
 import {
   adminCommonResponses as common,
@@ -47,22 +58,24 @@ import {
   transitJobsResponseSchema,
   transitStateSummarySchema,
 } from "./transit";
+import { transitCredentialOperations } from "./transit-credentials";
+import { transitPinOperations } from "./transit-pins";
 
 const service = "service" as const;
 const admin = "admin" as const;
 const idParams = z.strictObject({ id: z.string().min(1) });
 const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
-export const adminSourceMutationRequestSchema = transitMutationRequestSchema
-  .unwrap()
-  .omit({ triggeredBy: true })
-  .optional();
+export const adminSourceMutationRequestSchema = transitMutationRequestSchema.omit({
+  triggeredBy: true,
+});
 export const adminAddTransitSourceRequestSchema = addTransitSourceRequestSchema.omit({
   triggeredBy: true,
 });
-export const adminTransitSyncRequestSchema = transitSyncRequestSchema
-  .unwrap()
-  .omit({ triggeredBy: true })
-  .optional();
+export const adminTransitSyncRequestSchema = transitPreflightSelectionSchema.extend({
+  preflightId: z.uuid(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKey: z.string().max(200).optional(),
+});
 export const adminTransitBumpRequestSchema = z
   .strictObject({ branch: z.string().max(128).optional(), force: z.boolean().optional() })
   .optional();
@@ -70,7 +83,7 @@ const mutationResponses = {
   ...common,
   202: json(transitSourceMutationResultSchema),
   404: json(httpErrorSchema),
-  409: json(z.union([httpErrorSchema, transitConflictSchema])),
+  409: json(z.union([httpErrorSchema, transitConflictSchema, transitSourceActionErrorSchema])),
 };
 const ambientAccepted = {
   ...common,
@@ -86,6 +99,8 @@ const ambientUpdated = {
 };
 /** Application API operations. Service credentials, private acquisition and internal endpoints are not browser contracts. */
 export const dataManagerAdminOperations = {
+  ...transitCredentialOperations,
+  ...transitPinOperations,
   getApiDataManagerRoadConditionsPolicy: {
     method: "GET",
     path: "/api/data-manager/road-conditions/policy",
@@ -162,6 +177,32 @@ export const dataManagerAdminOperations = {
     request: { params: sourceParams, body: adminSourceMutationRequestSchema },
     responses: mutationResponses,
   },
+  postApiDataManagerTransitSourcesSourceIdDisable: {
+    method: "POST",
+    path: "/api/data-manager/transit/sources/:sourceId/disable",
+    auth: service,
+    request: { params: sourceParams, body: adminSourceMutationRequestSchema },
+    responses: mutationResponses,
+  },
+  getApiDataManagerTransitProfile: {
+    method: "GET",
+    path: "/api/data-manager/transit/profile",
+    auth: service,
+    responses: { ...common, 200: json(transitProfileSchema), 503: json(httpErrorSchema) },
+  },
+  postApiDataManagerTransitSyncPreflight: {
+    method: "POST",
+    path: "/api/data-manager/transit/sync/preflight",
+    auth: service,
+    request: { body: transitPreflightSelectionSchema },
+    responses: {
+      ...common,
+      200: json(transitSyncPreflightSchema),
+      409: json(transitPreflightStaleSchema),
+      422: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   postApiDataManagerTransitSync: {
     method: "POST",
     path: "/api/data-manager/transit/sync",
@@ -170,7 +211,7 @@ export const dataManagerAdminOperations = {
     responses: {
       ...common,
       202: json(transitSyncAcceptedSchema),
-      409: json(transitConflictSchema),
+      409: json(z.union([httpErrorSchema, transitConflictSchema, transitPreflightStaleSchema])),
       422: json(transitScopeRejectedSchema),
     },
   },
@@ -226,6 +267,13 @@ export const dataManagerAdminOperations = {
       409: json(httpErrorSchema),
       502: json(httpErrorSchema),
     },
+  },
+  getApiDataManagerOvertureRecovery: {
+    method: "GET",
+    path: "/api/data-manager/overture/recovery",
+    auth: admin,
+    request: { query: regionBodySchema },
+    responses: { ...common, 200: json(overtureRecoverySchema), 503: json(httpErrorSchema) },
   },
   getApiDataManagerOvertureStatus: {
     method: "GET",

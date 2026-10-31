@@ -23,6 +23,18 @@ afterEach(() => {
 });
 
 describe("release-store lock filesystem policy", () => {
+  it("does not reclaim a live backup operation before its fixed 35-minute lease", async () => {
+    const first = await acquireStoreLock(root, lockName, {}, () => 0, false, 35 * 60000);
+    let reads = 0;
+    const later = () => 20 * 60000 + (++reads > 2 ? 61000 : 0);
+    try {
+      await expect(acquireStoreLock(root, lockName, {}, later, false, 35 * 60000)).rejects.toThrow(
+        /busy/,
+      );
+    } finally {
+      first.release();
+    }
+  });
   it("publishes its owner, rejects a competing holder, and allows reuse after release", async () => {
     const first = await acquireStoreLock(root, lockName);
     const owner = JSON.parse(readFileSync(join(root, lockName, "owner.json"), "utf8"));

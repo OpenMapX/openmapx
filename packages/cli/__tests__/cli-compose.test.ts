@@ -170,6 +170,7 @@ describe("renderComposeForRepo", () => {
     writeFileSync(env, "DOMAIN=example.com\n", { mode: 0o600 });
     const owner = statSync(tmp);
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(statSync(join(tmp, "infra/docker/catalog-pins")).mode & 0o777).toBe(0o700);
     expect(readFileSync(env, "utf8")).toContain(`\nUID=${owner.uid}\nGID=${owner.gid}\n`);
     expect(permissions(env)).toBe(0o600);
 
@@ -1104,7 +1105,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
   };
 
   /** An admin apply that saved config and a vault secret for ingest without enabling it. */
-  async function adminApply() {
+  async function adminApply(transitCredentialsRevision?: string) {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     writeManifest("ingest", ingest);
     const registry = new coreServices.ServiceRegistry({ rootDir: tmp });
@@ -1114,6 +1115,7 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
       services: registry.list(),
       input: {
         domain: "example.com",
+        ...(transitCredentialsRevision ? { transitCredentialsRevision } : {}),
         selectedRoots: ["alpha"],
         serviceConfigs: [{ serviceId: "ingest", values: { MODE: "saved" } }],
         integrationConfigs: [],
@@ -1124,6 +1126,15 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
 
   afterEach(() => {
     delete process.env.SERVICE_INGEST_MODE;
+  });
+
+  it("preserves the opaque transit credential version during the actual CLI render", async () => {
+    const revision = "c".repeat(64);
+    await adminApply(revision);
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+    expect(coreServices.readAppliedTransitCredentialsRevision(join(tmp, "infra/docker"))).toBe(
+      revision,
+    );
   });
 
   it("keeps saved config and vault secrets, also for a service it enables later", async () => {
@@ -1151,4 +1162,90 @@ describe("renderComposeForRepo and what the admin panel applied", () => {
     expect(yaml).toContain(`MODE: \${SERVICE_INGEST_MODE:-}`);
     expect(yaml).not.toContain("from-env");
   });
+});
+
+it("keeps adopted platform slots across CLI renders and an invocation domain override", async () => {
+  writeManifest("alpha", {
+    ...baseManifest,
+    id: "alpha",
+    container: {
+      ...baseManifest.container,
+      environment: {
+        PUBLIC_ORIGIN: "https://${DOMAIN:-localhost}",
+        OPENMAPX_REGION: "${OPENMAPX_REGION:-}",
+        CONTACT: "${ACME_EMAIL:-admin@example.com}",
+      },
+    },
+  });
+  await renderComposeForRepo({ rootDir: tmp, services: ["alpha"] });
+  const registry = new coreServices.ServiceRegistry({ rootDir: tmp });
+  await registry.load();
+  const platform = {
+    version: 1 as const,
+    domain: { source: "database" as const, value: "adopted.example.test" },
+    acmeEmail: { source: "database" as const, value: "operator@example.test" },
+    defaultRegion: { source: "database" as const, value: "europe/germany" },
+  };
+  await coreServices.commitConfigurationGeneration({
+    infraDir: join(tmp, "infra/docker"),
+    services: registry.list(),
+    input: {
+      domain: "adopted.example.test",
+      platform,
+      selectedRoots: ["alpha"],
+      serviceConfigs: [],
+      serviceSecrets: [],
+      integrationConfigs: [],
+    },
+  });
+  const previousRoot = process.env.OPENMAPX_ROOT_DIR;
+  const previousRegion = process.env.OPENMAPX_REGION;
+  try {
+    process.env.OPENMAPX_ROOT_DIR = tmp;
+    process.env.OPENMAPX_REGION = "europe/france";
+    const { resolveOsmRegion } = await import("../src/lib/env-defaults");
+    expect(resolveOsmRegion(undefined)).toEqual({ value: "europe/germany" });
+    expect(resolveOsmRegion("europe/austria")).toEqual({ value: "europe/austria" });
+  } finally {
+    if (previousRoot === undefined) delete process.env.OPENMAPX_ROOT_DIR;
+    else process.env.OPENMAPX_ROOT_DIR = previousRoot;
+    if (previousRegion === undefined) delete process.env.OPENMAPX_REGION;
+    else process.env.OPENMAPX_REGION = previousRegion;
+  }
+  await renderComposeForRepo({ rootDir: tmp, services: ["alpha"] });
+  expect(readFileSync(generatedCompose(), "utf8")).toContain(
+    "PUBLIC_ORIGIN: https://adopted.example.test",
+  );
+  expect(readFileSync(generatedCompose(), "utf8")).toContain("OPENMAPX_REGION: europe/germany");
+  expect(coreServices.readAppliedPlatformConfiguration(join(tmp, "infra/docker"))).toEqual(
+    platform,
+  );
+  await renderComposeForRepo({ rootDir: tmp, services: ["alpha"], domain: "once.example.test" });
+  expect(readFileSync(generatedCompose(), "utf8")).toContain(
+    "PUBLIC_ORIGIN: https://once.example.test",
+  );
+  expect(coreServices.readAppliedPlatformConfiguration(join(tmp, "infra/docker"))).toEqual(
+    platform,
+  );
+  await renderComposeForRepo({ rootDir: tmp, services: ["alpha"] });
+  expect(readFileSync(generatedCompose(), "utf8")).toContain(
+    "PUBLIC_ORIGIN: https://adopted.example.test",
+  );
+});
+
+it("allows an explicit domain override when the unrelated host domain is malformed", async () => {
+  const previous = process.env.DOMAIN;
+  process.env.DOMAIN = "https://old-invalid.example.test";
+  try {
+    writeManifest("demo", { ...baseManifest, id: "demo" });
+    const result = await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "maps.example.test",
+      services: ["demo"],
+    });
+    expect(result.enabledServiceIds).toContain("demo");
+  } finally {
+    if (previous === undefined) delete process.env.DOMAIN;
+    else process.env.DOMAIN = previous;
+  }
 });

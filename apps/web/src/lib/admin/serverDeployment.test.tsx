@@ -76,9 +76,9 @@ describe("request-scoped deployment", () => {
     Response.json({ error: "denied" }, { status: 403 }),
     new Response("invalid", { headers: { "content-type": "application/json" } }),
     Response.json(deployment, { headers: { "content-type": "text/plain" } }),
-  ])("fails closed for malformed or failed deployment", async (response) => {
+  ])("preserves unknown for malformed or failed deployment", async (response) => {
     vi.stubGlobal("fetch", async () => response.clone());
-    expect(await getSelfHosted("session=one")).toBe(false);
+    expect(await getSelfHosted("session=one")).toBe(null);
   });
   it("aborts stalled body at 30 seconds, cancels/unlocks it and clears timers", async () => {
     vi.useFakeTimers();
@@ -101,14 +101,14 @@ describe("request-scoped deployment", () => {
     expect(settled).toBe(false);
     expect(canceled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await pending).toBe(false);
+    expect(await pending).toBe(null);
     expect(canceled).toBe(true);
     expect(stream.locked).toBe(false);
     expect((vi as typeof vi & { getTimerCount(): number }).getTimerCount()).toBe(0);
   });
 });
 
-it("returns false when the deployment headers fail or time out", async () => {
+it("returns unknown when the deployment headers fail or time out", async () => {
   vi.useFakeTimers();
   let signal: AbortSignal | null | undefined;
   vi.stubGlobal("fetch", (_url: string, init: RequestInit) => {
@@ -123,11 +123,11 @@ it("returns false when the deployment headers fail or time out", async () => {
   await vi.advanceTimersByTimeAsync(29_999);
   expect(signal?.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
-  expect(await pending).toBe(false);
+  expect(await pending).toBe(null);
   expect(signal?.aborted).toBe(true);
   expect((vi as typeof vi & { getTimerCount(): number }).getTimerCount()).toBe(0);
   vi.stubGlobal("fetch", async () => {
     throw new Error("synthetic acquisition failure");
   });
-  expect(await getSelfHosted("session=one")).toBe(false);
+  expect(await getSelfHosted("session=one")).toBe(null);
 });

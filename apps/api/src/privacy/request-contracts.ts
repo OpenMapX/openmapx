@@ -124,107 +124,14 @@ export const identityOutcomeSchema = z
   })
   .strict();
 
-export const identityReviewSchema = z
-  .object({
-    version: z.number().int().positive(),
-    party: z.enum(["subject", "representative"]),
-    outcome: z.enum(["verified", "failed", "clarification"]),
-    method: z
-      .enum(["account_login", "verified_email_challenge", "exceptional_evidence"])
-      .optional(),
-    reasonableDoubtCode: stableCode.optional(),
-    evidenceAttachmentId: uuid.optional(),
-    authorityOutcome: z.enum(["pending", "approved", "rejected"]).optional(),
-    authorityAttachmentId: uuid.optional(),
-    deliveryAuthorized: z.boolean().optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (
-      value.outcome === "verified" &&
-      !value.method &&
-      !(value.party === "representative" && value.authorityOutcome !== undefined)
-    )
-      ctx.addIssue({ code: "custom", path: ["method"], message: "verification method required" });
-    if (
-      value.method === "exceptional_evidence" &&
-      (!value.reasonableDoubtCode || !value.evidenceAttachmentId)
-    )
-      ctx.addIssue({
-        code: "custom",
-        path: ["evidenceAttachmentId"],
-        message: "exceptional evidence requires reasonable doubt and an attachment",
-      });
-    if (value.party === "representative") {
-      if (value.authorityOutcome === "approved" && !value.authorityAttachmentId)
-        ctx.addIssue({
-          code: "custom",
-          path: ["authorityAttachmentId"],
-          message: "authority evidence required",
-        });
-      if (value.deliveryAuthorized && value.authorityOutcome !== "approved")
-        ctx.addIssue({
-          code: "custom",
-          path: ["deliveryAuthorized"],
-          message: "representative delivery requires approved authority",
-        });
-    } else if (
-      value.authorityOutcome !== undefined ||
-      value.authorityAttachmentId !== undefined ||
-      value.deliveryAuthorized !== undefined
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["party"],
-        message: "authority applies to representative",
-      });
-    }
-  });
-export const taskAssignmentSchema = z
-  .object({
-    version: z.number().int().positive(),
-    assignedTo: z.string().min(1).max(256).nullable(),
-  })
-  .strict();
-export const assistedReauthStartSchema = z
-  .object({
-    channel: z.enum(["assisted", "representative"]).default("assisted"),
-    reasonCode: stableCode,
-  })
-  .strict();
-
-export const emailIdentityChallengeIssueSchema = z
-  .object({ party: z.enum(["subject", "representative"]) })
-  .strict();
-
-export const emailIdentityChallengeCompleteSchema = z
-  .object({
-    party: z.enum(["subject", "representative"]),
-    code: z.string().regex(/^\d{6}$/),
-  })
-  .strict();
-
-export const taskDecisionSchema = z
-  .object({
-    version: z.number().int().positive(),
-    status: z.enum(["complete", "not_applicable", "operator_review", "retryable", "canceled"]),
-    reasonCode: stableCode.optional(),
-    redactionCode: stableCode.optional(),
-    recordCount: z.number().int().min(0).max(10_000_000).optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (
-      ["not_applicable", "operator_review", "canceled"].includes(value.status) &&
-      !value.reasonCode
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["reasonCode"],
-        message: "decision requires a reason code",
-      });
-    }
-  });
+export {
+  assistedReauthStartSchema,
+  emailIdentityChallengeCompleteSchema,
+  emailIdentityChallengeIssueSchema,
+  identityReviewSchema,
+  taskAssignmentSchema,
+  taskDecisionSchema,
+} from "@openmapx/core/privacy";
 
 export interface RequestTransition {
   from: RequestState;

@@ -1,18 +1,28 @@
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { canonicalJson } from "@openmapx/core/ops";
 import { appliedHardlinkEntries, applyHardlinkPlan } from "@openmapx/hardlinks";
 import {
   type FeedProxyVars,
   normalizeFeedProxyVars,
   renderFeedProxyNginxConfig,
 } from "@openmapx/motis-feed-proxy-config";
-import { runOpsOperation } from "../../ops-client.js";
 import { atomicWriteFileSync } from "../../utils/atomic-write.js";
+import type { FreshDataChildReservation } from "../execution/store.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
-  verifyCandidateManifest,
+  verifyCandidateManifestAsync,
 } from "./candidate.js";
+import {
+  assertTransitForward,
+  preserveTransitPending,
+  publishTransitChange,
+  reserveTransitProxyRecovery,
+  retainTransitPhaseCandidate,
+  runTransitOwnedPhase,
+} from "./owned-ops.js";
 import type { JobContext, ProxyTransactionState, StageFn, StageResult } from "./types.js";
 
 export const ACTIVE_PROXY_ROOT_DIRNAME = "motis-feed-proxy";
@@ -96,28 +106,34 @@ function relinkFeedProxyConfig(ctx: JobContext): void {
   applyHardlinkPlan(entries, { rootDir: ctx.dataDir, prune: false });
 }
 
-async function validateAndReload(ctx: JobContext): Promise<void> {
-  // Propagate the just-written config into the container's mounted copy before
-  // asking nginx to validate/reload it.
-  relinkFeedProxyConfig(ctx);
-  // The agent validates the configuration and only then reloads, so a bad
-  // candidate can never take the proxy down.
-  await runOpsOperation({
-    kind: "feedProxy.validateAndReload",
-    // The mtime of the config just written identifies the candidate being
-    // activated; the agent needs only that opaque id.
-    candidateId: `feedproxy-${Math.trunc(statSync(join(ctx.dataDir, ACTIVE_PROXY_ROOT_DIRNAME, CONFIG_RELATIVE_PATH)).mtimeMs)}`,
-  });
+async function validateAndReload(
+  ctx: JobContext,
+  phase: "proxy-stage" | "proxy-commit" | "proxy-restore",
+  reservedContinuation?: FreshDataChildReservation,
+): Promise<void> {
+  assertTransitForward(ctx);
+  await publishTransitChange(ctx, () => relinkFeedProxyConfig(ctx));
+  await retainTransitPhaseCandidate(ctx, phase);
+  await runTransitOwnedPhase(ctx, phase, reservedContinuation);
 }
 
 async function restoreAndReload(ctx: JobContext, state: ProxyTransactionState): Promise<void> {
-  restore(state.activeConfigPath, state.previousConfig);
-  restore(state.activeVarsPath, state.previousVars);
-  try {
-    await validateAndReload(ctx);
-  } finally {
-    state.phase = "rolled-back";
-  }
+  assertTransitForward(ctx);
+  const continuation = await reserveTransitProxyRecovery(
+    ctx,
+    createHash("sha256")
+      .update(
+        canonicalJson({ previousConfig: state.previousConfig, previousVars: state.previousVars }),
+      )
+      .digest("hex"),
+  );
+  await publishTransitChange(ctx, () => {
+    restore(state.activeConfigPath, state.previousConfig);
+    assertTransitForward(ctx);
+    restore(state.activeVarsPath, state.previousVars);
+  });
+  await validateAndReload(ctx, "proxy-restore", continuation);
+  state.phase = "rolled-back";
 }
 
 export async function rollbackProxyTransaction(ctx: JobContext): Promise<void> {
@@ -131,11 +147,16 @@ export async function commitProxyTransaction(ctx: JobContext): Promise<void> {
   const state = ctx.state.proxyTransaction;
   if (state?.phase !== "staged") return;
   try {
-    writeProxyFile(state.activeConfigPath, state.candidateConfig);
-    writeProxyFile(state.activeVarsPath, state.candidateVars);
-    await validateAndReload(ctx);
+    assertTransitForward(ctx);
+    await publishTransitChange(ctx, () => {
+      writeProxyFile(state.activeConfigPath, state.candidateConfig);
+      assertTransitForward(ctx);
+      writeProxyFile(state.activeVarsPath, state.candidateVars);
+    });
+    await validateAndReload(ctx, "proxy-commit");
     state.phase = "committed";
   } catch (error) {
+    preserveTransitPending(ctx, error);
     await restoreAndReload(ctx, state);
     throw new Error(
       `feed-proxy commit failed and previous routing was restored: ${(error as Error).message}`,
@@ -164,7 +185,7 @@ export const run: StageFn = async (ctx) => {
     if (!existsSync(join(ctx.motisStagingDataDir, CANDIDATE_MANIFEST_FILENAME))) {
       return finish("skipped", "no assembled MOTIS candidate; feed-proxy transaction not needed");
     }
-    const manifest = verifyCandidateManifest(ctx.motisStagingDataDir);
+    const manifest = await verifyCandidateManifestAsync(ctx.motisStagingDataDir, ctx.abortSignal);
     const candidateRoot = join(ctx.motisStagingDataDir, CANDIDATE_PROXY_DIRNAME);
     const candidateConfigPath = join(candidateRoot, CONFIG_RELATIVE_PATH);
     const candidateVarsPath = join(candidateRoot, VARS_FILENAME);
@@ -193,10 +214,15 @@ export const run: StageFn = async (ctx) => {
     };
     ctx.state.proxyTransaction = state;
     try {
-      writeProxyFile(activeConfigPath, unionConfig);
-      writeProxyFile(activeVarsPath, unionVars);
-      await validateAndReload(ctx);
+      assertTransitForward(ctx);
+      await publishTransitChange(ctx, () => {
+        writeProxyFile(activeConfigPath, unionConfig);
+        assertTransitForward(ctx);
+        writeProxyFile(activeVarsPath, unionVars);
+      });
+      await validateAndReload(ctx, "proxy-stage");
     } catch (error) {
+      preserveTransitPending(ctx, error);
       await restoreAndReload(ctx, state);
       throw new Error(
         `feed-proxy activation failed and previous routing was restored: ${(error as Error).message}`,
@@ -209,6 +235,7 @@ export const run: StageFn = async (ctx) => {
       activeEntries: Object.keys(union).length,
     });
   } catch (error) {
+    preserveTransitPending(ctx, error);
     return finish("error", (error as Error).message, { rollback: true });
   }
 };

@@ -54,6 +54,11 @@ COPY apps/ops-agent/ apps/ops-agent/
 # catalog pins: the agent and its CLI run the release's, not the host
 # checkout's.
 COPY --parents \
+    services/data-manager/src/transitous-lock.ts \
+    services/data-manager/src/gbfs-catalog-lock.ts \
+    services/data-manager/src/jobs/transitous-feeds-overlay.ts \
+    services/data-manager/src/utils/atomic-write.ts \
+    integrations/transit-dynamic-registry/ \
     services/*/service.json \
     services/service-file-history.json \
     services/brouter/scripts/ \
@@ -89,6 +94,7 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 # the pnpm that corepack prepared for the build stages, and its bundled
 # dependencies, out of the shipped image.
 FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
+LABEL openmapx.configuration-handoff.version="1"
 WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. curl and
 # libcurl 8.23.0-r0 fix CVE-2026-92392.

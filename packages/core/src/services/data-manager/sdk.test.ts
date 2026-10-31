@@ -19,8 +19,8 @@ describe("generated complete internal data-manager SDK", () => {
       Extract<Awaited<ReturnType<typeof sdk.getOfflinePackageArchive>>, { status: 416 }>["data"]
     >().toEqualTypeOf<void>();
   });
-  it("has a generated callable for all 49 explicit operations", () => {
-    expect(Object.keys(dataManagerOperations)).toHaveLength(49);
+  it("has a generated callable for all 61 explicit operations", () => {
+    expect(Object.keys(dataManagerOperations)).toHaveLength(61);
     for (const key of Object.keys(dataManagerOperations))
       expect(sdk).toHaveProperty(key, expect.any(Function));
   });

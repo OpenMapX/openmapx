@@ -1,7 +1,9 @@
 export {
+  type AdminNativeDownloadTarget,
   ApiClient,
   type ApiClientConfig,
   ApiClientError,
+  ApiNativeDownloadUnavailableError,
   ApiRequestAbortedError,
   apiClient,
   apiUrl,

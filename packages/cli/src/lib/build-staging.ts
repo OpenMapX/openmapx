@@ -1,4 +1,6 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { assertCliControlForward } from "./control-context";
+import { assertCliExecutionAvailable } from "./execution-deadline";
 import { log } from "./output";
 
 /**
@@ -20,6 +22,8 @@ function previousBuildDir(liveDir: string): string {
  * that can't be removed fails the build up front rather than after it.
  */
 export function prepareStagedBuildDir(liveDir: string): string {
+  assertCliExecutionAvailable();
+  assertCliControlForward();
   const nextDir = stagedBuildDir(liveDir);
   rmSync(previousBuildDir(liveDir), { recursive: true, force: true });
   rmSync(nextDir, { recursive: true, force: true });
@@ -39,6 +43,8 @@ export interface StagedSwap {
  * artifact is already live by then.
  */
 export function promoteStagedBuildDirs(swaps: readonly StagedSwap[]): void {
+  assertCliExecutionAvailable();
+  assertCliControlForward();
   const moved: StagedSwap[] = [];
   const installed: StagedSwap[] = [];
   try {

@@ -19,3 +19,15 @@ export function aggregateCacheNamespaces(keys: readonly string[]): CacheNamespac
     .map(([namespace, count]) => ({ namespace, count }))
     .sort((a, b) => b.count - a.count || a.namespace.localeCompare(b.namespace));
 }
+
+/** Web cache operations remain confined to these literal application prefixes. */
+export const APP_CACHE_PREFIXES = ["int:", "cache:"] as const;
+export function isSafeCacheTargetText(value: string): boolean {
+  return value.trim().length > 0 && value.length <= 256 && !/\p{Cc}/u.test(value);
+}
+export function isAppCachePattern(pattern: string): boolean {
+  return (
+    isSafeCacheTargetText(pattern) &&
+    APP_CACHE_PREFIXES.some((prefix) => pattern.startsWith(prefix))
+  );
+}

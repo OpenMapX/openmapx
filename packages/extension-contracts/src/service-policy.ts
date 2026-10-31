@@ -80,6 +80,15 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
     errors.push("container.privileged is not allowed for community services");
   }
   if (!hostPrivilegesAllowed) {
+    const properties = m.configSchema?.properties;
+    if (
+      properties &&
+      typeof properties === "object" &&
+      ["OPENMAPX_MEMORY_MIB", "OPENMAPX_CPU_LIMIT", "OPENMAPX_JAVA_HEAP_MIB"].some(
+        (key) => key in properties,
+      )
+    )
+      errors.push("Reserved platform resource settings are not allowed for community services");
     for (const cap of m.container.capAdd ?? []) {
       if (!COMMUNITY_SAFE_CAPS.has(cap)) {
         errors.push(`container.capAdd: '${cap}' is not allowed for community services`);

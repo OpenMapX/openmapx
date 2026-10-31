@@ -8,6 +8,11 @@ import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
 afterEach(() => vi.unstubAllGlobals());
 
+const reviewed = {
+  countries: ["de"],
+  preflightId: "00000000-0000-4000-8000-000000000001",
+  fingerprint: "a".repeat(64),
+};
 describe("application administration contract registration", () => {
   it("registers the canonical relative path and documents its actual auth", async () => {
     const app = Fastify();
@@ -94,7 +99,7 @@ describe("application administration contract registration", () => {
     );
     vi.stubGlobal("fetch", administrationSdkFetch(app));
     const client = createApiClient({ baseUrl: "https://app.test", credentials: "include" });
-    const oversizedBody = { idempotencyKey: "x".repeat(200) };
+    const oversizedBody = { ...reviewed, idempotencyKey: "x".repeat(200) };
     try {
       const media = await baseline.inject({
         method: "POST",
@@ -111,10 +116,10 @@ describe("application administration contract registration", () => {
       expect(media.statusCode).toBe(415);
       expect(oversized.statusCode).toBe(413);
       await expect(
-        postApiDataManagerTransitSync(
-          {},
-          { client, headers: { "Content-Type": "application/xml" } },
-        ),
+        postApiDataManagerTransitSync(reviewed, {
+          client,
+          headers: { "Content-Type": "application/xml" },
+        }),
       ).resolves.toMatchObject({ status: 415, data: media.json() });
       await expect(postApiDataManagerTransitSync(oversizedBody, { client })).resolves.toMatchObject(
         { status: 413, data: oversized.json() },
@@ -146,7 +151,7 @@ describe("application administration contract registration", () => {
       const response = await app.inject({
         method: "POST",
         url: "/data-manager/transit/sync",
-        payload: { countries: ["de"] },
+        payload: reviewed,
       });
       expect(response.statusCode).toBe(409);
       expect(response.json()).toEqual({ ok: false, reason: "in-flight", existingJobId: null });
@@ -193,7 +198,7 @@ describe("shared registration response kinds and ordering", () => {
       expect(calls).toEqual(["before validation"]);
       calls.length = 0;
       expect(
-        (await app.inject({ method: "POST", url: "/data-manager/transit/sync", payload: {} }))
+        (await app.inject({ method: "POST", url: "/data-manager/transit/sync", payload: reviewed }))
           .statusCode,
       ).toBe(202);
       expect(calls).toEqual(["before validation", "inherited guard", "route guard", "handler"]);

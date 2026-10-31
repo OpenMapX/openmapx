@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { coerceEnvValue, isEnvValuePresent } from "./integration-config";
+import { coerceEnvValue, isEnvValuePresent, warnInvalidConfig } from "./integration-config";
 
 describe("coerceEnvValue", () => {
   it("coerces integer and number types to numbers", () => {
@@ -55,5 +55,29 @@ describe("isEnvValuePresent", () => {
     expect(isEnvValuePresent("some-value")).toBe(true);
     expect(isEnvValuePresent("0")).toBe(true);
     expect(isEnvValuePresent(" ")).toBe(true);
+  });
+});
+
+describe("configuration diagnostics", () => {
+  it("never logs a rejected secret enum value or its allowed credential bodies", () => {
+    const messages: string[] = [];
+    warnInvalidConfig(
+      {
+        id: "synthetic",
+        version: "1",
+        domains: [],
+        configSchema: {
+          properties: {
+            TOKEN: { type: "string", "x-openmapx-secret": true, enum: ["allowed-private"] },
+          },
+        },
+      } as Parameters<typeof warnInvalidConfig>[0],
+      { TOKEN: "rejected-private" },
+      "synthetic",
+      (message) => messages.push(message),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages.join("\n")).not.toContain("rejected-private");
+    expect(messages.join("\n")).not.toContain("allowed-private");
   });
 });

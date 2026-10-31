@@ -5,6 +5,10 @@ export type GetAdminServiceCredentials200CredentialsItemSource =
   (typeof GetAdminServiceCredentials200CredentialsItemSource)[keyof typeof GetAdminServiceCredentials200CredentialsItemSource];
 
 export const GetAdminServiceCredentials200CredentialsItemSource = {
+  default: "default",
+  database: "database",
   vault: "vault",
+  configjson: "config.json",
+  env: "env",
   missing: "missing",
 } as const;

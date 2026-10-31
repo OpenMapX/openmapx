@@ -15,7 +15,8 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
-    "fastify": "^5.12.7"
+    "fastify": "^5.12.7",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

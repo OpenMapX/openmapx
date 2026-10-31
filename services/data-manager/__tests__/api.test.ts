@@ -1,4 +1,24 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { transitSourceRevision } from "../src/transit-sources.js";
+
+vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
+  beginLegacyCatalogPreflight: async () => {},
+  rejectLegacyMissingCatalog: async () => {},
+  markLegacyCatalogFetchAttempt: async () => {},
+  startLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => ({
+    id: "unit-writer",
+    completion: run(),
+  }),
+  withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
+  independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
+}));
+vi.mock("../src/jobs/persistence.js", async () => ({
+  ...(await vi.importActual<typeof import("../src/jobs/persistence.js")>(
+    "../src/jobs/persistence.js",
+  )),
+  finalizeJobRow: vi.fn(async () => {}),
+}));
+
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
@@ -8,6 +28,7 @@ import { registerApi } from "../src/api.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
 import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
+import { dataReceipt, receiverFixture } from "./helpers/execution-receiver.js";
 
 const mockDownloadOsm = vi.hoisted(() =>
   vi.fn(async ({ region }: { region: string }) => ({
@@ -18,6 +39,39 @@ const mockDownloadOsm = vi.hoisted(() =>
 );
 
 vi.mock("../src/jobs/download-osm.js", () => ({ downloadOsm: mockDownloadOsm }));
+
+function observedUnitReceiver(
+  kind: import("@openmapx/core/data-manager-contracts").DataExecutionInput["kind"],
+  run: (progress: (event: Record<string, unknown>) => void) => Promise<Record<string, unknown>>,
+) {
+  let current = dataReceipt({ kind, status: "running", publication: "unknown" }),
+    done: Record<string, unknown> | undefined,
+    listener: ((event: Record<string, unknown>) => void) | undefined;
+  return receiverFixture({
+    admitLocal: async () => {
+      setTimeout(() => {
+        void run((event) => listener?.({ event: "progress", ...event })).then(
+          (result) => {
+            done = { event: "done", ok: true, ...result };
+            current = { ...current, status: "ok", publication: "committed" };
+          },
+          () => {
+            current = { ...current, status: "error", publication: "not_started" };
+          },
+        );
+      }, 0);
+      return current;
+    },
+    inspect: async () => current,
+    subscribe: (_id, onEvent) => {
+      listener = onEvent;
+      return () => {
+        listener = undefined;
+      };
+    },
+    legacyResult: () => done,
+  });
+}
 
 describe("data-manager API", () => {
   let fixtureRoot: string;
@@ -154,23 +208,54 @@ describe("data-manager API", () => {
     expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
   });
 
+  it("continues a legacy observer through running unknown publication without canceling its worker", async () => {
+    const status = dataReceipt({
+        kind: "download-fonts",
+        status: "running",
+        publication: "unknown",
+      }),
+      inspect = vi
+        .fn()
+        .mockResolvedValueOnce(status)
+        .mockResolvedValueOnce({ ...status, status: "ok", publication: "committed" }),
+      cancel = vi.fn(),
+      app = createTestApp();
+    registerApi(app, {
+      dataDir: createDataDir(),
+      executionReceiver: receiverFixture({
+        admitLocal: async () => status,
+        inspect,
+        requestCancel: cancel,
+      }),
+    });
+    const response = await app.inject({ method: "POST", url: "/download/fonts" });
+    expect(response.statusCode).toBe(200);
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(response.json()).toEqual({ ok: true });
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
   it("POST /search-index/build streams progress and the final snapshot", async () => {
     const dataDir = createDataDir();
     const app = createTestApp();
-    const buildSearchIndex = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
-      options.onProgress?.({ stage: "extract", message: "streaming" });
-      return {
-        region: "europe/germany",
-        epoch: "new-epoch",
-        sourceFingerprint: "md5:abc",
-        placeCount: 2,
-        termCount: 3,
-      };
-    });
+    const buildSearchIndex = vi.fn(
+      async (options: { onProgress?: (event: Record<string, unknown>) => void }) => {
+        options.onProgress?.({ stage: "extract", message: "streaming" });
+        return {
+          region: "europe/germany",
+          epoch: "new-epoch",
+          sourceFingerprint: "md5:abc",
+          placeCount: 2,
+          termCount: 3,
+        };
+      },
+    );
     registerApi(app, {
       dataDir,
       searchIndexSql: { reserve: vi.fn() } as never,
-      buildSearchIndex: buildSearchIndex as never,
+      executionReceiver: observedUnitReceiver("search-index-build", (onProgress) =>
+        buildSearchIndex({ onProgress }),
+      ),
     });
     const res = await app.inject({
       method: "POST",
@@ -203,23 +288,27 @@ describe("data-manager API", () => {
 
   it("POST /notable-places/build streams progress and the published snapshot", async () => {
     const app = createTestApp();
-    const build = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
-      options.onProgress?.({ stage: "names", message: "Fetching labels in en" });
-      return {
-        epoch: "e1",
-        source: "https://sparql.test",
-        minSitelinks: 8,
-        placeCount: 5,
-        nameCount: 9,
-      };
-    });
+    const build = vi.fn(
+      async (options: { onProgress?: (event: Record<string, unknown>) => void }) => {
+        options.onProgress?.({ stage: "names", message: "Fetching labels in en" });
+        return {
+          epoch: "e1",
+          source: "https://sparql.test",
+          minSitelinks: 8,
+          placeCount: 5,
+          nameCount: 9,
+        };
+      },
+    );
     registerApi(app, {
       dataDir: join(fixtureRoot, "data"),
       searchIndexSql: { reserve: vi.fn() } as never,
+      executionReceiver: observedUnitReceiver("notable-places-build", (onProgress) =>
+        build({ onProgress }),
+      ),
       notablePlaces: {
         runtimeState: { building: false, failure: null },
         operationLock: { inFlight: false, run: (operation) => operation() },
-        build: build as never,
       },
     });
     const res = await app.inject({ method: "POST", url: "/notable-places/build" });
@@ -233,7 +322,7 @@ describe("data-manager API", () => {
     ]);
   });
 
-  it("keeps a successful OSM download when search-index fingerprint persistence fails", async () => {
+  it("preserves a successful owned OSM receipt in the legacy observer", async () => {
     const dataDir = createDataDir();
     writeFileSync(
       join(dataDir, ".data-manager-state.json"),
@@ -259,6 +348,9 @@ describe("data-manager API", () => {
     registerApi(app, {
       dataDir,
       searchIndexSql: { unsafe, reserve: vi.fn() } as never,
+      executionReceiver: observedUnitReceiver("download-osm", () =>
+        mockDownloadOsm({ region: "europe/germany" }),
+      ),
     });
     const res = await app.inject({
       method: "POST",
@@ -320,17 +412,22 @@ describe("data-manager API", () => {
         reason: "in-flight" as const,
         existingJobId: "running-job",
       })),
+      reserveOwned: vi.fn(() => true),
       markSyncFinished: vi.fn(),
       getInflight: () => ({ jobId: "running-job", startedAt: new Date() }),
     };
     const app = createTestApp();
-    registerApi(app, { dataDir, singleFlight, launchTransitSync: vi.fn() });
+    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture() });
     const res = await app.inject({
       method: "POST",
       url: "/transit/sources",
       payload: {
         region: "de",
         name: "operator-feed",
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
         url: "https://operator.example/feed.zip",
         license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
       },
@@ -339,6 +436,37 @@ describe("data-manager API", () => {
     expect(existsSync(overlayPath)).toBe(false);
   });
 
+  it("rejects oversized source metadata before reserving a job or admitting work", async () => {
+    const dataDir = createDataDir();
+    sourceCatalog(dataDir);
+    const singleFlight: SingleFlightController = {
+        tryStartSync: vi.fn(),
+        reserveOwned: vi.fn(() => true),
+        markSyncFinished: vi.fn(),
+        getInflight: () => null,
+      },
+      admitLocal = vi.fn();
+    const app = createTestApp();
+    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture({ admitLocal }) });
+    const response = await app.inject({
+      method: "POST",
+      url: "/transit/sources",
+      payload: {
+        region: "de",
+        name: "bounded",
+        url: "https://operator.example/feed.zip",
+        license: { spdxIdentifier: "CC0-1.0", attribution: "ü".repeat(8192) },
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
+      },
+    });
+    expect(response.statusCode, response.body).toBe(413);
+    expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
+    expect(admitLocal).not.toHaveBeenCalled();
+    expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
+  });
   it("returns a reserved visible job before launching an accepted source mutation", async () => {
     const dataDir = createDataDir();
     sourceCatalog(dataDir);
@@ -348,33 +476,48 @@ describe("data-manager API", () => {
         events.push("job-inserted");
         return { ok: true as const, jobId: "job-visible" };
       }),
+      reserveOwned: vi.fn(() => true),
       markSyncFinished: vi.fn(),
       getInflight: () => ({ jobId: "job-visible", startedAt: new Date() }),
     };
-    const launchTransitSync = vi.fn(() => events.push("pipeline-launched"));
+    const admitLocal = vi.fn(async () => {
+      events.push("durable-admitted");
+      return dataReceipt({ kind: "transit-sync" });
+    });
     const app = createTestApp();
-    registerApi(app, { dataDir, singleFlight, launchTransitSync });
+    registerApi(app, { dataDir, singleFlight, executionReceiver: receiverFixture({ admitLocal }) });
     const res = await app.inject({
       method: "POST",
       url: "/transit/sources",
       payload: {
         region: "de",
         name: "operator-feed",
+        expectedSourceRevision: transitSourceRevision({
+          catalogDir: join(dataDir, ".transitous-catalog"),
+          overlayPath: join(dataDir, "overrides/feeds-overlay.json"),
+        }),
         url: "https://operator.example/feed.zip",
         license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
       },
     });
     expect(res.statusCode).toBe(202);
     expect(res.json()).toEqual({
-      jobId: "job-visible",
+      jobId: dataReceipt().id,
       sourceId: "operator:de:operator-feed",
       status: "started",
     });
-    expect(events).toEqual(["job-inserted", "pipeline-launched"]);
-    const overlay = JSON.parse(
-      readFileSync(join(dataDir, "overrides", "feeds-overlay.json"), "utf-8"),
-    ) as { version: number };
-    expect(overlay.version).toBe(3);
+    expect(events).toEqual(["job-inserted", "durable-admitted"]);
+    expect(existsSync(join(dataDir, "overrides/feeds-overlay.json"))).toBe(false);
+    expect(admitLocal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "transit-sync",
+        sourceMutation: expect.objectContaining({
+          action: "add",
+          source: expect.objectContaining({ name: "operator-feed" }),
+        }),
+      }),
+      expect.objectContaining({ sourceJobId: "job-visible" }),
+    );
   });
 
   it.each([
@@ -384,6 +527,7 @@ describe("data-manager API", () => {
     const dataDir = createDataDir();
     const singleFlight: SingleFlightController = {
       tryStartSync: vi.fn(),
+      reserveOwned: vi.fn(() => true),
       markSyncFinished: vi.fn(),
       getInflight: () => null,
     };
@@ -392,7 +536,6 @@ describe("data-manager API", () => {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
       singleFlight,
-      launchTransitSync: vi.fn(),
     });
 
     const res = await app.inject({
@@ -405,35 +548,109 @@ describe("data-manager API", () => {
     expect(singleFlight.tryStartSync).not.toHaveBeenCalled();
   });
 
+  it.each([{ countries: [] }, { countries: ["de"], freeDiskBytes: 10 ** 15, feedCount: 1 }])(
+    "POST /transit/sync/preflight refuses an invalid selection or caller capacity %j",
+    async (payload) => {
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir: createDataDir(),
+        operationsPolicy: resolveOperationsProfile({ countries: ["de", "at"] }),
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/transit/sync/preflight",
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+    },
+  );
+
+  it("observes an already admitted reviewed intent without replaying an expired preview", async () => {
+    const app = createTestApp(),
+      status = dataReceipt({ kind: "transit-sync", status: "running", publication: "unknown" }),
+      admitLocal = vi.fn(async () => status);
+    registerApi(app, {
+      dataDir: createDataDir(),
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      executionReceiver: receiverFixture({
+        admitLocal,
+        observeReviewedTransit: async () => status,
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: {
+        countries: ["de"],
+        preflightId: "00000000-0000-4000-8000-000000000001",
+        fingerprint: "a".repeat(64),
+        idempotencyKey: "original-intent",
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json().jobId).toBe(status.id);
+    expect(admitLocal).not.toHaveBeenCalled();
+  });
+
+  it("does not disclose private acquisition diagnostics from transit preview failures", async () => {
+    const ops = await import("../src/ops-client.js"),
+      spy = vi
+        .spyOn(ops, "runOpsOperation")
+        .mockRejectedValueOnce(
+          Error("private acquisition /private/operator-file synthetic-secret"),
+        );
+    try {
+      const app = createTestApp();
+      registerApi(app, {
+        dataDir: createDataDir(),
+        operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/transit/sync/preflight",
+        payload: { countries: ["de"] },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain("operator-file");
+      expect(response.body).not.toContain("synthetic-secret");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("POST /transit/sync starts an in-scope country", async () => {
     const dataDir = createDataDir();
     const singleFlight: SingleFlightController = {
       tryStartSync: vi.fn(async () => ({ ok: true as const, jobId: "job-sync" })),
+      reserveOwned: vi.fn(() => true),
       markSyncFinished: vi.fn(),
       getInflight: () => ({ jobId: "job-sync", startedAt: new Date() }),
     };
-    const launchTransitSync = vi.fn();
+    const admitLocal = vi.fn(async () => dataReceipt({ kind: "transit-sync" }));
     const app = createTestApp();
     registerApi(app, {
       dataDir,
       operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
       singleFlight,
-      launchTransitSync,
+      executionReceiver: receiverFixture({ admitLocal }),
     });
 
     const res = await app.inject({
       method: "POST",
       url: "/transit/sync",
-      payload: { countries: ["DE"] },
+      payload: {
+        countries: ["DE"],
+        idempotencyKey: "legacy-test-key",
+        triggeredBy: "api:synthetic-user",
+      },
     });
 
     expect(res.statusCode).toBe(202);
-    expect(res.json()).toEqual({ ok: true, jobId: "job-sync", status: "started" });
-    expect(launchTransitSync).toHaveBeenCalledWith({
-      jobId: "job-sync",
-      countries: ["DE"],
-      trigger: "api",
-    });
+    expect(res.json()).toEqual({ ok: true, jobId: dataReceipt().id, status: "started" });
+    expect(admitLocal).toHaveBeenCalledWith(
+      { kind: "transit-sync", countries: ["DE"] },
+      { legacyTransitKey: "legacy-test-key", triggeredBy: "api:synthetic-user" },
+    );
   });
 
   it.each(["../etc", "Europe/Germany"])(
@@ -442,7 +659,10 @@ describe("data-manager API", () => {
       const dataDir = createDataDir();
       mockDownloadOsm.mockClear();
       const app = createTestApp();
-      registerApi(app, { dataDir });
+      registerApi(app, {
+        dataDir,
+        executionReceiver: observedUnitReceiver("download-osm", () => mockDownloadOsm({ region })),
+      });
 
       const res = await app.inject({
         method: "POST",
@@ -461,7 +681,10 @@ describe("data-manager API", () => {
       const dataDir = createDataDir();
       mockDownloadOsm.mockClear();
       const app = createTestApp();
-      registerApi(app, { dataDir });
+      registerApi(app, {
+        dataDir,
+        executionReceiver: observedUnitReceiver("download-osm", () => mockDownloadOsm({ region })),
+      });
 
       const res = await app.inject({
         method: "POST",
@@ -470,7 +693,7 @@ describe("data-manager API", () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(mockDownloadOsm).toHaveBeenCalledWith(expect.objectContaining({ region, dataDir }));
+      expect(mockDownloadOsm).toHaveBeenCalledWith(expect.objectContaining({ region }));
       expect(res.body).toContain('"event":"done"');
     },
   );
@@ -546,14 +769,14 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("POST /link accepts a well-formed empty plan", async () => {
+  it("POST /link closes a legacy unsigned plan before effects", async () => {
     const dataDir = createDataDir();
     const app = createTestApp();
     registerApi(app, { dataDir });
 
     const res = await app.inject({ method: "POST", url: "/link", payload: { plan: [] } });
 
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body).ok).toBe(true);
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: "A signed generation-hardlinks execution is required" });
   });
 });

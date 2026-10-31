@@ -1,7 +1,10 @@
 import { jobStages, jobs } from "@openmapx/db-schema";
-import { eq } from "drizzle-orm";
-import { db } from "../db/index.js";
+import { and, eq, isNull, ne } from "drizzle-orm";
+import type postgres from "postgres";
+import z from "zod/v4";
+import { db, rawSql } from "../db/index.js";
 import { scrubDiagnosticValue, scrubSecrets } from "../utils/scrub-secrets.js";
+import { assertDataMutationAdmission } from "./execution/admission.js";
 
 export interface CreateJobRowOptions {
   kind: string;
@@ -24,23 +27,34 @@ export interface PersistenceLogger {
   warn(message: string): unknown;
 }
 
-export async function createJobRow(options: CreateJobRowOptions): Promise<string> {
-  const inserted = await db
-    .insert(jobs)
-    .values({
-      kind: options.kind,
-      status: "running",
-      triggeredBy: options.triggeredBy ?? null,
-      metadata: options.metadata ?? null,
-    })
-    .returning({ id: jobs.id });
+export async function createJobRow(
+  options: CreateJobRowOptions,
+  database: postgres.Sql = rawSql,
+): Promise<string> {
+  const { inserted } = await database.begin(async (tx) => {
+    await assertDataMutationAdmission(tx);
+    const inserted = await tx<
+      { id: string }[]
+    >`INSERT INTO data_manager.jobs(kind,status,triggered_by,metadata)
+    VALUES(${options.kind},'running',${options.triggeredBy ?? null},${options.metadata ? JSON.stringify(z.json().parse(options.metadata)) : null}::text::jsonb) RETURNING id`;
+    return { inserted };
+  });
   const row = inserted[0];
   if (!row) throw new Error("Failed to create data_manager.jobs row");
   return row.id;
 }
 
 export async function finalizeJobRow(jobId: string, status: string): Promise<void> {
-  await db.update(jobs).set({ status, finishedAt: new Date() }).where(eq(jobs.id, jobId));
+  await db
+    .update(jobs)
+    .set({ status, finishedAt: new Date() })
+    .where(
+      and(
+        eq(jobs.id, jobId),
+        isNull(jobs.executionVersion),
+        ne(jobs.kind, "configuration-maintenance"),
+      ),
+    );
 }
 
 export function makePersistingOnStageComplete<TStage extends PersistableStageResult>(

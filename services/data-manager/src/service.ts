@@ -1,11 +1,26 @@
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as waitForDataStatus } from "node:timers/promises";
+import {
+  createDataExecutionControlJournal,
+  loadControlStartup,
+} from "@openmapx/core/build-artifacts";
+import { isDataExecutionTerminal } from "@openmapx/core/data-manager-contracts";
 import { createFatalProcessHandler } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { registerApi } from "./api.js";
 import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
-import { sql } from "./db/index.js";
+import { rawSql, sql } from "./db/index.js";
+import { installDataMutationAdmission } from "./jobs/execution/admission.js";
+import type { DataExecutionReceiver } from "./jobs/execution/api.js";
+import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
+import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
+import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
+import { reconcileLegacyCatalogPreflightRejections } from "./jobs/execution/legacy-mutation.js";
+import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
+import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
+import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
 import {
   type NotablePlacesSchedule,
   scheduleNotablePlaces,
@@ -15,7 +30,11 @@ import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
-import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
+import { createCatalogReviewService } from "./jobs/transitous/catalog-review.js";
+import {
+  resolveOperationsProfileFromEnv,
+  transitAllowedCountries,
+} from "./jobs/transitous/operations-profile.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
 import { OfflinePackageGenerator } from "./offline-packages/generator.js";
@@ -27,8 +46,16 @@ import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
 
 const app = Fastify({ loggerInstance: rootLogger });
-registerAuth(app, resolveAuthToken(app));
+let executionReceiver: DataExecutionReceiver | undefined;
+registerAuth(app, resolveAuthToken(app), { executionReceiver: () => executionReceiver });
 const readiness = new DataManagerReadiness();
+const controlStartup = loadControlStartup({
+  infraDir: "/data",
+  role: "data-manager",
+  container: true,
+  serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
+});
+if (controlStartup.reason) app.log.warn(controlStartup.reason);
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const offlinePackageStorage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
@@ -58,7 +85,51 @@ const notablePlaces = {
   operationLock: createNotablePlacesOperationLock(sql),
 };
 
+const dataState = new StateStore(dataDir);
+const executionJournal = controlStartup.installation
+  ? createDataExecutionControlJournal(controlStartup.installation, rawSql)
+  : undefined;
+const configurationFence = controlStartup.installation
+  ? createDataConfigurationMaintenance(rawSql, controlStartup.installation)
+  : undefined;
+if (configurationFence) installDataMutationAdmission(configurationFence);
+const executionStore = createPostgresDataExecutionStore(rawSql, {
+  controlJournal: executionJournal,
+  configurationFence,
+});
+const catalogReview = controlStartup.installation
+  ? createCatalogReviewService({
+      dataDir,
+      installation: controlStartup.installation,
+      operationsPolicy,
+    })
+  : undefined;
+const dispatcher = createDataExecutionDispatcher({
+  dataDir,
+  state: dataState,
+  sql,
+  singleFlight,
+  operationsPolicy,
+  runHardlinks: applyOwnedGenerationHardlinks,
+  notablePlaces,
+});
+const executionRuntime = createDataExecutionRuntime({
+  store: executionStore,
+  dispatch: dispatcher.dispatch,
+});
+if (controlStartup.installation && configurationFence)
+  executionReceiver = createDataExecutionReceiver({
+    runtime: executionRuntime,
+    installation: controlStartup.installation,
+    configurationFence,
+    dispatcher,
+    operationsPolicy,
+  });
+
 registerApi(app, {
+  catalogReview,
+  executionReceiver,
+  searchIndexRuntimeState: dispatcher.searchIndexRuntimeState,
   dataDir,
   offlinePackages,
   singleFlight,
@@ -127,8 +198,18 @@ let cronHandles: CronHandles | null = null;
 let notablePlacesSchedule: NotablePlacesSchedule | null = null;
 
 async function start(): Promise<void> {
-  const store = new StateStore(dataDir);
-  const countries = operationsPolicy.countries;
+  const store = dataState;
+  try {
+    await reconcileLegacyCatalogPreflightRejections();
+    await configurationFence?.startup();
+    await executionRuntime.reconcile();
+  } catch (err) {
+    app.log.error(
+      { err },
+      "Data mutation admission remains closed pending retained ownership recovery",
+    );
+  }
+  const countries = transitAllowedCountries(operationsPolicy);
   const initialized = await initializeRequiredSubsystems({
     readiness,
     initializeOfflineStorage: async () => {
@@ -138,7 +219,9 @@ async function start(): Promise<void> {
     reconcileJobs: reconcileOrphanedJobs,
     setupCronSchedulers: () =>
       setupCron({
+        catalogReview,
         dataDir,
+        executionReceiver,
         countries,
         operationsPolicy,
         store,
@@ -178,7 +261,29 @@ async function start(): Promise<void> {
   // These maintenance operations already contain/log their own failures and
   // do not affect whether the registered HTTP and scheduled work is safe.
   void cronHandles.runTrafficExtractStartupNow();
-  notablePlacesSchedule = scheduleNotablePlaces({ sql, logger: app.log, ...notablePlaces });
+  notablePlacesSchedule = scheduleNotablePlaces({
+    sql,
+    logger: app.log,
+    ...notablePlaces,
+    runOwned: async () => {
+      if (!executionReceiver) throw Error("Durable data receiver is unavailable");
+      const admitted = await executionReceiver.admitLocal(
+        { kind: "notable-places-build" },
+        { triggeredBy: "bootstrap" },
+      );
+      for (;;) {
+        const status = await executionReceiver.inspect(admitted.id);
+        if (!status) throw Error("Notable build observation remains unknown");
+        if (isDataExecutionTerminal(status)) {
+          if (status.status !== "ok") throw Error("Notable build did not complete");
+          return;
+        }
+        if (Date.now() >= admitted.deadlineAt)
+          throw Error("Notable build observation remains pending");
+        await waitForDataStatus(250);
+      }
+    },
+  });
   void notablePlacesSchedule.buildIfMissing();
   if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
     void cronHandles.runOvertureConflationRetryNow();
@@ -205,6 +310,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   cronHandles?.stop();
   notablePlacesSchedule?.stop();
   await offlinePackages.close();
+  await executionRuntime.close();
   await cronHandles?.closeTrafficWriter();
   const result = await awaitInflightSync(singleFlight, 30_000);
   if (result === "timeout") {

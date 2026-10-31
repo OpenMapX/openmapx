@@ -73,11 +73,11 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           const source: "default" | "database" | "vault" | "config.json" | "env" = response.data.resolvedConfig.field.source;
         }
       });
-      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic"}, finiteOptions);
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic",expectedRevision:"cfg1_synthetic"}, {"idempotency-key":"synthetic-intent-0001"}, finiteOptions);
       // @ts-expect-error Credential bodies reject unknown fields.
-      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true});
+      setAdminIntegrationCredential("sample", "apiKey", {value: "synthetic", unexpected: true}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Credentials are strings, not numbers.
-      setAdminIntegrationCredential("sample", "apiKey", {value: 1});
+      setAdminIntegrationCredential("sample", "apiKey", {value: 1}, {"idempotency-key":"synthetic-intent-0001"});
       getAdminIntegrationHealthHistory("sample", {hours: 24}, finiteOptions);
       // @ts-expect-error Generated query output exposes bounded integer input, not string coercion.
       getAdminIntegrationHealthHistory("sample", {hours: "24"});
@@ -99,7 +99,7 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
     virtual.set(
       filename,
       `${virtual.get(filename)}
-      import { streamAdminServiceLogs, getAdminService, getAdminComposePreview, stopAdminCompose, setAdminServiceSelection, runAdminServicesBulkAction, restoreAdminServiceBackup } from "./service-admin.generated";
+      import { uploadAdminArtifactTransferContent,downloadAdminArtifactTransferContent,getDownloadAdminArtifactTransferContentTarget, streamAdminServiceLogs, getAdminService, getAdminComposePreview, stopAdminCompose, setAdminServiceSelection, runAdminServicesBulkAction, restoreAdminServiceBackup } from "./service-admin.generated";
       getAdminService("sample").then(response => {
         if (response.status === 200) {
           const image: string = response.data.manifest.container.image;
@@ -107,6 +107,17 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
           response.data.manifest.provides?.forEach(entry => { const capability: string = typeof entry === "string" ? entry : entry.capability; });
         }
       });
+      uploadAdminArtifactTransferContent("stage",new Blob([new Uint8Array([0,255])]),{client:undefined});
+      // @ts-expect-error Uploads accept opaque Blob bodies, not JSON.
+      uploadAdminArtifactTransferContent("stage",{body:"invalid"});
+      downloadAdminArtifactTransferContent("stage",{onByteChunk:async(chunk,signal)=>{const byte:number=chunk[0];signal.throwIfAborted();}}).then(response=>{if(response.status===200){const data:undefined=response.data;}});
+      // @ts-expect-error Byte downloads require an explicit owned consumer.
+      downloadAdminArtifactTransferContent("stage");
+      // @ts-expect-error Signal alone cannot consume a byte response.
+      downloadAdminArtifactTransferContent("stage",{signal:new AbortController().signal});
+      const native:Promise<{url:string;ownership:"browser"}>=getDownloadAdminArtifactTransferContentTarget("stage",{headers:{}});
+      // @ts-expect-error Native navigation cannot send custom headers.
+      getDownloadAdminArtifactTransferContentTarget("stage",{headers:{Authorization:"x"}});
       const logHeaders = {"idempotency-key": "synthetic-intent-0001"};
       streamAdminServiceLogs("id", logHeaders, undefined, {onTextChunk: async (chunk) => { const text: string = chunk; }, timeoutMs: 100}).then(response => {
         if (response.status === 200) { const data: undefined = response.data; }
@@ -124,9 +135,9 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
         if (response.status === 200) {}
         if (response.status === 503) { const guidance: string = response.data.error; const ok: false = response.data.ok; }
       });
-      setAdminServiceSelection({selectedRoots: []});
+      setAdminServiceSelection({selectedRoots: []}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error An absent selection cannot mean intentional deselection.
-      setAdminServiceSelection({});
+      setAdminServiceSelection({}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Build-only fields cannot enter lifecycle actions.
       runAdminServicesBulkAction({action: "start", serviceIds: ["sample"], all: true});
       restoreAdminServiceBackup("sample", {serviceIds: [], stopRunning: true});
@@ -301,6 +312,50 @@ afterEach(async () => {
 });
 
 describe("SDK artifact gate", () => {
+  it("keeps privacy generation dormant until actual privacy-admin routes adopt the family", () => {
+    const document = {
+      paths: {
+        "/fixture": {
+          get: { operationId: "fixture", tags: ["data-manager-admin"], responses: {} },
+        },
+      },
+    };
+    expect(
+      createCodegenConfig({ inputDocument: document, outputDirectory: "/tmp/sdk-config" }),
+    ).not.toHaveProperty("privacyAdmin");
+    const adopted = {
+      paths: {
+        ...document.paths,
+        "/api/admin/privacy/requests": {
+          get: {
+            operationId: "listAdminPrivacyRequests",
+            tags: ["privacy-admin"],
+            responses: {
+              200: {
+                description: "Cases",
+                content: { "application/json": { schema: { type: "object" } } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const config = createCodegenConfig({
+      inputDocument: adopted,
+      outputDirectory: "/tmp/sdk-config",
+    });
+    expect(config).toHaveProperty("privacyAdmin");
+    expect(config.privacyAdmin.output).toMatchObject({
+      target: "/tmp/sdk-config/generated/admin/privacy-admin.generated.ts",
+      schemas: "/tmp/sdk-config/generated/admin/privacy-models",
+    });
+    expect(typeof config.privacyAdmin.output.client).toBe("function");
+    expect(selectTaggedDocument(adopted, "privacy-admin").paths).toHaveProperty(
+      "/api/admin/privacy/requests",
+    );
+    expect(selectTaggedDocument(adopted, "service-admin").paths).toEqual({});
+  });
+
   it("keeps extension generation dormant until a real document adopts the tag", () => {
     const document = {
       paths: {
@@ -757,6 +812,20 @@ describe("integration administration generation", () => {
           name: "hours",
           schema: { type: "integer", minimum: 1, maximum: 168, default: 24 },
         });
+      if (request && "headers" in request) {
+        const emitted = routeJsonSchema(request.headers, {
+          identity: `${id}Headers`,
+          io: "output",
+        });
+        const required = emitted.required as string[] | undefined;
+        for (const [name, field] of Object.entries(emitted.properties as Record<string, unknown>))
+          parameters.push({
+            in: "header",
+            name,
+            required: required?.includes(name) ?? false,
+            schema: field,
+          });
+      }
       input.paths[path] ??= {};
       input.paths[path][operation.method.toLowerCase()] = {
         operationId: id,
@@ -928,6 +997,21 @@ describe("service administration custom-client generation", () => {
         operationId: id,
         tags: ["service-admin"],
         parameters,
+        ...(Object.values(operation.responses).some((c) => c.kind === "bytes" && c.nativeDownload)
+          ? { "x-openmapx-native-download": true }
+          : {}),
+        ...(operation.requestBody
+          ? {
+              requestBody: {
+                required: true,
+                content: {
+                  [operation.requestBody.mediaType]: {
+                    schema: { type: "string", format: "binary" },
+                  },
+                },
+              },
+            }
+          : {}),
         ...(request?.body
           ? {
               requestBody: {
@@ -950,7 +1034,9 @@ describe("service administration custom-client generation", () => {
                   schema:
                     "schema" in response
                       ? schema(response.schema, `${id}Response${status}`)
-                      : { type: "string" },
+                      : response.kind === "bytes"
+                        ? { type: "string", format: "binary" }
+                        : { type: "string" },
                 },
               },
             },
@@ -1042,7 +1128,10 @@ describe("service administration custom-client generation", () => {
       );
       let acquire: () => Response = () =>
         new Response("services:\n  synthetic: {}\n", {
-          headers: { "content-type": "text/yaml; charset=utf-8" },
+          headers: {
+            "content-type": "text/yaml; charset=utf-8",
+            "x-openmapx-current-configuration": "none",
+          },
         });
       vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
         expect(url).toMatch(/^https:\/\/app\.example\/api\/admin\//);

@@ -7,6 +7,8 @@
     "services/data-manager/src/jobs/download-fonts.ts|execa|1|unzip|data-manager-worker|data-manager.fonts-inspect",
     "services/data-manager/src/jobs/download-fonts.ts|execa|2|unzip|data-manager-worker|data-manager.fonts-extract",
     "services/data-manager/src/jobs/download-osm.ts|execa|1|curl|data-manager-worker|data-manager.osm-download",
+    "services/data-manager/src/jobs/execution/test-fixtures/dm-recovery-process.ts|runner|1|{ script: \"generate-attribution\" }|transitous-runner|transitous.fixed-runner",
+    "services/data-manager/src/jobs/execution/test-fixtures/dm-recovery-process.ts|runner|2|{ script: \"garbage-collect\" }|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/overture/duckdb.ts|execa|1|duckdb|data-manager-worker|data-manager.duckdb",
     "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|1|osmium|data-manager-worker|data-manager.overture-extract",
     "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|2|osmium|data-manager-worker|data-manager.overture-export",
@@ -17,11 +19,13 @@
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|1|git|transitous-runner|transitous.catalog-status",
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|2|git|transitous-runner|transitous.catalog-diff",
     "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|3|git|transitous-runner|transitous.catalog-proposal",
+    "services/data-manager/src/jobs/transitous/catalog-review.ts|execa|1|git|transitous-runner|transitous.catalog-diff",
     "services/data-manager/src/jobs/transitous/internal.ts|execa|1|command|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/transitous/internal.ts|execa|2|git|transitous-runner|transitous.git-read",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|1|git|transitous-runner|transitous.checkout-fetch",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|2|git|transitous-runner|transitous.checkout-resolve",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|3|git|transitous-runner|transitous.checkout-materialize",
+    "services/data-manager/src/jobs/transitous/script-runner.ts|runner|1|run|transitous-runner|transitous.fixed-runner",
     "services/data-manager/src/jobs/transitous/validate.ts|execa|1|unzip|transitous-runner|transitous.archive-validate",
     "services/data-manager/src/supervisor.ts|spawn|1|process.execPath|data-manager-worker|data-manager.supervise-traffic-worker"
   ],
@@ -31,14 +35,40 @@
       "agent.update",
       "appApi.replace",
       "appApi.runtime.inspect",
+      "artifactTransfer.capabilities",
+      "artifactTransfer.claim",
+      "artifactTransfer.create",
+      "artifactTransfer.delete",
+      "artifactTransfer.export",
+      "artifactTransfer.import",
+      "artifactTransfer.inspect",
+      "artifactTransfer.inspectClaim",
+      "artifactTransfer.list",
+      "artifactTransfer.previewImport",
+      "artifactTransfer.settle",
+      "artifactTransfer.validate",
       "backup.create",
       "backup.delete",
       "backup.list",
+      "backup.prune",
+      "backup.prune.preview",
       "backup.restore",
+      "catalogPins.inspect",
       "communityServices.inspect",
+      "configuration.hardlinks.apply",
       "configuration.failure.inspect",
       "configuration.hardlinks.inspect",
+      "configuration.hardlinks.preview",
       "configuration.inspect",
+      "configuration.sources.inspect",
+      "configurationHandoff.inspect",
+      "configurationHandoff.prepare",
+      "configurationMaintenance.decide",
+      "configurationMaintenance.inspect",
+      "configurationMaintenance.prepare",
+      "configurationMaintenance.settle",
+      "controlRetention.acknowledge",
+      "coreService.restart",
       "data.clean",
       "data.convertOverpass",
       "data.downloadFonts",
@@ -48,23 +78,34 @@
       "data.link",
       "data.notablePlacesBuild",
       "data.overtureConflate",
+      "data.overtureExtract",
+      "data.overtureIngest",
+      "data.overturePull",
       "data.overtureSync",
       "data.searchIndexBuild",
       "data.update",
       "dawarich.provisioning.inspect",
       "docker.status",
+      "integration.inspectInstall",
+      "integration.inspectOwnership",
+      "integration.install",
+      "integration.inventory",
       "installedIntegrations.inspect",
-      "integration.adopt",
-      "integration.inspect",
-      "integration.publish",
+      "catalogIntegration.adopt",
+      "catalogIntegration.inspect",
+      "catalogIntegration.publish",
+      "catalogIntegration.remove",
+      "catalogIntegration.settle",
       "integration.remove",
       "integration.settle",
       "integrationConfig.apply",
       "release.apply",
+      "release.clear",
       "release.inspect",
       "release.pull",
       "release.resolve",
       "service.build",
+      "service.image.stage",
       "service.logs",
       "service.logs.follow",
       "service.pull",
@@ -83,6 +124,7 @@
       "serviceSelection.apply",
       "serviceSelection.inspect",
       "services.buildAll",
+      "services.inspect",
       "stack.render",
       "stack.start",
       "stack.status",
@@ -90,6 +132,7 @@
       "system.diagnostics",
       "system.inspect",
       "system.update",
+      "transitCredentials.inspect",
       "transitousPin.inspect",
       "vault.apply"
     ],
@@ -105,10 +148,10 @@
       "transitousLock.approve",
       "transitousLock.inspect",
       "transitousLock.propose",
+      "valhalla.traffic.disable",
       "valhalla.traffic.inspect",
       "valhalla.traffic.maintain",
-      "valhalla.traffic.refreshWaysToEdges",
-      "valhalla.traffic.disable"
+      "valhalla.traffic.refreshWaysToEdges"
     ]
   },
   "trustedDataSourceKinds": [
@@ -136,11 +179,13 @@
       "convert-overpass",
       "link",
       "clean",
-      "generate-api-keys",
       "overture-sync",
       "overture-conflate",
       "search-index-build",
-      "notable-places-build"
+      "notable-places-build",
+      "overture-pull",
+      "overture-ingest",
+      "overture-extract"
     ],
     "apps/api/src/services/admin-job-handlers.ts#BackupOperation": ["create", "restore", "delete"],
     "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction": [
@@ -153,6 +198,20 @@
   },
   "businessEffects": [
     {
+      "id": "agent.services-inventory",
+      "callSiteIds": [],
+      "semanticSources": ["apps/ops-agent/src/production-runtime.ts#createProductionOpsRuntime"],
+      "typedKinds": ["services.inspect"]
+    },
+    {
+      "id": "api.control-retention.acknowledge",
+      "callSiteIds": [],
+      "semanticSources": [
+        "packages/core/src/build-artifacts/control-authority.ts#acknowledgeControlRetention"
+      ],
+      "typedKinds": ["controlRetention.acknowledge"]
+    },
+    {
       "id": "api.admin-cli.data",
       "callSiteIds": [],
       "semanticSources": ["apps/api/src/services/admin-operation-catalog.ts#AdminOperationId"],
@@ -163,8 +222,10 @@
         "data.convertOverpass",
         "data.link",
         "data.clean",
-        "data.generateApiKeys",
         "data.overtureSync",
+        "data.overturePull",
+        "data.overtureIngest",
+        "data.overtureExtract",
         "data.overtureConflate",
         "data.searchIndexBuild",
         "data.notablePlacesBuild",
@@ -180,27 +241,39 @@
     {
       "id": "api.admin-cli.bulk-service",
       "callSiteIds": [],
-      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#BulkServiceAction"],
+      "semanticSources": [
+        "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction",
+        "apps/ops-agent/src/core-service-runtime.ts"
+      ],
       "typedKinds": [
         "service.start",
         "service.stop",
         "service.restart",
         "service.update",
         "service.build",
-        "services.buildAll"
+        "services.buildAll",
+        "coreService.restart"
       ]
     },
     {
       "id": "api.configuration-hardlinks",
       "callSiteIds": [],
-      "semanticSources": ["apps/api/src/services/admin-ops.ts#applyGenerationHardlinks"],
-      "typedKinds": ["configuration.hardlinks.inspect"]
+      "semanticSources": [
+        "apps/api/src/services/configuration-hardlinks.ts#applyGenerationHardlinks",
+        "apps/ops-agent/src/configuration-hardlinks-runtime.ts#installConfigurationHardlinksRuntime",
+        "apps/ops-agent/src/trusted-config-runtime.ts#installTrustedConfigurationRuntime"
+      ],
+      "typedKinds": [
+        "configuration.hardlinks.inspect",
+        "configuration.hardlinks.apply",
+        "configuration.hardlinks.preview"
+      ]
     },
     {
       "id": "api.configuration-failure",
       "callSiteIds": [],
       "semanticSources": [
-        "apps/api/src/services/trusted-config-operations.ts#readConfigurationFailure"
+        "apps/api/src/services/trusted-configuration-producer.ts#readConfigurationFailure"
       ],
       "typedKinds": ["configuration.failure.inspect"]
     },
@@ -249,7 +322,7 @@
         "apps/api/src/services/community-repositories.ts#publishServiceRepository",
         "apps/api/src/services/community-repositories.ts#settleServiceRepository",
         "apps/api/src/services/community-repositories.ts#removeServiceRepository",
-        "apps/api/src/services/community-repositories.ts#readCommunityServices",
+        "apps/api/src/services/community-service-inventory.ts#readCommunityServices",
         "apps/api/src/services/extension-installer.ts#installExtension",
         "apps/api/src/services/extension-installer.ts#removeExtension"
       ],
@@ -277,11 +350,11 @@
         "apps/api/src/services/extension-installer.ts#removeExtension"
       ],
       "typedKinds": [
-        "integration.inspect",
-        "integration.publish",
-        "integration.settle",
-        "integration.remove",
-        "integration.adopt",
+        "catalogIntegration.inspect",
+        "catalogIntegration.publish",
+        "catalogIntegration.remove",
+        "catalogIntegration.settle",
+        "catalogIntegration.adopt",
         "installedIntegrations.inspect"
       ]
     },
@@ -293,14 +366,16 @@
         "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfigurationWithEvidence",
         "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
         "apps/api/src/routes/admin.ts#adminRoute",
-        "apps/api/src/services/service-secrets.ts#setServiceSecret"
+        "apps/api/src/services/service-secrets.ts#setServiceSecret",
+        "packages/core/src/build-artifacts/configuration-source-witness.ts#observeConfigurationSources"
       ],
       "typedKinds": [
         "configuration.inspect",
         "serviceSelection.apply",
         "serviceConfig.apply",
         "integrationConfig.apply",
-        "vault.apply"
+        "vault.apply",
+        "configuration.sources.inspect"
       ]
     },
     {
@@ -336,13 +411,140 @@
         "transitousLock.propose",
         "transitousLock.approve",
         "gbfsCatalogLock.inspect",
+        "catalogPins.inspect",
         "transitousPin.inspect"
       ]
+    },
+    {
+      "id": "api.configuration-maintenance",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/prospective-configuration.ts#prepareConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#inspectConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#decideConfigurationMaintenance",
+        "apps/api/src/services/prospective-configuration.ts#settleConfigurationMaintenance",
+        "apps/ops-agent/src/configuration-maintenance-store.ts#prepareConfigurationMaintenanceAdmission",
+        "apps/ops-agent/src/configuration-handoff-store.ts#launchPreparedConfigurationHandoff",
+        "apps/ops-agent/src/configuration-handoff-store.ts#inspectConfigurationHandoff"
+      ],
+      "typedKinds": [
+        "configurationMaintenance.prepare",
+        "configurationMaintenance.inspect",
+        "configurationMaintenance.decide",
+        "configurationMaintenance.settle",
+        "configurationHandoff.prepare",
+        "configurationHandoff.inspect"
+      ]
+    },
+    {
+      "id": "api.transit-credentials",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/transit-feed-credential-participant.ts#inspect",
+        "apps/ops-agent/src/transit-credentials-runtime.ts#installTransitCredentialsRuntime"
+      ],
+      "typedKinds": ["transitCredentials.inspect"]
+    },
+    {
+      "id": "ops.retired-feed-credential-generator",
+      "callSiteIds": [],
+      "semanticSources": [
+        "packages/core/src/ops/contract.ts#authorizeOpsOperation",
+        "apps/ops-agent/src/administrative-runtime.ts#createAdministrativeRuntime"
+      ],
+      "typedKinds": ["data.generateApiKeys"]
+    },
+    {
+      "id": "api.artifact-validation",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactValidationJob"
+      ],
+      "typedKinds": ["artifactTransfer.validate"]
+    },
+    {
+      "id": "api.artifact-transfers",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/artifact-transfers.ts#AdminArtifactTransfers"],
+      "typedKinds": [
+        "artifactTransfer.create",
+        "artifactTransfer.list",
+        "artifactTransfer.inspect",
+        "artifactTransfer.delete",
+        "artifactTransfer.claim",
+        "artifactTransfer.inspectClaim",
+        "artifactTransfer.settle",
+        "artifactTransfer.previewImport",
+        "artifactTransfer.capabilities"
+      ]
+    },
+    {
+      "id": "api.standalone-integration-installation",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/standalone-integrations/install.ts",
+        "apps/ops-agent/src/standalone-integration-runtime.ts#installStandaloneIntegrationRuntime"
+      ],
+      "typedKinds": ["integration.inspectInstall", "integration.install", "integration.settle"]
+    },
+    {
+      "id": "api.standalone-integration-ownership",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/standalone-integrations/ownership.ts#handleStandaloneOwnership",
+        "apps/ops-agent/src/standalone-ownership-runtime.ts#installStandaloneOwnershipRuntime"
+      ],
+      "typedKinds": ["integration.inventory", "integration.inspectOwnership", "integration.remove"]
+    },
+    {
+      "id": "api.release-pin-selection",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-release-controls.ts#handleReleaseClearJob"],
+      "typedKinds": ["release.clear"]
+    },
+    {
+      "id": "api.immutable-image-staging",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-image-staging.ts#handleImageStageJob",
+        "apps/ops-agent/src/image-stage-runtime.ts#installImageStageRuntime"
+      ],
+      "typedKinds": ["service.image.stage"]
+    },
+    {
+      "id": "api.backup-prune",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-backup-maintenance.ts#handleBackupPruneJob",
+        "apps/ops-agent/src/backup-prune-runtime.ts#installBackupPruneRuntime"
+      ],
+      "typedKinds": ["backup.prune", "backup.prune.preview"]
+    },
+    {
+      "id": "api.artifact-publication",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactImportJob"
+      ],
+      "typedKinds": ["artifactTransfer.import"]
+    },
+    {
+      "id": "api.artifact-export",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/admin-artifact-validation.ts#handlePreparedArtifactExportJob",
+        "apps/ops-agent/src/artifact-transfer/export-runtime.ts#installPreparedExportRuntime"
+      ],
+      "typedKinds": ["artifactTransfer.export"]
     }
   ],
   "mounts": [
+    "ops-agent|@infra:control-private/empty|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/control-private/host-cli|true",
+    "ops-agent|@infra:control-private/hidden-key|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets/control-host-cli.key|true",
+    "ops-agent|@infra:control-private/empty|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/control-private/data-manager|true",
+    "ops-agent|@infra:control-private/hidden-key|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets/control-data-manager.key|true",
     "ops-agent|@docker-socket|/var/run/docker.sock|false",
-    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}/infra/docker|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker|true",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}/infra/docker|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker|true",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/backups|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data|false",
     "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/secrets|false",

@@ -36,6 +36,7 @@ import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
+import { cliProcessOptions } from "../lib/execution-deadline";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { applyServiceSelection } from "../lib/service-selection";
@@ -80,6 +81,8 @@ export interface BackupManifest {
   formatVersion: 2;
   name: string;
   createdAt: string;
+  /** Latest allowed expiry, portable and never extended by a longer policy. */
+  expiresAt?: string;
   openmapxVersion: string;
   services: BackupServiceEntry[];
   privacySourceProvenance?: {
@@ -228,6 +231,8 @@ export function readBackupManifest(filePath: string): BackupManifest {
   if (raw.formatVersion !== 2) {
     throw new Error(`Malformed backup format version in ${filePath}`);
   }
+  if (raw.expiresAt !== undefined)
+    coreServices.backupRetentionExpiry(raw.createdAt, 36500, raw.expiresAt);
   const managed = raw.privacySourceProvenance?.managedDawarich;
   if (
     managed &&
@@ -393,6 +398,7 @@ function ctxFromRepo(rootDir?: string): ComposeContext {
 
 async function dockerCompose(ctx: ComposeContext, args: string[]): Promise<string> {
   const result = await execa("docker", [...ctx.composeArgs, ...args], {
+    ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,
   });
@@ -478,7 +484,7 @@ async function waitForPostgres(
         "-t",
         "1",
       ],
-      { cwd: ctx.cwd, reject: false, timeout: 5_000 },
+      { ...cliProcessOptions(5_000), cwd: ctx.cwd, reject: false },
     );
     if (result.exitCode === 0) return;
     if (attempt < 30) await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -573,7 +579,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   const name = opts.name ?? defaultBackupName();
   assertValidBackupName(name);
   // Validate policy before creating files or stopping services.
-  const retentionDays = configuredBackupRetentionDays();
+  const retentionDays = configuredBackupRetentionDays(opts.rootDir);
 
   const backupDir = resolveBackupDir(opts.rootDir, name);
 
@@ -649,6 +655,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
         }
       : {}),
   };
+  manifest.expiresAt = coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays);
 
   try {
     for (const svc of targets) {
@@ -794,7 +801,13 @@ async function pgDumpToFile(
       "--no-privileges",
       db,
     ],
-    { cwd: ctx.cwd, reject: false, stderr: "pipe", buffer: { stdout: false } },
+    {
+      ...cliProcessOptions(),
+      cwd: ctx.cwd,
+      reject: false,
+      stderr: "pipe",
+      buffer: { stdout: false },
+    },
   );
 
   if (!sub.stdout) {
@@ -835,7 +848,7 @@ async function tarVolumeToFile(
       "/source",
       ".",
     ],
-    { reject: false },
+    { ...cliProcessOptions(), reject: false },
   );
   if (result.exitCode !== 0) {
     throw new Error(
@@ -934,45 +947,31 @@ export function pruneExpiredBackups(opts: PruneExpiredBackupsOptions): PruneExpi
   ) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }
-  const now = (opts.now ?? new Date()).getTime();
-  const cutoff = now - opts.retentionDays * 24 * 60 * 60 * 1000;
+  const now = opts.now ?? new Date();
   const deleted: string[] = [];
   const retained: string[] = [];
-  const backupsRoot = join(repoPaths(opts.rootDir).infraDir, "backups");
+  const infraDir = repoPaths(opts.rootDir).infraDir;
+  const backupsRoot = join(infraDir, "backups");
   if (!existsSync(backupsRoot)) return { deleted, retained };
+  coreServices.retainBackupExpiryCeilings(infraDir, opts.retentionDays);
+  const plan = coreServices.backupPruneInventory(infraDir, opts.retentionDays, now);
+  for (const name of plan.corruptBackups)
+    opts.onWarning?.(`using directory age for ${name}: unreadable expiry metadata`);
+  const candidates = new Set(plan.candidates.map((entry) => entry.backupId));
   for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !isValidBackupName(entry.name)) continue;
-    const backupDir = resolveBackupDir(opts.rootDir, entry.name);
-    const directoryStats = lstatSync(backupDir);
-    if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) continue;
-    let timestamp = directoryStats.mtimeMs;
-    try {
-      const manifest = readBackupManifest(join(backupDir, "manifest.json"));
-      const createdAt = Date.parse(manifest.createdAt);
-      if (Number.isFinite(createdAt) && createdAt <= now) timestamp = createdAt;
-      else opts.onWarning?.(`using directory age for ${entry.name}: invalid creation timestamp`);
-    } catch (error) {
-      opts.onWarning?.(`using directory age for ${entry.name}: ${(error as Error).message}`);
-    }
-    if (timestamp < cutoff) {
+    if (!isValidBackupName(entry.name) || !entry.isDirectory()) continue;
+    if (candidates.has(entry.name)) {
       deleteBackup({ rootDir: opts.rootDir, name: entry.name });
       deleted.push(entry.name);
-    } else {
-      retained.push(entry.name);
-    }
+    } else retained.push(entry.name);
   }
   deleted.sort();
   retained.sort();
   return { deleted, retained };
 }
 
-function configuredBackupRetentionDays(): number {
-  const raw = process.env.BACKUP_RETENTION_DAYS?.trim() || "30";
-  const days = Number(raw);
-  if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
-    throw new Error("BACKUP_RETENTION_DAYS must be an integer between 1 and 36500");
-  }
-  return days;
+function configuredBackupRetentionDays(rootDir?: string): number {
+  return coreServices.readAppliedPlatformValues(repoPaths(rootDir).infraDir).backupRetentionDays;
 }
 
 function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
@@ -1033,19 +1032,23 @@ export function validateRestoreDataProtection(
   manifest: BackupManifest,
   opts: { rootDir?: string; retentionDays?: number; now?: Date } = {},
 ): void {
-  if (!containsOpenMapXDatabase(manifest)) return;
-  const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays();
+  const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays(opts.rootDir);
   if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }
   const createdAt = Date.parse(manifest.createdAt);
   if (!Number.isFinite(createdAt)) throw new Error("Backup has an invalid creation timestamp");
   const now = (opts.now ?? new Date()).getTime();
-  if (createdAt < now - retentionDays * 24 * 60 * 60 * 1000) {
+  if (
+    Date.parse(
+      coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays, manifest.expiresAt),
+    ) < now
+  ) {
     throw new Error(
       `Backup exceeds the ${retentionDays}-day retention policy and cannot be restored`,
     );
   }
+  if (!containsOpenMapXDatabase(manifest)) return;
   const { journalPath } = erasureJournalPaths(opts.rootDir);
   const key = readErasureJournalKey(opts.rootDir);
   const journal = readErasureJournal(journalPath, key);
@@ -1100,7 +1103,7 @@ async function listRestoredUsers(
       "-c",
       `SELECT json_build_object('id', id, 'email', email)::text FROM "user"`,
     ],
-    { cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
   );
   if (result.exitCode !== 0)
     throw new Error(`Unable to enumerate restored users: ${result.stderr}`);
@@ -1221,7 +1224,7 @@ COMMIT;
       "-v",
       "ON_ERROR_STOP=1",
     ],
-    { cwd: ctx.cwd, reject: false, input: statement },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: statement },
   );
   if (result.exitCode !== 0) {
     throw new Error(`Unable to replay user erasure (psql exit ${result.exitCode})`);
@@ -1498,7 +1501,7 @@ async function pgRestoreFromFile(
   const drop = await execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
-    { cwd: ctx.cwd, reject: false },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (drop.exitCode !== 0) {
     throw new Error(`dropdb failed: ${drop.stderr ?? ""}`);
@@ -1507,7 +1510,7 @@ async function pgRestoreFromFile(
   const create = await execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "createdb", "-U", user, db],
-    { cwd: ctx.cwd, reject: false },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (create.exitCode !== 0) {
     throw new Error(`createdb failed: ${create.stderr ?? ""}`);
@@ -1515,6 +1518,7 @@ async function pgRestoreFromFile(
 
   // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>
   const gunzip = execa("gunzip", ["-c", gzFile], {
+    ...cliProcessOptions(),
     cwd: ctx.cwd,
     reject: false,
     stdout: "pipe",
@@ -1522,7 +1526,7 @@ async function pgRestoreFromFile(
   const psql = execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "psql", "-U", user, "-v", "ON_ERROR_STOP=1", db],
-    { cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: gunzip.stdout ?? undefined },
   );
 
   const [gunzipRes, psqlRes] = await Promise.all([gunzip, psql]);
@@ -1558,7 +1562,7 @@ async function tarRestoreFromFile(
       `cd /target && find . -mindepth 1 -delete && ` +
         `tar -xzf /backup/${shellEscape(fileName)} -C /target`,
     ],
-    { reject: false },
+    { ...cliProcessOptions(), reject: false },
   );
   if (result.exitCode !== 0) {
     throw new Error(

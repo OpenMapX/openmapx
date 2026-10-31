@@ -712,7 +712,7 @@ describe("installIntegration (artifact source)", () => {
     ).toBe(true);
   });
 
-  it("extracts safe internal symlinks from artifacts", async () => {
+  it("rejects internal symlinks under the shared regular-file-only archive policy", async () => {
     const src = join(tmp, "symlink-artifact-src");
     const targetDir = join(src, "assets", "real");
     mkdirSync(targetDir, { recursive: true });
@@ -726,15 +726,11 @@ describe("installIntegration (artifact source)", () => {
     const artifact = join(tmp, "symlink-artifact.tar.gz");
     writeTarGz(src, artifact);
 
-    await installIntegration({
-      source: artifact,
-      sourceKind: "artifact",
-      rootDir: tmp,
-    });
-
-    const installedLink = join(tmp, "custom_integrations", "symlink-artifact", "assets", "linked");
-    expect(lstatSync(installedLink).isSymbolicLink()).toBe(true);
-    expect(existsSync(join(installedLink, "data.json"))).toBe(true);
+    await expectArtifactRejection(
+      artifact,
+      "symlink-artifact",
+      /Unsupported artifact entry type '2'/,
+    );
   });
 
   it("rejects artifacts that ship a node_modules directory", async () => {
@@ -1016,13 +1012,13 @@ describe("installIntegration (what the operations agent loads)", () => {
       { name: "copy.json", data: schemaManifest("linked-to") },
       { name: "manifest.json", type: "1", linkName: "copy.json" },
     ]);
-    await expectArtifactRejection(linkedTo, "linked-to", /must not be hard-linked/);
+    await expectArtifactRejection(linkedTo, "linked-to", /Unsupported artifact entry type '1'/);
     const linkedFrom = join(tmp, "manifest-linked-from.tar.gz");
     writeTarFixture(linkedFrom, [
       { name: "manifest.json", data: schemaManifest("linked-from") },
       { name: "alias.json", type: "1", linkName: "manifest.json" },
     ]);
-    await expectArtifactRejection(linkedFrom, "linked-from", /must not be hard-linked/);
+    await expectArtifactRejection(linkedFrom, "linked-from", /Unsupported artifact entry type '1'/);
     expect(agentLoads()).toEqual(["kept"]);
   });
 
@@ -1033,7 +1029,11 @@ describe("installIntegration (what the operations agent loads)", () => {
       { name: "real.json", data: schemaManifest("manifest-symlink") },
       { name: "manifest.json", type: "2", linkName: "real.json" },
     ]);
-    await expectArtifactRejection(artifact, "manifest-symlink", /not a symbolic link/);
+    await expectArtifactRejection(
+      artifact,
+      "manifest-symlink",
+      /Unsupported artifact entry type '2'/,
+    );
 
     const source = join(tmp, "local-symlink");
     mkdirSync(source);
@@ -1099,6 +1099,10 @@ describe("installIntegration (what the operations agent loads)", () => {
     >;
     chmodSync(join(backup.backupDirectory, "manifest.json"), 0o666);
     chmodSync(backup.backupDirectory, 0o777);
+    // Historical backups do not grant ownership of the current publication.
+    expect(() => restoreInstalledIntegration(tmp, backup)).toThrow(/ownership receipt/);
+    expect(agentLoads()).toEqual(["kept"]);
+    removeIntegration({ rootDir: tmp, id: "kept" });
     restoreInstalledIntegration(tmp, backup);
     expect(mode(target)).toBe(0o755);
     expect(mode(join(target, "manifest.json"))).toBe(0o644);
@@ -1121,7 +1125,7 @@ describe("packageIntegration (what the operations agent loads)", () => {
 });
 
 describe("integration rollback backups", () => {
-  it("restores the exact pre-update files", () => {
+  it("preserves a current target without a transaction receipt and restores the backup only after explicit removal", () => {
     writeIntegration("custom_integrations", "weather-radar", {
       ...baseManifest,
       id: "weather-radar",
@@ -1133,6 +1137,11 @@ describe("integration rollback backups", () => {
 
     writeFileSync(join(target, "version.txt"), "new", "utf8");
     writeFileSync(join(target, "new-only.txt"), "new", "utf8");
+    expect(() => restoreInstalledIntegration(tmp, backup as NonNullable<typeof backup>)).toThrow(
+      /ownership receipt/,
+    );
+    expect(readFileSync(join(target, "version.txt"), "utf8")).toBe("new");
+    removeIntegration({ rootDir: tmp, id: "weather-radar" });
     restoreInstalledIntegration(tmp, backup as NonNullable<typeof backup>);
 
     expect(readFileSync(join(target, "version.txt"), "utf8")).toBe("old");

@@ -38,6 +38,7 @@ import {
 import { execa } from "execa";
 import { runsFromAgentBundle } from "./agent-bundle";
 import { TRANSITOUS_COUNTRIES_ENV } from "./env-defaults";
+import { cliProcessOptions } from "./execution-deadline";
 import { readFeedProxyVars, renderFeedProxyNginxConfig } from "./motis-feed-proxy";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
@@ -71,11 +72,11 @@ export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
  */
 export function resolveTransitousToolsImage(rootDir?: string): string {
   const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
-  const selection = coreServices.releaseSelection();
-  // Read as the agent reads it: its own file, or nothing.
+  const selection = coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir);
   const overlay = coreServices.readReleaseOverlay(repoPaths(rootDir).infraDir);
   if (overlay !== null) {
     const selected = coreServices.parseReleaseComposeSelection(overlay);
+
     const pinned = selected.images["transitous-tools"];
     if (!selected.release || !pinned)
       throw new Error("Release overlay is malformed; explicitly reselect or clear it");
@@ -130,7 +131,11 @@ async function defaultRunner(
   args: string[],
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
-  await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "inherit" });
+  await execa(command, args, {
+    ...cliProcessOptions(),
+    cwd: opts.cwd,
+    stdio: opts.stdio ?? "inherit",
+  });
 }
 
 function linkOrCopy(source: string, target: string): void {
@@ -249,11 +254,17 @@ async function ensureTransitousToolsImage(
       await runner("docker", ["pull", image], { cwd: rootDir, stdio: "inherit" });
       return;
     } catch (error) {
-      if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+      if (
+        image.includes("@sha256:") ||
+        coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir).kind !== "local"
+      )
         throw error;
     }
   }
-  if (image.includes("@sha256:") || coreServices.releaseSelection().kind !== "local")
+  if (
+    image.includes("@sha256:") ||
+    coreServices.readAppliedReleaseSelection(repoPaths(rootDir).infraDir).kind !== "local"
+  )
     throw new Error("Refusing to build a replacement for a release-selected helper image");
   // The agent's CLI runs its release's code; the checkout is not that release.
   if (runsFromAgentBundle())

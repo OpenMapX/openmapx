@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as prepareRun } from "../../src/jobs/transitous/prepare.js";
@@ -16,8 +17,17 @@ const PINNED_LOCK = {
 };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
-    if (operation.kind === "transitousLock.inspect") {
-      return { active: PINNED_LOCK, proposed: null };
+    if (operation.kind === "catalogPins.inspect") {
+      const active = createCatalogPinSet(PINNED_LOCK, {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "b".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"b".repeat(40)}/systems.csv`,
+        sha256: "c".repeat(64),
+        lockedAt: PINNED_LOCK.lockedAt,
+        lockedBy: "test",
+      });
+      return { active, catalogRevisionId: active.generationId };
     }
     if (operation.kind === "gbfsCatalogLock.inspect") {
       return {
@@ -144,7 +154,7 @@ describe("prepare stage", () => {
     // Fail closed: an unpinned or unverifiable catalog must never reach the
     // upstream execution step.
     expect(result.status).toBe("error");
-    expect(String(result.message)).toMatch(/lock/i);
+    expect(String(result.message)).toMatch(/pin|lock|agent/i);
     expect(ran).not.toContain("python3");
   });
 
@@ -174,43 +184,20 @@ describe("prepare stage", () => {
     expect(warnings.some((w) => w.includes("no repoRoot supplied"))).toBe(true);
   });
 
-  it("resets the catalog to the PROPOSED lock when ctx.useProposedLock is set", async () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-proposed-"));
-    const dataDir = join(tmp, "data");
-    const catalogDir = join(dataDir, ".transitous-catalog");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
-
-    const ACTIVE = "a".repeat(40);
-    const PROPOSED = "d".repeat(40);
-    const { runOpsOperation } = await import("../../src/ops-client.js");
-    vi.mocked(runOpsOperation).mockImplementationOnce(
-      async () =>
-        ({
-          active: { ref: `main@${ACTIVE}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
-          proposed: { ref: `main@${PROPOSED}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
-        }) as never,
-    );
-
-    const calls: string[] = [];
-    const runner = async (command: string, args: string[]) => {
-      calls.push(`${command} ${args.join(" ")}`);
-    };
-
+  it("refuses a ref-only proposal before upstream execution", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-proposed-closed-"));
+    const runner = vi.fn(async () => {});
     const ctx = buildJobContext({
-      dataDir,
-      store: new StateStore(dataDir),
+      dataDir: tmp,
+      store: new StateStore(tmp),
       useProposedLock: true,
       runner,
-      now: () => "2026-05-01T00:00:00.000Z",
     });
-
-    const result = await prepareRun(ctx);
-    expect(result.status).toBe("ok");
-    expect(calls.some((c) => c.includes(`checkout --force ${PROPOSED}`))).toBe(true);
-    expect(calls.some((c) => c.includes(ACTIVE))).toBe(false);
-    // The capability snapshot later records the lock this run enforced.
-    expect(ctx.state.transitousLock?.ref).toBe(`main@${PROPOSED}`);
+    expect(await prepareRun(ctx)).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("Paired proposal"),
+    });
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("resets to the ACTIVE lock by default (no proposal enforcement)", async () => {
@@ -222,14 +209,6 @@ describe("prepare stage", () => {
 
     const ACTIVE = "a".repeat(40);
     const PROPOSED = "d".repeat(40);
-    const { runOpsOperation } = await import("../../src/ops-client.js");
-    vi.mocked(runOpsOperation).mockImplementationOnce(
-      async () =>
-        ({
-          active: { ref: `main@${ACTIVE}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
-          proposed: { ref: `main@${PROPOSED}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
-        }) as never,
-    );
 
     const calls: string[] = [];
     const runner = async (command: string, args: string[]) => {

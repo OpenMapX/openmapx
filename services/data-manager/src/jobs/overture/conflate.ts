@@ -1,3 +1,5 @@
+import { assertDataPublication, publishDataChange } from "../execution/worker-scope.js";
+
 export { buildConflationComponents } from "./components.js";
 
 import {
@@ -641,17 +643,20 @@ export async function publishOvertureLinks(
 ): Promise<{ linked: number }> {
   assertValidOvertureSchema(schema);
 
-  await sql.begin(async (tx) => {
-    await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
-    await tx.unsafe(
-      `INSERT INTO "${schema}".poi_conflation_link
+  assertDataPublication();
+  await publishDataChange(() =>
+    sql.begin(async (tx) => {
+      await tx.unsafe(`DELETE FROM "${schema}".poi_conflation_link`);
+      await tx.unsafe(
+        `INSERT INTO "${schema}".poi_conflation_link
          (osm_type, osm_id, gers_id, source_confidence, match_confidence,
           distance_m, method, evidence, release)
        SELECT osm_type, osm_id, gers_id, source_confidence, match_confidence,
               distance_m, method, evidence, release
        FROM "${schema}".poi_conflation_link_next`,
-    );
-  });
+      );
+    }),
+  );
 
   const [{ linked }] = await sql.unsafe<{ linked: string }[]>(
     `SELECT COUNT(*)::TEXT AS linked FROM "${schema}".poi_conflation_link`,

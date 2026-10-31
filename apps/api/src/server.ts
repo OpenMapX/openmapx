@@ -1,3 +1,12 @@
+import {
+  handlePreparedArtifactExportJob,
+  handlePreparedArtifactImportJob,
+  handlePreparedArtifactValidationJob,
+} from "./services/admin-artifact-validation";
+import { handleBackupPruneJob } from "./services/admin-backup-maintenance";
+import { handleComposeRenderJob } from "./services/admin-compose-render";
+import { handleImageStageJob } from "./services/admin-image-staging";
+import { handleReleaseClearJob } from "./services/admin-release-controls";
 import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -15,6 +24,7 @@ import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
+import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
 import { dataSubjectRequest, dataSubjectRequestTask } from "./db/schema";
@@ -112,6 +122,10 @@ import {
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
+import {
+  startAdminJobReconciliation,
+  stopAdminJobReconciliation,
+} from "./services/job-reconciliation";
 import { jobRunner } from "./services/job-runner";
 import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
 import { API_VOLUMES, privateVolumeDirectory } from "./services/private-volume-directory";
@@ -688,16 +702,27 @@ jobRunner.register("service.restart", async (ctx) => {
   await serviceRestart(service, ctx);
   return { service, action: "restart" };
 });
+jobRunner.register("service.core-restart", async (ctx) => {
+  const { runCoreServiceMaintenance } = await import("./services/core-service-maintenance");
+  return runCoreServiceMaintenance(ctx);
+});
 
 jobRunner.register("service.apply", async (ctx) => {
   const service = ctx.payload.service as string;
-  await serviceApply(service, ctx);
-  return { service, action: "apply" };
+  const result = await serviceApply(service, ctx);
+  return { service, action: "apply", ...result };
 });
 
 jobRunner.register("data.operation", handleDataOperationJob);
 jobRunner.register("backup.operation", handleBackupOperationJob);
 jobRunner.register("service.bulk", handleServiceBulkJob);
+jobRunner.register("release.clear", handleReleaseClearJob);
+jobRunner.register("service.images.pull", handleImageStageJob);
+jobRunner.register("backup.prune", handleBackupPruneJob);
+jobRunner.register("compose.render", handleComposeRenderJob);
+jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
+jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
+jobRunner.register("artifact.export", handlePreparedArtifactExportJob);
 jobRunner.register("system.update", handleSystemUpdateJob);
 jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
 
@@ -708,6 +733,18 @@ jobRunner.register("integration.reload", async (ctx) => {
   return result as Record<string, unknown>;
 });
 
+jobRunner.register("standalone.adopt", async (ctx) =>
+  (await import("./services/standalone-integrations/ownership")).handleStandaloneOwnership(ctx),
+);
+jobRunner.register("standalone.remove", async (ctx) =>
+  (await import("./services/standalone-integrations/ownership")).handleStandaloneOwnership(ctx),
+);
+jobRunner.register("standalone.preview", async (ctx) =>
+  (await import("./services/standalone-integrations/install")).handleStandalonePreview(ctx),
+);
+jobRunner.register("standalone.install", async (ctx) =>
+  (await import("./services/standalone-integrations/install")).handleStandaloneInstall(ctx),
+);
 jobRunner.register("extension.install", handleExtensionInstallJob);
 jobRunner.register("extension.remove", handleExtensionRemoveJob);
 
@@ -731,6 +768,9 @@ await startDataUsePolicyRefresh();
 
 const port = envInt("PORT", 3000);
 const host = envString("HOST", "0.0.0.0");
+server.addHook("onClose", stopAdminJobReconciliation);
+const stopAccountMailWorker = startAccountMailWorker();
+server.addHook("onClose", stopAccountMailWorker);
 
 try {
   await server.listen({ port, host });
@@ -752,6 +792,7 @@ void withExtensionChangeLock(() => adoptUnrecordedIntegrations()).catch((err) =>
 // genuinely listening, migrations succeeded, and Docker confirms that this
 // process is running the exact image pulled by the update job.
 await jobRunner.initialize();
+startAdminJobReconciliation();
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -12,7 +12,8 @@ const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-123");
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: { enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args) },
 }));
-vi.mock("@openmapx/core/server", () => ({
+vi.mock("@openmapx/core/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core/server")>()),
   findRepoRoot: () => "/repo",
 }));
 vi.mock("../../services/service-registry.js", () => ({
@@ -139,7 +140,7 @@ describe("POST /admin/operations/:id/run", () => {
     );
   });
 
-  it("rejects caller URL/output/argv/environment before fixed API-key generation", async () => {
+  it("rejects caller URL/output/argv/environment for the retired remote API-key generator", async () => {
     const response = await app.inject({
       method: "POST",
       url: "/admin/operations/generate-api-keys/run",
@@ -150,7 +151,7 @@ describe("POST /admin/operations/:id/run", () => {
         environment: { NODE_OPTIONS: "--require=/tmp/payload" },
       },
     });
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(404);
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).not.toHaveBeenCalled();
   });

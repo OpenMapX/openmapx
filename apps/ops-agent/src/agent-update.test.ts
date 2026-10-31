@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import { createAdministrativeRuntime, createDefaultReleaseEffects } from "./administrative-runtime";
 import { type AgentHandoffRecord, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
@@ -95,7 +96,11 @@ function fixture(options: { agent: "old" | "current"; helperStarts?: boolean }) 
     runDocker: docker,
     verifyAppliedRelease: async () => true,
   });
-  const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+  const context = {
+    execution: testExecution(),
+    signal: new AbortController().signal,
+    emitLog: vi.fn(),
+  };
   return { rootDir, docker, calls, cli, effects, context };
 }
 
@@ -303,6 +308,7 @@ describe("operations agent update", () => {
       runtime,
       { kind: "agent.update", releaseId: release, expectedDigest: digest, handoffId: "handoff-1" },
       {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: () => {},
         otherActiveOperations: () => 2,

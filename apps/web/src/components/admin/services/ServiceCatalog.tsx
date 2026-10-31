@@ -25,16 +25,20 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { listAdminServicePresets, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
 import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/core/api-contracts";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   useServiceHealthCheck,
+  useServiceImageStage,
   useServiceSelection,
   useServiceSelectionSave,
   useServicesBulkAction,
   useServicesList,
 } from "@/hooks/useServices";
+import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
@@ -42,6 +46,7 @@ import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { useClientPagination } from "../shared/tableHooks";
@@ -137,10 +142,14 @@ function filterServices(
   services: AdminServiceSummary[],
   search: string,
   quality: QualityFilter,
+  enabled: "all" | "enabled" | "disabled",
+  capability: string,
 ): AdminServiceSummary[] {
   const q = search.trim().toLowerCase();
   return services.filter((s) => {
     if (quality !== "all" && s.quality !== quality) return false;
+    if (enabled !== "all" && s.enabled !== (enabled === "enabled")) return false;
+    if (capability && !s.provides.includes(capability)) return false;
     if (!q) return true;
     return (
       s.id.toLowerCase().includes(q) ||
@@ -164,7 +173,7 @@ export function ServiceCatalog() {
 }
 
 function ServiceCatalogView() {
-  const { client } = useActivityClient();
+  const { client, apiUrl } = useActivityClient();
   const owner = useAdminMutationOwner(client);
   const showToast = useAdminToast();
   const { data, isLoading, isError, refetch } = useServicesList();
@@ -174,6 +183,20 @@ function ServiceCatalogView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [buildRegion, setBuildRegion] = useState("");
   const [buildContinueOnError, setBuildContinueOnError] = useState(true);
+  const [enabledFilter, setEnabledFilter] = useState<"all" | "enabled" | "disabled">("all");
+  const [capability, setCapability] = useState("");
+  const [preset, setPreset] = useState("");
+  const [noDeps, setNoDeps] = useState(false);
+  const [motisImport, setMotisImport] = useState(false);
+  const [stageIntent, setStageIntent] = useState<{
+    serviceIds: string[];
+    idempotencyKey: string;
+  } | null>(null);
+  const presets = useQuery({
+    queryKey: ["admin", "service-presets", apiUrl],
+    queryFn: async () => unwrapAdminResponse(await listAdminServicePresets({ client })),
+    retry: false,
+  });
 
   const selectionQuery = useServiceSelection();
 
@@ -187,8 +210,8 @@ function ServiceCatalogView() {
   const services = data?.services ?? emptyServices;
   const summary = data?.summary;
   const filtered = useMemo(
-    () => filterServices(services, search, quality),
-    [services, search, quality],
+    () => filterServices(services, search, quality, enabledFilter, capability),
+    [services, search, quality, enabledFilter, capability],
   );
   const { paged, paginationProps } = useClientPagination(filtered);
 
@@ -206,6 +229,7 @@ function ServiceCatalogView() {
   const allVisibleSelected = paged.length > 0 && paged.every((svc) => selectedIds.has(svc.id));
 
   const toggleSelected = (id: string) => {
+    setPreset("");
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -215,6 +239,7 @@ function ServiceCatalogView() {
   };
 
   const toggleSelectVisible = () => {
+    setPreset("");
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
@@ -226,9 +251,35 @@ function ServiceCatalogView() {
     });
   };
 
+  const deniedIds = (action: BulkAction) =>
+    [...selectedIds].filter((id) => {
+      const decision = services.find((service) => service.id === id)?.actions?.[action];
+      return Boolean(serviceActionReason(decision)) || decision?.workflow === "core-restart";
+    });
+  const bulkReason = (action: BulkAction) => {
+    const denied = deniedIds(action);
+    return denied.length
+      ? `Unavailable for: ${denied.join(", ")}. Use individual core Restart where available.`
+      : undefined;
+  };
   const healthCheckMutation = useServiceHealthCheck();
   const saveSelectionMutation = useServiceSelectionSave();
   const bulkMutation = useServicesBulkAction();
+  const stageMutation = useServiceImageStage();
+  async function stageImages() {
+    if (!stageIntent) return;
+    const execution = owner;
+    try {
+      const result = await stageMutation.mutateAsync(stageIntent);
+      if (execution.active) {
+        setStageIntent(null);
+        showToast(`Queued image staging (${result.jobId})`);
+      }
+    } catch (error) {
+      if (execution.active)
+        showToast(error instanceof Error ? error.message : "Image staging failed", "error");
+    }
+  }
 
   async function checkHealth() {
     const execution = owner;
@@ -240,16 +291,33 @@ function ServiceCatalogView() {
         showToast(error instanceof Error ? error.message : "Check failed", "error");
     }
   }
-  async function saveSelection() {
+  async function persistRoots(roots: string[]) {
     const execution = owner;
     try {
-      await saveSelectionMutation.mutateAsync(parseRootInput(selectionDraft));
-      if (execution.active) showToast("Service selection saved");
+      const result = await saveSelectionMutation.mutateAsync(roots);
+      if (execution.active)
+        showToast(
+          "jobId" in result
+            ? `Queued service selection (${result.jobId})`
+            : "Service selection saved",
+        );
     } catch (error) {
       if (execution.active)
         showToast(error instanceof Error ? error.message : "Save failed", "error");
     }
   }
+  const saveSelection = () => persistRoots(parseRootInput(selectionDraft));
+  const selectPreset = (id: string) => {
+    setPreset(id);
+    const choice = presets.data?.presets.find((preset) => preset.id === id);
+    if (!choice) return;
+    if (choice.missingIds.length) {
+      setPreset("");
+      showToast(`Preset is missing: ${choice.missingIds.join(", ")}`, "warning");
+      return;
+    }
+    setSelectedIds(new Set(choice.rootIds));
+  };
   async function queueBulk(payload: AdminServicesBulkAction) {
     const execution = owner;
     try {
@@ -263,22 +331,33 @@ function ServiceCatalogView() {
 
   const queueBulkAction = (action: BulkAction) => {
     const ids = [...selectedIds];
+    if (deniedIds(action).length) {
+      showToast(bulkReason(action) ?? "Action unavailable", "warning");
+      return;
+    }
     if (action !== "build" && ids.length === 0) {
       showToast("Select one or more services first", "warning");
       return;
     }
 
     if (action === "build") {
+      if (motisImport && !ids.includes("motis")) {
+        showToast("MOTIS import requires selecting MOTIS", "warning");
+        return;
+      }
       void queueBulk({
         action,
         serviceIds: ids,
         region: buildRegion.trim() || undefined,
         continueOnError: buildContinueOnError,
+        ...(motisImport ? { motisImport: true } : {}),
       });
       return;
     }
 
-    void queueBulk({ action, serviceIds: ids });
+    void queueBulk(
+      action === "update" ? { action, serviceIds: ids, noDeps } : { action, serviceIds: ids },
+    );
   };
 
   const queueBuildAll = () => {
@@ -287,6 +366,7 @@ function ServiceCatalogView() {
       all: true,
       region: buildRegion.trim() || undefined,
       continueOnError: buildContinueOnError,
+      ...(motisImport ? { motisImport: true } : {}),
     });
   };
 
@@ -296,6 +376,51 @@ function ServiceCatalogView() {
         gap: 2,
       }}
     >
+      <ConfirmDialog
+        open={stageIntent !== null}
+        title="Stage selected images"
+        message={`Download immutable images for ${stageIntent?.serviceIds.join(", ") ?? ""}. Configured tags and running containers stay unchanged. Follow progress in Activity.`}
+        confirmLabel="Stage images"
+        loading={stageMutation.isPending}
+        onConfirm={() => void stageImages()}
+        onCancel={() => setStageIntent(null)}
+      />
+      {data?.acquisition.state === "unavailable" && (
+        <CompactAlert severity="warning">
+          Operations agent is unavailable. Service state is unknown.{" "}
+          <Button onClick={() => void refetch()} size="small">
+            Retry
+          </Button>
+        </CompactAlert>
+      )}
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Typography variant="subtitle1">Action presets</Typography>
+        <Typography variant="body2">
+          Choose root services for the action checkboxes. This does not save service selection;
+          dependency expansion and action availability still apply.
+        </Typography>
+        <TextField
+          select
+          label="Preset (actions only)"
+          value={preset}
+          onChange={(e) => selectPreset(e.target.value)}
+          size="small"
+          sx={{ mt: 1, minWidth: 240 }}
+        >
+          <MenuItem value="">Custom selection</MenuItem>
+          {(presets.data?.presets ?? []).map((item) => (
+            <MenuItem key={item.id} value={item.id}>
+              {item.id} ({item.rootIds.join(", ")})
+              {item.missingIds.length ? " — missing services" : ""}
+            </MenuItem>
+          ))}
+        </TextField>
+        {presets.isError && (
+          <CompactAlert severity="warning">
+            Presets are unavailable; service selection remains unchanged.
+          </CompactAlert>
+        )}
+      </Paper>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack
           sx={{
@@ -317,7 +442,8 @@ function ServiceCatalogView() {
             }}
           >
             Manage persisted service roots from <code>service-selection.json</code>. Effective
-            services include dependencies of selected roots.
+            services include dependencies of selected roots. Removing a root can keep it enabled as
+            another root’s dependency.
           </Typography>
 
           {selectionQuery.data?.source === "env" && selectionQuery.data.envVarValue && (
@@ -472,11 +598,34 @@ function ServiceCatalogView() {
               flexWrap: "wrap",
             }}
           >
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={noDeps}
+                  onChange={(e) => setNoDeps(e.target.checked)}
+                  disabled={bulkMutation.isPending}
+                />
+              }
+              label="Update without dependency recreation"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={motisImport}
+                  onChange={(e) => setMotisImport(e.target.checked)}
+                  disabled={bulkMutation.isPending}
+                />
+              }
+              label="Import MOTIS after build"
+            />
             <Button
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("start")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("start")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("start").length > 0
+              }
             >
               Start Selected
             </Button>
@@ -485,7 +634,10 @@ function ServiceCatalogView() {
               variant="outlined"
               color="warning"
               onClick={() => queueBulkAction("stop")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("stop")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("stop").length > 0
+              }
             >
               Stop Selected
             </Button>
@@ -493,7 +645,10 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("restart")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("restart")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("restart").length > 0
+              }
             >
               Restart Selected
             </Button>
@@ -501,15 +656,48 @@ function ServiceCatalogView() {
               size="small"
               variant="outlined"
               onClick={() => queueBulkAction("update")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={bulkReason("update")}
+              disabled={
+                bulkMutation.isPending || selectedIds.size === 0 || deniedIds("update").length > 0
+              }
             >
               Update selected
             </Button>
             <Button
               size="small"
               variant="outlined"
+              disabled={
+                stageMutation.isPending ||
+                selectedIds.size === 0 ||
+                selectedIds.size > 64 ||
+                [...selectedIds].some(
+                  (id) => !services.find((service) => service.id === id)?.actions?.pull.available,
+                )
+              }
+              onClick={() =>
+                setStageIntent({
+                  serviceIds: [...selectedIds],
+                  idempotencyKey: crypto.randomUUID(),
+                })
+              }
+            >
+              Stage selected images
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
               onClick={() => queueBulkAction("build")}
-              disabled={bulkMutation.isPending || selectedIds.size === 0}
+              title={
+                motisImport && !selectedIds.has("motis")
+                  ? "MOTIS import requires selecting MOTIS"
+                  : bulkReason("build")
+              }
+              disabled={
+                bulkMutation.isPending ||
+                selectedIds.size === 0 ||
+                deniedIds("build").length > 0 ||
+                (motisImport && !selectedIds.has("motis"))
+              }
             >
               Build Selected
             </Button>
@@ -517,7 +705,12 @@ function ServiceCatalogView() {
               size="small"
               variant="contained"
               onClick={queueBuildAll}
-              disabled={bulkMutation.isPending}
+              disabled={
+                bulkMutation.isPending ||
+                !services.some((s) => s.actions?.build.available) ||
+                (motisImport &&
+                  !services.some((s) => s.id === "motis" && s.enabled && s.actions.build.available))
+              }
             >
               Build All
             </Button>
@@ -525,6 +718,22 @@ function ServiceCatalogView() {
               View Jobs
             </Button>
           </Stack>
+          {selectedIds.size > 0 &&
+            ["start", "stop", "restart", "update", "build"].some(
+              (action) => deniedIds(action as BulkAction).length > 0,
+            ) && (
+              <Typography role="status" variant="caption" color="text.secondary">
+                Unavailable targets:{" "}
+                {["start", "stop", "restart", "update", "build"]
+                  .map((action) => {
+                    const ids = deniedIds(action as BulkAction);
+                    return ids.length ? `${action}: ${ids.join(", ")}` : null;
+                  })
+                  .filter(Boolean)
+                  .join("; ")}
+                . Check individual service controls for the available workflow.
+              </Typography>
+            )}
         </Stack>
       </Paper>
       <Stack
@@ -540,6 +749,8 @@ function ServiceCatalogView() {
           direction="row"
           sx={{
             alignItems: "center",
+            flexWrap: "wrap",
+            minWidth: 0,
             gap: 1,
           }}
         >
@@ -557,6 +768,7 @@ function ServiceCatalogView() {
               direction="row"
               sx={{
                 gap: 0.5,
+                flexWrap: "wrap",
               }}
             >
               <Chip
@@ -584,6 +796,23 @@ function ServiceCatalogView() {
         </Stack>
         {isLoading && <CircularProgress size={20} />}
       </Stack>
+      {!!data?.capabilityInventory?.unrecognized.length && (
+        <Paper variant="outlined" sx={{ p: 1.5 }}>
+          <details>
+            <summary>
+              Unrecognized capability vocabulary ({data.capabilityInventory.unrecognized.length})
+            </summary>
+            <Typography variant="body2">
+              Custom vendor names are allowed. Check non-namespaced entries for spelling errors.
+            </Typography>
+            {data.capabilityInventory.unrecognized.map((item) => (
+              <Typography variant="body2" key={item.capability}>
+                {item.capability}: {item.serviceIds.join(", ")}
+              </Typography>
+            ))}
+          </details>
+        </Paper>
+      )}
       <AdminTableSurface
         toolbar={
           <Stack
@@ -609,6 +838,40 @@ function ServiceCatalogView() {
               }}
               sx={{ minWidth: 280 }}
             />
+            <TextField
+              select
+              size="small"
+              label="Enabled state"
+              value={enabledFilter}
+              onChange={(e) => setEnabledFilter(e.target.value as typeof enabledFilter)}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="all">All services</MenuItem>
+              <MenuItem value="enabled">Enabled</MenuItem>
+              <MenuItem value="disabled">Disabled</MenuItem>
+            </TextField>
+            <TextField
+              select
+              size="small"
+              label="Exact capability"
+              value={capability}
+              onChange={(e) => setCapability(e.target.value)}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">All capabilities</MenuItem>
+              {[
+                ...new Set([
+                  ...(data?.capabilityInventory?.recognized ?? []),
+                  ...(data?.capabilityInventory?.unrecognized ?? []).map((item) => item.capability),
+                ]),
+              ]
+                .sort()
+                .map((item) => (
+                  <MenuItem key={item} value={item}>
+                    {item}
+                  </MenuItem>
+                ))}
+            </TextField>
             <FormControl size="small" sx={{ minWidth: 160 }}>
               <Select
                 value={quality}
@@ -625,6 +888,11 @@ function ServiceCatalogView() {
         }
         pagination={<AdminTablePagination {...paginationProps} />}
       >
+        {summary && summary.unknown > 0 && (
+          <CompactAlert severity="warning">
+            {summary.unknown} service(s) have unknown status.
+          </CompactAlert>
+        )}
         {isError && (
           <CompactAlert
             severity="error"
@@ -649,6 +917,7 @@ function ServiceCatalogView() {
                 <TableCell padding="checkbox">
                   <Checkbox
                     size="small"
+                    slotProps={{ input: { "aria-label": "Select visible services" } }}
                     checked={allVisibleSelected}
                     indeterminate={selectedIds.size > 0 && !allVisibleSelected}
                     onChange={toggleSelectVisible}
@@ -679,6 +948,7 @@ function ServiceCatalogView() {
                     <TableCell padding="checkbox">
                       <Checkbox
                         size="small"
+                        slotProps={{ input: { "aria-label": `Select ${svc.id}` } }}
                         checked={selectedIds.has(svc.id)}
                         onChange={() => toggleSelected(svc.id)}
                       />
@@ -730,6 +1000,42 @@ function ServiceCatalogView() {
                     </TableCell>
                     <TableCell>
                       <ServiceStatusChip status={svc.status} />
+                      <Typography variant="caption" sx={{ display: "block" }}>
+                        {svc.enabled ? "Enabled" : "Disabled"}
+                        {selectionQuery.data?.selectedRoots.includes(svc.id)
+                          ? " · root"
+                          : svc.enabled
+                            ? " · dependency"
+                            : ""}
+                      </Typography>
+                      <Button
+                        size="small"
+                        disabled={
+                          !selectionQuery.data ||
+                          selectionQuery.isError ||
+                          selectionQuery.data.source === "env" ||
+                          saveSelectionMutation.isPending ||
+                          (svc.enabled && !selectionQuery.data.selectedRoots.includes(svc.id))
+                        }
+                        title={
+                          svc.enabled && !selectionQuery.data?.selectedRoots.includes(svc.id)
+                            ? "Required by a selected root. Edit the roots to remove that dependency."
+                            : undefined
+                        }
+                        onClick={() =>
+                          void persistRoots(
+                            selectionQuery.data?.selectedRoots.includes(svc.id)
+                              ? selectionQuery.data.selectedRoots.filter((id) => id !== svc.id)
+                              : [...(selectionQuery.data?.selectedRoots ?? []), svc.id],
+                          )
+                        }
+                      >
+                        {selectionQuery.data?.selectedRoots.includes(svc.id)
+                          ? `Remove ${svc.id} root`
+                          : svc.enabled
+                            ? "Required dependency"
+                            : `Enable ${svc.id}`}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

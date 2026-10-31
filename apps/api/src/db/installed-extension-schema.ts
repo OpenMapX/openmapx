@@ -1,4 +1,7 @@
+import type { StandaloneIntegrationProvenance } from "@openmapx/core/ops";
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   jsonb,
   pgTable,
@@ -22,6 +25,11 @@ export const installedExtension = pgTable(
     sourceUrl: text("source_url"),
     // Effective trust tier resolved at install: built-in | verified | community.
     sourceTrust: text("source_trust").notNull().default("community"),
+    installationKind: text("installation_kind", { enum: ["catalog", "standalone"] })
+      .notNull()
+      .default("catalog"),
+    provenance: jsonb("provenance").$type<StandaloneIntegrationProvenance>(),
+    lastOperationId: text("last_operation_id"),
     installedVersion: text("installed_version").notNull(),
     // Snapshot of the resolved extension.json we installed (what to remove/update).
     manifest: jsonb("manifest"),
@@ -29,7 +37,17 @@ export const installedExtension = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     installedBy: text("installed_by").references(() => user.id, { onDelete: "set null" }),
   },
-  (table) => [index("installedExtension_sourceTrust_idx").on(table.sourceTrust)],
+  (table) => [
+    index("installedExtension_sourceTrust_idx").on(table.sourceTrust),
+    check(
+      "installed_extension_installation_kind_check",
+      sql`${table.installationKind} in ('catalog','standalone')`,
+    ),
+    check(
+      "installed_extension_standalone_provenance_check",
+      sql`${table.installationKind} <> 'standalone' or coalesce((${table.sourceTrust} = 'community' and ${table.id} ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(${table.provenance}) = 'object' and ${table.provenance}->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and ${table.provenance}->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)`,
+    ),
+  ],
 );
 
 // One row per component an extension installed, linking to the per-component

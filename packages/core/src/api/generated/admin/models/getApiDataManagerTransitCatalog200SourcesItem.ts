@@ -5,6 +5,9 @@ import type { GetApiDataManagerTransitCatalog200SourcesItemSource } from "./getA
 
 export type GetApiDataManagerTransitCatalog200SourcesItem = {
   id: string;
+  /** @nullable */
+  installedSourceId: string | null;
+  discoveryIds: string[];
   name: string;
   source: GetApiDataManagerTransitCatalog200SourcesItemSource;
   countryCode: string;

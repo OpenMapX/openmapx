@@ -1,11 +1,22 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { isAbsolute } from "node:path";
+import { setTimeout as waitForOpsStatus } from "node:timers/promises";
 import {
+  createControlRootOperationKey,
+  normalizeExecutionAdmission,
+  OPS_KIND_POLICIES,
   OpsClient,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
+  opsOperationFingerprint,
+  parseControlRootOperationKey,
+  parseOpsResult,
 } from "@openmapx/core/ops";
+import {
+  checkpointLegacyDataOperation,
+  legacyDataMutation,
+} from "./jobs/execution/legacy-mutation.js";
 
 /**
  * Data-manager's client for the private operations agent.
@@ -36,23 +47,8 @@ export function opsClient(): OpsClient {
 }
 
 /** Test seam: drop the memoized client so a new environment is picked up. */
-export function resetOpsClient(): void {
-  cached = undefined;
-}
-
-/**
- * A deterministic operation key derived from a durable identity, so a retry
- * after a lost response reuses the same agent-side job instead of starting a
- * second one.
- */
-export function durableOpsKey(namespace: string, durableIdentity: string): string {
-  const digest = createHash("sha256")
-    .update("openmapx-ops-key-v1\0")
-    .update(namespace)
-    .update("\0")
-    .update(durableIdentity)
-    .digest("base64url");
-  return `opk1_${digest.slice(0, 32)}`;
+export function resetOpsClient(client?: OpsClient): void {
+  cached = client;
 }
 
 /**
@@ -64,22 +60,128 @@ export async function runOpsOperation<K extends OpsOperationKind>(
   options: { signal?: AbortSignal; operationKey?: string; pollIntervalMs?: number } = {},
 ): Promise<OpsResultFor<K>> {
   const client = opsClient();
-  const operationKey =
-    options.operationKey ?? `opk1_${randomBytes(18).toString("base64url").slice(0, 32)}`;
-  const admission = await client.execute(operation, { operationKey, signal: options.signal });
-  if (admission.execution === "sync") return admission.value as OpsResultFor<K>;
-
-  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
-  for (;;) {
-    options.signal?.throwIfAborted();
-    const status = await client.status(operation.kind, admission.operationId, {
+  if (OPS_KIND_POLICIES[operation.kind].execution === "sync") {
+    if (operation.kind === "transitousLock.propose") {
+      if (!legacyDataMutation())
+        throw Error("A retained data mutation owner is required for a proposal");
+      const admittedAt = Date.now(),
+        requestedDeadlineAt = options.operationKey
+          ? parseControlRootOperationKey(options.operationKey).notAfter
+          : admittedAt + OPS_KIND_POLICIES[operation.kind].timeoutMs,
+        operationKey =
+          options.operationKey ??
+          createControlRootOperationKey({ notAfter: requestedDeadlineAt, nonce: randomBytes(16) }),
+        operationFingerprint = opsOperationFingerprint(operation),
+        normalized = normalizeExecutionAdmission({
+          kind: operation.kind,
+          operationKey,
+          operationFingerprint,
+          admittedAt,
+          requestedDeadlineAt,
+        }),
+        retained = {
+          operationKey,
+          operation,
+          operationFingerprint,
+          ...normalized,
+          state: "attempted",
+        };
+      await checkpointLegacyDataOperation(retained);
+      const accepted = await client.execute(operation, {
+        operationKey,
+        execution: { requestedDeadlineAt },
+        signal: options.signal,
+      });
+      if (accepted.execution !== "sync") throw Error("Unexpected asynchronous proposal");
+      const result = parseOpsResult(operation.kind, accepted.value);
+      await checkpointLegacyDataOperation({ ...retained, state: "terminal", result });
+      return result as OpsResultFor<K>;
+    }
+    const admitted = await client.execute(operation, {
+      operationKey: options.operationKey ?? `opk1_${randomBytes(18).toString("base64url")}`,
       signal: options.signal,
     });
-    if (status.state === "succeeded") return status.result as OpsResultFor<K>;
-    if (status.state === "failed" || status.state === "timed_out") {
-      // The agent's public error class only; no host detail crosses back.
-      throw new Error(`Operation ${operation.kind} did not succeed (${status.errorClass})`);
+    if (admitted.execution !== "sync") throw Error("Unexpected async host effect");
+    return parseOpsResult(operation.kind, admitted.value) as OpsResultFor<K>;
+  }
+  if (!legacyDataMutation())
+    throw Error("A retained data mutation must own asynchronous host effects");
+  const admittedAt = Date.now(),
+    requestedDeadlineAt = admittedAt + OPS_KIND_POLICIES[operation.kind].timeoutMs,
+    operationKey =
+      options.operationKey ??
+      createControlRootOperationKey({ notAfter: requestedDeadlineAt, nonce: randomBytes(16) });
+  const normalized = normalizeExecutionAdmission({
+    kind: operation.kind,
+    operationKey,
+    operationFingerprint: opsOperationFingerprint(operation),
+    admittedAt,
+    requestedDeadlineAt,
+  });
+  let retained = {
+    operationKey,
+    operation,
+    operationFingerprint: opsOperationFingerprint(operation),
+    fingerprint: normalized.fingerprint,
+    admittedAt,
+    deadlineAt: normalized.deadlineAt,
+    state: "attempted",
+    operationId: undefined as string | undefined,
+    cancellationRequestedAt: null as string | null,
+  };
+  await checkpointLegacyDataOperation(retained);
+  try {
+    const admitted = await client.execute(operation, {
+      operationKey,
+      execution: { requestedDeadlineAt },
+      signal: options.signal,
+    });
+    if (admitted.execution !== "async") throw Error("Unexpected synchronous host effect");
+    retained = { ...retained, operationId: admitted.operationId, state: "observing" };
+    await checkpointLegacyDataOperation(retained);
+  } catch {
+    /* One POST only. Resolve ambiguous admission through the exact retained key. */
+  }
+  const settlement = AbortSignal.timeout(30000);
+  for (;;) {
+    if (options.signal?.aborted && retained.cancellationRequestedAt === null) {
+      retained = { ...retained, cancellationRequestedAt: new Date().toISOString() };
+      await checkpointLegacyDataOperation(retained);
     }
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    const signal = options.signal?.aborted ? settlement : options.signal;
+    const status = await client.lookup(operation, operationKey, {
+      fingerprint: normalized.fingerprint,
+      execution: { requestedDeadlineAt },
+      signal,
+    });
+    if (
+      status.version !== 2 ||
+      status.operationKey !== operationKey ||
+      status.kind !== operation.kind ||
+      status.fingerprint !== normalized.fingerprint ||
+      status.deadlineAt !== normalized.deadlineAt ||
+      (retained.operationId && status.operationId !== retained.operationId)
+    )
+      throw Error("Retained host effect identity conflict");
+    if (!retained.operationId) {
+      retained = { ...retained, operationId: status.operationId, state: "observing" };
+      await checkpointLegacyDataOperation(retained);
+    }
+    if (["succeeded", "failed", "timed_out"].includes(status.state)) {
+      await checkpointLegacyDataOperation({ ...retained, state: "terminal", status });
+      if (status.state === "succeeded")
+        return parseOpsResult(operation.kind, status.result) as OpsResultFor<K>;
+      throw Error(`Operation ${operation.kind} did not succeed (${status.errorClass})`);
+    }
+    if (options.signal?.aborted)
+      try {
+        await client.cancel(status.operationId, {
+          fingerprint: normalized.fingerprint,
+          signal: settlement,
+        });
+      } catch {
+        /* Lost cancel response is observation-only. */
+      }
+    await waitForOpsStatus(options.pollIntervalMs ?? 1000, undefined, { signal });
   }
 }

@@ -3,6 +3,8 @@
 import type { AddTransitSourceBodyLicense } from "./addTransitSourceBodyLicense";
 
 export type AddTransitSourceBody = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  expectedSourceRevision: string;
   /** @maxLength 200 */
   idempotencyKey?: string;
   /** @maxLength 200 */

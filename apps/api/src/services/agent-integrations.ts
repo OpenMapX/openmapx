@@ -3,7 +3,17 @@ import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { installedExtension, installedIntegration } from "../db/schema";
-import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
+import { JobObservationPending } from "./admin-job-failure";
+import { executeAdminJobOperation } from "./admin-job-ops";
+import { readProjection } from "./admin-job-projection";
+import { JobOwnershipLost } from "./admin-job-state";
+import type { JobContext } from "./job-runner";
+import {
+  createApiOpsClient,
+  createDurableOpsKey,
+  executeAndWait,
+  OpsObservationPending,
+} from "./ops-client";
 
 /**
  * Installed integrations, as the operations agent holds them.
@@ -16,11 +26,15 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
  * nothing here writes the host filesystem.
  */
 
-export type IntegrationSource = Extract<OpsOperation, { kind: "integration.publish" }>["source"];
+export type IntegrationSource = Extract<
+  OpsOperation,
+  { kind: "catalogIntegration.publish" }
+>["source"];
 export type InstalledIntegrationsSnapshot = OpsResultFor<"installedIntegrations.inspect">;
 export type AgentInstalledIntegration = InstalledIntegrationsSnapshot["integrations"][number];
 
 interface OperationOptions {
+  ctx: JobContext;
   operationKey: string;
   signal?: AbortSignal;
 }
@@ -29,12 +43,12 @@ interface OperationOptions {
 export function inspectIntegration(
   source: IntegrationSource,
   options: OperationOptions,
-): Promise<OpsResultFor<"integration.inspect">> {
-  return executeAndWait(
-    createApiOpsClient(),
-    { kind: "integration.inspect", source },
-    options.operationKey,
-    { signal: options.signal },
+): Promise<OpsResultFor<"catalogIntegration.inspect">> {
+  return executeAdminJobOperation(
+    options.ctx,
+    { kind: "catalogIntegration.inspect", source },
+    "extension.catalog.inspect",
+    { operationKey: options.operationKey },
   );
 }
 
@@ -47,24 +61,24 @@ export function inspectIntegration(
 export function publishIntegration(
   request: { integrationId: string; source: IntegrationSource; extensionId?: string },
   options: OperationOptions,
-): Promise<OpsResultFor<"integration.publish">> {
-  return executeAndWait(
-    createApiOpsClient(),
-    { kind: "integration.publish", ...request },
-    options.operationKey,
-    { signal: options.signal },
+): Promise<OpsResultFor<"catalogIntegration.publish">> {
+  return executeAdminJobOperation(
+    options.ctx,
+    { kind: "catalogIntegration.publish", ...request },
+    "extension.catalog.publish",
+    { operationKey: options.operationKey },
   );
 }
 
 export async function settleIntegration(
   request: { integrationId: string; transactionId: string; outcome: "commit" | "rollback" },
   options: OperationOptions,
-): Promise<OpsResultFor<"integration.settle">> {
-  const result = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "integration.settle", ...request },
-    options.operationKey,
-    { signal: options.signal },
+): Promise<OpsResultFor<"catalogIntegration.settle">> {
+  const result = await executeAdminJobOperation(
+    options.ctx,
+    { kind: "catalogIntegration.settle", ...request },
+    "extension.catalog.settle",
+    { operationKey: options.operationKey },
   );
   if (result.integrationId !== request.integrationId || result.outcome !== request.outcome) {
     throw new Error("The operations agent settled a different integration change");
@@ -75,12 +89,12 @@ export async function settleIntegration(
 export async function removeIntegration(
   request: { integrationId: string; extensionId?: string },
   options: OperationOptions,
-): Promise<OpsResultFor<"integration.remove">> {
-  const result = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "integration.remove", ...request },
-    options.operationKey,
-    { signal: options.signal },
+): Promise<OpsResultFor<"catalogIntegration.remove">> {
+  const result = await executeAdminJobOperation(
+    options.ctx,
+    { kind: "catalogIntegration.remove", ...request },
+    "extension.catalog.remove",
+    { operationKey: options.operationKey },
   );
   if (result.integrationId !== request.integrationId) {
     throw new Error("The operations agent removed a different integration");
@@ -96,12 +110,12 @@ export async function removeIntegration(
 export async function adoptIntegration(
   request: { integrationId: string; extensionId?: string; source?: IntegrationSource },
   options: OperationOptions,
-): Promise<OpsResultFor<"integration.adopt">> {
-  const result = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "integration.adopt", ...request },
-    options.operationKey,
-    { signal: options.signal },
+): Promise<OpsResultFor<"catalogIntegration.adopt">> {
+  const result = await executeAdminJobOperation(
+    options.ctx,
+    { kind: "catalogIntegration.adopt", ...request },
+    "extension.catalog.adopt",
+    { operationKey: options.operationKey },
   );
   if (result.integrationId !== request.integrationId) {
     throw new Error("The operations agent adopted a different integration");
@@ -272,6 +286,7 @@ export async function recoverAgentIntegrations(
      * extension's archive again, so startup leaves it to a background pass.
      */
     adopt?: boolean;
+    ctx?: JobContext;
   } = {},
 ): Promise<IntegrationRecoveryOutcome> {
   const log = options.log ?? {
@@ -288,7 +303,39 @@ export async function recoverAgentIntegrations(
   let snapshot = await readInstalledIntegrations({ signal: options.signal });
   for (const entry of snapshot.integrations) {
     if (!entry.pending) continue;
+    if (!options.ctx) {
+      log.warn(
+        `Integration "${entry.integrationId}" has a retained transaction requiring its original administrative job; startup observation cannot settle it`,
+      );
+      continue;
+    }
     const { transactionId } = entry.pending;
+    const projection = readProjection(options.ctx.checkpointResult);
+    const original = Object.values(projection.operations).find(
+      (operation) =>
+        operation.kind === "catalogIntegration.publish" &&
+        operation.attempt?.apiJobId === options.ctx!.jobId &&
+        operation.operation?.kind === "catalogIntegration.publish" &&
+        operation.operation.integrationId === entry.integrationId,
+    );
+    if (!original?.operation || original.operation.kind !== "catalogIntegration.publish") {
+      log.warn(
+        `Integration "${entry.integrationId}" requires recovery by its original administrative job; its transaction cannot be settled by this job`,
+      );
+      throw new JobObservationPending("recovery_required");
+    }
+    const step = Object.entries(projection.steps).find(
+      ([, value]) => value.operationKey === original.operationKey,
+    )?.[0];
+    if (!step) throw new JobObservationPending("recovery_required");
+    const publication = await executeAdminJobOperation(
+      options.ctx,
+      original.operation,
+      "extension.catalog.publish",
+      { operationKey: step },
+    );
+    if (publication.transactionId !== transactionId)
+      throw new JobObservationPending("recovery_required");
     const [row] = await db
       .select({ lastTransactionId: installedIntegration.lastTransactionId })
       .from(installedIntegration)
@@ -298,9 +345,10 @@ export async function recoverAgentIntegrations(
     await settleIntegration(
       { integrationId: entry.integrationId, transactionId, outcome: settleOutcome },
       {
+        ctx: options.ctx,
         operationKey: createDurableOpsKey(
-          `extension.integration.recovery.${settleOutcome}`,
-          `${entry.integrationId}:${transactionId}`,
+          `extension.integration.${settleOutcome}`,
+          `${options.ctx.jobId}:${entry.integrationId}:${transactionId}`,
         ),
         signal: options.signal,
       },
@@ -318,7 +366,7 @@ export async function recoverAgentIntegrations(
     snapshot = await readInstalledIntegrations({ signal: options.signal });
   }
 
-  if (options.adopt === false) return outcome;
+  if (options.adopt === false || !options.ctx) return outcome;
   const recorded = new Set(snapshot.integrations.map((entry) => entry.integrationId));
   const rows = await db
     .select({
@@ -362,11 +410,12 @@ export async function recoverAgentIntegrations(
           ...(source ? { source } : {}),
         },
         {
-          // Adoption that could not download the archive is not persisted and
-          // is retried by the next recovery, so every attempt is its own.
+          ctx: options.ctx,
+          // The original job reuses this retained step; an attempted download
+          // is observed rather than redispatched under a fresh identity.
           operationKey: createDurableOpsKey(
             "extension.integration.adopt",
-            `${row.id}:${randomUUID()}`,
+            `${options.ctx.jobId}:${row.id}`,
           ),
           signal: options.signal,
         },
@@ -381,6 +430,13 @@ export async function recoverAgentIntegrations(
         );
       }
     } catch (error) {
+      if (
+        error instanceof JobObservationPending ||
+        error instanceof OpsObservationPending ||
+        error instanceof JobOwnershipLost ||
+        options.ctx.signal.aborted
+      )
+        throw error;
       log.warn(
         `The operations agent could not adopt integration "${row.id}" yet: ${(error as Error).message}`,
       );

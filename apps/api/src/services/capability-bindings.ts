@@ -1,6 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { capabilityBinding } from "../db/schema";
+import {
+  type AdministrativeConfigurationReadContext,
+  assertAdministrativeConfigurationRead,
+} from "./administrative-configuration-context";
 
 export interface BindingKey {
   integrationId: string;
@@ -58,7 +62,26 @@ export async function removeBinding(key: BindingKey): Promise<void> {
     );
 }
 
-export async function loadAllBindingsByIntegration(): Promise<Map<string, Map<string, string>>> {
+export async function loadAllBindingsByIntegration(
+  context?: AdministrativeConfigurationReadContext,
+): Promise<Map<string, Map<string, string>>> {
+  if (context) {
+    assertAdministrativeConfigurationRead(context);
+    if (context.integrationBindingSnapshot)
+      return new Map(
+        Object.entries(context.integrationBindingSnapshot).map(([id, bindings]) => [
+          id,
+          new Map(Object.entries(bindings)),
+        ]),
+      );
+    if (!context.bindingRows) throw Error("Captured binding authority unavailable");
+    const out = new Map<string, Map<string, string>>();
+    for (const row of context.bindingRows) {
+      if (!out.has(row.integrationId)) out.set(row.integrationId, new Map());
+      out.get(row.integrationId)?.set(row.capability, row.serviceId);
+    }
+    return out;
+  }
   const rows = await db
     .select({
       integrationId: capabilityBinding.integrationId,

@@ -26,16 +26,21 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { TransitSource } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
-import { useClientPagination, useTextFilter } from "../shared/tableHooks";
+import { useServerPagination } from "../shared/tableHooks";
+import { TransitSyncDialog } from "./TransitSyncDialog";
 
 export type { TransitSource };
 
 export function sourceStateLabel(source: TransitSource): string {
+  if (source.desiredState === "removed")
+    return source.active ? "Removed · active pending sync" : "Removed";
+  if (source.desiredState === "disabled" && source.active) return "Disabled · active pending sync";
   if (source.lifecycle === "removal-pending") return "Removal pending · active";
   if (source.lifecycle === "update-pending") return "Update pending · active";
   if (source.lifecycle === "add-pending") return "Add pending · not active";
@@ -68,13 +73,30 @@ function formatDate(value: string): string {
 }
 
 export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
+  return <TransitSourcesView key={apiUrl} apiUrl={apiUrl} />;
+}
+function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
   const queryClient = useQueryClient();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
     [apiUrl],
   );
+  const [removing, setRemoving] = useState<TransitSource | null>(null);
+  const identities = useRef(new Map<string, string>());
+  const operationId = (intent: unknown) => {
+    const fingerprint = JSON.stringify(intent);
+    let key = identities.current.get(fingerprint);
+    if (!key) {
+      key = crypto.randomUUID();
+      if (identities.current.size >= 128)
+        identities.current.delete(identities.current.keys().next().value!);
+      identities.current.set(fingerprint, key);
+    }
+    return key;
+  };
   const [toast, setToast] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [region, setRegion] = useState("");
@@ -82,29 +104,63 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   const [licenseUrl, setLicenseUrl] = useState("");
   const [attribution, setAttribution] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
+  const catalogPagination = useServerPagination(50);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
+  const [query, setSearch] = useState("");
+  const pagination = useServerPagination(50);
+  const setQuery = (value: string) => {
+    setSearch(value);
+    pagination.setPage(0);
+  };
   const sourcesQuery = useQuery({
-    queryKey: ["admin", "transit", "sources"],
+    queryKey: [
+      "admin",
+      "transit",
+      apiUrl,
+      "sources",
+      query.trim(),
+      pagination.offset,
+      pagination.rowsPerPage,
+    ],
     queryFn: async ({ signal }) =>
       sdk.unwrapAdminResponse(
-        await sdk.getApiDataManagerTransitSources({ limit: 500 }, { client, signal }),
+        await sdk.getApiDataManagerTransitSources(
+          {
+            search: query.trim() || undefined,
+            limit: pagination.rowsPerPage,
+            offset: pagination.offset,
+          },
+          { client, signal },
+        ),
       ),
     refetchInterval: 30_000,
   });
   const stateQuery = useQuery({
-    queryKey: ["admin", "transit", "state"],
+    queryKey: ["admin", "transit", apiUrl, "state"],
     queryFn: async ({ signal }) =>
       sdk.unwrapAdminResponse(await sdk.getApiDataManagerTransitState({ client, signal })),
     refetchInterval: 10_000,
   });
   const catalogQuery = useQuery({
-    queryKey: ["admin", "transit", "catalog", catalogSearch],
+    queryKey: [
+      "admin",
+      "transit",
+      apiUrl,
+      "catalog",
+      catalogSearch,
+      catalogPagination.offset,
+      catalogPagination.rowsPerPage,
+    ],
     enabled: dialogOpen && catalogSearch.trim().length >= 2,
     queryFn: async ({ signal }) =>
       sdk.unwrapAdminResponse(
         await sdk.getApiDataManagerTransitCatalog(
-          { search: catalogSearch.trim() },
+          {
+            search: catalogSearch.trim(),
+            limit: catalogPagination.rowsPerPage,
+            offset: catalogPagination.offset,
+          },
           { client, signal },
         ),
       ),
@@ -113,13 +169,25 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
   const reportJob = (jobId: string, message: string) => {
     setLastJobId(jobId);
     setToast(message);
-    void queryClient.invalidateQueries({ queryKey: ["admin", "transit"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "transit", apiUrl] });
   };
   const addMutation = useMutation({
+    retry: false,
     mutationFn: async () =>
       sdk.unwrapAdminResponse(
         await sdk.postApiDataManagerTransitSources(
           {
+            expectedSourceRevision: sourcesQuery.data!.sourceRevision,
+            idempotencyKey: operationId({
+              action: "add",
+              url,
+              name,
+              region,
+              licenseSpdx,
+              licenseUrl,
+              attribution,
+              revision: sourcesQuery.data?.sourceRevision,
+            }),
             url: url.trim(),
             name: name.trim(),
             region: region.trim(),
@@ -145,32 +213,40 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
     onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
   const sourceMutation = useMutation({
-    mutationFn: async ({ sourceId, method }: { sourceId: string; method: "DELETE" | "POST" }) =>
-      sdk.unwrapAdminResponse(
-        await (method === "DELETE"
-          ? sdk.deleteApiDataManagerTransitSourcesSourceId(sourceId, {}, { client })
-          : sdk.postApiDataManagerTransitSourcesSourceIdEnable(sourceId, {}, { client })),
-      ),
-    onSuccess: ({ jobId, sourceId }) => reportJob(jobId, `${sourceId} queued as ${jobId}.`),
-    onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
-  });
-  const syncMutation = useMutation({
-    mutationFn: async () =>
-      sdk.unwrapAdminResponse(await sdk.postApiDataManagerTransitSync({}, { client })),
-    onSuccess: ({ jobId }) => reportJob(jobId, `Transit sync queued as ${jobId}.`),
+    retry: false,
+    mutationFn: async ({
+      sourceId,
+      action,
+      revision,
+    }: {
+      sourceId: string;
+      action: "enable" | "disable" | "remove";
+      revision: string;
+    }) => {
+      const body = {
+        expectedSourceRevision: revision,
+        idempotencyKey: operationId({ sourceId, action, revision }),
+      };
+      return sdk.unwrapAdminResponse(
+        await (action === "remove"
+          ? sdk.deleteApiDataManagerTransitSourcesSourceId(sourceId, body, { client })
+          : action === "disable"
+            ? sdk.postApiDataManagerTransitSourcesSourceIdDisable(sourceId, body, { client })
+            : sdk.postApiDataManagerTransitSourcesSourceIdEnable(sourceId, body, { client })),
+      );
+    },
+    onSuccess: ({ jobId, sourceId }) => {
+      setRemoving(null);
+      reportJob(jobId, `${sourceId} queued as ${jobId}.`);
+    },
     onError: (error) => setToast(sdk.adminErrorMessage(error, error.message)),
   });
 
   const sources = sourcesQuery.data?.sources ?? [];
-  const { query, setQuery, filtered } = useTextFilter(sources, (source) =>
-    [source.id, source.name, source.region, source.origin, source.originUrl]
-      .filter(Boolean)
-      .join(" "),
-  );
-  const { paged, paginationProps } = useClientPagination(filtered);
+  const paged = sources;
+  const paginationProps = { ...pagination.paginationProps, count: sourcesQuery.data?.total ?? 0 };
   const syncJob = stateQuery.data?.currentJob ?? null;
-  const mutationPending =
-    addMutation.isPending || sourceMutation.isPending || syncMutation.isPending;
+  const mutationPending = addMutation.isPending || sourceMutation.isPending || syncDialogOpen;
   const actionsDisabled = syncJob !== null || mutationPending;
   const disabledReason = syncJob
     ? `Transit sync ${syncJob.jobId} is active. Open Activity to monitor it.`
@@ -208,7 +284,7 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
                 variant="outlined"
                 size="small"
                 disabled={actionsDisabled}
-                onClick={() => syncMutation.mutate()}
+                onClick={() => setSyncDialogOpen(true)}
               >
                 Sync sources
               </Button>
@@ -219,7 +295,7 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
               <Button
                 variant="contained"
                 size="small"
-                disabled={actionsDisabled}
+                disabled={actionsDisabled || !sourcesQuery.data}
                 onClick={() => setDialogOpen(true)}
               >
                 Add source
@@ -243,7 +319,22 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
             : `Source change queued as ${lastJobId}.`}
         </Alert>
       )}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
+      {syncDialogOpen && (
+        <TransitSyncDialog
+          apiUrl={apiUrl}
+          onClose={() => setSyncDialogOpen(false)}
+          onQueued={(jobId) => {
+            setSyncDialogOpen(false);
+            reportJob(jobId, `Transit sync queued as ${jobId}.`);
+          }}
+        />
+      )}
+      <Dialog
+        open={dialogOpen}
+        onClose={addMutation.isPending ? undefined : () => setDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>Add transit source</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -277,6 +368,8 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
             />
             <TextField
               label="Attribution"
+              multiline
+              minRows={2}
               value={attribution}
               onChange={(event) => setAttribution(event.target.value)}
               fullWidth
@@ -306,34 +399,72 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
             <TextField
               label="Search installed catalog (optional)"
               value={catalogSearch}
-              onChange={(event) => setCatalogSearch(event.target.value)}
+              onChange={(event) => {
+                setCatalogSearch(event.target.value);
+                catalogPagination.setPage(0);
+              }}
               fullWidth
               size="small"
             />
-            {catalogQuery.data?.sources
-              .filter((source) => source.source === "transitous")
-              .slice(0, 5)
-              .map((source) => (
-                <Button
-                  key={source.id}
-                  variant="text"
-                  sx={{ justifyContent: "flex-start" }}
-                  disabled={actionsDisabled}
-                  onClick={() => {
-                    sourceMutation.mutate({ sourceId: source.id, method: "POST" });
+            {catalogQuery.error && (
+              <Alert severity="error">
+                {sdk.adminErrorMessage(catalogQuery.error, catalogQuery.error.message)}
+              </Alert>
+            )}
+            {catalogQuery.data?.sources.map((source) => (
+              <Button
+                key={source.id}
+                variant="text"
+                sx={{ justifyContent: "flex-start" }}
+                disabled={actionsDisabled}
+                onClick={() => {
+                  if (source.installedSourceId) {
+                    if (sourcesQuery.data)
+                      sourceMutation.mutate({
+                        sourceId: source.installedSourceId,
+                        action: "enable",
+                        revision: sourcesQuery.data.sourceRevision,
+                      });
                     setDialogOpen(false);
-                  }}
-                >
-                  Enable {source.name} ({source.countryCode})
-                </Button>
-              ))}
+                  } else {
+                    setUrl(source.url);
+                    setName(source.name);
+                    setRegion(source.countryCode);
+                    const bindings = source.licensing?.bindings ?? [],
+                      license = bindings.length === 1 ? bindings[0]?.license : undefined;
+                    setLicenseSpdx(license?.kind === "spdx" ? license.expression : "");
+                    setLicenseUrl(license?.url ?? "");
+                    setAttribution(
+                      bindings
+                        .flatMap((binding) => [
+                          binding.subject,
+                          binding.notice,
+                          ...(binding.conditions ?? []),
+                        ])
+                        .filter(Boolean)
+                        .join("\n"),
+                    );
+                  }
+                }}
+              >
+                {source.installedSourceId ? "Enable" : "Use"} {source.name} ({source.countryCode})
+              </Button>
+            ))}
+            <AdminTablePagination
+              {...catalogPagination.paginationProps}
+              count={catalogQuery.data?.total ?? 0}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} disabled={addMutation.isPending}>
             Cancel
           </Button>
-          <Button variant="contained" disabled={!addValid} onClick={() => addMutation.mutate()}>
+          <Button
+            variant="contained"
+            disabled={!addValid || !sourcesQuery.data}
+            onClick={() => addMutation.mutate()}
+          >
             {addMutation.isPending ? "Queueing…" : "Add and sync"}
           </Button>
         </DialogActions>
@@ -420,15 +551,19 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
                     {source.lastImportedAt ? formatDate(source.lastImportedAt) : "—"}
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title={disabledReason} disableHoverListener={!actionsDisabled}>
+                    <Tooltip title={disabledReason || source.actions.reason || ""}>
                       <span>
                         <Button
                           size="small"
-                          disabled={actionsDisabled}
+                          disabled={
+                            actionsDisabled ||
+                            !(source.requested ? source.actions.disable : source.actions.enable)
+                          }
                           onClick={() =>
                             sourceMutation.mutate({
                               sourceId: source.id,
-                              method: source.requested ? "DELETE" : "POST",
+                              action: source.requested ? "disable" : "enable",
+                              revision: source.sourceRevision,
                             })
                           }
                         >
@@ -436,6 +571,16 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
                         </Button>
                       </span>
                     </Tooltip>
+                    {source.actions.remove && (
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={actionsDisabled}
+                        onClick={() => setRemoving(source)}
+                      >
+                        Remove
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -444,6 +589,23 @@ export function TransitSourcesSection({ apiUrl }: { apiUrl: string }) {
         </Table>
       </TableContainer>
       <AdminTablePagination {...paginationProps} />
+      <ConfirmDialog
+        open={!!removing}
+        title="Remove transit source"
+        message={`Remove ${removing?.name ?? ""}? Its saved URL and licence will be deleted. Disable it instead if you want to keep it for later.`}
+        confirmLabel="Remove source"
+        confirmColor="error"
+        loading={sourceMutation.isPending}
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          if (removing && !sourceMutation.isPending)
+            sourceMutation.mutate({
+              sourceId: removing.id,
+              action: "remove",
+              revision: removing.sourceRevision,
+            });
+        }}
+      />
       <Snackbar
         open={toast !== null}
         autoHideDuration={4000}

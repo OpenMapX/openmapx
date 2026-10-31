@@ -33,9 +33,54 @@
     }
   },
   "provides": ["llm-inference"],
-  "volumes": [{ "name": "openmapx-ollama", "mountAt": "/root/.ollama", "backup": false }],
+  "volumes": [
+    {
+      "name": "openmapx-ollama",
+      "mountAt": "/root/.ollama",
+      "backup": false
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 11434, "host": 11434, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 11434,
+        "host": 11434,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "infrastructure" }
+  "ui": {
+    "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OLLAMA_KEEP_ALIVE": {
+        "type": "string",
+        "title": "Model keep-alive (0 or duration, at most 24h)",
+        "format": "ollama-duration",
+        "maxLength": 32
+      },
+      "OLLAMA_MAX_LOADED_MODELS": {
+        "type": "integer",
+        "title": "Maximum loaded models",
+        "minimum": 1,
+        "maximum": 32
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

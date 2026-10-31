@@ -1,7 +1,10 @@
 import { existsSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { execa } from "execa";
+import { dataWorkerSignal, publishDataChange } from "./execution/worker-scope.js";
 
 export interface CurlAtomicOptions {
+  publication?: "data-output";
+  signal?: AbortSignal;
   /**
    * Invoked roughly every second with the current byte count of the in-flight
    * temp file and (when available from a HEAD request) the total expected
@@ -36,6 +39,8 @@ export async function curlAtomicWithResult(
   targetPath: string,
   opts: CurlAtomicOptions = {},
 ): Promise<CurlAtomicResult> {
+  opts = { ...opts, signal: dataWorkerSignal(opts.signal) };
+  opts.signal?.throwIfAborted();
   const rand = Math.random().toString(36).slice(2, 10);
   const tmpPath = `${targetPath}.tmp.${rand}`;
 
@@ -45,13 +50,17 @@ export async function curlAtomicWithResult(
   let totalBytes: number | undefined;
   if (opts.onProgress) {
     try {
-      const head = await execa("curl", ["-sIL", url], { timeout: 15_000 });
+      const head = await execa("curl", ["-sIL", url], {
+        timeout: 15_000,
+        cancelSignal: opts.signal,
+      });
       const match = head.stdout.match(/^\s*content-length:\s*(\d+)/im);
       if (match?.[1]) totalBytes = Number(match[1]);
     } catch {
       // ignore — totalBytes stays undefined
     }
   }
+  opts.signal?.throwIfAborted();
 
   // Skip the download entirely if the upstream resource hasn't changed since
   // we last fetched it. `curl -z <file>` adds an `If-Modified-Since` header
@@ -64,7 +73,11 @@ export async function curlAtomicWithResult(
   }
   args.push(url);
 
-  const child = execa("curl", args, { stdio: "inherit" });
+  const child = execa("curl", args, {
+    stdio: "inherit",
+    cancelSignal: opts.signal,
+    forceKillAfterDelay: 5000,
+  });
   const poll = opts.onProgress
     ? setInterval(() => {
         try {
@@ -78,6 +91,7 @@ export async function curlAtomicWithResult(
 
   try {
     await child;
+    opts.signal?.throwIfAborted();
     if (poll) clearInterval(poll);
     // 304 Not Modified: curl writes nothing to the tmp path. Leave the
     // existing target in place and return without renaming.
@@ -104,20 +118,26 @@ export async function curlAtomicWithResult(
       }
     }
     await opts.beforePublish?.(tmpPath);
+    opts.signal?.throwIfAborted();
     let published = false;
     const publish = (): void => {
+      opts.signal?.throwIfAborted();
       if (published) throw new Error("Atomic download publish callback invoked more than once");
       renameSync(tmpPath, targetPath);
       published = true;
     };
-    if (opts.withPublishLock) {
-      await opts.withPublishLock(publish);
-      if (!published) {
-        throw new Error("Atomic download publish lock resolved without publishing the temp file");
+    const commit = async () => {
+      if (opts.withPublishLock) {
+        await opts.withPublishLock(publish);
+        if (!published) {
+          throw new Error("Atomic download publish lock resolved without publishing the temp file");
+        }
+      } else {
+        publish();
       }
-    } else {
-      publish();
-    }
+    };
+    if (opts.publication === "data-output") await publishDataChange(commit);
+    else await commit();
     return { published: true };
   } catch (err) {
     if (poll) clearInterval(poll);

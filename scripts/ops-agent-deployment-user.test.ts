@@ -1,6 +1,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   constants,
   fstatSync,
@@ -17,13 +18,18 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { OpsClient } from "@openmapx/core/ops";
+import {
+  configurationApplyResultSchema,
+  createControlRootOperationKey,
+  OpsClient,
+  type OpsOperation,
+  type OpsOperationKind,
+  type OpsResultFor,
+  opsExecutionBudget,
+} from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  createDurableOpsKey,
-  executeTrustedConfigurationAndWait,
-} from "../apps/api/src/services/ops-client";
+import { waitForOpsResult } from "../apps/api/src/services/ops-client";
 import {
   consumePublishedTrustedConfiguration,
   publishTrustedConfigurationSnapshot,
@@ -40,8 +46,8 @@ import {
  * trusted-configuration request: in the host update's order (the host's
  * render, then the agent) and in the panel self-update's (the new agent
  * first). Only the host's render writes UID and GID; the agent and its fixed
- * CLI read .env and never change it. app-api publishes as the UID and GID
- * Compose gives it from .env.
+ * CLI read .env and never change it. The fixture publishes with the UID/GID
+ * Compose gives app-api from .env and submits a truthful local bearer root.
  *
  * Runs only on Linux where `OPENMAPX_TEST_DEPLOYMENT_USER` names the uid the
  * test runs as, which must not be 1000 and must own the repository, e.g. in a
@@ -83,16 +89,29 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const clone = mkdtempSync(join(tmpdir(), "openmapx-deployment-user-"));
       roots.push(clone);
       const target = join(clone, "checkout");
-      const previous = process.umask(0o002);
-      try {
-        await run("git", ["clone", "-q", "--no-local", ROOT, target]);
-      } finally {
-        process.umask(previous);
-      }
+      // Set only the clone child process's umask, never the test worker's.
+      await run(process.execPath, [
+        "-e",
+        'process.umask(0o002); const { status } = require("node:child_process").spawnSync(process.argv[1], process.argv.slice(2), { stdio: "inherit" }); process.exit(status ?? 1);',
+        "git",
+        "clone",
+        "-q",
+        "--no-local",
+        ROOT,
+        target,
+      ]);
       expect(statSync(target).uid).toBe(EXPECTED_UID);
       writeFileSync(join(target, "infra", "docker", ".env"), envWithoutUser(target), {
         mode: 0o600,
       });
+      // Explicit operator bootstrap required by the private control keys.
+      // Harden only their authority ancestors; source trees retain umask 002.
+      const infra = join(target, "infra", "docker");
+      mkdirSync(join(infra, "secrets"), { recursive: true, mode: 0o700 });
+      for (const directory of [target, join(target, "infra"), infra, join(infra, "secrets")])
+        chmodSync(directory, statSync(directory).mode & 0o7777 & ~0o022);
+      for (const source of [join(target, "services"), join(target, "integrations")])
+        expect(statSync(source).mode & 0o020, source).toBe(0o020);
       return target;
     }
 
@@ -205,6 +224,31 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       return { port, output: () => output };
     }
 
+    /** A timed local bearer root carrying a real sealed snapshot, not a fabricated API parent. */
+    function localRootIdentity(kind: OpsOperationKind) {
+      const requestedDeadlineAt = Date.now() + opsExecutionBudget(kind).processMs;
+      return {
+        operationKey: createControlRootOperationKey({
+          notAfter: requestedDeadlineAt,
+          nonce: randomBytes(16),
+        }),
+        execution: { requestedDeadlineAt },
+      };
+    }
+
+    async function executeLocalRoot<K extends OpsOperationKind>(
+      client: OpsClient,
+      operation: Extract<OpsOperation, { kind: K }>,
+      identity = localRootIdentity(operation.kind),
+    ): Promise<OpsResultFor<K>> {
+      const submitted = await client.execute<K>(operation, identity);
+      if (submitted.execution === "sync") return submitted.value;
+      return waitForOpsResult<K>(client, operation.kind, submitted, {
+        execution: identity.execution,
+        observerDeadlineAt: identity.execution.requestedDeadlineAt,
+      });
+    }
+
     /** A request app-api publishes as the UID and GID Compose passes it. */
     async function submit(
       target: string,
@@ -214,7 +258,11 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     ) {
       const infra = join(target, "infra", "docker");
       const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-      const operationKey = createDurableOpsKey("stack.render", name);
+      const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
+      const inspected = await client.execute({ kind: "configuration.sources.inspect" });
+      if (inspected.execution !== "sync") throw Error("Expected a synchronous source inspection");
+      const identity = localRootIdentity("stack.render");
+      const { operationKey } = identity;
       const before = services.currentConfigurationGeneration(infra);
       const sealed = await publishTrustedConfigurationSnapshot({
         directory: services.agentStatePaths(infra).trustedConfig,
@@ -226,6 +274,8 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
           kind: "stack.render",
           revisionId,
           expectedCurrentRevisionId: before,
+          expectedSourceRevision: inspected.value.sourceRevision,
+          coordinatorMode: "require-running",
         }),
         payload: {
           domain: `${name}.example.test`,
@@ -234,16 +284,16 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
           serviceSecrets: [],
         },
       });
-      const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
       const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-        executeTrustedConfigurationAndWait(
-          client,
-          sealed.operation as Parameters<typeof executeTrustedConfigurationAndWait>[1],
-          operationKey,
-        ),
+        executeLocalRoot(client, sealed.operation, identity),
       );
       expect(consumed.submission.status, agent.output()).toBe("fulfilled");
-      return consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
+      const result = configurationApplyResultSchema.parse(
+        consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined,
+      );
+      if (result.outcome === "committed")
+        expect(result.revisionId).toBe(sealed.operation.revisionId);
+      return result;
     }
 
     async function expectCommitted(
@@ -284,6 +334,13 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
       const written = envFileState(target, true);
       const agent = await startAgent(target);
       expect(agent.output()).not.toContain("sets no UID");
+      const infra = join(target, "infra", "docker");
+      const before = services.currentConfigurationGeneration(infra);
+      await expect(
+        submit(target, agent, "wrong-deployment-user", { uid: 1000, gid: statSync(target).gid }),
+      ).rejects.toThrow("Trusted configuration snapshot publish failed");
+      expect(envFileState(target)).toEqual(written);
+      expect(services.currentConfigurationGeneration(infra)).toBe(before);
       await expectCommitted(target, agent, "host-update");
       // The agent's fixed CLI renders with it too, and leaves .env as it was.
       await agentCli(target, "compose", "render");

@@ -1,3 +1,20 @@
+import { backupMaintenanceAdminOperations } from "./backup-maintenance";
+import { releaseControlAdminOperations } from "./release-controls";
+
+export * from "./backup-maintenance";
+
+export * from "./release-controls";
+
+import { cacheAdminOperations } from "./cache";
+
+export * from "./cache";
+
+import { artifactTransferAdminOperations } from "./artifact-transfers";
+import { platformAdminOperations } from "./platform";
+
+export * from "./artifact-transfers";
+export * from "./platform";
+
 import z from "zod/v4";
 import {
   type AdminOperation,
@@ -7,6 +24,7 @@ import {
   adminText,
   httpErrorSchema,
 } from "../admin";
+import { configurationSourceOwnedSchema } from "../configuration-ownership";
 import {
   adminServiceAcceptedSchema,
   adminServiceCredentialParamsSchema,
@@ -22,6 +40,7 @@ import {
   adminServiceBackupParamsSchema,
   adminServiceBackupRestoreSchema,
   adminServiceBackupsSchema,
+  adminServiceDataQuerySchema,
   adminServiceDataSchema,
   adminServiceSelectionSchema,
   adminServiceSelectionSetSchema,
@@ -44,11 +63,14 @@ import {
   adminServiceCredentialsSchema,
   adminServiceDetailSchema,
   adminServiceLogsQuerySchema,
+  adminServicePresetsSchema,
   adminServicesBulkActionSchema,
   adminServicesCheckedSchema,
   adminServicesSchema,
 } from "./services";
 import {
+  adminComposePreviewHeadersSchema,
+  adminComposeRenderInputSchema,
   adminDawarichBundleConflictSchema,
   adminDawarichConfirmationErrorSchema,
   adminDawarichConflictSchema,
@@ -72,6 +94,21 @@ export * from "./workflows";
 
 /** Complete service/workflow family. Authentication metadata never grants access. */
 export const serviceAdminOperations = {
+  ...releaseControlAdminOperations,
+  ...backupMaintenanceAdminOperations,
+  ...cacheAdminOperations,
+  ...artifactTransferAdminOperations,
+  ...platformAdminOperations,
+  listAdminServicePresets: {
+    method: "GET",
+    path: "/api/admin/services/presets",
+    auth: "admin",
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminServicePresetsSchema),
+      503: adminJson(httpErrorSchema),
+    },
+  },
   listAdminServices: {
     method: "GET",
     path: "/api/admin/services",
@@ -105,14 +142,17 @@ export const serviceAdminOperations = {
     method: "POST",
     path: "/api/admin/services/:id/config",
     auth: "admin",
-    request: { params: adminServiceParamsSchema, body: adminServiceConfigUpdateSchema },
+    request: {
+      params: adminServiceParamsSchema,
+      body: adminServiceConfigUpdateSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceOkSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       404: adminJson(httpErrorSchema),
       400: adminJson(z.union([httpErrorSchema, adminServiceValidationErrorSchema])),
-      // Not applied, for a reason the operator can fix (an override render may not use).
-      409: adminJson(httpErrorSchema),
     },
   },
   getAdminServiceCredentials: {
@@ -130,24 +170,44 @@ export const serviceAdminOperations = {
     method: "PUT",
     path: "/api/admin/services/:id/credentials/:key",
     auth: "admin",
-    request: { params: adminServiceCredentialParamsSchema, body: adminServiceCredentialSetSchema },
+    request: {
+      params: adminServiceCredentialParamsSchema,
+      body: adminServiceCredentialSetSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(adminServiceCredentialManagedSchema),
+      409: adminJson(
+        z.union([
+          adminServiceCredentialManagedSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+        ]),
+      ),
     },
   },
   deleteAdminServiceCredential: {
     method: "DELETE",
     path: "/api/admin/services/:id/credentials/:key",
     auth: "admin",
-    request: { params: adminServiceCredentialParamsSchema, body: adminServiceEmptyMutationSchema },
+    request: {
+      params: adminServiceCredentialParamsSchema,
+      body: adminServiceEmptyMutationSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceCredentialChangedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(adminServiceCredentialManagedSchema),
+      409: adminJson(
+        z.union([
+          adminServiceCredentialManagedSchema,
+          httpErrorSchema,
+          configurationSourceOwnedSchema,
+        ]),
+      ),
     },
   },
   streamAdminServiceLogs: {
@@ -163,7 +223,7 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminStream("text/plain"),
       404: adminJson(httpErrorSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       503: adminJson(httpErrorSchema),
     },
   },
@@ -197,6 +257,7 @@ export const serviceAdminOperations = {
     method: "GET",
     path: "/api/admin/services/data",
     auth: "admin",
+    request: { query: adminServiceDataQuerySchema },
     responses: { ...adminCommonResponses, 200: adminJson(adminServiceDataSchema) },
   },
   getAdminServiceSelection: {
@@ -213,12 +274,14 @@ export const serviceAdminOperations = {
     method: "PUT",
     path: "/api/admin/services/selection",
     auth: "admin",
-    request: { body: adminServiceSelectionSetSchema },
+    request: {
+      body: adminServiceSelectionSetSchema,
+      headers: adminServiceIdempotencyHeadersSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceSelectionUpdatedSchema),
-      // Not applied, for a reason the operator can fix (an override render may not use).
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       503: adminJson(httpErrorSchema),
     },
   },
@@ -244,7 +307,7 @@ export const serviceAdminOperations = {
       ...adminCommonResponses,
       200: adminJson(adminServiceAcceptedSchema),
       404: adminJson(httpErrorSchema),
-      409: adminJson(httpErrorSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
     },
   },
   deleteAdminServiceBackup: {
@@ -270,7 +333,7 @@ export const serviceAdminOperations = {
     auth: "admin",
     responses: {
       ...adminCommonResponses,
-      200: adminText(z.string(), "text/yaml"),
+      200: { ...adminText(z.string(), "text/yaml"), headers: adminComposePreviewHeadersSchema },
       503: adminJson(httpErrorSchema),
     },
   },
@@ -285,7 +348,20 @@ export const serviceAdminOperations = {
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceComposeStartedSchema),
+      409: adminJson(z.union([httpErrorSchema, configurationSourceOwnedSchema])),
       400: adminJson(z.union([httpErrorSchema, adminServiceFailureSchema])),
+    },
+  },
+  renderAdminComposeConfiguration: {
+    method: "POST",
+    path: "/api/admin/compose/render",
+    auth: "admin",
+    request: { headers: adminServiceIdempotencyHeadersSchema, body: adminComposeRenderInputSchema },
+    responses: {
+      ...adminCommonResponses,
+      202: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
+      503: adminJson(httpErrorSchema),
     },
   },
   stopAdminCompose: {
@@ -382,3 +458,5 @@ export const serviceAdminOperations = {
   },
 } as const satisfies Record<string, AdminOperation>;
 export type ServiceAdminOperationId = keyof typeof serviceAdminOperations;
+
+export * from "./platform";

@@ -180,7 +180,8 @@ describe("resolveServiceConfigFromEnv", () => {
       },
       { SERVICE_VALHALLA_BUILD_ELEVATION: "False" },
     );
-    expect(r.build_elevation).toEqual({ value: "False", source: "env" });
+    // Valhalla overrides are typed before sealing; its renderer emits capitalized False.
+    expect(r.build_elevation).toEqual({ value: false, source: "env" });
   });
 });
 

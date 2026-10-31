@@ -1,9 +1,9 @@
-import { lstatSync, mkdtempSync, readFileSync, rmSync, type Stats, unlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fsyncDirectory } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
 const {
@@ -11,7 +11,6 @@ const {
   RELEASE_SELECTOR_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
-  releaseChannel,
   writeReleaseComposeArtifacts,
 } = coreServices;
 
@@ -31,12 +30,26 @@ function releaseState(opts: ReleaseStateLocation) {
   return coreServices.releaseStatePaths(opts.infraDir ?? repoPaths().infraDir);
 }
 
+function appliedReleaseChannel(
+  infraDir = repoPaths().infraDir,
+): ReturnType<typeof coreServices.releaseChannel> {
+  const selection = coreServices.readAppliedReleaseSelection(infraDir);
+  return selection.kind === "local"
+    ? { kind: "disabled" }
+    : {
+        kind: "enabled",
+        selection,
+        manifestImage: selection.manifestImage,
+        imagePrefix: selection.imagePrefix,
+      };
+}
+
 export type ReleaseDockerRunner = (
   args: string[],
 ) => Promise<{ stdout: string; exitCode: number; stderr: string }>;
 
 async function defaultDocker(args: string[]) {
-  const result = await execa("docker", args, { reject: false });
+  const result = await execa("docker", args, { ...cliProcessOptions(), reject: false });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
@@ -53,8 +66,9 @@ function expectOk(result: { exitCode: number; stderr: string }, what: string): v
 /** Pull the aggregate release pointer and return its validated manifest. */
 export async function resolveReleaseManifest(
   docker: ReleaseDockerRunner = defaultDocker,
+  infraDir = repoPaths().infraDir,
 ): Promise<ReleaseManifest> {
-  const channel = releaseChannel();
+  const channel = appliedReleaseChannel(infraDir);
   if (channel.kind === "disabled") {
     throw new Error(`release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
   }
@@ -133,7 +147,7 @@ export async function ensureReleaseOverlay(
   const path = releaseState(opts).overlay;
   const selected = readSelection(path, opts);
   if (selected) {
-    const channel = releaseChannel();
+    const channel = appliedReleaseChannel(infraDir);
     const prefix =
       channel.kind === "enabled" ? channel.imagePrefix : selected?.images.api?.split("/api@")[0];
     if (
@@ -150,11 +164,11 @@ export async function ensureReleaseOverlay(
   }
   // An operator running local images opts out once instead of paying a
   // failed registry pull (and a warning) on every start.
-  if (releaseChannel().kind === "disabled") return { status: "disabled" };
+  if (appliedReleaseChannel(infraDir).kind === "disabled") return { status: "disabled" };
   const held = coreServices.releaseSelectionHold(infraDir, { uid: opts.uid });
   if (held) return { status: "held", reason: held };
   try {
-    const manifest = await resolveReleaseManifest(opts.docker);
+    const manifest = await resolveReleaseManifest(opts.docker, infraDir);
     writeReleaseOverlay(manifest, opts);
     return { status: "resolved", path, release: manifest.release };
   } catch (error) {
@@ -186,7 +200,8 @@ export function releaseStatusLines(
   opts: Pick<ReleaseStateLocation, "uid"> = {},
 ): string[] {
   const selected = readSelection(path, opts);
-  const disabled = releaseChannel().kind === "disabled";
+  const channel = appliedReleaseChannel();
+  const disabled = channel.kind === "disabled";
   if (!selected)
     return [
       disabled
@@ -210,67 +225,42 @@ export async function selectRelease(
     report?: (line: string) => void;
   } & ReleaseStateLocation = {},
 ): Promise<{ path: string; release: string }> {
-  const path = releaseState(opts).overlay;
-  const previous = readSelection(path, opts);
-  const manifest = await (opts.resolve ?? resolveReleaseManifest)();
-  const report = opts.report ?? (() => undefined);
-  report(
-    `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
-  );
-  report(`Candidate release: ${manifest.release}`);
-  for (const name of coreServices.RELEASE_IMAGE_NAMES) {
-    const before = previous?.images[name]?.split("@")[1];
-    const after = manifest.images[name].split("@")[1];
-    report(
-      `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
-    );
-  }
-  writeReleaseOverlay(manifest, opts);
-  return { path, release: manifest.release };
-}
-
-/**
- * Clear only local Compose selection, the overlay in the agent's release state;
- * preserve evidence still mounted by running services. An overlay of an
- * earlier release in `infra/docker` is left alone: nothing reads it any more.
- */
-export async function clearReleaseSelection(
-  opts: ReleaseStateLocation = {},
-): Promise<{ path: string; cleared: boolean }> {
   const { directory, store, overlay: path } = releaseState(opts);
   coreServices.ensureReleaseStateDirectory(directory, { uid: opts.uid });
   coreServices.ensureReleaseStateDirectory(store, { uid: opts.uid });
   const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
-    try {
-      lstatSync(join(store, "transaction.json"));
-      throw new Error(
-        "Release transaction is active; finish or recover the update before clearing selection",
-      );
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    // Clearing is a decision too: an earlier release's selection no longer holds.
-    coreServices.supersedeLegacyReleaseOverlay(opts.infraDir ?? repoPaths().infraDir, {
-      uid: opts.uid,
-    });
-    let selected: Stats;
-    try {
-      selected = lstatSync(path);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path, cleared: false };
-      throw error;
-    }
-    const problem = coreServices.releaseStateFileProblem(
-      selected,
-      coreServices.RELEASE_STORE_LIMITS.manifestBytes,
-      { uid: opts.uid },
+    const previous = readSelection(path, opts);
+    const manifest = await (
+      opts.resolve ?? (() => resolveReleaseManifest(defaultDocker, opts.infraDir))
+    )();
+    const report = opts.report ?? (() => undefined);
+    report(
+      `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
     );
-    if (problem) throw new Error(`Release selection overlay is unsafe: ${path} ${problem}`);
-    unlinkSync(path);
-    fsyncDirectory(directory);
-    return { path, cleared: true };
+    report(`Candidate release: ${manifest.release}`);
+    for (const name of coreServices.RELEASE_IMAGE_NAMES) {
+      const before = previous?.images[name]?.split("@")[1];
+      const after = manifest.images[name].split("@")[1];
+      report(
+        `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
+      );
+    }
+    writeReleaseOverlay(manifest, opts);
+    return { path, release: manifest.release };
   } finally {
     lock.release();
   }
+}
+
+/** Clear only selection with the shared conditional release-store writer. */
+export async function clearReleaseSelection(
+  opts: ReleaseStateLocation & { expectedReleaseId?: string } = {},
+): Promise<{ path: string; cleared: boolean }> {
+  return coreServices.clearReleaseComposeSelection({
+    infraDir: opts.infraDir ?? repoPaths().infraDir,
+    uid: opts.uid,
+    path: releaseState(opts).overlay,
+    expectedReleaseId: opts.expectedReleaseId,
+  });
 }

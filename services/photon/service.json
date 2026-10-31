@@ -36,9 +36,63 @@
     }
   },
   "provides": ["geocoder"],
-  "bindMounts": [{ "source": "@infra:data/photon", "target": "/photon/data", "readOnly": false }],
+  "bindMounts": [
+    {
+      "source": "@infra:data/photon",
+      "target": "/photon/data",
+      "readOnly": false
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 2322, "host": 2322, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 2322,
+        "host": 2322,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "geocoding" }
+  "ui": {
+    "category": "geocoding"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "REGION": {
+        "type": "string",
+        "title": "Index region",
+        "format": "resource-region"
+      },
+      "UPDATE_STRATEGY": {
+        "type": "string",
+        "title": "Update strategy",
+        "enum": ["PARALLEL", "SEQUENTIAL"]
+      },
+      "UPDATE_INTERVAL": {
+        "type": "string",
+        "title": "Update interval (1h–8760h)",
+        "format": "photon-duration",
+        "maxLength": 32
+      },
+      "LOG_LEVEL": {
+        "type": "string",
+        "title": "Log level",
+        "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

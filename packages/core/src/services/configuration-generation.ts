@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  readFileSync,
   readlinkSync,
   readSync,
   renameSync,
@@ -17,6 +18,7 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
 import { configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
 import {
@@ -25,6 +27,7 @@ import {
 } from "../ops/trusted-config";
 import { type AgentMountLayout, runningAgentMountLayout } from "./agent-mounts";
 import { ensureTraefikDynamicDirectory } from "./agent-state";
+import { withBackupRetentionPolicyChange } from "./backup-retention-store";
 import {
   GENERATED_SECRETS_DIRNAME,
   type RenderContext,
@@ -44,16 +47,25 @@ import {
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import type { ContainerBindMounts } from "./container-mounts";
 import {
+  CONFIGURATION_GENERATION_BASE_PREFIX,
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
+  configurationGenerationBasePath,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
   LEGACY_CONFIGURATION_GENERATIONS,
   LEGACY_CURRENT_CONFIGURATION,
+  readConfigurationGenerationBase,
   readServiceSelectionFile,
   SERVICE_SELECTION_FILE,
   writeServiceSelectionFile,
 } from "./deployment";
+import {
+  type PlatformConfiguration,
+  platformConfigurationSchema,
+  resolvePlatformConfiguration,
+} from "./platform-configuration";
+import { normalizeReleaseSelection } from "./release-selection";
 import {
   type ReleaseServiceFiles,
   releaseServiceFiles,
@@ -107,10 +119,17 @@ export interface CommitConfigurationOptions {
   input: ConfigurationInput;
   /** Tolerate selected services that are not installed (the default selection in a reduced checkout). */
   allowMissingSelected?: boolean;
+  /** Verified Docker generations that still contain owned containers; absent means retain conservatively. */
+  ownedServiceGenerations?: readonly { containerId: string; revisionIds: readonly string[] }[];
+  /** A complete bounded acquisition; omission cannot prove a previous container disappeared. */
+  observedServiceContainerIds?: readonly string[];
   /** The authenticated candidate identity; omitted, use a fresh activation identity (no ABA). */
   revisionId?: string;
   /** Applied identity to compare under writer ownership; null means no pointer. */
   expectedCurrentRevisionId?: string | null;
+  /** Fixed executor correlation for a retained noncommit observation. */
+  operationKey?: string;
+  installationId?: string;
   signal?: AbortSignal;
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
@@ -176,6 +195,43 @@ export class ConfigurationGenerationError extends Error {
 export interface ConfigurationGenerationWriter {
   commit(options: Omit<CommitConfigurationOptions, "infraDir">): Promise<CommittedConfiguration>;
 }
+const liveWriters = new WeakSet<ConfigurationGenerationWriter>();
+const writerCommits = new WeakMap<ConfigurationGenerationWriter, CommittedConfiguration>();
+declare const nonCommitBrand: unique symbol;
+export type OriginalConfigurationGenerationNonCommit = Readonly<{ [nonCommitBrand]: true }>;
+type NonCommitSource = Readonly<{
+  infraDir: string;
+  installationId: string;
+  operationKey: string;
+  revisionId: string;
+  expectedCurrentRevisionId: string;
+  result: Extract<ConfigurationApplyResult, { outcome: "not_committed" }>;
+}>;
+const pendingNonCommits = new WeakMap<Error, NonCommitSource>(),
+  nonCommitErrors = new WeakMap<Error, OriginalConfigurationGenerationNonCommit>(),
+  nonCommitSources = new WeakMap<OriginalConfigurationGenerationNonCommit, NonCommitSource>();
+export function configurationGenerationNonCommitForError(
+  error: unknown,
+): OriginalConfigurationGenerationNonCommit | undefined {
+  return error instanceof Error ? nonCommitErrors.get(error) : undefined;
+}
+export function originalConfigurationGenerationNonCommitSource(
+  value: OriginalConfigurationGenerationNonCommit,
+): NonCommitSource {
+  const source = nonCommitSources.get(value);
+  if (!source) throw Error("Actual completed configuration writer noncommit required");
+  return source;
+}
+export function assertConfigurationGenerationWriter(writer: ConfigurationGenerationWriter): void {
+  if (!liveWriters.has(writer)) throw Error("Configuration writer is not available");
+}
+/** Exact evidence from this live writer, never a competing current-pointer read. */
+export function configurationGenerationWriterCommit(
+  writer: ConfigurationGenerationWriter,
+): Readonly<CommittedConfiguration> | undefined {
+  assertConfigurationGenerationWriter(writer);
+  return writerCommits.get(writer);
+}
 
 /** Hold ownership before reading state used to construct a write, through all follow-up work. */
 export async function withConfigurationGenerationWriter<T>(
@@ -189,22 +245,73 @@ export async function withConfigurationGenerationWriter<T>(
   let value!: T;
   let active = true;
   let pending: Promise<CommittedConfiguration> | undefined;
+  let writer: ConfigurationGenerationWriter | undefined;
   try {
     release = await acquireConfigurationOwnership(infraDir, signal);
-    value = await run({
+    writer = {
       commit: (options) => {
         if (!active || pending) throw new Error("Configuration writer is not available");
         pending = commitOwnedConfigurationGeneration({
           ...options,
           infraDir,
           signal: options.signal ?? signal,
-        }).then((result) => {
-          committed = result;
-          return result;
-        });
+        })
+          .then((result) => {
+            committed = result;
+            writerCommits.set(writer!, result);
+            return result;
+          })
+          .catch((error) => {
+            if (
+              error instanceof ConfigurationGenerationError &&
+              error.result.outcome === "committed"
+            )
+              writerCommits.set(writer!, {
+                revisionId: error.result.revisionId,
+                enabledServiceIds: error.result.enabledServiceIds,
+                warnings: [],
+                stackFileProblems: [],
+                serviceFileReport: [],
+              });
+            // Only this awaited native writer attempt, without an injected hook,
+            // can record conclusive nonpublication while ownership is still held.
+            if (
+              error instanceof ConfigurationGenerationError &&
+              error.result.outcome === "not_committed" &&
+              !error.result.cleanupFailed &&
+              options.revisionId &&
+              options.expectedCurrentRevisionId &&
+              options.operationKey &&
+              options.installationId &&
+              /^opk1_[A-Za-z0-9_-]{16,64}$/.test(options.operationKey) &&
+              !options.beforeCommit &&
+              !options.afterGenerationRename &&
+              !options.afterCommit
+            ) {
+              try {
+                if (currentConfigurationGeneration(infraDir) === options.expectedCurrentRevisionId)
+                  pendingNonCommits.set(
+                    error,
+                    Object.freeze({
+                      infraDir,
+                      installationId: options.installationId,
+                      operationKey: options.operationKey,
+                      revisionId: options.revisionId,
+                      expectedCurrentRevisionId: options.expectedCurrentRevisionId,
+                      result: Object.freeze({ ...error.result }),
+                    }),
+                  );
+              } catch {
+                /* An unreadable pointer cannot prove nonpublication. */
+              }
+            }
+            throw error;
+          });
         return pending;
       },
-    });
+    };
+    liveWriters.add(writer);
+    value = await run(writer);
   } catch (error) {
     failure =
       error instanceof Error
@@ -212,6 +319,7 @@ export async function withConfigurationGenerationWriter<T>(
         : new Error("Configuration generation failed", { cause: error });
   }
   active = false;
+  if (writer) liveWriters.delete(writer);
   // Even a misbehaving callback that did not await commit cannot release its fence early.
   try {
     await pending;
@@ -253,10 +361,22 @@ export async function withConfigurationGenerationWriter<T>(
               reason: failure instanceof ConfigurationWriterBusyError ? "busy" : "failed",
               cleanupFailed: false,
             };
-    throw new ConfigurationGenerationError(
+    const wrapped = new ConfigurationGenerationError(
       { ...result, cleanupFailed: result.cleanupFailed || cleanupFailed },
       failure,
     );
+    const original = failure instanceof Error ? pendingNonCommits.get(failure) : undefined;
+    if (
+      original &&
+      !cleanupFailed &&
+      wrapped.result.outcome === "not_committed" &&
+      !wrapped.result.cleanupFailed
+    ) {
+      const proof = Object.freeze({}) as OriginalConfigurationGenerationNonCommit;
+      nonCommitSources.set(proof, original);
+      nonCommitErrors.set(wrapped, proof);
+    }
+    throw wrapped;
   }
   return value;
 }
@@ -338,7 +458,9 @@ function resolveInput(
     const entry = saved.get(service.manifest.id);
     const envKeys = new Set(entry?.envKeys ?? []);
     const defaults = Object.entries(
-      flattenResolvedConfig(resolveServiceConfigFromEnv(service.manifest, {})),
+      flattenResolvedConfig(
+        resolveServiceConfigFromEnv(service.manifest, {}, { firstParty: service.isBuiltIn }),
+      ),
     ).filter(([key]) => !envKeys.has(key));
     const values = { ...Object.fromEntries(defaults), ...entry?.values };
     if (Object.keys(values).length > 0) serviceConfigs.set(service.manifest.id, values);
@@ -734,6 +856,28 @@ export function readAppliedServiceIds(
   return new Set(expanded.enabledIds);
 }
 
+/** Exact service closure of the frozen generated base, excluding release-overlay stubs. */
+export function readAppliedComposeServiceIds(
+  infraDir: string,
+  expectedRevisionId: string,
+): string[] {
+  if (currentConfigurationGeneration(infraDir) !== expectedRevisionId)
+    throw Error("Configuration revision changed");
+  const file = configurationGenerationComposeFile(infraDir, expectedRevisionId),
+    metadata = lstatSync(file, { bigint: true });
+  const { contents } = readGenerationFile(file, metadata, MAX_GENERATION_BYTES, [0o400n, 0o600n]);
+  const parsed = loadYaml(new TextDecoder("utf-8", { fatal: true }).decode(contents), {
+    schema: JSON_SCHEMA,
+  }) as { services?: unknown } | undefined;
+  const value = parsed?.services;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw Error("Generated service closure unavailable");
+  const ids = Object.keys(value);
+  if (ids.length > 256 || ids.some((id) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)))
+    throw Error("Invalid generated service closure");
+  return ids;
+}
+
 function readOwnGenerationFile(path: string, modes: readonly bigint[]): string {
   return readGenerationFile(
     path,
@@ -761,6 +905,8 @@ export function readAppliedConfiguration(
   ) as {
     serviceConfigs?: ConfigurationInput["serviceConfigs"];
     integrationConfigs?: ConfigurationInput["integrationConfigs"];
+    platform?: PlatformConfiguration;
+    transitCredentialsRevision?: string;
   };
   const serviceSecrets: ConfigurationInput["serviceSecrets"] = [];
   const secretsRoot = join(generation, GENERATED_SECRETS_DIRNAME);
@@ -777,7 +923,61 @@ export function readAppliedConfiguration(
     serviceConfigs: resolved.serviceConfigs ?? [],
     integrationConfigs: resolved.integrationConfigs ?? [],
     serviceSecrets,
+    ...(resolved.transitCredentialsRevision
+      ? { transitCredentialsRevision: resolved.transitCredentialsRevision }
+      : {}),
+    ...(resolved.platform
+      ? { platform: platformConfigurationSchema.parse(resolved.platform) }
+      : {}),
   };
+}
+
+/** Non-secret encrypted-row revision of the applied managed map. */
+export function readAppliedTransitCredentialsRevision(infraDir: string): string | null {
+  const active = currentConfigurationGeneration(infraDir);
+  if (!active) return null;
+  const resolved = JSON.parse(
+    readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
+  );
+  return resolved.transitCredentialsRevision === undefined
+    ? null
+    : (trustedConfigurationPayloadSchema.shape.transitCredentialsRevision.parse(
+        resolved.transitCredentialsRevision,
+      ) ?? null);
+}
+
+/** Read only non-secret platform metadata, never service secret files. */
+export function readAppliedPlatformConfiguration(
+  infraDir: string,
+): PlatformConfiguration | undefined {
+  const active = currentConfigurationGeneration(infraDir);
+  if (!active) return undefined;
+  const resolved = JSON.parse(
+    readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
+  );
+  return resolved.platform === undefined
+    ? undefined
+    : platformConfigurationSchema.parse(resolved.platform);
+}
+
+/** Resolve each invocation against the currently applied non-secret projection. */
+export function readAppliedPlatformValues(
+  infraDir: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  return resolvePlatformConfiguration({ saved: readAppliedPlatformConfiguration(infraDir), env })
+    .values;
+}
+
+export function readAppliedReleaseSelection(
+  infraDir: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
+  const field = readAppliedPlatformConfiguration(infraDir)?.releaseSelector;
+  return normalizeReleaseSelection(
+    field?.source === "database" ? field.value : env.OPENMAPX_RELEASE,
+    env.OPENMAPX_RELEASE_MANIFEST_REPOSITORY,
+  );
 }
 
 /** Call under writer ownership so the pointer and its projections are one observation.
@@ -802,6 +1002,9 @@ export function inspectAppliedConfiguration(
   });
   return {
     revisionId,
+    ...(resolved.platform
+      ? { platform: platformConfigurationSchema.parse(resolved.platform) }
+      : {}),
     integrationConfigDigests: integrationConfigs.map(({ integrationId, values }) => ({
       integrationId,
       digest: configurationProjectionFingerprint(values),
@@ -817,6 +1020,205 @@ export async function initializeConfigurationGenerations(infraDir: string): Prom
   return withConfigurationGenerationWriter(infraDir, () =>
     initializeOwnedConfigurationGenerations(infraDir),
   );
+}
+
+const RETAINED_GENERATIONS = ".owned-service-generations.json";
+interface GenerationRetention {
+  conservative: string[];
+  containers: Record<string, string[]>;
+}
+function readGenerationRetention(infraDir: string): GenerationRetention {
+  const path = join(infraDir, RETAINED_GENERATIONS);
+  try {
+    const metadata = lstatSync(path, { bigint: true });
+    const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o600n]);
+    const raw = JSON.parse(contents.toString("utf8")) as GenerationRetention;
+    if (
+      !raw ||
+      Object.keys(raw).sort().join(",") !== "conservative,containers" ||
+      !Array.isArray(raw.conservative) ||
+      !raw.containers ||
+      typeof raw.containers !== "object" ||
+      Array.isArray(raw.containers)
+    )
+      throw new Error(UNSAFE);
+    const values = Object.values(raw.containers);
+    if (
+      Object.keys(raw.containers).length > 256 ||
+      Object.keys(raw.containers).some((id) => !/^[a-f0-9]{64}$/.test(id)) ||
+      values.some((ids) => !Array.isArray(ids) || ids.length > 256)
+    )
+      throw new Error(UNSAFE);
+    const revisions = [...raw.conservative, ...values.flat()];
+    if (
+      revisions.length > 512 ||
+      revisions.some((id) => typeof id !== "string" || !REVISION.test(id)) ||
+      new Set(revisions).size > 256
+    )
+      throw new Error(UNSAFE);
+    return raw;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      // An upgraded deployment has no ownership observations yet. Startup and
+      // host-only renders must not prune its old containers' generation files.
+      const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+      let entries: string[];
+      try {
+        const stat = lstatSync(generations);
+        if (
+          !stat.isDirectory() ||
+          stat.isSymbolicLink() ||
+          stat.uid !== (process.geteuid?.() ?? 0) ||
+          (stat.mode & 0o777) !== 0o700
+        )
+          throw new Error(UNSAFE);
+        entries = readdirSync(generations).filter((name) => REVISION.test(name));
+      } catch (missing) {
+        if ((missing as NodeJS.ErrnoException).code === "ENOENT")
+          return { conservative: [], containers: {} };
+        throw missing;
+      }
+      if (entries.length > 256) throw new Error(UNSAFE);
+      for (const revision of entries) configurationGenerationComposeFile(infraDir, revision);
+      return { conservative: entries, containers: {} };
+    }
+    throw error;
+  }
+}
+function retainedConfigurationGenerations(infraDir: string): Set<string> {
+  const retained = readGenerationRetention(infraDir);
+  return new Set([...retained.conservative, ...Object.values(retained.containers).flat()]);
+}
+
+/**
+ * Recover only the first recorded generation of a legacy container whose Docker
+ * labels named the movable current alias. This is path selection, never an
+ * ownership claim: callers must still verify registry, labels and image identity.
+ */
+export function retainedContainerComposeFile(infraDir: string, containerId: string): string | null {
+  if (!/^[a-f0-9]{64}$/.test(containerId)) throw new Error(UNSAFE);
+  const retained = readGenerationRetention(infraDir);
+  const revisions = retained.containers[containerId];
+  if (!revisions) {
+    const current = currentConfigurationGeneration(infraDir);
+    if (
+      [...retained.conservative, ...Object.values(retained.containers).flat()].some(
+        (id) => id !== current,
+      )
+    )
+      throw new Error(UNSAFE);
+    return null;
+  }
+  if (revisions.length !== 1) throw new Error(UNSAFE);
+  return configurationGenerationComposeFile(infraDir, revisions[0] ?? "");
+}
+async function retainConfigurationGenerations(
+  infraDir: string,
+  owned?: CommitConfigurationOptions["ownedServiceGenerations"],
+  observed?: readonly string[],
+): Promise<void> {
+  const previous = readGenerationRetention(infraDir);
+  let retained = previous;
+  if (owned) {
+    if (
+      owned.length > 256 ||
+      new Set(owned.map((entry) => entry.containerId)).size !== owned.length
+    )
+      throw new Error(UNSAFE);
+    if (
+      observed &&
+      (observed.length > 256 ||
+        observed.some((id) => !/^[a-f0-9]{64}$/.test(id)) ||
+        new Set(observed).size !== observed.length)
+    )
+      throw new Error(UNSAFE);
+    // A missing verified claim is not evidence of cleanup. Retain previously
+    // owned IDs still observed by Docker even when their image/provenance no longer verifies.
+    const containers: Record<string, string[]> = Object.fromEntries(
+      Object.entries(previous.containers).filter(([id]) => !observed || observed.includes(id)),
+    );
+    for (const entry of owned) {
+      if (
+        !/^[a-f0-9]{64}$/.test(entry.containerId) ||
+        entry.revisionIds.some((id) => !REVISION.test(id))
+      )
+        throw new Error(UNSAFE);
+      // Labels on a live immutable Docker ID do not change. Remember the first
+      // resolved generation when older containers named the movable current alias.
+      containers[entry.containerId] = previous.containers[entry.containerId] ?? [
+        ...new Set(entry.revisionIds),
+      ];
+    }
+    // Unobserved legacy/CLI generations have no per-container attribution.
+    // Only a complete empty inventory proves that conservative group is unused.
+    retained = { conservative: observed?.length === 0 ? [] : previous.conservative, containers };
+  } else {
+    const active = currentConfigurationGeneration(infraDir);
+    if (active)
+      retained = { ...previous, conservative: [...new Set([...previous.conservative, active])] };
+  }
+  if (new Set([...retained.conservative, ...Object.values(retained.containers).flat()]).size > 256)
+    throw new Error(UNSAFE);
+  const encoded = `${JSON.stringify(retained)}\n`;
+  if (
+    [...retained.conservative, ...Object.values(retained.containers).flat()].length > 512 ||
+    Buffer.byteLength(encoded) > 64 * 1024
+  )
+    throw new Error(UNSAFE);
+  const path = join(infraDir, RETAINED_GENERATIONS);
+  // The generation writer is exclusive. A fixed staging name bounds crash leftovers.
+  const temporary = `${path}.tmp`;
+  try {
+    const stat = lstatSync(temporary);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.nlink !== 1 ||
+      stat.uid !== (process.geteuid?.() ?? 0) ||
+      (stat.mode & 0o777) !== 0o600 ||
+      stat.size > 64 * 1024
+    )
+      throw new Error(UNSAFE);
+    rmSync(temporary);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  try {
+    await writeDurable(temporary, encoded, 0o600);
+    renameSync(temporary, path);
+    await syncDirectory(infraDir);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+/** Validate a retained generation with the same filesystem rules as the active pointer. */
+export function configurationGenerationComposeFile(infraDir: string, revisionId: string): string {
+  if (!REVISION.test(revisionId)) throw new Error(UNSAFE);
+  const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+  const root = lstatSync(generations);
+  if (
+    !root.isDirectory() ||
+    root.isSymbolicLink() ||
+    root.uid !== (process.geteuid?.() ?? 0) ||
+    (root.mode & 0o777) !== 0o700
+  )
+    throw new Error(UNSAFE);
+  const path = join(generations, revisionId);
+  safeGenerationTree(path);
+  return join(path, GENERATED_COMPOSE_FILE);
+}
+
+function ensureConfigurationGenerationBase(infraDir: string, revisionId: string): boolean {
+  try {
+    readConfigurationGenerationBase(infraDir, revisionId);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  symlinkSync(`generations/${revisionId}`, configurationGenerationBasePath(infraDir, revisionId));
+  readConfigurationGenerationBase(infraDir, revisionId);
+  return true;
 }
 
 async function initializeOwnedConfigurationGenerations(infraDir: string): Promise<void> {
@@ -841,7 +1243,8 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   }
   const active = currentConfigurationGeneration(infraDir);
   const entries = readdirSync(generations, { withFileTypes: true });
-  if (entries.length > MAX_GENERATIONS + 8) throw new Error(`${generations} has too many entries`);
+  if (entries.length > MAX_GENERATIONS + 256 + 8)
+    throw new Error(`${generations} has too many entries`);
   const temporaryPaths: string[] = [];
   const complete: Array<{ name: string; path: string; mtimeMs: number }> = [];
   for (const entry of entries) {
@@ -857,10 +1260,19 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
     complete.push({ name: entry.name, path, mtimeMs: lstatSync(path).mtimeMs });
   }
   const pointerTemporaries: string[] = [];
+  const generationBases: { revisionId: string; path: string }[] = [];
   const pointerDirectory = dirname(join(infraDir, CURRENT_CONFIGURATION));
   const pointerName = new RegExp(`^\\.${basename(CURRENT_CONFIGURATION)}\\.[a-f0-9]{32}\\.tmp$`);
   const targetName = new RegExp(`^${pointerTarget(LAYOUT, "cfg1_")}[A-Za-z0-9_-]{43}$`);
   for (const entry of readdirSync(pointerDirectory, { withFileTypes: true })) {
+    if (entry.name.startsWith(basename(CONFIGURATION_GENERATION_BASE_PREFIX))) {
+      const revisionId = entry.name.slice(basename(CONFIGURATION_GENERATION_BASE_PREFIX).length);
+      generationBases.push({
+        revisionId,
+        path: readConfigurationGenerationBase(infraDir, revisionId),
+      });
+      continue;
+    }
     if (!pointerName.test(entry.name)) continue;
     const path = join(pointerDirectory, entry.name);
     const stats = lstatSync(path);
@@ -873,8 +1285,9 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   if (pointerTemporaries.length > 0) await syncDirectory(pointerDirectory);
   // Keep space for the next generation and prune only after every existing
   // entry has passed validation.
+  const retained = retainedConfigurationGenerations(infraDir);
   const removable = complete
-    .filter((entry) => entry.name !== active)
+    .filter((entry) => entry.name !== active && !retained.has(entry.name))
     .sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
   let retainedCount = complete.length;
   while (retainedCount > MAX_GENERATIONS - 1) {
@@ -884,6 +1297,17 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
     retainedCount -= 1;
   }
   if (complete.some((entry) => !existsSync(entry.path))) await syncDirectory(generations);
+  let basesChanged = false;
+  for (const base of generationBases) {
+    if (!existsSync(join(generations, base.revisionId))) {
+      rmSync(base.path);
+      basesChanged = true;
+    }
+  }
+  for (const entry of complete)
+    if (existsSync(entry.path))
+      basesChanged = ensureConfigurationGenerationBase(infraDir, entry.name) || basesChanged;
+  if (basesChanged) await syncDirectory(pointerDirectory);
   if (active && !existsSync(join(generations, active))) {
     throw new Error(`The applied generation ${active} is missing`);
   }
@@ -987,6 +1411,17 @@ export function renderConfiguration(
   const serviceFiles = resolveServiceFiles(options.services, release, overrideOverlay(overrides));
   const context: RenderContext = {
     domain: input.domain,
+    ...(input.platform
+      ? {
+          platform: input.platform,
+          platformValues: resolvePlatformConfiguration({
+            saved: input.platform,
+            overrides: { domain: input.domain },
+          }).values,
+        }
+      : {}),
+    // Runtime supplies a fixed generation alias at this same directory depth.
+    // Keep these bytes compatible with existing current/retained generations.
     agentMountLayout: options.agentMountLayout ?? runningAgentMountLayout(infraDir),
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
     infraDir,
@@ -1030,20 +1465,15 @@ export async function commitConfigurationGeneration(
 async function commitOwnedConfigurationGeneration(
   options: CommitConfigurationOptions,
 ): Promise<CommittedConfiguration> {
-  const { infraDir, input } = options;
   if (
     options.expectedCurrentRevisionId !== undefined &&
     options.expectedCurrentRevisionId !== null &&
     !REVISION.test(options.expectedCurrentRevisionId)
-  ) {
+  )
     throw new Error("Bad expected current generation");
-  }
   options.signal?.throwIfAborted();
-  // Its bind mount is optional, left out when the directory is missing, so
-  // it is there before the generation is rendered.
+  const { infraDir } = options;
   ensureTraefikDynamicDirectory(infraDir);
-  // The first generation with the release's files takes the operator's
-  // checkout edits along as overrides, before it renders.
   const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
   const imported = importCheckoutServiceFiles({
     infraDir,
@@ -1051,12 +1481,50 @@ async function commitOwnedConfigurationGeneration(
     release,
     ...(options.checkoutPosition ? { position: options.checkoutPosition } : {}),
   });
-  const { resolved, context, rendered, serviceFiles, overrides } = renderConfiguration({
+  const rendered = renderConfiguration({
     ...options,
     releaseServiceFiles: release,
     agentMountLayout: options.agentMountLayout?.(),
   });
+  // This store lock concerns retention only. An invocation-level domain
+  // override has already been validated by renderConfiguration above; parsing
+  // unrelated host fields again would incorrectly discard that override.
+  const retentionEnv = { BACKUP_RETENTION_DAYS: process.env.BACKUP_RETENTION_DAYS };
+  const oldDays = resolvePlatformConfiguration({
+    saved: readAppliedPlatformConfiguration(options.infraDir),
+    env: retentionEnv,
+  }).values.backupRetentionDays;
+  const newDays = resolvePlatformConfiguration({ saved: options.input.platform, env: retentionEnv })
+    .values.backupRetentionDays;
+  if (
+    oldDays !== newDays &&
+    options.expectedCurrentRevisionId !== undefined &&
+    options.expectedCurrentRevisionId !== currentConfigurationGeneration(options.infraDir)
+  )
+    throw new ConfigurationGenerationError({
+      outcome: "not_committed",
+      reason: "conflict",
+      currentRevisionId: currentConfigurationGeneration(options.infraDir),
+      cleanupFailed: false,
+    });
+  return withBackupRetentionPolicyChange(options.infraDir, oldDays, newDays, () =>
+    commitOwnedConfigurationFiles(options, rendered, release, imported),
+  );
+}
+async function commitOwnedConfigurationFiles(
+  options: CommitConfigurationOptions,
+  prepared: ReturnType<typeof renderConfiguration>,
+  release: ReleaseServiceFiles,
+  imported: ReturnType<typeof importCheckoutServiceFiles>,
+): Promise<CommittedConfiguration> {
+  const { infraDir, input } = options;
+  const { resolved, context, rendered, serviceFiles, overrides } = prepared;
   const generations = join(infraDir, CONFIGURATION_GENERATIONS);
+  await retainConfigurationGenerations(
+    infraDir,
+    options.ownedServiceGenerations,
+    options.observedServiceContainerIds,
+  );
   await initializeOwnedConfigurationGenerations(infraDir);
   const nonce = randomUUID().replaceAll("-", "");
   const placeholder = options.revisionId ?? `cfg1_${"0".repeat(43)}`;
@@ -1083,6 +1551,10 @@ async function commitOwnedConfigurationGeneration(
       `${JSON.stringify({
         serviceConfigs: input.serviceConfigs,
         integrationConfigs: input.integrationConfigs,
+        ...(input.transitCredentialsRevision
+          ? { transitCredentialsRevision: input.transitCredentialsRevision }
+          : {}),
+        ...(input.platform ? { platform: platformConfigurationSchema.parse(input.platform) } : {}),
       })}\n`,
       0o600,
     );
@@ -1157,6 +1629,8 @@ async function commitOwnedConfigurationGeneration(
       await options.afterGenerationRename?.();
     }
     options.signal?.throwIfAborted();
+    if (ensureConfigurationGenerationBase(infraDir, revisionId))
+      await syncDirectory(dirname(configurationGenerationBasePath(infraDir, revisionId)));
     const currentRevisionId = currentConfigurationGeneration(infraDir);
     if (
       options.expectedCurrentRevisionId !== undefined &&

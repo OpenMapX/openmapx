@@ -13,15 +13,18 @@ export function CapabilityBindingPicker({
   providers,
   value,
   onChange,
+  disabled = false,
 }: {
   capability: string;
   providers: CapabilityProvider[];
   value: string | null;
   onChange: (serviceId: string | null) => void;
+  disabled?: boolean;
 }) {
   return (
     <TextField
       select
+      disabled={disabled}
       size="small"
       label={capability}
       value={value ?? ""}

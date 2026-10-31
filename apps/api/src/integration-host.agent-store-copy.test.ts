@@ -87,14 +87,14 @@ it("loads an integration copied from the checkout out of the agent's store, unti
   const earlier = store(services.legacyAgentStorePaths(infraDir).customIntegrations);
   const published = await earlier.publish(
     {
-      kind: "integration.publish",
+      kind: "catalogIntegration.publish",
       integrationId: "weather-radar",
       source: { kind: "artifact", url, sha256: sha256(readFileSync(archive)) },
     },
     new AbortController().signal,
   );
   await earlier.settle({
-    kind: "integration.settle",
+    kind: "catalogIntegration.settle",
     integrationId: "weather-radar",
     transactionId: published.transactionId,
     outcome: "commit",
@@ -118,7 +118,7 @@ it("loads an integration copied from the checkout out of the agent's store, unti
     directory: join(mount, "weather-radar"),
   });
 
-  await agent.remove({ kind: "integration.remove", integrationId: "weather-radar" });
+  await agent.remove({ kind: "catalogIntegration.remove", integrationId: "weather-radar" });
   await reloadIntegrations();
   expect(getIntegration("weather-radar")).toBeUndefined();
 });

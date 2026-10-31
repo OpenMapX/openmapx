@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
 import type { StageName, StageResult } from "../../src/jobs/transitous/types.js";
@@ -17,6 +18,18 @@ const PINNED_LOCK = {
 };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "catalogPins.inspect") {
+      const pins = createCatalogPinSet(PINNED_LOCK, {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "b".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"b".repeat(40)}/systems.csv`,
+        sha256: "c".repeat(64),
+        lockedAt: PINNED_LOCK.lockedAt,
+        lockedBy: "fixture",
+      });
+      return { active: pins, catalogRevisionId: pins.generationId };
+    }
     if (operation.kind === "transitousLock.inspect") {
       return { active: PINNED_LOCK, proposed: null };
     }
@@ -59,22 +72,96 @@ const ORDERED_STAGES: StageName[] = [
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
+  it("refuses a skipped critical stage when validating a reviewed catalog", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-catalog-critical-"));
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+    });
+    await expect(
+      runTransitousPipeline(ctx, {
+        startAt: "assemble-staging",
+        stopAt: "motis-health",
+        requireCompleteStages: true,
+      }),
+    ).rejects.toThrow(/assemble-staging.*skipped/);
+  });
+
+  it("stops at a failed owner checkpoint before the next stage can mutate", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-owner-"));
+    mkdirSync(join(tmp, ".transitous-catalog", ".git"), { mode: 0o700, recursive: true });
+    mkdirSync(join(tmp, ".transitous-catalog", "feeds"), { mode: 0o700, recursive: true });
+    writeFileSync(
+      join(tmp, ".transitous-catalog", "feeds", "de.json"),
+      JSON.stringify({ sources: [{ name: "fixture" }] }),
+      { mode: 0o600 },
+    );
+    const stages: StageResult[] = [];
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+      runScript: async () => {},
+      onStageComplete: async (result) => {
+        stages.push(result);
+        throw Error("durable execution owner checkpoint lost");
+      },
+    });
+    await expect(runTransitousPipeline(ctx, { stopAt: "filter" })).rejects.toThrow(
+      "durable execution owner checkpoint lost",
+    );
+    expect(stages.map((result) => result.stage)).toEqual(["prepare"]);
+  });
+  it("never reports ok when cancellation follows a successful stage", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-cancel-"));
+    const catalogDir = join(tmp, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { mode: 0o700, recursive: true });
+    const controller = new AbortController();
+    const persisted: StageResult[] = [];
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      runner: async () => {},
+      abortSignal: controller.signal,
+      onStageComplete: async (result) => {
+        persisted.push(result);
+        controller.abort(new Error("operator canceled transit execution"));
+      },
+    });
+
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(/cancel|abort/i);
+    expect(persisted.map(({ stage, status }) => ({ stage, status }))).toEqual([
+      { stage: "prepare", status: "ok" },
+    ]);
+  });
+
   it("invokes all stages in order against an in-memory persistence hook", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-orchestrator-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
     const gtfsDir = join(dataDir, "gtfs");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
-    mkdirSync(join(catalogDir, "src"), { recursive: true });
+    mkdirSync(join(catalogDir, ".git"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "src"), { mode: 0o700, recursive: true });
     writeFileSync(
       join(catalogDir, "feeds", "de.json"),
       JSON.stringify({ sources: [{ name: "BVG" }] }, null, 2),
+      { mode: 0o600 },
     );
     // Stub Transitous python scripts so the gen-* stages dispatch their run.
-    writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n");
-    writeFileSync(join(catalogDir, "src", "generate-attribution.py"), "#!/usr/bin/env python3\n");
-    writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n");
+    writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(catalogDir, "src", "generate-attribution.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
 
     const persisted: StageResult[] = [];
 
@@ -90,13 +177,14 @@ describe("runTransitousPipeline orchestrator", () => {
           writeFileSync(
             join(catalogDir, "out", "config.yml"),
             "timetable:\n  datasets:\n    de_bvg:\n      path: de_bvg.gtfs.zip\n",
+            { mode: 0o600 },
           );
         } else if (run.script === "feed-proxy-vars-to-json") {
-          writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
+          writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}", { mode: 0o600 });
         } else if (run.script === "generate-attribution") {
           // Simulate the upstream script writing its manifest (gen-attribution
           // now asserts the file exists).
-          writeFileSync(join(catalogDir, "out", "license.json"), "[]");
+          writeFileSync(join(catalogDir, "out", "license.json"), "[]", { mode: 0o600 });
         }
       },
       now: () => "2026-05-01T00:00:00.000Z",
@@ -116,6 +204,11 @@ describe("runTransitousPipeline orchestrator", () => {
     // The finalized config and attribution are assembled before any import.
     const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
     expect(byStage["assemble-staging"]?.status).toBe("ok");
+    const proxy = join(ctx.outDir, ".openmapx-feed-proxy");
+    for (const directory of [proxy, join(proxy, "conf")])
+      expect(statSync(directory).mode & 0o777).toBe(0o700);
+    for (const path of [join(proxy, "feed-proxy-vars.json"), join(proxy, "conf/default.conf")])
+      expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(byStage["motis-import"]).toBeUndefined();
     expect(byStage["motis-health"]).toBeUndefined();
     expect(byStage.promote).toBeUndefined();
@@ -132,11 +225,12 @@ describe("runTransitousPipeline orchestrator", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-hardstop-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+    mkdirSync(join(catalogDir, ".git"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
     writeFileSync(
       join(catalogDir, "feeds", "de.json"),
       JSON.stringify({ sources: [{ name: "BVG" }] }, null, 2),
+      { mode: 0o600 },
     );
 
     const persisted: StageResult[] = [];
@@ -174,20 +268,28 @@ describe("runTransitousPipeline orchestrator", () => {
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
     const gtfsDir = join(dataDir, "gtfs");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
-    mkdirSync(join(catalogDir, "src"), { recursive: true });
+    mkdirSync(join(catalogDir, ".git"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "src"), { mode: 0o700, recursive: true });
     writeFileSync(
       join(catalogDir, "feeds", "de.json"),
       JSON.stringify({ sources: [{ name: "BVG" }, { name: "DELFI" }] }, null, 2),
+      { mode: 0o600 },
     );
     writeFileSync(
       join(catalogDir, "feeds", "ch.json"),
       JSON.stringify({ sources: [{ name: "SBB" }] }, null, 2),
+      { mode: 0o600 },
     );
-    writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n");
-    writeFileSync(join(catalogDir, "src", "generate-attribution.py"), "#!/usr/bin/env python3\n");
-    writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n");
+    writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(catalogDir, "src", "generate-attribution.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
+    writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n", {
+      mode: 0o600,
+    });
 
     const ctx = buildJobContext({
       dataDir,
@@ -196,12 +298,12 @@ describe("runTransitousPipeline orchestrator", () => {
       runner: async () => {},
       runScript: async (run) => {
         if (run.script === "fetch") {
-          mkdirSync(gtfsDir, { recursive: true });
+          mkdirSync(gtfsDir, { mode: 0o700, recursive: true });
           writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
           writeFixtureGtfsArchive(join(gtfsDir, "de_delfi.gtfs.zip"));
           writeFixtureGtfsArchive(join(gtfsDir, "ch_sbb.gtfs.zip"));
         } else if (run.script === "generate-attribution") {
-          writeFileSync(join(catalogDir, "out", "license.json"), "[]");
+          writeFileSync(join(catalogDir, "out", "license.json"), "[]", { mode: 0o600 });
         }
       },
       now: () => "2026-05-01T00:00:00.000Z",
@@ -227,11 +329,12 @@ describe("runTransitousPipeline orchestrator", () => {
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
     const gtfsDir = join(dataDir, "gtfs");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+    mkdirSync(join(catalogDir, ".git"), { mode: 0o700, recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
     writeFileSync(
       join(catalogDir, "feeds", "de.json"),
       JSON.stringify({ sources: [{ name: "A" }, { name: "B" }] }, null, 2),
+      { mode: 0o600 },
     );
 
     const ctx = buildJobContext({
@@ -242,7 +345,7 @@ describe("runTransitousPipeline orchestrator", () => {
       runScript: async (run) => {
         if (run.script === "fetch") {
           // Partial fetch: write A, then error attributable to B.
-          mkdirSync(gtfsDir, { recursive: true });
+          mkdirSync(gtfsDir, { mode: 0o700, recursive: true });
           writeFixtureGtfsArchive(join(gtfsDir, "de_a.gtfs.zip"));
           throw new Error("Error: Could not fetch de-B: HTTP 500");
         }

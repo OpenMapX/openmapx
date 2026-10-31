@@ -8,6 +8,64 @@ import {
 } from "./policy";
 
 describe("operation-specific authority policy", () => {
+  it("deselected owned service retains stop and logs but cannot start", async () => {
+    const claimer = createRegistryResourceClaimer({
+      serviceIds: ["worker", "ops-agent", "app-api", "traefik"],
+      enabledServiceIds: () => new Set(),
+      integrationIds: [],
+      trustedData: denyAllTrustedOpsData,
+      ownedServices: {
+        inspectOwnedServices: async () =>
+          ["worker", "ops-agent"].map((serviceId) => ({
+            serviceId,
+            containerId: "a".repeat(64),
+            state: "running",
+            provenance: {
+              project: "docker",
+              composeWorkingDirectory: "/trusted",
+              composeConfigFiles: ["/trusted/docker-compose.generated.yml"],
+              imageId: `sha256:${"b".repeat(64)}`,
+            },
+          })),
+      },
+    });
+    const signal = new AbortController().signal;
+    for (const kind of ["service.stop", "service.logs", "service.logs.follow"] as const) {
+      const operation = { kind, serviceId: "worker", tail: 20, maxDurationSeconds: 1 };
+      await expect(claimer.claim(operation, "a".repeat(64), signal)).resolves.not.toBeNull();
+    }
+    for (const kind of [
+      "service.start",
+      "service.restart",
+      "service.recreate",
+      "service.recreateIsolated",
+      "service.pull",
+      "service.update",
+      "service.build",
+    ] as const) {
+      await expect(
+        claimer.claim(
+          { kind, serviceId: "worker", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
+          "b".repeat(64),
+          signal,
+        ),
+      ).resolves.toBeNull();
+    }
+    await expect(
+      claimer.claim(
+        { kind: "service.logs", serviceId: "ops-agent", tail: 20 },
+        "c".repeat(64),
+        signal,
+      ),
+    ).resolves.not.toBeNull();
+    await expect(
+      claimer.claim({ kind: "service.stop", serviceId: "ops-agent" }, "d".repeat(64), signal),
+    ).resolves.toBeNull();
+    await expect(
+      claimer.claim({ kind: "service.stop", serviceId: "unknown" }, "e".repeat(64), signal),
+    ).resolves.toBeNull();
+  });
+
   it("uses agent-owned backup authority without consulting caller-published trusted data", async () => {
     const trustedClaims: string[] = [];
     const backupClaims: string[] = [];
@@ -173,10 +231,10 @@ describe("operation-specific authority policy", () => {
   });
 
   it("refreshes custom service and integration authority without restarting the agent", async () => {
-    let enabled = new Set(["redis"]);
+    let enabled = new Set(["worker"]);
     let authority = {
       revisionId: "authority-initial",
-      services: [{ serviceId: "redis", enabled: true, isBuiltIn: true }],
+      services: [{ serviceId: "worker", enabled: true, isBuiltIn: true }],
       integrationIds: [] as string[],
     };
     const claimer = createProductionRegistryResourceClaimer({
@@ -191,23 +249,41 @@ describe("operation-specific authority policy", () => {
     });
     const signal = new AbortController().signal;
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "a".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "a".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
 
     authority = {
       revisionId: "authority-installed",
       services: [
-        { serviceId: "redis", enabled: true, isBuiltIn: true },
+        { serviceId: "worker", enabled: true, isBuiltIn: true },
         { serviceId: "community-live", enabled: true, isBuiltIn: false },
       ],
       integrationIds: ["integration-live"],
     };
-    enabled = new Set(["redis", "community-live"]);
+    enabled = new Set(["worker", "community-live"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "b".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "b".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
     const configClaim = await claimer.claim(
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "integration-live",
@@ -223,16 +299,26 @@ describe("operation-specific authority policy", () => {
 
     authority = {
       revisionId: "authority-removed",
-      services: [{ serviceId: "redis", enabled: true, isBuiltIn: true }],
+      services: [{ serviceId: "worker", enabled: true, isBuiltIn: true }],
       integrationIds: [],
     };
-    enabled = new Set(["redis"]);
+    enabled = new Set(["worker"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "community-live" }, "d".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "community-live",
+        },
+        "d".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
     await expect(
       claimer.claim(
         {
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running" as const,
           expectedCurrentRevisionId: null,
           kind: "integrationConfig.apply",
           integrationId: "integration-live",
@@ -247,11 +333,11 @@ describe("operation-specific authority policy", () => {
   it("rolls back the exact pre-admission snapshot when refreshed authority rejects its binding", async () => {
     let rollbacks = 0;
     const claimer = createProductionRegistryResourceClaimer({
-      services: [{ serviceId: "redis", enabled: true, isBuiltIn: true }],
+      services: [{ serviceId: "worker", enabled: true, isBuiltIn: true }],
       integrationIds: [],
       loadAuthority: async () => ({
         revisionId: "authority-current",
-        services: [{ serviceId: "redis", enabled: true, isBuiltIn: true }],
+        services: [{ serviceId: "worker", enabled: true, isBuiltIn: true }],
         integrationIds: [],
       }),
       trustedData: {
@@ -273,6 +359,8 @@ describe("operation-specific authority policy", () => {
     await expect(
       claimer.claim(
         {
+          expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+          coordinatorMode: "require-running" as const,
           expectedCurrentRevisionId: null,
           kind: "stack.render",
           revisionId: `cfg1_${"r".repeat(43)}`,
@@ -286,10 +374,10 @@ describe("operation-specific authority policy", () => {
   });
 
   it("tracks committed generation enable/disable state for lifecycle authority across restart", async () => {
-    let enabled = new Set(["redis", "app-api", "traefik", "ops-agent"]);
+    let enabled = new Set(["worker", "app-api", "traefik", "ops-agent"]);
     const claimer = createProductionRegistryResourceClaimer({
       services: [
-        { serviceId: "redis", enabled: true, isBuiltIn: true },
+        { serviceId: "worker", enabled: true, isBuiltIn: true },
         { serviceId: "motis", enabled: false, isBuiltIn: true },
         { serviceId: "community-enabled", enabled: true, isBuiltIn: false },
         { serviceId: "community-disabled", enabled: false, isBuiltIn: false },
@@ -303,8 +391,11 @@ describe("operation-specific authority policy", () => {
     });
     const signal = new AbortController().signal;
     const operations: OpsOperation[] = [
-      { kind: "service.restart", serviceId: "redis" },
-      { kind: "service.logs", serviceId: "redis", tail: 20 },
+      {
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        kind: "service.start",
+        serviceId: "worker",
+      },
     ];
     for (const operation of operations) {
       await expect(claimer.claim(operation, "a".repeat(64), signal)).resolves.not.toBeNull();
@@ -322,15 +413,31 @@ describe("operation-specific authority policy", () => {
     }
     enabled = new Set(["motis"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "motis" }, "c".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "motis",
+        },
+        "c".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "redis" }, "d".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "worker",
+        },
+        "d".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
     // A reconstructed claimer reads the same recovered generation-owned set.
     const restarted = createProductionRegistryResourceClaimer({
       services: [
-        { serviceId: "redis", enabled: true, isBuiltIn: true },
+        { serviceId: "worker", enabled: true, isBuiltIn: true },
         { serviceId: "motis", enabled: false, isBuiltIn: true },
       ],
       integrationIds: [],
@@ -338,18 +445,33 @@ describe("operation-specific authority policy", () => {
       enabledServiceIds: () => enabled,
     });
     await expect(
-      restarted.claim({ kind: "service.start", serviceId: "motis" }, "e".repeat(64), signal),
+      restarted.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "motis",
+        },
+        "e".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
   });
 
   it("excludes the agent, edge proxy, and self-replaced API from generic lifecycle", async () => {
     const policy = createRegistryResourcePolicy({
-      serviceIds: ["redis", "ops-agent", "traefik", "app-api"],
+      serviceIds: ["worker", "ops-agent", "traefik", "app-api"],
       integrationIds: [],
       trustedData: denyAllTrustedOpsData,
     });
     await expect(
-      authorizeOpsResources({ kind: "service.restart", serviceId: "redis" }, policy),
+      authorizeOpsResources(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "worker",
+        },
+        policy,
+      ),
     ).resolves.toBe(true);
     for (const serviceId of ["ops-agent", "traefik", "app-api"]) {
       await expect(
@@ -401,7 +523,7 @@ describe("operation-specific authority policy", () => {
   it("reapplies registry and never-manage constraints after a trusted complete-operation claim", async () => {
     let sourceCalls = 0;
     const claimer = createRegistryResourceClaimer({
-      serviceIds: ["redis", "motis"],
+      serviceIds: ["worker", "motis"],
       integrationIds: ["routing-motis"],
       trustedData: {
         claim: async () => {
@@ -413,6 +535,8 @@ describe("operation-specific authority policy", () => {
     const signal = new AbortController().signal;
     const forbidden: OpsOperation[] = [
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "serviceConfig.apply",
         serviceId: "ops-agent",
@@ -421,9 +545,11 @@ describe("operation-specific authority policy", () => {
       {
         kind: "backup.restore",
         backupId: "backup_1",
-        serviceIds: ["redis", "traefik"],
+        serviceIds: ["worker", "traefik"],
       },
       {
+        expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+        coordinatorMode: "require-running" as const,
         expectedCurrentRevisionId: null,
         kind: "integrationConfig.apply",
         integrationId: "unregistered-integration",

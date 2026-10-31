@@ -1,6 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { createApiClient } from "@openmapx/core";
 import { integrationAdminOperations } from "@openmapx/core/api-contracts";
-import { configurationProjectionFingerprint } from "@openmapx/core/ops";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import { integrationConfigDbFixture } from "../../services/__tests__/helpers/int
 import type { IntegrationImportPorts } from "../../services/integration-config-import";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
-import { healthCheckSweepLimit, RateLimiter } from "../../utils/rate-limit";
+import { healthCheckSweepLimit, RateLimiter, serviceActionLimit } from "../../utils/rate-limit";
 import { installAdminRouteMocks } from "./admin-test-helpers";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
@@ -18,10 +18,21 @@ const { requireAdmin: mockRequireAdmin, session: fakeSession } = installAdminRou
 // Job runner
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
+const mockImmediateImport = vi.fn();
+const mockImmediateBinding = vi.fn();
+const mockImmediateCredential = vi.fn();
+const expectedBinding = { expectedServiceId: null, expectedRevision: "a".repeat(64) };
+const bindingHeaders = () => {
+  serviceActionLimit.reset();
+  return { "idempotency-key": crypto.randomUUID() };
+};
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: {
+    applyImmediateIntegrationCredential: (...args: unknown[]) => mockImmediateCredential(...args),
+    applyImmediateIntegrationBinding: (...args: unknown[]) => mockImmediateBinding(...args),
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
+    importImmediateIntegrationConfiguration: (...args: unknown[]) => mockImmediateImport(...args),
   },
 }));
 
@@ -84,6 +95,11 @@ vi.mock("../../db/index.js", () => ({
 vi.mock("../../db/schema.js", () => ({
   user: { id: "id", banned: "banned" },
   session: { id: "id", userId: "userId", updatedAt: "updatedAt" },
+  integrationApplicationReceipt: {
+    integrationId: "integration_id",
+    createdAt: "created_at",
+    result: "result",
+  },
   adminAuditLog: {
     id: "id",
     action: "action",
@@ -123,7 +139,7 @@ const MOCK_INTEGRATION = {
     quality: "built-in",
 
     dependencies: [],
-    requires: [],
+    requires: [{ capability: "routing" }],
 
     configSchema: {
       type: "object",
@@ -146,12 +162,37 @@ const mockReloadIntegrations = vi
 const mockResolveConfigWithSources = vi.fn().mockResolvedValue({});
 
 vi.mock("../../integration-host.js", () => ({
+  inspectIntegrationRuntime: () => null,
   getAllIntegrations: (...args: unknown[]) => mockGetAllIntegrations(...args),
   getIntegration: (...args: unknown[]) => mockGetIntegration(...args),
   reloadIntegrations: (...args: unknown[]) => mockReloadIntegrations(...args),
   resolveConfigWithSources: (...args: unknown[]) => mockResolveConfigWithSources(...args),
 }));
 
+vi.mock("../../services/integration-credential-status", async (original) => {
+  const view = async () => {
+    const resolved = await mockResolveConfigWithSources();
+    return {
+      revision: "a".repeat(64),
+      resolved,
+      ownership: {},
+      credentials: [
+        {
+          key: "apiKey",
+          title: "API Key",
+          source: resolved.apiKey?.source ?? "missing",
+          updatedBy: null,
+        },
+      ],
+    };
+  };
+  return {
+    ...(await original<typeof import("../../services/integration-credential-status")>()),
+    inspectIntegrationCredentialView: view,
+    computeCredentialStatus: async () => (await view()).credentials,
+    latestIntegrationApplication: async () => null,
+  };
+});
 // Health services
 const mockGetCachedHealthStatus = vi.fn().mockReturnValue(null);
 const mockExecuteIntegrationHealthCheck = vi.fn().mockResolvedValue([]);
@@ -196,6 +237,19 @@ vi.mock("../../services/admin-ops.js", () => ({
   isDockerAvailable: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock("../../services/administrative-configuration-writer", () => ({
+  withAdministrativeConfigurationRead: async (
+    _options: unknown,
+    run: (read: unknown) => Promise<unknown>,
+  ) => run({}),
+}));
+vi.mock("../../services/integration-binding-state", () => ({
+  capturedBindingState: () => ({
+    bindings: { routing: "fixture-service" },
+    revision: "a".repeat(64),
+    desiredRevision: "a".repeat(64),
+  }),
+}));
 const setBinding = vi.fn();
 const removeBinding = vi.fn();
 const getRegistry = vi.fn();
@@ -229,7 +283,18 @@ beforeEach(() => {
     },
   });
   mockCompensate.mockReset().mockRejectedValue(Error("Must not compensate"));
-  mockApply.mockReset().mockResolvedValue({ revisionId: "revision_1" });
+  mockApply.mockReset().mockResolvedValue({
+    revisionId: "revision_1",
+    integrationReload: { message: "Integrations reloaded", reloaded: 1, enabled: 1 },
+  });
+  mockImmediateImport.mockReset().mockImplementation(async ({ body }) => ({
+    ok: true,
+    imported: body.integrations.length,
+    skipped: [],
+    message: "Integrations reloaded",
+    reloaded: 1,
+    enabled: 1,
+  }));
   mockRequireAdmin.mockReset().mockResolvedValue(fakeSession);
   mockGetIntegration.mockReset().mockReturnValue(MOCK_INTEGRATION);
   mockGetAllIntegrations.mockReset().mockReturnValue([MOCK_INTEGRATION]);
@@ -245,7 +310,25 @@ beforeEach(() => {
   mockIsSecretsConfigured.mockReset().mockReturnValue(true);
   getRegistry.mockReset().mockReturnValue({
     get: (id: string) =>
-      id === "fixture-service" ? { manifest: { id, provides: ["routing"] } } : undefined,
+      id === "fixture-service"
+        ? { enabled: true, manifest: { id, provides: ["routing"] } }
+        : undefined,
+  });
+  mockImmediateCredential.mockReset().mockResolvedValue({
+    operationId: "credential-sdk-fixture",
+    integrationId: "geocoding-maptiler",
+    desiredRevision: "a".repeat(64),
+    database: "retained",
+    runtime: "applied",
+    runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+  });
+  mockImmediateBinding.mockReset().mockResolvedValue({
+    operationId: "binding-sdk-fixture",
+    integrationId: "geocoding-maptiler",
+    desiredRevision: "a".repeat(64),
+    database: "retained",
+    runtime: "applied",
+    runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
   });
   setBinding.mockReset().mockResolvedValue(undefined);
   removeBinding.mockReset().mockResolvedValue(undefined);
@@ -268,6 +351,12 @@ async function wire() {
   });
   await app.register(adminRoute, { prefix: "/api" });
   await registerCapabilityBindingRoutes(app);
+  for (const route of [
+    (await import("../admin-standalone-integrations")).adminStandaloneIntegrationsRoute,
+    (await import("../admin-configuration-migration")).adminConfigurationMigrationRoute,
+    (await import("../admin-credential-transfer")).adminCredentialTransferRoute,
+  ])
+    await app.register(route, { prefix: "/api" });
   await app.ready();
   const transport = administrationSdkFetch(app);
   vi.stubGlobal("fetch", (input: string | Request | URL, init?: RequestInit) => {
@@ -278,7 +367,7 @@ async function wire() {
   return { app, registered, client };
 }
 describe("actual integration producers through generated SDK", () => {
-  it("exports and executes exactly all 22 registered operations with full serialized fields", async () => {
+  it("exports all 35 registered operations and executes integration producers with full serialized fields", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     for (const id of Object.keys(integrationAdminOperations))
       expect(sdk).toHaveProperty(id, expect.any(Function));
@@ -306,20 +395,52 @@ describe("actual integration producers through generated SDK", () => {
         () =>
           sdk.importAdminIntegrationConfigs(
             { integrations: [{ integrationId: id, config: { label: "new" } }] },
+            { "idempotency-key": crypto.randomUUID() },
             options,
           ),
         () => sdk.runAdminIntegrationHealthChecks(undefined, options),
         () => sdk.reloadAdminIntegrations(undefined, options),
-        () => sdk.patchAdminIntegrationConfig(id, { label: "new" }, options),
-        () => sdk.enableAdminIntegration(id, undefined, options),
-        () => sdk.disableAdminIntegration(id, undefined, options),
+        () =>
+          sdk.patchAdminIntegrationConfig(
+            id,
+            { label: "new" },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.enableAdminIntegration(
+            id,
+            { "idempotency-key": crypto.randomUUID() },
+            undefined,
+            options,
+          ),
+        () =>
+          sdk.disableAdminIntegration(
+            id,
+            { "idempotency-key": crypto.randomUUID() },
+            undefined,
+            options,
+          ),
         () => sdk.getAdminIntegrationHealth(id, options),
         () => sdk.getAdminIntegrationHealthHistory(id, undefined, options),
         () => sdk.reloadAdminIntegration(id, undefined, options),
         () => sdk.listAdminIntegrationBindings(id, options),
         () =>
-          sdk.setAdminIntegrationBinding(id, "routing", { serviceId: "fixture-service" }, options),
-        () => sdk.deleteAdminIntegrationBinding(id, "routing", undefined, options),
+          sdk.setAdminIntegrationBinding(
+            id,
+            "routing",
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
+            options,
+          ),
+        () =>
+          sdk.deleteAdminIntegrationBinding(
+            id,
+            "routing",
+            expectedBinding,
+            bindingHeaders(),
+            options,
+          ),
         () => sdk.listAdminCredentials(options),
         () => sdk.getAdminIntegrationCredentials(id, options),
         () => {
@@ -336,10 +457,18 @@ describe("actual integration producers through generated SDK", () => {
           sdk.setAdminIntegrationCredential(
             id,
             "apiKey",
-            { value: "synthetic-credential" },
+            { value: "synthetic-credential", expectedRevision: "a".repeat(64) },
+            { "idempotency-key": crypto.randomUUID() },
             options,
           ),
-        () => sdk.deleteAdminIntegrationCredential(id, "apiKey", undefined, options),
+        () =>
+          sdk.deleteAdminIntegrationCredential(
+            id,
+            "apiKey",
+            { expectedRevision: "a".repeat(64) },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
         () => sdk.getAdminOverview(options),
       ];
       for (const call of cases)
@@ -361,65 +490,61 @@ describe("actual integration producers through generated SDK", () => {
     }
   });
   it.each(["patch", "enable", "disable"] as const)(
-    "merges overlapping ordinary %s with a completed import at the locked row",
+    "forwards ordinary %s as a finite candidate overlay without route-local writes",
     async (kind) => {
-      const sdk = await import("@openmapx/core/api-admin-sdk");
-      const { app, client } = await wire();
+      const sdk = await import("@openmapx/core/api-admin-sdk"),
+        { app, client } = await wire();
       const id = MOCK_INTEGRATION.id;
-      const initialEnabled = kind === "disable";
-      configDb.reset([
-        {
-          id: "row-a",
-          integrationId: id,
-          config: { label: "old", nested: { count: 1 }, enabled: initialEnabled },
-          version: "0",
-        },
-      ]);
-      const reached = Promise.withResolvers<void>();
-      const resume = Promise.withResolvers<void>();
-      // Before the row lock: the old handler has already read/merged stale data.
-      // A corrected handler carries only intent into this same transaction boundary.
-      configDb.beforeTransaction = async () => {
-        reached.resolve();
-        await resume.promise;
-      };
-      const ordinary =
-        kind === "patch"
-          ? sdk.patchAdminIntegrationConfig(id, { nested: { count: 9 } }, { client })
-          : kind === "enable"
-            ? sdk.enableAdminIntegration(id, undefined, { client })
-            : sdk.disableAdminIntegration(id, undefined, { client });
       try {
-        await reached.promise;
-        expect(
-          await sdk.importAdminIntegrationConfigs(
-            {
-              integrations: [
+        const response =
+          kind === "patch"
+            ? await sdk.patchAdminIntegrationConfig(
+                id,
+                { nested: { count: 9 } },
+                { "idempotency-key": crypto.randomUUID() },
+                { client },
+              )
+            : kind === "enable"
+              ? await sdk.enableAdminIntegration(
+                  id,
+                  { "idempotency-key": crypto.randomUUID() },
+                  undefined,
+                  { client },
+                )
+              : await sdk.disableAdminIntegration(
+                  id,
+                  { "idempotency-key": crypto.randomUUID() },
+                  undefined,
+                  { client },
+                );
+        expect(response).toMatchObject({ status: 200, data: { ok: true } });
+        expect(mockApply).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            kind: "integrationConfig.apply",
+            integrationId: id,
+            overlay: {
+              purpose: "integration-config",
+              coordinatorMode: "ensure-running",
+              changes: [
                 {
+                  kind: "integration-config",
                   integrationId: id,
-                  config: { label: "imported", nested: { count: 2 }, enabled: initialEnabled },
+                  set: kind === "patch" ? { nested: { count: 9 } } : { enabled: kind === "enable" },
+                  unset: [],
                 },
               ],
             },
-            { client },
-          ),
-        ).toMatchObject({ status: 200, data: { ok: true, imported: 1 } });
-        resume.resolve();
-        expect(await ordinary).toMatchObject({ status: 200, data: { ok: true } });
-        expect(configDb.rows[0].config).toEqual({
-          label: "imported",
-          nested: { count: kind === "patch" ? 9 : 2 },
-          enabled: kind === "patch" ? initialEnabled : kind === "enable",
-        });
+          }),
+        );
+        expect(configDb.writes).toBe(0);
+        expect(mockReloadIntegrations).not.toHaveBeenCalled();
       } finally {
-        resume.resolve();
-        await ordinary;
         await app.close();
       }
     },
   );
   it.each(["patch", "enable", "disable"] as const)(
-    "does not let an older ordinary %s rollback overwrite a completed import",
+    "does not perform a route-local inverse after an older ordinary %s producer fails",
     async (kind) => {
       const sdk = await import("@openmapx/core/api-admin-sdk");
       const { app, client } = await wire();
@@ -447,21 +572,38 @@ describe("actual integration producers through generated SDK", () => {
       });
       const ordinary =
         kind === "patch"
-          ? sdk.patchAdminIntegrationConfig(id, { nested: { count: 9 } }, { client })
+          ? sdk.patchAdminIntegrationConfig(
+              id,
+              { nested: { count: 9 } },
+              { "idempotency-key": crypto.randomUUID() },
+              { client },
+            )
           : kind === "enable"
-            ? sdk.enableAdminIntegration(id, undefined, { client })
-            : sdk.disableAdminIntegration(id, undefined, { client });
+            ? sdk.enableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              )
+            : sdk.disableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              );
       try {
         await reached.promise;
         expect(
           await sdk.importAdminIntegrationConfigs(
             { integrations: [{ integrationId: id, config: { label: "imported", enabled: true } }] },
+            { "idempotency-key": crypto.randomUUID() },
             { client },
           ),
         ).toMatchObject({ status: 200 });
         resume.resolve();
         expect(await ordinary).toMatchObject({ status: 500 });
-        expect(configDb.rows[0].config).toEqual({ label: "imported", enabled: true });
+        expect(configDb.rows[0].config).toEqual({ label: "old", enabled: kind === "disable" });
+        expect(configDb.writes).toBe(0);
       } finally {
         resume.resolve();
         await ordinary;
@@ -489,25 +631,34 @@ describe("actual integration producers through generated SDK", () => {
           await sdk.setAdminIntegrationBinding(
             "fixture",
             "routing",
-            { serviceId: "fixture-service" },
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
             { client },
           )
         ).status,
       ).toBe(403);
       mockRequireAdmin.mockResolvedValue(fakeSession);
-      setBinding.mockRejectedValueOnce(Error("synthetic-secret"));
+      mockImmediateBinding.mockRejectedValueOnce(Error("synthetic-secret"));
       const failed = await sdk.setAdminIntegrationBinding(
         "fixture",
         "routing",
-        { serviceId: "fixture-service" },
+        { serviceId: "fixture-service", ...expectedBinding },
+        bindingHeaders(),
         { client },
       );
       expect(failed.status).toBe(500);
       expect(JSON.stringify(failed)).not.toContain("synthetic-secret");
-      removeBinding.mockRejectedValueOnce(Error("synthetic-secret"));
+      mockImmediateBinding.mockRejectedValueOnce(Error("synthetic-secret"));
       expect(
-        (await sdk.deleteAdminIntegrationBinding("fixture", "routing", undefined, { client }))
-          .status,
+        (
+          await sdk.deleteAdminIntegrationBinding(
+            "fixture",
+            "routing",
+            expectedBinding,
+            bindingHeaders(),
+            { client },
+          )
+        ).status,
       ).toBe(500);
       getRegistry.mockImplementationOnce(() => {
         throw Error("unavailable");
@@ -517,7 +668,8 @@ describe("actual integration producers through generated SDK", () => {
           await sdk.setAdminIntegrationBinding(
             "fixture",
             "routing",
-            { serviceId: "fixture-service" },
+            { serviceId: "fixture-service", ...expectedBinding },
+            bindingHeaders(),
             { client },
           )
         ).status,
@@ -550,10 +702,21 @@ describe("actual integration producers through generated SDK", () => {
       expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
       mockIsSecretsConfigured.mockReturnValueOnce(false);
       expect(
-        await sdk.setAdminIntegrationCredential(id, "apiKey", { value: "synthetic" }, { client }),
+        await sdk.setAdminIntegrationCredential(
+          id,
+          "apiKey",
+          { value: "synthetic", expectedRevision: "a".repeat(64) },
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
       ).toMatchObject({ status: 503, data: { hint: expect.any(String) } });
-      mockReloadIntegrations.mockRejectedValueOnce(Error("synthetic-secret"));
-      const failed = await sdk.enableAdminIntegration(id, undefined, { client });
+      mockApply.mockRejectedValueOnce(Error("synthetic-secret"));
+      const failed = await sdk.enableAdminIntegration(
+        id,
+        { "idempotency-key": crypto.randomUUID() },
+        undefined,
+        { client },
+      );
       expect(failed.status).toBe(500);
       expect(JSON.stringify(failed)).not.toContain("synthetic-secret");
       const malformed = await app.inject({
@@ -611,6 +774,7 @@ describe("actual integration producers through generated SDK", () => {
             },
           ],
         },
+        { "idempotency-key": crypto.randomUUID() },
         { client },
       );
       expect(response.status).toBe(400);
@@ -635,71 +799,31 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
-  describe.each(["incomplete", "reload"] as const)("unproven prior state after %s", (failure) => {
-    it.each(["conflict", "unknown", "retained"] as const)(
-      "carries %s through actual import, generated SDK and browser formatter",
-      async (database) => {
-        const sdk = await import("@openmapx/core/api-admin-sdk");
-        const { integrationErrorMessage } = await import(
-          "../../../../web/src/lib/admin/integrationErrors"
-        );
-        const { app, client } = await wire();
-        const id = MOCK_INTEGRATION.id;
-        configDb.reset([
-          { id: "row-alpha", integrationId: id, config: { label: "saved-before" }, version: "0" },
-        ]);
-        const settleFailure = () => {
-          if (database === "conflict") {
-            configDb.rows[0].config = { label: "competing-edit" };
-            configDb.rows[0].version = "competing-version";
-          }
-          if (database === "unknown")
-            mockDbSelect.mockImplementationOnce(() => {
-              throw Error("synthetic ownership failure");
-            });
-        };
-        const outcome = {
-          outcome: "committed" as const,
-          revisionId: `cfg1_${"b".repeat(43)}`,
-          enabledServiceIds: [],
-          followUp: failure === "incomplete" ? ("failed" as const) : ("complete" as const),
-          cleanupFailed: false,
-          publisherCleanupFailed: false,
-          registryUpdateFailed: false,
-        };
-        mockApplyWithEvidence.mockImplementationOnce(async () => {
-          if (failure === "incomplete") settleFailure();
-          return {
-            payload: {
-              domain: "fixture.invalid",
-              serviceConfigs: [],
-              serviceSecrets: [],
-              integrationConfigs: [{ integrationId: id, values: { label: "imported" } }],
-            },
-            previousApplied: {
-              revisionId: `cfg1_${"a".repeat(43)}`,
-              integrationConfigDigests: [
-                {
-                  integrationId: id,
-                  digest: configurationProjectionFingerprint({ label: "live-before" }),
-                },
-              ],
-            },
-            outcome,
-          };
-        });
-        if (failure === "reload")
-          mockReloadIntegrations.mockImplementationOnce(async () => {
-            settleFailure();
-            throw Error("synthetic reload failure");
-          });
-        try {
-          const response = await sdk.importAdminIntegrationConfigs(
-            { integrations: [{ integrationId: id, config: { label: "imported" } }] },
-            { client },
+  describe.each(["incomplete", "reload"] as const)(
+    "retained failure projection after %s",
+    (failure) => {
+      it.each(["conflict", "unknown", "retained"] as const)(
+        "carries retained %s evidence through the registered route, generated SDK and browser formatter",
+        async (database) => {
+          const sdk = await import("@openmapx/core/api-admin-sdk");
+          const { integrationErrorMessage } = await import(
+            "../../../../web/src/lib/admin/integrationErrors"
           );
-          expect(response.status).toBe(409);
-          expect(response.data).toEqual({
+          const { app, client } = await wire();
+          const id = MOCK_INTEGRATION.id;
+          configDb.reset([
+            { id: "row-alpha", integrationId: id, config: { label: "saved-before" }, version: "0" },
+          ]);
+          const outcome = {
+            outcome: "committed" as const,
+            revisionId: `cfg1_${"b".repeat(43)}`,
+            enabledServiceIds: [],
+            followUp: failure === "incomplete" ? ("failed" as const) : ("complete" as const),
+            cleanupFailed: false,
+            publisherCleanupFailed: false,
+            registryUpdateFailed: false,
+          };
+          mockImmediateImport.mockResolvedValueOnce({
             ok: false,
             error: "Integration import failed",
             recovery: "reconciliation_required",
@@ -709,35 +833,52 @@ describe("actual integration producers through generated SDK", () => {
             runtime: failure === "incomplete" ? "unchanged" : "unknown",
             apply: outcome,
           });
-          let displayed = "";
           try {
-            sdk.unwrapAdminResponse(response);
-          } catch (error) {
-            displayed = integrationErrorMessage(error, "Import failed");
-          }
-          if (database === "retained")
-            expect(displayed).toContain("The imported configuration is saved.");
-          else {
-            expect(displayed).toContain(
-              database === "conflict"
-                ? "newer edits were preserved"
-                : "The saved configuration is uncertain.",
+            const response = await sdk.importAdminIntegrationConfigs(
+              { integrations: [{ integrationId: id, config: { label: "imported" } }] },
+              { "idempotency-key": crypto.randomUUID() },
+              { client },
             );
-            expect(displayed).not.toContain("The imported configuration is saved.");
+            expect(response.status).toBe(409);
+            expect(response.data).toEqual({
+              ok: false,
+              error: "Integration import failed",
+              recovery: "reconciliation_required",
+              reason: "previous_applied_not_proven",
+              database,
+              phase: failure === "incomplete" ? "apply" : "reload",
+              runtime: failure === "incomplete" ? "unchanged" : "unknown",
+              apply: outcome,
+            });
+            let displayed = "";
+            try {
+              sdk.unwrapAdminResponse(response);
+            } catch (error) {
+              displayed = integrationErrorMessage(error, "Import failed");
+            }
+            if (database === "retained")
+              expect(displayed).toContain("The imported configuration is saved.");
+            else {
+              expect(displayed).toContain(
+                database === "conflict"
+                  ? "newer edits were preserved"
+                  : "The saved configuration is uncertain.",
+              );
+              expect(displayed).not.toContain("The imported configuration is saved.");
+            }
+            expect(configDb.rows[0].config).toEqual({ label: "saved-before" });
+            expect(configDb.writes).toBe(0);
+            expect(mockImmediateImport).toHaveBeenCalledTimes(1);
+            expect(mockCompensate).not.toHaveBeenCalled();
+            expect(mockApplyWithEvidence).not.toHaveBeenCalled();
+            expect(mockReloadIntegrations).not.toHaveBeenCalled();
+          } finally {
+            await app.close();
           }
-          expect(configDb.rows[0].config).toEqual({
-            label: database === "conflict" ? "competing-edit" : "imported",
-          });
-          expect(configDb.writes).toBe(1);
-          expect(mockCompensate).not.toHaveBeenCalled();
-          expect(mockApplyWithEvidence).toHaveBeenCalledTimes(1);
-          expect(mockReloadIntegrations).toHaveBeenCalledTimes(failure === "reload" ? 1 : 0);
-        } finally {
-          await app.close();
-        }
-      },
-    );
-  });
+        },
+      );
+    },
+  );
   it("validates the whole import before writes and carries explicit reconciliation evidence over generated transport", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();
@@ -768,9 +909,17 @@ describe("actual integration producers through generated SDK", () => {
         ).toBe(400);
       }
       expect(configDb.writes).toBe(0);
-      configDb.failWrite = true;
+      mockImmediateImport.mockResolvedValueOnce({
+        ok: false,
+        error: "Integration import failed",
+        phase: "persistence",
+        recovery: "reconciliation_required",
+        database: "unknown",
+        runtime: "unchanged",
+      });
       const failed = await sdk.importAdminIntegrationConfigs(
         { integrations: [{ integrationId: "geocoding-maptiler", config: {} }] },
+        { "idempotency-key": crypto.randomUUID() },
         { client },
       );
       expect(failed).toMatchObject({
@@ -808,6 +957,39 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it.each(["set", "delete"] as const)(
+    "reports %s credential reconciliation as unavailable rather than an internal error",
+    async (action) => {
+      const { JobObservationPending } = await import("../../services/admin-job-failure");
+      mockImmediateCredential.mockRejectedValue(new JobObservationPending("recovery_required"));
+      const sdk = await import("@openmapx/core/api-admin-sdk"),
+        { app, client } = await wire();
+      try {
+        const headers = { "idempotency-key": randomUUID() },
+          body = { expectedRevision: "a".repeat(64) };
+        const result =
+          action === "set"
+            ? await sdk.setAdminIntegrationCredential(
+                "geocoding-maptiler",
+                "apiKey",
+                { ...body, value: "synthetic" },
+                headers,
+                { client },
+              )
+            : await sdk.deleteAdminIntegrationCredential(
+                "geocoding-maptiler",
+                "apiKey",
+                body,
+                headers,
+                { client },
+              );
+        expect(result.status).toBe(503);
+        expect(result.data).toMatchObject({ error: expect.stringMatching(/reconciliation/) });
+      } finally {
+        await app.close();
+      }
+    },
+  );
   it("retains real cookie CSRF and the public rate floor", async () => {
     const app = Fastify();
     const limiter = new RateLimiter({ max: 2, windowMs: 60000 });

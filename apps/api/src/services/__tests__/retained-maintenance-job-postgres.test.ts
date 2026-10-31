@@ -1,0 +1,1126 @@
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Writable } from "node:stream";
+import { createApiClient } from "@openmapx/core";
+import {
+  clearAdminReleaseSelection,
+  createAdminArtifactTransfer,
+  downloadAdminArtifactTransferContent,
+  exportAdminArtifactTransfer,
+  getAdminArtifactTransferCapabilities,
+  importAdminArtifactTransfer,
+  previewAdminArtifactImport,
+  previewAdminBackupPrune,
+  pruneAdminServiceBackups,
+  pullAdminServiceImages,
+  renderAdminComposeConfiguration,
+  uploadAdminArtifactTransferContent,
+  validateAdminArtifactTransfer,
+} from "@openmapx/core/api-admin-sdk";
+import {
+  closeControlInstallation,
+  DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+  openControlInstallation,
+  writeBuildBundle,
+} from "@openmapx/core/build-artifacts";
+import { services } from "@openmapx/core/server";
+import { eq, inArray } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
+import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
+import {
+  createProductionOpsRuntime,
+  productionOwnedServices,
+} from "../../../../ops-agent/src/production-runtime";
+import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
+import { adminJob, user } from "../../db/schema";
+import {
+  createAdminTestApp,
+  installAdminRouteMocks,
+} from "../../routes/__tests__/admin-test-helpers";
+import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+
+const state = vi.hoisted(() => ({
+  fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
+  services: [] as services.LoadedService[],
+}));
+vi.mock("../../db", () => ({
+  get db() {
+    return state.fixture.db;
+  },
+  get sql() {
+    return state.fixture.sql;
+  },
+}));
+
+vi.mock("../../integration-host", () => ({ getAllIntegrations: () => [] }));
+vi.mock("../service-registry", () => ({
+  getServiceRegistry: () => ({
+    list: () => state.services,
+    get: (id: string) => state.services.find((service) => service.manifest.id === id),
+    applyEnabledIds: (ids: Set<string>) => {
+      for (const service of state.services) service.enabled = ids.has(service.manifest.id);
+    },
+  }),
+}));
+const adminMocks = installAdminRouteMocks();
+
+import { MaintenanceRequestConflict, retainMaintenanceJob } from "../retained-maintenance-job";
+
+const dbDescribe = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
+dbDescribe("retained finite maintenance requests", () => {
+  let root: string, actor: string;
+  const acceptedIds: string[] = [];
+  beforeAll(async () => {
+    state.fixture = await createMigratedPostgresFixture();
+    root = await mkdtemp(join(tmpdir(), "openmapx-maintenance-key-"));
+    const token = join(root, "token");
+    await writeFile(token, Buffer.alloc(32, 91).toString("base64url"), { mode: 0o600 });
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", token);
+    actor = randomUUID();
+    adminMocks.session.user.id = actor;
+    await state.fixture.db.insert(user).values({
+      id: actor,
+      email: `${actor}@example.test`,
+      name: "Synthetic administrator",
+      role: "admin",
+    });
+  }, 90000);
+  afterAll(async () => {
+    vi.unstubAllEnvs();
+    await state.fixture?.stop();
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+  const body = { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" };
+  it.each([false, true, "cancel"] as const)(
+    "validates uploaded bundle bytes through actual SDK, queued SQL job and production agent (result loss=%s)",
+    async (loseImportResult) => {
+      const keySuffix =
+        loseImportResult === "cancel" ? "-canceled-result" : loseImportResult ? "-lost-result" : "";
+      const host = await ownedServiceHost({ extraServiceIds: ["osrm"] });
+      state.services = host.loaded;
+      const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      });
+      let journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      const { ArtifactTransferStore } = await import(
+          "../../../../ops-agent/src/artifact-transfer/store"
+        ),
+        { installArtifactTransferRuntime } = await import(
+          "../../../../ops-agent/src/artifact-transfer/runtime"
+        );
+      let store = new ArtifactTransferStore({
+        dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
+        privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
+        token: host.token,
+        capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
+      });
+      const stores = [store];
+      installArtifactTransferRuntime(host.runtime, store);
+      const { installPreparedImportRuntime } = await import(
+        "../../../../ops-agent/src/artifact-transfer/import-runtime"
+      );
+      installPreparedImportRuntime(host.runtime, store, {
+        rootDir: host.root,
+        infraDir: host.infraDir,
+        stack: host.stack,
+        loadAuthority: host.loadAuthority,
+        ownedServices: host.owned,
+        execFile: host.execFile,
+      });
+      let agent = buildOpsAgentServer({
+        runtime: host.runtime,
+        resourceClaimer: host.claimer,
+        journal,
+        controlInstallation: installation,
+        artifactTransfers: store,
+        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      });
+      agent.addHook("preHandler", async (request, reply) => {
+        const operation = (
+          request.body as
+            | { operation?: { kind?: string; identity?: { executionId?: string } } }
+            | undefined
+        )?.operation;
+        if (
+          loseImportResult &&
+          operation?.kind === "artifactTransfer.inspectClaim" &&
+          journal
+            .records()
+            .some(
+              (record) =>
+                record.operationId === operation.identity?.executionId &&
+                record.operation.kind === "artifactTransfer.import",
+            )
+        )
+          return reply.code(503).send({ error: "Named unavailable original import observer" });
+      });
+      let lostAdmission = false;
+      agent.addHook("onSend", async (request, reply, payload) => {
+        if (
+          !lostAdmission &&
+          reply.statusCode === 202 &&
+          (request.body as { operation?: { kind?: string } } | undefined)?.operation?.kind ===
+            "artifactTransfer.validate"
+        ) {
+          lostAdmission = true;
+          reply.code(503);
+          return JSON.stringify({ error: "Synthetic lost validation admission response" });
+        }
+        return payload;
+      });
+      const tokenFile = join(host.root, "validation-api-token");
+      writeFileSync(tokenFile, host.token, { mode: 0o600 });
+      const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
+      vi.stubEnv("OPS_AGENT_URL", agentUrl);
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+      const { jobRunner } = await import("../job-runner"),
+        {
+          handlePreparedArtifactValidationJob,
+          handlePreparedArtifactImportJob,
+          handlePreparedArtifactExportJob,
+        } = await import("../admin-artifact-validation"),
+        { adminArtifactTransfersRoute } = await import("../../routes/admin-artifact-transfers");
+      jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
+      jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
+      jobRunner.register("artifact.export", handlePreparedArtifactExportJob);
+      const api = await createAdminTestApp(adminArtifactTransfersRoute, { prefix: "/api" }),
+        url = await api.listen({ host: "127.0.0.1", port: 0 }),
+        options = { client: createApiClient({ baseUrl: url }) };
+      const source = join(host.root, "validation-source");
+      mkdirSync(join(source, "osrm-graph"), { recursive: true });
+      for (const name of [
+        "region.osrm",
+        "region.osrm.partition",
+        "region.osrm.cells",
+        "region.osrm.mldgr",
+      ])
+        writeFileSync(join(source, "osrm-graph", name), `synthetic ${name}`);
+      const chunks: Buffer[] = [];
+      await writeBuildBundle({
+        dataRoot: source,
+        serviceId: "osrm",
+        record: {
+          schemaVersion: 1,
+          service: "osrm",
+          builtAt: "2026-10-30T00:00:00.000Z",
+          runtimeImages: { osrm: "example/osrm:1" },
+          toolImages: {},
+        },
+        target: new Writable({
+          write(chunk, _encoding, done) {
+            chunks.push(Buffer.from(chunk));
+            done();
+          },
+        }),
+        limits: DEFAULT_ARTIFACT_ARCHIVE_LIMITS,
+        signal: new AbortController().signal,
+      });
+      const bytes = Buffer.concat(chunks);
+      try {
+        const created = await createAdminArtifactTransfer(
+          { purpose: "prepared-artifact", direction: "upload", declaredBytes: bytes.length },
+          { "idempotency-key": `actual-prepared-stage-create-001${keySuffix}` },
+          options,
+        );
+        expect(created.status).toBe(200);
+        if (created.status !== 200) throw Error("No stage");
+        expect(
+          (
+            await uploadAdminArtifactTransferContent(
+              created.data.stageId,
+              new Blob([bytes]),
+              options,
+            )
+          ).status,
+        ).toBe(200);
+        const key = { "idempotency-key": `actual-prepared-stage-validation-001${keySuffix}` },
+          accepted = await validateAdminArtifactTransfer(created.data.stageId, key, options);
+        expect(accepted.status).toBe(202);
+        if (accepted.status !== 202) throw Error("Validation unavailable");
+        await vi.waitFor(
+          async () => {
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, accepted.data.jobId));
+            expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+              "success",
+            );
+            expect(row?.result).toMatchObject({
+              operation: "validate-artifact",
+              stage: { stageId: created.data.stageId, state: "ready" },
+            });
+          },
+          { timeout: 20000, interval: 100 },
+        );
+        expect(
+          (await validateAdminArtifactTransfer(created.data.stageId, key, options)).data,
+        ).toEqual(accepted.data);
+        const preview = await previewAdminArtifactImport(created.data.stageId, options);
+        expect(preview.status).toBe(200);
+        if (preview.status !== 200) throw Error("Import preview unavailable");
+        expect(preview.data.blockers).toEqual([]);
+        const body = {
+            expectedSha256: preview.data.sha256,
+            previewFingerprint: preview.data.fingerprint,
+            expectedCurrentRevisionId: preview.data.currentRevisionId,
+          },
+          importKey = { "idempotency-key": `actual-prepared-stage-import-001${keySuffix}` };
+        if (loseImportResult) {
+          const originalRead = store.withPreparedArtifact.bind(store);
+          let lost = false;
+          vi.spyOn(store, "withPreparedArtifact").mockImplementation(async (input, consume) => {
+            const value = await originalRead(input, consume);
+            if (!lost && existsSync(join(host.infraDir, "data/.openmapx-builds/osrm.json"))) {
+              lost = true;
+              throw Error("Named lost completed-import result");
+            }
+            return value;
+          });
+        }
+        const imported = await importAdminArtifactTransfer(
+          created.data.stageId,
+          body,
+          importKey,
+          options,
+        );
+        expect(imported.status).toBe(202);
+        if (imported.status !== 202) throw Error("Import admission unavailable");
+        let historicalTerminal: string | undefined;
+        let lostPurposeAck = false;
+        const purposeReads: { status: number; publication: boolean }[] = [];
+        if (loseImportResult) {
+          await vi.waitFor(
+            () =>
+              expect(
+                journal.records().find((row) => row.operation.kind === "artifactTransfer.import")
+                  ?.state,
+              ).toBe("failed"),
+            { timeout: 30000, interval: 50 },
+          );
+          const original = journal
+            .records()
+            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+          historicalTerminal = JSON.stringify({
+            state: original.state,
+            errorClass: original.errorClass,
+            terminalAt: original.terminalAt,
+            updatedAt: original.updatedAt,
+          });
+          if (loseImportResult === "cancel") {
+            // false means containment is pending, not that the intent was lost.
+            expect(await jobRunner.cancel(imported.data.jobId)).toBe(false);
+            const [canceling] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, imported.data.jobId));
+            expect(canceling?.status).toBe("cancel_pending");
+          }
+          await agent.close();
+          const runtime = await createProductionOpsRuntime({
+            rootDir: host.root,
+            stack: host.stack,
+            loadAuthority: host.loadAuthority,
+            communityRepositories: host.repositories,
+            docker: { execFile: host.execFile, fileExists: existsSync },
+          });
+          store = new ArtifactTransferStore({
+            dataRoot: join(host.infraDir, "data/.openmapx-transfers"),
+            privateRoot: join(host.infraDir, "control-private/ops-agent/artifact-transfers"),
+            token: host.token,
+            capacity: () => ({ bytes: 4 * 1024 ** 3, inodes: 100000 }),
+          });
+          stores.push(store);
+          installArtifactTransferRuntime(runtime, store);
+          installPreparedImportRuntime(runtime, store, {
+            rootDir: host.root,
+            infraDir: host.infraDir,
+            stack: host.stack,
+            loadAuthority: host.loadAuthority,
+            ownedServices: productionOwnedServices(runtime),
+            execFile: host.execFile,
+          });
+          journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+          agent = buildOpsAgentServer({
+            runtime,
+            journal,
+            resourceClaimer: host.createResourceClaimer(runtime),
+            controlInstallation: installation,
+            artifactTransfers: store,
+            tokens: { api: host.token, "data-manager": "d".repeat(43) },
+          });
+          agent.addHook("onSend", async (request, reply, payload) => {
+            const op = (
+              request.body as { operation?: { kind?: string; operationKey?: string } } | undefined
+            )?.operation;
+            if (op?.kind === "artifactTransfer.inspectClaim") {
+              const value = typeof payload === "string" ? JSON.parse(payload) : {};
+              purposeReads.push({
+                status: reply.statusCode,
+                publication: JSON.stringify(value).includes('"publication"'),
+              });
+            }
+            if (
+              !lostPurposeAck &&
+              reply.statusCode === 200 &&
+              op?.kind === "controlRetention.acknowledge" &&
+              op.operationKey === original.operationKey
+            ) {
+              const [row] = await state.fixture.db
+                .select()
+                .from(adminJob)
+                .where(eq(adminJob.id, imported.data.jobId));
+              expect(row?.result).toMatchObject({
+                _artifactPurposeObservation: {
+                  kind: "artifactTransfer.import",
+                  publication: { outcome: "committed", followUp: "complete" },
+                },
+              });
+              lostPurposeAck = true;
+              reply.code(503);
+              return JSON.stringify({ error: "Named lost purpose receipt acknowledgement" });
+            }
+            return payload;
+          });
+          await agent.listen({ host: "127.0.0.1", port: Number(new URL(agentUrl).port) });
+        }
+        await vi.waitFor(
+          async () => {
+            // This route-only Fastify fixture omits application bootstrap's
+            // daemon timer; invoke its actual observer entrypoint explicitly.
+            if (loseImportResult) await jobRunner.reconcile();
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, imported.data.jobId));
+
+            expect(
+              row?.status,
+              JSON.stringify({ error: row?.error, result: row?.result, purposeReads }),
+            ).toBe("success");
+            expect(row?.result).toMatchObject({
+              operation: "import-artifact",
+              publication: { outcome: "committed", followUp: "complete" },
+            });
+          },
+          { timeout: 30000, interval: 100 },
+        );
+        if (historicalTerminal) {
+          expect(lostPurposeAck).toBe(true);
+          const original = journal
+            .records()
+            .find((row) => row.operation.kind === "artifactTransfer.import")!;
+          expect(
+            JSON.stringify({
+              state: original.state,
+              errorClass: original.errorClass,
+              terminalAt: original.terminalAt,
+              updatedAt: original.updatedAt,
+            }),
+          ).toBe(historicalTerminal);
+        }
+        expect(
+          (await importAdminArtifactTransfer(created.data.stageId, body, importKey, options)).data,
+        ).toEqual(imported.data);
+        expect(readFileSync(join(host.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(
+          "synthetic region.osrm",
+        );
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
+        ).toHaveLength(1);
+        const capabilities = await getAdminArtifactTransferCapabilities(options);
+        expect(capabilities.status).toBe(200);
+        if (capabilities.status !== 200) throw Error("Export capabilities unavailable");
+        const osrm = capabilities.data.targets.find((target) => target.serviceId === "osrm");
+        expect(osrm?.available).toBe(true);
+        if (!osrm?.artifactFingerprint) throw Error("Prepared fingerprint missing");
+        const exportBody = {
+            serviceId: "osrm" as const,
+            expectedArtifactFingerprint: osrm.artifactFingerprint,
+          },
+          exportKey = { "idempotency-key": `actual-prepared-export-001${keySuffix}` },
+          exporting = await exportAdminArtifactTransfer(exportBody, exportKey, options);
+        expect(exporting.status).toBe(202);
+        if (exporting.status !== 202) throw Error("Export admission unavailable");
+        let exported: { stageId: string; sha256: string; bytes: number } | undefined;
+        await vi.waitFor(
+          async () => {
+            const [row] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, exporting.data.jobId));
+            expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+              "success",
+            );
+            exported = (row?.result as { stage?: typeof exported }).stage;
+            expect(exported?.stageId).toBeTruthy();
+          },
+          { timeout: 30000, interval: 100 },
+        );
+        if (!exported) throw Error("Export result missing");
+        const downloadChunks: Buffer[] = [];
+        const downloaded = await downloadAdminArtifactTransferContent(exported.stageId, {
+          ...options,
+          onByteChunk: async (chunk) => {
+            downloadChunks.push(Buffer.from(chunk));
+          },
+        });
+        expect(downloaded.status).toBe(200);
+        expect(createHash("sha256").update(Buffer.concat(downloadChunks)).digest("hex")).toBe(
+          exported.sha256,
+        );
+        expect(Buffer.concat(downloadChunks).length).toBe(exported.bytes);
+        expect((await exportAdminArtifactTransfer(exportBody, exportKey, options)).data).toEqual(
+          exporting.data,
+        );
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.export"),
+        ).toHaveLength(1);
+        expect(lostAdmission).toBe(true);
+        expect(
+          journal.records().filter((job) => job.operation.kind === "artifactTransfer.validate"),
+        ).toHaveLength(1);
+        expect(
+          host.calls.some(
+            (args) => args.includes("up") || args.includes("stop") || args.includes("pull"),
+          ),
+        ).toBe(false);
+      } finally {
+        await api.close();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        const runner = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+        await vi.waitFor(() => {
+          expect(runner.active.size).toBe(0);
+          expect(runner.pumping).toBe(false);
+        });
+        await agent.close();
+        for (const originalStore of stores.reverse()) originalStore.close();
+        closeControlInstallation(installation);
+        state.services = [];
+        rmSync(host.cleanupRoot, { recursive: true, force: true });
+        vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+      }
+    },
+    120000,
+  );
+  it("generates configuration only through the actual retained API job and production agent", async () => {
+    const host = await ownedServiceHost();
+    state.services = host.loaded;
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      }),
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+      agent = buildOpsAgentServer({
+        runtime: host.runtime,
+        resourceClaimer: host.claimer,
+        journal,
+        controlInstallation: installation,
+        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      });
+    const tokenFile = join(host.root, "render-api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    vi.stubEnv("OPS_AGENT_URL", await agent.listen({ host: "127.0.0.1", port: 0 }));
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
+    vi.stubEnv("OPS_TRUSTED_CONFIG_UID", String(statSync(host.queue).uid));
+    vi.stubEnv("OPS_TRUSTED_CONFIG_GID", String(statSync(host.queue).gid));
+    const { jobRunner } = await import("../job-runner"),
+      { handleComposeRenderJob } = await import("../admin-compose-render"),
+      { registerAdminComposeRoutes } = await import("../../routes/admin-compose");
+    jobRunner.register("compose.render", handleComposeRenderJob);
+    const api = await createAdminTestApp(registerAdminComposeRoutes, { prefix: "/api" }),
+      url = await api.listen({ host: "127.0.0.1", port: 0 }),
+      options = { client: createApiClient({ baseUrl: url }) };
+    const request = {
+        expectedCurrentRevisionId: host.initial.revisionId,
+        confirmed: true as const,
+      },
+      key = { "idempotency-key": "actual-compose-render-retained-001" };
+    try {
+      const accepted = await renderAdminComposeConfiguration(request, key, options);
+      expect(accepted.status).toBe(202);
+      if (accepted.status !== 202) throw Error("Render unavailable");
+      await vi.waitFor(
+        async () => {
+          const [row] = await state.fixture.db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.id, accepted.data.jobId));
+          expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
+            "success",
+          );
+          expect(row?.result).toMatchObject({
+            configuration: { outcome: "committed", followUp: "complete", restartRequired: true },
+          });
+        },
+        { timeout: 20000, interval: 100 },
+      );
+      const rendered = services.currentConfigurationGeneration(host.infraDir);
+      expect(rendered).not.toBe(host.initial.revisionId);
+      expect(
+        host.calls.some(
+          (args) =>
+            args.includes("up") ||
+            args.includes("stop") ||
+            args.includes("restart") ||
+            args.includes("pull"),
+        ),
+      ).toBe(false);
+      expect((await renderAdminComposeConfiguration(request, key, options)).data).toEqual(
+        accepted.data,
+      );
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(rendered);
+      expect(journal.records().filter((job) => job.operation.kind === "stack.render")).toHaveLength(
+        1,
+      );
+    } finally {
+      await api.close();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(worker.active.size).toBe(0);
+        expect(worker.pumping).toBe(false);
+      });
+      await agent.close();
+      closeControlInstallation(installation);
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+    }
+  }, 60000);
+  it("retains the actual preview-bound backup prune across lost admission and terminal replay", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    const host = await ownedServiceHost(),
+      backupRoot = join(host.infraDir, "backups");
+    function archive(name: string, age: number) {
+      const path = join(backupRoot, name);
+      mkdirSync(path, { recursive: true, mode: 0o700 });
+      writeFileSync(
+        join(path, "manifest.json"),
+        JSON.stringify({
+          formatVersion: 2,
+          name,
+          createdAt: new Date(Date.now() - age * 86400000).toISOString(),
+          openmapxVersion: "1.0.0",
+          services: [],
+        }),
+        { mode: 0o600 },
+      );
+      return path;
+    }
+    const old = archive("expired", 40),
+      fresh = archive("fresh", 2),
+      freshBytes = readFileSync(join(fresh, "manifest.json"));
+    state.services = host.loaded;
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      }),
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+    const agent = buildOpsAgentServer({
+      runtime: host.runtime,
+      resourceClaimer: host.claimer,
+      journal,
+      controlInstallation: installation,
+      tokens: { api: host.token, "data-manager": "d".repeat(43) },
+    });
+    let lost = false;
+    agent.addHook("onSend", async (request, reply, payload) => {
+      if (
+        !lost &&
+        reply.statusCode === 202 &&
+        (request.body as { operation?: { kind?: string } } | undefined)?.operation?.kind ===
+          "backup.prune"
+      ) {
+        lost = true;
+        reply.code(503);
+        return JSON.stringify({ error: "Synthetic lost admission response" });
+      }
+      return payload;
+    });
+    const endpoint = await agent.listen({ host: "127.0.0.1", port: 0 }),
+      tokenFile = join(host.root, "backup-api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    vi.stubEnv("OPS_AGENT_URL", endpoint);
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+    const { jobRunner } = await import("../job-runner"),
+      { handleBackupPruneJob } = await import("../admin-backup-maintenance"),
+      { adminBackupMaintenanceRoute } = await import("../../routes/admin-backup-maintenance");
+    jobRunner.register("backup.prune", handleBackupPruneJob);
+    const api = await createAdminTestApp(adminBackupMaintenanceRoute, { prefix: "/api" }),
+      url = await api.listen({ host: "127.0.0.1", port: 0 }),
+      options = { client: createApiClient({ baseUrl: url }) };
+    try {
+      const preview = await previewAdminBackupPrune(options);
+      expect(preview.status).toBe(200);
+      if (preview.status !== 200) throw Error("Preview unavailable");
+      expect(preview.data.candidates.map((entry) => entry.backupId)).toEqual(["expired"]);
+      expect(existsSync(old)).toBe(true);
+      const request = { proof: preview.data.proof, confirmation: "PRUNE EXPIRED BACKUPS" as const },
+        key = { "idempotency-key": "actual-backup-prune-retained-001" };
+      const accepted = await pruneAdminServiceBackups(request, key, options);
+      expect(accepted.status).toBe(202);
+      if (accepted.status !== 202) throw Error("Prune unavailable");
+      await vi.waitFor(
+        async () => {
+          const [job] = await state.fixture.db
+            .select()
+            .from(adminJob)
+            .where(eq(adminJob.id, accepted.data.jobId));
+          expect(job?.status).toBe("success");
+          expect(job?.result).toMatchObject({ deleted: ["expired"], retainedCount: 1 });
+        },
+        { timeout: 20000, interval: 100 },
+      );
+      expect(lost).toBe(true);
+      expect(existsSync(old)).toBe(false);
+      expect(readFileSync(join(fresh, "manifest.json"))).toEqual(freshBytes);
+      const newcomer = archive("after-preview", 40),
+        replay = await pruneAdminServiceBackups(request, key, options);
+      expect(replay.data).toEqual(accepted.data);
+      expect(existsSync(newcomer)).toBe(true);
+      expect(journal.records().filter((job) => job.operation.kind === "backup.prune")).toHaveLength(
+        1,
+      );
+    } finally {
+      await api.close();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(worker.active.size).toBe(0);
+        expect(worker.pumping).toBe(false);
+      });
+      await agent.close();
+      closeControlInstallation(installation);
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
+    }
+  }, 60000);
+  it("serializes competing requests and preserves terminal duplicates across a new call", async () => {
+    const key = "same-release-intent-001",
+      ids = await Promise.all(
+        Array.from({ length: 3 }, () => retainMaintenanceJob("release.clear", body, actor, key)),
+      );
+    expect(new Set(ids).size).toBe(1);
+    const id = ids[0]!;
+    acceptedIds.push(id);
+    await state.fixture.db
+      .update(adminJob)
+      .set({ status: "success", result: { cleared: true }, finishedAt: new Date() })
+      .where(eq(adminJob.id, id));
+    expect(await retainMaintenanceJob("release.clear", body, actor, key)).toBe(id);
+    const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
+    expect(row?.status).toBe("success");
+    expect(row?.result).toEqual({ cleared: true });
+    await expect(
+      retainMaintenanceJob(
+        "release.clear",
+        { ...body, expectedReleaseId: "changed-pin" },
+        actor,
+        key,
+      ),
+    ).rejects.toBeInstanceOf(MaintenanceRequestConflict);
+  });
+  it("allows only one changed-intent winner and scopes equal keys to the original actor", async () => {
+    const key = "competing-release-intent-002",
+      results = await Promise.allSettled([
+        retainMaintenanceJob("release.clear", body, actor, key),
+        retainMaintenanceJob(
+          "release.clear",
+          { ...body, expectedReleaseId: "other-pin" },
+          actor,
+          key,
+        ),
+      ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const other = randomUUID();
+    await state.fixture.db.insert(user).values({
+      id: other,
+      email: `${other}@example.test`,
+      name: "Other synthetic administrator",
+      role: "admin",
+    });
+    for (const result of results) if (result.status === "fulfilled") acceptedIds.push(result.value);
+    const otherId = await retainMaintenanceJob("release.clear", body, other, key);
+    acceptedIds.push(otherId);
+    expect(
+      results.some((result) => result.status === "fulfilled" && result.value === otherId),
+    ).toBe(false);
+  });
+  it("runs the real queued route and worker through the production agent, retaining the same job after success", async () => {
+    await state.fixture.db
+      .update(adminJob)
+      .set({ status: "failed" })
+      .where(inArray(adminJob.id, acceptedIds));
+    const host = await ownedServiceHost();
+    state.services = host.loaded;
+    const installation = openControlInstallation({
+      infraDir: host.infraDir,
+      role: "ops-agent",
+      serviceIds: host.loaded.map((s) => s.manifest.id),
+    });
+    const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+    const agent = buildOpsAgentServer({
+      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      runtime: host.runtime,
+      resourceClaimer: host.claimer,
+      journal,
+      controlInstallation: installation,
+    });
+    const manifest = services.parseReleaseManifest(
+      JSON.stringify({
+        schemaVersion: 1,
+        release: "checked-pin",
+        images: Object.fromEntries(
+          services.RELEASE_IMAGE_NAMES.map((name) => [
+            name,
+            `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
+          ]),
+        ),
+        privacyReleaseValidation: {
+          version: 1,
+          sourceBuildFingerprint: "a".repeat(64),
+          validatedAt: "2026-10-30T00:00:00.000Z",
+          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
+        },
+      }),
+    );
+    const overlay = join(host.infraDir, "docker-compose.release.yml");
+    services.writeReleaseComposeArtifacts(manifest, overlay);
+    const tokenFile = join(host.root, "clear-api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
+    vi.stubEnv("OPS_AGENT_URL", agentUrl);
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+    vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+    const { jobRunner } = await import("../job-runner"),
+      { handleReleaseClearJob } = await import("../admin-release-controls"),
+      { adminReleaseControlsRoute } = await import("../../routes/admin-release-controls");
+    jobRunner.register("release.clear", handleReleaseClearJob);
+    const api = await createAdminTestApp(adminReleaseControlsRoute, { prefix: "/api" });
+    const url = await api.listen({ host: "127.0.0.1", port: 0 }),
+      options = { client: createApiClient({ baseUrl: url }) };
+    const pointer = services.currentConfigurationGeneration(host.infraDir),
+      key = { "idempotency-key": "actual-clear-request-003" };
+    try {
+      const accepted = await clearAdminReleaseSelection(
+        { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" },
+        key,
+        options,
+      );
+      expect(accepted.status).toBe(202);
+      if (accepted.status !== 202) throw Error("Clear was not accepted");
+      const id = accepted.data.jobId;
+      await vi.waitFor(
+        async () => {
+          const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
+          expect(row?.status).toBe("success");
+        },
+        { timeout: 20000, interval: 100 },
+      );
+      expect(existsSync(overlay)).toBe(false);
+      expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pointer);
+      expect(
+        journal.records().filter((row) => row.operation.kind === "release.clear"),
+      ).toHaveLength(1);
+      const duplicate = await clearAdminReleaseSelection(
+        { expectedReleaseId: "checked-pin", confirmation: "CLEAR RELEASE PIN" },
+        key,
+        options,
+      );
+      expect(duplicate.status).toBe(202);
+      expect(duplicate.data).toEqual({ ok: true, jobId: id });
+      expect(
+        journal.records().filter((row) => row.operation.kind === "release.clear"),
+      ).toHaveLength(1);
+      expect(
+        host.calls.some(
+          (args) =>
+            args[0] === "pull" ||
+            args[0] === "run" ||
+            args.includes("up") ||
+            args.includes("restart"),
+        ),
+      ).toBe(false);
+    } finally {
+      await api.close();
+      // The real runner schedules its final queue scan in a timer. Drain this
+      // fixture's worker before closing its disposable SQL connection.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(worker.active.size).toBe(0);
+        expect(worker.pumping).toBe(false);
+      });
+      await agent.close();
+      closeControlInstallation(installation);
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+    }
+  }, 60000);
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    "stages immutable images or refuses incompatible metadata without source writes (pinned=%s, invalidMetadata=%s)",
+    async (pinned, invalidMetadata) => {
+      vi.stubEnv("OPENMAPX_RELEASE", pinned ? "main" : "local");
+      const ids = ["motis", "data-manager", "ops-agent"],
+        host = await ownedServiceHost({
+          withCoordinator: true,
+          selectedRoots: ids,
+          imageReferences: pinned
+            ? undefined
+            : {
+                motis: { image: "example/shared", tag: "1" },
+                "data-manager": { image: "example/shared", tag: "1" },
+              },
+        });
+      state.services = host.loaded;
+      const oldId = host.row.Image,
+        newId = `sha256:${"e".repeat(64)}`,
+        digest = `sha256:${"c".repeat(64)}`,
+        stageCalls: string[][] = [];
+      const compose = services.configurationGenerationComposeFile(
+          host.infraDir,
+          host.initial.revisionId,
+        ),
+        args = services.stackComposeArgs({
+          infraDir: host.infraDir,
+          composePath: compose,
+          composeReleasePath: host.stack.composeReleasePath,
+        });
+      const rows = await Promise.all(
+        ids.map(async (id, index) => ({
+          ...host.row,
+          Id: String(index + 1).repeat(64),
+          ConfigImage: services.serviceContainerImageReference(
+            host.loaded.find((service) => service.manifest.id === id)!.manifest.container,
+          ),
+          Labels: {
+            ...host.row.Labels,
+            "com.docker.compose.service": id,
+            "com.docker.compose.config-hash": (
+              await host.execFile("docker", [...args, "config", "--hash", id], {
+                signal: new AbortController().signal,
+                timeout: 15000,
+                maxBuffer: 1024 * 1024,
+              })
+            ).stdout
+              .trim()
+              .split(/\s+/)
+              .at(-1)!,
+          },
+        })),
+      );
+      host.setRows(rows);
+      const overlay = join(host.infraDir, "docker-compose.release.yml");
+      if (pinned)
+        services.writeReleaseComposeArtifacts(
+          services.parseReleaseManifest(
+            JSON.stringify({
+              schemaVersion: 1,
+              release: "stage-pin",
+              images: Object.fromEntries(
+                services.RELEASE_IMAGE_NAMES.map((name) => [
+                  name,
+                  `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
+                ]),
+              ),
+              privacyReleaseValidation: {
+                version: 1,
+                sourceBuildFingerprint: "a".repeat(64),
+                validatedAt: "2026-10-30T00:00:00.000Z",
+                checks: {
+                  translationsConsistent: true,
+                  openApiConsistent: true,
+                  policyConsistent: true,
+                },
+              },
+            }),
+          ),
+          overlay,
+        );
+      const beforeOverlay = existsSync(overlay) ? readFileSync(overlay, "utf8") : null;
+      const execFile: typeof host.execFile = async (file, argv, io) => {
+        stageCalls.push([...argv]);
+        if (argv[0] === "info") return { stdout: "linux/amd64", stderr: "" };
+        if (argv[0] === "manifest" && argv[1] === "inspect")
+          return {
+            stdout: JSON.stringify([
+              {
+                Descriptor: {
+                  digest,
+                  mediaType: "application/vnd.oci.image.manifest.v1+json",
+                  platform: { architecture: invalidMetadata ? "riscv64" : "amd64", os: "linux" },
+                },
+              },
+            ]),
+            stderr: "",
+          };
+        if (argv[0] === "image" && argv[1] === "ls") return { stdout: oldId, stderr: "" };
+        if (argv[0] === "image" && argv[1] === "inspect" && argv.at(-1)?.includes("@"))
+          return { stdout: newId, stderr: "" };
+        if (argv[0] === "image" && argv[1] === "pull")
+          return { stdout: "Downloaded immutable image", stderr: "" };
+        return host.execFile(file, argv, io);
+      };
+      const runtime = await createProductionOpsRuntime({
+        rootDir: host.root,
+        stack: host.stack,
+        loadAuthority: host.loadAuthority,
+        communityRepositories: host.repositories,
+        candidateSource: {
+          directory: host.queue,
+          token: host.token,
+          ownerUid: statSync(host.queue).uid,
+          ownerGid: statSync(host.queue).gid,
+        },
+        docker: { execFile, fileExists: existsSync },
+      });
+      const installation = openControlInstallation({
+          infraDir: host.infraDir,
+          role: "ops-agent",
+          serviceIds: host.loaded.map((service) => service.manifest.id),
+        }),
+        journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      const agent = buildOpsAgentServer({
+        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        runtime,
+        resourceClaimer: host.claimer,
+        journal,
+        controlInstallation: installation,
+      });
+      let lostAdmissionResponse = false;
+      agent.addHook("onSend", async (request, reply, payload) => {
+        const submitted = request.body as { operation?: { kind?: string } } | undefined;
+        if (
+          !lostAdmissionResponse &&
+          request.method === "POST" &&
+          reply.statusCode === 202 &&
+          submitted?.operation?.kind === "service.image.stage"
+        ) {
+          lostAdmissionResponse = true;
+          reply.code(503);
+          return JSON.stringify({ error: "Synthetic lost admission response" });
+        }
+        return payload;
+      });
+      const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 }),
+        tokenFile = join(host.root, "stage-api-token");
+      writeFileSync(tokenFile, host.token, { mode: 0o600 });
+      vi.stubEnv("OPS_AGENT_URL", agentUrl);
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
+      vi.stubEnv("OPS_TRUSTED_CONFIG_DIR", host.queue);
+      const { jobRunner } = await import("../job-runner"),
+        { handleImageStageJob } = await import("../admin-image-staging"),
+        { adminReleaseControlsRoute } = await import("../../routes/admin-release-controls");
+      jobRunner.register("service.images.pull", handleImageStageJob);
+      const api = await createAdminTestApp(adminReleaseControlsRoute, { prefix: "/api" }),
+        url = await api.listen({ host: "127.0.0.1", port: 0 }),
+        options = { client: createApiClient({ baseUrl: url }) },
+        key = {
+          "idempotency-key": `actual-stage-request-${pinned ? "pinned" : "floating"}-${invalidMetadata ? "invalid" : "valid"}-004`,
+        };
+      try {
+        const accepted = await pullAdminServiceImages({ serviceIds: ids }, key, options);
+        expect(accepted.status).toBe(202);
+        if (accepted.status !== 202) throw Error("Stage was not accepted");
+        const id = accepted.data.jobId;
+        await vi.waitFor(
+          async () => {
+            const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
+            expect(["success", "failed"]).toContain(row?.status);
+          },
+          { timeout: 20000, interval: 100 },
+        );
+        const [finished] = await state.fixture.db
+          .select()
+          .from(adminJob)
+          .where(eq(adminJob.id, id));
+        expect(lostAdmissionResponse).toBe(true);
+        expect(
+          finished?.status,
+          JSON.stringify({
+            error: finished?.error,
+            batch: (finished?.result as Record<string, unknown>)?.serviceBatch,
+            records: journal.records().map((job) => ({
+              kind: job.operation.kind,
+              serviceId: "serviceId" in job.operation ? job.operation.serviceId : null,
+              state: job.state,
+              errorClass: job.errorClass,
+            })),
+            calls: stageCalls.filter((argv) =>
+              ["manifest", "info", "image"].includes(argv[0] ?? ""),
+            ),
+          }),
+        ).toBe(invalidMetadata ? "failed" : "success");
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+          host.initial.revisionId,
+        );
+        expect(existsSync(overlay) ? readFileSync(overlay, "utf8") : null).toBe(beforeOverlay);
+        const pulls = stageCalls.filter((argv) => argv[0] === "image" && argv[1] === "pull");
+        expect(pulls).toHaveLength(invalidMetadata ? 0 : 3);
+        expect(pulls.every((argv) => /@sha256:[a-f0-9]{64}$/.test(argv[2] ?? ""))).toBe(true);
+        expect(
+          stageCalls.some(
+            (argv) =>
+              argv[0] === "run" ||
+              argv.includes("up") ||
+              argv.includes("restart") ||
+              argv[0] === "tag",
+          ),
+        ).toBe(false);
+        if (!pinned) {
+          const owned = await productionOwnedServices(runtime).inspectOwnedServices(
+            new AbortController().signal,
+          );
+          expect(
+            ids.every((serviceId) =>
+              owned.some(
+                (container) =>
+                  container.serviceId === serviceId && container.provenance.imageId === oldId,
+              ),
+            ),
+          ).toBe(true);
+        }
+        const duplicate = await pullAdminServiceImages({ serviceIds: ids }, key, options);
+        expect(duplicate.status).toBe(202);
+        expect(duplicate.data).toEqual({ ok: true, jobId: id });
+        expect(stageCalls.filter((argv) => argv[0] === "image" && argv[1] === "pull")).toHaveLength(
+          invalidMetadata ? 0 : 3,
+        );
+        expect(
+          journal.records().filter((job) => job.operation.kind === "service.image.stage"),
+        ).toHaveLength(invalidMetadata ? 1 : 3);
+      } finally {
+        await api.close();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        const worker = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+        await vi.waitFor(() => {
+          expect(worker.active.size).toBe(0);
+          expect(worker.pumping).toBe(false);
+        });
+        await agent.close();
+        closeControlInstallation(installation);
+        state.services = [];
+        rmSync(host.cleanupRoot, { recursive: true, force: true });
+      }
+    },
+    60000,
+  );
+});

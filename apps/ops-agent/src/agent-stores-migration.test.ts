@@ -24,6 +24,7 @@ import {
   communityRepositoryId,
 } from "./community-repositories";
 import { IntegrationStore } from "./integration-store";
+import { createOwnedServiceResolver } from "./owned-services";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
 const URL = "https://github.com/example/community-services";
@@ -134,7 +135,7 @@ function earlierRelease() {
   const install = async (store: IntegrationStore, id: string, region = "eu") => {
     const published = await store.publish(
       {
-        kind: "integration.publish",
+        kind: "catalogIntegration.publish",
         integrationId: id,
         source: await artifact(id, region),
         extensionId: "bundle",
@@ -148,7 +149,7 @@ function earlierRelease() {
 
 async function settleIntegration(store: IntegrationStore, id: string, transactionId: string) {
   await store.settle({
-    kind: "integration.settle",
+    kind: "catalogIntegration.settle",
     integrationId: id,
     transactionId,
     outcome: "commit",
@@ -230,15 +231,39 @@ describe("copying the agent's stores out of the checkout", () => {
 
     // And removes there, leaving the earlier copies as they were at the copy.
     await integrations.remove({
-      kind: "integration.remove",
+      kind: "catalogIntegration.remove",
       integrationId: "weather-radar",
       extensionId: "bundle",
     });
-    await repositories.remove({
-      kind: "serviceRepository.remove",
-      repository: REPOSITORY,
-      extensionId: "bundle",
+    const owned = createOwnedServiceResolver({
+      stack: {
+        infraDir: f.infraDir,
+        composePath: join(
+          f.infraDir,
+          services.CURRENT_CONFIGURATION,
+          "docker-compose.generated.yml",
+        ),
+        composeReleasePath: services.releaseStatePaths(f.infraDir).overlay,
+      },
+      loadAuthority: f.loadAuthority,
+      // External Docker observation: no running or stopped containers remain.
+      // Keep the actual provenance/inventory parser in the removal boundary.
+      execFile: async (file, args) => {
+        expect(file).toBe("docker");
+        expect(args.slice(0, 3)).toEqual(["container", "ls", "--all"]);
+        return { stdout: "", stderr: "" };
+      },
     });
+    await repositories.remove(
+      {
+        kind: "serviceRepository.remove",
+        repository: REPOSITORY,
+        extensionId: "bundle",
+      },
+      signal(),
+      owned,
+      ["community-live"],
+    );
     expect(existsSync(join(paths.customIntegrations, "weather-radar"))).toBe(false);
     expect(existsSync(join(paths.community, REPOSITORY))).toBe(false);
     expect(services.loadTrustedIntegrationSchemas(f.root).size).toBe(0);
@@ -374,7 +399,7 @@ describe("copying the agent's stores out of the checkout", () => {
 
     // Rolled back in the new location, the first version comes back.
     await f.integrations().settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: second.transactionId,
       outcome: "rollback",

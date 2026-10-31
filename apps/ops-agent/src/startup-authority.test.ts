@@ -58,15 +58,39 @@ describe("ops-agent startup authority gate", () => {
     });
     const signal = new AbortController().signal;
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "dawarich-app" }, "a".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "dawarich-app",
+        },
+        "a".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
 
     trusted = new Set(["dawarich-app"]);
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "dawarich-app" }, "b".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "dawarich-app",
+        },
+        "b".repeat(64),
+        signal,
+      ),
     ).resolves.not.toBeNull();
     await expect(
-      claimer.claim({ kind: "service.start", serviceId: "redis" }, "c".repeat(64), signal),
+      claimer.claim(
+        {
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          kind: "service.start",
+          serviceId: "redis",
+        },
+        "c".repeat(64),
+        signal,
+      ),
     ).resolves.toBeNull();
   });
 

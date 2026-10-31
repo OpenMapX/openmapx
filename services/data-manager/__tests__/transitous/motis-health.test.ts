@@ -42,21 +42,23 @@ afterEach(() => {
 function makeStagingDir(): string {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-health-"));
   const stagingDir = join(tmp, "motis", "staging");
-  mkdirSync(stagingDir, { recursive: true });
+  mkdirSync(stagingDir, { mode: 0o700, recursive: true });
   writeFileSync(
     join(stagingDir, "config.yml"),
     "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+    { mode: 0o600 },
   );
-  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
-  writeFileSync(join(stagingDir, "license.json"), "{}\n");
+  writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs", { mode: 0o600 });
+  writeFileSync(join(stagingDir, "license.json"), "{}\n", { mode: 0o600 });
   writeFileSync(
     join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
     '{"version":1,"generatedAt":"2026-05-01T00:00:00Z","sources":[]}\n',
+    { mode: 0o600 },
   );
   const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
-  mkdirSync(join(proxy, "conf"), { recursive: true });
-  writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
-  writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+  mkdirSync(join(proxy, "conf"), { mode: 0o700, recursive: true });
+  writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n", { mode: 0o600 });
+  writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
   createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
   return tmp;
 }
@@ -93,7 +95,7 @@ describe("motis-health stage", () => {
 
   it("skips when the staging data dir is empty", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-health-empty-"));
-    mkdirSync(join(tmp, "motis", "staging"), { recursive: true });
+    mkdirSync(join(tmp, "motis", "staging"), { mode: 0o700, recursive: true });
     const result = await motisHealthRun(ctxFor(tmp));
     expect(result.status).toBe("skipped");
   });

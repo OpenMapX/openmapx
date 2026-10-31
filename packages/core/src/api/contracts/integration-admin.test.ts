@@ -11,6 +11,28 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 const at = "2026-10-20T12:00:00.000Z";
 const inventory = [
+  [
+    "getAdminConfigurationMigrationInventory",
+    "GET",
+    "/api/admin/configuration-migration/inventory",
+  ],
+  ["exportAdminConfigurationMigration", "GET", "/api/admin/configuration-migration/export"],
+  ["previewAdminConfigurationMigration", "POST", "/api/admin/configuration-migration/preview"],
+  ["applyAdminConfigurationMigration", "POST", "/api/admin/configuration-migration/apply"],
+  ["exportAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/export"],
+  ["previewAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/preview"],
+  [
+    "chooseAdminCredentialTransferFields",
+    "POST",
+    "/api/admin/credential-transfer/preview/:previewId/choices",
+  ],
+  ["applyAdminCredentialTransfer", "POST", "/api/admin/credential-transfer/apply"],
+
+  ["listAdminStandaloneIntegrations", "GET", "/api/admin/standalone-integrations"],
+  ["adoptAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/adopt"],
+  ["removeAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/:id/remove"],
+  ["previewAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/preview"],
+  ["installAdminStandaloneIntegration", "POST", "/api/admin/standalone-integrations/install"],
   ["listAdminIntegrations", "GET", "/api/admin/integrations"],
   ["getAdminIntegration", "GET", "/api/admin/integrations/:id"],
   ["listAdminIntegrationEnvVars", "GET", "/api/admin/integrations/env-vars"],
@@ -115,7 +137,7 @@ const overview = {
   systemHealth: { status: "degraded", unhealthyCount: 1 },
   users: { total: 2, active24h: 1, banned: 0 },
   integrations: { total: 3, enabled: 2, unhealthy: 1, unconfigured: 0 },
-  services: { running: 1, stopped: 2, unhealthy: 0 },
+  services: { running: 1, stopped: 2, unhealthy: 0, unknown: 0 },
   attention: [
     { type: "health_check_failed", severity: "error", message: "Probe failed", target: "sample" },
   ],
@@ -171,14 +193,24 @@ const detail = {
   secretsConfigured: true,
 };
 
-function success(id: keyof typeof contracts.integrationAdminOperations, value: unknown) {
+function success(
+  id: Exclude<
+    keyof typeof contracts.integrationAdminOperations,
+    | "previewAdminStandaloneIntegration"
+    | "installAdminStandaloneIntegration"
+    | "listAdminStandaloneIntegrations"
+    | "adoptAdminStandaloneIntegration"
+    | "removeAdminStandaloneIntegration"
+  >,
+  value: unknown,
+) {
   const contract = contracts.integrationAdminOperations[id].responses[200];
   expect(contract.kind).toBe("json");
   if (contract.kind !== "json") throw new Error("Expected JSON");
   return contract.schema.parse(value);
 }
 describe("integration administration canonical producer contracts", () => {
-  it("binds exactly the 22 approved operation IDs, methods, paths and admin auth", () => {
+  it("binds exactly the 35 approved operation IDs, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("integrationAdminOperations");
     expect(
       Object.entries(contracts.integrationAdminOperations).map(([id, op]) => [
@@ -235,9 +267,28 @@ describe("integration administration canonical producer contracts", () => {
       reloadAdminIntegration: { ok: true, jobId: "job" },
       listAdminIntegrationBindings: {
         bindings: [{ capability: "routing-engine", serviceId: "router" }],
+        revision: "a".repeat(64),
+        desiredRevision: "a".repeat(64),
+        runtime: null,
+        lastApplication: null,
       },
-      setAdminIntegrationBinding: { ok: true },
-      deleteAdminIntegrationBinding: { ok: true },
+      setAdminIntegrationBinding: {
+        operationId: "binding-test-operation",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "applied",
+        runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deleteAdminIntegrationBinding: {
+        operationId: "binding-test-operation",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "pending",
+        runtimeGenerationId: null,
+        reason: "integration_disabled",
+      },
       listAdminCredentials: {
         credentials: [
           {
@@ -256,6 +307,9 @@ describe("integration administration canonical producer contracts", () => {
         name: "Sample",
         credentials: [credential],
         secretsConfigured: true,
+        configurationRevision: "a".repeat(64),
+        runtime: null,
+        application: null,
       },
       testAdminIntegrationCredentials: {
         ok: true,
@@ -265,8 +319,23 @@ describe("integration administration canonical producer contracts", () => {
         responseTime: 15,
         error: null,
       },
-      setAdminIntegrationCredential: reload,
-      deleteAdminIntegrationCredential: reload,
+      setAdminIntegrationCredential: {
+        operationId: "test-credential",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "applied",
+        runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+      },
+      deleteAdminIntegrationCredential: {
+        operationId: "test-credential",
+        integrationId: "sample",
+        desiredRevision: "a".repeat(64),
+        database: "retained",
+        runtime: "pending",
+        runtimeGenerationId: null,
+        reason: "integration_disabled",
+      },
       getAdminOverview: overview,
     };
     for (const [id, fixture] of Object.entries(fixtures))
@@ -491,8 +560,14 @@ describe("integration administration canonical producer contracts", () => {
   });
   it("rejects unknown mutation keys and malformed credential/binding/no-body shapes", () => {
     const ops = contracts.integrationAdminOperations;
-    expect(ops.setAdminIntegrationCredential.request.body.parse({ value: " synthetic " })).toEqual({
+    expect(
+      ops.setAdminIntegrationCredential.request.body.parse({
+        value: " synthetic ",
+        expectedRevision: "a".repeat(64),
+      }),
+    ).toEqual({
       value: " synthetic ",
+      expectedRevision: "a".repeat(64),
     });
     for (const value of ["", " ", null, 1])
       expect(ops.setAdminIntegrationCredential.request.body.safeParse({ value }).success).toBe(
@@ -520,13 +595,23 @@ describe("integration administration canonical producer contracts", () => {
       "reloadAdminIntegration",
       "reloadAdminIntegrations",
       "runAdminIntegrationHealthChecks",
-      "deleteAdminIntegrationBinding",
-      "deleteAdminIntegrationCredential",
     ] as const) {
       expect(ops[id].request.body.safeParse(undefined).success).toBe(true);
       expect(ops[id].request.body.safeParse({}).success).toBe(true);
       expect(ops[id].request.body.safeParse({ extra: true }).success).toBe(false);
     }
+    expect(ops.deleteAdminIntegrationBinding.request.body.safeParse(undefined).success).toBe(false);
+    expect(
+      ops.deleteAdminIntegrationBinding.request.body.safeParse({
+        expectedServiceId: null,
+        expectedRevision: "a".repeat(64),
+      }).success,
+    ).toBe(true);
+    expect(
+      ops.deleteAdminIntegrationCredential.request.body.safeParse({
+        expectedRevision: "a".repeat(64),
+      }).success,
+    ).toBe(true);
     for (const body of [{}, [], null, { enabled: true }])
       expect(ops.patchAdminIntegrationConfig.request.body.safeParse(body).success).toBe(false);
   });
@@ -565,3 +650,19 @@ describe("integration administration canonical producer contracts", () => {
     ).toBe(false);
   });
 });
+
+it.each(["previewAdminStandaloneIntegration", "installAdminStandaloneIntegration"] as const)(
+  "retains standalone durable acceptance for %s",
+  (id) => {
+    const op = contracts.integrationAdminOperations[id];
+    expect(
+      op.responses[202].schema.parse({
+        jobId: "568ce225-448a-4a8f-86c3-3994d4c6d8a9",
+        operationId: "99b22375-7d2c-486c-a2f5-d92391ceda2a",
+      }),
+    ).toHaveProperty("operationId");
+    expect(op.request.headers.safeParse({ "idempotency-key": "fixture-operation" }).success).toBe(
+      true,
+    );
+  },
+);

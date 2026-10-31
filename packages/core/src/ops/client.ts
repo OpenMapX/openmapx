@@ -1,6 +1,8 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import type { ArtifactStageClaim, TransferStage } from "./artifact-transfer";
+import { type ArtifactStageStreamInput, withArtifactStream } from "./artifact-transfer-client";
 import {
   OPS_KIND_POLICIES,
   OPS_MAX_HTTP_RESPONSE_BYTES,
@@ -16,6 +18,7 @@ import {
   type OpsRequest,
   type OpsResponseEnvelope,
   type OpsSubmitResult,
+  parseOpsAdmission,
   parseOpsEventBatch,
   parseOpsJobStatus,
   parseOpsJobStatusForKind,
@@ -26,9 +29,8 @@ import { opsOperationFingerprint } from "./fingerprint";
 const TOKEN_BYTES = 43;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_RESPONSE_BYTES = OPS_MAX_HTTP_RESPONSE_BYTES;
-const MAX_REQUEST_TIMEOUT_MS = 30 * 60_000;
+const MAX_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BYTES = OPS_MAX_HTTP_RESPONSE_BYTES;
-const TRANSPORT_MARGIN_MS = 5_000;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const ERROR_CLASSES = new Set<OpsErrorClass>([
   "authentication",
@@ -40,10 +42,12 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "timeout",
   "busy",
   "conflict",
+  "configuration_prerequisite",
   "not_found",
   "not_wired",
   "recovery_required",
   "host_update_required",
+  "control_upgrade_required",
   "runtime",
 ]);
 
@@ -60,6 +64,14 @@ export class OpsClientError extends Error {
   ) {
     super("Ops agent request failed");
     this.name = "OpsClientError";
+  }
+}
+
+export class OpsProtocolUpgradeRequiredError extends OpsClientError {
+  constructor() {
+    super("host_update_required", 409);
+    this.name = "OpsProtocolUpgradeRequiredError";
+    this.message = "Update the ops-agent before submitting version2 operations";
   }
 }
 
@@ -160,7 +172,7 @@ function parseResponse(raw: string, requestId: string, status: number): OpsRespo
   }
   const envelope = value as Record<string, unknown>;
   if (
-    envelope.version !== OPS_PROTOCOL_VERSION ||
+    envelope.version !== 1 ||
     envelope.requestId !== requestId ||
     typeof envelope.ok !== "boolean"
   ) {
@@ -201,14 +213,13 @@ export interface OpsClientOptions {
   randomBytes?: (size: number) => Uint8Array;
 }
 
-export function opsRequestTimeoutMs(kind: OpsOperationKind, configuredTimeoutMs?: number): number {
+export function opsRequestTimeoutMs(_kind: OpsOperationKind, configuredTimeoutMs?: number): number {
   if (configuredTimeoutMs !== undefined) return configuredTimeoutMs;
-  const policy = OPS_KIND_POLICIES[kind];
-  if (policy.execution === "async") return DEFAULT_REQUEST_TIMEOUT_MS;
-  return Math.min(policy.timeoutMs + TRANSPORT_MARGIN_MS, MAX_REQUEST_TIMEOUT_MS);
+  return DEFAULT_REQUEST_TIMEOUT_MS;
 }
 
 export class OpsClient {
+  private protocolReady?: Promise<void>;
   private readonly baseUrl: string;
   private readonly tokenFile: string;
   private readonly fetchImpl: typeof globalThis.fetch;
@@ -241,13 +252,77 @@ export class OpsClient {
     this.randomBytes = options.randomBytes ?? nodeRandomBytes;
   }
 
+  async uploadArtifactStage(
+    input: ArtifactStageStreamInput & { body: ReadableStream<Uint8Array>; contentLength?: number },
+  ): Promise<TransferStage> {
+    const observation = await this.execute(
+      {
+        kind: "artifactTransfer.inspect",
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+      },
+      { signal: input.signal },
+    );
+    if (!("execution" in observation) || observation.execution !== "sync")
+      throw new OpsClientError("runtime");
+    return (await withArtifactStream({
+      baseUrl: this.baseUrl,
+      token: await readOpsTokenFile(this.tokenFile),
+      fetch: this.fetchImpl,
+      now: this.now().getTime(),
+      parentSignal: this.signal,
+      stage: observation.value,
+      input,
+      body: input.body,
+      contentLength: input.contentLength,
+    })) as TransferStage;
+  }
+  async consumeArtifactStage<T>(
+    input: ArtifactStageStreamInput & { claim?: ArtifactStageClaim },
+    consume: (input: {
+      body: ReadableStream<Uint8Array>;
+      signal: AbortSignal;
+      headers: Headers;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const observation = await this.execute(
+      {
+        kind: "artifactTransfer.inspect",
+        stageId: input.stageId,
+        ownerId: input.ownerId,
+        purpose: input.purpose,
+      },
+      { signal: input.signal },
+    );
+    if (!("execution" in observation) || observation.execution !== "sync")
+      throw new OpsClientError("runtime");
+    return (await withArtifactStream(
+      {
+        baseUrl: this.baseUrl,
+        token: await readOpsTokenFile(this.tokenFile),
+        fetch: this.fetchImpl,
+        now: this.now().getTime(),
+        parentSignal: this.signal,
+        stage: observation.value,
+        input,
+      },
+      consume,
+    )) as T;
+  }
   createOperationKey(): string {
     return `opk1_${Buffer.from(this.randomBytes(18)).toString("base64url")}`;
   }
 
   private async get(
     path: string,
-    options: { method?: "GET" | "DELETE"; signal?: AbortSignal; fingerprint?: string } = {},
+    options: {
+      method?: "GET" | "DELETE";
+      signal?: AbortSignal;
+      fingerprint?: string;
+      bodyFingerprint?: string;
+      requestedDeadlineAt?: number;
+    } = {},
   ): Promise<unknown> {
     const token = await readOpsTokenFile(this.tokenFile);
     const requestId = `ops1_${Buffer.from(this.randomBytes(18)).toString("base64url")}`;
@@ -264,7 +339,12 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "x-ops-request-id": requestId,
+          "x-ops-protocol-version": "2",
           ...(options.fingerprint ? { "x-ops-operation-fingerprint": options.fingerprint } : {}),
+          ...(options.bodyFingerprint ? { "x-ops-body-fingerprint": options.bodyFingerprint } : {}),
+          ...(options.requestedDeadlineAt === undefined
+            ? {}
+            : { "x-ops-requested-deadline": String(options.requestedDeadlineAt) }),
         },
         signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
       });
@@ -335,18 +415,32 @@ export class OpsClient {
     }
   }
 
-  async cancel(operationId: string, options: { signal?: AbortSignal } = {}): Promise<OpsJobStatus> {
+  async cancel(
+    operationId: string,
+    options: { signal?: AbortSignal; fingerprint?: string } = {},
+  ): Promise<OpsJobStatus> {
     if (!/^job1_[A-Za-z0-9_-]{16,64}$/.test(operationId)) {
       throw new OpsClientError("validation");
     }
     try {
+      const retained = options.fingerprint
+        ? undefined
+        : parseOpsJobStatus(
+            await this.get(`/v1/operations/${operationId}`, { signal: options.signal }),
+          );
       const status = parseOpsJobStatus(
         await this.get(`/v1/operations/${operationId}`, {
           method: "DELETE",
           signal: options.signal,
+          fingerprint: options.fingerprint ?? retained?.fingerprint,
         }),
       );
       if (status.operationId !== operationId) throw new Error("Operation status ID mismatch");
+      if (
+        status.version === 2 &&
+        status.fingerprint !== (options.fingerprint ?? retained?.fingerprint)
+      )
+        throw new Error("Operation cancellation identity mismatch");
       return status;
     } catch (error) {
       if (error instanceof OpsClientError) throw error;
@@ -358,7 +452,11 @@ export class OpsClient {
   async lookup<K extends OpsOperationKind>(
     operation: Extract<OpsOperation, { kind: K }>,
     operationKey: string,
-    options: { signal?: AbortSignal } = {},
+    options: {
+      signal?: AbortSignal;
+      fingerprint?: string;
+      execution?: { requestedDeadlineAt: number };
+    } = {},
   ): Promise<OpsJobStatusFor<K>> {
     if (!/^opk1_[A-Za-z0-9_-]{16,64}$/.test(operationKey)) throw new OpsClientError("validation");
     try {
@@ -366,7 +464,9 @@ export class OpsClient {
         operation.kind,
         await this.get(`/v1/operation-keys/${operationKey}`, {
           signal: options.signal,
-          fingerprint: opsOperationFingerprint(operation),
+          bodyFingerprint: opsOperationFingerprint(operation),
+          fingerprint: options.fingerprint ?? opsOperationFingerprint(operation),
+          requestedDeadlineAt: options.execution?.requestedDeadlineAt,
         }),
         {},
       );
@@ -381,13 +481,51 @@ export class OpsClient {
     }
   }
 
+  private async requireProtocol2(signal?: AbortSignal): Promise<void> {
+    this.protocolReady ??= (async () => {
+      let value: unknown;
+      try {
+        value = await this.get("/v1/protocol", { signal });
+      } catch (error) {
+        if (
+          isAbortError(error) ||
+          (error instanceof OpsClientError &&
+            ["authentication", "authorization", "timeout"].includes(error.errorClass))
+        )
+          throw error;
+        throw new OpsProtocolUpgradeRequiredError();
+      }
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        !exactKeys(value as Record<string, unknown>, ["versions"]) ||
+        JSON.stringify((value as { versions?: unknown }).versions) !== "[1,2]"
+      )
+        throw new OpsProtocolUpgradeRequiredError();
+    })();
+    try {
+      await this.protocolReady;
+    } catch (error) {
+      this.protocolReady = undefined;
+      throw error;
+    }
+  }
+
   async execute<K extends OpsOperationKind>(
     operation: Extract<OpsOperation, { kind: K }>,
-    options: { operationKey?: string; signal?: AbortSignal } = {},
+    options: {
+      operationKey?: string;
+      signal?: AbortSignal;
+      execution?: { requestedDeadlineAt: number };
+      controlAssertion?: string;
+      parentAssertion?: string;
+    } = {},
   ): Promise<OpsSubmitResult<K>> {
     if (OPS_KIND_POLICIES[operation.kind].execution === "async" && !options.operationKey) {
       throw new Error("Async operation key is required");
     }
+    await this.requireProtocol2(options.signal);
     const token = await readOpsTokenFile(this.tokenFile);
     const issued = this.now();
     const requestId = `ops1_${Buffer.from(this.randomBytes(18)).toString("base64url")}`;
@@ -401,6 +539,7 @@ export class OpsClient {
         issued.getTime() + Math.min(20_000, OPS_MAX_REQUEST_TTL_MS),
       ).toISOString(),
       operation,
+      ...(options.execution ? { execution: options.execution } : {}),
     };
     const timeoutSignal = AbortSignal.timeout(
       opsRequestTimeoutMs(operation.kind, this.configuredRequestTimeoutMs),
@@ -415,6 +554,12 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
+          ...(options.controlAssertion
+            ? { "x-openmapx-control-delegation": options.controlAssertion }
+            : {}),
+          ...(options.parentAssertion
+            ? { "x-openmapx-parent-execution": options.parentAssertion }
+            : {}),
         },
         body: JSON.stringify(request),
         signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
@@ -445,20 +590,10 @@ export class OpsClient {
           value: parseOpsResult(operation.kind, submit.value),
         } as OpsSubmitResult<K>;
       }
-      if (
-        !exactKeys(submit, ["execution", "operationId", "operationKey", "kind", "state"]) ||
-        submit.execution !== "async" ||
-        submit.kind !== operation.kind ||
-        submit.operationKey !== operationKey ||
-        typeof submit.operationId !== "string" ||
-        !/^job1_[A-Za-z0-9_-]{16,64}$/.test(submit.operationId) ||
-        !["queued", "running", "succeeded", "failed", "termination_pending", "timed_out"].includes(
-          String(submit.state),
-        )
-      ) {
+      const admission = parseOpsAdmission(submit);
+      if (admission.kind !== operation.kind || admission.operationKey !== operationKey)
         throw new OpsClientError("runtime", response.status);
-      }
-      return submit as unknown as OpsSubmitResult<K>;
+      return admission as OpsSubmitResult<K>;
     } catch (error) {
       if (error instanceof OpsClientError) throw error;
       if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");

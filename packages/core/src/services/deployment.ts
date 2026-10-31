@@ -8,8 +8,10 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
+  realpathSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { atomicWrite } from "../release-files";
 import {
   DEFAULT_SELECTED_SERVICE_IDS,
@@ -40,6 +42,26 @@ export const LEGACY_CONFIGURATION_GENERATIONS = ".trusted-config-generations";
 export const LEGACY_SERVICE_SELECTION_FILE = SERVICE_SELECTION_FILE;
 export const GENERATED_COMPOSE_FILE = "docker-compose.generated.yml";
 export const GENERATED_HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
+export const CONFIGURATION_GENERATION_BASE_PREFIX = `${CONFIGURATION_DIRECTORY}/.base-`;
+
+export function configurationGenerationBasePath(infraDir: string, revisionId: string): string {
+  if (!/^cfg1_[A-Za-z0-9_-]{43}$/.test(revisionId))
+    throw new Error("Unsafe generation Compose base");
+  return join(infraDir, `${CONFIGURATION_GENERATION_BASE_PREFIX}${revisionId}`);
+}
+/** A fixed same-depth alias preserves legacy relative paths and pins its own secrets. */
+export function readConfigurationGenerationBase(infraDir: string, revisionId: string): string {
+  const base = configurationGenerationBasePath(infraDir, revisionId),
+    stat = lstatSync(base);
+  if (
+    !stat.isSymbolicLink() ||
+    stat.uid !== (process.geteuid?.() ?? 0) ||
+    stat.nlink !== 1 ||
+    readlinkSync(base) !== `generations/${revisionId}`
+  )
+    throw new Error("Unsafe generation Compose base");
+  return base;
+}
 
 /**
  * The Compose project of the stack, written into the generated compose file:
@@ -75,11 +97,35 @@ export function stackComposeArgs(
     if (inherited) throw new Error(inherited);
   }
   const hasOverlay = (fileExists ?? ownedStateFilePresent)(paths.composeReleasePath);
+  // Compose records this path in container provenance. Pin the generation,
+  // rather than the movable current symlink, so deselection retains cleanup authority.
+  let composePath = paths.composePath;
+  let projectArgs: string[] = [];
+  let existing = false;
+  try {
+    composePath = realpathSync(composePath);
+    existing = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (existing) {
+    const infra = realpathSync(paths.infraDir);
+    if (
+      dirname(dirname(composePath)) === join(infra, CONFIGURATION_GENERATIONS) &&
+      basename(composePath) === GENERATED_COMPOSE_FILE
+    ) {
+      const base = readConfigurationGenerationBase(infra, basename(dirname(composePath)));
+      if (realpathSync(base) !== dirname(composePath))
+        throw new Error("Unsafe generation Compose base");
+      projectArgs = ["--project-name", STACK_PROJECT, "--project-directory", base];
+    }
+  }
   return [
     "compose",
+    ...projectArgs,
     ...(hasEnvFile ? ["--env-file", envFile] : []),
     "-f",
-    paths.composePath,
+    composePath,
     ...(hasOverlay ? ["-f", paths.composeReleasePath] : []),
   ];
 }

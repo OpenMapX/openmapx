@@ -1,20 +1,45 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import {
+  assertArtifactTargetLeaseForward,
+  assertControlExecutionForward,
+  assertDataTransitCandidateForExecution,
+} from "@openmapx/core/build-artifacts";
 import {
   OPS_MAX_EVENT_MESSAGE_BYTES,
   OPS_MAX_FOLLOW_LOG_EVENTS,
   type OpsResultFor,
+  type ProcessDiagnostics,
 } from "@openmapx/core/ops";
 import {
   assertPosixProcessGroupsSupported,
   monitorPosixProcessGroup,
   services,
 } from "@openmapx/core/server";
+import {
+  createFeedProxyValidationInvocation,
+  parseFeedProxyValidationCompletion,
+} from "./feed-proxy-validation";
+import type { OwnedServiceResolver, OwnedServiceSnapshot } from "./owned-services";
+import { createBoundedProcessOutput, safeProcessDiagnostic } from "./process-output";
+import {
+  createUnavailableRuntime,
+  type OpsExecutionContext,
+  OpsExecutionFailure,
+  type OpsRuntime,
+} from "./runtime";
+import { decideServiceAction } from "./service-action-policy";
+
+const containedProcessFailures = new WeakSet<object>();
+/** Only actual contained-process adapters mint this observation; it is not request authority. */
+export function isContainedProcessFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && containedProcessFailures.has(error);
+}
+
 import { openAnchoredDirectory } from "./anchored-directory";
-import { createUnavailableRuntime, type OpsRuntime } from "./runtime";
 
 const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
 const TRAFFIC_GENERATIONS_MANIFEST = "traffic-generations.json";
@@ -24,7 +49,6 @@ const TRAFFIC_GENERATIONS_UNVERIFIED = "traffic-generations.unverified.json";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
-const PULL_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const KILL_GRACE_MS = 2_000;
 
@@ -63,6 +87,7 @@ export interface DockerRuntimeOptions {
   stack: services.StackPaths;
   fileExists: (path: string) => boolean;
   execFile?: ExecFile;
+  ownedServices?: OwnedServiceResolver;
   followLogs?: FollowLogs;
   /**
    * Owner of the shared `/data` mount. Artifacts a container writes as root
@@ -82,6 +107,88 @@ export interface ContainedProcessOptions {
   killGraceMs?: number;
   /** The child's environment; the agent's own when omitted. */
   env?: NodeJS.ProcessEnv;
+}
+
+export interface StreamingProcessOptions {
+  signal: AbortSignal;
+  timeout: number;
+  killGraceMs?: number;
+  onLine(stream: "stdout" | "stderr", message: string): void;
+  redact: (message: string) => string;
+  /** Only the fixed CLI adapter supplies a private managed context. */
+  env?: NodeJS.ProcessEnv;
+}
+
+function childEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of [
+    "OPENMAPX_CONTROL_EXECUTION",
+    "OPENMAPX_CONTROL_DELEGATION",
+    "OPENMAPX_PARENT_EXECUTION",
+  ])
+    delete env[key];
+  return env;
+}
+
+export async function runContainedStreamingProcess(
+  file: string,
+  args: readonly string[],
+  options: StreamingProcessOptions,
+): Promise<ProcessDiagnostics> {
+  assertPosixProcessGroupsSupported();
+  if (options.signal.aborted || options.timeout <= 0)
+    throw new OpsExecutionFailure("timeout", { diagnostics: { tail: [], truncated: false } });
+  if (
+    !Number.isSafeInteger(options.timeout) ||
+    (options.killGraceMs !== undefined &&
+      (!Number.isSafeInteger(options.killGraceMs) || options.killGraceMs < 1))
+  )
+    throw new OpsExecutionFailure("runtime", { diagnostics: { tail: [], truncated: false } });
+  const output = createBoundedProcessOutput(options);
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(file, [...args], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: options.env ?? childEnvironment(),
+    });
+  } catch {
+    throw new OpsExecutionFailure("runtime", { diagnostics: output.end() });
+  }
+  const group = monitorPosixProcessGroup(child, {
+    killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
+  });
+  let timedOut = false;
+  const abort = () => group.terminate();
+  const timer = setTimeout(() => {
+    timedOut = true;
+    group.terminate();
+  }, options.timeout);
+  options.signal.addEventListener("abort", abort, { once: true });
+  if (options.signal.aborted) abort();
+  child.stdout?.on("data", (chunk: Buffer) => output.write("stdout", chunk));
+  child.stderr?.on("data", (chunk: Buffer) => output.write("stderr", chunk));
+  try {
+    const exit = await group.closed;
+    const diagnostics = output.end();
+    if (
+      timedOut ||
+      options.signal.aborted ||
+      exit.spawnFailed ||
+      exit.residualDescendants ||
+      exit.containmentFailed ||
+      exit.code !== 0 ||
+      exit.signal !== null
+    ) {
+      const error = new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
+      if (!exit.residualDescendants && !exit.containmentFailed) containedProcessFailures.add(error);
+      throw error;
+    }
+    return diagnostics;
+  } finally {
+    clearTimeout(timer);
+    options.signal.removeEventListener("abort", abort);
+  }
 }
 
 // The agent runs as the data-owning user, so its own identity is the default
@@ -131,11 +238,13 @@ export function runContainedProcess(
   options: ContainedProcessOptions,
 ): Promise<{ stdout: string; stderr: string }> {
   assertPosixProcessGroupsSupported();
+  if (options.signal.aborted || options.timeout <= 0)
+    return Promise.reject(new Error("Contained process failed"));
   return new Promise((resolve, reject) => {
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
-      ...(options.env ? { env: options.env } : {}),
+      env: { ...childEnvironment(), ...options.env },
     });
     const group = monitorPosixProcessGroup(child, {
       killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
@@ -163,8 +272,8 @@ export function runContainedProcess(
     const timeout = setTimeout(terminate, options.timeout);
     options.signal.addEventListener("abort", onAbort, { once: true });
     if (options.signal.aborted) terminate();
-    child.stdout.on("data", onData(stdout));
-    child.stderr.on("data", onData(stderr));
+    child.stdout?.on("data", onData(stdout));
+    child.stderr?.on("data", onData(stderr));
     child.once("error", () => {
       failed = true;
     });
@@ -179,7 +288,10 @@ export function runContainedProcess(
         exit.code !== 0 ||
         exit.signal !== null
       ) {
-        reject(new Error("Contained process failed"));
+        const error = new Error("Contained process failed");
+        if (!exit.residualDescendants && !exit.containmentFailed)
+          containedProcessFailures.add(error);
+        reject(error);
         return;
       }
       resolve({
@@ -200,6 +312,7 @@ export function runContainedLogProcess(
     const child = spawn(file, [...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: childEnvironment(),
     });
     const group = monitorPosixProcessGroup(child, { killGraceMs: KILL_GRACE_MS });
     let bytes = 0;
@@ -335,8 +448,22 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     services.stackComposeArgs(options.stack, options.fileExists);
   const run = (args: readonly string[], signal: AbortSignal, timeout = DEFAULT_TIMEOUT_MS) =>
     execFile("docker", args, { signal, timeout, maxBuffer: MAX_OUTPUT_BYTES });
-  const changed = async (args: readonly string[], signal: AbortSignal, timeout?: number) => {
-    await run(args, signal, timeout);
+  const changed = async (
+    args: readonly string[],
+    context: OpsExecutionContext,
+    timeout = DEFAULT_TIMEOUT_MS,
+  ) => {
+    const remaining = context.execution.deadlineAt - Date.now();
+    if (remaining <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
+    context.beginServiceCreation?.();
+    if (options.execFile) await run(args, context.signal, Math.min(timeout, remaining));
+    else
+      await runContainedStreamingProcess("docker", args, {
+        signal: context.signal,
+        timeout: Math.min(timeout, remaining),
+        onLine: context.emitLog,
+        redact: safeProcessDiagnostic,
+      });
     return { changed: true } as const;
   };
   const motisState = async (name: "motis" | "motis-staging", signal: AbortSignal) => {
@@ -366,14 +493,48 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
   const stopMotis = async (
     name: "motis" | "motis-staging",
-    signal: AbortSignal,
+    context: OpsExecutionContext,
   ): Promise<OpsResultFor<"motis.primary.stop">> => {
-    const before = await motisState(name, signal);
+    const before = await motisState(name, context.signal);
     if (before !== "running") return { changed: false, state: before };
-    await run(["stop", name], signal);
-    const after = await motisState(name, signal);
+    await changed(["stop", name], context);
+    const after = await motisState(name, context.signal);
     if (after === "running") throw new Error("MOTIS container remains running after stop");
     return { changed: true, state: after };
+  };
+  const ownedTarget = async (
+    serviceId: string,
+    context: OpsExecutionContext,
+    action: "stop" | "logs",
+  ): Promise<OwnedServiceSnapshot> => {
+    const encoded = context.claim.capability.values.ownedService;
+    if (!options.ownedServices || typeof encoded !== "string")
+      throw new Error("Owned service claim required");
+    const claimed = JSON.parse(encoded) as OwnedServiceSnapshot;
+    const current = (await options.ownedServices.inspectOwnedServices(context.signal)).find(
+      (s) => s.serviceId === serviceId,
+    );
+    if (
+      !current ||
+      claimed.serviceId !== serviceId ||
+      claimed.containerId !== current.containerId ||
+      JSON.stringify(claimed.provenance) !== JSON.stringify(current.provenance)
+    )
+      throw new Error("Owned service claim changed");
+    if (
+      !decideServiceAction(
+        {
+          revisionId: "owned",
+          services: [{ serviceId, isBuiltIn: true, buildable: false }],
+          enabledServiceIds: new Set(),
+        },
+        current,
+        action,
+      ).available
+    )
+      throw new Error("Service action denied");
+    context.signal.throwIfAborted();
+    return current;
   };
   const runtime = createUnavailableRuntime();
   const followLogs: FollowLogs = options.followLogs ?? runContainedLogProcess;
@@ -386,71 +547,210 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     const result = await run([...composePrefix(), "ps", "--format", "json"], context.signal);
     return parseStackStatus(result.stdout);
   };
-  runtime["stack.start"] = (_operation, context) =>
-    changed([...composePrefix(), "up", "-d"], context.signal, LIFECYCLE_TIMEOUT_MS);
+  const preparedCreation = async (
+    operation: { expectedConfigurationRevisionId: string; serviceId?: string },
+    context: OpsExecutionContext,
+    args: () => string[],
+    continuation?: () => string[] | undefined,
+  ) => {
+    if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+    if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+    try {
+      return await services.withConfigurationGenerationWriter(
+        options.stack.infraDir,
+        async () => {
+          const currentRevisionId = services.currentConfigurationGeneration(options.stack.infraDir);
+          if (operation.expectedConfigurationRevisionId !== currentRevisionId)
+            throw new OpsExecutionFailure("conflict", {
+              serviceLifecycle: {
+                expectedRevisionId: operation.expectedConfigurationRevisionId,
+                seedRevisionId: operation.expectedConfigurationRevisionId,
+                finalRevisionId: null,
+                phase: "failed",
+                commit: "seed_committed",
+                followUp: "not_started",
+                failure: {
+                  reason: "revision_conflict",
+                  failedServiceIds: operation.serviceId ? [operation.serviceId] : [],
+                },
+              },
+            });
+          const store = services.releaseStatePaths(options.stack.infraDir).store;
+          await mkdir(store, { mode: 0o700, recursive: true });
+          const release = await services.acquireReleaseStoreLock(store);
+          try {
+            const command = args();
+            // Direct DM Start is fixed --no-recreate; guarded DM recreation is
+            // checked by the actual frozen-step verifier before this adapter.
+            // All implicit coordinator creation stays outside this generic path.
+            if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
+              const configuration = JSON.parse(
+                  (
+                    await run(
+                      [...composePrefix(), "config", "--format", "json"],
+                      context.signal,
+                      15000,
+                    )
+                  ).stdout,
+                ),
+                targets = operation.serviceId
+                  ? [operation.serviceId]
+                  : services.readAppliedComposeServiceIds(
+                      options.stack.infraDir,
+                      operation.expectedConfigurationRevisionId,
+                    );
+              if (
+                services
+                  .composeCreationDependencyIds(configuration, targets)
+                  .includes("data-manager")
+              )
+                throw Error("Coordinator maintenance required before service creation");
+            }
+            const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+            const next = continuation?.();
+            if (next) {
+              if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+              if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+              return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
+            }
+            return result;
+          } finally {
+            release.release();
+          }
+        },
+        context.signal,
+      );
+    } catch (error) {
+      if (
+        error instanceof services.ConfigurationGenerationError &&
+        error.cause instanceof OpsExecutionFailure
+      )
+        throw error.cause;
+      if (
+        error instanceof services.ConfigurationGenerationError &&
+        error.result.outcome === "not_committed" &&
+        !error.result.cleanupFailed &&
+        isContainedProcessFailure(error.cause)
+      )
+        throw error.cause;
+      throw error;
+    }
+  };
+  runtime["stack.start"] = (operation, context) => {
+    const selected = () =>
+      services.readAppliedComposeServiceIds(
+        options.stack.infraDir,
+        operation.expectedConfigurationRevisionId,
+      );
+    const protectedIds = new Set(["data-manager", "ops-agent"]);
+    return preparedCreation(
+      operation,
+      context,
+      () => {
+        const ids = selected();
+        if (ids.length === 0) throw Error("No enabled services to start");
+        // Start the entire frozen closure without replacing the coordinator or
+        // executing agent. Their replacements use the dedicated guarded paths.
+        return [
+          ...composePrefix(),
+          "up",
+          "-d",
+          ...(ids.some((id) => protectedIds.has(id)) ? ["--no-recreate"] : []),
+          "--no-deps",
+          ...ids,
+        ];
+      },
+      () => {
+        const ids = selected();
+        if (!ids.some((id) => protectedIds.has(id))) return undefined;
+        const ordinary = ids.filter((id) => !protectedIds.has(id));
+        return ordinary.length
+          ? [...composePrefix(), "up", "-d", "--no-deps", ...ordinary]
+          : undefined;
+      },
+    );
+  };
   runtime["service.start"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
-  runtime["service.stop"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "stop", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      ...(operation.serviceId === "data-manager" ? ["--no-recreate"] : []),
+      operation.serviceId,
+    ]);
+  runtime["service.stop"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "stop");
+    return changed(["stop", target.containerId], context, LIFECYCLE_TIMEOUT_MS);
+  };
   runtime["service.restart"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "restart", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "restart", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.recreate"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", "--force-recreate", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      "--force-recreate",
+      operation.serviceId,
+    ]);
   runtime["service.recreateIsolated"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
-  runtime["service.pull"] = (operation, context) =>
-    changed([...composePrefix(), "pull", operation.serviceId], context.signal, PULL_TIMEOUT_MS);
+    preparedCreation(operation, context, () => [
+      ...composePrefix(),
+      "up",
+      "-d",
+      "--force-recreate",
+      "--no-deps",
+      operation.serviceId,
+    ]);
   runtime["service.remove"] = (operation, context) =>
-    changed(
-      [...composePrefix(), "rm", "-sf", operation.serviceId],
-      context.signal,
-      LIFECYCLE_TIMEOUT_MS,
-    );
+    changed([...composePrefix(), "rm", "-sf", operation.serviceId], context, LIFECYCLE_TIMEOUT_MS);
   runtime["service.logs"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "logs");
     const result = await run(
-      [...composePrefix(), "logs", "--no-color", `--tail=${operation.tail}`, operation.serviceId],
+      ["logs", `--tail=${operation.tail}`, target.containerId],
       context.signal,
     );
-    const rawLines = result.stdout.split(/\r?\n/).filter(Boolean);
-    const selected = rawLines.slice(0, operation.tail);
-    const lines = selected.map((line) => truncateUtf8(line));
+    // Use the existing incremental credential framing before exposing a snapshot.
+    // A fixed ring keeps the latest requested messages without an unbounded list.
+    const retained: string[] = [];
+    let cursor = 0,
+      count = 0;
+    const output = createBoundedProcessOutput({
+      redact: safeProcessDiagnostic,
+      onLine: (_stream, message) => {
+        if (retained.length < operation.tail) retained.push(message);
+        else {
+          retained[cursor] = message;
+          cursor = (cursor + 1) % operation.tail;
+        }
+        count++;
+      },
+    });
+    output.write("stdout", Buffer.from(result.stdout));
+    output.write("stderr", Buffer.from(result.stderr));
+    const diagnostics = output.end();
+    const ordered =
+      count <= operation.tail
+        ? retained
+        : [...retained.slice(cursor), ...retained.slice(0, cursor)];
+    // JSON escaping can expand otherwise bounded lines; bound the actual wire bytes.
+    let bytes = 32,
+      first = ordered.length;
+    for (let index = ordered.length - 1; index >= 0; index--) {
+      const size = Buffer.byteLength(JSON.stringify(ordered[index]), "utf8") + 1;
+      if (bytes + size > MAX_OUTPUT_BYTES) break;
+      bytes += size;
+      first = index;
+    }
     return {
-      lines,
-      truncated:
-        rawLines.length > operation.tail || lines.some((line, index) => line !== selected[index]),
+      lines: ordered.slice(first),
+      truncated: diagnostics.truncated || count > operation.tail || first > 0,
     };
   };
-  runtime["service.logs.follow"] = (operation, context) =>
-    followLogs(
+  runtime["service.logs.follow"] = async (operation, context) => {
+    const target = await ownedTarget(operation.serviceId, context, "logs");
+    return followLogs(
       "docker",
-      [
-        ...composePrefix(),
-        "logs",
-        "-f",
-        "--no-color",
-        `--tail=${operation.tail}`,
-        operation.serviceId,
-      ],
+      ["logs", "--follow", `--tail=${operation.tail}`, target.containerId],
       {
         signal: context.signal,
         timeout: operation.maxDurationSeconds * 1_000,
@@ -458,6 +758,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         onLine: context.emitLog,
       },
     );
+  };
   runtime["dawarich.provisioning.inspect"] = async (_operation, context) => {
     const statusResult = await run([...composePrefix(), "ps", "--format", "json"], context.signal);
     const status = parseStackStatus(statusResult.stdout);
@@ -512,11 +813,63 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     return { availableBytes: parsePosixDfAvailableBytes(result.stdout) };
   };
+  function assertTransitCandidateEffect(
+    operation: Parameters<typeof assertDataTransitCandidateForExecution>[1],
+    context: OpsExecutionContext,
+  ) {
+    context.signal.throwIfAborted();
+    if (
+      !context.controlAuthority ||
+      !context.artifactLease ||
+      typeof context.claim.capability.values.candidateDigest !== "string"
+    )
+      throw Error("Original owned transit resource claim required");
+    assertArtifactTargetLeaseForward(context.artifactLease);
+    assertDataTransitCandidateForExecution(
+      context.controlAuthority,
+      operation,
+      context.claim.capability.values.candidateDigest,
+    );
+  }
   runtime["feedProxy.validateAndReload"] = async (operation, context) => {
+    assertTransitCandidateEffect(operation, context);
     // Validate before reloading: a reload against a bad configuration would
     // take the proxy down rather than reject the candidate.
-    await run(["exec", FEED_PROXY_CONTAINER, "nginx", "-t"], context.signal, 30_000);
-    await run(["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], context.signal, 30_000);
+    if (!context.commitFeedProxyValidationFailure || !context.markFeedProxyReloadAttempted)
+      throw Error("Fixed validation producer is unavailable");
+    const candidateDigest = context.claim.capability.values.candidateDigest;
+    if (typeof candidateDigest !== "string") throw Error("Original candidate digest missing");
+    const invocation = createFeedProxyValidationInvocation(),
+      remaining = context.execution.deadlineAt - Date.now();
+    if (remaining <= 0) throw new OpsExecutionFailure("timeout", {});
+    // Unlike streaming mutation output, validation requires the complete bounded
+    // nonce marker from the strict normal-zero contained-process adapter.
+    const completed = await run(
+      ["exec", FEED_PROXY_CONTAINER, ...invocation.args],
+      context.signal,
+      Math.min(30_000, remaining),
+    );
+    context.signal.throwIfAborted();
+    const validation = parseFeedProxyValidationCompletion(
+      completed.stdout,
+      invocation.nonce,
+      context.execution,
+      candidateDigest,
+    );
+    if (validation.output) context.emitLog("stdout", validation.output);
+    if (completed.stderr) context.emitLog("stderr", completed.stderr);
+    if (validation.validationExitCode !== 0) {
+      await context.commitFeedProxyValidationFailure({
+        candidateDigest,
+        validationExitCode: validation.validationExitCode,
+        completionDigest: validation.completionDigest,
+      });
+      throw new OpsExecutionFailure("runtime", {});
+    }
+    assertTransitCandidateEffect(operation, context);
+    await context.markFeedProxyReloadAttempted();
+    assertTransitCandidateEffect(operation, context);
+    await changed(["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], context, 30_000);
     return { candidateId: operation.candidateId, reloaded: true as const };
   };
   // Valhalla traffic effects. The whole sequence lives here because each step
@@ -589,7 +942,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return { state: tileMtime > tarMtime ? ("not_ready" as const) : ("ready" as const) };
   };
 
+  function assertTrafficForward(context: OpsExecutionContext): void {
+    context.signal.throwIfAborted();
+    if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+    if (context.ownedTargetLease) assertArtifactTargetLeaseForward(context.ownedTargetLease);
+  }
   runtime["valhalla.traffic.maintain"] = async (operation, context) => {
+    assertTrafficForward(context);
     const dataRoot = options.trafficDataRoot;
     if (!dataRoot) throw new Error("Valhalla traffic maintenance data root is not configured");
     const writerLockPath = join(dataRoot, "traffic", "live-state.json.lock");
@@ -610,6 +969,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     if (stopped.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
 
+    assertTrafficForward(context);
     // data-manager can rewrite everything under the data root, so the agent
     // writes this directory only through descriptors opened without
     // following a symlink, never by a path it re-resolves.
@@ -710,8 +1070,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         waysToEdgesGeneration: generation,
         completedAt: new Date().toISOString(),
       };
+      assertTrafficForward(context);
       shared.replaceFile(TRAFFIC_GENERATIONS_MANIFEST, `${JSON.stringify(manifest)}\n`, 0o644);
 
+      assertTrafficForward(context);
       await run(["start", VALHALLA_CONTAINER], context.signal, 30_000);
       const healthDeadline = Date.now() + 60_000;
       while (true) {
@@ -725,6 +1087,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
+      assertTrafficForward(context);
       shared.removeFile(TRAFFIC_MAINTENANCE_FENCE);
       return {
         changed: true,
@@ -773,6 +1136,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
 
   runtime["valhalla.traffic.refreshWaysToEdges"] = async (_operation, context) => {
+    assertTrafficForward(context);
     // Writes `<tile_dir>/way_edges.txt`, a hard-coded name with no output flag.
     // data-manager reads and filters it from the shared mount afterwards.
     // A whole-country graph takes minutes, far past the default command bound.
@@ -783,6 +1147,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     );
     if (build.exitCode !== 0) throw new Error("valhalla_ways_to_edges failed");
     const owner = options.dataMountOwner ?? defaultDataMountOwner;
+    assertTrafficForward(context);
     await valhallaExec(
       ["chown", `${owner.uid}:${owner.gid}`, `${VALHALLA_TILE_DIR}/way_edges.txt`],
       context.signal,
@@ -791,25 +1156,28 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   };
 
   runtime["motis.staging.restart"] = (_operation, context) =>
-    changed(["restart", "motis-staging"], context.signal);
-  runtime["motis.staging.stop"] = (_operation, context) =>
-    stopMotis("motis-staging", context.signal);
+    changed(
+      [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis-staging"],
+      context,
+    );
+  runtime["motis.staging.stop"] = (_operation, context) => stopMotis("motis-staging", context);
   runtime["motis.primary.restart"] = (_operation, context) =>
-    changed(["restart", "motis"], context.signal);
+    changed([...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis"], context);
   runtime["motis.primary.promote"] = async (operation, context) => {
+    assertTransitCandidateEffect(operation, context);
     // Recreate rather than restart: Docker resolves a bind-mount symlink when
     // the container is created, so a plain restart can keep pointing at the old
     // A/B target. `--no-deps` stops Compose from cascading into the feed proxy
     // and recreating MOTIS a second time, which would race the caller's
     // post-swap health probe.
-    await run(
+    await changed(
       [...composePrefix(), "up", "-d", "--force-recreate", "--no-deps", "motis"],
-      context.signal,
+      context,
       10 * 60_000,
     );
     // The caller performed the data swap; the agent reports the run it activated.
     return { activeRunId: operation.preparedRunId };
   };
-  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context.signal);
+  runtime["motis.primary.stop"] = (_operation, context) => stopMotis("motis", context);
   return runtime;
 }

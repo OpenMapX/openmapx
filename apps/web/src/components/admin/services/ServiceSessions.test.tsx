@@ -1,7 +1,9 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cloneElement, isValidElement, type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { job } from "../activity/__tests__/fixtures";
 import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
@@ -21,10 +23,14 @@ function mount(child: ReactNode, strict = false) {
   const view = (next: ReactNode) =>
     strict ? (
       <StrictMode>
-        <QueryClientProvider client={qc}>{next}</QueryClientProvider>
+        <QueryClientProvider client={qc}>
+          <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+        </QueryClientProvider>
       </StrictMode>
     ) : (
-      <QueryClientProvider client={qc}>{next}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      </QueryClientProvider>
     );
   const rendered = render(view(child));
   return {
@@ -75,7 +81,11 @@ function composeFetch(write: (url: string, init: RequestInit) => Promise<Respons
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) =>
     init.method === "POST"
       ? write(url, init)
-      : new Response("services:\n  synthetic: {}\n", { headers: { "content-type": "text/yaml" } }),
+      : String(url).includes("/jobs/")
+        ? Response.json(job({ id: "render-job", status: "running" }))
+        : new Response("services:\n  synthetic: {}\n", {
+            headers: { "content-type": "text/yaml", "x-openmapx-current-configuration": "none" },
+          }),
   );
 }
 function logs(id = "service /one", open = true) {
@@ -93,6 +103,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Compose generated consumers", () => {
+  it("confirms render-only and retains its revision/key after a lost response without starting containers", async () => {
+    const writes: { path: string; init: RequestInit }[] = [];
+    composeFetch((url, init) => {
+      writes.push({ path: new URL(url).pathname, init });
+      return writes.length === 1
+        ? Response.json({ error: "Connection interrupted" }, { status: 503 })
+        : Response.json({ ok: true, jobId: "render-job" }, { status: 202 });
+    });
+    mount(<ComposePreview />);
+    await screen.findByText(/synthetic: \{\}/);
+    fireEvent.click(screen.getByRole("button", { name: "Generate configuration" }));
+    expect(await screen.findByText(/does not start or restart containers/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Generate only" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Generate only" })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate only" }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.map((write) => write.path)).toEqual([
+      "/api/admin/compose/render",
+      "/api/admin/compose/render",
+    ]);
+    expect(writes.map((write) => JSON.parse(String(write.init.body)))).toEqual(
+      [1, 2].map(() => ({ expectedCurrentRevisionId: null, confirmed: true })),
+    );
+    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBeTruthy();
+    expect(new Headers(writes[0].init.headers).get("idempotency-key")).toBe(
+      new Headers(writes[1].init.headers).get("idempotency-key"),
+    );
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringContaining("render-job")));
+  });
   it("shows finite YAML, rejects 200 domain failure and retains same unresolved key", async () => {
     const writes: RequestInit[] = [];
     composeFetch(async (_url, init) => {
@@ -105,7 +147,11 @@ describe("Compose generated consumers", () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Compose up failed", "error"));
     expect(writes).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Compose Up" }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith("Compose up completed"));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        "Stack started. Use guarded Apply/Update for Data Manager or agent changes.",
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Compose Up" }));
     await waitFor(() => expect(writes).toHaveLength(3));
     const keys = writes.map((init) => new Headers(init.headers).get("idempotency-key"));
@@ -113,7 +159,7 @@ describe("Compose generated consumers", () => {
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
   });
-  it("shows bounded down guidance once with no success or fallback", async () => {
+  it("shows copyable host shutdown guidance without sending a doomed mutation", async () => {
     const paths: string[] = [];
     composeFetch(async (url) => {
       paths.push(new URL(url).pathname);
@@ -121,9 +167,10 @@ describe("Compose generated consumers", () => {
     });
     mount(<ComposePreview />);
     await screen.findByText(/synthetic: \{\}/);
-    fireEvent.click(screen.getByRole("button", { name: "Compose Down" }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith("Use typed service controls", "error"));
-    expect(paths).toEqual(["/api/admin/compose/down"]);
+    expect(screen.queryByRole("button", { name: "Compose Down" })).toBeNull();
+    expect(screen.getByText("pnpm openmapx compose down")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Shutdown and recovery guidance" })).toBeVisible();
+    expect(paths).toEqual([]);
   });
   it.each([true, false])(
     "fences old origin completion/error (%s) and never reuses its intent",
@@ -164,7 +211,7 @@ describe("Compose generated consumers", () => {
   });
 });
 describe("generated log sessions", () => {
-  it("decodes split UTF8/newlines, flushes EOF residual and keeps last 500 nonempty lines", async () => {
+  it("decodes split UTF8/newlines, preserves blank output and keeps the last1000 lines", async () => {
     const encoder = new TextEncoder();
     const bytes = encoder.encode("α\n\nline\nlast😀");
     const stream = new ReadableStream<Uint8Array>({
@@ -179,25 +226,26 @@ describe("generated log sessions", () => {
       return new Response(stream, { headers: { "content-type": "text/plain" } });
     });
     const view = mount(logs());
-    expect(await screen.findByText("3 lines")).toBeInTheDocument();
-    expect(document.querySelector("pre")?.textContent).toBe("α\nline\nlast😀");
+    expect(await screen.findByText("4 lines")).toBeInTheDocument();
+    expect(document.querySelector("pre")?.textContent).toBe("α\n\nline\nlast😀");
     expect(stream.locked).toBe(false);
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("http://admin.test/api/admin/services/service%20%2Fone/logs");
+    expect(new URL(calls[0].url).pathname).toBe("/api/admin/services/service%20%2Fone/logs");
+    expect(new URL(calls[0].url).searchParams.get("lines")).toBe("200");
     expect(new Headers(calls[0].init.headers).get("idempotency-key")).toBeTruthy();
     vi.stubGlobal(
       "fetch",
       async () =>
-        new Response(Array.from({ length: 505 }, (_, i) => `line-${i}\n\n`).join(""), {
+        new Response(Array.from({ length: 1005 }, (_, i) => `line-${i}\n`).join(""), {
           headers: { "content-type": "text/plain" },
         }),
     );
     view.replace(logs("large"));
-    await screen.findByText("500 lines");
+    await screen.findByText("1000 lines");
     const lines = document.querySelector("pre")?.textContent?.split("\n");
-    expect(lines).toHaveLength(500);
+    expect(lines).toHaveLength(1000);
     expect(lines?.[0]).toBe("line-5");
-    expect(lines?.at(-1)).toBe("line-504");
+    expect(lines?.at(-1)).toBe("line-1004");
   });
   it.each(["origin", "service", "close", "unmount"])(
     "aborts stalled observation on %s and clears replacement content",
@@ -236,7 +284,7 @@ describe("generated log sessions", () => {
       expect(stream.locked).toBe(false);
       if (kind === "origin" || kind === "service") {
         expect(document.querySelector("pre")?.textContent).toBe("");
-        expect(screen.getByText("streaming")).toBeInTheDocument();
+        expect(screen.getByText("following")).toBeInTheDocument();
       }
     },
   );
@@ -253,7 +301,7 @@ describe("generated log sessions", () => {
     await act(async () => {
       old.resolve(Response.json({ error: "old error" }, { status: 404 }));
     });
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
     expect(screen.queryByText(/old error/)).not.toBeInTheDocument();
     expect(new Headers(calls[1].headers).get("idempotency-key")).not.toBe(
       new Headers(calls[0].headers).get("idempotency-key"),
@@ -295,7 +343,7 @@ describe("generated log sessions", () => {
       await vi.advanceTimersByTimeAsync(30_001);
     });
     expect(signal?.aborted).toBe(false);
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
     view.unmount();
     await act(async () => {});
     expect(canceled).toBe(true);
@@ -590,7 +638,7 @@ describe("additional ownership and safe feedback", () => {
     expect(canceled).toBe(true);
     expect(stream.locked).toBe(false);
     expect(document.querySelector("pre")?.textContent).toBe("");
-    expect(screen.getByText("streaming")).toBeInTheDocument();
+    expect(screen.getByText("following")).toBeInTheDocument();
   });
   it("close aborts immediately, clears content, and reopening allocates one new key", async () => {
     const calls: RequestInit[] = [];
@@ -611,7 +659,7 @@ describe("additional ownership and safe feedback", () => {
     });
     const view = mount(logs());
     await screen.findByText("current-log");
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "Close service logs" }));
     await act(async () => {});
     expect(calls[0].signal?.aborted).toBe(true);
     expect(canceled).toBe(1);
@@ -667,4 +715,46 @@ it("retains newer rotation feedback when an older provision settles with unchang
   });
   expect(screen.getByText(/persisted managed OAuth client is duplicated/)).toBeInTheDocument();
   expect(screen.queryByText(/database password copies conflict/)).not.toBeInTheDocument();
+});
+
+it("owns query changes, pause/resume and snapshot reload with distinct logical read identities", async () => {
+  const calls: { url: URL; init: RequestInit }[] = [];
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    const parsed = new URL(url);
+    calls.push({ url: parsed, init });
+    if (parsed.searchParams.get("follow") === "false")
+      return new Response("snapshot-log\n", { headers: { "content-type": "text/plain" } });
+    return new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("live-log\n"));
+        },
+      }),
+      { headers: { "content-type": "text/plain" } },
+    );
+  });
+  mount(logs());
+  await screen.findByText("live-log");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Tail lines" }));
+  fireEvent.click(await screen.findByRole("option", { name: "500" }));
+  await waitFor(() => expect(calls).toHaveLength(2));
+  expect(calls[0].init.signal?.aborted).toBe(true);
+  expect(calls[1].url.searchParams.get("lines")).toBe("500");
+  expect(new Headers(calls[1].init.headers).get("idempotency-key")).not.toBe(
+    new Headers(calls[0].init.headers).get("idempotency-key"),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  expect(calls[1].init.signal?.aborted).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+  await waitFor(() => expect(calls).toHaveLength(3));
+  expect(new Headers(calls[2].init.headers).get("idempotency-key")).not.toBe(
+    new Headers(calls[1].init.headers).get("idempotency-key"),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Log mode" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Snapshot" }));
+  expect(await screen.findByText("Snapshot complete.")).toBeInTheDocument();
+  expect(screen.getByText("snapshot-log")).toBeInTheDocument();
+  expect(calls[2].init.signal?.aborted).toBe(true);
+  expect(calls[3].url.searchParams.get("follow")).toBe("false");
+  expect(calls[3].url.searchParams.has("maxDurationSeconds")).toBe(false);
 });

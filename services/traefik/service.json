@@ -48,10 +48,41 @@
   ],
   "exposure": {
     "hostPorts": [
-      { "container": 80, "host": 80 },
-      { "container": 443, "host": 443 },
-      { "container": 443, "host": 443, "protocol": "udp" }
+      {
+        "container": 80,
+        "host": 80
+      },
+      {
+        "container": 443,
+        "host": 443
+      },
+      {
+        "container": 443,
+        "host": 443,
+        "protocol": "udp"
+      }
     ]
   },
-  "ui": { "category": "infrastructure" }
+  "ui": {
+    "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

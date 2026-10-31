@@ -1,3 +1,11 @@
+export {
+  accountAdminGuard,
+  authPolicyApplication,
+  authPolicyState,
+} from "./account-administration-schema";
+export { accountActionReceipt, accountMailOutbox } from "./account-provisioning-schema";
+export { adminActionReauthentication } from "./admin-reauthentication-schema";
+export { configurationMigrationPreview } from "./configuration-migration-schema";
 // Capability bindings — explicit (integration, capability) → service mappings
 
 // data-manager pipeline observability (Postgres schema "data_manager")
@@ -58,6 +66,7 @@ export {
 } from "./installed-extension-schema";
 // Installed community integrations
 export { installedIntegration } from "./installed-integration-schema";
+export * from "./integration-administration-schema";
 // Integration config
 export { integrationConfig } from "./integration-config-schema";
 // Integration secrets
@@ -66,6 +75,7 @@ export { integrationSecret } from "./integration-secret-schema";
 export { mangroveKeypair, mangroveKeypairWrap } from "./mangrove-keypair-schema";
 // Short-lived system-browser → WebView session handoff
 export { mobileAuthHandoff } from "./mobile-auth-handoff-schema";
+export { platformConfigurationPreview } from "./platform-configuration-preview-schema";
 // Export-download authentication assurance and purpose-bound challenges
 export { dataExportReauthentication, sessionAuthAssurance } from "./privacy-auth-schema";
 // GDPR subject-access request lifecycle and encrypted artifact metadata
@@ -109,6 +119,7 @@ export {
   type PersonalTimelineConnectionRow,
   personalTimelineConnection,
 } from "./timeline-connection-schema";
+export { transitCredentialPreview } from "./transit-credential-preview-schema";
 // Personal vehicle garage and parked-location state
 export {
   type ParkedLocationRow,

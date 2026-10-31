@@ -48,7 +48,12 @@ afterEach(() => {
 describe("service feature hooks use the generated SDK", () => {
   it("acquires list data and surfaces declared errors", async () => {
     const fetch = vi.fn(() =>
-      Response.json({ services: [], summary: { running: 2, stopped: 1, total: 3 } }),
+      Response.json({
+        acquisition: { state: "available", reason: null },
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { running: 2, stopped: 1, unknown: 0, total: 3 },
+      }),
     );
     vi.stubGlobal("fetch", fetch);
     const { result } = mount(useServicesList);
@@ -96,6 +101,20 @@ describe("service feature hooks use the generated SDK", () => {
         );
       });
       expect(fetch).toHaveBeenCalledTimes(1);
+      if (["config", "set", "delete", "selection"].includes(kind)) {
+        const init = fetch.mock.calls[0]![1] as RequestInit;
+        expect(new Headers(init.headers).get("idempotency-key")).toMatch(
+          /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
+        );
+        if (kind !== "delete")
+          expect(JSON.parse(String(init.body))).toEqual(
+            kind === "config"
+              ? { config: { count: 2 } }
+              : kind === "set"
+                ? { value: "synthetic-private" }
+                : { selectedRoots: [] },
+          );
+      }
       if (kind === "set" || kind === "delete")
         expect(fetch.mock.calls[0][0]).toContain("TOKEN%20%2Fkey");
     },

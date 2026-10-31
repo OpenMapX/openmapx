@@ -96,8 +96,10 @@ function parseRecord(raw: string): AgentHandoffRecord {
 export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
   return readAgentHandoffFile(agentHandoffPath(rootDir));
 }
-
-/** A handoff record at `path`, or `null` when there is none. */
+/** Existing legacy journal data, read without startup mutation or repair. */
+export function readAgentHandoffFromInfra(infraDir: string): AgentHandoffRecord | null {
+  return readAgentHandoffFile(join(infraDir, "data", "ops-agent", "agent-handoff.json"));
+}
 export function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
   let raw: string;
   try {
@@ -252,12 +254,7 @@ export function agentHandoffContainerName(handoffId: string): string {
   return `openmapx-ops-agent-handoff-${handoffId.slice(0, 64)}`;
 }
 
-/**
- * `docker run` arguments for the helper: the Docker socket and the agent's
- * own mounts at or under the checkout's path, no network. Compose recreates
- * the agent from the generation, so the mounts the new agent gets are the
- * generation's, whichever layout this agent has.
- */
+/** Fixed helper mounts keep sibling role keys and private receipts hidden; no network. */
 export function agentHandoffRunArgs(
   facts: AgentContainerFacts,
   rootDir: string,
@@ -282,8 +279,22 @@ export function agentHandoffRunArgs(
   const inherited = facts.envNames.filter(
     (name) =>
       /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
-      !["HOSTNAME", "DOCKER_CONFIG", "OPS_AGENT_HANDOFF_ID"].includes(name),
+      ![
+        "HOSTNAME",
+        "DOCKER_CONFIG",
+        "OPS_AGENT_HANDOFF_ID",
+        "OPENMAPX_CONTROL_EXECUTION",
+        "OPENMAPX_CONTROL_DELEGATION",
+        "OPENMAPX_PARENT_EXECUTION",
+      ].includes(name),
   );
+  const hostSource = (target: string): string => {
+    const mount = facts.rootMounts
+      .filter((entry) => target === entry.target || target.startsWith(`${entry.target}/`))
+      .at(-1);
+    if (!mount) throw new Error("Agent handoff control mounts unavailable");
+    return `${mount.source}${target.slice(mount.target.length)}`;
+  };
   return [
     "run",
     "--detach",
@@ -314,6 +325,18 @@ export function agentHandoffRunArgs(
       "--mount",
       `type=bind,source=${mount.source},target=${mount.target}${mount.readOnly ? ",readonly" : ""}`,
     ]),
+    ...["ops-agent", "data-manager", "host-cli"].flatMap((role) => [
+      "--mount",
+      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/hidden-key"))},target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
+    ]),
+    ...["data-manager", "host-cli"].flatMap((role) => [
+      "--mount",
+      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/empty"))},target=${rootDir}/infra/docker/control-private/${role},readonly`,
+    ]),
+    "--mount",
+    `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/ops-agent"))},target=/var/lib/openmapx/control-private`,
+    "--mount",
+    `type=bind,source=${hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json"))},target=/run/secrets/openmapx-control-verifiers,readonly`,
     ...inherited.flatMap((name) => ["--env", name]),
     "--env",
     "DOCKER_CONFIG=/tmp/docker",

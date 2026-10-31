@@ -1,6 +1,12 @@
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerDataCommands } from "../src/commands/data";
+import { runCliDataStep } from "../src/lib/data-execution";
+import { unitDataCommandResult } from "./helpers/data-command-result";
+
+// Command presentation/result-policy unit boundary. Durable POST/GET identity,
+// signed containment and SQL ownership belong to the real execution suites.
+vi.mock("../src/lib/data-execution", () => ({ runCliDataStep: vi.fn() }));
 
 function makeProgram(): Command {
   const program = new Command();
@@ -8,7 +14,10 @@ function makeProgram(): Command {
   registerDataCommands(program);
   return program;
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.mocked(runCliDataStep).mockReset();
+});
 
 describe("data search-index CLI", () => {
   it("exposes nested build and status commands", () => {
@@ -16,40 +25,19 @@ describe("data search-index CLI", () => {
     const searchIndex = data?.commands.find((command) => command.name() === "search-index");
     expect(searchIndex?.commands.map((command) => command.name())).toEqual(["build", "status"]);
   });
-  it("builds the selected region and forwards validated progress messages", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (url, options) => {
-      expect(String(url)).toMatch(/\/search-index\/build$/);
-      expect(JSON.parse(options?.body as string)).toEqual({ region: "europe/germany" });
-      return new Response(
-        [
-          { event: "progress", stage: "extract", message: "Extracted 42 places" },
-          {
-            event: "done",
-            ok: true,
-            region: "europe/germany",
-            epoch: "epoch-2",
-            sourceFingerprint: "fingerprint",
-            placeCount: 42,
-            termCount: 84,
-          },
-        ]
-          .map((event) => JSON.stringify(event))
-          .join("\n"),
-        {
-          headers: {
-            "content-type": "application/x-ndjson",
-            "cache-control": "no-cache",
-            "x-accel-buffering": "no",
-          },
-        },
-      );
-    });
+  it("builds the selected region through the durable command and prints its execution identity", async () => {
+    vi.mocked(runCliDataStep).mockResolvedValueOnce(unitDataCommandResult("search-index-build"));
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
     await makeProgram().parseAsync(["data", "search-index", "build", "europe/germany"], {
       from: "user",
     });
-    expect(output.mock.calls.flat().join(" ")).toContain("Extracted 42 places");
-    expect(output.mock.calls.flat().join(" ")).toContain("42 places");
+    expect(vi.mocked(runCliDataStep).mock.calls[0]?.[0]).toEqual({
+      kind: "search-index-build",
+      region: "europe/germany",
+    });
+    expect(output.mock.calls.flat().join(" ")).toContain(
+      "Search index published for europe/germany; execution 00000000-0000-4000-8000-000000000001",
+    );
   });
   it("prints the operational status fields", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

@@ -14,6 +14,9 @@ import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
 import { getServiceSelectionSummary } from "./admin-cli";
+import { JobObservationPending } from "./admin-job-failure";
+import { hasRetainedAdminJobOperation } from "./admin-job-ops";
+import { JobOwnershipLost } from "./admin-job-state";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import {
   adoptIntegration,
@@ -34,8 +37,16 @@ import { assertComponentOwnership } from "./extension-component-ownership";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "./extension-recovery";
 import { getKillSwitch } from "./extension-store";
+import {
+  completedExtensionStep,
+  type ExtensionWorkflow,
+  extensionDatabaseStep,
+  extensionStep,
+  hasExtensionPublications,
+  openExtensionWorkflow,
+} from "./extension-workflow";
 import type { JobContext } from "./job-runner";
-import { createDurableOpsKey } from "./ops-client";
+import { createDurableOpsKey, OpsObservationPending } from "./ops-client";
 import {
   communityServiceRepository,
   getServiceRegistry,
@@ -304,6 +315,7 @@ async function integrationManagedBy(id: string): Promise<string | null> {
  * running API follows the applied generation without a restart.
  */
 async function applySelectionRoots(
+  ctx: JobContext,
   roots: string[],
   allowMissing: boolean,
   operationKey: string,
@@ -318,6 +330,7 @@ async function applySelectionRoots(
     throw new Error(`Selected service(s) are not installed: ${expanded.missingIds.join(", ")}`);
   }
   await applyTrustedConfiguration({
+    ctx,
     kind: "serviceSelection.apply",
     selectedRoots: normalized,
     operationKey,
@@ -325,30 +338,79 @@ async function applySelectionRoots(
   });
 }
 
-/** Add service ids to the selection. Returns the ids newly added. */
-async function enableServicesInSelection(
-  serviceIds: string[],
-  operationKey: string,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  const registry = getServiceRegistry();
-  const roots = [...(await getServiceSelectionSummary(registry)).selectedRoots];
-  const added = serviceIds.filter((id) => !roots.includes(id));
-  if (added.length === 0) return [];
-  await applySelectionRoots([...roots, ...added], false, operationKey, signal);
-  return added;
-}
-
-async function disableServicesInSelection(
-  serviceIds: string[],
-  operationKey: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  const registry = getServiceRegistry();
-  const roots = (await getServiceSelectionSummary(registry)).selectedRoots.filter(
-    (r) => !serviceIds.includes(r),
-  );
-  await applySelectionRoots(roots, true, operationKey, signal);
+function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
+  return {
+    publishServiceRepository: (
+      request: Parameters<typeof publishServiceRepository>[0],
+      options: Parameters<typeof publishServiceRepository>[1],
+    ) =>
+      extensionStep(workflow, `repository.publish:${options.operationKey}`, request, async () => {
+        if (!hasRetainedAdminJobOperation(ctx, options.operationKey))
+          await assertNotRevoked(request.extensionId);
+        return publishServiceRepository(request, options);
+      }),
+    settleServiceRepository: (
+      request: Parameters<typeof settleServiceRepository>[0],
+      options: Parameters<typeof settleServiceRepository>[1],
+    ) =>
+      extensionStep(workflow, `repository.settle:${options.operationKey}`, request, () =>
+        settleServiceRepository(request, options),
+      ),
+    removeServiceRepository: (
+      request: Parameters<typeof removeServiceRepository>[0],
+      options: Parameters<typeof removeServiceRepository>[1],
+    ) =>
+      extensionStep(workflow, `repository.remove:${options.operationKey}`, request, () =>
+        removeServiceRepository(request, options),
+      ),
+    publishIntegration: (
+      request: Parameters<typeof publishIntegration>[0],
+      options: Parameters<typeof publishIntegration>[1],
+    ) =>
+      extensionStep(workflow, `integration.publish:${options.operationKey}`, request, async () => {
+        if (!hasRetainedAdminJobOperation(ctx, options.operationKey))
+          await assertNotRevoked(request.extensionId!);
+        return publishIntegration(request, options);
+      }),
+    adoptIntegration: (
+      request: Parameters<typeof adoptIntegration>[0],
+      options: Parameters<typeof adoptIntegration>[1],
+    ) =>
+      extensionStep(workflow, `integration.adopt:${options.operationKey}`, request, () =>
+        adoptIntegration(request, options),
+      ),
+    settleIntegration: (
+      request: Parameters<typeof settleIntegration>[0],
+      options: Parameters<typeof settleIntegration>[1],
+    ) =>
+      extensionStep(workflow, `integration.settle:${options.operationKey}`, request, () =>
+        settleIntegration(request, options),
+      ),
+    removeIntegration: (
+      request: Parameters<typeof removeIntegration>[0],
+      options: Parameters<typeof removeIntegration>[1],
+    ) =>
+      extensionStep(workflow, `integration.remove:${options.operationKey}`, request, () =>
+        removeIntegration(request, options),
+      ),
+    dockerComposeAction: (
+      service: string,
+      action: Parameters<typeof dockerComposeAction>[1],
+      options: Parameters<typeof dockerComposeAction>[2],
+    ) =>
+      extensionStep(
+        workflow,
+        `lifecycle:${options?.operationKey}`,
+        { service, action, revision: options?.expectedConfigurationRevisionId ?? null },
+        () => dockerComposeAction(service, action, options),
+      ),
+    renderAndPersistCompose: (options: Parameters<typeof renderAndPersistCompose>[0]) =>
+      extensionStep(workflow, `render:${options?.operationKey}`, {}, () =>
+        renderAndPersistCompose(options),
+      ),
+    serviceStart: (service: string, _ctx: JobContext) =>
+      extensionStep(workflow, `start:${service}`, { service }, () => serviceStart(service, ctx)),
+  };
 }
 
 interface InstallLedger {
@@ -379,7 +441,8 @@ export function installExtension(
 ): Promise<{ id: string; components: number }> {
   const normalized = normalizedInstallOptions(opts);
   return withExtensionChangeLock(async () => {
-    await recoverInterruptedExtensionChanges(ctx.signal);
+    if (!ctx.checkpointResult?._extensionWorkflow)
+      await recoverInterruptedExtensionChanges(ctx.signal, { ctx });
     return installExtensionNow(ctx, normalized);
   });
 }
@@ -388,16 +451,42 @@ async function installExtensionNow(
   ctx: JobContext,
   opts: InstallExtensionOptions,
 ): Promise<{ id: string; components: number }> {
+  const workflow = await openExtensionWorkflow(ctx, opts);
+  const {
+    publishServiceRepository,
+    settleServiceRepository,
+    publishIntegration,
+    adoptIntegration,
+    settleIntegration,
+    dockerComposeAction,
+    renderAndPersistCompose,
+    serviceStart,
+  } = extensionEffects(workflow, ctx);
+  const rollback = completedExtensionStep<{ ledger: InstallLedger; message: string }>(
+    workflow,
+    "rollback.intent",
+  );
+  if (rollback) {
+    await extensionStep(workflow, "rollback", rollback.ledger, () =>
+      rollbackInstall(ctx, rollback.ledger, workflow),
+    );
+    throw new Error(rollback.message);
+  }
   const { manifest } = opts;
   // Synthetic (loopback) actors have no user row → attribute to null.
   const installedBy = dbActorId(opts.actorId);
 
   // Everything that can be decided without touching the deployment is decided
   // here, before the first mutation.
-  await preflightExtensionInstall(opts);
+  await extensionStep(workflow, "preflight", opts, async () => {
+    await preflightExtensionInstall(opts);
+    return null;
+  });
   // Revocation can land between queueing and execution, so it is rechecked
   // immediately before the first mutation as well as at the end.
-  await assertNotRevoked(manifest.id);
+  let bookkeepingCommitted = completedExtensionStep(workflow, "bookkeeping") !== undefined;
+  if (!bookkeepingCommitted && !hasExtensionPublications(workflow))
+    await assertNotRevoked(manifest.id);
 
   const ledger: InstallLedger = {
     publishedRepositories: [],
@@ -407,7 +496,6 @@ async function installExtensionNow(
     previouslyEnabledServiceIds: [],
     selectedRootsBefore: null,
   };
-  let bookkeepingCommitted = false;
   let rollbackRequired = false;
 
   try {
@@ -423,19 +511,29 @@ async function installExtensionNow(
     for (const component of serviceComponents) serviceRepos.set(component.repo, component);
 
     if (serviceComponents.length > 0) {
-      const registry = getServiceRegistry();
-      ledger.selectedRootsBefore = [...(await getServiceSelectionSummary(registry)).selectedRoots];
+      const original = await extensionStep(workflow, "selection.before", {}, async () => {
+        const registry = getServiceRegistry();
+        return {
+          roots: [...(await getServiceSelectionSummary(registry)).selectedRoots],
+          enabled: serviceComponents
+            .map((c) => c.service)
+            .filter((id) => registry.get(id)?.enabled === true),
+        };
+      });
+      ledger.selectedRootsBefore = original.roots;
       ledger.touchedServiceIds = serviceComponents.map((component) => component.service);
-      ledger.previouslyEnabledServiceIds = ledger.touchedServiceIds.filter(
-        (serviceId) => registry.get(serviceId)?.enabled === true,
-      );
+      ledger.previouslyEnabledServiceIds = original.enabled;
     }
 
     // Pin every repository to the exact commit the security preview describes.
-    const inspections = await inspectExtensionServiceRepos(
-      opts,
-      { namespace: "extension.install.inspect", identity: `${ctx.jobId}:${manifest.id}` },
-      ctx.signal,
+    const inspections = new Map(
+      await extensionStep(workflow, "inspections", opts, async () => [
+        ...(await inspectExtensionServiceRepos(
+          opts,
+          { namespace: "extension.install.inspect", identity: `${ctx.jobId}:${manifest.id}` },
+          ctx.signal,
+        )),
+      ]),
     );
     const installPreview = buildExtensionInstallPreview(opts, inspections);
     if (
@@ -468,6 +566,7 @@ async function installExtensionNow(
           },
         },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.repository.publish",
             `${ctx.jobId}:${manifest.id}:${inspection.repository}`,
@@ -527,15 +626,29 @@ async function installExtensionNow(
           );
         }
       }
-      const newlyEnabled = await enableServicesInSelection(
+      const newlyEnabled = await extensionStep(
+        workflow,
+        "selection.enable",
         serviceComponents.map((s) => s.service),
-        createDurableOpsKey("extension.selection.enable", `${ctx.jobId}:${manifest.id}`),
-        ctx.signal,
+        async () => {
+          const roots = ledger.selectedRootsBefore!;
+          const added = serviceComponents.map((s) => s.service).filter((id) => !roots.includes(id));
+          if (added.length)
+            await applySelectionRoots(
+              ctx,
+              [...roots, ...added],
+              false,
+              createDurableOpsKey("extension.selection.enable", `${ctx.jobId}:${manifest.id}`),
+              ctx.signal,
+            );
+          return added;
+        },
       );
       ledger.enabledServiceIds.push(...newlyEnabled);
 
       await ctx.log("Rendering compose...");
-      await renderAndPersistCompose({
+      const rendered = await renderAndPersistCompose({
+        ctx,
         operationKey: createDurableOpsKey("extension.config.render", `${ctx.jobId}:${manifest.id}`),
         signal: ctx.signal,
       });
@@ -544,6 +657,8 @@ async function installExtensionNow(
         // fatal: starting a cached image would make the recorded extension
         // version claim an artifact that was never acquired.
         const pulled = await dockerComposeAction(svc.service, "pull", {
+          expectedConfigurationRevisionId: rendered.revisionId,
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.service.pull",
             `${ctx.jobId}:${manifest.id}:${svc.service}`,
@@ -569,7 +684,9 @@ async function installExtensionNow(
     }> = [];
     const agentIntegrations =
       integrationComponents.length > 0
-        ? await readInstalledIntegrations({ signal: ctx.signal })
+        ? await extensionStep(workflow, "integrations.before", {}, () =>
+            readInstalledIntegrations({ signal: ctx.signal }),
+          )
         : null;
     for (const intg of integrationComponents) {
       await ctx.log(`Installing integration ${intg.id}...`);
@@ -583,6 +700,7 @@ async function installExtensionNow(
         await adoptIntegration(
           { integrationId: intg.id, extensionId: manifest.id },
           {
+            ctx,
             operationKey: createDurableOpsKey(
               "extension.integration.adopt",
               `${ctx.jobId}:${manifest.id}:${intg.id}`,
@@ -598,6 +716,7 @@ async function installExtensionNow(
           extensionId: manifest.id,
         },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.integration.publish",
             `${ctx.jobId}:${manifest.id}:${intg.id}`,
@@ -641,88 +760,95 @@ async function installExtensionNow(
     const now = new Date();
     const components = coreServices.extensionComponentSummary(manifest);
     // Last gate before the install becomes authoritative.
-    await assertNotRevoked(manifest.id);
-    await assertComponentOwnership(manifest.id, components);
-    await db.transaction(async (tx) => {
-      for (const row of pendingServiceRepoRows) {
-        await tx
-          .insert(serviceRepository)
-          .values(row)
-          .onConflictDoUpdate({
-            target: serviceRepository.hash,
-            set: {
-              lastSha: row.lastSha,
-              pinnedRef: row.pinnedRef,
-              managedByExtension: row.managedByExtension,
-              lastTransactionId: row.lastTransactionId,
-            },
-          });
-      }
-      for (const row of pendingIntegrationRows) {
-        await tx
-          .insert(installedIntegration)
-          .values({
-            id: row.id,
-            repository: row.repository,
-            installedVersion: manifest.version,
-            sourceType: "registry",
-            installedAt: now,
-            updatedAt: now,
-            installedBy,
-            managedByExtension: manifest.id,
-            lastTransactionId: row.transactionId,
-          })
-          .onConflictDoUpdate({
-            target: installedIntegration.id,
-            set: {
+    if (!bookkeepingCommitted) {
+      await assertNotRevoked(manifest.id);
+      await assertComponentOwnership(manifest.id, components);
+    }
+    await extensionDatabaseStep(
+      workflow,
+      "bookkeeping",
+      { manifest, pendingServiceRepoRows, pendingIntegrationRows },
+      async (tx) => {
+        for (const row of pendingServiceRepoRows) {
+          await tx
+            .insert(serviceRepository)
+            .values(row)
+            .onConflictDoUpdate({
+              target: serviceRepository.hash,
+              set: {
+                lastSha: row.lastSha,
+                pinnedRef: row.pinnedRef,
+                managedByExtension: row.managedByExtension,
+                lastTransactionId: row.lastTransactionId,
+              },
+            });
+        }
+        for (const row of pendingIntegrationRows) {
+          await tx
+            .insert(installedIntegration)
+            .values({
+              id: row.id,
               repository: row.repository,
               installedVersion: manifest.version,
               sourceType: "registry",
+              installedAt: now,
               updatedAt: now,
+              installedBy,
               managedByExtension: manifest.id,
               lastTransactionId: row.transactionId,
-            },
-          });
-      }
+            })
+            .onConflictDoUpdate({
+              target: installedIntegration.id,
+              set: {
+                repository: row.repository,
+                installedVersion: manifest.version,
+                sourceType: "registry",
+                updatedAt: now,
+                managedByExtension: manifest.id,
+                lastTransactionId: row.transactionId,
+              },
+            });
+        }
 
-      await tx
-        .insert(installedExtension)
-        .values({
-          id: manifest.id,
-          name: manifest.name,
-          sourceUrl: opts.sourceUrl ?? null,
-          sourceTrust: opts.sourceTrust,
-          installedVersion: manifest.version,
-          manifest: manifest as unknown as Record<string, unknown>,
-          installedAt: now,
-          updatedAt: now,
-          installedBy,
-        })
-        .onConflictDoUpdate({
-          target: installedExtension.id,
-          set: {
+        await tx
+          .insert(installedExtension)
+          .values({
+            id: manifest.id,
             name: manifest.name,
             sourceUrl: opts.sourceUrl ?? null,
             sourceTrust: opts.sourceTrust,
             installedVersion: manifest.version,
             manifest: manifest as unknown as Record<string, unknown>,
+            installedAt: now,
             updatedAt: now,
-          },
-        });
+            installedBy,
+          })
+          .onConflictDoUpdate({
+            target: installedExtension.id,
+            set: {
+              name: manifest.name,
+              sourceUrl: opts.sourceUrl ?? null,
+              sourceTrust: opts.sourceTrust,
+              installedVersion: manifest.version,
+              manifest: manifest as unknown as Record<string, unknown>,
+              updatedAt: now,
+            },
+          });
 
-      await tx
-        .delete(installedExtensionComponent)
-        .where(eq(installedExtensionComponent.extensionId, manifest.id));
-      if (components.length > 0) {
-        await tx.insert(installedExtensionComponent).values(
-          components.map((c) => ({
-            extensionId: manifest.id,
-            kind: c.kind,
-            componentId: c.id,
-          })),
-        );
-      }
-    });
+        await tx
+          .delete(installedExtensionComponent)
+          .where(eq(installedExtensionComponent.extensionId, manifest.id));
+        if (components.length > 0) {
+          await tx.insert(installedExtensionComponent).values(
+            components.map((c) => ({
+              extensionId: manifest.id,
+              kind: c.kind,
+              componentId: c.id,
+            })),
+          );
+        }
+      },
+    );
     bookkeepingCommitted = true;
 
     // Once the bookkeeping transaction commits, the install is authoritative.
@@ -737,6 +863,7 @@ async function installExtensionNow(
         const settled = await settleIntegration(
           { integrationId, transactionId, outcome: "commit" },
           {
+            ctx,
             operationKey: createDurableOpsKey(
               "extension.integration.commit",
               `${ctx.jobId}:${integrationId}:${transactionId}`,
@@ -753,12 +880,13 @@ async function installExtensionNow(
             .catch(() => {});
         }
       } catch (error) {
-        await ctx
-          .log(
-            `Cleanup: the operations agent could not settle integration ${integrationId}: ${safeDiagnostic(error)}`,
-            "stderr",
-          )
-          .catch(() => {});
+        if (
+          error instanceof JobObservationPending ||
+          error instanceof OpsObservationPending ||
+          error instanceof JobOwnershipLost
+        )
+          throw error;
+        throw new JobObservationPending("recovery_required");
       }
     }
     for (const { repository, transactionId } of ledger.publishedRepositories) {
@@ -766,6 +894,7 @@ async function installExtensionNow(
         const settled = await settleServiceRepository(
           { repository, transactionId, outcome: "commit" },
           {
+            ctx,
             operationKey: createDurableOpsKey(
               "extension.repository.commit",
               `${ctx.jobId}:${repository}:${transactionId}`,
@@ -784,12 +913,13 @@ async function installExtensionNow(
             .catch(() => {});
         }
       } catch (error) {
-        await ctx
-          .log(
-            `Cleanup: the operations agent could not settle repository ${repository}: ${safeDiagnostic(error)}`,
-            "stderr",
-          )
-          .catch(() => {});
+        if (
+          error instanceof JobObservationPending ||
+          error instanceof OpsObservationPending ||
+          error instanceof JobOwnershipLost
+        )
+          throw error;
+        throw new JobObservationPending("recovery_required");
       }
     }
     await ctx
@@ -797,6 +927,13 @@ async function installExtensionNow(
       .catch(() => {});
     return { id: manifest.id, components: components.length };
   } catch (err) {
+    if (
+      err instanceof JobObservationPending ||
+      err instanceof OpsObservationPending ||
+      err instanceof JobOwnershipLost ||
+      ctx.signal.aborted
+    )
+      throw err;
     if (err instanceof TrustedConfigurationApplyError && !isProvenConfigurationNonCommit(err))
       throw err;
     if (bookkeepingCommitted) throw err;
@@ -804,14 +941,36 @@ async function installExtensionNow(
     await ctx
       .log(`Install failed: ${safeDiagnostic(err)}. Rolling back...`, "stderr")
       .catch(() => {});
-    await rollbackInstall(ctx, ledger).catch((rbErr) => {
+    await extensionStep(workflow, "rollback.intent", {}, async () => ({
+      ledger,
+      message: safeDiagnostic(err),
+    }));
+    await extensionStep(workflow, "rollback", ledger, () =>
+      rollbackInstall(ctx, ledger, workflow),
+    ).catch((rbErr) => {
+      if (
+        rbErr instanceof JobObservationPending ||
+        rbErr instanceof OpsObservationPending ||
+        rbErr instanceof JobOwnershipLost
+      )
+        throw rbErr;
       ctx.log(`Rollback encountered an error: ${safeDiagnostic(rbErr)}`, "stderr").catch(() => {});
     });
     throw err;
   }
 }
 
-async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<void> {
+async function rollbackInstall(
+  ctx: JobContext,
+  ledger: InstallLedger,
+  workflow: ExtensionWorkflow,
+): Promise<void> {
+  const {
+    settleIntegration,
+    settleServiceRepository,
+    dockerComposeAction,
+    renderAndPersistCompose,
+  } = extensionEffects(workflow, ctx);
   // Integrations first (cheap), then services. Newest first: the agent
   // restores each previous copy, or removes an integration this run added. One
   // it cannot undo yet stays pending, and recovery rolls it back, since no
@@ -821,6 +980,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
       await settleIntegration(
         { ...transaction, outcome: "rollback" },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.integration.rollback",
             `${ctx.jobId}:${transaction.integrationId}:${transaction.transactionId}`,
@@ -828,12 +988,19 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
         },
       );
     } catch (error) {
+      if (
+        error instanceof JobObservationPending ||
+        error instanceof OpsObservationPending ||
+        error instanceof JobOwnershipLost
+      )
+        throw error;
       await ctx
         .log(
           `Rollback: the operations agent could not restore integration ${transaction.integrationId}: ${safeDiagnostic(error)}`,
           "stderr",
         )
         .catch(() => {});
+      throw new JobObservationPending("recovery_required");
     }
   }
   if (ledger.publishedIntegrations.length > 0) {
@@ -843,6 +1010,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
   if (ledger.enabledServiceIds.length > 0) {
     for (const svc of ledger.enabledServiceIds) {
       const removed = await dockerComposeAction(svc, "remove", {
+        ctx,
         operationKey: createDurableOpsKey("extension.service.rollback", `${ctx.jobId}:${svc}`),
       });
       if (removed.exitCode !== 0) {
@@ -858,6 +1026,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
       await settleServiceRepository(
         { ...transaction, outcome: "rollback" },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.repository.rollback",
             `${ctx.jobId}:${transaction.repository}:${transaction.transactionId}`,
@@ -872,6 +1041,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
           "stderr",
         )
         .catch(() => {});
+      throw new JobObservationPending("recovery_required");
     }
   }
   // With the previous checkouts back, restore the selection and runtimes. The
@@ -881,23 +1051,25 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
     try {
       await initServiceRegistry({ strict: true });
       await applySelectionRoots(
+        ctx,
         ledger.selectedRootsBefore,
         false,
         createDurableOpsKey("extension.selection.rollback", ctx.jobId),
         ctx.signal,
       );
       await renderAndPersistCompose({
+        ctx,
         operationKey: createDurableOpsKey("extension.rollback.render", ctx.jobId),
         signal: ctx.signal,
       });
       for (const serviceId of ledger.previouslyEnabledServiceIds) {
-        await serviceStart(serviceId, ctx);
+        await serviceStart(serviceId, ctx, "extension-restore");
       }
     } catch (error) {
       await ctx
         .log(`Rollback: failed to restore service state: ${safeDiagnostic(error)}`, "stderr")
         .catch(() => {});
-      return;
+      throw new JobObservationPending("recovery_required");
     }
   }
   for (const transaction of rolledBack) {
@@ -905,6 +1077,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
       await settleServiceRepository(
         { ...transaction, outcome: "release" },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.repository.release",
             `${ctx.jobId}:${transaction.repository}:${transaction.transactionId}`,
@@ -918,6 +1091,7 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
           "stderr",
         )
         .catch(() => {});
+      throw new JobObservationPending("recovery_required");
     }
   }
 }
@@ -931,7 +1105,8 @@ export function removeExtension(
   id: string,
 ): Promise<{ id: string; removed: number }> {
   return withExtensionChangeLock(async () => {
-    await recoverInterruptedExtensionChanges(ctx.signal);
+    if (!ctx.checkpointResult?._extensionWorkflow)
+      await recoverInterruptedExtensionChanges(ctx.signal, { ctx });
     return removeExtensionNow(ctx, id);
   });
 }
@@ -940,17 +1115,26 @@ async function removeExtensionNow(
   ctx: JobContext,
   id: string,
 ): Promise<{ id: string; removed: number }> {
-  const [ext] = await db
-    .select()
-    .from(installedExtension)
-    .where(eq(installedExtension.id, id))
-    .limit(1);
-  if (!ext) throw new Error(`Extension "${id}" is not installed`);
-
-  const components = await db
-    .select()
-    .from(installedExtensionComponent)
-    .where(eq(installedExtensionComponent.extensionId, id));
+  const workflow = await openExtensionWorkflow(ctx, { id });
+  const {
+    removeServiceRepository,
+    removeIntegration,
+    adoptIntegration,
+    dockerComposeAction,
+    renderAndPersistCompose,
+  } = extensionEffects(workflow, ctx);
+  const components = await extensionStep(workflow, "remove.snapshot", { id }, async () => {
+    const [ext] = await db
+      .select()
+      .from(installedExtension)
+      .where(eq(installedExtension.id, id))
+      .limit(1);
+    if (!ext) throw new Error(`Extension "${id}" is not installed`);
+    return db
+      .select()
+      .from(installedExtensionComponent)
+      .where(eq(installedExtensionComponent.extensionId, id));
+  });
 
   const serviceIds = components.filter((c) => c.kind === "service").map((c) => c.componentId);
   const integrationIds = components
@@ -964,16 +1148,23 @@ async function removeExtensionNow(
   // agent, which no longer reports them at all, refuses to act on them.
   const reported =
     serviceIds.length > 0
-      ? new Set((await readCommunityServices({ signal: ctx.signal })).reportedServiceIds)
+      ? new Set(
+          (
+            await extensionStep(workflow, "remove.services.before", {}, () =>
+              readCommunityServices({ signal: ctx.signal }),
+            )
+          ).reportedServiceIds,
+        )
       : new Set<string>();
 
   // Tear down service containers while they're still in the compose file.
   for (const svc of serviceIds.filter((id) => reported.has(id))) {
     await ctx.log(`Removing service container ${svc}...`);
     const removed = await dockerComposeAction(svc, "remove", {
+      ctx,
       operationKey: createDurableOpsKey("extension.service.remove", `${ctx.jobId}:${svc}`),
       signal: ctx.signal,
-    }).catch(() => ({ exitCode: 1 }));
+    });
     if (removed.exitCode !== 0) {
       throw new Error(`Failed to remove community service runtime ${svc}`);
     }
@@ -981,19 +1172,25 @@ async function removeExtensionNow(
   // Remove the repos this extension owns + drop the services from selection.
   if (serviceIds.length > 0) {
     try {
-      await disableServicesInSelection(
-        serviceIds,
-        createDurableOpsKey("extension.selection.disable", `${ctx.jobId}:${id}`),
-        ctx.signal,
-      );
+      await extensionStep(workflow, "selection.disable", serviceIds, async () => {
+        const roots = await extensionStep(workflow, "remove.selection.before", {}, async () => [
+          ...(await getServiceSelectionSummary(getServiceRegistry())).selectedRoots,
+        ]);
+        await applySelectionRoots(
+          ctx,
+          roots.filter((root) => !serviceIds.includes(root)),
+          true,
+          createDurableOpsKey("extension.selection.disable", `${ctx.jobId}:${id}`),
+          ctx.signal,
+        );
+      });
     } catch (e) {
       await ctx.log(`Failed to disable services: ${(e as Error).message}`, "stderr");
       throw e;
     }
-    const repos = await db
-      .select()
-      .from(serviceRepository)
-      .where(eq(serviceRepository.managedByExtension, id));
+    const repos = await extensionStep(workflow, "remove.repositories.before", {}, () =>
+      db.select().from(serviceRepository).where(eq(serviceRepository.managedByExtension, id)),
+    );
     // A repository the agent cannot remove fails the job before the extension
     // record is deleted, so the removal can be retried.
     for (const repo of repos) {
@@ -1001,6 +1198,7 @@ async function removeExtensionNow(
       await removeServiceRepository(
         { repository: repo.hash, extensionId: id },
         {
+          ctx,
           operationKey: createDurableOpsKey(
             "extension.repository.remove",
             `${ctx.jobId}:${repo.hash}`,
@@ -1008,12 +1206,21 @@ async function removeExtensionNow(
           signal: ctx.signal,
         },
       );
-      await db.delete(serviceRepository).where(eq(serviceRepository.hash, repo.hash));
+      await extensionDatabaseStep(
+        workflow,
+        `remove.repository.row:${repo.hash}`,
+        { hash: repo.hash },
+        async (tx) => {
+          await tx.delete(serviceRepository).where(eq(serviceRepository.hash, repo.hash));
+        },
+      );
     }
-    // disableServicesInSelection already applied the reduced enabled set in
-    // memory; re-render to drop the service from compose (no registry re-init,
-    // which would re-read the stale baked env).
+    // Repository removal changes the authoritative manifest inventory. Re-read
+    // it before sealing the reduced generation; the original selection phase
+    // already committed its desired roots and remains a separate retained step.
+    await initServiceRegistry({ strict: true });
     await renderAndPersistCompose({
+      ctx,
       operationKey: createDurableOpsKey("extension.remove.render", `${ctx.jobId}:${id}`),
       signal: ctx.signal,
     });
@@ -1023,7 +1230,9 @@ async function removeExtensionNow(
   // Have the agent remove the integrations. One it cannot remove fails the
   // job before the extension record is deleted, so the removal can be retried.
   if (integrationIds.length > 0) {
-    const installed = await readInstalledIntegrations({ signal: ctx.signal });
+    const installed = await extensionStep(workflow, "remove.integrations.before", {}, () =>
+      readInstalledIntegrations({ signal: ctx.signal }),
+    );
     const records = new Map(installed.integrations.map((entry) => [entry.integrationId, entry]));
     const unrecorded = new Set(installed.unrecorded);
     for (const intgId of integrationIds) {
@@ -1043,6 +1252,7 @@ async function removeExtensionNow(
           await adoptIntegration(
             { integrationId: intgId, extensionId: id },
             {
+              ctx,
               operationKey: createDurableOpsKey(
                 "extension.integration.adopt",
                 `${ctx.jobId}:${intgId}`,
@@ -1054,6 +1264,7 @@ async function removeExtensionNow(
         await removeIntegration(
           { integrationId: intgId, extensionId: id },
           {
+            ctx,
             operationKey: createDurableOpsKey(
               "extension.integration.remove",
               `${ctx.jobId}:${intgId}`,
@@ -1062,17 +1273,29 @@ async function removeExtensionNow(
           },
         );
       }
-      await db
-        .delete(installedIntegration)
-        .where(
-          and(eq(installedIntegration.id, intgId), eq(installedIntegration.managedByExtension, id)),
-        );
+      await extensionDatabaseStep(
+        workflow,
+        `remove.integration.row:${intgId}`,
+        { id: intgId },
+        async (tx) => {
+          await tx
+            .delete(installedIntegration)
+            .where(
+              and(
+                eq(installedIntegration.id, intgId),
+                eq(installedIntegration.managedByExtension, id),
+              ),
+            );
+        },
+      );
     }
     await reloadIntegrations().catch(() => {});
   }
   await ctx.setProgress(90);
 
-  await db.delete(installedExtension).where(eq(installedExtension.id, id));
+  await extensionDatabaseStep(workflow, "remove.parent", { id }, async (tx) => {
+    await tx.delete(installedExtension).where(eq(installedExtension.id, id));
+  });
   await ctx.setProgress(100);
   await ctx.log(`Extension "${id}" removed (${components.length} component(s)).`);
   return { id, removed: components.length };

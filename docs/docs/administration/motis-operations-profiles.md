@@ -82,7 +82,43 @@ Recovery drill:
 
 ## Pin upgrades
 
-`openmapx transitous bump` and `POST /transit/bump` write a proposal into the operations agent's state (`infra/docker/state/ops-agent/transitous/proposed.json`); they do not change the pin in effect. Approval records the pin in the same directory, never in the tracked `infra/docker/transitous.lock.json`. An approved pin holds until a release ships a different one; that release's pin then takes over, the agent logs the approval it retired, and the auto-bump proposes again through its canary. The GBFS registry pin is the release's and changes only with a release. Review catalog/feed/license diffs, build the inactive slot, and run the timetable, rental, planner, attribution, and response-contract canaries. API activation requires typing the exact proposed ref at `/transit/bump/approve`. Keep previous pins with the previous healthy slot.
+`openmapx transitous bump` and `POST /transit/bump` resolve immutable paired
+Transitous/Atlas and GBFS proposals; they never change active pins. In
+**Admin → Transit → Catalog pins**, review the paginated source, country, URL,
+attribution and licensing diff. Unknown licensing is shown explicitly.
+
+Configure credentials against the proposed pair before validation. Values remain
+masked, and existing orphaned keys are preserved. Regional validation requires
+credentials only for the selected countries and enabled sources. Planet validation
+checks all enabled sources.
+
+**Validate inactive slot** builds the exact proposal through the functional MOTIS
+probes, restores the current proxy and stops staging. Validation is valid for at
+most 24 hours and binds the source policy, overlay, countries, consumed credentials,
+image, slot, epoch and candidate manifest. Changed inputs require new validation.
+The previous healthy inactive generation is archived before its slot is reused;
+insufficient retention capacity blocks validation. Candidate directories must be
+owned by the data-manager and must not be writable by other users.
+
+After validation, acknowledge the exact diff and confirm **Activate validated pair**.
+The operation keeps its original target fence through promotion, atomic pair
+publication and child settlement. CLI and scheduled bumps cannot activate proposals;
+legacy raw-ref approval is closed. A disconnected observer does not cancel work.
+Cancellation requests wait for actual effect containment. An unknown outcome keeps
+conflicting work blocked; reconnect to the original job instead of submitting a
+second attempt or manually replacing its pointers. Original signed commit receipts
+support recovery after either process restarts.
+
+The actual catalog-worker/agent canary additionally runs the pinned MOTIS image
+against disposable PostgreSQL and uniquely named containers:
+
+```bash
+OPENMAPX_RUN_DATABASE_TESTS=1 OPENMAPX_CATALOG_LIVE_MOTIS=1 pnpm exec vitest run --project node services/data-manager/__tests__/transitous/catalog-workflow-postgres.test.ts
+```
+
+Pre-pull the repository-pinned MOTIS image before enabling this opt-in check. The
+test removes only its own containers; Docker registry/ownership I/O is a fixture
+bridge, while MOTIS import, health and functional routing use the actual image.
 
 Mutable tags such as `latest` are prohibited. MOTIS currently uses the repository-wide pinned release.
 

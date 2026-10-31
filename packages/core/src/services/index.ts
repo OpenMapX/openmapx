@@ -1,3 +1,4 @@
+export { openAdminDataWorkflow } from "./admin-data-workflow";
 export {
   type AgentMountLayout,
   generationAgentMountLayout,
@@ -19,6 +20,9 @@ export {
   prepareAgentStores,
   readAgentStoresMigration,
 } from "./agent-stores";
+export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
+export { backupRetentionExpiry } from "./backup-retention";
+export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
 export {
   type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
@@ -84,21 +88,30 @@ export {
 } from "./config-resolver";
 export {
   appliedServiceFile,
+  assertConfigurationGenerationWriter,
   type CommitConfigurationOptions,
   type CommittedConfiguration,
   ConfigurationGenerationError,
   type ConfigurationGenerationWriter,
   type ConfigurationInput,
   commitConfigurationGeneration,
+  configurationGenerationComposeFile,
+  configurationGenerationWriterCommit,
   configurationMigrationPending,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
   migrateLegacyServiceSelection,
   type RenderConfigurationOptions,
+  readAppliedComposeServiceIds,
   readAppliedConfiguration,
+  readAppliedPlatformConfiguration,
+  readAppliedPlatformValues,
+  readAppliedReleaseSelection,
   readAppliedServiceIds,
+  readAppliedTransitCredentialsRevision,
   renderConfiguration,
+  retainedContainerComposeFile,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
 export {
@@ -114,6 +127,11 @@ export {
   type ContainerBindMounts,
   readContainerBindMounts,
 } from "./container-mounts";
+export { coordinatorPullReferenceIdentity } from "./coordinator-pull-reference";
+export {
+  composeCreationDependencyIds,
+  serviceCreationDependencyIds,
+} from "./creation-dependencies";
 export type {
   DataManagerCoverageEvidencePage,
   NotablePlacesBuildResult,
@@ -131,6 +149,7 @@ export {
   CONFIGURATION_DIRECTORY,
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
+  configurationGenerationBasePath,
   currentConfigurationFile,
   type DesiredSelection,
   type DesiredSelectionSource,
@@ -181,6 +200,11 @@ export {
   verifiedCatalogEntrySchema,
 } from "./extension-schema";
 export {
+  type ImageStagePlatform,
+  imageStagePlatform,
+  immutableImageStageReference,
+} from "./image-stage";
+export {
   acceptedManifestDigests,
   INTEGRATION_RECORD_VERSION,
   type IntegrationFileDigest,
@@ -207,6 +231,18 @@ export {
   serviceManifestSchema,
   validateServiceManifest,
 } from "./manifest-schema";
+export {
+  type PlatformConfiguration,
+  type PlatformField,
+  type PlatformValues,
+  platformConfigurationSchema,
+  resolvePlatformConfiguration,
+} from "./platform-configuration";
+export {
+  buildPlatformConfigurationPreview,
+  type PlatformConfigurationPreview,
+} from "./platform-preview";
+export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   type BuiltInServiceReadOptions,
@@ -218,6 +254,11 @@ export {
   readBuiltInServices,
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
+export {
+  configurationImageReference,
+  readServiceReleaseImageSelection,
+  validateExistingReleaseSelection,
+} from "./release-image-selection";
 export {
   canonicalReleaseManifest,
   DEFAULT_RELEASE_MANIFEST_REPOSITORY,
@@ -250,6 +291,7 @@ export {
   validateResolvedSelection,
   writeReleaseComposeArtifacts,
 } from "./release-manifest";
+export { clearReleaseComposeSelection } from "./release-selection-clear";
 export {
   parseReleaseServiceFiles,
   type ReleaseServiceFile,
@@ -307,6 +349,12 @@ export {
   resolveRequirement,
 } from "./resolver";
 export {
+  isRuntimeResourceKey,
+  materializeServiceConfigKey,
+  memoryHostVariable,
+  resolveServiceRuntimeResources,
+} from "./runtime-resources";
+export {
   assertRenderSandbox,
   COMMUNITY_SAFE_CAPS,
   checkManifestSandbox,
@@ -341,6 +389,7 @@ export {
 } from "./service-file-import";
 export { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
+export * from "./service-lifecycle-receipt";
 export { readServiceOverrides, staleOverrides } from "./service-overrides";
 export {
   LEGACY_TRAEFIK_MOUNT_NOTICE,
