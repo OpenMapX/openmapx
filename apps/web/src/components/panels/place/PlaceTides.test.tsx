@@ -29,6 +29,7 @@ const baseResponse: TidesResponse = {
   datum: "MLLW",
   units: "english",
   timeZone: "lst_ldt",
+  heightSource: "prediction",
   provider: {
     integrationId: "knowledge-tides-ioc",
     sourceId: "ioc-sealevel-monitoring",
@@ -68,6 +69,43 @@ describe("PlaceTidesContent", () => {
 
     expect(screen.getByText(note)).toBeInTheDocument();
     expect(screen.queryAllByText(/^datumNote/)).toHaveLength(1);
+  });
+
+  it("says predicted heights exclude wind and storm surge, beside a measured level", () => {
+    render(
+      <PlaceTidesContent
+        data={{
+          ...baseResponse,
+          heightSource: "prediction",
+          events: [{ time: "2026-05-18T02:00:00Z", type: "H", valueFt: 3.4 }],
+          currentLevel: { time: "2026-05-18T00:00:00Z", valueFt: 2.1 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("predictionDisclaimer")).toBeInTheDocument();
+  });
+
+  it("makes no astronomical-tide claim about measured water levels", () => {
+    render(
+      <PlaceTidesContent
+        data={{
+          ...baseResponse,
+          heightSource: "observation",
+          datum: "gauge_zero",
+          timeZone: "iso_offset",
+          events: [{ time: "2026-05-17T20:00:00Z", type: "H", valueFt: 3.4 }],
+          curve: [
+            { time: "2026-05-17T20:00:00Z", valueFt: 3.4 },
+            { time: "2026-05-17T23:00:00Z", valueFt: 2.1 },
+          ],
+          currentLevel: { time: "2026-05-17T23:00:00Z", valueFt: 2.1 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("currentLevel")).toBeInTheDocument();
+    expect(screen.queryByText(/Disclaimer$/)).not.toBeInTheDocument();
   });
 
   it("renders a current observation when no predictions are available", () => {

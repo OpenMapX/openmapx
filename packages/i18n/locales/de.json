@@ -1566,7 +1566,7 @@
     "datumNoteChartDatum": "Höhen über Seekartennull.",
     "datumNoteGaugeZero": "Höhen über dem Pegelnullpunkt.",
     "datumNoteSensorReference": "Höhen relativ zum Bezugsniveau des Sensors.",
-    "informationalDisclaimer": "Nur astronomische Gezeiten; ohne Wind- und Sturmflut.",
+    "predictionDisclaimer": "Vorhergesagte Gezeiten sind rein astronomisch, ohne Windstau und Sturmflut.",
     "attribution": "Quelle",
     "currentLevel": "Jetzt",
     "preliminary": "vorläufig",

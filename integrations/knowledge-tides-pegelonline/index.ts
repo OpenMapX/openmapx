@@ -141,7 +141,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const quarterKey = Math.floor(Date.now() / (TIDES_TTL * 1000));
-  const cacheKey = `tides:datum-v1:${station.uuid}:${quarterKey}`;
+  const cacheKey = `tides:height-source-v1:${station.uuid}:${quarterKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
@@ -182,6 +182,7 @@ async function buildTidesResponse(
     datum: "gauge_zero",
     units: "english",
     timeZone: "iso_offset",
+    heightSource: "observation",
     currentLevel: {
       time: last.time,
       valueFt: Math.round(last.valueCm * CM_TO_FT * 100) / 100,
