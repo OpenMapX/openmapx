@@ -7,7 +7,12 @@ import type {
   WeatherResponse,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import {
+  fetchJsonWithTimeout,
+  forecastTimeZone,
+  groupByLocalDay,
+  round4,
+} from "@openmapx/integration-weather/lib";
 import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE = "https://api.openweathermap.org/data/2.5";
@@ -82,10 +87,6 @@ interface OWM25ForecastResponse {
 
 function toIso(unix: number): string {
   return new Date(unix * 1000).toISOString();
-}
-
-function toDateStr(unix: number): string {
-  return new Date(unix * 1000).toISOString().slice(0, 10);
 }
 
 function fetchJson<T>(url: string): Promise<T> {
@@ -182,17 +183,14 @@ export function setup(ctx: IntegrationContext): void {
       const data = await fetchJson<OWM25ForecastResponse>(url);
       const windMul = units === "metric" ? 3.6 : 1;
 
-      // Group entries by date
-      const byDate = new Map<string, OWM25ForecastEntry[]>();
-      for (const e of data.list) {
-        const date = toDateStr(e.dt);
-        const arr = byDate.get(date);
-        if (arr) arr.push(e);
-        else byDate.set(date, [e]);
-      }
-
+      // OWM's 3-hour steps are UTC instants; days are the location's calendar days.
+      const timeZone = forecastTimeZone(coords);
       const result: DailyForecastPoint[] = [];
-      for (const [date, entries] of byDate) {
+      for (const { date, records: entries } of groupByLocalDay(
+        data.list,
+        (e) => e.dt * 1000,
+        timeZone,
+      )) {
         if (result.length >= days) break;
         let tMin = Infinity;
         let tMax = -Infinity;
@@ -215,6 +213,7 @@ export function setup(ctx: IntegrationContext): void {
 
         result.push({
           date,
+          timeZone,
           weatherCode: owmIdToWmo(dominantCode),
           temperatureMax: tMax,
           temperatureMin: tMin,

@@ -270,6 +270,12 @@ points. Hourly and daily fallback can select different suppliers. A successful
 empty forecast keeps its selected source with empty points and receipts; when
 no provider succeeds, the source is `null` and both arrays are empty.
 
+A daily point's `date` is a calendar date at the forecast location, not a UTC
+date, and `timeZone` names its IANA zone when the provider states it. Providers
+that report UTC instants group them by the zone resolved from the coordinates;
+a day on which daylight saving time starts or ends has 23 or 25 hours, and the
+day's symbol is the reading nearest local noon.
+
 Each forecast point retains its own canonical `contributors`, including
 authoritative `[]`, so clients can project credits after filtering or selecting
 points. The orchestrator captures the lookup catalogue before each provider

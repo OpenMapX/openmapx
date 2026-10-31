@@ -195,6 +195,31 @@ describe("Open-Meteo weather provider", () => {
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("&daily=weather_code");
   });
 
+  it("states the zone whose calendar days Open-Meteo reports", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        ...currentResponse(),
+        timezone: "Pacific/Auckland",
+        daily: {
+          time: ["2026-11-01"],
+          weather_code: [3],
+          temperature_2m_max: [17.9],
+          temperature_2m_min: [7.6],
+          precipitation_sum: [0],
+          wind_speed_10m_max: [20],
+          sunrise: ["2026-11-01T06:16"],
+          sunset: ["2026-11-01T19:51"],
+        },
+      }),
+    );
+
+    const daily = await getProvider().getDailyForecast([174.7633, -36.8485], 1);
+
+    expect(daily.points.map((p) => [p.date, p.timeZone])).toEqual([
+      ["2026-11-01", "Pacific/Auckland"],
+    ]);
+  });
+
   it("returns an empty daily array when the response omits daily data", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
     expect(await getProvider().getDailyForecast(COORDS, 5)).toEqual({

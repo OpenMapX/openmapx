@@ -36,7 +36,10 @@ export interface HourlyForecastPoint extends ContributingRecord {
 }
 
 export interface DailyForecastPoint extends ContributingRecord {
+  /** Calendar date at the forecast location, `YYYY-MM-DD`; not a UTC date. */
   date: string;
+  /** IANA zone whose calendar `date` names, when the provider states it. */
+  timeZone?: string;
   weatherCode: number;
   temperatureMax: number;
   temperatureMin: number;
