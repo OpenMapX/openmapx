@@ -63484,23 +63484,6 @@
         "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
       }
     },
-    "/api/integrations/overlay-air-quality/air-quality/stations": {
-      "get": {
-        "operationId": "getApiIntegrationsOverlayAirQualityAirQualityStations",
-        "responses": {
-          "default": {
-            "description": "Integration response"
-          }
-        },
-        "summary": "GET /air-quality/stations (overlay-air-quality)",
-        "tags": [
-          "integrations"
-        ],
-        "x-openmapx-auth": "public",
-        "x-openmapx-integration": "overlay-air-quality",
-        "x-openmapx-source": "integrations/overlay-air-quality/index.ts"
-      }
-    },
     "/api/integrations/overlay-earthquakes/earthquakes": {
       "get": {
         "operationId": "getApiIntegrationsOverlayEarthquakesEarthquakes",

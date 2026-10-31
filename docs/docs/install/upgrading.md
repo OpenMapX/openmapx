@@ -704,21 +704,6 @@ visible there. The integration records in `infra/docker/state/ops-agent/integrat
 are shared by both releases, so such an integration shows as needing a
 reinstall, or one removed after the update as not installed through the agent.
 
-## Air-quality API compatibility
-
-The legacy OpenAQ station route
-`GET /api/integrations/overlay-air-quality/air-quality/stations` remains available through
-1 March 2027, but its `aqi` field is now `number | null`. OpenMapX no longer labels one instantaneous
-PM2.5 concentration as a US AQI value. A station receives a numeric index only when a complete,
-locally applicable index can be validated; otherwise clients must display the `pm25` concentration and
-the observation time.
-
-The route sends `Deprecation: true`, `Sunset: Mon, 01 Mar 2027 00:00:00 GMT`, and a
-`rel="successor-version"` link to `/api/integrations/air-quality/stations`. Operators should migrate map
-and API consumers to that canonical route. During the compatibility window, clients must accept
-`aqi: null`, retain the per-station attribution/license, and treat 429/5xx responses as unavailable data,
-not as zero or "good" air quality.
-
 ## Where to go next
 
 - [Preparing data](./preparing-data.md): refreshing OSM extracts, GTFS

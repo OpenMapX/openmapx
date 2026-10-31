@@ -141,7 +141,6 @@ describe("metrics service", () => {
       cacheResult: "stale",
       headlineClass: "computed-ground",
       rejectionCode: "incomplete-window",
-      compatibilityUse: "none",
       quotaTruncated: true,
       evidenceCount: 4,
       latencyMs: 37,
