@@ -9,6 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const LAST_BEFORE_DROP = "0038_better_auth_account_issuer_cleanup";
+const LAST_BEFORE_JOB_STAGES_INDEX = "0043_mangrove_encrypted_revision";
+const JOB_STAGES_INDEX = "job_stages_job_id_idx";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
@@ -49,6 +51,16 @@ async function freshDatabase(name: string): Promise<Sql> {
 async function migrateTo(sql: Sql, migrationsFolder: string): Promise<void> {
   await migrate(drizzle(sql), { migrationsFolder });
 }
+
+async function jobStagesIndexes(sql: Sql): Promise<string[]> {
+  const rows = await sql<{ indexdef: string }[]>`
+    SELECT indexdef FROM pg_indexes
+    WHERE schemaname = 'data_manager' AND tablename = 'job_stages' AND indexname = ${JOB_STAGES_INDEX}
+  `;
+  return rows.map((row) => row.indexdef);
+}
+
+const JOB_STAGES_INDEX_DEF = `CREATE INDEX ${JOB_STAGES_INDEX} ON data_manager.job_stages USING btree (job_id)`;
 
 integration("dropping the POI-ingest pipeline's database state", () => {
   beforeAll(async () => {
@@ -108,6 +120,7 @@ integration("dropping the POI-ingest pipeline's database state", () => {
       expect(jobs).toEqual([{ id: kept.id, kind: "transitous-sync" }]);
       const stages = await sql<{ job_id: string }[]>`SELECT job_id FROM data_manager.job_stages`;
       expect(stages).toEqual([{ job_id: kept.id }]);
+      expect(await jobStagesIndexes(sql)).toEqual([JOB_STAGES_INDEX_DEF]);
     } finally {
       await sql.end({ timeout: 5 });
     }
@@ -127,6 +140,50 @@ integration("dropping the POI-ingest pipeline's database state", () => {
         SELECT count(*)::text AS count FROM data_manager.jobs
       `;
       expect(count).toBe("0");
+      expect(await jobStagesIndexes(sql)).toEqual([JOB_STAGES_INDEX_DEF]);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("adds the job_stages index to a database that already dropped the ingest pipeline", async () => {
+    const sql = await freshDatabase("dropped_before_index");
+    try {
+      await migrateTo(sql, migrationsUpTo(LAST_BEFORE_JOB_STAGES_INDEX));
+      expect(await jobStagesIndexes(sql)).toEqual([]);
+
+      await migrateTo(sql, MIGRATIONS);
+
+      expect(await jobStagesIndexes(sql)).toEqual([JOB_STAGES_INDEX_DEF]);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("indexes every data_manager foreign key that cascades or nulls on delete", async () => {
+    const sql = await freshDatabase("data_manager_fk_indexes");
+    try {
+      await migrateTo(sql, MIGRATIONS);
+
+      // A referencing column needs an index whose leading columns are exactly
+      // the key's columns, or each parent delete scans the whole child table.
+      const unindexed = await sql<{ constraint: string }[]>`
+        SELECT fk.conname AS constraint
+        FROM pg_constraint fk
+        JOIN pg_namespace ns ON ns.oid = fk.connamespace
+        WHERE fk.contype = 'f'
+          AND fk.confdeltype IN ('c', 'n')
+          AND ns.nspname = 'data_manager'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_index ix
+            WHERE ix.indrelid = fk.conrelid
+              AND ix.indnkeyatts >= cardinality(fk.conkey)
+              AND (ix.indkey::int2[])[0:cardinality(fk.conkey) - 1] @> fk.conkey
+              AND fk.conkey @> (ix.indkey::int2[])[0:cardinality(fk.conkey) - 1]
+          )
+        ORDER BY fk.conname
+      `;
+      expect(unindexed).toEqual([]);
     } finally {
       await sql.end({ timeout: 5 });
     }

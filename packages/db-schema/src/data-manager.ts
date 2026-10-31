@@ -40,22 +40,28 @@ export const jobs = dataManager.table("jobs", {
   metadata: jsonb("metadata"),
 });
 
-export const jobStages = dataManager.table("job_stages", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  jobId: uuid("job_id")
-    .notNull()
-    .references(() => jobs.id, { onDelete: "cascade" }),
-  /** StageName */
-  stage: text("stage").notNull(),
-  /** StageStatus */
-  status: text("status").notNull(),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
-  finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
-  durationMs: integer("duration_ms").notNull(),
-  message: text("message"),
-  error: jsonb("error"),
-  artifacts: jsonb("artifacts"),
-});
+export const jobStages = dataManager.table(
+  "job_stages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    /** StageName */
+    stage: text("stage").notNull(),
+    /** StageStatus */
+    status: text("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    message: text("message"),
+    error: jsonb("error"),
+    artifacts: jsonb("artifacts"),
+  },
+  // Deleting a job cascades here once per job row, and the job detail views
+  // read stages by job. Without this index each of those is a full table scan.
+  (table) => [index("job_stages_job_id_idx").on(table.jobId)],
+);
 
 export const feedState = dataManager.table("feed_state", {
   id: uuid("id").primaryKey().defaultRandom(),

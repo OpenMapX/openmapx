@@ -77,7 +77,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const journal = JSON.parse(
         await readFile(new URL("../../db/migrations/meta/_journal.json", import.meta.url), "utf8"),
       );
-      expect(journal.entries.at(-1).tag).toBe("0043_mangrove_encrypted_revision");
+      expect(journal.entries.map((entry: { tag: string }) => entry.tag)).toContain(
+        "0043_mangrove_encrypted_revision",
+      );
       const applied =
         await fixture.sql`SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations`;
       expect(applied[0].count).toBe(journal.entries.length);
