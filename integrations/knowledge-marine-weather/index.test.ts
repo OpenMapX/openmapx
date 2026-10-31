@@ -60,7 +60,7 @@ describe("parseHourly", () => {
 
     expect(hourly).toHaveLength(2);
     expect(hourly[0]).toEqual({
-      time: "2026-06-14T00:00",
+      time: "2026-06-14T00:00:00.000Z",
       waveHeightM: 1.2,
       waveDirectionDeg: 210,
       wavePeriodS: 6.5,
@@ -77,6 +77,18 @@ describe("parseHourly", () => {
     // null wave_height on the 2nd hour becomes undefined.
     expect(hourly[1]?.waveHeightM).toBeUndefined();
     expect(hourly[1]?.seaLevelHeightM).toBe(-0.05);
+  });
+
+  it("turns wall-clock steps into UTC instants using the stated offset", () => {
+    const hourly = parseHourly({
+      utc_offset_seconds: -14_400,
+      hourly: { time: ["2026-10-31T10:00", "2026-10-31T11:00"], wave_height: [0.3, 0.4] },
+    });
+
+    expect(hourly.map((h) => h.time)).toEqual([
+      "2026-10-31T14:00:00.000Z",
+      "2026-10-31T15:00:00.000Z",
+    ]);
   });
 
   it("returns an empty array when there is no hourly block", () => {
@@ -226,6 +238,43 @@ describe("GET /marine route", () => {
     expect(reply.payload).toMatchObject({
       contributors: [{ sourceId: "open-meteo-marine", name: "Captured marine supplier" }],
     });
+  });
+
+  it("reports the step at the current instant for a coastal point outside UTC", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-31T14:08:00Z"));
+    const time = Array.from({ length: 72 }, (_, i) => {
+      const step = new Date(Date.UTC(2026, 9, 31, i));
+      return step.toISOString().slice(0, 16);
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        latitude: 40.5,
+        longitude: -73.9,
+        utc_offset_seconds: 0,
+        timezone: "GMT",
+        hourly: { time, wave_height: time.map((_, i) => i / 100) },
+      }),
+    );
+
+    try {
+      const reply = await invoke({ lat: "40.5", lng: "-73.9" });
+
+      const requested = new URL(String(mockFetch.mock.calls[0]?.[0]));
+      expect(requested.searchParams.get("timezone")).toBe("GMT");
+      const payload = reply.payload as {
+        current: { time: string; waveHeightM: number };
+        hourly: Array<{ time: string }>;
+      };
+      expect(payload.current).toMatchObject({
+        time: "2026-10-31T14:00:00.000Z",
+        waveHeightM: 0.14,
+      });
+      expect(payload.hourly[0]?.time).toBe("2026-10-31T00:00:00.000Z");
+      expect(payload.hourly).toHaveLength(48);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("400s on out-of-range coordinates without calling upstream", async () => {
