@@ -63,6 +63,7 @@ const MERGED_STATION_FIELDS = [
   "nativeId",
   "operator",
   "branding",
+  "availableVehicles",
   "emptySlots",
   "capacity",
   "isActive",
@@ -102,13 +103,18 @@ function mergeStation(existing: SharedMobilityStation, incoming: SharedMobilityS
       color: existing.branding.color ?? incoming.branding.color,
     };
   }
+  if (existing.availableVehicles === undefined && incoming.availableVehicles !== undefined) {
+    existing.availableVehicles = incoming.availableVehicles;
+  }
   if (existing.emptySlots === undefined && incoming.emptySlots !== undefined) {
     existing.emptySlots = incoming.emptySlots;
   }
   if (existing.capacity === undefined && incoming.capacity !== undefined) {
     existing.capacity = incoming.capacity;
   }
-  if (!existing.isActive && incoming.isActive) existing.isActive = true;
+  if (incoming.isActive !== undefined && existing.isActive !== true) {
+    existing.isActive = incoming.isActive;
+  }
   if (!existing.accessMethod && incoming.accessMethod)
     existing.accessMethod = incoming.accessMethod;
   if (!existing.transitInfo && incoming.transitInfo) existing.transitInfo = incoming.transitInfo;

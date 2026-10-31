@@ -111,11 +111,17 @@ export interface SharedMobilityStation extends ContributingRecord {
   ids?: Ids;
   name: string;
   coordinates: LngLat;
-  /** Number of available vehicles at the station. */
-  availableVehicles: number;
+  /**
+   * Vehicles available to rent now. Absent when the source does not publish
+   * live availability, such as a static open-data station list.
+   */
+  availableVehicles?: number;
   /** Number of empty docking slots (undefined for dockless). */
   emptySlots?: number;
-  /** Total station capacity. */
+  /**
+   * Total station capacity: docks or parking spaces, or for a static car-sharing
+   * feed the vehicles assigned to the station.
+   */
   capacity?: number;
   systemId?: string;
   nativeId?: string;
@@ -132,8 +138,8 @@ export interface SharedMobilityStation extends ContributingRecord {
   vehicleTypes: VehicleFormFactor[];
   /** Provider-specific vehicle type ids relevant to this station. */
   vehicleTypeIds?: string[];
-  /** Whether the station is currently operational. */
-  isActive: boolean;
+  /** Whether the station is currently operational. Absent when the source does not say. */
+  isActive?: boolean;
   isRenting?: boolean;
   isReturning?: boolean;
   returnConstraint?: RentalReturnConstraint;

@@ -3,12 +3,12 @@ import { contributionState, retainContributions } from "@openmapx/mobility-core/
  * Enrichment merge for regional car-sharing stations.
  *
  * When multiple sources report the same station (by proximity within 50m),
- * keeps the first occurrence's live data (availability, operator, name) but
- * enriches it with extra fields from later occurrences that the first one lacks
- * (address, website, location hints, vehicle classes, etc.).
+ * keeps the first occurrence's identity and data (availability, operator, name)
+ * but enriches it with extra fields from later occurrences that the first one
+ * lacks (address, website, location hints, vehicle classes, etc.).
  *
- * Registration order determines priority: Cambio (live API) should be registered
- * before open data sources so its live availability numbers are kept.
+ * Registration order determines priority. Static open-data feeds publish no
+ * availability, so a later source's stated availability fills that gap.
  */
 
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
@@ -57,6 +57,8 @@ const ENRICHMENT_FIELDS = [
   "vehicleClassNames",
   "stationType",
   "capacity",
+  "availableVehicles",
+  "isActive",
 ] as const;
 
 export function mergeRegionalStations(stations: SharedMobilityStation[]): SharedMobilityStation[] {
@@ -87,13 +89,16 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
       existing.vehicleClassNames = s.vehicleClassNames;
     if (!existing.stationType && s.stationType) existing.stationType = s.stationType;
     if (existing.capacity === undefined && s.capacity !== undefined) existing.capacity = s.capacity;
+    if (existing.availableVehicles === undefined && s.availableVehicles !== undefined) {
+      existing.availableVehicles = s.availableVehicles;
+    }
+    if (existing.isActive === undefined && s.isActive !== undefined) existing.isActive = s.isActive;
     if (contributionState(existing, ENRICHMENT_FIELDS) !== before) retainContributions(existing, s);
     else if (existing.contributors === undefined && s.contributors === undefined) {
       // Preserve only the historical legacy footprint; captured display receipts remain precise.
       existing.sources = [...new Set([...existing.sources, ...s.sources])];
     }
-    // Do NOT override: availableVehicles, isActive, operator, name, id
-    // These come from the primary (live) source. Sources are merged above.
+    // Never override stated availability, status, operator, name or id.
   }
 
   return merged;

@@ -283,6 +283,58 @@ describe("mergeRegionalStations", () => {
     const result = mergeRegionalStations([primary, secondary]);
     expect(result[0].capacity).toBe(8);
   });
+
+  it("keeps a live station's availability when a static station within 50 m is seen first", () => {
+    const staticStation: SharedMobilityStation = {
+      id: "de-stadtteilauto/1",
+      name: "Static",
+      coordinates: [7.64, 51.95],
+      vehicleTypes: ["car"],
+      sources: ["de-stadtteilauto"],
+      capacity: 3,
+    };
+    const live = makeStation({
+      id: "de-cambio/MST/1",
+      name: "Live",
+      coordinates: [7.64, 51.9503],
+      sources: ["de-cambio/MST"],
+      availableVehicles: 1,
+      isActive: true,
+    });
+
+    const [merged] = mergeRegionalStations([staticStation, live]);
+
+    expect(merged.id).toBe("de-stadtteilauto/1");
+    expect(merged.availableVehicles).toBe(1);
+    expect(merged.isActive).toBe(true);
+    expect(merged.capacity).toBe(3);
+    expect(merged.sources).toEqual(["de-stadtteilauto", "de-cambio/MST"]);
+  });
+
+  it("keeps a live station's availability when the static station comes second", () => {
+    const live = makeStation({
+      id: "de-cambio/MST/1",
+      name: "Live",
+      coordinates: [7.64, 51.95],
+      sources: ["de-cambio/MST"],
+      availableVehicles: 0,
+      isActive: false,
+    });
+    const staticStation: SharedMobilityStation = {
+      id: "de-stadtteilauto/1",
+      name: "Static",
+      coordinates: [7.64, 51.9503],
+      vehicleTypes: ["car"],
+      sources: ["de-stadtteilauto"],
+      capacity: 3,
+    };
+
+    const [merged] = mergeRegionalStations([live, staticStation]);
+
+    expect(merged.availableVehicles).toBe(0);
+    expect(merged.isActive).toBe(false);
+    expect(merged.capacity).toBe(3);
+  });
 });
 
 it("credits a captured regional supplement only when its fields survive priority merging", () => {

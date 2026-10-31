@@ -21,8 +21,10 @@ function parseWktPoint(wkt: string): [number, number] | null {
   return [Number.parseFloat(match[1]), Number.parseFloat(match[2])];
 }
 
-function parse(body: string): SharedMobilityStation[] {
-  const rows = parseCsvRecords(body);
+export function parseDeNwBielefeldCsv(body: string): SharedMobilityStation[] {
+  // The WFS currently answers with semicolon-separated CSV despite the generic format name.
+  const [header = ""] = body.split("\n", 1);
+  const rows = parseCsvRecords(body, { delimiter: header.includes(";") ? ";" : "," });
   if (rows.length === 0) return [];
 
   const stations: SharedMobilityStation[] = [];
@@ -50,11 +52,10 @@ function parse(body: string): SharedMobilityStation[] {
       id: `de-nw-bielefeld/${gid}`,
       name: name || "Station",
       coordinates: [lng, lat] as LngLat,
-      availableVehicles: capacity ?? 0,
+      // A static station list: capacity is what the station holds, not what is free now.
       capacity: Number.isFinite(capacity) ? capacity : undefined,
       operator: "Cambio Bielefeld",
       vehicleTypes: ["car"],
-      isActive: true,
       sources: ["de-nw-bielefeld"],
       address: fullStreet ? { street: fullStreet, city: "Bielefeld", country: "DE" } : undefined,
       website: website || undefined,
@@ -73,7 +74,10 @@ export const deNwBielefeldClient = createStaticCarSharingClient({
   attribution: {
     label: "Stadt Bielefeld",
     url: "https://open-data.bielefeld.de",
-    licensing: licensingFromDeclaration("ODbL", "https://opendatacommons.org/licenses/odbl/"),
+    licensing: licensingFromDeclaration(
+      "ODbL-1.0",
+      "https://opendatacommons.org/licenses/odbl/1.0/",
+    ),
   },
-  parse,
+  parse: parseDeNwBielefeldCsv,
 });

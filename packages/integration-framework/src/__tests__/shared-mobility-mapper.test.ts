@@ -185,6 +185,58 @@ describe("mapStationToResult", () => {
   });
 });
 
+describe("station without published availability", () => {
+  const staticStation = () =>
+    makeStation({
+      availableVehicles: undefined,
+      isActive: undefined,
+      emptySlots: undefined,
+      capacity: 3,
+      vehicleTypes: ["car"],
+    });
+
+  it("is neither empty nor inactive", () => {
+    const result = mapStationToResult(staticStation());
+    expect(result.variant).toBe("unknown");
+    expect(result.status).toBe("unknown");
+  });
+
+  it("summarises the vehicles the station holds instead of an availability count", () => {
+    expect(mapStationToResult(staticStation()).summary).toEqual({
+      $t: "summary.capacity",
+      values: { count: 3 },
+    });
+  });
+
+  it("omits the summary when neither availability nor capacity is known", () => {
+    expect(
+      mapStationToResult(makeStation({ availableVehicles: undefined, capacity: undefined }))
+        .summary,
+    ).toBeUndefined();
+  });
+
+  it("leaves the available sort value unset so the station sorts after known counts", () => {
+    expect(mapStationToResult(staticStation()).sortValues).not.toHaveProperty("available");
+  });
+
+  it("says availability is not published instead of showing a number", () => {
+    const section = findSection(
+      mapStationToDetail(staticStation()).sections,
+      "shared.section.availability",
+    );
+    expect(findRow(section, "row.availableVehicles")?.[1]).toEqual({
+      $t: "value.availabilityNotPublished",
+    });
+    expect(findRow(section, "row.totalCapacity")?.[1]).toBe(3);
+  });
+
+  it("still marks a station inactive when the source says so", () => {
+    expect(
+      mapStationToResult(makeStation({ availableVehicles: undefined, isActive: false })).variant,
+    ).toBe("inactive");
+  });
+});
+
 describe("mapVehicleToResult", () => {
   describe("variant computation", () => {
     it("returns 'reserved' when isReserved = true", () => {

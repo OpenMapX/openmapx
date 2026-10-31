@@ -184,18 +184,18 @@
         "bindings": [
           {
             "scope": "data",
-            "subject": "Stadt Bielefeld Open Data material",
+            "subject": "Stadt Bielefeld car-sharing stations dataset",
             "license": {
               "kind": "spdx",
-              "expression": "CC-BY-4.0",
-              "url": "https://open-data.bielefeld.de/page/nutzungsbedingungen"
+              "expression": "ODbL-1.0",
+              "url": "https://open-data.bielefeld.de/dataset/carsharing"
             }
           }
         ],
         "declarations": [
           {
-            "text": "CC-BY-4.0",
-            "url": "https://open-data.bielefeld.de/page/nutzungsbedingungen"
+            "text": "ODbL-1.0",
+            "url": "https://open-data.bielefeld.de/dataset/carsharing"
           }
         ]
       }

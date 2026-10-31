@@ -129,7 +129,8 @@ export function createSharedMobilityProvider(
       if (!retained) return wrapRealtime(null, []);
       const cached = structuredClone(retained.item);
 
-      const isStation = "availableVehicles" in cached;
+      // Only stations list vehicle types; availability is optional on a station.
+      const isStation = "vehicleTypes" in cached;
       await config.runtime
         .enrichEnturMobilityItems(
           isStation ? [cached] : [],
@@ -143,9 +144,7 @@ export function createSharedMobilityProvider(
       await detailStore.updateRetained(retained, captured);
       if (retained.expiresAt <= Date.now()) return wrapRealtime(null, []);
       return wrapRealtime(
-        "availableVehicles" in captured
-          ? mapStationToDetail(captured)
-          : mapVehicleToDetail(captured),
+        "vehicleTypes" in captured ? mapStationToDetail(captured) : mapVehicleToDetail(captured),
         captured.contributors,
         retained.acquiredAt,
       );
