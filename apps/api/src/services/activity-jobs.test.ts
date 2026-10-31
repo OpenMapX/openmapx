@@ -17,6 +17,7 @@ describe("activity job normalization", () => {
     ["manual:admin:user-2", "user-2", "Administrator"],
     ["cron:data-manager-cron", null, "Scheduled"],
     ["bootstrap", null, "Bootstrap"],
+    ["cron:data-manager-auto-bump", null, "Automatic version bump"],
     ["data-manager-auto-bump", null, "Automatic version bump"],
     [null, null, "System"],
   ])("parses data-manager actor %s", (triggeredBy, userId, label) => {

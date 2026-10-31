@@ -28,7 +28,10 @@ export const jobs = dataManager.table("jobs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   /** "running" | "ok" | "partial" | "error" */
   status: text("status").notNull(),
-  /** "cron" | "manual:<user>" */
+  /**
+   * `<trigger>:<actor>`, e.g. "cron:data-manager-cron" or "api:user:<user id>".
+   * A user id here is personal data: retention prunes the row once it ages out.
+   */
   triggeredBy: text("triggered_by"),
   /**
    * Client-supplied idempotency token. A POST /sync that replays the same
