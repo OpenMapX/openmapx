@@ -114,6 +114,11 @@ function fetchBrightSky<T>(url: string): Promise<T> {
 const brightSkyProvider: WeatherProvider = {
   id: "bright-sky",
   priority: 3,
+  // Bright Sky documents that it changes DWD's data: `icon` and `condition`
+  // are "calculated from different fields in the raw data as a best effort",
+  // `/current_weather` compiles SYNOP observations, and gaps are filled from
+  // fallback stations (https://brightsky.dev/docs/).
+  changesSourceData: true,
 
   async getCurrentWeather(coords: LngLat, options?: WeatherOptions): Promise<WeatherResponse> {
     const lat = round4(coords[1]);

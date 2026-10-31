@@ -280,17 +280,58 @@ export function readingCredits(
   );
 }
 
-/** Captured record/offer suppliers, independent of the current source catalogue. */
-export function recordCredits(record: Rec): Attribution[] {
+/** A line or area geometry, which can be redrawn; a point marker only stands for a place. */
+const SHAPES = new Set(["LineString", "MultiLineString", "Polygon", "MultiPolygon"]);
+
+/** Whether OpenConditions redrew the record's line or area (simplified, unioned). */
+function redrawnShape(record: Rec): boolean {
+  const location = rec(record.location);
+  const shape = str(rec(location.geometry).type);
+  return location.geometryOrigin === "derived" && shape !== undefined && SHAPES.has(shape);
+}
+
+/**
+ * Whether a shown record carries something OpenConditions derived from its
+ * own sources' data: the record itself computed (a congestion situation from
+ * flow readings), a severity it assessed where the record shows one, or a
+ * line or area it redrew from them. A shape redrawn from a location table
+ * changes the table's data, which its own credit says
+ * ({@link locationTableCredits}). Drawing a referenced location, a point
+ * standing for a published shape and naming a stated value by a code of the
+ * same or a coarser meaning present the data; they do not change it.
+ */
+export function derivedShown(record: Rec, shows: { severity: boolean }): boolean {
+  if (rec(record.provenance).origin === "derived") return true;
+  const severity = rec(record.severity);
+  if (shows.severity && severity.source === "derived" && severity.label !== "unknown") return true;
+  return redrawnShape(record) && str(rec(rec(record.location).locationTable).ref) === undefined;
+}
+
+/**
+ * The credits as the credits of changed data, as change-notice licences ask:
+ * every source's but the instance's own crowd reports, which nothing changed.
+ */
+export function asModified(credits: readonly Attribution[]): Attribution[] {
+  return credits.map((c) => (c.sourceId === CROWD ? c : { ...c, modified: true as const }));
+}
+
+/**
+ * Captured record/offer suppliers, independent of the current source
+ * catalogue; `modified` where the record shows a value OpenConditions derived
+ * ({@link derivedShown}). Required notices are never marked: they are the
+ * publisher's text, not its data.
+ */
+export function recordCredits(record: Rec, options: { modified?: boolean } = {}): Attribution[] {
+  const changed = (credits: Attribution[]) => (options.modified ? asModified(credits) : credits);
   const native = readCapturedContributors(record.contributors);
-  if (native !== undefined) return snapshotContributors(native);
+  if (native !== undefined) return snapshotContributors(changed([...native]));
   const captured = sourcesOf(record).map((source) => ({
     ...source,
     id: str(source.attribution.parentSourceId) ?? source.id,
   }));
   return snapshotContributors(
-    captured.map((source) => credit(source, NO_SOURCES)),
-    upstreamCredits(captured, NO_SOURCES),
+    changed(captured.map((source) => credit(source, NO_SOURCES))),
+    changed(upstreamCredits(captured, NO_SOURCES)),
     captured.flatMap((source) => {
       const notice = str(source.attribution.notice);
       return notice ? [{ sourceId: source.id, name: notice }] : [];
@@ -323,11 +364,6 @@ function capturedCreditLicensing(captured: Rec): Licensing | undefined {
 }
 
 /** A source's credit; without a link of its own it takes the source's link from `sources`. */
-/**
- * A feed's credit. OpenConditions normalises every record into its model, so
- * what it serves is changed from what the feed published: the credit says so,
- * as change-notice licences require.
- */
 export function credit(source: RecordSource, sources: CreditSources): Attribution {
   const a = source.attribution;
   const url = str(a.url) ?? sources.link(source.id);
@@ -346,8 +382,6 @@ export function credit(source: RecordSource, sources: CreditSources): Attributio
         }
       : {}),
     ...(str(a.provider) ? { attributionText: str(a.provider) } : {}),
-    // Crowd reports are the instance's own; nothing was taken and changed.
-    ...(source.id === CROWD ? {} : { modified: true as const }),
   };
 }
 
@@ -388,7 +422,6 @@ export function upstreamCredits(
         ...(licensing ? { licensing } : {}),
         publisher: { name: publisher },
         ...(str(u.attribution) ? { attributionText: str(u.attribution) } : {}),
-        modified: true,
       });
     }
   }
@@ -452,8 +485,8 @@ export function locationTableCredits(record: Rec, sourceId: string | undefined):
       ...(url ? { url } : {}),
       ...(licensing ? { licensing } : {}),
       attributionText: notice,
-      // The table's codes are resolved into the record's geometry and names.
-      modified: true,
+      // An area redrawn from the table's shapes changes the table's data.
+      ...(redrawnShape(record) ? { modified: true as const } : {}),
     },
   ];
 }

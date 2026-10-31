@@ -81,3 +81,39 @@ it("does not use a declared catalogue wholesale when provider and explicit sourc
   provider.getAggregate = async () => ({ ...aggregate, source: "declared-other" });
   expect((await wrapped.getAggregate(subject)).contributors).toEqual([]);
 });
+
+it("credits a computed aggregate as derived data, but not the reviews it was computed from", async () => {
+  const ctx = createMockIntegrationContext();
+  ctx.manifest.dataSources = [
+    {
+      sourceId: "reviews",
+      name: "Review store",
+      url: "https://reviews.test/",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://reviews.test/privacy",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", subject: "Reviews", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+        ],
+      },
+    },
+  ];
+  const provider: ReviewProvider = {
+    id: "reviews",
+    name: "Reviews",
+    aggregateComputed: true,
+    getReviews: async () => [{ id: "r1", source: "reviews", rating: 80 } as never],
+    getAggregate: async () => aggregate,
+  };
+  const wrapped = captureReviewProviderContributors(ctx, provider);
+  expect((await wrapped.getAggregate(subject)).contributors?.map((c) => c.modified)).toEqual([
+    true,
+  ]);
+  const [review] = await wrapped.getReviews(subject);
+  expect(review?.contributors?.map((c) => c.modified)).toEqual([undefined]);
+  const stated = captureReviewProviderContributors(ctx, { ...provider, aggregateComputed: false });
+  expect((await stated.getAggregate(subject)).contributors?.map((c) => c.modified)).toEqual([
+    undefined,
+  ]);
+});

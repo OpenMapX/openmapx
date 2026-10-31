@@ -13,6 +13,7 @@ import escapeHtml from "escape-html";
 import { type DefaultTreeAdapterTypes, parseFragment } from "parse5";
 import type { Attribution } from "../types/dataSource";
 import type { IntegrationDataSource } from "../types/integrationMeta";
+import { requiresChangeNotice } from "./changeNotice";
 
 function safeExternalUrl(value: string | undefined, baseUrl?: string): string | undefined {
   if (!value) return undefined;
@@ -251,8 +252,12 @@ export function buildAttributionPresentation(
 ): AttributionPresentation {
   const detail = structuredClone(attribution);
   let publisherHtml = "";
-  // A change notice belongs to the source note itself, wherever it is shown.
-  const modified = attribution.modified ? escapeHtml(labels.modified) : "";
+  // A change notice belongs to the source note itself, wherever it is shown,
+  // and is given where the source's licence asks for one.
+  const modified =
+    attribution.modified && requiresChangeNotice(attribution.licensing)
+      ? escapeHtml(labels.modified)
+      : "";
   const fullParts = [buildRuntimeAttributionHtml(attribution, { includeSoftware: true })];
   const original = parseAttributionHtml(fullParts[0] ?? "");
   const sourceUrl = safeExternalUrl(attribution.url);

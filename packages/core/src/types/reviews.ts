@@ -96,6 +96,11 @@ export interface Review {
 export interface ReviewProvider {
   readonly id: string;
   readonly name: string;
+  /**
+   * The aggregate is computed from the reviews (a mean rating, counts) rather
+   * than read from the source, so its credit says the data was derived.
+   */
+  readonly aggregateComputed?: boolean;
   getReviews(
     subject: ReviewSubject,
     options?: { signal?: AbortSignal; strict?: boolean },

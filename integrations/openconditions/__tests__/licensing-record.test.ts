@@ -1,9 +1,12 @@
 import { expect, it } from "vitest";
 import {
+  asModified,
   CROWD,
   credit,
+  derivedShown,
   NO_SOURCES,
   readingCredits,
+  recordCredits,
   sourcesOf,
   upstreamCredits,
 } from "../features/record.js";
@@ -36,7 +39,6 @@ it("keeps distinct captured terms and required notices for the same upstream pub
   expect(credits).toEqual([
     {
       sourceId: "feed",
-      modified: true,
       name: "Feed – Town",
       publisher: { name: "Town" },
       attributionText: "Credit A",
@@ -44,7 +46,6 @@ it("keeps distinct captured terms and required notices for the same upstream pub
     },
     {
       sourceId: "feed",
-      modified: true,
       name: "Feed – Town",
       publisher: { name: "Town" },
       attributionText: "Credit B",
@@ -130,12 +131,66 @@ it("projects fused captures from every original supplier without crediting the s
   expect(credits[0]?.attributionText).toBe("Feed A");
 });
 
-it("credits a feed's data as modified, since OpenConditions normalises every record, but not the instance's own crowd reports", () => {
-  const feed = credit({ id: "feed", attribution: { name: "Feed" }, upstream: [] }, NO_SOURCES);
-  expect(feed.modified).toBe(true);
-  const crowd = credit(
-    { id: CROWD, attribution: { name: "Contributors" }, upstream: [] },
-    NO_SOURCES,
+it("credits a record's sources as changed only where it shows a value OpenConditions derived", () => {
+  const record = (over: Record<string, unknown>) => ({
+    provenance: {
+      sourceId: "feed",
+      attribution: { name: "Feed", provider: "Feed" },
+      upstream: [{ publisher: "Town" }],
+    },
+    location: { geometry: { type: "Point", coordinates: [7, 51] }, geometryOrigin: "source" },
+    ...over,
+  });
+  const modified = (r: Record<string, unknown>, severity = true) =>
+    recordCredits(r, { modified: derivedShown(r, { severity }) }).map((c) => c.modified);
+
+  // The publisher's own severity, its own geometry, a fed record: presented, not changed.
+  expect(modified(record({ severity: { label: "major", source: "declared" } }))).toEqual([
+    undefined,
+    undefined,
+  ]);
+  // An assessed severity changes what the shown record says; the feed and its upstream say so.
+  const assessed = record({ severity: { label: "major", source: "derived" } });
+  expect(modified(assessed)).toEqual([true, true]);
+  // Not where the severity is not shown, nor where nothing was assessed.
+  expect(modified(assessed, false)).toEqual([undefined, undefined]);
+  expect(modified(record({ severity: { label: "unknown", source: "derived" } }))).toEqual([
+    undefined,
+    undefined,
+  ]);
+  // A computed record, and a redrawn area, are derived; a point standing for a shape is not.
+  expect(modified(record({ provenance: { ...record({}).provenance, origin: "derived" } }))).toEqual(
+    [true, true],
   );
+  const area = {
+    type: "Polygon",
+    coordinates: [
+      [
+        [7, 51],
+        [8, 51],
+        [8, 52],
+        [7, 51],
+      ],
+    ],
+  };
+  expect(
+    modified(record({ location: { geometry: area, geometryOrigin: "derived" } }), false),
+  ).toEqual([true, true]);
+  expect(
+    modified(
+      record({
+        location: { geometry: { type: "Point", coordinates: [7, 51] }, geometryOrigin: "derived" },
+      }),
+      false,
+    ),
+  ).toEqual([undefined, undefined]);
+});
+
+it("never marks the instance's own crowd reports, nor a credit built on its own, as changed", () => {
+  expect(
+    credit({ id: "feed", attribution: { name: "Feed" }, upstream: [] }, NO_SOURCES),
+  ).not.toHaveProperty("modified");
+  const [crowd] = asModified([{ sourceId: CROWD, name: "Contributors" }]);
   expect(crowd).not.toHaveProperty("modified");
+  expect(asModified([{ sourceId: "feed", name: "Feed" }])[0]!.modified).toBe(true);
 });

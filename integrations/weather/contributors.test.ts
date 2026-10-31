@@ -256,3 +256,53 @@ it("isolates old weather caches and keeps the acquired receipt on retained respo
       contributors: [{ sourceId: "winner", attributionText: "Original notice" }],
     });
 });
+
+it("credits a provider's data as modified where its service changes the source's data", async () => {
+  const source = {
+    sourceId: "changed",
+    name: "DWD via a service",
+    url: "https://service.test",
+    licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
+  };
+  const integration = (changesSourceData: boolean) =>
+    [
+      {
+        id: "weather-service",
+        name: "Weather service",
+        enabled: true,
+        manifest: { domains: ["weather"], dataSources: [source] },
+        providers: new Map([
+          [
+            "weather",
+            [
+              {
+                id: "changed",
+                priority: 1,
+                ...(changesSourceData ? { changesSourceData } : {}),
+                getCurrentWeather: async () => ({
+                  location: [6, 51],
+                  current: {},
+                  source: "changed",
+                }),
+                getHourlyForecast: async () => ({
+                  source: "changed",
+                  points: [{ time: "2026-10-31T12:00:00Z", temperature: 10 }],
+                }),
+              },
+            ],
+          ],
+        ]),
+        dataSources: [source],
+      },
+    ] as never;
+  const ctx = createMockIntegrationContext();
+  ctx.getIntegrationsByDomain = () => integration(true);
+  const weather = createWeatherOrchestrator(ctx);
+  const current = await weather.getCurrentWeather([6, 51]);
+  expect(current?.contributors?.map((c) => c.modified)).toEqual([true]);
+  const hourly = await weather.getHourlyForecast([6, 51], 1);
+  expect(hourly.points[0]?.contributors?.map((c) => c.modified)).toEqual([true]);
+  ctx.getIntegrationsByDomain = () => integration(false);
+  const plain = await createWeatherOrchestrator(ctx).getCurrentWeather([6, 51]);
+  expect(plain?.contributors?.map((c) => c.modified)).toEqual([undefined]);
+});

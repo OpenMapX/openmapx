@@ -56,6 +56,15 @@ export function resolveContributors(
     : snapshotContributors(captured);
 }
 
+/**
+ * Credits as the credits of changed data: where what is shown was changed
+ * from the source or derived from it, for the licences that ask a changed
+ * version to say so (`Attribution.modified`).
+ */
+export function asModifiedContributors(credits: readonly Attribution[]): Attribution[] {
+  return credits.map((credit) => ({ ...credit, modified: true as const }));
+}
+
 /** Capture exact built-in source IDs from their declared metadata or runtime feed index. */
 export function resolveIntegrationContributors(
   ctx: Pick<IntegrationContext, "manifest" | "attributionIndex">,

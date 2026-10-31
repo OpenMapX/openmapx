@@ -501,10 +501,7 @@ export function createLiveSources(): UpdatableLiveSources {
             ? [
                 [
                   ds.sourceId,
-                  // Served normalised into OpenConditions' model; see `credit`.
-                  snapshotContributors([
-                    { ...dataSourceToAttribution(ds as IntegrationDataSource), modified: true },
-                  ]),
+                  snapshotContributors([dataSourceToAttribution(ds as IntegrationDataSource)]),
                 ] as const,
               ]
             : [],

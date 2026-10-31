@@ -8,7 +8,7 @@ import type {
 } from "@openmapx/integration-framework";
 import { snapshotContributors } from "@openmapx/integration-framework";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
-import { locationTableCredits, recordCredits } from "../features/record.js";
+import { derivedShown, locationTableCredits, recordCredits } from "../features/record.js";
 
 type Rec = Record<string, unknown>;
 
@@ -107,7 +107,8 @@ export function situationToRoadConditionEvent(
   const sourceId = parentSourceId ?? str(provenance.sourceId);
   // A named location table is additional captured evidence, including with native receipts.
   const contributors = snapshotContributors(
-    recordCredits(record),
+    // The popup shows the severity, so an assessed one is derived data shown.
+    recordCredits(record, { modified: derivedShown(record, { severity: true }) }),
     locationTableCredits(record, sourceId),
   );
   const direction = obj(location.direction);

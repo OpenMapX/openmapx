@@ -432,4 +432,20 @@ it("says beside a changed source's credit that its data was modified, in the vie
   const unchanged = buildAttributionPresentation({ ...receipt, modified: undefined }, "map");
   expect(unchanged.visibleHtml).not.toContain("modified");
   expect(unchanged.fullHtml).not.toContain("modified");
+  // A licence that asks for no change notice gets none, however the data was changed.
+  const zero = {
+    ...receipt,
+    licensing: {
+      ...receipt.licensing,
+      bindings: [
+        {
+          ...receipt.licensing.bindings[0]!,
+          license: { kind: "spdx" as const, expression: "DL-DE-ZERO-2.0" },
+        },
+      ],
+    },
+  };
+  const unasked = buildAttributionPresentation(zero, "map");
+  expect(unasked.visibleHtml).not.toContain("modified");
+  expect(unasked.fullHtml).not.toContain("modified");
 });

@@ -335,6 +335,8 @@ function aggregateFromReviews(reviews: Review[]): ReviewAggregate {
 
 export const mangroveProvider: ReviewProvider = {
   id: "mangrove",
+  // Mangrove's own subject aggregate over-counts, so the mean is computed here.
+  aggregateComputed: true,
   name: "Mangrove.reviews",
 
   async getReviews(
