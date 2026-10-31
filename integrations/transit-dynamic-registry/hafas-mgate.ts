@@ -98,6 +98,15 @@ function buildProducts(rawProducts: TransportApiProduct[]): Array<{
   }));
 }
 
+/**
+ * HAFAS protocol versions for catalogue entries that state none, where the
+ * endpoint rejects hafas-client's request without one ("Invalid version").
+ * Taken from hafas-client's own profile for the same endpoint.
+ */
+const PROTOCOL_VERSION_FALLBACKS: Readonly<Record<string, string>> = {
+  "de/avv-hafas-mgate": "1.26",
+};
+
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client uses untyped profiles
 function buildProfile(entry: RegistryEntry): Record<string, any> {
   const opts = entry.options;
@@ -109,7 +118,9 @@ function buildProfile(entry: RegistryEntry): Record<string, any> {
   if (opts.endpoint && registryEndpointIsUsable(opts)) profile.endpoint = opts.endpoint;
   if (opts.auth) profile.auth = opts.auth;
   if (opts.client) profile.client = opts.client;
-  if (opts.ver) profile.ver = opts.ver;
+  // Some catalogue entries name the protocol version `version` rather than `ver`.
+  const ver = opts.ver ?? opts.version ?? PROTOCOL_VERSION_FALLBACKS[entry.id];
+  if (ver) profile.ver = ver;
   if (opts.ext) profile.ext = opts.ext;
   if (opts.checksumSalt) profile.salt = opts.checksumSalt;
   if (opts.micMacSalt) profile.micMacSalt = opts.micMacSalt;

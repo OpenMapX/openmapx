@@ -153,6 +153,54 @@ describe("stop-name search coverage", () => {
     }
   });
 
+  describe("for a place", () => {
+    const koeln = { lat: 50.94, lng: 6.97 };
+    const homed = (entry: ReturnType<typeof failing>, home: [number, number, number, number]) => {
+      Object.assign(entry.provider, { coverage: { bbox: [-10, 35, 30, 60], home } });
+      return entry;
+    };
+
+    it("isn't partial when a provider fails away from its home area", async () => {
+      // ÖBB covers Europe's long-distance trains but is the source for Austria.
+      const oebb = homed(failing("oebb"), [9.5, 46.3, 17.3, 49.1]);
+      const { transit } = orchestrator([answering("a"), oebb]);
+
+      const result = await transit.searchByNameRaw("Central", 30, undefined, undefined, koeln);
+
+      expect(result.data.map((s) => s.id)).toEqual(["a:central"]);
+      expect(result.freshness.isPartial).toBeUndefined();
+    });
+
+    it("is partial when a provider fails in its home area", async () => {
+      const kvb = homed(failing("kvb"), [6.8, 50.8, 7.2, 51.1]);
+      const { transit } = orchestrator([answering("a"), kvb]);
+
+      const result = await transit.searchByNameRaw("Central", 30, undefined, undefined, koeln);
+
+      expect(result.freshness.isPartial).toBe(true);
+    });
+
+    it("is partial when a provider without a home area fails or cools down", async () => {
+      for (const [entries, options] of [
+        [[answering("a"), failing("b")], {}],
+        [[answering("a"), answering("b")], { coolingDown: ["b"] }],
+      ] as const) {
+        const { transit } = orchestrator([...entries], options);
+        const result = await transit.searchByNameRaw("Central", 30, undefined, undefined, koeln);
+        expect(result.freshness.isPartial).toBe(true);
+      }
+    });
+
+    it("still rejects when no provider answers", async () => {
+      const oebb = homed(failing("oebb"), [9.5, 46.3, 17.3, 49.1]);
+      const { transit } = orchestrator([oebb]);
+
+      await expect(
+        transit.searchByNameRaw("Central", 30, undefined, undefined, koeln),
+      ).rejects.toThrow("Transit stop sources unavailable");
+    });
+  });
+
   it("passes partial coverage through the deduplicated search", async () => {
     const { transit } = orchestrator([answering("a"), failing("b")]);
 

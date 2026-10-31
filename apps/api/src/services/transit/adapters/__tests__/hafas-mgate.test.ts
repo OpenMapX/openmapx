@@ -648,3 +648,39 @@ describe("departure board age", () => {
     ).toBeUndefined();
   });
 });
+
+describe("HAFAS protocol version", () => {
+  async function versionFor(entry: RegistryEntry): Promise<unknown> {
+    const { createClient } = await import("hafas-client");
+    mockHafasClient.locations.mockResolvedValue([]);
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
+    await hafasMgateAdapter.searchByName?.(entry, "Aachen Hbf", 5);
+    const calls = vi.mocked(createClient).mock.calls;
+    return (calls.at(-1)?.[0] as { ver?: unknown } | undefined)?.ver;
+  }
+
+  it("reads a version the catalogue names `version`", async () => {
+    const entry = {
+      ...MOCK_ENTRY,
+      id: "de/db-smartrbl-hafas-mgate",
+      options: { ...MOCK_ENTRY.options, version: "1.18" },
+    };
+    expect(await versionFor(entry)).toBe("1.18");
+  });
+
+  it("uses hafas-client's version for an entry that states none", async () => {
+    const entry = { ...MOCK_ENTRY, id: "de/avv-hafas-mgate" };
+    expect(await versionFor(entry)).toBe("1.26");
+  });
+
+  it("prefers the catalogue's `ver`", async () => {
+    const entry = {
+      ...MOCK_ENTRY,
+      id: "de/example-hafas-mgate",
+      options: { ...MOCK_ENTRY.options, ver: "1.34", version: "1.18" },
+    };
+    expect(await versionFor(entry)).toBe("1.34");
+  });
+});
