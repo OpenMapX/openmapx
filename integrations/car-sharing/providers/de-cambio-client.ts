@@ -40,7 +40,7 @@ const DE_CAMBIO_REGIONS: {
 ];
 
 interface DeCambioStation {
-  id: number;
+  id: string | number;
   displayName?: string;
   name: string;
   vehicleCount?: number;
@@ -94,10 +94,10 @@ async function fetchRegionStations(
           id: `de-cambio/${region.code}/${s.id}`,
           name,
           coordinates: [lng, lat] as LngLat,
-          availableVehicles: s.vehicleCount ?? 0,
+          // The API lists the vehicles stationed here, not those free to book now.
+          capacity: s.vehicleCount,
           operator: `Cambio ${region.name}`,
           vehicleTypes: ["car"],
-          isActive: (s.vehicleCount ?? 0) > 0,
           sources: [`de-cambio/${region.code}`],
         };
       });
