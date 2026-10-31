@@ -107,15 +107,16 @@ describe("searchByName", () => {
     expect(stops[0].provider).toBe("oebb");
   });
 
-  it("returns empty array on error", async () => {
+  it("reports a failed search as unavailable instead of no matches", async () => {
     mockHafasClient.locations.mockRejectedValue(new Error("fail"));
 
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const stops = (await hafasMgateAdapter.searchByName?.(MOCK_ENTRY, "Wien", 10)) ?? [];
 
-    expect(stops).toEqual([]);
+    await expect(hafasMgateAdapter.searchByName?.(MOCK_ENTRY, "Wien", 10)).rejects.toThrow(
+      "HAFAS stop search unavailable",
+    );
   });
 });
 

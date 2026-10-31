@@ -155,6 +155,7 @@ export async function searchByName(
   limit = 10,
   signal?: AbortSignal,
 ): Promise<TransitStop[]> {
+  // A failed search must not read as "no stop by that name"; callers decide how to degrade.
   try {
     const data = await client.locations(query, {
       results: limit,
@@ -169,7 +170,7 @@ export async function searchByName(
       .map(normalizeStop);
   } catch (error) {
     if (signal?.aborted) throw error;
-    return [];
+    throw new Error("DB stop search unavailable");
   }
 }
 

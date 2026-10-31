@@ -254,12 +254,13 @@ export async function searchByName(
   query: string,
   limit = 10,
 ): Promise<TransitStop[]> {
+  // A failed search must not read as "no stop by that name"; callers decide how to degrade.
   try {
-    const { data } = await geocode({
+    const { data, error } = await geocode({
       client: instance.client,
       query: { text: query, type: ["STOP"] },
     });
-    if (!data || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) throw new Error("MOTIS stop search unavailable");
     return data
       .filter((match) => (match.type === "STOP" || match.type === "PLACE") && match.id != null)
       .slice(0, limit)
@@ -274,7 +275,7 @@ export async function searchByName(
         }),
       );
   } catch {
-    return [];
+    throw new Error("MOTIS stop search unavailable");
   }
 }
 

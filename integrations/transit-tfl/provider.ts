@@ -113,12 +113,21 @@ export async function searchByName(
     maxResults: String(Math.min(limit, 50)),
     app_key: key,
   });
+  // A failed search must not read as "no stop by that name". The request URL
+  // carries the app key, so the upstream error is not passed on.
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = await fetchJson<{ matches?: any[] }>(
-    `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
-    { nullOnError: true, signal },
-  );
-  return (data?.matches ?? []).slice(0, limit).map(normalizeStop);
+  let data: { matches?: any[] };
+  try {
+    // biome-ignore lint/suspicious/noExplicitAny: external API response
+    data = await fetchJson<{ matches?: any[] }>(
+      `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
+      { signal },
+    );
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error("TfL stop search unavailable");
+  }
+  return (data.matches ?? []).slice(0, limit).map(normalizeStop);
 }
 
 function mapTflSeverity(severityNumber: number): AlertSeverity {

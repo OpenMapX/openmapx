@@ -402,14 +402,22 @@ describe("searchByName", () => {
     expect(results[0].id).toBe("vbb:s1");
   });
 
-  it("returns empty array on non-ok response", async () => {
+  it("reports a non-ok response as unavailable instead of no matches", async () => {
     mockFetch.mockResolvedValueOnce(mockNotOk());
 
     const { HAFAS_INSTANCES, searchByName } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const results = await searchByName(vbb, "test", 10);
 
-    expect(results).toEqual([]);
+    await expect(searchByName(vbb, "test", 10)).rejects.toThrow("HAFAS stop search unavailable");
+  });
+
+  it("returns an empty array when the search succeeds without matches", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk([]));
+
+    const { HAFAS_INSTANCES, searchByName } = await loadModule();
+    const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
+
+    expect(await searchByName(vbb, "test", 10)).toEqual([]);
   });
 });
 
@@ -791,14 +799,13 @@ describe("getStopsNearby edge cases", () => {
 // searchByName edge cases
 
 describe("searchByName edge cases", () => {
-  it("returns empty array on fetch error", async () => {
+  it("reports a fetch error as unavailable instead of no matches", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network error"));
 
     const { HAFAS_INSTANCES, searchByName } = await loadModule();
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb") as HafasInstance;
-    const stops = await searchByName(vbb, "test", 10);
 
-    expect(stops).toEqual([]);
+    await expect(searchByName(vbb, "test", 10)).rejects.toThrow("HAFAS stop search unavailable");
   });
 });
 

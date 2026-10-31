@@ -103,7 +103,11 @@ it("drops duplicate stop B receipts after real provider fan-out and capping", as
 it("credits no discarded discovery candidates when linked-stop pruning is empty", async () => {
   const { createPlaceTransit } = await import("../place-transit.js");
   const ctx = {
-    cache: { withCache: (_key: string, _ttl: number, load: () => unknown) => load() },
+    cache: {
+      get: async () => null,
+      set: async () => {},
+      withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+    },
   } as unknown as IntegrationContext;
   const orchestrator = {
     searchByNameRaw: async () => ({

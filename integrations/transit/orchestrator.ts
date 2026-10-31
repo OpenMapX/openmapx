@@ -334,18 +334,36 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return 100; // unknown providers get low priority
   }
 
-  async function filterHealthy(providers: TransitProvider[]): Promise<TransitProvider[]> {
+  /**
+   * Split the policy-allowed providers into those that may be called now and
+   * those in health cooldown. Policy-disallowed providers are in neither: their
+   * absence is the operator's choice, while a cooling-down provider's absence
+   * leaves a gap in the answer.
+   */
+  async function partitionByHealth(
+    providers: TransitProvider[],
+  ): Promise<{ healthy: TransitProvider[]; coolingDown: TransitProvider[] }> {
     const banned = await disallowedProviderIds();
     const allowed = banned.size === 0 ? providers : providers.filter((p) => !banned.has(p.id));
     const checks = await Promise.all(allowed.map((p) => providerHealth.isHealthy(p.id)));
-    return allowed.filter((_, i) => checks[i]);
+    return {
+      healthy: allowed.filter((_, i) => checks[i]),
+      coolingDown: allowed.filter((_, i) => !checks[i]),
+    };
+  }
+
+  async function filterHealthy(providers: TransitProvider[]): Promise<TransitProvider[]> {
+    return (await partitionByHealth(providers)).healthy;
+  }
+
+  function providersOverlapping(bbox: BBox): TransitProvider[] {
+    return collectProviders()
+      .filter((p) => providerOverlapsBbox(p, bbox))
+      .sort(compareProviderPolicy);
   }
 
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
-    const overlapping = collectProviders()
-      .filter((p) => providerOverlapsBbox(p, bbox))
-      .sort(compareProviderPolicy);
-    return filterHealthy(overlapping);
+    return filterHealthy(providersOverlapping(bbox));
   }
 
   async function getStopsInBbox(
@@ -455,6 +473,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    * Raw stop-name search without deduplication/truncation.
    * Used by place-linked lookups that need full candidate sets before local
    * distance/name filtering is applied.
+   *
+   * A provider that fails or is in health cooldown makes the answer partial.
+   * When providers should have answered and none did, the search rejects, so an
+   * outage is never reported as "no stop by that name".
    */
   async function searchByNameRaw(
     query: string,
@@ -462,13 +484,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     bbox?: BBox,
     context?: ProviderCallContext,
   ): Promise<MobilityResult<TransitStop[]>> {
-    const baseProviders = bbox
-      ? await getProvidersForBbox(bbox)
-      : await filterHealthy(collectProviders().sort((a, b) => a.priority - b.priority));
-    const withSearch = baseProviders.filter((p) => p.searchStopsByName);
+    const candidates = (
+      bbox ? providersOverlapping(bbox) : collectProviders().sort((a, b) => a.priority - b.priority)
+    ).filter((p) => p.searchStopsByName);
+    const { healthy, coolingDown } = await partitionByHealth(candidates);
 
     const results = await pMapSettled(
-      withSearch,
+      healthy,
       async (p) => {
         context?.signal.throwIfAborted();
         if (!p.searchStopsByName) return null;
@@ -484,15 +506,20 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       },
       { concurrency: 4, signal: context?.signal },
     );
+    // A cancelled caller must see its cancellation, not a provider outage.
+    context?.signal.throwIfAborted();
 
     const ok = results
       .map((r) => (r.status === "fulfilled" ? r.value : null))
       .filter((v): v is MobilityResult<TransitStop[]> => v != null);
+    const unavailable = healthy.length + coolingDown.length - ok.length;
+    if (unavailable > 0 && ok.length === 0) throw new Error("Transit stop sources unavailable");
 
+    const freshness = mergeFreshness(...ok.map((r) => r.freshness));
     return {
       data: ok.flatMap((r) => r.data),
       attributions: contributorsForRecords(ok.flatMap((r) => r.data)),
-      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+      freshness: unavailable > 0 ? { ...freshness, isPartial: true } : freshness,
     };
   }
 

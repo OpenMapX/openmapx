@@ -124,6 +124,7 @@ export async function searchByName(
   limit = 10,
   signal?: AbortSignal,
 ): Promise<TransitStop[]> {
+  // A failed search must not read as "no stop by that name"; callers decide how to degrade.
   try {
     const params = new URLSearchParams({
       query,
@@ -133,17 +134,14 @@ export async function searchByName(
       poi: "false",
     });
     // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await fetchJson<any[]>(`${inst.baseUrl}/locations?${params}`, {
-      nullOnError: true,
-      signal,
-    });
-    if (!data) return [];
+    const data = await fetchJson<any[]>(`${inst.baseUrl}/locations?${params}`, { signal });
+    if (!Array.isArray(data)) throw new Error("malformed locations response");
     return data
       .filter((s) => s.type === "stop" || s.type === "station")
       .map((s) => normalizeStop(s, inst));
   } catch (error) {
     if (signal?.aborted) throw error;
-    return [];
+    throw new Error("HAFAS stop search unavailable");
   }
 }
 

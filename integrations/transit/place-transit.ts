@@ -74,7 +74,15 @@ const TTL = {
   placeRoutes: TTL_POLICY.SHORT_LIVED,
   placeAlerts: TTL_POLICY.REALTIME_WARM,
   placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
+  // Long enough that boards polling every 30 seconds don't repeat the whole
+  // stop search, short enough that a recovered provider is picked up soon.
+  partialDiscovery: TTL_POLICY.REALTIME_WARM,
 };
+
+/** A result built on a partial discovery is retried soon instead of living for its full lifetime. */
+function cacheTtl(freshness: Freshness, completeTtl: number): number {
+  return freshness.isPartial ? Math.min(completeTtl, TTL.partialDiscovery) : completeTtl;
+}
 
 /**
  * Resolve a route's raw provider ids (e.g. "ms", "db", "dyn:at/oebb") to
@@ -189,6 +197,11 @@ export function createPlaceTransit(
    * Returns ALL stops within 1 km with name similarity >= 0.4 — NOT deduplicated —
    * so that multiple providers' entries for the same physical station are all kept
    * (their routes/departures will be merged separately).
+   *
+   * Only a complete discovery is cached for the full link lifetime. A partial one
+   * (some stop search failed) is kept briefly under its own key, and a discovery
+   * where no stop search answered rejects, so an outage never becomes a cached
+   * "this place has no stops".
    */
   async function getLinkedStops(
     lat: number,
@@ -196,87 +209,115 @@ export function createPlaceTransit(
     name: string,
     placeId?: string,
   ): Promise<MobilityResult<TransitStop[]>> {
-    const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
+    const id = placeCacheId(lat, lng, name, placeId);
+    const key = hashKey("transit:place-stops", { id });
+    const partialKey = hashKey("transit:place-stops-partial", { id });
     // All four station-panel requests share this discovery, including cold misses.
-    const envelope = await cache.withCache<CachedStopsEnvelope>(key, TTL.placeStops, async () => {
-      // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
-      // providers from distant regions don't contribute stops that share stop-database
-      // IDs but would then return their own regional routes via getRoutesForStop.
-      const buf = 1.0;
-      const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
-      // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
-      // providers indexing either form are found, then deduplicate by stop id.
-      const variants = getQueryVariants(name);
-      const variantResults = await Promise.all(
-        variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
-      );
-      const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
-      const seen = new Set<string>();
-      const raw = variantResults
-        .flatMap((r) => captureTransitContributors(r.data, r.attributions))
-        .filter((s) => {
-          if (seen.has(s.id)) return false;
-          seen.add(s.id);
-          return true;
-        });
-      const normVariants = variants
-        .map((v) => normalizeLinkName(v))
-        .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
-
-      // First-pass candidates: distance + fuzzy name match against any query variant.
-      const prelim = raw.filter((stop) => {
-        if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-        const stopNorm = normalizeLinkName(stop.name);
-        if (!stopNorm) return false;
-        let best = 0;
-        for (const q of normVariants) {
-          const score = diceSimilarity(stopNorm, q);
-          if (score > best) best = score;
+    const envelope = await cache.withCache<CachedStopsEnvelope>(
+      key,
+      TTL.placeStops,
+      async () => {
+        // The short-lived entry is best effort, like the shared cache's own reads and writes.
+        const recent = await cache.get<CachedStopsEnvelope>(partialKey).catch(() => null);
+        if (recent) return recent;
+        const writer = (await cache.captureWriter?.()) ?? cache;
+        const discovered = await discoverLinkedStops(lat, lng, name);
+        if (discovered.freshness.isPartial) {
+          await writer.set(partialKey, discovered, TTL.partialDiscovery).catch(() => {});
         }
-        return best >= MIN_NAME_DICE;
-      });
-
-      if (prelim.length === 0) {
-        return { stops: [], attributions: [], freshness };
-      }
-
-      // Second-pass pruning: avoid linking by city token only.
-      // Keep candidates that share at least one informative token from the place
-      // name variants (tokens present in some, but not all, prelim candidates).
-      const tokenFreq = new Map<string, number>();
-      const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
-      for (const tokens of prelimTokenSets) {
-        for (const t of tokens) {
-          tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
-        }
-      }
-
-      const placeTokens = new Set<string>();
-      for (const q of normVariants) {
-        for (const t of tokenizeLinkName(q)) {
-          if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
-          if (/^\d+$/.test(t)) continue;
-          placeTokens.add(t);
-        }
-      }
-
-      const informativeTokens = Array.from(placeTokens).filter((t) => {
-        const count = tokenFreq.get(t) ?? 0;
-        return count > 0 && count < prelim.length;
-      });
-
-      const linked =
-        informativeTokens.length === 0
-          ? prelim
-          : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
-
-      return { stops: linked, attributions: contributorsForRecords(linked), freshness };
-    });
+        return discovered;
+      },
+      undefined,
+      (value) => !value.freshness.isPartial,
+    );
     return {
       data: envelope.stops,
       attributions: envelope.attributions,
       freshness: envelope.freshness,
     };
+  }
+
+  async function discoverLinkedStops(
+    lat: number,
+    lng: number,
+    name: string,
+  ): Promise<CachedStopsEnvelope> {
+    // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
+    // providers from distant regions don't contribute stops that share stop-database
+    // IDs but would then return their own regional routes via getRoutesForStop.
+    const buf = 1.0;
+    const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
+    // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
+    // providers indexing either form are found, then deduplicate by stop id.
+    const variants = getQueryVariants(name);
+    const settled = await Promise.allSettled(
+      variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
+    );
+    const variantResults = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed && variantResults.length === 0) throw failed.reason;
+    const merged = mergeFreshness(...variantResults.map((r) => r.freshness));
+    const freshness: Freshness = failed ? { ...merged, isPartial: true } : merged;
+    const seen = new Set<string>();
+    const raw = variantResults
+      .flatMap((r) => captureTransitContributors(r.data, r.attributions))
+      .filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+    const normVariants = variants
+      .map((v) => normalizeLinkName(v))
+      .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+
+    // First-pass candidates: distance + fuzzy name match against any query variant.
+    const prelim = raw.filter((stop) => {
+      if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
+      const stopNorm = normalizeLinkName(stop.name);
+      if (!stopNorm) return false;
+      let best = 0;
+      for (const q of normVariants) {
+        const score = diceSimilarity(stopNorm, q);
+        if (score > best) best = score;
+      }
+      return best >= MIN_NAME_DICE;
+    });
+
+    if (prelim.length === 0) {
+      return { stops: [], attributions: [], freshness };
+    }
+
+    // Second-pass pruning: avoid linking by city token only.
+    // Keep candidates that share at least one informative token from the place
+    // name variants (tokens present in some, but not all, prelim candidates).
+    const tokenFreq = new Map<string, number>();
+    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
+    for (const tokens of prelimTokenSets) {
+      for (const t of tokens) {
+        tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+      }
+    }
+
+    const placeTokens = new Set<string>();
+    for (const q of normVariants) {
+      for (const t of tokenizeLinkName(q)) {
+        if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
+        if (/^\d+$/.test(t)) continue;
+        placeTokens.add(t);
+      }
+    }
+
+    const informativeTokens = Array.from(placeTokens).filter((t) => {
+      const count = tokenFreq.get(t) ?? 0;
+      return count > 0 && count < prelim.length;
+    });
+
+    const linked =
+      informativeTokens.length === 0
+        ? prelim
+        : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
+
+    return { stops: linked, attributions: contributorsForRecords(linked), freshness };
   }
 
   // Route merging
@@ -318,7 +359,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, TTL.placeRoutes);
+      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -401,7 +442,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedRoutes = { routes: merged, attributions, freshness };
-    await cache.set(key, envelope, TTL.placeRoutes);
+    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
     return { data: merged, attributions, freshness };
   }
 
@@ -657,7 +698,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, TTL.placeAlerts);
+      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -700,7 +741,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
-    await cache.set(key, envelope, TTL.placeAlerts);
+    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
     return { data: merged, attributions, freshness };
   }
 
@@ -740,7 +781,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, TTL.placeFacilities);
+      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -761,7 +802,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
-    await cache.set(key, envelope, TTL.placeFacilities);
+    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
     return { data: merged, attributions, freshness };
   }
 
