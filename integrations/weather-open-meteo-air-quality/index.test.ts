@@ -98,7 +98,7 @@ async function invoke(ctx: MockIntegrationContext, query: Record<string, string>
 }
 
 describe("legacy Open-Meteo AQI compatibility route", () => {
-  it("preserves the exact legacy body and advertises the canonical successor", async () => {
+  it("preserves the legacy fields, credits the source and advertises the canonical successor", async () => {
     const ctx = context();
     const result = await invoke(ctx, { lat: "52.52", lng: "13.4" });
     expect(result.statusCode).toBe(200);
@@ -112,6 +112,22 @@ describe("legacy Open-Meteo AQI compatibility route", () => {
       europeanAqi: 31,
       usAqi: 42,
       time: "2026-08-30T12:00",
+      contributors: [
+        {
+          sourceId: "open-meteo-air-quality",
+          name: "Open-Meteo Air Quality API / CAMS",
+          url: "https://open-meteo.com/en/docs/air-quality-api",
+          attributionText: "Open-Meteo; CAMS ENSEMBLE data providers",
+          licensing: expect.objectContaining({
+            bindings: expect.arrayContaining([
+              expect.objectContaining({
+                scope: "data",
+                license: { kind: "spdx", expression: "CC-BY-4.0" },
+              }),
+            ]),
+          }),
+        },
+      ],
     });
     expect(result.headers).toMatchObject({
       Deprecation: "true",
