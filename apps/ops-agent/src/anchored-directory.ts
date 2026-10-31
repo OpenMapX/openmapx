@@ -8,6 +8,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -33,6 +34,11 @@ export interface AnchoredDirectory {
   createFile(name: string, contents: string, mode: number): void;
   /** Remove `name` if present; a symlink there is removed, not followed. */
   removeFile(name: string): void;
+  /**
+   * Read `name` if it is a regular file of at most `maxBytes`; null when absent.
+   * A symlink or any other kind of entry there is refused, not followed.
+   */
+  readFile(name: string, maxBytes: number): string | null;
   close(): void;
 }
 
@@ -141,6 +147,34 @@ export function openAnchoredDirectory(
           unlinkSync(entry(name));
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      },
+      readFile(name, maxBytes) {
+        let descriptor: number;
+        try {
+          descriptor = openSync(
+            entry(name),
+            constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+          throw error;
+        }
+        try {
+          const metadata = fstatSync(descriptor);
+          if (!metadata.isFile()) throw new Error("Unsafe anchored file");
+          // Bounded by the read itself: another writer can grow the file after fstat.
+          const buffer = Buffer.alloc(maxBytes + 1);
+          let length = 0;
+          while (length < buffer.length) {
+            const read = readSync(descriptor, buffer, length, buffer.length - length, null);
+            if (read === 0) break;
+            length += read;
+          }
+          if (length > maxBytes) throw new Error("Anchored file exceeds its size limit");
+          return buffer.toString("utf8", 0, length);
+        } finally {
+          closeSync(descriptor);
         }
       },
       close() {

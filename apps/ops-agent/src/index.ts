@@ -25,7 +25,11 @@ import {
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
 import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
-import { createDockerRuntime, runContainedProcess } from "./docker-runtime";
+import {
+  createDockerRuntime,
+  recoverInterruptedTrafficMaintenance,
+  runContainedProcess,
+} from "./docker-runtime";
 import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
@@ -284,6 +288,25 @@ async function main(): Promise<void> {
       retry.unref();
     }
     const journal = await openOpsJobJournal(config.journalFile);
+    // A maintenance job this agent was stopped in left its fence behind, and
+    // with it a quiesced data-manager worker that would never ask again.
+    try {
+      const recovery = await recoverInterruptedTrafficMaintenance({
+        trafficDataRoot: join(paths.infraDir, "data"),
+        journalRecords: journal.records(),
+      });
+      if (recovery.state === "released") {
+        process.stderr.write(
+          `Released the Valhalla traffic maintenance fence of interrupted job ${recovery.operationId.slice(0, 16)} (${recovery.plan}); data-manager requests a fresh maintenance\n`,
+        );
+      } else if (recovery.state === "kept") {
+        process.stderr.write(
+          `Kept the Valhalla traffic maintenance fence: ${recovery.reason}. Valhalla stays stopped and data-manager's traffic worker paused; recover as described under "Graph maintenance pauses" in the monitoring guide\n`,
+        );
+      }
+    } catch {
+      process.stderr.write("Could not check the Valhalla traffic maintenance fence\n");
+    }
     // After a self-update this agent starts before anything has rendered with
     // its code, so the state directories it opens may not exist yet.
     await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
