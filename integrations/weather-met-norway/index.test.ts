@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseMetSymbol, SYMBOL_TO_WMO, setup } from "./index.js";
 
 const COORDS: LngLat = [10.7522, 59.9139];
+const AUCKLAND: LngLat = [174.7633, -36.8485];
+const NEW_YORK: LngLat = [-74.006, 40.7128];
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -312,6 +314,129 @@ describe("MET Norway weather provider", () => {
       ["2026-03-10", 7],
       ["2026-03-11", 9],
     ]);
+  });
+
+  describe("local days", () => {
+    const HOUR_MS = 60 * 60 * 1000;
+
+    function metStep(
+      time: string,
+      options: {
+        temperature?: number;
+        wind?: number;
+        symbol?: string;
+        oneHour?: number | null;
+        sixHours?: number;
+      },
+    ) {
+      const { temperature = 15, wind = 3, symbol = "cloudy", oneHour = 0, sixHours = 0 } = options;
+      return {
+        time,
+        data: {
+          instant: {
+            details: {
+              air_temperature: temperature,
+              air_pressure_at_sea_level: 1012,
+              cloud_area_fraction: 90,
+              relative_humidity: 70,
+              wind_from_direction: 180,
+              wind_speed: wind,
+            },
+          },
+          ...(oneHour == null
+            ? {}
+            : {
+                next_1_hours: {
+                  summary: { symbol_code: symbol },
+                  details: { precipitation_amount: oneHour },
+                },
+              }),
+          next_6_hours: {
+            summary: { symbol_code: symbol },
+            details: { precipitation_amount: sixHours },
+          },
+        },
+      };
+    }
+
+    function hourlyTimes(firstIso: string, count: number): string[] {
+      const first = Date.parse(firstIso);
+      return Array.from({ length: count }, (_, i) =>
+        new Date(first + i * HOUR_MS).toISOString().replace(".000Z", "Z"),
+      );
+    }
+
+    it("groups Auckland's forecast by its local date, not the UTC date", async () => {
+      // Auckland is UTC+13: its 1 November runs 2026-10-31T11:00Z..2026-11-01T10:00Z.
+      const special: Record<string, Parameters<typeof metStep>[1]> = {
+        // 23:00 local on 31 October.
+        "2026-10-31T10:00:00Z": { temperature: 30 },
+        // 03:00 and 06:00 local on 1 November, which are 31 October in UTC.
+        "2026-10-31T14:00:00Z": { oneHour: 1 },
+        "2026-10-31T17:00:00Z": { temperature: 7 },
+        // Local noon.
+        "2026-10-31T23:00:00Z": { symbol: "clearsky_day" },
+        // 20:00 local.
+        "2026-11-01T07:00:00Z": { oneHour: 0.5 },
+      };
+      const timeseries = [
+        ...hourlyTimes("2026-10-31T10:00:00Z", 26).map((time) =>
+          metStep(time, special[time] ?? {}),
+        ),
+        // 01:00 local on 2 November, which a UTC "T12:" match would take as 1 November's symbol.
+        metStep("2026-11-01T12:00:00Z", {
+          oneHour: null,
+          sixHours: 4,
+          wind: 20,
+          symbol: "heavyrain",
+        }),
+        metStep("2026-11-01T18:00:00Z", { oneHour: null, sixHours: 2 }),
+      ];
+      mockFetch.mockResolvedValueOnce(
+        mockOk({ properties: { meta: { updated_at: "" }, timeseries } }),
+      );
+
+      const daily = await getProvider().getDailyForecast(AUCKLAND, 7);
+
+      expect(daily.points.map((p) => p.date)).toEqual(["2026-10-31", "2026-11-01", "2026-11-02"]);
+      expect(daily.points.every((p) => p.timeZone === "Pacific/Auckland")).toBe(true);
+      const day = daily.points[1];
+      expect(day?.temperatureMin).toBe(7);
+      expect(day?.temperatureMax).toBe(15);
+      expect(day?.precipitationSum).toBeCloseTo(1.5, 5);
+      expect(day?.windSpeedMax).toBeCloseTo(10.8, 5);
+      expect(day?.weatherCode).toBe(0);
+      expect(daily.points[0]?.temperatureMax).toBe(30);
+      expect(daily.points[2]?.precipitationSum).toBeCloseTo(6, 5);
+    });
+
+    it("keeps all 25 hours of New York's day on which daylight saving time ends", async () => {
+      // EDT (UTC-4) gives way to EST (UTC-5) at 02:00 local on 1 November 2026.
+      const timeseries = hourlyTimes("2026-11-01T04:00:00Z", 26).map((time) =>
+        metStep(time, {
+          oneHour: 0.1,
+          // 07:00 local is 12:00 UTC; local noon is 17:00 UTC.
+          symbol:
+            time === "2026-11-01T17:00:00Z"
+              ? "fair_day"
+              : time === "2026-11-01T12:00:00Z"
+                ? "rain"
+                : "cloudy",
+        }),
+      );
+      mockFetch.mockResolvedValueOnce(
+        mockOk({ properties: { meta: { updated_at: "" }, timeseries } }),
+      );
+
+      const daily = await getProvider().getDailyForecast(NEW_YORK, 7);
+
+      expect(daily.points.map((p) => [p.date, p.timeZone])).toEqual([
+        ["2026-11-01", "America/New_York"],
+        ["2026-11-02", "America/New_York"],
+      ]);
+      expect(daily.points[0]?.precipitationSum).toBeCloseTo(2.5, 5);
+      expect(daily.points[0]?.weatherCode).toBe(1);
+    });
   });
 
   it("reads polar-twilight symbols as the base symbol at night", async () => {

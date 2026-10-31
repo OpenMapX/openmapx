@@ -7,7 +7,12 @@ import type {
   WeatherResponse,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import {
+  fetchJsonWithTimeout,
+  forecastTimeZone,
+  groupByLocalDay,
+  round4,
+} from "@openmapx/integration-weather/lib";
 import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
@@ -242,17 +247,17 @@ const metNorwayProvider: WeatherProvider = {
     const isImperial = options?.units === "imperial";
     const windMultiplier = isImperial ? 2.237 : 3.6;
 
+    // MET reports UTC times; days are the location's calendar days. A 6-hour
+    // period that runs past local midnight counts towards the day it starts in.
+    const timeZone = forecastTimeZone(coords);
     const counted = countedPrecipitation(data.properties.timeseries);
-    const byDate = new Map<string, MetTimeseriesEntry[]>();
-    for (const entry of data.properties.timeseries) {
-      const date = entry.time.slice(0, 10);
-      const arr = byDate.get(date);
-      if (arr) arr.push(entry);
-      else byDate.set(date, [entry]);
-    }
 
     const results: DailyForecastPoint[] = [];
-    for (const [date, entries] of byDate) {
+    for (const { date, records: entries, noon } of groupByLocalDay(
+      data.properties.timeseries,
+      (entry) => entry.time,
+      timeZone,
+    )) {
       if (results.length >= days) break;
 
       let minTemp = Number.POSITIVE_INFINITY;
@@ -277,13 +282,13 @@ const metNorwayProvider: WeatherProvider = {
         }
       }
 
-      const middayEntry = entries.find((e) => e.time.includes("T12:")) ?? entries[0];
-      const { wmo } = entryConditions(middayEntry);
+      const { wmo } = entryConditions(noon);
 
       const convertTemp = (c: number) => (isImperial ? (c * 9) / 5 + 32 : c);
 
       results.push({
         date,
+        timeZone,
         weatherCode: wmo,
         temperatureMax: convertTemp(maxTemp),
         temperatureMin: convertTemp(minTemp),

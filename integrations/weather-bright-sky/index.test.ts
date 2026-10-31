@@ -1,10 +1,11 @@
-import type { LngLat } from "@openmapx/core";
+import { isoWithOffsetInZone, type LngLat } from "@openmapx/core";
 import type { WeatherProvider } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { brightSkyWeatherCode, setup } from "./index.js";
 
 const COORDS: LngLat = [13.405, 52.52];
+const NEW_YORK: LngLat = [-74.006, 40.7128];
 
 function mockOk(data: unknown) {
   return Response.json(data);
@@ -224,6 +225,87 @@ describe("Bright Sky weather provider", () => {
     const day2 = daily.points[1];
     expect(day2?.date).toBe("2026-03-11");
     expect(day2?.weatherCode).toBe(71); // 0.5 mm in the hour: slight snowfall
+  });
+
+  it("groups days by the local date at the location, across a DST change", async () => {
+    // New York leaves EDT for EST at 02:00 local on 1 November 2026, so that
+    // local day has 25 hours: 04:00Z on 1 November to 04:00Z on 2 November.
+    const first = Date.parse("2026-11-01T03:00:00Z");
+    const rows = Array.from({ length: 27 }, (_, i) => {
+      const at = first + i * 60 * 60 * 1000;
+      return {
+        at,
+        cloud_cover: 90,
+        condition: "dry" as string | null,
+        icon: "cloudy" as string | null,
+        precipitation: 0,
+        precipitation_probability: 0,
+        pressure_msl: 1015,
+        relative_humidity: 70,
+        temperature: 10,
+        wind_direction: 180,
+        wind_speed: 10,
+      };
+    });
+    const at = (iso: string) => {
+      const row = rows.find((r) => r.at === Date.parse(iso));
+      if (!row) throw new Error(`no row at ${iso}`);
+      return row;
+    };
+    // 23:00 local on 31 October.
+    Object.assign(at("2026-11-01T03:00:00Z"), { temperature: -5 });
+    // 07:00 local, which a UTC "T12:" match would pick as the day's symbol.
+    Object.assign(at("2026-11-01T12:00:00Z"), {
+      condition: "rain",
+      icon: "rain",
+      precipitation: 8,
+    });
+    // 12:00 EST, local noon.
+    Object.assign(at("2026-11-01T17:00:00Z"), { icon: "clear-day", cloud_cover: 5 });
+    // 22:00 local on 1 November.
+    Object.assign(at("2026-11-02T03:00:00Z"), {
+      temperature: 15,
+      precipitation: 3,
+      wind_speed: 30,
+    });
+    // 00:00 local on 2 November.
+    Object.assign(at("2026-11-02T05:00:00Z"), { temperature: 20 });
+
+    // Bright Sky renders timestamps in the requested `tz`, UTC by default.
+    mockFetch.mockImplementation(async (url: string) => {
+      const tz = new URL(String(url)).searchParams.get("tz") ?? "UTC";
+      return mockOk({
+        weather: rows.map(({ at, ...row }) => ({
+          ...row,
+          timestamp: isoWithOffsetInZone(new Date(at), tz),
+        })),
+      });
+    });
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 23:30 EDT on 31 October.
+    vi.setSystemTime(new Date("2026-11-01T03:30:00Z"));
+    try {
+      const daily = await getProvider().getDailyForecast(NEW_YORK, 3);
+
+      const url = new URL(String(mockFetch.mock.calls[0]?.[0]));
+      expect(url.searchParams.get("tz")).toBe("America/New_York");
+      expect(url.searchParams.get("date")).toBe("2026-10-31");
+      expect(url.searchParams.get("last_date")).toBe("2026-11-03");
+
+      expect(daily.points.map((p) => p.date)).toEqual(["2026-10-31", "2026-11-01", "2026-11-02"]);
+      expect(daily.points.every((p) => p.timeZone === "America/New_York")).toBe(true);
+      const day = daily.points[1];
+      expect(day?.temperatureMin).toBe(10);
+      expect(day?.temperatureMax).toBe(15);
+      expect(day?.precipitationSum).toBe(11);
+      expect(day?.windSpeedMax).toBe(30);
+      expect(day?.weatherCode).toBe(0);
+      expect(daily.points[0]?.temperatureMin).toBe(-5);
+      expect(daily.points[2]?.temperatureMax).toBe(20);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("omits current readings Bright Sky does not report instead of showing zero", async () => {

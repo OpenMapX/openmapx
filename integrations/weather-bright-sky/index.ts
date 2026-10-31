@@ -6,8 +6,14 @@ import type {
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
+import { localDateInZone } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import {
+  fetchJsonWithTimeout,
+  forecastTimeZone,
+  groupByLocalDay,
+  round4,
+} from "@openmapx/integration-weather/lib";
 import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.brightsky.dev";
@@ -197,11 +203,15 @@ const brightSkyProvider: WeatherProvider = {
   ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
     const lat = round4(coords[1]);
     const lon = round4(coords[0]);
+    const timeZone = forecastTimeZone(coords);
     const now = new Date();
     const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
+    // With `tz`, Bright Sky reads `date`/`last_date` as local dates and returns
+    // timestamps with the zone's offset, so the window covers whole local days.
     const data = await fetchBrightSky<{ weather: BrightSkyHourly[] }>(
-      `${BASE_URL}/weather?lat=${lat}&lon=${lon}&date=${now.toISOString().slice(0, 10)}&last_date=${end.toISOString().slice(0, 10)}`,
+      `${BASE_URL}/weather?lat=${lat}&lon=${lon}&date=${localDateInZone(now, timeZone)}` +
+        `&last_date=${localDateInZone(end, timeZone)}&tz=${encodeURIComponent(timeZone)}`,
     );
 
     if (!data.weather?.length) throw new Error("No forecast data from Bright Sky");
@@ -209,16 +219,12 @@ const brightSkyProvider: WeatherProvider = {
     const isImperial = options?.units === "imperial";
     const convertTemp = (c: number) => (isImperial ? (c * 9) / 5 + 32 : c);
 
-    const byDate = new Map<string, BrightSkyHourly[]>();
-    for (const h of data.weather) {
-      const date = h.timestamp.slice(0, 10);
-      const arr = byDate.get(date);
-      if (arr) arr.push(h);
-      else byDate.set(date, [h]);
-    }
-
     const results: DailyForecastPoint[] = [];
-    for (const [date, entries] of byDate) {
+    for (const { date, records, noon } of groupByLocalDay(
+      data.weather,
+      (h) => h.timestamp,
+      timeZone,
+    )) {
       if (results.length >= days) break;
 
       let minTemp = Number.POSITIVE_INFINITY;
@@ -226,7 +232,7 @@ const brightSkyProvider: WeatherProvider = {
       let precipSum = 0;
       let maxWind = 0;
 
-      for (const h of entries) {
+      for (const h of records) {
         const temp = h.temperature ?? 0;
         if (temp < minTemp) minTemp = temp;
         if (temp > maxTemp) maxTemp = temp;
@@ -234,11 +240,10 @@ const brightSkyProvider: WeatherProvider = {
         if ((h.wind_speed ?? 0) > maxWind) maxWind = h.wind_speed ?? 0;
       }
 
-      const midday = entries.find((h) => h.timestamp.includes("T12:")) ?? entries[0];
-
       results.push({
         date,
-        weatherCode: brightSkyWeatherCode(midday, midday.precipitation),
+        timeZone,
+        weatherCode: brightSkyWeatherCode(noon, noon.precipitation),
         temperatureMax: convertTemp(maxTemp),
         temperatureMin: convertTemp(minTemp),
         precipitationSum: precipSum,
