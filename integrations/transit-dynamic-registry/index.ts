@@ -28,7 +28,10 @@ function buildAttributionFor(
       name: entryAttribution.name,
       url: entryAttribution.homepage,
       licensing: licensingFromDeclaration(
-        entryAttribution.license,
+        // The catalogue writes "todo" where an entry's licence is yet to be found.
+        /^todo$/i.test(entryAttribution.license?.trim() ?? "")
+          ? undefined
+          : entryAttribution.license,
         undefined,
         entryAttribution.name,
       ),
