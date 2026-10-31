@@ -311,6 +311,7 @@ export type {
   TideCurvePoint,
   TideDatum,
   TideEvent,
+  TideHeightSource,
   TideProvider,
   TideResponseStation,
   TidesPayload,

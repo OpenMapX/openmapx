@@ -257,7 +257,7 @@ async function buildTidesResponse(
 ): Promise<TidesResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
   // High/low events + curve are deterministic; cache 6h.
-  const cacheKey = `tides:datum-v1:${station.id}:${dayKey}`;
+  const cacheKey = `tides:height-source-v1:${station.id}:${dayKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) {
     return station.hasWlo
@@ -290,6 +290,7 @@ async function buildTidesResponse(
     datum: "chart_datum",
     units: "english",
     timeZone: "iso_offset",
+    heightSource: "prediction",
     currentLevel,
   };
   const acquired = station.hasWlo ? withCurrentLevel(result, currentLevel) : result;

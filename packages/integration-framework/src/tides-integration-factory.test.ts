@@ -71,6 +71,7 @@ it.each([
       datum: "MLLW",
       units: "english",
       timeZone: "lst_ldt",
+      heightSource: "prediction",
       contributors,
     }),
     maxStationDistanceKm: 10,
@@ -90,6 +91,7 @@ const cases = [
     sourceId: "kartverket-sehavniva",
     datum: "chart_datum",
     timeZone: "iso_offset",
+    heightSource: "prediction",
     catalog: '<location name="Station" code="s" latitude="54" longitude="10" type="PERM"/>',
     data: '<waterlevel value="100" time="2026-10-15T12:00:00Z" flag="pre"/><waterlevel value="100" time="2026-10-15T12:00:00Z" flag="high"/>',
   },
@@ -100,6 +102,7 @@ const cases = [
     sourceId: "dfo-iwls",
     datum: "chart_datum",
     timeZone: "iso_offset",
+    heightSource: "prediction",
     catalog: [
       {
         id: "s",
@@ -123,6 +126,7 @@ const cases = [
     sourceId: "ioc-sealevel",
     datum: "sensor_reference",
     timeZone: "iso_offset",
+    heightSource: "observation",
     catalog: [{ Code: "s", Location: "Station", Lat: 54, Lon: 10, status: 1 }],
     data: [
       { slevel: 1, stime: "2026-10-15 12:00:00", sensor: "rad" },
@@ -136,6 +140,7 @@ const cases = [
     sourceId: "wsv-pegelonline",
     datum: "gauge_zero",
     timeZone: "iso_offset",
+    heightSource: "observation",
     catalog: [{ uuid: "s", shortname: "Station", latitude: 54, longitude: 10 }],
     data: [{ timestamp: "2026-10-15T12:00:00Z", value: 100 }],
   },
@@ -159,8 +164,32 @@ describe.each(cases)("$name acquisition", (adapter) => {
     for (const payload of [direct, nearest]) {
       expect(payload.datum).toBe(adapter.datum);
       expect(payload.timeZone).toBe(adapter.timeZone);
+      expect(payload.heightSource).toBe(adapter.heightSource);
       for (const event of payload.events) expect(event.time).toMatch(/(Z|[+-]\d{2}:\d{2})$/);
     }
+  });
+
+  it("rebuilds coordinate lookups cached before heights named their source", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    const h = host();
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = String(input);
+      const isCatalog =
+        url.includes("stationlist") || url.includes("/stations?") || url.includes("/stations.json");
+      const value = isCatalog ? adapter.catalog : adapter.data;
+      return new Response(typeof value === "string" ? value : JSON.stringify(value), {
+        status: 200,
+      });
+    });
+    for (const generation of ["datum-v1", "sea-level-sensor-v1"]) {
+      h.values.set(`nearest:${generation}:54,10:2026-10-15`, { datum: adapter.datum });
+    }
+    adapter.setup(h.ctx);
+
+    const nearest = await h.read({ lat: "54", lng: "10" });
+
+    expect(nearest.heightSource).toBe(adapter.heightSource);
   });
 
   it("retains old inner-cache capture for direct station and a fresh coordinate key", async () => {
