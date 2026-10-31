@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
 import { refuseAgentSwitchOrExit } from "../src/lib/agent-layout";
+import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
 import { dockerComposeStream } from "../src/lib/docker";
 import { ensureReleaseOverlay } from "../src/lib/release";
 
@@ -20,6 +21,11 @@ vi.mock("../src/lib/docker", () => ({ dockerComposeStream: vi.fn() }));
 // Whether recreating the agent would switch it to its narrow mounts unready
 // is agent-layout.test.ts's; here it lets the update go on.
 vi.mock("../src/lib/agent-layout", () => ({ refuseAgentSwitchOrExit: vi.fn(async () => {}) }));
+// The migration step's own Docker calls are api-migrations.test.ts's.
+vi.mock("../src/lib/api-migrations", () => ({
+  API_SERVICE_ID: "app-api",
+  migrateBeforeApiUpdate: vi.fn(async () => 0),
+}));
 vi.mock("../src/lib/release", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/release")>()),
   ensureReleaseOverlay: vi.fn(),
@@ -28,6 +34,7 @@ vi.mock("../src/lib/release", async (importOriginal) => ({
 beforeEach(() => {
   vi.mocked(dockerComposeStream).mockReset().mockResolvedValue(0);
   vi.mocked(ensureReleaseOverlay).mockReset();
+  vi.mocked(migrateBeforeApiUpdate).mockReset().mockResolvedValue(0);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -146,5 +153,40 @@ describe("services update and the operations agent's mounts", () => {
     });
     await expect(update("ops-agent")).rejects.toThrow("exit:1");
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "ops-agent"]]]);
+  });
+});
+
+describe("services update and app-api's database migrations", () => {
+  beforeEach(() => {
+    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
+  });
+
+  it("migrates after the pull and before recreation when app-api is replaced", async () => {
+    const order: string[] = [];
+    vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
+      order.push(args[0] as string);
+      return 0;
+    });
+    vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {
+      order.push("migrate");
+      return 0;
+    });
+    await expect(update("--no-deps", "app-web", "app-api")).rejects.toThrow("exit:0");
+    expect(order).toEqual(["pull", "migrate", "up"]);
+    expect(migrateBeforeApiUpdate).toHaveBeenCalledWith({ deps: false });
+
+    await expect(update("app-api")).rejects.toThrow("exit:0");
+    expect(migrateBeforeApiUpdate).toHaveBeenLastCalledWith({ deps: true });
+  });
+
+  it("recreates nothing when the migration step fails", async () => {
+    vi.mocked(migrateBeforeApiUpdate).mockResolvedValue(1);
+    await expect(update("--no-deps", "app-web", "app-api")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "app-web", "app-api"]]]);
+  });
+
+  it("does not migrate when app-api is not among the services", async () => {
+    await expect(update("app-web")).rejects.toThrow("exit:0");
+    expect(migrateBeforeApiUpdate).not.toHaveBeenCalled();
   });
 });

@@ -142,7 +142,7 @@
       "interval": "15s",
       "timeout": "3s",
       "retries": 10,
-      "startPeriod": "20m"
+      "startPeriod": "30s"
     }
   },
   "bindMounts": [
