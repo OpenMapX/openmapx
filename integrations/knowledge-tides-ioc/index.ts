@@ -28,9 +28,13 @@ import {
  * from the past 24 h of observations. Forecast event sections self-hide
  * because the derived events all lie in the past.
  *
- * Units: m by default; converted to feet for parity with NOAA. Levels are the
- * gauge's raw signal against the instrument's own unreferenced zero, not a
- * tidal datum: "We only deal with relative data, we don't have the vertical
+ * Units: `query=data` serves every sea-level sensor in metres; they are
+ * converted to feet for parity with NOAA. The station list's `units` field
+ * names the originator's unit, not the served one: for its 26 "F" stations
+ * (mostly JMA radars) the served values sit on a 0.003048 m (0.01 ft) grid,
+ * and their daily ranges match JMA's centimetre predictions read as metres.
+ * Levels are the gauge's raw signal against the instrument's own unreferenced
+ * zero, not a tidal datum: "We only deal with relative data, we don't have the vertical
  * datum information available" (https://www.ioc-sealevelmonitoring.org/service.php).
  * `stime` is UTC without a marker and is re-emitted with `Z`. The IOC policy
  * covers non-commercial use; commercial use requires the relevant data
@@ -47,6 +51,51 @@ const CATALOG_TTL = 7 * 24 * 60 * 60;
 const TIDES_TTL = 30 * 60; // observations refresh; predictions cache shorter
 const MAX_STATION_DISTANCE_KM = 80; // IOC stations are sparse globally
 const M_TO_FT = 3.28084;
+const CACHE_GENERATION = "sea-level-sensor-v1";
+
+/**
+ * Sensor codes that measure sea level, from IOC's sensor-type table
+ * (https://github.com/SLSMF/API-Documentation/blob/main/API_description.md).
+ * Stations also report battery voltage (`bat`), air pressure (`atm`) and
+ * other non-sea-level channels in the same series. `prte` is left out because
+ * IOC folds DART tsunami-event samples into `prt` and never prefers them.
+ */
+const SEA_LEVEL_SENSORS = new Set([
+  "prs",
+  "pr1",
+  "pr2",
+  "pr3",
+  "rad",
+  "ra2",
+  "ra3",
+  "ras",
+  "enc",
+  "enb",
+  "en2",
+  "aqu",
+  "bub",
+  "bub1",
+  "ecs",
+  "ec2",
+  "wls",
+  "pwl",
+  "bwl",
+  "flt",
+  "stp",
+  "prt",
+]);
+
+/**
+ * IOC's preferred-sensor rule picks the sensor with the most good values and
+ * breaks ties by type: "rad > ra2 > ra3 > prs > pr1 > pr2 > rest"
+ * (https://github.com/SLSMF/API-Documentation/blob/main/research_data/Readme.md).
+ */
+const SENSOR_PREFERENCE = ["rad", "ra2", "ra3", "prs", "pr1", "pr2"];
+
+function sensorRank(sensor: string): number {
+  const rank = SENSOR_PREFERENCE.indexOf(sensor);
+  return rank === -1 ? SENSOR_PREFERENCE.length : rank;
+}
 
 interface IocStationRaw {
   Code: string;
@@ -55,7 +104,8 @@ interface IocStationRaw {
   Lat: number;
   Lon: number;
   status?: number;
-  units?: string; // "M" or "F" depending on sensor
+  /** Originator's unit ("M", "F", "V"); `query=data` still serves metres. */
+  units?: string;
 }
 
 interface IocDataPoint {
@@ -126,17 +176,21 @@ export async function fetchObservations(stationCode: string): Promise<IocDataPoi
   const url = `${BASE}?query=data&code=${encodeURIComponent(stationCode)}&format=json&period=1`;
   const raw = await fetchJson<IocDataPoint[]>(url);
   if (!raw) return [];
-  // Some stations publish multiple sensor types; pick the most-populated one.
   const bySensor = new Map<string, IocDataPoint[]>();
   for (const p of raw) {
-    if (!Number.isFinite(p.slevel)) continue;
+    if (!Number.isFinite(p.slevel) || !SEA_LEVEL_SENSORS.has(p.sensor)) continue;
     const list = bySensor.get(p.sensor) ?? [];
     list.push(p);
     bySensor.set(p.sensor, list);
   }
   let best: IocDataPoint[] = [];
-  for (const list of bySensor.values()) {
-    if (list.length > best.length) best = list;
+  let bestRank = Number.POSITIVE_INFINITY;
+  for (const [sensor, list] of bySensor) {
+    const rank = sensorRank(sensor);
+    if (list.length > best.length || (list.length === best.length && rank < bestRank)) {
+      best = list;
+      bestRank = rank;
+    }
   }
   return best.sort((a, b) => a.stime.localeCompare(b.stime));
 }
@@ -160,7 +214,7 @@ async function buildTidesResponse(
   distanceKm: number,
 ): Promise<TidesResponse | null> {
   const hourKey = new Date().toISOString().slice(0, 13);
-  const cacheKey = `tides:datum-v1:${station.code}:${hourKey}`;
+  const cacheKey = `tides:${CACHE_GENERATION}:${station.code}:${hourKey}`;
   const cached = await ctx.cache.get<TidesResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
@@ -234,6 +288,7 @@ export function setup(ctx: IntegrationContext): void {
     buildTidesResponse,
     maxStationDistanceKm: MAX_STATION_DISTANCE_KM,
     nearestCacheTtl: TIDES_TTL,
+    nearestCacheGeneration: CACHE_GENERATION,
     cacheControlMaxAge: 1800,
     unavailableMessage: "Observations unavailable",
   });
