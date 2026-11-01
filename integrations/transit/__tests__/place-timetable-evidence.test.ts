@@ -124,7 +124,7 @@ describe("linked stop discovery failures", () => {
   it("keeps the stops found by one name variant when another variant's search fails", async () => {
     const search = vi.fn(async (query: string) => {
       if (query === "Aachen Hauptbahnhof") throw new Error("Transit stop sources unavailable");
-      return result(stops);
+      return result(stops.map((stop) => ({ ...stop, name: "Aachen Hbf" })));
     });
     const api = discovering(search as unknown as TransitOrchestrator["searchByNameRaw"]);
 

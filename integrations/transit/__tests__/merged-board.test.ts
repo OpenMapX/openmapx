@@ -392,7 +392,7 @@ describe("the stop a merged row leaves from", () => {
         "ms:bf": [dep("ms:t1", "RE1", "Aachen Hbf", "10:00:00")],
         "ms:bus": [dep("ms:u1", "150", "Chorweiler", "10:01:00")],
       },
-      { "ms:bf": "Köln Messe/Deutz Bf", "ms:bus": "Köln Messe/Deutz Ottoplatz Bussteig" },
+      { "ms:bf": "Köln Messe/Deutz Bf", "ms:bus": "Köln Bf Deutz/Messe Ottoplatz Bussteig" },
       "Köln Messe/Deutz",
     );
     expect(rows.map((row) => row.atOtherStop ?? false)).toEqual([false, true]);

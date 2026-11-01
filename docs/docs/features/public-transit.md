@@ -78,6 +78,15 @@ place's stops get the same warning. Lines, alerts and facilities that cannot be
 loaded are left out rather than kept as "none", and are loaded again on a later
 visit or within about a minute.
 
+A place's board includes the stops within 1 km whose name is the place's name.
+Sources spell it differently, with or without the town ("Neumarkt", "Köln
+Neumarkt", "Marienplatz, München"). It also includes stops whose name says
+they belong to the station, such as "Köln Dom/Hbf" at Köln Hauptbahnhof or
+"S+U Alexanderplatz Bhf/Gontardstr." at Alexanderplatz. A stop that only shares
+the district is left out: "Köln Deutz Suevenstr." is not on the board for
+"Köln Messe/Deutz". Some bus stops beside a station are left out too, when
+their name doesn't say they belong to it.
+
 A place's stops can have different names, for example a main station and a bus
 stop beside it. A departure from a stop other than the place's main one shows
 that stop's name next to its line, so you know where to board. When you open a
