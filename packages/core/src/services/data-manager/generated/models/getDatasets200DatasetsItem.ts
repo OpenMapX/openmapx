@@ -16,4 +16,6 @@ export type GetDatasets200DatasetsItem = {
   md5?: string;
   /** @minLength 1 */
   path: string;
+  osmTimestamp?: string;
+  osmReplicationUrl?: string;
 };

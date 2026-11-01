@@ -3,6 +3,7 @@ import { createReadStream, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
+import { type OsmPbfHeader, tryReadOsmPbfHeader } from "../utils/osm-pbf-header.js";
 import {
   type CurlAtomicOptions,
   type CurlAtomicResult,
@@ -101,6 +102,33 @@ export interface DownloadOsmResult {
   md5?: string;
 }
 
+/** The dataset fields an OSM PBF's header supplies. */
+function headerFields(
+  header: OsmPbfHeader,
+): Pick<DatasetMetadata, "osmTimestamp" | "osmReplicationUrl"> {
+  return {
+    ...(header.timestamp ? { osmTimestamp: header.timestamp } : {}),
+    ...(header.replicationUrl ? { osmReplicationUrl: header.replicationUrl } : {}),
+  };
+}
+
+/**
+ * Record the header of every downloaded OSM PBF that has none recorded yet,
+ * so a file fetched before the header was read still reports how current it
+ * is. A file that is gone or unreadable is left as it is.
+ */
+export function backfillOsmHeaders(store: StateStore): number {
+  let filled = 0;
+  for (const dataset of store.getAll()) {
+    if (dataset.type !== "osm-pbf" || dataset.osmTimestamp) continue;
+    const fields = headerFields(tryReadOsmPbfHeader(dataset.path));
+    if (!fields.osmTimestamp) continue;
+    store.upsert({ ...dataset, ...fields });
+    filled += 1;
+  }
+  return filled;
+}
+
 export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsmResult> {
   const url = resolveOsmUrl(opts.region);
   const fileName = osmPbfName(opts.region);
@@ -151,6 +179,7 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
     downloadedAt: new Date().toISOString(),
     path: targetPath,
     ...(md5 ? { md5 } : {}),
+    ...headerFields(tryReadOsmPbfHeader(targetPath)),
   };
   opts.store.upsert(meta);
 

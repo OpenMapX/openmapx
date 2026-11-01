@@ -17,7 +17,10 @@ const mockDownloadOsm = vi.hoisted(() =>
   })),
 );
 
-vi.mock("../src/jobs/download-osm.js", () => ({ downloadOsm: mockDownloadOsm }));
+vi.mock("../src/jobs/download-osm.js", () => ({
+  backfillOsmHeaders: () => 0,
+  downloadOsm: mockDownloadOsm,
+}));
 
 describe("data-manager API", () => {
   let fixtureRoot: string;
