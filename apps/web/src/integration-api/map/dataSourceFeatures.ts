@@ -39,7 +39,8 @@ export function buildGeoJson(
         circleFields.push("variant");
       if (markerStyle?.inactiveOpacity !== 1 && r.status) circleFields.push("status");
       const marker = contributorsForRecordFields(r, imageId ? ["coordinates"] : circleFields);
-      const summary = translate(r.summary) ?? "";
+      const summaryField = r.labelSummary ? "labelSummary" : "summary";
+      const summary = translate(r[summaryField]) ?? "";
       const nameField = r.name ? "name" : "fallbackName";
       const labelFields = ["coordinates", nameField];
       const logoFields = [
@@ -71,7 +72,7 @@ export function buildGeoJson(
               contributorsForRecordFields(r, labelFields),
             ),
             _mapSummaryLabelAttributions: serializeContributors(
-              contributorsForRecordFields(r, [...labelFields, ...(summary ? ["summary"] : [])]),
+              contributorsForRecordFields(r, [...labelFields, ...(summary ? [summaryField] : [])]),
             ),
             _mapLogoSelectionAttributions: serializeContributors(
               contributorsForRecordFields(r, logoFields),

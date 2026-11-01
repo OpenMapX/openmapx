@@ -18,7 +18,7 @@ import {
   wrapSiteResult as wrap,
 } from "@openmapx/integration-framework";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import { mapFuelStationToDetail, mapFuelStationToResult } from "./mapper.js";
+import { comparisonGrade, mapFuelStationToDetail, mapFuelStationToResult } from "./mapper.js";
 import { createFuelStationOrchestrator } from "./orchestrator.js";
 
 const META: DataSourceMeta = {
@@ -110,7 +110,11 @@ export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourc
       const kept = found.sites.filter(
         (s) => (grades.length === 0 || sells(s, grades)) && (!pricesOnly || hasPrice(s)),
       );
-      const result = wrap(kept.map(mapFuelStationToResult), siteAttributions(kept));
+      const options = { grade: comparisonGrade(grades), now: Date.now() };
+      const result = wrap(
+        kept.map((station) => mapFuelStationToResult(station, options)),
+        siteAttributions(kept),
+      );
       return found.partial ? { ...result, partial: found.partial } : result;
     },
 
