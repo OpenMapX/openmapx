@@ -25,9 +25,16 @@ jobs:
         with:
           # Markdown across the repo; node_modules and other gitignored paths are
           # skipped automatically. Tune ignored URLs in .lycheeignore.
+          # Docusaurus serves root-relative links: /img/... from docs/static and
+          # /<section>/<page> from docs/docs/<section>/<page>.md(x). Resolve both
+          # so lychee checks those targets exist instead of reporting them as
+          # unresolvable.
           args: >-
             --no-progress --cache --max-cache-age 1d
             --exclude-path infra/docker/data
+            --root-dir ${{ github.workspace }}/docs/static
+            --remap 'file://${{ github.workspace }}/docs/static/(administration|developer|features|guides|install|overview|releases)/(.+) file://${{ github.workspace }}/docs/docs/$1/$2'
+            --fallback-extensions md,mdx
             './**/*.md' './**/*.mdx'
           fail: false # don't fail the run; we report via an issue instead
       - name: Find existing broken-links issue
