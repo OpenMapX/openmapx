@@ -58,6 +58,8 @@ export interface SessionCost {
   amount: number;
   currency: string;
   tariffId: string;
+  /** The costed tariff's type as published (e.g. `ad_hoc`, `profile_cheap`); absent when unstated. */
+  tariffType?: string;
   /** The costed tariff's main price, e.g. 0.39 EUR per kWh; the client formats it in its locale. */
   price: TariffPrice;
 }
