@@ -889,6 +889,26 @@ describe("estimateSessionCost", () => {
     );
   });
 
+  it("reports the costed tariff's stated type, and none when it states none", () => {
+    const weekendAdHoc: ChargingSite = {
+      ...site("s", 1),
+      tariffs: [
+        tariff("cheap", [energy(0.2)], { type: "profile_cheap" }),
+        tariff("adhoc", [energy(0.5, { days: ["SA", "SU"] })], { type: "ad_hoc" }),
+      ],
+    };
+    expect(estimateSessionCost(weekendAdHoc, pickOn(weekendAdHoc), facts())?.tariffType).toBe(
+      "profile_cheap",
+    );
+    const adHoc: ChargingSite = {
+      ...site("s", 1),
+      tariffs: [tariff("adhoc", [energy(0.5)], { type: "ad_hoc" })],
+    };
+    expect(estimateSessionCost(adHoc, pickOn(adHoc), facts())?.tariffType).toBe("ad_hoc");
+    const untyped: ChargingSite = { ...site("s", 1), tariffs: [tariff("t", [energy(0.5)])] };
+    expect(estimateSessionCost(untyped, pickOn(untyped), facts())).not.toHaveProperty("tariffType");
+  });
+
   it("the card's tariff summary is the costed tariff, not the first", () => {
     const base = site("s", 1);
     const s: ChargingSite = {

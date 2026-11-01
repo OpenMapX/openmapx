@@ -277,6 +277,7 @@ export async function runEvPlan(
 
     const sites = chargingSites(ctx);
     let partialChargerData = false;
+    let straightLineDistances = false;
     const nowMs = Date.now();
 
     const socStartKwh = (args.socStartPct / 100) * vehicle.batteryKwh;
@@ -329,6 +330,7 @@ export async function runEvPlan(
               ctx.log.warn("[ev] matrix failed; using great-circle", e as Error);
             }
           }
+          straightLineDistances = true;
           return greatCircleMatrix(sources, targets);
         },
       },
@@ -435,6 +437,9 @@ export async function runEvPlan(
           addedKwh: Math.round(s.addedKwh * 10) / 10,
           availability: availabilityOf(s.site),
           tariffPrice: s.estimatedCost?.price,
+          ...(isContractTariff(s.estimatedCost?.tariffType)
+            ? { contractTariff: true as const }
+            : {}),
           estimatedCost: s.estimatedCost && {
             amount: roundToMinorUnit(s.estimatedCost.amount, s.estimatedCost.currency),
             currency: s.estimatedCost.currency,
@@ -482,12 +487,18 @@ export async function runEvPlan(
         ...plan.warnings,
         ...revalidationWarnings,
         ...(partialChargerData ? [{ kind: "partial-charger-data" } as const] : []),
+        ...(straightLineDistances ? [{ kind: "straight-line-distances" } as const] : []),
       ],
     };
   };
   return ttl > 0
     ? ctx.cache.withCache(evPlanCacheKey(args, vehicle, exclusionsHash), ttl, buildPlan)
     : buildPlan();
+}
+
+/** A stated tariff type other than ad hoc: a member, roaming or profile rate. */
+function isContractTariff(type: string | undefined): boolean {
+  return type !== undefined && type !== "ad_hoc";
 }
 
 /** Deterministic cache key: rounded waypoints + vehicle + bucketed inputs. */

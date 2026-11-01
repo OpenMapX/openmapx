@@ -486,6 +486,12 @@ export interface EvChargeStop extends ContributingRecord {
   availability?: { available: number; total: number; updatedAt?: string };
   /** The main price of the tariff the session was costed on; the client formats it in its locale. */
   tariffPrice?: TariffPrice;
+  /**
+   * True when that tariff is of a stated type other than ad hoc (a member,
+   * roaming or profile rate): a price for holders of that contract, not what
+   * anyone can pay at the charger. Absent when the type is ad hoc or unstated.
+   */
+  contractTariff?: true;
   /** Modelled cost of this charging session. */
   estimatedCost?: { amount: number; currency: string };
   attributions: Attribution[];
@@ -498,7 +504,9 @@ export interface EvChargeStop extends ContributingRecord {
  * and no charging site was found (or none is configured);
  * `charger-sources-unavailable` that a stop was needed and no charger source
  * answered for it; `partial-charger-data` that a charger source did not answer
- * in full, so a better stop may exist.
+ * in full, so a better stop may exist; `straight-line-distances` that the road
+ * distances between candidate stops were not available, so the plan used
+ * straight-line estimates for them.
  */
 export type EvPlanWarning =
   | { kind: "unreachable"; afterStopIndex: number }
@@ -506,6 +514,7 @@ export type EvPlanWarning =
   | { kind: "no-charger-data" }
   | { kind: "charger-sources-unavailable" }
   | { kind: "partial-charger-data" }
+  | { kind: "straight-line-distances" }
   | { kind: "no-allowed-network"; afterStopIndex: number };
 
 /**
