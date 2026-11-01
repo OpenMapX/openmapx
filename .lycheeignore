@@ -20,3 +20,6 @@
 ^https://api\.peatus\.ee/routing/v1/routers/estonia/index/graphql$
 ^https://mapi\.5t\.torino\.it/routing/v1/routers/mat/index/graphql$
 ^https://otp281\.trufi\.app/otp/transmodel/v3$
+
+# Digitransit returns 403 to automated link checkers; the pages work in a browser.
+^https://digitransit\.fi/en/developers/

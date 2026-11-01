@@ -60,10 +60,10 @@ public durable archive is claimed for them. Prior Git history is preserved.
 
 ## Identity and source presence
 
-[Official Moch](https://www.edeka.de/maerkte/408935/) verifies Grunerstr. 20,
-10179 Berlin, phone +493024045625; rechecked 2026-10-08. Its point is a listing
-location, not a surveyed entrance. Shared mall address/proximity/brand cannot
-establish exact tenant identity.
+The official EDEKA store page for Moch (market 408935) lists Grunerstr. 20,
+10179 Berlin, phone +493024045625. Its point is a listing location, not a
+surveyed entrance. A shared mall address, proximity or brand cannot establish
+exact tenant identity.
 
 | Entity                    | Evidence and judgment                                                                                                                                                                                                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
