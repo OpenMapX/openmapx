@@ -4,9 +4,9 @@ Original provider assets, retrieved 14 October 2026 and used solely for required
 attribution. Resizing preserves aspect ratio; do not crop, recolour or imply
 endorsement. These assets are not covered by OpenMapX's code licence.
 
-- OpenWeather master/negative RGB PNG: the official archive linked by
-  https://docs.openweather.co.uk/faq,
-  https://docs.openweather.co.uk/storage/app/media/logo_files.zip.
+- OpenWeather master/negative RGB PNG: the official logo archive. Attribution
+  rules: https://openweathermap.org/faq; brand guidelines and logo downloads:
+  https://openweather.co.uk/brand_guidelines.
 - MapTiler SVG: https://api.maptiler.com/resources/logo.svg, linked by
   https://docs.maptiler.com/guides/map-design/attribution/add-attribution/.
 - TDX PNG: https://tdx.transportdata.tw/images/tdxlogo.png, usage instructions
