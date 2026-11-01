@@ -57,6 +57,9 @@
   "summary": {
     "priceList": "{scope, select, car {{prices}} hgv {{hgvPrices} (HGV)} other {{prices} · {hgvPrices} (HGV)}}",
     "price": "{label} {amount}",
+    "priceAge": "{label} {amount} · {age}",
+    "noGradePrice": "{label} –",
+    "age": "{unit, select, minutes {{count} min} hours {{count} h} other {{count} d}}",
     "join": "{head} · {tail}",
     "grade": {
       "e5": "E5",
