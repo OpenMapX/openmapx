@@ -172,6 +172,7 @@ export * from "./getAdminServiceData200MotisTransitousOperationsProfile";
 export * from "./getAdminServiceData200MotisTransitousPreflightState";
 export * from "./getAdminServiceData200MotisTransitousPreviousHealthySlot";
 export * from "./getAdminServiceData200Osm";
+export * from "./getAdminServiceData200OsmExtract";
 export * from "./getAdminServiceData400";
 export * from "./getAdminServiceData401";
 export * from "./getAdminServiceData403";

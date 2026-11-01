@@ -3,12 +3,14 @@
 import type { GetAdminServiceData200BuildsItem } from "./getAdminServiceData200BuildsItem";
 import type { GetAdminServiceData200MotisTransitous } from "./getAdminServiceData200MotisTransitous";
 import type { GetAdminServiceData200Osm } from "./getAdminServiceData200Osm";
+import type { GetAdminServiceData200OsmExtract } from "./getAdminServiceData200OsmExtract";
 
 export type GetAdminServiceData200 = {
   osm: GetAdminServiceData200Osm;
   /** @maxItems 10 */
   builds: GetAdminServiceData200BuildsItem[];
   motisTransitous: GetAdminServiceData200MotisTransitous;
+  osmExtract?: GetAdminServiceData200OsmExtract;
   /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
   fetchedAt: string;
 };

@@ -41,6 +41,7 @@ import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
 import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
+import { OsmExtractDetails } from "./OsmExtractDetails";
 import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
 import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
@@ -174,7 +175,7 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   );
 }
 
-function OsmSection({ osm }: { osm: OsmInfo }) {
+function OsmSection({ osm, extract }: { osm: OsmInfo; extract: AdminServiceData["osmExtract"] }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack
@@ -262,6 +263,7 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
                 <Typography variant="body2">{formatDate(osm.modifiedAt)}</Typography>
               </Box>
             )}
+            <OsmExtractDetails extract={extract} />
           </Stack>
           <Chip
             icon={<CheckCircleIcon />}
@@ -642,7 +644,7 @@ function DataWorkflowsView() {
       </Box>
       <Stack spacing={2}>
         <DataOperationsSection apiUrl={apiUrl} />
-        <OsmSection osm={data.osm} />
+        <OsmSection osm={data.osm} extract={data.osmExtract} />
         <OvertureMaintenance apiUrl={apiUrl} />
         <SearchIndexMaintenance apiUrl={apiUrl} />
         <AmbientPlacesMaintenance apiUrl={apiUrl} />

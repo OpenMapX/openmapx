@@ -57,6 +57,12 @@ do not replace the previous good file. Check disk space before downloading a
 larger extract; serving multiple PBFs does not automatically give each consumer
 the correct region. Inspect the generated hardlink plan when several inputs exist.
 
+The extract's own header says when its data is current to, which can be well
+before the download. Data-manager records it, and the admin panel's
+**Data workflows** page shows it with its age on the OSM card, flagged once it
+is more than 30 days old. The card also shows the diff feed the extract names,
+which is the feed to give Nominatim (below).
+
 ### Transit schedule sources
 
 For a configured MOTIS deployment, sync the requested country subset:
@@ -171,6 +177,15 @@ MOTIS's low-level build prepares initial/off-host data in place; `--import` also
 runs the runtime import. It is distinct from transactional live transit sync.
 Valhalla, Nominatim, and Overpass import within their service containers; they
 have no CLI build hook.
+
+Nominatim and Overpass can then keep themselves current from a diff feed
+instead of a new extract. Both default to the planet feed, which suits only a
+planet import: a regional import must follow its extract's feed, or the planet
+diffs pull changes from everywhere into the regional database. For Nominatim
+set `NOMINATIM_REPLICATION_URL` to that feed and `NOMINATIM_UPDATE_MODE` to
+`continuous`; with the default mode `none` it applies no diffs and search stays
+at the import's date. For Overpass set `OVERPASS_DIFF_URL`. See
+[Configuration](./configuration.md) for each setting.
 
 `services build-all --region europe/germany` currently plans OSRM, OTP, MOTIS,
 Pelias, and TileServer GL even when only one is selected. It continues after

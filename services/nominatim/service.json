@@ -19,8 +19,10 @@
     "expose": [8080],
     "environment": {
       "PBF_PATH": "/nominatim/data/data.osm.pbf",
-      "REPLICATION_URL": "https://planet.openstreetmap.org/replication/day",
-      "REPLICATION_UPDATE_INTERVAL": "86400",
+      "REPLICATION_URL": "${NOMINATIM_REPLICATION_URL:-https://planet.openstreetmap.org/replication/day}",
+      "REPLICATION_UPDATE_INTERVAL": "${NOMINATIM_REPLICATION_UPDATE_INTERVAL:-86400}",
+      "REPLICATION_RECHECK_INTERVAL": "${NOMINATIM_REPLICATION_RECHECK_INTERVAL:-900}",
+      "UPDATE_MODE": "${NOMINATIM_UPDATE_MODE:-none}",
       "NOMINATIM_PASSWORD": "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}",
       "THREADS": "${NOMINATIM_THREADS:-8}",
       "IMPORT_STYLE": "full",

@@ -4,6 +4,19 @@ import { adminCountSchema, adminTimestampSchema } from "../admin";
 import { adminServiceIdListSchema } from "./common";
 
 export const adminServiceDataSchema = OPS_RESULT_SCHEMAS["data.inspect"].extend({
+  /**
+   * How current the OSM extract on disk is, from its header as data-manager
+   * recorded it; absent when the file names no time or data-manager has none.
+   */
+  osmExtract: z
+    .strictObject({
+      timestamp: adminTimestampSchema,
+      replicationUrl: z
+        .url({ protocol: /^https$/ })
+        .max(2048)
+        .optional(),
+    })
+    .optional(),
   fetchedAt: adminTimestampSchema,
 });
 export const adminServiceSelectionSchema = z.strictObject({

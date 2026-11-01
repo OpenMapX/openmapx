@@ -14841,6 +14841,12 @@
                           "path": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "osmTimestamp": {
+                            "type": "string"
+                          },
+                          "osmReplicationUrl": {
+                            "type": "string"
                           }
                         },
                         "required": [

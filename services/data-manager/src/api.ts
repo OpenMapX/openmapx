@@ -18,7 +18,7 @@ import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import { convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
-import { downloadOsm } from "./jobs/download-osm.js";
+import { backfillOsmHeaders, downloadOsm } from "./jobs/download-osm.js";
 import { applyHardlinkPlan } from "./jobs/link.js";
 import {
   type BuildNotablePlacesOptions,
@@ -504,6 +504,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
+  // A PBF downloaded before its header was recorded still reports how current it is.
+  backfillOsmHeaders(store);
   const searchIndexSql = opts.searchIndexSql ?? sql;
   registerAmbientPlacesApi(app, searchIndexSql);
   const searchIndexRuntimeState = createSearchIndexRuntimeState();
