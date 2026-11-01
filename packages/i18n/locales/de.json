@@ -1864,6 +1864,7 @@
     "zoomIn": "Näher heranzoomen um Ergebnisse zu sehen",
     "zoomInToSee": "Für Stationen näher heranzoomen",
     "zoomInToLoadMore": "Für mehr Ergebnisse näher heranzoomen",
+    "sourceDidNotAnswer": "Nicht jede Quelle hat geantwortet, daher fehlen hier möglicherweise Ergebnisse.",
     "failedToLoadData": "Daten konnten nicht geladen werden. Erneut versuchen.",
     "lowToHigh": "Aufsteigend",
     "highToLow": "Absteigend",
