@@ -20,7 +20,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -32,6 +31,7 @@ import { createSvgIcon } from "@mui/material/utils";
 import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/integration-api/components/Dialog";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import {
   mobileFullScreenDialogPaperSx,

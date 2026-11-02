@@ -4,7 +4,6 @@ import CloseIcon from "@mui/icons-material/Close";
 import HotelOutlinedIcon from "@mui/icons-material/HotelOutlined";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import {
@@ -18,6 +17,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { HotelCompareList } from "./HotelCompareList";
 import { HotelPriceBadge } from "./HotelPriceBadge";

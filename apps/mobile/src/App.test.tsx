@@ -1,6 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { Linking } from "react-native";
+import { BackHandler, Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
@@ -22,6 +22,7 @@ jest.mock("react-native-webview", () => {
       mockWebViewProps = props;
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+        goBack: () => mockInjectedScripts.push("<goBack>"),
       }));
       return React.createElement(View, { testID: props.testID as string });
     }),
@@ -82,6 +83,23 @@ describe("App WebView policy", () => {
     const view = await renderApp();
     expect(view.getByTestId("product-webview")).toBeTruthy();
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("sends Android's Back button into the page's history while it has any", async () => {
+    let press: (() => boolean | null | undefined) | undefined;
+    jest.spyOn(BackHandler, "addEventListener").mockImplementation((_event, handler) => {
+      press = () => handler({} as never);
+      return { remove: jest.fn() };
+    });
+    await renderApp();
+    expect(press?.()).toBe(false);
+    await act(async () => {
+      (mockWebViewProps.onNavigationStateChange as (state: { canGoBack: boolean }) => void)({
+        canGoBack: true,
+      });
+    });
+    expect(press?.()).toBe(true);
+    expect(mockInjectedScripts).toContain("<goBack>");
   });
 
   it("allowlists only the exact configured origin", async () => {

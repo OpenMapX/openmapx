@@ -39,6 +39,7 @@ import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { StorageDialog } from "@/components/settings/StorageDialog";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
+import { useBackDismiss } from "@/lib/useBackDismiss";
 
 const DRAWER_WIDTH = 280;
 
@@ -47,6 +48,7 @@ export function HamburgerMenu() {
   const tCommon = useTranslations("common");
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
+  useBackDismiss(isOpen, close);
   const { data: session, isPending: sessionPending } = useSession();
   const { data: parked } = useParkedLocations();
   const isSignedIn = !sessionPending && !!session?.user?.id;

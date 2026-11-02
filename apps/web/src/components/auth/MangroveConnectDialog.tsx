@@ -4,7 +4,6 @@ import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -16,6 +15,7 @@ import { useKeypairStore, useMangroveSigner } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { SiBluesky } from "react-icons/si";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

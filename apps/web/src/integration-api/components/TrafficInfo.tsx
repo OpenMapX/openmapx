@@ -4,10 +4,10 @@ import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import Popover from "@mui/material/Popover";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useId, useState } from "react";
+import Popover from "@/components/ui/Popover";
 
 /** Optional traffic explanation; never nested inside route selection controls. */
 export function TrafficInfo({ children }: { children: ReactNode }) {

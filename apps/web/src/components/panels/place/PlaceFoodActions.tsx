@@ -7,7 +7,6 @@ import DeliveryDiningOutlinedIcon from "@mui/icons-material/DeliveryDiningOutlin
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RestaurantMenuIcon from "@mui/icons-material/RestaurantMenu";
 import Box from "@mui/material/Box";
-import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -28,6 +27,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, type ReactNode, useId, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 

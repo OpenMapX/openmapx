@@ -8,7 +8,6 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -16,7 +15,6 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { SavedList } from "@openmapx/core";
@@ -30,6 +28,8 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
+import Menu from "@/components/ui/Menu";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
 

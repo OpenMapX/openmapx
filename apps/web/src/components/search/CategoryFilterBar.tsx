@@ -9,7 +9,6 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
-import Popover from "@mui/material/Popover";
 import Radio from "@mui/material/Radio";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material/styles";
@@ -33,6 +32,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import Popover from "@/components/ui/Popover";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";

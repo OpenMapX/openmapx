@@ -13,13 +13,13 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import { proxyImageUrl, type Review, safeHref } from "@openmapx/core";
 import { fingerprintPem } from "@openmapx/mangrove-client";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import Menu from "@/components/ui/Menu";
 import { StarDisplay } from "./StarDisplay";
 
 /**

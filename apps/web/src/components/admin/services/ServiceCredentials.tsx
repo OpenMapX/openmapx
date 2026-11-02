@@ -7,7 +7,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -19,6 +18,7 @@ import type {
   AdminServiceCredentialChanged,
 } from "@openmapx/core/api-contracts";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import {
   useDeleteServiceCredential,
   useServiceCredentials,

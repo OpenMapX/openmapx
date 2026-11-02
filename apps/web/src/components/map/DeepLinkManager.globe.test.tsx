@@ -81,19 +81,21 @@ describe("globe camera restoration", () => {
     },
   );
 
-  it("preserves a history camera but still reveals globe after a later UI toggle", () => {
+  it("leaves the camera and projection as they are on a history traversal", () => {
     render(<Scene />);
+    const before = {
+      zoom: fake.map.getZoom(),
+      pitch: fake.map.getPitch(),
+      projection: fake.map.getProjection(),
+    };
     act(() => {
       window.history.pushState(null, "", VIEW);
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
-    expect(fake.map.getZoom()).toBe(17.5);
-    expect(fake.map.getPitch()).toBe(45);
-    expect(fake.map.getProjection()).toEqual({ type: "globe" });
-
-    act(() => useLayerStore.getState().setGlobeView(false));
-    act(() => useLayerStore.getState().setGlobeView(true));
-    expect(fake.map.getZoom()).toBe(3);
-    expect(fake.map.getPitch()).toBe(45);
+    // Back/Forward step through open surfaces only; the map stays where the
+    // user left it, as in a native map app.
+    expect(fake.map.getZoom()).toBe(before.zoom);
+    expect(fake.map.getPitch()).toBe(before.pitch);
+    expect(fake.map.getProjection()).toEqual(before.projection);
   });
 });

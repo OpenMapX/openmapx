@@ -21,6 +21,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { useBackDismiss } from "@/lib/useBackDismiss";
 
 export function MapClickFloatingCard() {
   const tc = useTranslations("common");
@@ -33,6 +34,7 @@ export function MapClickFloatingCard() {
   const { flyTo } = useMap();
 
   const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat, locale);
+  useBackDismiss(clickedLngLat !== null, () => setClickedLngLat(null));
 
   if (!clickedLngLat) return null;
 

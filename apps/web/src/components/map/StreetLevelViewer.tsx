@@ -1,7 +1,6 @@
 "use client";
 
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -11,6 +10,7 @@ import { safeHref, useDirectionsStore, useStreetLevelStore } from "@openmapx/cor
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
 
 const StreetLevelViewerInner = dynamic(

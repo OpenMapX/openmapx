@@ -7,11 +7,11 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
-import Popover from "@mui/material/Popover";
 import Typography from "@mui/material/Typography";
 import type { CategoryFacet } from "@openmapx/core";
 import { useCategoryFacetStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import Popover from "@/components/ui/Popover";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 function prettifyCuisine(value: string): string {

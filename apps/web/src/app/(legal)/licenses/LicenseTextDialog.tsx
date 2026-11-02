@@ -3,12 +3,12 @@
 import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 
 interface Props {
   packageName: string;

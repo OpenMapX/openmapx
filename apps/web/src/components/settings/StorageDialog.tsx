@@ -2,7 +2,6 @@
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -16,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { createOfflinePackageStorage } from "@/lib/offlineAreas";
 import {
   isStoragePersisted,

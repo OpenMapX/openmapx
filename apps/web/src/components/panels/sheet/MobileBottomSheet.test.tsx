@@ -1,12 +1,14 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetBackNavigationForTests } from "@/lib/backNavigation";
 import {
   getMapObstructionInsets,
   publishMapObstruction,
   subscribeMapObstructions,
 } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
-import { PLACE_DETENTS } from "./detents";
+import { settleHistory } from "@/test/history";
+import { detentIndex, PLACE_DETENTS } from "./detents";
 import { isHostKeyDown, keyboardDetent, MobileBottomSheet } from "./MobileBottomSheet";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -354,5 +356,53 @@ describe("controlled transition interruption", () => {
       ),
     );
     expect(onChange).toHaveBeenCalledWith("full");
+  });
+});
+
+describe("MobileBottomSheet and Back", () => {
+  function expand(host: HTMLElement) {
+    act(() =>
+      host.dispatchEvent(
+        new CustomEvent("snap-position-change", {
+          detail: { snapIndex: detentIndex(PLACE_DETENTS).full, sheetState: "expanded" },
+        }),
+      ),
+    );
+  }
+
+  it("lowers a fully expanded sheet to its middle detent", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    window.history.replaceState(null, "", "/");
+    resetBackNavigationForTests();
+    const { container } = render(
+      <MobileBottomSheet id="back" zIndex={1} detents={PLACE_DETENTS}>
+        <div>content</div>
+      </MobileBottomSheet>,
+    );
+    const host = container.querySelector("bottom-sheet") as HTMLElement & {
+      snapToPoint: ReturnType<typeof vi.fn>;
+    };
+    host.snapToPoint = vi.fn();
+    expand(host);
+    expect(window.history.state?.omx?.depth).toBe(1);
+
+    window.history.back();
+    await act(settleHistory);
+
+    expect(host.snapToPoint).toHaveBeenLastCalledWith(detentIndex(PLACE_DETENTS).mid, {
+      behavior: "smooth",
+    });
+  });
+
+  it("adds no entry while another sheet covers it", () => {
+    window.history.replaceState(null, "", "/");
+    resetBackNavigationForTests();
+    const { container } = render(
+      <MobileBottomSheet id="covered" zIndex={1} detents={PLACE_DETENTS} obscured>
+        <div>content</div>
+      </MobileBottomSheet>,
+    );
+    expand(container.querySelector("bottom-sheet") as HTMLElement);
+    expect(window.history.state?.omx?.depth ?? 0).toBe(0);
   });
 });

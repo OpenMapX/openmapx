@@ -4,7 +4,6 @@ import AutorenewIcon from "@mui/icons-material/Autorenew";
 import DeleteIcon from "@mui/icons-material/Delete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -19,6 +18,7 @@ import { useCreateShare, useRevokeShare, useRotateShare, useShares } from "@open
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ShareLinkCreated } from "@/components/share/ShareLinkCreated";
+import Dialog from "@/components/ui/Dialog";
 
 const EXPIRY_OPTIONS = [
   { value: 0, key: "expiryNever" },

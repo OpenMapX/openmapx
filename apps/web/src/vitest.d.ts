@@ -111,6 +111,7 @@ declare module "vitest" {
     useFakeTimers(options?: { shouldAdvanceTime?: boolean }): void;
     setSystemTime(now?: string | number | Date): void;
     useRealTimers(): void;
+    isFakeTimers(): boolean;
     advanceTimersByTime(ms: number): void;
     advanceTimersByTimeAsync(ms: number): Promise<void>;
     waitFor<T>(

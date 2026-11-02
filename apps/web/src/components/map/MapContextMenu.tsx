@@ -14,10 +14,8 @@ import {
   Divider,
   ListItemIcon,
   ListItemText,
-  Menu,
   MenuItem,
   MenuList,
-  Popover,
   Snackbar,
   Typography,
 } from "@mui/material";
@@ -45,6 +43,8 @@ import {
   useState,
 } from "react";
 import { useSaveParking } from "@/components/panels/parking/useSaveParking";
+import Menu from "@/components/ui/Menu";
+import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";

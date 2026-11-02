@@ -2,7 +2,6 @@
 
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -16,6 +15,7 @@ import TextField from "@mui/material/TextField";
 import { authClient } from "@openmapx/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAdminToast } from "../shared/AdminToast";
 
 interface CreateUserDialogProps {

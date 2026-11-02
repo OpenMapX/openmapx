@@ -17,7 +17,6 @@ import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
@@ -35,6 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import {
   mobileFullScreenDialogPaperSx,
