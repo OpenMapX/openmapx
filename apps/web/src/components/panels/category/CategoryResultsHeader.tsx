@@ -6,7 +6,6 @@ import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import SortIcon from "@mui/icons-material/Sort";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
@@ -15,6 +14,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import Menu from "@/components/ui/Menu";
 import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
 
 type ResultSort = "relevance" | "distance";

@@ -3,7 +3,6 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -11,6 +10,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import type { Review } from "@openmapx/core";
 import { useSubmitReview } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
+import Dialog from "@/components/ui/Dialog";
 
 interface Props {
   open: boolean;

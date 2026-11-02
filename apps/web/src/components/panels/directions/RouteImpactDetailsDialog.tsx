@@ -5,7 +5,6 @@ import EnergySavingsLeafIcon from "@mui/icons-material/EnergySavingsLeaf";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
@@ -22,6 +21,7 @@ import Typography from "@mui/material/Typography";
 import { formatMeasurementDistance, type RouteImpact, useSettingsStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { RouteImpactProvenance } from "./RouteImpactProvenance";
 

@@ -23,6 +23,7 @@ import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
+import { useHardwareBack } from "./shell/useHardwareBack";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
@@ -48,6 +49,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
+  const handleNavigationStateChange = useHardwareBack(webViewRef);
   const shell = useMemo(
     () =>
       createShellBridge({
@@ -232,6 +234,8 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         thirdPartyCookiesEnabled={false}
         allowsBackForwardNavigationGestures
         onShouldStartLoadWithRequest={handleNavigationRequest}
+        // Android's Back button goes back in the page before it leaves the app.
+        onNavigationStateChange={handleNavigationStateChange}
         onOpenWindow={(event) => {
           // Popups get the same structural policy as ordinary navigation; they
           // never open a second in-app browser.

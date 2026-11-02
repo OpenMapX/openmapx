@@ -13,7 +13,6 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
 import ToggleButton from "@mui/material/ToggleButton";
@@ -79,6 +78,7 @@ import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sh
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import Menu from "@/components/ui/Menu";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";

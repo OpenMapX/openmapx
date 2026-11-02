@@ -4,7 +4,6 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -20,6 +19,7 @@ import Typography from "@mui/material/Typography";
 import { createApiClient } from "@openmapx/core";
 import { type QueryKey, useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import {

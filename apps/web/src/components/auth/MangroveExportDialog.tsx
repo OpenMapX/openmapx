@@ -8,7 +8,6 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -19,6 +18,7 @@ import { toMangroveExportJwk } from "@openmapx/mangrove-client";
 import { useMangroveKeypairExport } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

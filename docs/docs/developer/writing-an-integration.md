@@ -294,6 +294,10 @@ paths. This is the trusted web host's app-local API, not an extension SDK.
 Installed community integrations cannot execute presentation JavaScript and
 cannot consume these modules; they remain declarative-only.
 
+Dialogs use `@/integration-api/components/Dialog` instead of
+`@mui/material/Dialog`, so the system Back gesture closes them on a phone; lint
+rejects the direct import.
+
 The full `frontend.overlay` schema and the community-code restriction are documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
 

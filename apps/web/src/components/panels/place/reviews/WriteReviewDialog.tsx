@@ -8,7 +8,6 @@ import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -30,6 +29,7 @@ import { useEffect, useRef, useState } from "react";
 import { MangroveConnectDialog } from "@/components/auth/MangroveConnectDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

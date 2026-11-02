@@ -1,6 +1,5 @@
 "use client";
 
-import Dialog from "@mui/material/Dialog";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -14,6 +13,7 @@ import {
 import { useCommandPaletteStore, useSearchStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { CommandPaletteFooter } from "./CommandPaletteFooter";
 import { CommandPaletteInput } from "./CommandPaletteInput";
 import { buildDefaultCommandRows, CommandPaletteList } from "./CommandPaletteList";

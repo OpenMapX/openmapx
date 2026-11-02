@@ -4,7 +4,6 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import ButtonBase from "@mui/material/ButtonBase";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -12,6 +11,7 @@ import type { AttributionDetail } from "@openmapx/core/attribution";
 import type { AttributionLogo } from "@openmapx/mobility-core/licensing";
 import { useTranslations } from "next-intl";
 import { useId, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { AttributionEntry } from "./AttributionEntry";
 import { AttributionLogos } from "./AttributionNotices";
 

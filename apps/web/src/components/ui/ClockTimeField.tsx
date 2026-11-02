@@ -5,7 +5,6 @@ import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import ButtonBase from "@mui/material/ButtonBase";
-import Dialog from "@mui/material/Dialog";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import InputBase from "@mui/material/InputBase";
@@ -15,6 +14,7 @@ import Typography from "@mui/material/Typography";
 import { type TimeFormat, useSettingsStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { type KeyboardEvent, type PointerEvent, useId, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 
 /** Whether times should show AM/PM: the user's time-format setting, else the locale's own convention. */
 export function usesTwelveHourClock(locale: string, timeFormat: TimeFormat | undefined): boolean {

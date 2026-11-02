@@ -24,6 +24,7 @@ import {
   publishMobilePanelHeight,
   useMobilePanelFollowCap,
 } from "@/lib/mobilePanelHeight";
+import { useBackDismiss } from "@/lib/useBackDismiss";
 import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { type Detent, type DetentConfig, detentIndex, snapSlots } from "./detents";
@@ -215,6 +216,12 @@ export function MobileBottomSheet({
       host?.snapToPoint?.(index, { behavior });
     },
     [host, detents],
+  );
+
+  // An expanded sheet reads as its own screen on a phone, so Back lowers it
+  // first; the next Back then closes whatever the sheet shows.
+  useBackDismiss(state.detent === "full" && !obscured, () =>
+    snapTo(detents.mid != null ? "mid" : "peek"),
   );
 
   const settleControlledTransition = useCallback(() => {

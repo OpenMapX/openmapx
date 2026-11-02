@@ -2,7 +2,6 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
@@ -16,6 +15,7 @@ import {
   type VoiceGuidanceTiming,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

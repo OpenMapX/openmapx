@@ -5,7 +5,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
@@ -24,6 +23,7 @@ import { listSavedListPlaces, unwrapSavedResponse } from "@openmapx/core/saved-p
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { haptics } from "@/lib/haptics";
 import { resolveListIcon } from "@/lib/listIcon";

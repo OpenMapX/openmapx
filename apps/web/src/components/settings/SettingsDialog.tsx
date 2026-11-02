@@ -2,7 +2,6 @@
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
@@ -24,6 +23,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { localeNames, locales } from "@/i18n/config";
 import {
   mobileFullScreenDialogPaperSx,

@@ -1,9 +1,9 @@
 "use client";
 
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import type { Route } from "@openmapx/core";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

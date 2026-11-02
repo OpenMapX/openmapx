@@ -6,7 +6,6 @@ import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
@@ -35,6 +34,7 @@ import {
 import { getVehiclePreset, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,

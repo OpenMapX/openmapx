@@ -96,6 +96,7 @@ import {
 import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET } from "@/lib/layout";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
+import { useBackDismiss } from "@/lib/useBackDismiss";
 import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import {
@@ -552,6 +553,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // just a different layout.
   const fullScreen = isMobile && isFocused;
 
+  const handleBack = () => {
+    cancelSubmission();
+    setIsFocused(false);
+    inputRef.current?.blur();
+  };
+  // The full-screen search is a screen of its own on a phone; Back leaves it.
+  useBackDismiss(fullScreen, handleBack);
+
   // Desktop keeps the bar inside the rail's column, which is already registered
   // as an obstruction; a full-screen search covers the map entirely, and
   // framing against that would leave nothing to aim at. The street-level viewer
@@ -971,12 +980,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     (isFetching || aggregateSearchFetching) &&
     !showDropdown &&
     !syntheticResult;
-
-  const handleBack = () => {
-    cancelSubmission();
-    setIsFocused(false);
-    inputRef.current?.blur();
-  };
 
   const handleSelectLabeledPlace = (place: LabeledPlace) => {
     cancelSubmission();

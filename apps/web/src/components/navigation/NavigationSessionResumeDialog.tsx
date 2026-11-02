@@ -2,13 +2,13 @@
 
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Typography from "@mui/material/Typography";
 import { formatMeasurementDistance, type NavigationSessionSnapshot } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import Dialog from "@/components/ui/Dialog";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
 
 interface Props {

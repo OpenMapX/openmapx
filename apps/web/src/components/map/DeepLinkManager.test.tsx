@@ -7,7 +7,9 @@ import {
 import { useWildfireStore } from "@integrations/overlay-wildfires/store";
 import {
   createOverlayStore,
+  createPlace,
   getRegisteredOverlayStore,
+  idsFromPrimaryOrCoords,
   isOverlayActive,
   type OverlayStoreBase,
   PANEL,
@@ -24,6 +26,9 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: null }, mapReady: true }),
 }));
 
+import { resetBackNavigationForTests } from "@/lib/backNavigation";
+import { DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
+import { settleHistory } from "@/test/history";
 import { DeepLinkManager } from "./DeepLinkManager";
 
 const FALLBACK: OverlayStoreBase = {
@@ -51,6 +56,7 @@ beforeEach(() => {
   resetOverlay("weather", ["air-quality"]);
   resetOverlay("air-quality", ["weather"]);
   window.history.replaceState(null, "", "/");
+  resetBackNavigationForTests();
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
   usePlaceStore.setState({ selectedPlace: null });
   useCategorySearchStore.getState().clearCategory();
@@ -179,5 +185,103 @@ describe("DeepLinkManager overlay application", () => {
     expect(isOverlayActive("air-quality")).toBe(true);
     expect(getRegisteredOverlayStore("air-quality")?.getState().userRevision).toBe(0);
     expect(window.location.search).toContain("ov=air-quality");
+  });
+});
+
+describe("DeepLinkManager history entries", () => {
+  async function settled(): Promise<void> {
+    await act(settleHistory);
+  }
+
+  function writeNow(): void {
+    act(() => {
+      window.dispatchEvent(new Event(DEEPLINK_UPDATE_EVENT));
+    });
+  }
+
+  it("gives an opened place card its own entry, which Back closes without rebuilding the list", async () => {
+    window.history.replaceState(null, "", "/?panel=category&categoryId=restaurants");
+    render(<DeepLinkManager />);
+    const listRevision = useCategorySearchStore.getState().searchRevision;
+
+    act(() => {
+      usePlaceStore.getState().setSelectedPlace(
+        createPlace({
+          ...idsFromPrimaryOrCoords("stylePoi:1", [6.08, 50.78]),
+          name: "Grotesque",
+          address: "Grotesque",
+          coordinates: [6.08, 50.78],
+        }),
+      );
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    });
+    writeNow();
+    expect(window.location.search).toContain("place=");
+    expect(window.history.state.omx.depth).toBe(1);
+
+    window.history.back();
+    await settled();
+
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(useSidebarStore.getState()).toMatchObject({
+      activeSidebarId: PANEL.CATEGORY,
+      activeDetailId: null,
+    });
+    expect(useCategorySearchStore.getState().activeCategory).toBe("restaurants");
+    // Closed in place: the list was not cleared and searched again.
+    expect(useCategorySearchStore.getState().searchRevision).toBe(listRevision);
+    expect(window.location.search).not.toContain("place=");
+  });
+
+  it("rewrites the card's entry when its own close control is used, so Back does not reopen it", async () => {
+    window.history.pushState(null, "", "/elsewhere");
+    window.history.pushState(null, "", "/?panel=category&categoryId=restaurants");
+    resetBackNavigationForTests();
+    render(<DeepLinkManager />);
+    act(() => {
+      usePlaceStore.getState().setSelectedPlace(
+        createPlace({
+          ...idsFromPrimaryOrCoords("stylePoi:1", [6.08, 50.78]),
+          name: "Grotesque",
+          address: "Grotesque",
+          coordinates: [6.08, 50.78],
+        }),
+      );
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    });
+    writeNow();
+    expect(window.history.state.omx.depth).toBe(1);
+
+    act(() => {
+      usePlaceStore.getState().setSelectedPlace(null);
+      useSidebarStore.getState().closeDetail();
+    });
+    writeNow();
+    expect(window.history.state.omx.depth).toBe(1);
+    expect(window.location.search).not.toContain("place=");
+
+    // The entry below shows the same list, so Back steps over it and closes
+    // the list's page instead of doing nothing visible.
+    window.history.back();
+    await settled();
+    expect(window.location.pathname).toBe("/elsewhere");
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+  });
+
+  it("restores a text search from its link", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?panel=category&search=pizza&bbox=6.0%2C50.7%2C6.1%2C50.8",
+    );
+    render(<DeepLinkManager />);
+
+    expect(useCategorySearchStore.getState()).toMatchObject({
+      mode: "text",
+      textQuery: "pizza",
+      activeCategory: null,
+    });
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+    expect(window.location.search).toContain("search=pizza");
   });
 });

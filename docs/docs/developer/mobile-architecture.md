@@ -155,6 +155,38 @@ available, native loading and recovery UI must remain usable. Physical-device
 qualification must cover suspension, renderer loss, audio, alerts and recovery
 before offline navigation claims are published.
 
+## Back navigation
+
+The system Back gesture steps out of what the user last opened, in the installed
+PWA, a browser and the native shell alike. The web app records that in browser
+history; `apps/web/src/lib/backNavigation.ts` is the only code that writes it.
+
+- Opening a panel, place, list item or map tool pushes an entry. The navigation
+  path that decides this (`navigationPath` in `lib/deepLink.ts`) leaves out the
+  camera, base layer and overlays, so panning or toggling a layer rewrites the
+  current entry instead.
+- Closing rewrites the current entry, so a later Back cannot reopen what was
+  just closed. Switching between siblings, such as another place in the same
+  list, rewrites it too.
+- App code never traverses history itself: to the Next.js router that popstate
+  would cancel a page navigation in flight, such as a drawer link that also
+  closes the drawer. A surface closed by its own control leaves its entry, and a
+  Back that lands on an entry showing exactly what was already shown keeps
+  going. The next surface to open reuses such an entry.
+- Back restores only the open surfaces. The map stays where the user left it.
+  When Back only steps out of something, the remaining surfaces keep their
+  in-memory state instead of being rebuilt from the URL.
+- Transient surfaces get an entry of their own through `useBackDismiss`:
+  dialogs, menus and popovers (use the wrappers in `@/components/ui`, which lint
+  requires), the drawer menu, the full-screen search, the photo gallery, the
+  map-click card, an expanded bottom sheet (Back lowers it to the middle detent)
+  and active guidance (Back ends the trip, like the End button).
+
+Android's hardware Back reaches that history through `useHardwareBack` in the
+native shell, which calls the WebView's `goBack()` while it can go back and
+otherwise leaves Back to the system. iOS uses the WebView's own
+back-forward swipe.
+
 ## What is not here
 
 There is no EAS build configuration, hosted wrapper, remote push or native OTA
