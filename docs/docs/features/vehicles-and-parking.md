@@ -32,7 +32,8 @@ import retains local data so it can be retried.
 
 Save where you parked from three places, all of them a deliberate press:
 
-- right-click (or the context key) on the map → **Save parking here**
+- right-click (or the context key) on the map → **Save parking here**; on a phone,
+  long-press the map → **Save parking**
 - tap the blue location dot → **Save parking**
 - the arrival card after driving or motorcycling → **Save parking**
 

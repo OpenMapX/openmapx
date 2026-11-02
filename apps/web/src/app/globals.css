@@ -119,6 +119,14 @@ main {
   height: 100%;
 }
 
+/* A long-press on the map drops a pin; keep iOS from also treating it as a
+   press on text or an image (selection, magnifier, callout). */
+.maplibregl-canvas-container {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Shared MapLibre popup styling */
 @layer base {
   .omx-popup.maplibregl-popup .maplibregl-popup-content {
