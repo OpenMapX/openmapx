@@ -88,6 +88,13 @@ interface Props {
    */
   onDetentChange?: (detent: Detent) => void;
   /**
+   * Lets the user swipe the sheet down past its lowest detent to close what it
+   * shows, as a place card closes in native map apps. Called once the sheet
+   * has been dragged off the bottom; the caller closes the surface, which
+   * unmounts the sheet.
+   */
+  onDismiss?: () => void;
+  /**
    * Hides the library's own drag-pill part, for a caller that renders its own
    * (labeled, tappable) handle as part of `header` instead.
    */
@@ -123,6 +130,7 @@ export function MobileBottomSheet({
   detents,
   detent,
   onDetentChange,
+  onDismiss,
   hideHandle,
   disableContentSafeArea,
   obscured,
@@ -151,6 +159,25 @@ export function MobileBottomSheet({
   useEffect(() => {
     onDetentChangeRef.current = onDetentChange;
   }, [onDetentChange]);
+  const onDismissRef = useRef(onDismiss);
+  const obscuredRef = useRef(obscured);
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+    obscuredRef.current = obscured;
+  }, [onDismiss, obscured]);
+  /**
+   * The library reports the dismissed position for a sheet that has not
+   * reached its first snap yet, so only a sheet that has rested at a real
+   * detent can be dismissed by reaching it.
+   */
+  const restedRef = useRef(false);
+  /**
+   * The closing snap point exists only while the sheet rests at its lowest
+   * detent. Offered all the time, a quick flick down from the middle would
+   * carry the sheet past the lowest detent and close it; this way the flick
+   * lowers it, and a further swipe closes it, as in native map apps.
+   */
+  const [restingAtPeek, setRestingAtPeek] = useState(detents.initial === "peek");
   // Registered by descendant content through useDetailChrome — the pinned
   // header / docked footer slots. Owned here (rather than by DetailShell)
   // so every surface that renders a sheet gets the bridge, not just the
@@ -237,7 +264,14 @@ export function MobileBottomSheet({
   useEffect(() => {
     if (!host) return;
     const onSnap = (event: Event) => {
-      const next = detentFromSnapEvent((event as CustomEvent<SnapDetail>).detail, detents);
+      const detail = (event as CustomEvent<SnapDetail>).detail;
+      if (detail.snapIndex === 0 && detail.sheetState === "collapsed") {
+        // A covered sheet is hidden and cannot be swiped; whatever it reports is not the user's.
+        if (restedRef.current && !obscuredRef.current) onDismissRef.current?.();
+        return;
+      }
+      restedRef.current = true;
+      const next = detentFromSnapEvent(detail, detents);
       if (pendingDetentRef.current === next.detent) pendingDetentRef.current = null;
       if (detentRef.current !== next.detent) {
         detentRef.current = next.detent;
@@ -249,11 +283,40 @@ export function MobileBottomSheet({
       );
     };
     const onScrollEnd = settleControlledTransition;
+    // "Came to rest" is a quiet spell after the last scroll with no finger on
+    // the sheet (`scrollend` is missing in older Safari). A finger holding
+    // still mid-drag does not count: the library already reports the lower
+    // detent as soon as a drag leaves the one above, long before it gets there.
+    let restTimer: ReturnType<typeof setTimeout> | null = null;
+    let touching = false;
+    const scheduleRest = () => {
+      if (restTimer !== null) clearTimeout(restTimer);
+      restTimer = setTimeout(() => {
+        restTimer = null;
+        if (!touching) setRestingAtPeek(detentRef.current === "peek");
+      }, SHEET_SETTLE_MS);
+    };
+    const onTouchStart = () => {
+      touching = true;
+    };
+    const onTouchEnd = () => {
+      touching = false;
+      scheduleRest();
+    };
+    host.addEventListener("scroll", scheduleRest, { passive: true });
+    host.addEventListener("touchstart", onTouchStart, { passive: true });
+    host.addEventListener("touchend", onTouchEnd, { passive: true });
+    host.addEventListener("touchcancel", onTouchEnd, { passive: true });
     host.addEventListener("snap-position-change", onSnap);
     host.addEventListener("scrollend", onScrollEnd);
     return () => {
+      if (restTimer !== null) clearTimeout(restTimer);
       host.removeEventListener("snap-position-change", onSnap);
       host.removeEventListener("scrollend", onScrollEnd);
+      host.removeEventListener("scroll", scheduleRest);
+      host.removeEventListener("touchstart", onTouchStart);
+      host.removeEventListener("touchend", onTouchEnd);
+      host.removeEventListener("touchcancel", onTouchEnd);
     };
   }, [host, detents, settleControlledTransition]);
 
@@ -478,6 +541,12 @@ export function MobileBottomSheet({
             ref={setHost}
             nested-scroll
             expand-to-scroll
+            // Gives the sheet a snap point below its lowest detent while it
+            // rests there (see `restingAtPeek`); reaching it is reported as
+            // the collapsed state, which `onSnap` turns into `onDismiss`. The
+            // library's own dismissal only acts on a sheet inside a <dialog>,
+            // which this one is not.
+            {...(onDismiss && restingAtPeek ? { "swipe-to-dismiss": true } : {})}
             role="region"
             aria-label={ariaLabel ?? t("panelAriaLabel")}
             // `visibility: hidden` (below) already drops a covered sheet from

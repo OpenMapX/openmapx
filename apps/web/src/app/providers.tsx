@@ -13,6 +13,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import { ThemeColorSync } from "../components/pwa/ThemeColorSync";
 import { createAppQueryClient } from "../lib/appQueryClient";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
@@ -137,6 +138,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const inner = (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ThemeColorSync />
       {/*
         These teardown-only guards must observe the raw session transition even
         while the private tree is gated, so old in-memory keys and timeline

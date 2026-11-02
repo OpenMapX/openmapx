@@ -33,8 +33,19 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * Chrome refuses (and logs) vibration before the page's first tap, which a
+ * long-press on the map can be.
+ */
+function blockedBeforeFirstTap(): boolean {
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+    .userActivation;
+  return activation !== undefined && !activation.hasBeenActive;
+}
+
 function vibrate(pattern: number | number[]): void {
   if (!hapticsSupported() || !isHapticsEnabled() || prefersReducedMotion()) return;
+  if (blockedBeforeFirstTap()) return;
   try {
     navigator.vibrate(pattern);
   } catch {

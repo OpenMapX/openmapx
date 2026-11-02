@@ -72,6 +72,7 @@ import {
   writeNavigation,
 } from "@/lib/backNavigation";
 import { frameBoundsInstant, jumpToView } from "@/lib/cameraFraming";
+import { closePlaceSelection, closeSidebarPanel } from "@/lib/closeSurfaces";
 import {
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
@@ -593,17 +594,13 @@ function applyPanels(parsed: ParsedDeepLink, map: maplibregl.Map | null): void {
  */
 function closeSegment(segment: string): void {
   const kind = segment.split(":", 1)[0];
-  const sidebar = useSidebarStore.getState();
   switch (kind) {
     case "tool":
       if (segment === "tool:measure") useMeasurementStore.getState().deactivate();
       else useTravelTimeStore.getState().deactivate();
       return;
     case "place":
-      usePlaceStore.getState().setSelectedPlace(null);
-      useDataSourceStore.getState().clearSelection();
-      if (sidebar.activeDetailId === PANEL.PLACE_CARD) sidebar.closeDetail();
-      else if (sidebar.activeSidebarId === PANEL.PLACE) sidebar.closeSidebar();
+      closePlaceSelection();
       return;
     case "item":
       useDataSourceStore.getState().clearSelection();
@@ -612,8 +609,7 @@ function closeSegment(segment: string): void {
       useSavedPlacesStore.getState().clearSelectedList();
       return;
     default:
-      sidebar.closeSidebar();
-      useSearchStore.getState().setQuery("");
+      closeSidebarPanel();
   }
 }
 

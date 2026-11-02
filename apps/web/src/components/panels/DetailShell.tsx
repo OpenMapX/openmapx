@@ -37,7 +37,14 @@ export function useDetailChrome(header: ReactNode, footer: ReactNode) {
   }, [api, footer]);
 }
 
-export function DetailShell({ children }: { children: ReactNode }) {
+export function DetailShell({
+  children,
+  onDismiss,
+}: {
+  children: ReactNode;
+  /** Mobile: swiping the sheet down past its lowest detent closes the detail this way. */
+  onDismiss?: () => void;
+}) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const t = useTranslations("common");
@@ -53,6 +60,7 @@ export function DetailShell({ children }: { children: ReactNode }) {
           // opened from the card portal to the end of <body> and stay on top.
           zIndex={navigating ? NAV_OVERLAY_Z_INDEX : 11}
           detents={PLACE_DETENTS}
+          onDismiss={onDismiss}
           ariaLabel={t("detailsPanelAriaLabel")}
         >
           {children}

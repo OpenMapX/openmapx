@@ -81,6 +81,7 @@ class FakeMap {
     this.featuresByLayer[id] || this.styleLayers.some((layer) => layer.id === id)
       ? { id }
       : undefined;
+  getCanvas = () => this.canvas;
   getCanvasContainer = () => this.canvas;
   getContainer = () => this.canvas;
   project = () => ({ x: 400, y: 200 });

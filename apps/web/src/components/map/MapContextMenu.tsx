@@ -23,14 +23,10 @@ import {
   coordinateId,
   createPlace,
   isLiveNavigationStatus,
-  PANEL,
   type Place,
-  useDirectionsStore,
   useMapClickStore,
   useNavigationStore,
-  usePlaceStore,
   useReverseGeocoding,
-  useSidebarStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
@@ -47,7 +43,7 @@ import Menu from "@/components/ui/Menu";
 import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
+import { openLocationDetails, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 
 interface MapContextTarget {
@@ -294,25 +290,13 @@ export function MapContextMenu(): React.ReactNode {
 
   const chooseRouteEndpoint = (endpoint: "origin" | "destination") => {
     if (!target) return;
-    const directions = useDirectionsStore.getState();
-    const index = endpoint === "origin" ? 0 : directions.waypoints.length - 1;
-    directions.setWaypoint(index, target.coordinates, actionLabel);
-    directions.open();
-    useSidebarStore.getState().closeDetail();
-    useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+    routeFromOrTo(endpoint, target.coordinates, actionLabel);
     closeMenu();
   };
 
   const openPlaceDetails = () => {
     if (!place) return;
-    usePlaceStore.getState().setSelectedPlace(place);
-    const sidebar = useSidebarStore.getState();
-    if (!sidebar.activeSidebarId || sidebar.activeSidebarId === PANEL.PLACE) {
-      sidebar.closeDetail();
-      sidebar.openSidebar(PANEL.PLACE);
-    } else {
-      sidebar.openDetail(PANEL.PLACE_CARD);
-    }
+    openLocationDetails(place);
     closeMenu();
   };
 
@@ -369,14 +353,7 @@ export function MapContextMenu(): React.ReactNode {
     if (!place) return;
     const targetGeneration = targetGenerationRef.current;
     const actionGeneration = ++actionGenerationRef.current;
-    const url = buildLocationShareUrl(window.location.href, {
-      id: place.id,
-      coordinates: place.coordinates,
-      name: place.name,
-      category: place.category,
-      rawCategory: place.rawCategory,
-    });
-    const result = await shareUrl({ url, title: place.name });
+    const result = await shareLocationLink(place);
     if (
       !mountedRef.current ||
       targetGeneration !== targetGenerationRef.current ||
