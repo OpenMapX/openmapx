@@ -23,6 +23,9 @@ jobs:
     name: privacy + license URL liveness
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write # to open, update and close the failing-check issue
     env:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
@@ -40,7 +43,90 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Check legal URLs
-        # Fails the run (404/410/5xx/DNS failure). Bot-blocks, rate-limits and
-        # transient errors are reported as non-blocking. Run locally with
-        # `pnpm check-legal-urls`.
+        id: check
+        # Fails on GET-confirmed 404/410 and on domains that do not exist.
+        # Bot blocks, rate limits, server errors and other network failures are
+        # reported as non-blocking. Run locally with `pnpm check-legal-urls`.
+        # The run continues so the report and issue steps below see the result;
+        # the last step fails the run again.
+        continue-on-error: true
+        env:
+          LEGAL_URLS_REPORT: ${{ runner.temp }}/legal-urls.md
         run: pnpm check-legal-urls
+
+      - name: Show the report in the run summary
+        if: ${{ !cancelled() }}
+        env:
+          REPORT: ${{ runner.temp }}/legal-urls.md
+        run: |
+          if [ -f "$REPORT" ]; then cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # Scheduled-run failure emails reach only whoever last edited the cron
+      # line, so a red run can go unnoticed for weeks. Keep one open issue
+      # instead: open it on failure, refresh it on each later failure, and close
+      # it when the check passes again.
+      - name: Open, update or close the failing-check issue
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          REPORT: ${{ runner.temp }}/legal-urls.md
+        with:
+          script: |
+            const fs = require('node:fs');
+            const title = 'Legal URLs check is failing';
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => !issue.pull_request && issue.title === title);
+
+            if (process.env.CHECK_OUTCOME === 'success') {
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  body: `The Legal URLs check passed again in ${runUrl}. Closing.`,
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+              }
+              return;
+            }
+
+            const report = fs.existsSync(process.env.REPORT)
+              ? fs.readFileSync(process.env.REPORT, 'utf8')
+              : 'The check did not finish, so there is no link report. See the run log for the failing step.';
+            const footer =
+              `\n\n---\n\nLatest failing run: ${runUrl} (${new Date().toISOString().slice(0, 10)}). ` +
+              'Each failing scheduled run refreshes this issue, and the first passing run closes it.';
+            // Stay under GitHub's 65,536-character issue body limit.
+            const body = report.slice(0, 60000 - footer.length) + footer;
+
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+            } else {
+              // Token-created issues do not trigger the lifecycle workflow, so
+              // add the initial triage label here.
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                labels: ['ci', 'needs-triage'],
+              });
+            }
+
+      - name: Fail the run when the check failed
+        if: ${{ steps.check.outcome == 'failure' }}
+        run: exit 1
