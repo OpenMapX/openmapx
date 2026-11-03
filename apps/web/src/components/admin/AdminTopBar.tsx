@@ -69,6 +69,7 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
         borderBottom: "1px solid",
         borderColor: "divider",
         color: "text.primary",
+        pt: "var(--omx-safe-top)",
         width: { md: sidebarOpen ? `calc(100% - ${SIDEBAR_WIDTH}px)` : "100%" },
         ml: { md: sidebarOpen ? `${SIDEBAR_WIDTH}px` : 0 },
         transition:

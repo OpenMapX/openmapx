@@ -29,6 +29,7 @@ import { MapCredits } from "@/components/map/MapCredits";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { SAFE_AREA_PADDING } from "@/lib/layout";
 import { useBackDismiss } from "@/lib/useBackDismiss";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -99,6 +100,8 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
           display: "flex",
           flexDirection: "column",
           zIndex: 1400,
+          boxSizing: "border-box",
+          ...SAFE_AREA_PADDING,
         }}
       >
         {/* Top bar */}
