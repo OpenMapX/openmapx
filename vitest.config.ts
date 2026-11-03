@@ -39,6 +39,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
+      // The report is the point of the non-gating coverage run; write it even
+      // when a test fails so one slow test does not discard the baseline.
+      reportOnFailure: true,
       include: [
         "apps/*/src/**",
         "packages/*/src/**",

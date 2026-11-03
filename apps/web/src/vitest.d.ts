@@ -7,6 +7,7 @@ interface VitestTestFunction {
   each<T>(
     cases: readonly T[],
   ): (name: string, callback: (...args: VitestEachArguments<T>) => void | Promise<void>) => void;
+  skipIf(condition: unknown): VitestTestFunction;
 }
 
 /**

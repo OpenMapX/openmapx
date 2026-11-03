@@ -333,15 +333,20 @@ describe("integration frontend modules", () => {
       ...filesUnder(WEB_SRC_DIR).filter((file) => /\.tsx?$/.test(file)),
       ...scanFrontendImports(productionFrontendRoots()).scannedFiles,
     ];
-    const violations = files.flatMap((file) =>
-      moduleSpecifiers(file, fs.readFileSync(file, "utf8"))
+    // A relative path from these roots into apps/api/src has to name the `api`
+    // directory, so only sources with such a literal need the (costly) AST parse.
+    const relativeApiLiteral = /["'`]\.\.?\/[^"'`\n]*api/;
+    const violations = files.flatMap((file) => {
+      const source = fs.readFileSync(file, "utf8");
+      if (!relativeApiLiteral.test(source)) return [];
+      return moduleSpecifiers(file, source)
         .filter((specifier) => {
           if (!specifier.startsWith(".")) return false;
           const target = path.resolve(path.dirname(file), specifier);
           return target === apiDir || target.startsWith(`${apiDir}${path.sep}`);
         })
-        .map((specifier) => `${path.relative(WEB_SRC_DIR, file)}: ${specifier}`),
-    );
+        .map((specifier) => `${path.relative(WEB_SRC_DIR, file)}: ${specifier}`);
+    });
 
     expect(violations).toEqual([]);
   });
