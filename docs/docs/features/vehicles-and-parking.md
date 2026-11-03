@@ -44,6 +44,20 @@ walking directions back to it, share its coordinates, add a note (up to 500 char
 record when parking expires (up to 30 days ahead), move the pin, or clear it. Moving or dragging the pin clears the old address so it is not shown at the new
 location.
 
+## Parking near your destination
+
+After a drive or motorcycle trip, the arrival card suggests up to four car parks
+within 500 m of the destination, closest first. **Drive here** routes you to one,
+and on arrival there the card offers the walk to your original destination.
+
+When the instance offers the parking data source, the suggestions come from it.
+Closed sites are left out, as are sites reserved for permit holders or other
+private users and sites whose every space is kept for a group, such as a lone
+disabled bay. Each suggestion shows its free spaces and whether it is free when
+the source knows, and sites currently reported full come after the others. Without that source, or when it does not answer,
+the card lists mapped parking places instead, with their fee where the map
+records it.
+
 ## What OpenMapX does not do here
 
 Saving requires an explicit action. Motion, Bluetooth, and arrival heuristics do

@@ -1,4 +1,9 @@
-import { type CategoryPlace, type Route, useNavigationStore } from "@openmapx/core";
+import {
+  type CategoryPlace,
+  type DataSourceResult,
+  type Route,
+  useNavigationStore,
+} from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@/test";
 import { setPendingArrivalHandoff } from "./arrivalHandoffState";
@@ -25,14 +30,52 @@ const useCategorySearch = vi.fn(() => ({
   data: { results: [] as CategoryPlace[] },
   isLoading: false,
 }));
+const useDataSources = vi.fn(() => ({
+  data: { sources: [] as { id: string }[] } as { sources: { id: string }[] } | undefined,
+  isLoading: false,
+}));
+const useDataSourceSearch = vi.fn(() => ({
+  data: undefined as DataSourceResult[] | undefined,
+  isLoading: false,
+  isError: false,
+  partial: null as "area" | "unavailable" | null,
+}));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
     fetchDirections: (...args: unknown[]) => fetchDirections(...args),
     useCategorySearch: (...args: unknown[]) => useCategorySearch(...args),
+    useDataSources: () => useDataSources(),
+    useDataSourceSearch: (...args: unknown[]) => useDataSourceSearch(...args),
   };
 });
+
+/** The bounded search area around the destination. */
+const AREA = expect.objectContaining({ west: expect.any(Number), east: expect.any(Number) });
+
+function site(id: string, offset: number, over: Partial<DataSourceResult> = {}): DataSourceResult {
+  return {
+    id,
+    name: id,
+    coordinates: [10.01 + offset / 1000, 50.01],
+    source: "osm-parking",
+    variant: "available",
+    contributors: [{ sourceId: "osm-parking", name: "OpenStreetMap" }],
+    ...over,
+  };
+}
+
+function offerParkingSource(search: Partial<ReturnType<typeof useDataSourceSearch>> = {}): void {
+  useDataSources.mockReturnValue({ data: { sources: [{ id: "parking" }] }, isLoading: false });
+  useDataSourceSearch.mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+    partial: null,
+    ...search,
+  });
+}
 
 import { useArrivalHandoff } from "./useArrivalHandoff";
 
@@ -68,6 +111,13 @@ describe("useArrivalHandoff", () => {
     state.completeArrival.mockResolvedValue(true);
     fetchDirections.mockResolvedValue({ routes: [] });
     useCategorySearch.mockReturnValue({ data: { results: [] }, isLoading: false });
+    useDataSources.mockReturnValue({ data: { sources: [] }, isLoading: false });
+    useDataSourceSearch.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      partial: null,
+    });
     setPendingArrivalHandoff(null);
     useNavigationStore.setState({
       status: "arrived",
@@ -126,6 +176,86 @@ describe("useArrivalHandoff", () => {
       "en",
     );
     expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["p1", "p2", "p3", "p4"]);
+  });
+
+  it("searches places for parking while no parking source is offered", () => {
+    renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(useDataSourceSearch).toHaveBeenCalledWith(null, AREA, {});
+    expect(useCategorySearch).toHaveBeenCalledWith("parking", AREA, "en");
+  });
+
+  it("waits for the source list before choosing where to search", () => {
+    useDataSources.mockReturnValue({ data: undefined, isLoading: true });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(useCategorySearch).toHaveBeenLastCalledWith(null, AREA, "en");
+    expect(result.current.isParkingLoading).toBe(true);
+  });
+
+  it("offers the parking source's sites a visitor may use, with fee and free spaces", () => {
+    const spaces = { $t: "summary.spaces", values: { count: 12 } };
+    offerParkingSource({
+      data: [
+        site("closed", 1, { status: "non-operational", variant: "closed" }),
+        site("private", 2, { access: "private" }),
+        site("permit", 3, { access: "permit" }),
+        site("restricted", 4, { access: "restricted" }),
+        site("garage", 7, { fee: "paid", summary: spaces }),
+        site("shop", 6, { access: "customers", fee: "free" }),
+        site("lot", 5, { access: "public" }),
+        site("street", 8),
+        site("far", 9),
+      ],
+    });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(useDataSourceSearch).toHaveBeenCalledWith("parking", AREA, {});
+    expect(useCategorySearch).toHaveBeenLastCalledWith(null, AREA, "en");
+    expect(result.current.nearbyParking.map((place) => place.id)).toEqual([
+      "lot",
+      "shop",
+      "garage",
+      "street",
+    ]);
+    const [lot, shop, garage] = result.current.nearbyParking;
+    expect(lot?.osmTags).toBeUndefined();
+    expect(shop?.osmTags).toEqual({ fee: "no" });
+    expect(garage).toMatchObject({ osmTags: { fee: "yes" }, summary: spaces });
+    expect(garage?.contributors).toEqual([{ sourceId: "osm-parking", name: "OpenStreetMap" }]);
+  });
+
+  it("ranks a site reported full after farther sites that may have room", () => {
+    offerParkingSource({
+      data: [
+        site("full", 1, { variant: "full" }),
+        site("open", 3, { variant: "available" }),
+        site("stale", 2, { variant: "unknown" }),
+      ],
+    });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(result.current.nearbyParking.map((place) => place.id)).toEqual([
+      "stale",
+      "open",
+      "full",
+    ]);
+  });
+
+  it("reports the parking source's loading state", () => {
+    offerParkingSource({ data: undefined, isLoading: true });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(result.current.isParkingLoading).toBe(true);
+  });
+
+  it.each<[string, Partial<ReturnType<typeof useDataSourceSearch>>]>([
+    ["fails", { data: undefined, isError: true }],
+    ["did not answer", { data: [], partial: "unavailable" }],
+  ])("falls back to the place search when the parking source %s", (_, search) => {
+    offerParkingSource(search);
+    useCategorySearch.mockReturnValue({
+      data: { results: [{ id: "poi", name: "POI", coordinates: [10.011, 50.01] }] },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(useCategorySearch).toHaveBeenLastCalledWith("parking", AREA, "en");
+    expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["poi"]);
   });
 
   it("does not request a zero-length walk at the original destination", () => {

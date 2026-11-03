@@ -16,10 +16,12 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
+import { type NearbyParkingPlace, PARKING_SOURCE_ID } from "./nearbyParking";
 import { getParkingCoords } from "./parkingCoords";
 
 interface Props {
-  places: CategoryPlace[];
+  places: NearbyParkingPlace[];
   selectedPlace: CategoryPlace | null;
   isLoading: boolean;
   onSelectPlace: (place: CategoryPlace | null) => void;
@@ -39,6 +41,7 @@ export function NearbyParkingCarousel({
 }: Props) {
   const t = useTranslations("navigation");
   const units = useSettingsStore((s) => s.units);
+  const resolveToken = useDataSourceI18nResolver(PARKING_SOURCE_ID);
 
   if (isLoading) {
     return (
@@ -77,6 +80,7 @@ export function NearbyParkingCarousel({
           const feeTag = place.osmTags?.fee;
           const isFree = feeTag === "no";
           const isPaid = feeTag === "yes";
+          const summary = place.summary ? resolveToken(place.summary) : "";
 
           const coords = getParkingCoords(place);
           const detourMeters =
@@ -130,6 +134,11 @@ export function NearbyParkingCarousel({
                     color="default"
                     variant="outlined"
                   />
+                )}
+                {summary && (
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    {summary}
+                  </Typography>
                 )}
                 {detourMeters !== null && (
                   <Typography variant="caption" color="text.secondary">

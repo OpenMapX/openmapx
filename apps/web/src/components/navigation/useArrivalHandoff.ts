@@ -9,6 +9,8 @@ import {
   type Route,
   type TravelMode,
   useCategorySearch,
+  useDataSourceSearch,
+  useDataSources,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
@@ -22,12 +24,19 @@ import {
   setPendingArrivalHandoff,
   usePendingArrivalHandoff,
 } from "./arrivalHandoffState";
+import {
+  isUsableParking,
+  type NearbyParkingPlace,
+  PARKING_SOURCE_ID,
+  toNearbyParking,
+} from "./nearbyParking";
 import { getParkingCoords } from "./parkingCoords";
 
 const PARKING_MODES = new Set<TravelMode>(["driving", "motorcycle"]);
 const SEARCH_RADIUS_METERS = 500;
 const MAX_PARKING_RESULTS = 4;
 const MIN_WALKING_HANDOFF_METERS = 20;
+const NO_FILTERS: Record<string, unknown> = {};
 
 export interface UseArrivalHandoffOptions {
   onClose: () => void;
@@ -45,7 +54,7 @@ export interface UseArrivalHandoffResult {
   walkingRoute: Route | null;
   isWalkingLoading: boolean;
   handleStartWalking: () => Promise<boolean>;
-  nearbyParking: CategoryPlace[];
+  nearbyParking: NearbyParkingPlace[];
   isParkingLoading: boolean;
   selectedParking: CategoryPlace | null;
   handleSelectParking: (place: CategoryPlace | null) => void;
@@ -118,25 +127,57 @@ export function useArrivalHandoff({
         : null,
     [destinationCoords, showParkingOptions],
   );
-  const { data: parkingData, isLoading: isParkingLoading } = useCategorySearch(
-    showParkingOptions ? "parking" : null,
+  // The parking source knows which sites are closed or private and how many
+  // spaces are free; the POI search stands in while it is not offered or fails.
+  const { data: dataSources, isLoading: isSourceListLoading } = useDataSources();
+  const hasParkingSource =
+    dataSources?.sources.some((source) => source.id === PARKING_SOURCE_ID) ?? false;
+  const parkingSourceSearch = useDataSourceSearch(
+    showParkingOptions && hasParkingSource ? PARKING_SOURCE_ID : null,
+    parkingBbox,
+    NO_FILTERS,
+  );
+  const parkingSourceFailed =
+    parkingSourceSearch.isError ||
+    (parkingSourceSearch.partial === "unavailable" && !parkingSourceSearch.data?.length);
+  const fromParkingSource = hasParkingSource && !parkingSourceFailed;
+  const { data: poiData, isLoading: isPoiLoading } = useCategorySearch(
+    showParkingOptions && !isSourceListLoading && !fromParkingSource ? "parking" : null,
     parkingBbox,
     locale,
+  );
+  const isParkingLoading =
+    showParkingOptions &&
+    (isSourceListLoading || (fromParkingSource ? parkingSourceSearch.isLoading : isPoiLoading));
+
+  const parkingCandidates = useMemo<NearbyParkingPlace[]>(
+    () =>
+      fromParkingSource
+        ? (parkingSourceSearch.data ?? []).filter(isUsableParking).map(toNearbyParking)
+        : (poiData?.results ?? []),
+    [parkingSourceSearch.data, poiData, fromParkingSource],
   );
 
   const nearbyParking = useMemo(() => {
     if (!destinationCoords) return [];
-    return (parkingData?.results ?? [])
-      .flatMap((place) => {
-        const coordinates = getParkingCoords(place);
-        return coordinates
-          ? [{ place, distance: haversineDistance(coordinates, destinationCoords) }]
-          : [];
-      })
-      .sort((left, right) => left.distance - right.distance)
-      .slice(0, MAX_PARKING_RESULTS)
-      .map(({ place }) => place);
-  }, [destinationCoords, parkingData]);
+    return (
+      parkingCandidates
+        .flatMap((place) => {
+          const coordinates = getParkingCoords(place);
+          return coordinates
+            ? [{ place, distance: haversineDistance(coordinates, destinationCoords) }]
+            : [];
+        })
+        // A site reported full goes after every site that may have room.
+        .sort(
+          (left, right) =>
+            Number(left.place.full === true) - Number(right.place.full === true) ||
+            left.distance - right.distance,
+        )
+        .slice(0, MAX_PARKING_RESULTS)
+        .map(({ place }) => place)
+    );
+  }, [destinationCoords, parkingCandidates]);
 
   useEffect(() => {
     if (selectedParking && !nearbyParking.some((place) => place.id === selectedParking.id)) {

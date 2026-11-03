@@ -50,7 +50,7 @@
     "stale": "Availability stale",
     "spacesOf": "{free}/{capacity} free",
     "spaces": "{count} free",
-    "totalSpaces": "{count} spaces"
+    "totalSpaces": "{count, plural, =1 {1 space} other {# spaces}}"
   },
   "area": {
     "forVehicle": "{group} ({vehicle})",

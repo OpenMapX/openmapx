@@ -22,8 +22,19 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     ...actual,
     fetchDirections: (...args: unknown[]) => mockFetchDirections(...args),
     useCategorySearch: (...args: unknown[]) => mockUseCategorySearch(...args),
+    // No parking source is offered, so arrival parking comes from the place search.
+    useDataSources: () => ({ data: { sources: [] }, isLoading: false }),
+    useDataSourceSearch: () => ({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      partial: null,
+    }),
   };
 });
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: () => () => "",
+}));
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 

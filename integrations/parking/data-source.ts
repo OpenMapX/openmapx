@@ -17,7 +17,7 @@ import {
   wrapSiteResult as wrap,
 } from "@openmapx/integration-framework";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import { mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
+import { feeOf, mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
 import { createParkingSiteOrchestrator } from "./orchestrator.js";
 
 const META: DataSourceMeta = {
@@ -106,9 +106,7 @@ function parkingTypes(site: ParkingSite): Set<string> {
 }
 
 function fee(site: ParkingSite): "free" | "paid" | "unknown" {
-  if (site.free === true) return "free";
-  if (site.free === false || site.rates.length > 0) return "paid";
-  return "unknown";
+  return feeOf(site) ?? "unknown";
 }
 
 function hasArea(site: ParkingSite, userGroup: string): boolean {

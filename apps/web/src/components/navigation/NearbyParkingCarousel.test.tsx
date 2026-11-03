@@ -5,6 +5,15 @@ import { NearbyParkingCarousel } from "./NearbyParkingCarousel";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
+const resolver = vi.hoisted(() => ({ integrationId: undefined as string | undefined }));
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: (integrationId: string | undefined) => {
+    resolver.integrationId = integrationId;
+    return (value: unknown) =>
+      value && typeof value === "object" && "$t" in value ? `resolved ${String(value.$t)}` : "";
+  },
+}));
+
 const mockPlaces: CategoryPlace[] = [
   {
     id: "p1",
@@ -205,5 +214,20 @@ describe("NearbyParkingCarousel", () => {
 
     expect(screen.getAllByText(/navigation.straightLineDistance/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/navigation.walkDetour/)).toBeNull();
+  });
+
+  it("shows the parking source's free-space line in the parking strings", () => {
+    render(
+      <NearbyParkingCarousel
+        places={[{ ...mockPlaces[0], summary: { $t: "summary.spaces", values: { count: 12 } } }]}
+        selectedPlace={null}
+        isLoading={false}
+        onSelectPlace={vi.fn()}
+        onDriveToPlace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("resolved summary.spaces")).toBeInTheDocument();
+    expect(resolver.integrationId).toBe("parking");
   });
 });

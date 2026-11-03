@@ -164,8 +164,37 @@ function siteIdentity(site: ParkingSite): OsmIdentity | undefined {
   return site.operator ? { operator: site.operator } : undefined;
 }
 
+/** Whether parking at the site costs money: a site with rates is paid even without a fee flag. */
+export function feeOf(site: ParkingSite): "free" | "paid" | undefined {
+  if (site.free === true) return "free";
+  if (site.free === false || site.rates.length > 0) return "paid";
+  return undefined;
+}
+
+/**
+ * Whether every space of the site is kept for a user group at all hours, as
+ * a lone disabled bay is: its group areas hold at least its capacity. An area
+ * without a count holds at least one space; one kept at some hours only
+ * leaves its spaces to anyone at the others.
+ */
+function keptForGroups(site: ParkingSite): boolean {
+  if (!site.capacity) return false;
+  const kept = site.areas
+    .filter((area) => area.userGroup !== "any" && area.hours === undefined)
+    .reduce((spaces, area) => spaces + (area.capacity ?? 1), 0);
+  return kept >= site.capacity;
+}
+
+/** Who may park at the site: its stated audience, else restricted when a group keeps every space. */
+function accessOf(site: ParkingSite): DataSourceResult["access"] {
+  if (site.audience && site.audience !== "unknown") return site.audience;
+  return keptForGroups(site) ? "restricted" : undefined;
+}
+
 export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
   const available = freshAvailable(site);
+  const fee = feeOf(site);
+  const access = accessOf(site);
   const result: DataSourceResult = {
     id: site.id,
     name: site.name,
@@ -180,6 +209,8 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
     operator: site.operator,
     sortValues: available === undefined ? undefined : { freeSpaces: available },
   };
+  if (fee) result.fee = fee;
+  if (access) result.access = access;
   const attributions = siteCredits(site);
   if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
