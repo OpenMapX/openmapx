@@ -2,21 +2,21 @@
 
 import {
   type ActiveAlert,
+  type AlongRange,
   type BoundingBox,
   CAMERA_RESTRICTED_COUNTRIES,
+  cumulativeDistances,
   fetchRoadAlerts,
   type LngLat,
   PROGRESS_BUCKET_METERS,
-  type PreparedRouteMatcher,
   paddedRouteAheadBounds,
-  prepareRouteMatcher,
   progressBucket,
   progressBucketStartMeters,
+  projectRoadAlertsOntoRoute,
   type RawRoadAlert,
   type RoadAlert,
   type Route,
   selectActiveAlert,
-  snapPreparedRoute,
   useCountryFromCoordinates,
   useNavigationStore,
   useSettingsStore,
@@ -24,18 +24,16 @@ import {
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/** An alert must sit within this distance (m) of the route to be relevant. */
-const MAX_DEVIATION_M = 25;
 /** Skip fetching for corridors larger than this (deg²); mirrors the server cap. */
 const MAX_BBOX_DEG2 = 0.6;
 /**
  * Largest approach window `selectActiveAlert` uses for anything this hook can
  * fetch. The server's OSM alert endpoint only ever emits `speed_camera`,
  * `railway_crossing`, `stop`, and `traffic_calming` (see `mapAlertElements` in
- * `integrations/routing/index.ts`); of their entries in the `APPROACH` table in
- * `packages/core/src/navigation/alerts.ts`, `speed_camera`'s 500 m `maxM` is the
- * largest. A query window shorter than that could miss an alert the selector
- * would otherwise have surfaced.
+ * `integrations/routing/navigation-alerts.ts`); of their entries in the
+ * `APPROACH` table in `packages/core/src/navigation/alerts.ts`,
+ * `speed_camera`'s 500 m `maxM` is the largest. A query window shorter than
+ * that could miss an alert the selector would otherwise have surfaced.
  */
 const MAX_APPROACH_M = 500;
 /**
@@ -76,12 +74,21 @@ function alertWindowBoxes(
   ];
 }
 
+/** Alerts fetched for one ahead-window, and the along-route span that window covers. */
+interface WindowAlerts {
+  alerts: RawRoadAlert[];
+  range: AlongRange;
+}
+
+const NO_ALERTS: WindowAlerts = { alerts: [], range: { fromMeters: 0, toMeters: 0 } };
+
 /**
  * Approach alert to surface right now along the active route, or null. Fetches
  * OSM alert POIs in a bounded ahead-window (keyed on route identity + progress
- * bucket, like `useNavIncidents`), projects them onto the line, and picks the
- * nearest in-range one each fix. Speed cameras are dropped unless the user
- * opted in AND the route origin's country permits them.
+ * bucket, like `useNavIncidents`), attaches those the route arrives at along
+ * their own road in a direction they apply to (`projectRoadAlertsOntoRoute`),
+ * and picks the nearest in-range one each fix. Speed cameras are dropped unless
+ * the user opted in AND the route origin's country permits them.
  */
 export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert | null {
   const route = useNavigationStore((s) => s.route);
@@ -104,7 +111,7 @@ export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert
   // right after the setting is switched on, before the legal region is known.
   const countryUnknown = countryQueryEnabled && country === undefined;
 
-  const [raw, setRaw] = useState<RawRoadAlert[]>([]);
+  const [raw, setRaw] = useState<WindowAlerts>(NO_ALERTS);
 
   // The route the LATEST effect run belongs to, and a generation counter for
   // its fetch — `fetchRoadAlerts` has no abort signal, so a stale response is
@@ -116,7 +123,7 @@ export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert
     if (connectivity === "offline" || !route || route.geometry.length < 2) {
       requestIdRef.current += 1;
       ownerRouteRef.current = route ?? null;
-      setRaw([]);
+      setRaw(NO_ALERTS);
       return;
     }
 
@@ -128,17 +135,14 @@ export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert
     const isNewRoute = ownerRouteRef.current !== route;
     ownerRouteRef.current = route;
 
-    const boxes = alertWindowBoxes(
-      route.geometry,
-      progressBucketStartMeters(bucket),
-      WINDOW_LOOKAHEAD_M,
-    );
+    const windowStart = progressBucketStartMeters(bucket);
+    const boxes = alertWindowBoxes(route.geometry, windowStart, WINDOW_LOOKAHEAD_M);
     if (boxes.length === 0) {
       requestIdRef.current += 1;
-      setRaw([]);
+      setRaw(NO_ALERTS);
       return;
     }
-    if (isNewRoute) setRaw([]);
+    if (isNewRoute) setRaw(NO_ALERTS);
 
     const requestId = ++requestIdRef.current;
     void Promise.all(boxes.map((box) => fetchRoadAlerts(box)))
@@ -148,43 +152,32 @@ export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert
         for (const list of results) {
           for (const a of list) byId.set(a.id, a);
         }
-        setRaw([...byId.values()]);
+        setRaw({
+          alerts: [...byId.values()],
+          range: { fromMeters: windowStart, toMeters: windowStart + WINDOW_LOOKAHEAD_M },
+        });
       })
       .catch(() => undefined);
   }, [route, bucket, connectivity]);
 
-  // The active route's snap index, rebuilt only when the route identity
-  // changes (mirrors `useNavIncidents`'s `matcherRef`).
-  const matcherRef = useRef<{ geometry: LngLat[]; matcher: PreparedRouteMatcher } | null>(null);
+  // Along-route distances of the active route, recomputed only when it changes.
+  const cum = useMemo(() => (route ? cumulativeDistances(route.geometry) : []), [route]);
 
-  // Project each raw alert onto the route, keep those on/near the line, and
-  // apply the speed-camera opt-in + legal region gate.
+  // Attach each fetched alert where the route meets it on its own road, in a
+  // direction it applies to — never merely because it stands near the line.
+  const projected: RoadAlert[] = useMemo(() => {
+    if (!route || connectivity === "offline" || route.geometry.length < 2) return [];
+    return projectRoadAlertsOntoRoute(raw.alerts, route.geometry, cum, raw.range);
+  }, [raw, route, cum, connectivity]);
+
+  // Apply the speed-camera opt-in + legal region gate.
   const alerts: RoadAlert[] = useMemo(() => {
-    if (!route || connectivity === "offline") return [];
-    const geometry = route.geometry;
-    const held = matcherRef.current;
-    const matcher = held?.geometry === geometry ? held.matcher : prepareRouteMatcher(geometry);
-    matcherRef.current = { geometry, matcher };
-
     const cameraAllowed =
       speedCameraAlerts &&
       !countryUnknown &&
       !(country != null && CAMERA_RESTRICTED_COUNTRIES.has(country));
-    const out: RoadAlert[] = [];
-    for (const a of raw) {
-      if (a.type === "speed_camera" && !cameraAllowed) continue;
-      const snap = snapPreparedRoute(matcher, [a.lng, a.lat]);
-      if (snap.deviationMeters > MAX_DEVIATION_M) continue;
-      out.push({
-        id: a.id,
-        type: a.type,
-        coord: [a.lng, a.lat],
-        alongMeters: snap.alongMeters,
-        speedLimitKmh: a.speedLimitKmh,
-      });
-    }
-    return out;
-  }, [raw, route, speedCameraAlerts, country, countryUnknown, connectivity]);
+    return cameraAllowed ? projected : projected.filter((a) => a.type !== "speed_camera");
+  }, [projected, speedCameraAlerts, country, countryUnknown]);
 
   // Traffic incidents (from the road-conditions capability) merge into the same
   // selector as the OSM hazards; they carry priority 0, so an in-range incident
