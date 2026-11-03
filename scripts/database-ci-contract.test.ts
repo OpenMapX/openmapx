@@ -121,11 +121,15 @@ describe("required database test gate", () => {
         return entry.isFile() && /\.(test|spec)\.tsx?$/.test(entry.name) ? [path] : [];
       });
     }
-    const inventory: { suite: string; flag: string }[] = [];
+    const inventory: { suite: string; flag: string; source: string }[] = [];
     for (const suite of ["apps", "packages", "services", "integrations", "scripts"].flatMap(
       discover,
     )) {
-      const file = ts.createSourceFile(suite, read(suite), ts.ScriptTarget.Latest, true);
+      const source = read(suite);
+      // Parsing every suite into an AST is the expensive part; only files that
+      // name a candidate flag at all can contribute to the inventory.
+      if (!/OPENMAPX_(?:RUN_|POSTGRES_TESTS)/.test(source)) continue;
+      const file = ts.createSourceFile(suite, source, ts.ScriptTarget.Latest, true);
       const flags = new Set<string>();
       function visit(node: ts.Node): void {
         if (
@@ -140,10 +144,10 @@ describe("required database test gate", () => {
         ts.forEachChild(node, visit);
       }
       visit(file);
-      for (const flag of flags) inventory.push({ suite, flag });
+      for (const flag of flags) inventory.push({ suite, flag, source });
     }
     expect(inventory.length).toBeGreaterThan(0);
-    for (const { suite, flag } of inventory) {
+    for (const { suite, flag, source } of inventory) {
       expect(flag, `${suite}: obsolete or unknown database opt-in`).toMatch(
         /^OPENMAPX_RUN_(DATABASE|RESTORE_DATABASE|DAWARICH_EXPORT)_TESTS$/,
       );
@@ -158,7 +162,6 @@ describe("required database test gate", () => {
       if (owners[0] !== "export-restore") {
         expect(command(owners[0]).env[flag], `${suite}: opt-in must be enabled`).toBe("1");
       }
-      const source = read(suite);
       expect(source, suite).not.toContain("process.env.CI");
       expect(source, suite).not.toContain("context.skip");
       expect(source, suite).not.toContain("SKIP_TESTCONTAINERS");
