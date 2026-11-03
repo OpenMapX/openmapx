@@ -61,6 +61,7 @@ import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
+import { RouteStopSearch } from "@/components/panels/directions/RouteStopSearch";
 import type { RouteArrivalContext } from "@/components/panels/directions/routeArrival";
 import { ShareRouteDialog } from "@/components/panels/directions/ShareRouteDialog";
 import {
@@ -431,29 +432,56 @@ export function DirectionsPanelContent() {
   const scheduledQuery = useScheduledDirections(scheduleRequest);
   const { data: scheduledData } = scheduledQuery;
 
+  // The displayed route's request without its waypoints; a stop detour along
+  // it is compared with exactly these options.
+  const groundRequest = useMemo(
+    () => ({
+      mode: routeMode,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      bikeProfile,
+      bikeHillPreference,
+      bikePreferQuietRoads,
+      bikePreferSmoothSurfaces,
+      bikeSpeedKmh,
+      avoidClosures: avoidIncidents,
+      units,
+      lang: locale,
+      departAt: drivingDepartAtStr,
+      arriveBy: drivingArriveByStr,
+    }),
+    [
+      routeMode,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      bikeProfile,
+      bikeHillPreference,
+      bikePreferQuietRoads,
+      bikePreferSmoothSurfaces,
+      bikeSpeedKmh,
+      avoidIncidents,
+      units,
+      locale,
+      drivingDepartAtStr,
+      drivingArriveByStr,
+    ],
+  );
   const directionsQuery = useDirections({
+    ...groundRequest,
     waypoints:
       isTransitMode || isFlightMode || isEvMode || scheduleRequest
         ? []
         : allWaypointsFilled
           ? routeWaypoints
           : [],
-    mode: routeMode,
-    avoidHighways,
-    avoidTolls,
-    avoidFerries,
-    bikeProfile,
-    bikeHillPreference,
-    bikePreferQuietRoads,
-    bikePreferSmoothSurfaces,
-    bikeSpeedKmh,
-    avoidClosures: avoidIncidents,
-    units,
-    lang: locale,
-    departAt: drivingDepartAtStr,
-    arriveBy: drivingArriveByStr,
   });
   const { data, isLoading, isError } = directionsQuery;
+  const stopSearchRoute =
+    (mode === "driving" || mode === "motorcycle") && data
+      ? (data.routes[activeRouteIndex] ?? data.routes[0])
+      : undefined;
 
   const routesForImpact = (scheduleRequest ? scheduledData?.routes : data?.routes) ?? [];
   const fastestRouteIndex = useMemo(() => {
@@ -1612,6 +1640,17 @@ export function DirectionsPanelContent() {
                   </Box>
                 ))}
               </Box>
+              {stopSearchRoute && (stopSearchRoute.geometry?.length ?? 0) >= 2 && (
+                <>
+                  <Divider />
+                  <RouteStopSearch
+                    route={stopSearchRoute}
+                    provider={data.provider}
+                    request={groundRequest}
+                    units={units}
+                  />
+                </>
+              )}
               <AttributionStrip
                 attributions={routingAttributions}
                 variant="panel-header"

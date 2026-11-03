@@ -19,8 +19,6 @@ import Typography from "@mui/material/Typography";
 import {
   type AlongRoutePoi,
   type BrandSummary,
-  CATEGORY_DEFINITIONS,
-  type CategoryId,
   type CategoryPlace,
   geoJsonBBox,
   useBrandSuggest,
@@ -42,50 +40,11 @@ import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 import { routeSearchQueryFor, useRouteSearch } from "@/lib/navigation/useRouteSearch";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
-
-// MUI LocalGasStation glyph — fuel isn't a poi-search chip category, so we carry
-// its icon here and query it via the `preset:amenity/fuel` server path.
-const FUEL_ICON_PATH =
-  "M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h9v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77M12 10H6V5h6z";
-
-// MUI Place glyph — the along-route pin icon for a brand search, which (unlike
-// a category) has no single glyph of its own.
-const PLACE_ICON_PATH =
-  "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7m0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5";
-
-function iconFor(id: CategoryId): string {
-  return CATEGORY_DEFINITIONS.find((d) => d.id === id)?.iconPath ?? "";
-}
-
-interface SearchCategory {
-  key: string; // CategoryId or `preset:<id>`
-  labelKey: string;
-  iconPath: string;
-}
-
-const CATEGORIES: SearchCategory[] = [
-  { key: "preset:amenity/fuel", labelKey: "rsFuel", iconPath: FUEL_ICON_PATH },
-  { key: "restaurants", labelKey: "rsRestaurants", iconPath: iconFor("restaurants") },
-  { key: "cafes", labelKey: "rsCafes", iconPath: iconFor("cafes") },
-  { key: "supermarkets", labelKey: "rsSupermarkets", iconPath: iconFor("supermarkets") },
-  { key: "parking", labelKey: "rsParking", iconPath: iconFor("parking") },
-  { key: "hotels", labelKey: "rsHotels", iconPath: iconFor("hotels") },
-];
-
-function Glyph({ path, size = 24 }: { path: string; size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d={path} />
-    </svg>
-  );
-}
+import {
+  RouteSearchGlyph as Glyph,
+  PLACE_ICON_PATH,
+  ROUTE_SEARCH_CATEGORIES,
+} from "./routeSearchCategories";
 
 /**
  * "Search along route" picker sheet, result pins and POI card. The entry button
@@ -117,7 +76,7 @@ export function RouteSearchControl() {
   const { data: brandSuggestData } = useBrandSuggest(debouncedBrandQuery);
   const brandMatches = brandSuggestData?.matches ?? [];
 
-  const category = CATEGORIES.find((c) => c.key === categoryKey) ?? null;
+  const category = ROUTE_SEARCH_CATEGORIES.find((c) => c.key === categoryKey) ?? null;
   // A stable identity for whichever selection is active, used to gate the
   // result layer and the center/clear/card chrome below; `brand:<qid>` keeps
   // the pin-image cache in RouteSearchResultsLayer keyed per chain.
@@ -350,7 +309,7 @@ export function RouteSearchControl() {
             </Typography>
           </Box>
           <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
-            {CATEGORIES.map((c) => (
+            {ROUTE_SEARCH_CATEGORIES.map((c) => (
               <Box
                 key={c.key}
                 component="button"

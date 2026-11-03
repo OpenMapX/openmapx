@@ -244,3 +244,11 @@ it("keeps navigation brand-picker credits outside the row icon and selection act
   fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
   expect(useRouteSearchStore.getState().brand).toBeNull();
 });
+
+it("offers charging stations in the navigation picker", () => {
+  useRouteSearchStore.getState().reset();
+  useRouteSearchStore.getState().openPicker();
+  render(view());
+  fireEvent.click(screen.getByRole("button", { name: "Charging" }));
+  expect(useRouteSearchStore.getState().categoryKey).toBe("ev_charging");
+});
