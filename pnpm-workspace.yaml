@@ -41,7 +41,6 @@ minimumReleaseAgeExclude:
   - "better-auth@1.7.16"
   - "@better-auth/core@1.7.16"
   - "@better-auth/drizzle-adapter@1.7.16"
-  - "@better-auth/expo@1.7.16"
   - "@better-auth/i18n@1.7.16"
   - "@better-auth/kysely-adapter@1.7.16"
   - "@better-auth/memory-adapter@1.7.16"
@@ -168,14 +167,9 @@ overrides:
   # installs it. These peers serve entry points nothing here imports, and the
   # API's production install carried them: Expo, React Native and Hermes
   # through drizzle-orm's `drizzle-orm/expo-sqlite` (only apps/mobile installs
-  # expo-sqlite, and it does not use drizzle-orm) and @better-auth/expo's
-  # `/client`; Next.js, Vue and Vitest through better-auth's `/next-js`, `/vue`
-  # and `/test`. Remove an entry before importing the entry point it serves.
-  "@better-auth/expo>expo-constants": "-"
-  "@better-auth/expo>expo-linking": "-"
-  "@better-auth/expo>expo-network": "-"
-  "@better-auth/expo>expo-secure-store": "-"
-  "@better-auth/expo>expo-web-browser": "-"
+  # expo-sqlite, and it does not use drizzle-orm); Next.js, Vue and Vitest
+  # through better-auth's `/next-js`, `/vue` and `/test`. Remove an entry
+  # before importing the entry point it serves.
   "better-auth>drizzle-kit": "-"
   "better-auth>next": "-"
   "better-auth>vitest": "-"

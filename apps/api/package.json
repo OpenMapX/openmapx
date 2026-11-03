@@ -21,7 +21,6 @@
   "dependencies": {
     "@archiver/archiver": "0.3.0",
     "@better-auth/core": "1.7.16",
-    "@better-auth/expo": "1.7.16",
     "@better-auth/i18n": "1.7.16",
     "@better-auth/oauth-provider": "1.7.16",
     "@better-auth/passkey": "1.7.16",
