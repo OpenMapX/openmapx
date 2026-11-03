@@ -155,6 +155,37 @@ describe("MobileAuthClient", () => {
     expect(view.queryByTestId("auth-dialog")).toBeNull();
   });
 
+  it("keeps the sign-in dialog mounted while a signed-out session refetches", () => {
+    // better-auth reports a refetch of an empty session as pending. The password
+    // step triggers one before it asks for the two-factor code, so unmounting
+    // here would reset the dialog to its password form.
+    sessionState.data = null;
+    const view = renderClient();
+    const dialog = view.getByTestId("auth-dialog");
+
+    sessionState.isPending = true;
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <MobileAuthClient
+          purpose="sign-in"
+          state={STATE}
+          codeChallenge={CHALLENGE}
+          callbackScheme="openmapx"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(view.getByTestId("auth-dialog")).toBe(dialog);
+  });
+
+  it("shows no sign-in dialog before the first session check finishes", () => {
+    sessionState.data = null;
+    sessionState.isPending = true;
+    const view = renderClient();
+
+    expect(view.queryByTestId("auth-dialog")).toBeNull();
+  });
+
   it("issues nothing when the server refuses", async () => {
     stubIssue({ ok: false });
     const view = renderClient();

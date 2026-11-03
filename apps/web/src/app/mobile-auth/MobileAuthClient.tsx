@@ -7,7 +7,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
 import { useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
@@ -49,6 +49,14 @@ export function MobileAuthClient({
   const { data: session, isPending } = useSession();
   const [phase, setPhase] = useState<Phase>("idle");
   const authenticated = Boolean(session);
+  // better-auth reports every refetch of an empty session as pending, and the
+  // password step triggers one just before it asks for a two-factor code.
+  // Hiding the dialog then would remount it on its password form, so only the
+  // first session check keeps it hidden.
+  const [sessionChecked, setSessionChecked] = useState(!isPending);
+  useEffect(() => {
+    if (!isPending) setSessionChecked(true);
+  }, [isPending]);
   // Signing in happens here, in the real browser, where OAuth providers and
   // platform passkeys work. Every sign-in route returns to this exact handoff
   // so the app's state and challenge survive a provider round trip.
@@ -112,7 +120,7 @@ export function MobileAuthClient({
       </Typography>
       <Typography sx={{ mb: 3, color: "text.secondary" }}>{purposeText}</Typography>
 
-      {!authenticated && !isPending && (
+      {!authenticated && sessionChecked && (
         <>
           <Alert severity="info" sx={{ mb: 3, textAlign: "left" }}>
             {t("signInFirst")}
