@@ -29,7 +29,7 @@ const MAX_IMPORTED_UNFINISHED = 16;
  *   restored on a rollback, and data-manager could have written it.
  */
 
-export type LegacyImportOutcome = "imported" | "absent" | "discarded";
+type LegacyImportOutcome = "imported" | "absent" | "discarded";
 
 export interface LegacyStateImport {
   journal: LegacyImportOutcome;

@@ -19,6 +19,8 @@
         "scripts/self-hosting-replay-vitest.config.ts",
         // Docker-context scanner tests spawn this deadline-isolated fixture by path.
         "scripts/fixtures/docker-context-redirection-probe.ts",
+        // Codegen artifact tests spawn these lifetime and zombie-process fixtures by path.
+        "scripts/codegen/fixtures/*.mjs",
         // Release IO tests copy this executable into fake gh/docker/trivy subprocess paths.
         "scripts/fixtures/product-release-command.mjs",
         // Release IO tests invoke this fixed JSON-input Node subprocess entry point.
@@ -51,9 +53,8 @@
     "apps/api": {
       "entry": [
         "scripts/**/*.ts",
-        // Memory tests spawn these exact paths in heap-constrained processes.
-        "src/privacy/__tests__/fixtures/primary-db-archive-memory-child.ts",
-        "src/privacy/__tests__/fixtures/primary-stream-memory-child.ts"
+        // Memory tests spawn these children by path in heap-constrained processes.
+        "src/privacy/__tests__/fixtures/*-memory-child.ts"
       ],
       "ignoreFiles": [
         "src/__tests__/fixtures/**",
@@ -85,6 +86,16 @@
         // navigation composition is not yet mounted by App.tsx. Keep this explicit
         // so Knip does not turn unfinished product wiring into a deletion.
         "src/notifications/ExpoNotificationScheduler.ts"
+      ]
+    },
+    "apps/ops-agent": {
+      "entry": [
+        // Runtime bundle entries from scripts/build-runtime-bundles.mjs: the
+        // agent itself and the helper that replaces the agent's container.
+        "src/index.ts",
+        "src/agent-handoff-main.ts",
+        // Concurrency tests spawn these writer processes by path.
+        "src/__fixtures__/*.mjs"
       ]
     },
     "apps/web": {
@@ -132,6 +143,11 @@
     "packages/cli": {
       // Root scripts invoke this workspace through `pnpm exec tsx`.
       "ignoreDependencies": ["tsx"]
+    },
+    "packages/entur-client": {
+      // check-types compiles this never-imported file to assert generated
+      // GraphQL variable inference.
+      "entry": ["src/client.typecheck.ts"]
     },
     "packages/extension-cli": {
       "ignoreFiles": ["templates/**"]

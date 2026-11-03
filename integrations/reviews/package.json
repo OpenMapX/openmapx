@@ -21,7 +21,6 @@
     }
   },
   "dependencies": {
-    "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mangrove-client": "workspace:^"
   }

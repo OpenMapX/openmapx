@@ -333,9 +333,6 @@ importers:
       '@openmapx/presets':
         specifier: workspace:^
         version: link:../../packages/presets
-      '@openmapx/transitous-core':
-        specifier: workspace:^
-        version: link:../../packages/transitous-core
       '@opentelemetry/api':
         specifier: ^1.10.0
         version: 1.10.0
@@ -1051,9 +1048,6 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
-        specifier: workspace:^
-        version: link:../geocoding
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -1276,10 +1270,6 @@ importers:
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
-    devDependencies:
-      '@graphql-typed-document-node/core':
-        specifier: 3.2.0
-        version: 3.2.0(graphql@17.0.2)
 
   integrations/live-transit-motis:
     dependencies:
@@ -1829,9 +1819,6 @@ importers:
 
   integrations/reviews:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -1965,9 +1952,6 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-routing':
-        specifier: workspace:^
-        version: link:../routing
 
   integrations/routing-osrm:
     dependencies:
@@ -2787,9 +2771,6 @@ importers:
       p-map:
         specifier: 7.1.1
         version: 7.1.1
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
     devDependencies:
       '@types/geojson':
         specifier: ^7946.0.16

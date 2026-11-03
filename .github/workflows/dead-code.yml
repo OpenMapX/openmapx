@@ -1,16 +1,28 @@
 name: Dead-code audit
 
 on:
+  # Knip is not a required check: this monorepo has convention-loaded
+  # integrations and generated entry points, so config changes deserve review
+  # instead of blocking unrelated pull requests. It does run on pull requests
+  # that change what it judges most often, dependency manifests and files that
+  # tests or builds load by path, so the author sees a new finding before merge
+  # instead of the weekly run turning red afterwards.
+  pull_request:
+    paths:
+      - "**/package.json"
+      - "pnpm-lock.yaml"
+      - "knip.jsonc"
+      - "**/fixtures/**"
+      - "**/__fixtures__/**"
+      - "scripts/build-runtime-bundles.mjs"
+      - ".github/workflows/dead-code.yml"
   schedule:
-    # Knip is deliberately periodic rather than a PR gate: this monorepo has
-    # convention-loaded integrations and generated entry points, so config
-    # changes deserve review instead of blocking unrelated pull requests.
     - cron: "17 6 * * 1"
   workflow_dispatch:
 
 concurrency:
-  group: dead-code-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: dead-code-${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
