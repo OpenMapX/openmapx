@@ -89,7 +89,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
   const tc = useTranslations("common");
   const locale = useLocale();
   const mapCtx = useMapOptional();
-  const { inSheet, snapTo } = useMobileSheet();
+  const { inSheet, detent, snapTo } = useMobileSheet();
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const activeRouteIndex = useDirectionsStore((s) => s.activeRouteIndex);
   const insertWaypoint = useDirectionsStore((s) => s.insertWaypoint);
@@ -173,13 +173,19 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
     [search.results, selected],
   );
 
+  // A pin tap brings its card into view. In a phone sheet the content only
+  // scrolls once the sheet is fully open; scrolling earlier would move the
+  // sheet itself and leave it short of full.
+  const scrolledFor = useRef(0);
   useEffect(() => {
-    if (scrollRequest === 0) return;
-    const frame = requestAnimationFrame(() =>
-      selectedRowRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }),
-    );
+    if (scrollRequest === 0 || scrolledFor.current === scrollRequest) return;
+    if (inSheet && detent !== "full") return;
+    const frame = requestAnimationFrame(() => {
+      scrolledFor.current = scrollRequest;
+      selectedRowRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    });
     return () => cancelAnimationFrame(frame);
-  }, [scrollRequest]);
+  }, [scrollRequest, inSheet, detent]);
 
   const clearSelection = () => {
     setSelectedId(null);

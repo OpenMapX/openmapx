@@ -103,9 +103,11 @@ function setWaypoints(coords: LngLat[]) {
 function view({
   units = "metric" as "metric" | "imperial",
   sheet = false,
+  detent = "mid",
 }: {
   units?: "metric" | "imperial";
   sheet?: boolean;
+  detent?: "peek" | "mid" | "full";
 } = {}) {
   const content: ReactNode = (
     <RouteStopSearch
@@ -119,7 +121,12 @@ function view({
     <NextIntlClientProvider locale="en" messages={en}>
       {sheet ? (
         <MobileSheetContext.Provider
-          value={{ detent: "mid", isExpanded: false, inSheet: true, snapTo: fixture.snapTo }}
+          value={{
+            detent,
+            isExpanded: detent === "full",
+            inSheet: true,
+            snapTo: fixture.snapTo,
+          }}
         >
           {content}
         </MobileSheetContext.Provider>
@@ -334,13 +341,20 @@ describe("RouteStopSearch", () => {
     expect(screen.getByText("Station p24")).toBeInTheDocument();
   });
 
-  it("opens the sheet fully when a pin selects a result on a phone", () => {
-    render(view({ sheet: true }));
+  it("opens the sheet fully when a pin selects a result on a phone, then shows the card", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const { rerender } = render(view({ sheet: true }));
     fireEvent.click(chip("Fuel"));
     fireEvent.click(screen.getByRole("button", { name: "Tap last pin" }));
     expect(fixture.snapTo).toHaveBeenCalledWith("full");
     expect(screen.getByRole("region", { name: "Station b" })).toBeInTheDocument();
     expect(fixture.flyTo).not.toHaveBeenCalled();
+    await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(scrolled).not.toHaveBeenCalled();
+    rerender(view({ sheet: true, detent: "full" }));
+    await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    expect(scrolled).toHaveBeenCalledTimes(1);
   });
 
   it("clears a stale selection when the route changes", () => {
