@@ -36,6 +36,7 @@ import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { NAV_CHROME_INSET } from "@/lib/layout";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 import { routeSearchQueryFor, useRouteSearch } from "@/lib/navigation/useRouteSearch";
@@ -286,8 +287,8 @@ export function RouteSearchControl() {
             position: "fixed",
             left: "50%",
             transform: "translateX(-50%)",
-            top: "calc(var(--omx-safe-top) + 8px)",
-            width: { xs: "calc(100% - 16px)", sm: 480 },
+            top: `calc(var(--omx-safe-top) + ${NAV_CHROME_INSET}px)`,
+            width: { xs: `calc(100% - ${2 * NAV_CHROME_INSET}px)`, sm: 480 },
             borderRadius: 3,
             zIndex: 1350,
             p: 2,
@@ -420,8 +421,8 @@ export function RouteSearchControl() {
             position: "fixed",
             left: "50%",
             transform: "translateX(-50%)",
-            bottom: "calc(var(--omx-safe-bottom) + 8px)",
-            width: { xs: "calc(100% - 16px)", sm: 420 },
+            bottom: `calc(var(--omx-safe-bottom) + ${NAV_CHROME_INSET}px)`,
+            width: { xs: `calc(100% - ${2 * NAV_CHROME_INSET}px)`, sm: 420 },
             borderRadius: 3,
             zIndex: 1350,
             p: 2,

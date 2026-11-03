@@ -22,6 +22,13 @@ export const SEARCH_BAR_CLEARANCE = `calc(${SEARCH_BAR_INSET * 2 + SEARCH_BAR_HE
 export const NAV_LANDSCAPE_PANEL_WIDTH = 400;
 
 /**
+ * Gap (px) between the turn-by-turn chrome (maneuver banner, bottom bar) and
+ * the safe-area edges of the screen. Overlays shown over that chrome (the
+ * search-along-route picker and stop card) use it too, so they line up.
+ */
+export const NAV_CHROME_INSET = 16;
+
+/**
  * Whether the left sidebar panel is currently occupying horizontal space, so
  * bottom-anchored map chrome (the footer's legal links + credits, the overlay
  * legends) must clear it by shifting right `PANEL_WIDTH`.

@@ -252,3 +252,17 @@ it("offers charging stations in the navigation picker", () => {
   fireEvent.click(screen.getByRole("button", { name: "Charging" }));
   expect(useRouteSearchStore.getState().categoryKey).toBe("ev_charging");
 });
+
+it("lines the picker and stop card up with the maneuver banner and bottom bar insets", () => {
+  useRouteSearchStore.getState().reset();
+  useRouteSearchStore.getState().openPicker();
+  const { unmount } = render(view());
+  const picker = screen.getByText("Search along route").closest(".MuiPaper-root") as HTMLElement;
+  expect(getComputedStyle(picker).top).toBe("calc(var(--omx-safe-top) + 16px)");
+  unmount();
+  useRouteSearchStore.getState().setCategoryKey("preset:amenity/fuel");
+  render(view());
+  fireEvent.click(screen.getByRole("button", { name: "Select stop" }));
+  const card = screen.getByText("River services").closest(".MuiPaper-root") as HTMLElement;
+  expect(getComputedStyle(card).bottom).toBe("calc(var(--omx-safe-bottom) + 16px)");
+});
