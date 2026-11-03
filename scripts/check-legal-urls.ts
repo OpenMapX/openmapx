@@ -42,21 +42,11 @@ const TIMEOUT_MS = 12_000;
 const USER_AGENT = "Mozilla/5.0";
 
 /**
- * Exact URLs that serve their page in a real browser but answer automated clients
- * with HTTP 404. Each is reported as unverified, never as OK, until `reviewBy`;
- * after that it blocks again until someone re-checks it in a browser and renews
- * the entry (about 30 days at a time). A 410 is never exempt.
- *
- * Uber's developer docs render client-side: the server returns 404 and an empty
- * shell for every docs path, so the terms text cannot be checked automatically.
+ * Ask for HTML the way a browser does. Some sites answer a bare wildcard Accept
+ * header with a 404 for every path (Uber's developer docs do), which looks exactly
+ * like a dead link. The low-priority wildcard keeps JSON/API URLs working.
  */
-const BROWSER_VERIFIED_FALSE_404S = [
-  {
-    url: "https://developer.uber.com/docs/businesses/terms-of-use",
-    verifiedOn: "2026-11-03",
-    reviewBy: "2026-12-03",
-  },
-];
+const ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
 type Verdict = "ok" | "dead" | "unverified";
 
@@ -148,7 +138,7 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<number> {
       method,
       redirect: "follow",
       signal: controller.signal,
-      headers: { "user-agent": USER_AGENT, accept: "*/*" },
+      headers: { "user-agent": USER_AGENT, accept: ACCEPT },
     });
     // Free the socket without downloading the body.
     try {
@@ -165,19 +155,6 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<number> {
 function classify(url: string, status: number | undefined, err: unknown): UrlResult {
   if (status !== undefined) {
     if (status < 400) return { url, status, verdict: "ok" };
-    const falseNotFound = BROWSER_VERIFIED_FALSE_404S.find((entry) => entry.url === url);
-    if (
-      status === 404 &&
-      falseNotFound &&
-      Date.now() < Date.parse(`${falseNotFound.reviewBy}T00:00:00Z`)
-    ) {
-      return {
-        url,
-        status,
-        verdict: "unverified",
-        error: `Browser verified on ${falseNotFound.verifiedOn}; automated false 404. Review by ${falseNotFound.reviewBy}.`,
-      };
-    }
     // Only GET-confirmed missing resources block the check.
     if (status === 404 || status === 410) return { url, status, verdict: "dead" };
     // Other HTTP failures can be outages or automated-request blocking.
