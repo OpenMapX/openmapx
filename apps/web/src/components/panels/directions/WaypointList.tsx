@@ -20,12 +20,10 @@ import SwapVertIcon from "@mui/icons-material/SwapVert";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import type { Waypoint } from "@openmapx/core";
+import { MAX_DIRECTIONS_WAYPOINTS, type Waypoint } from "@openmapx/core";
 import type { useTranslations } from "next-intl";
 import { WaypointRow } from "@/components/panels/directions/WaypointRow";
 import { BRAND } from "@/integration-api/runtime/theme";
-
-const MAX_WAYPOINTS = 10;
 
 interface WaypointListProps {
   waypoints: Waypoint[];
@@ -75,7 +73,7 @@ export function WaypointList({
     }
   };
 
-  const canAddMore = waypoints.length < MAX_WAYPOINTS && !isEvMode;
+  const canAddMore = waypoints.length < MAX_DIRECTIONS_WAYPOINTS && !isEvMode;
 
   return (
     <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useDirectionsStore } from "./directionsStore";
+import { MAX_DIRECTIONS_WAYPOINTS, useDirectionsStore } from "./directionsStore";
 
 function reset() {
   // close() restores the initial transit-options state.
@@ -141,5 +141,46 @@ describe("waypoint schedules", () => {
     useDirectionsStore.getState().setTripTime(new Date("2026-09-01T09:00:00Z"));
     useDirectionsStore.getState().setTimeMode("now");
     expect(useDirectionsStore.getState().tripTime).toBeNull();
+  });
+});
+
+describe("insertWaypoint", () => {
+  beforeEach(() => {
+    reset();
+    const s = useDirectionsStore.getState();
+    s.setWaypoint(0, [0, 0], "Home");
+    s.setWaypoint(1, [1, 0], "Work");
+    useDirectionsStore.setState({ activeRouteIndex: 1 });
+  });
+
+  it("inserts a filled stop between origin and destination", () => {
+    expect(useDirectionsStore.getState().insertWaypoint(1, [0.5, 0], "Aral")).toBe(true);
+    const { waypoints, activeRouteIndex } = useDirectionsStore.getState();
+    expect(waypoints.map((wp) => [wp.type, wp.label, wp.coords])).toEqual([
+      ["origin", "Home", [0, 0]],
+      ["waypoint", "Aral", [0.5, 0]],
+      ["destination", "Work", [1, 0]],
+    ]);
+    expect(new Set(waypoints.map((wp) => wp.id)).size).toBe(3);
+    expect(activeRouteIndex).toBe(0);
+  });
+
+  it("refuses to replace the origin or append after the destination", () => {
+    const before = useDirectionsStore.getState().waypoints;
+    expect(useDirectionsStore.getState().insertWaypoint(0, [0.5, 0], "Aral")).toBe(false);
+    expect(useDirectionsStore.getState().insertWaypoint(2, [0.5, 0], "Aral")).toBe(false);
+    expect(useDirectionsStore.getState().waypoints).toBe(before);
+  });
+
+  it("refuses a stop once the route has the most waypoints it can take", () => {
+    const s = useDirectionsStore.getState();
+    for (let i = 0; i < MAX_DIRECTIONS_WAYPOINTS - 2; i++) {
+      expect(s.insertWaypoint(1, [0.1 * (i + 1), 0], `Stop ${i}`)).toBe(true);
+    }
+    expect(MAX_DIRECTIONS_WAYPOINTS).toBe(10);
+    const full = useDirectionsStore.getState().waypoints;
+    expect(full).toHaveLength(10);
+    expect(useDirectionsStore.getState().insertWaypoint(1, [0.95, 0], "One more")).toBe(false);
+    expect(useDirectionsStore.getState().waypoints).toBe(full);
   });
 });

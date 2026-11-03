@@ -4,8 +4,8 @@ import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { BoundingBox } from "../../types/geometry";
-import type { OverpassFilter } from "../../utils/overpassFilter";
-import { useFilterSearch } from "../useFilterSearch";
+import { normalizeFilter, type OverpassFilter } from "../../utils/overpassFilter";
+import { filterSearchQueryOptions, useFilterSearch } from "../useFilterSearch";
 
 const bbox: BoundingBox = { south: 52.4, west: 13.3, north: 52.6, east: 13.5 };
 
@@ -94,5 +94,29 @@ describe("useFilterSearch", () => {
 
     expect(result.current.fetchStatus).toBe("idle");
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("filterSearchQueryOptions", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("shares the hook's normalized cache key and POST request", async () => {
+    const spy = vi
+      .spyOn(apiClient, "post")
+      .mockResolvedValue({ results: [], partial: false } as never);
+    const options = filterSearchQueryOptions(validFilter, bbox, "en");
+    expect(options.queryKey).toEqual([
+      "filter-search",
+      JSON.stringify(normalizeFilter(validFilter)),
+      bbox,
+      "en",
+    ]);
+    const signal = new AbortController().signal;
+    await options.queryFn({ signal } as never);
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.poiFilter,
+      { filter: validFilter, ...bbox, lang: "en" },
+      expect.objectContaining({ signal }),
+    );
   });
 });

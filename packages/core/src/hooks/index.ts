@@ -75,7 +75,11 @@ export {
 } from "./useBrandDetail";
 export { useBrandSuggest } from "./useBrandSuggest";
 export { useCapabilities } from "./useCapabilities";
-export { isAreaTooLarge, useCategorySearch } from "./useCategorySearch";
+export {
+  categorySearchQueryOptions,
+  isAreaTooLarge,
+  useCategorySearch,
+} from "./useCategorySearch";
 export { useChipTranslations } from "./useChipTranslations";
 export { useCountryFromCoordinates } from "./useCountryFromCoordinates";
 export { useCurrentWeather } from "./useCurrentWeather";
@@ -88,12 +92,17 @@ export {
 } from "./useDataSources";
 export { useDebounce, useDebouncedCallback } from "./useDebounce";
 export { useDeliveryProviderCatalog, useDeliveryProviders } from "./useDeliveryProviders";
-export { directionsQueryKey, useDirections } from "./useDirections";
+export {
+  type DirectionsQueryParams,
+  directionsQueryKey,
+  directionsRequestFor,
+  useDirections,
+} from "./useDirections";
 export { useElevation } from "./useElevation";
 export { evDirectionsQueryKey, useEvDirections } from "./useEvDirections";
 export { useExploreResults } from "./useExploreResults";
 export { useFilteredCategoryResults } from "./useFilteredCategoryResults";
-export { useFilterSearch } from "./useFilterSearch";
+export { filterSearchQueryOptions, useFilterSearch } from "./useFilterSearch";
 export { useFlightProviders } from "./useFlightProviders";
 export {
   GARAGE_QUERY_KEY,
