@@ -482,6 +482,20 @@ export function DirectionsPanelContent() {
     (mode === "driving" || mode === "motorcycle") && data
       ? (data.routes[activeRouteIndex] ?? data.routes[0])
       : undefined;
+  // Under the route cards of a plain driving or motorcycle trip, with or
+  // without stops; the EV, scheduled and ride branches never render it.
+  const stopSearch =
+    stopSearchRoute && data && (stopSearchRoute.geometry?.length ?? 0) >= 2 ? (
+      <>
+        <Divider />
+        <RouteStopSearch
+          route={stopSearchRoute}
+          provider={data.provider}
+          request={groundRequest}
+          units={units}
+        />
+      </>
+    ) : null;
 
   const routesForImpact = (scheduleRequest ? scheduledData?.routes : data?.routes) ?? [];
   const fastestRouteIndex = useMemo(() => {
@@ -1561,6 +1575,7 @@ export function DirectionsPanelContent() {
                   </Box>
                 </Box>
               </Box>
+              {stopSearch}
               <AttributionStrip
                 attributions={routingAttributions}
                 variant="panel-header"
@@ -1640,17 +1655,7 @@ export function DirectionsPanelContent() {
                   </Box>
                 ))}
               </Box>
-              {stopSearchRoute && (stopSearchRoute.geometry?.length ?? 0) >= 2 && (
-                <>
-                  <Divider />
-                  <RouteStopSearch
-                    route={stopSearchRoute}
-                    provider={data.provider}
-                    request={groundRequest}
-                    units={units}
-                  />
-                </>
-              )}
+              {stopSearch}
               <AttributionStrip
                 attributions={routingAttributions}
                 variant="panel-header"

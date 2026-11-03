@@ -358,10 +358,14 @@ export function RouteLayer() {
     if (!map) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
       if (getMapClickOwner(e)) return;
-      // A pin drawn over an alternative (an along-route result, a category
-      // marker) owns its tap; selecting the route beneath would replan away
-      // from what the user tapped.
-      const interactive = [...INTERACTIVE_LAYER_IDS].filter((id) => !!map.getLayer(id));
+      // A pin or label drawn over an alternative (an along-route result, a
+      // category marker) owns its tap; selecting the route beneath would replan
+      // away from what the user tapped. Area fills lie under the route and keep
+      // it selectable.
+      const interactive = [...INTERACTIVE_LAYER_IDS].filter((id) => {
+        const type = map.getLayer(id)?.type;
+        return type === "symbol" || type === "circle";
+      });
       if (
         interactive.length > 0 &&
         map.queryRenderedFeatures(e.point, { layers: interactive }).length > 0

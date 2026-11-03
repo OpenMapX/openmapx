@@ -197,6 +197,7 @@
     "rsPlanCount": "{count, plural, =0 {Nothing found along the route} one {# place along the route} other {# places along the route}}",
     "rsPlanCapped": "Only the first {distance} of the route were searched.",
     "rsPlanTruncated": "Busy areas show only a selection of places.",
+    "rsPlanFailed": "The route could not be searched.",
     "rsPlanIncomplete": "Part of the route could not be searched.",
     "rsPlanFromStart": "{distance} from start",
     "rsPlanShowMore": "Show more",

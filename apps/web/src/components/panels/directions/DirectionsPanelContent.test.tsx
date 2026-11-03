@@ -1443,6 +1443,33 @@ describe("stops along the route", () => {
     expect(routes.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("stays available after a stop was added, so a second stop can be found", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().insertWaypoint(1, [12.4, 50.3], "Aral");
+    });
+    useDirectionsMock.mockReturnValue({
+      ...routesResult("driving"),
+      data: {
+        provider: "valhalla",
+        routes: [
+          {
+            mode: "driving",
+            duration: 600,
+            distance: 5000,
+            geometry,
+            legs: [
+              { duration: 300, distance: 2500 },
+              { duration: 300, distance: 2500 },
+            ],
+          },
+        ],
+      },
+    });
+    renderPanel();
+    expect(screen.getByTestId("route-stop-search")).toHaveAttribute("data-mode", "driving");
+  });
+
   it.each(["walking", "cycling", "transit"] as const)("is not offered for %s", (mode) => {
     seedOriginDestination();
     act(() => useDirectionsStore.getState().setMode(mode));

@@ -15,6 +15,7 @@ import {
   prepareRouteMatcher,
   projectRoutePois,
   ROUTE_STOP_CACHE_MS,
+  type Route,
   type RouteSearchChunks,
   type RouteStopCandidate,
   type RouteStopDetour,
@@ -22,12 +23,13 @@ import {
   routeStopAccess,
 } from "@openmapx/core";
 import {
+  hashKey,
   type QueryObserverResult,
   useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RouteSearchQuery } from "./useRouteSearch";
 
 /** Area requests a planning search keeps in flight at once. */
@@ -62,6 +64,8 @@ function combineAreas(results: AreaResult[]) {
   return {
     data: results.map((r) => r.data),
     statuses: results.map((r) => r.status),
+    // Observed so a refetch that starts or ends re-renders and re-runs the gate.
+    fetchStatuses: results.map((r) => r.fetchStatus),
     refetches: results.map((r) => r.refetch),
   };
 }
@@ -102,19 +106,58 @@ export function usePlannedRouteSearch(
   );
   // An area is settled once it has an answer or a final error and nothing is
   // fetching for it; until then it holds one of the in-flight slots. Read from
-  // the cache, so a render after any area settles already sees it.
+  // the cache, so a render after any area settles already sees it. Planned
+  // areas never refetch on their own (focus, reconnect, remount): that would
+  // start every stale area at once.
   const client = useQueryClient();
+  const isFetching = (key: readonly unknown[]) =>
+    client.getQueryState(key)?.fetchStatus === "fetching";
   let unsettled = 0;
   const queries = base.map((options) => {
-    const enabled = active && unsettled < PLANNED_SEARCH_CONCURRENCY;
     const state = client.getQueryState(options.queryKey);
-    const settled =
-      (state?.status === "success" || state?.status === "error") &&
-      state.fetchStatus !== "fetching";
+    const answered = state?.status === "success" || state?.status === "error";
+    const settled = answered && !isFetching(options.queryKey);
+    // An answered area stays enabled: toggling it back on would refetch it
+    // outside the gate (an errored area has no data and is always stale).
+    const enabled = active && (answered || unsettled < PLANNED_SEARCH_CONCURRENCY);
     if (!settled) unsettled++;
-    return { ...options, enabled, staleTime: PLANNED_SEARCH_STALE_MS };
+    return {
+      ...options,
+      enabled,
+      staleTime: PLANNED_SEARCH_STALE_MS,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retryOnMount: false,
+    };
   });
   const areas = useQueries({ queries, combine: combineAreas });
+
+  // Retry re-requests failed areas through the same two slots. The queue is a
+  // ref so an area leaves it the moment it starts: a render landing between a
+  // start and a state update must never start it again.
+  const retryQueue = useRef<string[]>([]);
+  const [retryTick, setRetryTick] = useState(0);
+  const hashes = queries.map((options) => hashKey(options.queryKey));
+  const hashSignature = hashes.join("\n");
+  const queriesRef = useRef(queries);
+  queriesRef.current = queries;
+  const refetchesRef = useRef(areas.refetches);
+  refetchesRef.current = areas.refetches;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run whenever a fetch starts or ends.
+  useEffect(() => {
+    if (retryQueue.current.length === 0) return;
+    const current = queriesRef.current;
+    const indexOf = new Map(current.map((options, index) => [hashKey(options.queryKey), index]));
+    const pending = retryQueue.current.filter((hash) => indexOf.has(hash));
+    const inFlight = current.filter((options) => isFetching(options.queryKey)).length;
+    const start = pending.slice(0, Math.max(0, PLANNED_SEARCH_CONCURRENCY - inFlight));
+    retryQueue.current = pending.slice(start.length);
+    for (const hash of start) {
+      const index = indexOf.get(hash);
+      if (index !== undefined) void refetchesRef.current[index]?.();
+    }
+  }, [retryTick, areas.fetchStatuses, hashSignature]);
 
   const data = useElementwiseStable(areas.data);
   const places = useMemo(() => {
@@ -141,17 +184,18 @@ export function usePlannedRouteSearch(
     ? areas.statuses.filter((status) => status === "success" || status === "error").length
     : 0;
   const failedChunks = active ? areas.statuses.filter((status) => status === "error").length : 0;
-  const refetches = areas.refetches;
   const statuses = areas.statuses;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hashes change only with hashSignature.
   const retry = useCallback(() => {
-    statuses.forEach((status, index) => {
-      if (status === "error") void refetches[index]();
-    });
-  }, [statuses, refetches]);
+    retryQueue.current = hashes.filter((_, index) => statuses[index] === "error");
+    setRetryTick((tick) => tick + 1);
+  }, [statuses, hashSignature]);
+  const fetching = areas.fetchStatuses.some((status) => status === "fetching");
 
   return {
     results,
-    isSearching: active && settledChunks < boxes.length,
+    isSearching:
+      active && (settledChunks < boxes.length || fetching || retryQueue.current.length > 0),
     settledChunks,
     totalChunks: active ? boxes.length : 0,
     failedChunks,
@@ -171,8 +215,8 @@ function geometryKey(geometry: LngLat[]): string {
 }
 
 export interface PlannedStopDetourInput {
-  /** The selected route the candidate was found along. */
-  geometry: LngLat[];
+  /** The displayed route the candidate was found along; stops are compared with it. */
+  route: Route;
   /** The planned itinerary: origin, user stops, destination. */
   waypoints: LngLat[];
   candidate: RouteStopCandidate | null;
@@ -183,18 +227,21 @@ export interface PlannedStopDetourInput {
 }
 
 /**
- * Road detour of one selected stop: the planned itinerary with and without it,
- * both requested exactly as the displayed route was. Only the selected
- * candidate is compared, so browsing results costs no routing requests.
+ * Road detour of one selected stop: the planned itinerary through it, requested
+ * exactly as the displayed route was, compared with that displayed route (the
+ * selected alternative, not the provider's fastest). Only the selected
+ * candidate is compared, so browsing results costs no routing requests. When
+ * the displayed route's provider is unknown, a baseline is requested instead.
  */
 export function usePlannedStopDetour({
-  geometry,
+  route,
   waypoints,
   candidate,
   provider,
   request,
 }: PlannedStopDetourInput): { detour?: RouteStopDetour; isPending: boolean } {
   const access = candidate ? routeStopAccess(candidate) : null;
+  const geometry = route.geometry;
   const query = useQuery({
     queryKey: [
       "planned-route-stop-detour",
@@ -202,6 +249,8 @@ export function usePlannedStopDetour({
       request,
       waypoints,
       geometryKey(geometry),
+      route.duration,
+      route.distance,
       candidate?.id ?? null,
       access?.coordinates ?? null,
     ],
@@ -213,6 +262,7 @@ export function usePlannedStopDetour({
         waypoints,
         candidates: [candidate],
         provider,
+        ...(provider ? { baseline: { route, provider } } : {}),
         signal,
         requestRoute: ({ waypoints: itinerary, provider: pinned, signal: requestSignal }) =>
           fetchDirections(

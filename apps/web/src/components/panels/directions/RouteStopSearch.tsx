@@ -145,7 +145,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
 
   const selectedBase = search.results.find((r) => r.place.id === selectedId) ?? null;
   const { detour, isPending: detourPending } = usePlannedStopDetour({
-    geometry: route.geometry,
+    route,
     waypoints: waypointCoords,
     candidate: selectedBase?.place ?? null,
     provider,
@@ -230,6 +230,9 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
   };
 
   const atLimit = waypoints.length >= MAX_DIRECTIONS_WAYPOINTS;
+  // Every searched area failed: there is no answer, not an empty one.
+  const nothingAnswered =
+    !search.isSearching && search.totalChunks > 0 && search.failedChunks === search.totalChunks;
   const handleAdd = () => {
     if (!selected) return;
     const target = selected.place.routingEntrance ?? selected.place.coordinates;
@@ -393,11 +396,16 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
                 {t("rsPlanSearching")}
               </Typography>
               <LinearProgress
+                aria-label={t("rsPlanSearching")}
                 variant="determinate"
                 value={search.totalChunks ? (100 * search.settledChunks) / search.totalChunks : 0}
                 sx={{ mt: 0.75, borderRadius: 1 }}
               />
             </>
+          ) : nothingAnswered ? (
+            <Typography variant="body2" color="error">
+              {t("rsPlanFailed")}
+            </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary">
               {t("rsPlanCount", { count: search.results.length })}
@@ -417,9 +425,11 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
           )}
           {(search.failedChunks > 0 || search.incomplete) && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Typography variant="caption" color="error">
-                {t("rsPlanIncomplete")}
-              </Typography>
+              {!nothingAnswered && (
+                <Typography variant="caption" color="error">
+                  {t("rsPlanIncomplete")}
+                </Typography>
+              )}
               {search.failedChunks > 0 && (
                 <Button size="small" onClick={search.retry}>
                   {tc("retry")}
@@ -436,7 +446,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
             {shown.map((poi) => {
               const isSelected = poi.place.id === selectedId;
               const row = isSelected && selected ? selected : poi;
-              const copy = routeStopCopy(row);
+              const copy = routeStopCopy(row, true);
               return (
                 <Box key={poi.place.id} ref={isSelected ? selectedRowRef : undefined}>
                   <ListItemButton

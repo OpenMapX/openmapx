@@ -204,19 +204,22 @@ distance from the start, as a list and as pins on the map. Routes longer than
 1,000 km are searched for their first 1,000 km, and the panel says so. Like the
 navigation search, it keeps places within 1,200 m of the route. The panel says
 when part of the route could not be searched (with **Retry**), or when a busy
-area returned only a selection of its places. Charging stations come from map
-data; a station mapped without a name is listed under its brand or operator.
+area returned only a selection of its places. Fuel and charging stations come
+from map data. A station mapped without a name is listed under its brand or
+operator, here and in other category results.
 
 The straight-line estimate shown for each result does not prove road access.
-Selecting a result compares the planned trip with and without that stop by road,
-with the same routing provider and options as the displayed route. It shows the
-extra time and distance, or that the stop is unreachable. Only the selected
-result is compared.
+Selecting a result plans the trip through that stop by road, with the same
+routing provider and options as the displayed route. The card shows the extra
+time and distance compared with the route you selected, which may be an
+alternative, or that the stop is unreachable. Only the selected result is
+compared.
 
 **Add stop** inserts it as an ordinary waypoint, before the next of your stops
 beyond its position on the route, so your stops keep their order. The routes are
 then recalculated as for any waypoint change; with an intermediate stop the
-engine returns no alternatives. A route takes at most ten waypoints in total,
+engine returns no alternatives. The search stays available for the next stop.
+A route takes at most ten waypoints in total,
 and the panel says when that limit is reached. The search does not check
 opening hours or prices.
 

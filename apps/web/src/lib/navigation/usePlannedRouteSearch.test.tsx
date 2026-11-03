@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { BoundingBox, CategoryPlace, LngLat, OverpassFilter } from "@openmapx/core";
+import type { BoundingBox, CategoryPlace, LngLat, OverpassFilter, Route } from "@openmapx/core";
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHookWithQuery } from "@/test";
@@ -29,7 +29,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
         (kind === "filter-search" ? search.filterCalls : search.calls).push(key);
         search.pending.push({ key, bbox, resolve, reject });
       }),
-    gcTime: 0,
+    gcTime: 300_000,
     retry: false,
   });
   return {
@@ -42,7 +42,11 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   };
 });
 
-import { usePlannedRouteSearch, usePlannedStopDetour } from "./usePlannedRouteSearch";
+import {
+  PLANNED_SEARCH_CONCURRENCY,
+  usePlannedRouteSearch,
+  usePlannedStopDetour,
+} from "./usePlannedRouteSearch";
 
 /** Due east along the equator; 1 km ≈ 1/111.32°. */
 const KM = 1 / 111.32;
@@ -139,6 +143,52 @@ describe("usePlannedRouteSearch", () => {
     expect(search.calls[3]).toBe(search.calls[0]);
   });
 
+  it("does not refetch every cached area at once when the search is shown again", async () => {
+    const geometry = eastLine(60);
+    const first = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "hotels" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    await settle(0, []);
+    await settle(1, []);
+    await waitFor(() => expect(search.calls).toHaveLength(3));
+    await settle(2, []);
+    first.unmount();
+    await first.queryClient.invalidateQueries();
+    const before = search.calls.length;
+    const again = renderHookWithQuery(
+      () => usePlannedRouteSearch(geometry, { category: "hotels" }, "en"),
+      { queryClient: first.queryClient },
+    );
+    await act(async () => {});
+    expect(search.calls.length - before).toBeLessThanOrEqual(PLANNED_SEARCH_CONCURRENCY);
+    expect(again.result.current.isSearching).toBe(false);
+  });
+
+  it("retries failed areas two at a time", async () => {
+    const geometry = eastLine(60);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "parking" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    await act(async () => search.pending[0].reject(new Error("down")));
+    await act(async () => search.pending[1].reject(new Error("down")));
+    await waitFor(() => expect(search.calls).toHaveLength(3));
+    await act(async () => search.pending[2].reject(new Error("down")));
+    await waitFor(() => expect(result.current.failedChunks).toBe(3));
+    act(() => result.current.retry());
+    await waitFor(() => expect(search.calls).toHaveLength(5));
+    await act(async () => {});
+    expect(search.calls).toHaveLength(5);
+    await settle(3, []);
+    await waitFor(() => expect(search.calls).toHaveLength(6));
+    await settle(4, []);
+    await settle(5, []);
+    await waitFor(() => expect(result.current.failedChunks).toBe(0));
+    await waitFor(() => expect(result.current.isSearching).toBe(false), { timeout: 3000 });
+    expect(search.calls).toHaveLength(6);
+  });
+
   it("marks a partial area answer as incomplete", async () => {
     const geometry = eastLine(20);
     const { result } = renderHookWithQuery(() =>
@@ -172,16 +222,13 @@ describe("usePlannedStopDetour", () => {
     provider: "valhalla",
   });
 
-  it("compares the itinerary with and without the stop using the displayed route's request", async () => {
-    directions.mockImplementation(async (request: unknown) =>
-      routeOf(
-        (request as { waypoints: LngLat[] }).waypoints.length === waypoints.length ? 1000 : 1180,
-      ),
-    );
+  it("compares the stop with the displayed route, requested like it", async () => {
+    directions.mockImplementation(async () => routeOf(1180));
     const candidate = { id: "aral", coordinates: [15 * KM, 0.0005] as LngLat };
+    const displayed = { ...routeOf(1000).routes[0], mode: "motorcycle" } as unknown as Route;
     const { result } = renderHookWithQuery(() =>
       usePlannedStopDetour({
-        geometry,
+        route: displayed,
         waypoints,
         candidate,
         provider: "valhalla",
@@ -192,24 +239,38 @@ describe("usePlannedStopDetour", () => {
     expect(result.current.detour).toMatchObject({ kind: "network", seconds: 180 });
     const requests = directions.mock.calls.map(([request]) => request as { waypoints: LngLat[] });
     expect(requests.map((r) => r.waypoints)).toEqual([
-      waypoints,
       [waypoints[0], waypoints[1], candidate.coordinates, waypoints[2]],
     ]);
-    for (const request of requests) {
-      expect(request).toMatchObject({
-        mode: "motorcycle",
-        avoidHighways: false,
-        avoidTolls: false,
-        lang: "de",
-        provider: "valhalla",
-      });
-    }
+    expect(requests[0]).toMatchObject({
+      mode: "motorcycle",
+      avoidHighways: false,
+      avoidTolls: false,
+      lang: "de",
+      provider: "valhalla",
+    });
+  });
+
+  it("requests a baseline when the displayed route's provider is unknown", async () => {
+    directions.mockImplementation(async (request: unknown) =>
+      routeOf((request as { waypoints: LngLat[] }).waypoints.length === 3 ? 1000 : 1180),
+    );
+    const { result } = renderHookWithQuery(() =>
+      usePlannedStopDetour({
+        route: routeOf(900).routes[0] as unknown as Route,
+        waypoints,
+        candidate: { id: "aral", coordinates: [15 * KM, 0.0005] },
+        request: { mode: "driving", lang: "en" },
+      }),
+    );
+    await waitFor(() => expect(result.current.detour?.kind).toBe("network"));
+    expect(directions).toHaveBeenCalledTimes(2);
+    expect(result.current.detour).toMatchObject({ seconds: 180 });
   });
 
   it("does not request anything without a selected stop", () => {
     renderHookWithQuery(() =>
       usePlannedStopDetour({
-        geometry,
+        route: routeOf(900).routes[0] as unknown as Route,
         waypoints,
         candidate: null,
         request: { mode: "driving", lang: "en" },

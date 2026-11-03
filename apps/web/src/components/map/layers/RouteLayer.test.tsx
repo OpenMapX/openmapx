@@ -332,6 +332,27 @@ describe("alternative route taps", () => {
     view.unmount();
   });
 
+  it("still selects the alternative inside an interactive area fill", async () => {
+    activateRoute.mockClear();
+    const view = render(<RouteLayer />);
+    await act(async () => {});
+    fake.map.addSource("areas", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    fake.map.addLayer({ id: "parking-context-fill", type: "fill", source: "areas" });
+    INTERACTIVE_LAYER_IDS.add("parking-context-fill");
+    fake.setRenderedFeatures("parking-context-fill", [
+      { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.01, 50] } },
+    ] as unknown as MapGeoJSONFeature[]);
+    tapAlternative();
+    expect(activateRoute).toHaveBeenCalledWith(1);
+    INTERACTIVE_LAYER_IDS.delete("parking-context-fill");
+    fake.setRenderedFeatures("parking-context-fill", []);
+    fake.map.removeLayer("parking-context-fill");
+    view.unmount();
+  });
+
   it("leaves the route alone when an interactive pin above it took the tap", async () => {
     activateRoute.mockClear();
     const view = render(<RouteLayer />);

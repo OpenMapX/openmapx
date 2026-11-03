@@ -108,6 +108,12 @@ export interface EvaluateRouteStopsInput {
   signal: AbortSignal;
   /** The caller closes over the same mode, language and avoid/access options. */
   requestRoute: (request: RouteStopRequest) => Promise<DirectionsResult>;
+  /**
+   * The route the user already has and the provider that answered it. Stops
+   * are then compared with that route (a selected alternative, not the
+   * provider's fastest) and no baseline request is made.
+   */
+  baseline?: { route: Route; provider: string };
 }
 
 function checkAbort(signal: AbortSignal): void {
@@ -149,21 +155,34 @@ export async function evaluateRouteStopDetours(
   let baseline: Route;
   let baselineFields: FieldContributors;
   let provider: string;
-  try {
-    const response = await requestRoute({ waypoints, provider: input.provider, signal });
-    checkAbort(signal);
-    const selected = selectedRoute(response);
-    if (!selected || !response.provider || (input.provider && response.provider !== input.provider))
-      return results;
-    baseline = selected;
+  if (input.baseline) {
+    baseline = input.baseline.route;
+    provider = input.baseline.provider;
     baselineFields = {
-      duration: contributorsForField(selected, "duration"),
-      distance: contributorsForField(selected, "distance"),
+      duration: contributorsForField(baseline, "duration"),
+      distance: contributorsForField(baseline, "distance"),
     };
-    provider = response.provider;
-  } catch {
-    checkAbort(signal);
-    return results;
+  } else {
+    try {
+      const response = await requestRoute({ waypoints, provider: input.provider, signal });
+      checkAbort(signal);
+      const selected = selectedRoute(response);
+      if (
+        !selected ||
+        !response.provider ||
+        (input.provider && response.provider !== input.provider)
+      )
+        return results;
+      baseline = selected;
+      baselineFields = {
+        duration: contributorsForField(selected, "duration"),
+        distance: contributorsForField(selected, "distance"),
+      };
+      provider = response.provider;
+    } catch {
+      checkAbort(signal);
+      return results;
+    }
   }
   let next = 0;
   const worker = async () => {

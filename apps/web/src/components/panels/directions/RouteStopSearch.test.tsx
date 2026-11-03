@@ -302,6 +302,26 @@ describe("RouteStopSearch", () => {
     expect(fixture.retry).toHaveBeenCalledTimes(1);
   });
 
+  it("does not call a route with no answer an empty one", () => {
+    fixture.search = { ...baseSearch(), results: [], failedChunks: 2, settledChunks: 2 };
+    render(view());
+    fireEvent.click(chip("Parking"));
+    expect(screen.getByText("The route could not be searched.")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing found along the route")).toBeNull();
+    expect(screen.queryByText("Part of the route could not be searched.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("names its progress bar and keeps result rows to one line of facts", () => {
+    fixture.search = { ...baseSearch(), isSearching: true, settledChunks: 1, totalChunks: 2 };
+    render(view());
+    fireEvent.click(chip("Fuel"));
+    expect(
+      screen.getByRole("progressbar", { name: "Searching along the route…" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("12.0 km from start · ~+1 min")).toBeInTheDocument();
+  });
+
   it("pages long result lists", () => {
     fixture.search = {
       ...baseSearch(),
