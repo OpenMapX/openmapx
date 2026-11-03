@@ -962,6 +962,37 @@ class TrafficWatchdogTest(unittest.TestCase):
             for sig, handler in handlers.items():
                 signal.signal(sig, handler)
 
+    def test_proxy_proves_a_trace_of_a_route_shape_like_the_route(self):
+        with tempfile.TemporaryDirectory() as root:
+            fixture = HttpFixture(root)
+            try:
+                evidence = fixture.write_evidence()
+                request_id = str(uuid.uuid4())
+                request = {
+                    "openmapx_request_id": request_id,
+                    "encoded_polyline": "_p~iF~ps|U",
+                    "shape_match": "edge_walk",
+                    "costing": "motorcycle",
+                    "date_time": {"type": 0},
+                    "costing_options": {"motorcycle": {"speed_types": ["current"]}},
+                }
+                status, _, body = fixture.request(
+                    "POST",
+                    "/trace_attributes",
+                    json.dumps(request),
+                    {"content-type": "application/json"},
+                )
+                self.assertEqual(status, 200)
+                forwarded = json.loads(fixture.backend.requests[0][3])
+                self.assertNotIn("openmapx_request_id", forwarded)
+                proof = json.loads(body)["openmapx_traffic_proof"]
+                self.assertEqual(proof["endpoint"], "trace_attributes")
+                self.assertEqual(proof["costing"], "motorcycle")
+                self.assertEqual(proof["requestId"], request_id)
+                self.assertEqual(proof["writeId"], evidence["writeId"])
+            finally:
+                fixture.close()
+
     def test_only_exact_route_paths_can_receive_proof(self):
         body = json.dumps(
             {
@@ -971,7 +1002,7 @@ class TrafficWatchdogTest(unittest.TestCase):
                 "costing_options": {"auto": {"speed_types": ["current"]}},
             }
         ).encode()
-        for path in ("//route", "///route", "/route/"):
+        for path in ("//route", "///route", "/route/", "/trace_attributes/", "/trace_route"):
             _, eligibility = watchdog.eligible_request(path, body)
             self.assertIsNone(eligibility, path)
 

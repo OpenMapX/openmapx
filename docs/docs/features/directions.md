@@ -105,10 +105,14 @@ unavailable** appears in the details and screen-reader description. A positive
 delay estimate does not establish complete fresh congestion coverage for every
 road.
 
-The interface supports a green duration when fresh, complete evidence confirms
-that current congestion data was used and delay is below the display threshold.
-The current built-in providers do not emit that coverage evidence, so a small or
-zero comparison alone does not produce green.
+A green duration means fresh, complete evidence confirms that current congestion
+data was used for every road of the route and the delay is below the display
+threshold. A self-hosted Valhalla engine provides that evidence for depart-now
+car and motorcycle routes: it walks each route's own path against the same live
+traffic write the route came from and finds a current speed on every road. The
+evidence lasts at most two minutes. A route with any road lacking live speed
+data, a hosted engine, another provider, or a planned departure keeps the normal
+color, so a small or zero comparison alone does not produce green.
 
 Road-update verification is separate from estimated delay. It applies only while
 matching engine and server evidence remains current. Map overlay colors also do

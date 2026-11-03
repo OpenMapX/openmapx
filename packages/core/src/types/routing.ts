@@ -159,8 +159,11 @@ export interface Route extends ContributingRecord {
    * Provider evidence that fresh congestion speeds cover this exact route and
    * were used in its duration. A comparison duration or road-closure proof is
    * insufficient. Only complete coverage permits a green, low-delay ETA.
-   * Leases must be at most two minutes from evaluatedAt. Current providers do
-   * not yet emit this evidence; absent/partial/expired evidence means unknown.
+   * Leases must be at most two minutes from evaluatedAt. The self-hosted
+   * Valhalla provider emits it for depart-now car and motorcycle routes when
+   * an exact trace of each leg, proven against the same live traffic write as
+   * the route, finds a current speed on every edge; absent/partial/expired
+   * evidence means unknown.
    */
   trafficCoverage?: {
     complete: boolean;
