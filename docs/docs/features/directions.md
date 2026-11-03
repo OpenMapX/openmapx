@@ -283,6 +283,17 @@ layer choice is respected and restored when the trip ends. Incidents ahead can
 produce approach alerts, including confirmation/negation prompts for compatible
 [crowd reports](./crowd-reports.md).
 
+Approach alerts also cover stop signs, railway level crossings, speed bumps and,
+when enabled where they are legal, speed cameras from OpenStreetMap. An alert is
+shown only when the route drives along the road that carries it, in a direction
+it applies to: a stop sign on a side street, or a speed bump on a parallel street
+or on a road passing under a bridge, is not announced. Stop signs follow their
+mapped `direction` or `stop:direction`. A stop sign mapped on the junction itself
+applies to the junction's minor roads unless it is tagged `stop=all`. An
+undirected one applies toward the nearest junction. Speed bumps are height
+changes (humps, tables, cushions, rumble strips); chicanes and narrowings are not
+announced. These alerts need a connection.
+
 Navigation requires usable location fixes. Browser wake locks, speech, background
 behavior, and connectivity depend on the device. Prepare
 [offline coverage](./offline-maps.md) before losing connectivity; offline

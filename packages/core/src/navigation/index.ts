@@ -182,6 +182,7 @@ export {
   shouldRerouteForClosure,
   updateOffRouteScore,
 } from "./reroute";
+export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
 export {
   appendCountrySpans,
   countryAtMeters,

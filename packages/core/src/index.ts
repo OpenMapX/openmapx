@@ -50,6 +50,7 @@ export * from "./hooks";
 export * from "./impact";
 export {
   type ActiveAlert,
+  type AlongRange,
   type AlongRouteOptions,
   type AlongRoutePoi,
   type ApproachCamera,
@@ -140,6 +141,7 @@ export {
   progressBucketStartMeters,
   projectEventsToRoute,
   projectFlowToRoute,
+  projectRoadAlertsOntoRoute,
   projectRoutePath,
   projectRoutePois,
   pruneRerouteTimes,
