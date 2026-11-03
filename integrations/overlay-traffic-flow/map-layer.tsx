@@ -24,7 +24,7 @@ import { useRenderedMapAttributions } from "@/integration-api/overlay/useRendere
 import { createVectorTileCoverageContributorResolver } from "@/integration-api/overlay/vectorTileCoverageContributors";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficFlowStore } from "./store";
-import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
+import { TRAFFIC_FLOW_OPACITY_EXPRESSION, TRAFFIC_FLOW_WITH_DATA_FILTER } from "./visual-style";
 
 const SRC = "omx-traffic-flow-src";
 const CASING = "omx-traffic-flow-casing";
@@ -42,20 +42,18 @@ function catalogServesFlow(catalog: unknown): boolean {
 }
 
 /**
- * Relative-speed (`speed_ratio` = current ÷ free-flow) → TomTom-style color
- * bands. A segment with no measured ratio (`speed_ratio` null — a declared-LoS
- * segment carrying only `los`, or a base segment with no `segment_speed` row)
- * is coloured by its `los` instead of defaulting to green: queuing → red,
- * stationary/blocked → dark red, heavy → orange, free_flow/unknown → green (so
- * a base segment still reads green, but a declared jam reads red).
+ * Relative-speed (`speed_ratio` = current ÷ free-flow) → colour bands. A
+ * segment with no measured ratio but a declared `los` is coloured by it:
+ * queuing → red, stationary/blocked → dark red, heavy → orange, free_flow →
+ * green. Segments with neither are filtered out of both layers, so a road
+ * without data is never drawn as free-flowing.
  */
 const COLOR_EXPR = flowColorExpression("speed_ratio", "los");
 
 /**
  * Confidence → opacity: measured brightest, typical faintest. The floor (0.6 for
- * `typical`/no-live-data segments) is kept high enough that covered roads still
- * read as faint colour rather than letting the casing show through as black —
- * most segments are `typical` where live flow data is sparse.
+ * `typical` segments) is kept high enough that covered roads still read as
+ * faint colour rather than letting the casing show through as black.
  */
 const COLOR_WIDTH_EXPR: maplibregl.ExpressionSpecification = [
   "interpolate",
@@ -212,6 +210,7 @@ export function TrafficFlowLayer() {
           source: SRC,
           "source-layer": SOURCE_LAYER,
           minzoom: LAYER_MIN_ZOOM,
+          filter: TRAFFIC_FLOW_WITH_DATA_FILTER,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             // Light, semi-transparent slate — a subtle outline for contrast and
@@ -244,6 +243,7 @@ export function TrafficFlowLayer() {
           source: SRC,
           "source-layer": SOURCE_LAYER,
           minzoom: LAYER_MIN_ZOOM,
+          filter: TRAFFIC_FLOW_WITH_DATA_FILTER,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": COLOR_EXPR,

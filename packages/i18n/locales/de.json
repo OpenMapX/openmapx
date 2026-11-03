@@ -807,6 +807,7 @@
       "typical": "Typisch",
       "unknown": "Unbekannt"
     },
+    "dataOnly": "Nur Straßen mit Verkehrsdaten sind eingefärbt.",
     "los": {
       "free_flow": "Freie Fahrt",
       "heavy": "Starker Verkehr",

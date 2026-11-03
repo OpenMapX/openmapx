@@ -25,3 +25,15 @@ export const TRAFFIC_FLOW_OPACITY_EXPRESSION: ExpressionSpecification = [
   TRAFFIC_FLOW_CONFIDENCE_OPACITY.typical,
   TRAFFIC_FLOW_CONFIDENCE_OPACITY.fallback,
 ];
+
+/**
+ * Only segments that carry traffic data are drawn. The tiles hold every road
+ * segment; one with no speed reading and no declared level of service has no
+ * traffic data, and drawing it would paint unknown roads as free-flowing. A
+ * declared level (a DATEX jam, a declared free flow) still counts as data.
+ */
+export const TRAFFIC_FLOW_WITH_DATA_FILTER: ExpressionSpecification = [
+  "any",
+  ["has", "speed_ratio"],
+  ["all", ["has", "los"], ["!=", ["get", "los"], "unknown"]],
+];
