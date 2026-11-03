@@ -5,6 +5,7 @@ import type {
   DataSourceMeta,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
+import { currentlyOpen } from "@openmapx/core/server";
 import {
   type DataSourceSearchResult,
   type IntegrationContext,
@@ -16,8 +17,9 @@ import {
   withinZoom,
   wrapSiteResult as wrap,
 } from "@openmapx/integration-framework";
+import type { ParkingStatus } from "@openmapx/mobility-core/parking";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import { feeOf, mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
+import { feeOf, isClosed, mapParkingSiteToDetail, mapParkingSiteToResult } from "./mapper.js";
 import { createParkingSiteOrchestrator } from "./orchestrator.js";
 
 const META: DataSourceMeta = {
@@ -83,6 +85,7 @@ const PARKING_FILTERS: DataSourceFilterDef[] = [
       { id: "park-and-ride", label: "Park & Ride" },
     ],
   },
+  { id: "open_now", label: "Open now", type: "toggle" },
 ];
 
 /** Seconds a search answer is cached: occupancy moves by the minute. */
@@ -134,6 +137,45 @@ function knownFull(site: ParkingSite): boolean {
   return !site.stale && (site.available === 0 || site.status === "full");
 }
 
+/** Live statuses that say a site is in service now, whatever its listed hours. */
+const IN_SERVICE: ReadonlySet<ParkingStatus> = new Set([
+  "open",
+  "spaces_available",
+  "almost_full",
+  "full",
+]);
+
+/** One search's verdicts, by hours and place: many sites share a schedule. */
+type OpenVerdicts = Map<string, Promise<boolean | undefined>>;
+
+/**
+ * Whether a site takes vehicles now. A closed site does not; a fresh live
+ * status of being in service outweighs the listed hours; otherwise the hours
+ * decide, and a site without hours, or with hours that say nothing now, may.
+ */
+async function openNow(site: ParkingSite, verdicts: OpenVerdicts): Promise<boolean> {
+  if (isClosed(site)) return false;
+  if (!site.stale && site.status && IN_SERVICE.has(site.status)) return true;
+  const hours = site.openingHours;
+  if (!hours) return true;
+  const [lon, lat] = site.coordinates;
+  // A tenth of a degree keeps sites of one schedule together without merging time zones.
+  const key = `${hours}|${site.country ?? ""}|${lat.toFixed(1)}|${lon.toFixed(1)}`;
+  let verdict = verdicts.get(key);
+  if (!verdict) {
+    verdict = currentlyOpen(hours, { lat, lon, countryCode: site.country });
+    verdicts.set(key, verdict);
+  }
+  return (await verdict) !== false;
+}
+
+/** The sites open now, in their order. */
+async function openSites(sites: readonly ParkingSite[]): Promise<ParkingSite[]> {
+  const verdicts: OpenVerdicts = new Map();
+  const open = await Promise.all(sites.map((site) => openNow(site, verdicts)));
+  return sites.filter((_, i) => open[i]);
+}
+
 /** Whether a site passes the filters; within one filter any selected option matches, features all must. */
 function matches(site: ParkingSite, filters: Record<string, unknown> | undefined): boolean {
   const types = selected(filters, "parkingType");
@@ -178,7 +220,9 @@ export function createParkingDataSource(ctx: IntegrationContext): MobilityDataSo
       // providers fetch a region's sites, so it is answered empty.
       if (!withinZoom(bbox, META.minZoom)) return wrap([], []);
       const found = await sites.search(toBBox(bbox));
-      const kept = found.sites.filter((s) => matches(s, filters));
+      const matching = found.sites.filter((s) => matches(s, filters));
+      // Judged when the answer is made, so a cached answer is at most its TTL behind the hours.
+      const kept = filters?.open_now === true ? await openSites(matching) : matching;
       const result = wrap(kept.map(mapParkingSiteToResult), siteAttributions(kept));
       return found.partial ? { ...result, partial: found.partial } : result;
     },

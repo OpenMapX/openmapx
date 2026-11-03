@@ -16,9 +16,19 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useLayoutEffect, useRef } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { type NearbyParkingPlace, PARKING_SOURCE_ID } from "./nearbyParking";
 import { getParkingCoords } from "./parkingCoords";
+
+/** Scrolls a car park's card into view; false when there is no such card. */
+function revealCard(scroller: HTMLElement, id: string | null): boolean {
+  const card = id
+    ? scroller.querySelector<HTMLElement>(`[data-parking-id="${CSS.escape(id)}"]`)
+    : null;
+  card?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  return Boolean(card);
+}
 
 interface Props {
   places: NearbyParkingPlace[];
@@ -42,6 +52,25 @@ export function NearbyParkingCarousel({
   const t = useTranslations("navigation");
   const units = useSettingsStore((s) => s.units);
   const resolveToken = useDataSourceI18nResolver(PARKING_SOURCE_ID);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const order = places.map((place) => place.id).join("\n");
+  const selectedId = selectedPlace?.id ?? null;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  // Measuring the drive and walk reorders the cards. Scroll snapping would keep
+  // the previously first card in view and hide the new best one to its left, so
+  // a new order starts from the first card, unless one is selected.
+  useLayoutEffect(() => {
+    void order;
+    const scroller = scrollerRef.current;
+    if (scroller && !revealCard(scroller, selectedIdRef.current)) scroller.scrollLeft = 0;
+  }, [order]);
+
+  // A car park chosen on the map brings its card into view.
+  useLayoutEffect(() => {
+    if (scrollerRef.current) revealCard(scrollerRef.current, selectedId);
+  }, [selectedId]);
 
   if (isLoading) {
     return (
@@ -64,6 +93,7 @@ export function NearbyParkingCarousel({
         {t("nearbyParking")} · {t("parkingOptionsCount", { count: places.length })}
       </Typography>
       <Box
+        ref={scrollerRef}
         sx={{
           display: "flex",
           gap: 1.5,
@@ -77,18 +107,16 @@ export function NearbyParkingCarousel({
       >
         {places.map((place) => {
           const isSelected = selectedPlace?.id === place.id;
-          const feeTag = place.osmTags?.fee;
-          const isFree = feeTag === "no";
-          const isPaid = feeTag === "yes";
           const summary = place.summary ? resolveToken(place.summary) : "";
 
           const coords = getParkingCoords(place);
-          const detourMeters =
+          const straightMeters =
             destinationCoords && coords ? haversineDistance(coords, destinationCoords) : null;
 
           return (
             <Paper
               key={place.id}
+              data-parking-id={place.id}
               variant="outlined"
               component="article"
               sx={{
@@ -119,7 +147,7 @@ export function NearbyParkingCarousel({
                 </Typography>
               </Button>
               <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
-                {isFree && (
+                {place.fee === "free" && (
                   <Chip
                     size="small"
                     label={t("parkingFeeFree")}
@@ -127,11 +155,19 @@ export function NearbyParkingCarousel({
                     variant="outlined"
                   />
                 )}
-                {isPaid && (
+                {place.fee === "paid" && (
                   <Chip
                     size="small"
                     label={t("parkingFeePaid")}
                     color="default"
+                    variant="outlined"
+                  />
+                )}
+                {place.access === "customers" && (
+                  <Chip
+                    size="small"
+                    label={t("parkingCustomersOnly")}
+                    color="warning"
                     variant="outlined"
                   />
                 )}
@@ -140,12 +176,21 @@ export function NearbyParkingCarousel({
                     {summary}
                   </Typography>
                 )}
-                {detourMeters !== null && (
+                {place.walk ? (
                   <Typography variant="caption" color="text.secondary">
-                    {t("straightLineDistance", {
-                      dist: formatMeasurementDistance(detourMeters, units),
+                    {t("parkingWalkToDestination", {
+                      minutes: Math.max(1, Math.round(place.walk.seconds / 60)),
+                      dist: formatMeasurementDistance(place.walk.meters, units),
                     })}
                   </Typography>
+                ) : (
+                  straightMeters !== null && (
+                    <Typography variant="caption" color="text.secondary">
+                      {t("straightLineDistance", {
+                        dist: formatMeasurementDistance(straightMeters, units),
+                      })}
+                    </Typography>
+                  )
                 )}
               </Box>
               <Button

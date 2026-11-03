@@ -1,6 +1,7 @@
 import {
   type CategoryPlace,
   type DataSourceResult,
+  type LngLat,
   type Route,
   useNavigationStore,
 } from "@openmapx/core";
@@ -109,7 +110,8 @@ describe("useArrivalHandoff", () => {
     state.saveHere.mockResolvedValue("saved");
     state.startGround.mockResolvedValue({ ok: true });
     state.completeArrival.mockResolvedValue(true);
-    fetchDirections.mockResolvedValue({ routes: [] });
+    // No router answers unless a test gives one: candidates stay unmeasured.
+    fetchDirections.mockRejectedValue(new Error("no router in this test"));
     useCategorySearch.mockReturnValue({ data: { results: [] }, isLoading: false });
     useDataSources.mockReturnValue({ data: { sources: [] }, isLoading: false });
     useDataSourceSearch.mockReturnValue({
@@ -180,7 +182,7 @@ describe("useArrivalHandoff", () => {
 
   it("searches places for parking while no parking source is offered", () => {
     renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    expect(useDataSourceSearch).toHaveBeenCalledWith(null, AREA, {});
+    expect(useDataSourceSearch).toHaveBeenCalledWith(null, AREA, { open_now: true });
     expect(useCategorySearch).toHaveBeenCalledWith("parking", AREA, "en");
   });
 
@@ -191,7 +193,7 @@ describe("useArrivalHandoff", () => {
     expect(result.current.isParkingLoading).toBe(true);
   });
 
-  it("offers the parking source's sites a visitor may use, with fee and free spaces", () => {
+  it("offers the parking source's open sites a visitor may use, with fee and free spaces", () => {
     const spaces = { $t: "summary.spaces", values: { count: 12 } };
     offerParkingSource({
       data: [
@@ -207,7 +209,7 @@ describe("useArrivalHandoff", () => {
       ],
     });
     const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    expect(useDataSourceSearch).toHaveBeenCalledWith("parking", AREA, {});
+    expect(useDataSourceSearch).toHaveBeenCalledWith("parking", AREA, { open_now: true });
     expect(useCategorySearch).toHaveBeenLastCalledWith(null, AREA, "en");
     expect(result.current.nearbyParking.map((place) => place.id)).toEqual([
       "lot",
@@ -216,9 +218,9 @@ describe("useArrivalHandoff", () => {
       "street",
     ]);
     const [lot, shop, garage] = result.current.nearbyParking;
-    expect(lot?.osmTags).toBeUndefined();
-    expect(shop?.osmTags).toEqual({ fee: "no" });
-    expect(garage).toMatchObject({ osmTags: { fee: "yes" }, summary: spaces });
+    expect(lot).not.toHaveProperty("fee");
+    expect(shop).toMatchObject({ fee: "free", access: "customers" });
+    expect(garage).toMatchObject({ fee: "paid", summary: spaces });
     expect(garage?.contributors).toEqual([{ sourceId: "osm-parking", name: "OpenStreetMap" }]);
   });
 
@@ -236,6 +238,145 @@ describe("useArrivalHandoff", () => {
       "open",
       "full",
     ]);
+  });
+
+  it("leaves private, reserved and closed places out of the place search's suggestions", () => {
+    const now = Date.now();
+    useCategorySearch.mockReturnValue({
+      data: {
+        results: [
+          {
+            id: "private",
+            name: "A",
+            coordinates: [10.011, 50.01],
+            osmTags: { access: "private" },
+          },
+          {
+            id: "bay",
+            name: "B",
+            coordinates: [10.012, 50.01],
+            osmTags: { parking_space: "disabled" },
+          },
+          {
+            id: "night",
+            name: "C",
+            coordinates: [10.013, 50.01],
+            openingHours: "Mo-Sa 07:00-22:00",
+            openingHoursInfo: {
+              status: { isOpen: false },
+              isAlwaysOpen: false,
+              weekBitmap: "",
+              validUntil: new Date(now + 60_000).toISOString(),
+            },
+          },
+          { id: "free", name: "D", coordinates: [10.014, 50.01], osmTags: { fee: "no" } },
+        ],
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(result.current.nearbyParking.map((place) => [place.id, place.fee])).toEqual([
+      ["free", "free"],
+    ]);
+  });
+
+  it("measures the closest car parks and offers the quickest drive and walk first", async () => {
+    offerParkingSource({ data: [site("near", 1), site("middle", 2), site("far", 3)] });
+    const route = (duration: number, distance: number) => ({
+      routes: [
+        {
+          ...walkingRoute,
+          duration,
+          distance,
+          contributors: [{ sourceId: "valhalla", name: "Valhalla" }],
+        },
+      ],
+      provider: "valhalla",
+    });
+    // The nearest is a long drive round a one-way loop; the middle one is quick to both.
+    const drives: Record<string, number> = { "10.011": 400, "10.012": 40, "10.013": 60 };
+    const walks: Record<string, number> = { "10.011": 60, "10.012": 120, "10.013": 200 };
+    fetchDirections.mockImplementation(async (...args: unknown[]) => {
+      const { waypoints, mode } = args[0] as { waypoints: LngLat[]; mode: string };
+      if (mode === "walking") return route(walks[waypoints[0][0].toFixed(3)] ?? 0, 150);
+      return route(drives[waypoints[1][0].toFixed(3)] ?? 0, 500);
+    });
+    useNavigationStore.setState({
+      routeOptions: {
+        avoidHighways: false,
+        avoidTolls: true,
+        avoidFerries: false,
+        avoidClosures: false,
+      },
+    });
+
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(result.current.nearbyParking.map((place) => place.id)).toEqual([
+      "near",
+      "middle",
+      "far",
+    ]);
+    await waitFor(() =>
+      expect(result.current.nearbyParking.map((place) => place.id)).toEqual([
+        "middle",
+        "far",
+        "near",
+      ]),
+    );
+    expect(result.current.nearbyParking[0]?.walk).toEqual({
+      seconds: 120,
+      meters: 150,
+      contributors: [{ sourceId: "valhalla", name: "Valhalla" }],
+    });
+    expect(fetchDirections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        waypoints: [
+          [10.01, 50.01],
+          [10.012, 50.01],
+        ],
+        mode: "driving",
+        avoidTolls: true,
+      }),
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchDirections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        waypoints: [
+          [10.012, 50.01],
+          [10.01, 50.01],
+        ],
+        mode: "walking",
+      }),
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("drops a car park no route reaches and keeps measuring through position noise", async () => {
+    offerParkingSource({ data: [site("cut-off", 1), site("open", 2)] });
+    fetchDirections.mockImplementation(async (...args: unknown[]) => {
+      const { waypoints, mode } = args[0] as { waypoints: LngLat[]; mode: string };
+      return mode !== "walking" && (waypoints[1]?.[0] ?? 0) < 10.0115
+        ? { routes: [] }
+        : { routes: [walkingRoute], provider: "valhalla" };
+    });
+    const { result, rerender } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    await waitFor(() =>
+      expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["open"]),
+    );
+    const calls = fetchDirections.mock.calls.length;
+
+    const progress = useNavigationStore.getState().progress;
+    if (!progress) throw new Error("Expected arrival progress");
+    act(() =>
+      useNavigationStore.setState({
+        progress: { ...progress, snapped: [10.01000002, 50.01000001] },
+      }),
+    );
+    rerender();
+    expect(fetchDirections).toHaveBeenCalledTimes(calls);
+    expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["open"]);
   });
 
   it("reports the parking source's loading state", () => {

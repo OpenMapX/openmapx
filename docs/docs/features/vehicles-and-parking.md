@@ -47,16 +47,27 @@ location.
 ## Parking near your destination
 
 After a drive or motorcycle trip, the arrival card suggests up to four car parks
-within 500 m of the destination, closest first. **Drive here** routes you to one,
-and on arrival there the card offers the walk to your original destination.
+within 500 m of the destination. **Drive here** routes you to one, and on
+arrival there the card offers the walk to your original destination.
 
-When the instance offers the parking data source, the suggestions come from it.
-Closed sites are left out, as are sites reserved for permit holders or other
-private users and sites whose every space is kept for a group, such as a lone
-disabled bay. Each suggestion shows its free spaces and whether it is free when
-the source knows, and sites currently reported full come after the others. Without that source, or when it does not answer,
-the card lists mapped parking places instead, with their fee where the map
-records it.
+The card leaves out car parks you cannot use now: closed ones, ones outside
+their opening hours, ones for permit holders, residents or other private users,
+and car parks whose every space is kept for a group, such as a single disabled
+bay. A car park that only
+customers may use is marked **Customers only**. Each suggestion shows whether it
+is free or paid and, where the source counts them, its free spaces.
+
+The closest six are then measured: the drive from where you stopped to the car
+park, and the walk from it to your destination. The quickest drive and walk
+together comes first, and the card shows the walk instead of the straight-line
+distance. A car park no route reaches is left out, and one reported full comes
+after the others. Until the routes are measured, or when they cannot be, the
+card orders the car parks by straight-line distance.
+
+When the instance offers the parking data source, the suggestions come from
+it, with live free-space counts and access details. Without that source, or
+when it does not answer, the card uses the mapped parking places from the
+place search, which carries no live counts and lists only named car parks.
 
 ## What OpenMapX does not do here
 

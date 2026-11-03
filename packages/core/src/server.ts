@@ -90,7 +90,7 @@ export {
   VECTOR_TILE_MEDIA_TYPES,
 } from "./utils/boundedBinaryResponse";
 export { applyHoursFilter } from "./utils/categoryFilter";
-export { currentOpeningHoursInfo } from "./utils/currentOpeningHours";
+export { currentlyOpen, currentOpeningHoursInfo } from "./utils/currentOpeningHours";
 export {
   DELIVERY_PROVIDER_HOSTS,
   deliveryProviderIdForHost,

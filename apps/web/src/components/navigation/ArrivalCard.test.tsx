@@ -73,7 +73,8 @@ beforeEach(() => {
   setPendingArrivalHandoff(null);
   state.saveHere.mockClear();
   mockFetchDirections.mockReset();
-  mockFetchDirections.mockResolvedValue({ routes: [] });
+  // No router answers unless a test gives one: parking stays unmeasured, in distance order.
+  mockFetchDirections.mockRejectedValue(new Error("no router in this test"));
   mockUseCategorySearch.mockReturnValue({
     data: { results: [] },
     isLoading: false,
@@ -259,9 +260,14 @@ describe("ArrivalCard", () => {
       data: { results: sampleParkingPlaces },
       isLoading: false,
     });
-    mockFetchDirections.mockResolvedValue({ routes: [] });
+    // The car parks are reachable when measured; the drive started later finds no route.
+    mockFetchDirections.mockResolvedValue({ routes: [mockWalkingRoute] });
 
     render(<ArrivalCard onClose={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getAllByText("navigation.parkingWalkToDestination")).toHaveLength(2),
+    );
+    mockFetchDirections.mockResolvedValue({ routes: [] });
     await userEvent.click(screen.getAllByRole("button", { name: "navigation.driveHere" })[0]);
 
     expect(await screen.findByText("navigation.handoffFailed")).toBeInTheDocument();

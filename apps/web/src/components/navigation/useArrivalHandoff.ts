@@ -25,18 +25,31 @@ import {
   usePendingArrivalHandoff,
 } from "./arrivalHandoffState";
 import {
-  isUsableParking,
+  byDistance,
+  MEASURED_PARKING,
+  measureParkingLegs,
+  type ParkingLegs,
+  rankParking,
+} from "./arrivalParkingLegs";
+import {
+  fromParkingSourceResult,
+  fromPlaceSearch,
   type NearbyParkingPlace,
   PARKING_SOURCE_ID,
-  toNearbyParking,
 } from "./nearbyParking";
 import { getParkingCoords } from "./parkingCoords";
 
 const PARKING_MODES = new Set<TravelMode>(["driving", "motorcycle"]);
 const SEARCH_RADIUS_METERS = 500;
-const MAX_PARKING_RESULTS = 4;
 const MIN_WALKING_HANDOFF_METERS = 20;
-const NO_FILTERS: Record<string, unknown> = {};
+/** Only sites taking vehicles now: the parking source judges their hours. */
+const OPEN_NOW: Record<string, unknown> = { open_now: true };
+const PARKING_LEG_TIMEOUT_MS = 15_000;
+
+/** A point to about ten metres, so position noise does not restart a measurement. */
+function roundedPoint([lng, lat]: LngLat): string {
+  return `${lng.toFixed(4)},${lat.toFixed(4)}`;
+}
 
 export interface UseArrivalHandoffOptions {
   onClose: () => void;
@@ -127,15 +140,15 @@ export function useArrivalHandoff({
         : null,
     [destinationCoords, showParkingOptions],
   );
-  // The parking source knows which sites are closed or private and how many
-  // spaces are free; the POI search stands in while it is not offered or fails.
+  // The parking source knows which sites are closed, kept for others or full;
+  // the place search stands in while it is not offered or does not answer.
   const { data: dataSources, isLoading: isSourceListLoading } = useDataSources();
   const hasParkingSource =
     dataSources?.sources.some((source) => source.id === PARKING_SOURCE_ID) ?? false;
   const parkingSourceSearch = useDataSourceSearch(
     showParkingOptions && hasParkingSource ? PARKING_SOURCE_ID : null,
     parkingBbox,
-    NO_FILTERS,
+    OPEN_NOW,
   );
   const parkingSourceFailed =
     parkingSourceSearch.isError ||
@@ -150,34 +163,98 @@ export function useArrivalHandoff({
     showParkingOptions &&
     (isSourceListLoading || (fromParkingSource ? parkingSourceSearch.isLoading : isPoiLoading));
 
-  const parkingCandidates = useMemo<NearbyParkingPlace[]>(
-    () =>
-      fromParkingSource
-        ? (parkingSourceSearch.data ?? []).filter(isUsableParking).map(toNearbyParking)
-        : (poiData?.results ?? []),
-    [parkingSourceSearch.data, poiData, fromParkingSource],
-  );
-
-  const nearbyParking = useMemo(() => {
+  const closestParking = useMemo(() => {
     if (!destinationCoords) return [];
-    return (
-      parkingCandidates
-        .flatMap((place) => {
-          const coordinates = getParkingCoords(place);
-          return coordinates
-            ? [{ place, distance: haversineDistance(coordinates, destinationCoords) }]
-            : [];
-        })
-        // A site reported full goes after every site that may have room.
-        .sort(
-          (left, right) =>
-            Number(left.place.full === true) - Number(right.place.full === true) ||
-            left.distance - right.distance,
-        )
-        .slice(0, MAX_PARKING_RESULTS)
-        .map(({ place }) => place)
+    const candidates = fromParkingSource
+      ? (parkingSourceSearch.data ?? []).map(fromParkingSourceResult)
+      : (poiData?.results ?? []).map((place) => fromPlaceSearch(place));
+    return byDistance(
+      candidates.filter((place): place is NearbyParkingPlace => place !== null),
+      destinationCoords,
     );
-  }, [destinationCoords, parkingCandidates]);
+  }, [destinationCoords, fromParkingSource, parkingSourceSearch.data, poiData]);
+
+  // The closest few are measured by the drive to them and the walk on to the
+  // destination, once per arrival and shortlist rather than per position fix.
+  const measuredParking = useMemo(
+    () => closestParking.slice(0, MEASURED_PARKING),
+    [closestParking],
+  );
+  const measureKey =
+    showParkingOptions && currentCoords && destinationCoords && measuredParking.length > 0
+      ? JSON.stringify([
+          roundedPoint(currentCoords),
+          roundedPoint(destinationCoords),
+          mode,
+          measuredParking.map((place) => place.id),
+        ])
+      : null;
+  const measureInputs = useRef({
+    currentCoords,
+    destinationCoords,
+    measuredParking,
+    mode,
+    routeOptions,
+    units,
+    locale,
+  });
+  measureInputs.current = {
+    currentCoords,
+    destinationCoords,
+    measuredParking,
+    mode,
+    routeOptions,
+    units,
+    locale,
+  };
+  const [measuredLegs, setMeasuredLegs] = useState<{ key: string; legs: ParkingLegs[] } | null>(
+    null,
+  );
+  useEffect(() => {
+    const inputs = measureInputs.current;
+    if (!measureKey || !inputs.currentCoords || !inputs.destinationCoords) return;
+    const controller = new AbortController();
+    const plan = (params: Parameters<typeof fetchDirections>[0], signal: AbortSignal) =>
+      fetchDirections(params, undefined, { signal, timeoutMs: PARKING_LEG_TIMEOUT_MS });
+    void measureParkingLegs({
+      from: inputs.currentCoords,
+      destination: inputs.destinationCoords,
+      candidates: inputs.measuredParking,
+      signal: controller.signal,
+      drive: (legWaypoints, signal) =>
+        plan(
+          {
+            waypoints: legWaypoints,
+            mode: inputs.mode,
+            units: inputs.units,
+            lang: inputs.locale,
+            ...inputs.routeOptions,
+          },
+          signal,
+        ),
+      walk: (legWaypoints, signal) =>
+        plan(
+          { waypoints: legWaypoints, mode: "walking", units: inputs.units, lang: inputs.locale },
+          signal,
+        ),
+    })
+      .then((legs) => {
+        if (!controller.signal.aborted) setMeasuredLegs({ key: measureKey, legs });
+      })
+      .catch(() => {
+        // Cancelled for a newer shortlist; the distance order stands meanwhile.
+      });
+    return () => controller.abort();
+  }, [measureKey]);
+
+  const nearbyParking = useMemo(
+    () =>
+      rankParking(
+        closestParking,
+        measuredLegs && measuredLegs.key === measureKey ? measuredLegs.legs : null,
+      ),
+    [closestParking, measuredLegs, measureKey],
+  );
 
   useEffect(() => {
     if (selectedParking && !nearbyParking.some((place) => place.id === selectedParking.id)) {

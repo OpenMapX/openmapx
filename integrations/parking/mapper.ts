@@ -86,7 +86,8 @@ const CAR_GROUP_ROW: Readonly<Record<string, string>> = {
   ev_charging: "row.evCharging",
 };
 
-function isClosed(site: ParkingSite): boolean {
+/** Closed for good or reported closed: a site that takes no vehicles whatever its hours. */
+export function isClosed(site: ParkingSite): boolean {
   return site.closed || site.status === "closed" || site.status === "closed_abnormally";
 }
 
