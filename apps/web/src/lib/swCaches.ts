@@ -140,3 +140,24 @@ export function isPublicCacheableApiPath(pathname: string): boolean {
 export function isNetworkOnlyApiPath(pathname: string): boolean {
   return pathname.startsWith("/api/") && !isPublicCacheableApiPath(pathname);
 }
+
+/**
+ * Directions carry live traffic and closures, so the network answers whenever
+ * it can; a stored route is only an offline fallback.
+ */
+export function isDirectionsApiPath(pathname: string): boolean {
+  return /^\/api\/integrations\/routing\/directions(?:\/optimize)?$/.test(pathname);
+}
+
+/**
+ * Whether a response may enter Cache Storage. Serwist stores any 200 by
+ * default; a server that marks a response `no-store` or `private` (a depart-now
+ * car route with live traffic, for one) has said it must not be kept.
+ */
+export function responseAllowsStorage(response: Response): boolean {
+  if (response.status !== 200) return false;
+  const directives = (response.headers.get("Cache-Control") ?? "")
+    .split(",")
+    .map((directive) => directive.trim().toLowerCase().split("=")[0]);
+  return !directives.includes("no-store") && !directives.includes("private");
+}
