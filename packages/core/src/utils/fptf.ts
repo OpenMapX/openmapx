@@ -1,8 +1,8 @@
 /**
  * Shared FPTF (Friendly Public Transport Format) normalization utilities.
  *
- * Used by hafas-mgate adapter, hafas provider, and db-vendo provider to avoid
- * duplicating departure/remark normalization logic.
+ * Shared by the FPTF-based transit providers, such as the HAFAS mgate adapter,
+ * to avoid duplicating departure/remark normalization logic.
  */
 import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import type {
@@ -24,7 +24,7 @@ export function fptfLineName(line: any): LineName {
 
 /**
  * Maps FPTF product strings to internal TransportMode values.
- * Superset covering hafas-client, hafas-mgate, and db-vendo-client products.
+ * Covers hafas-client and hafas-mgate product names.
  */
 export const FPTF_PRODUCT_MODE: Readonly<Record<string, TransportMode>> = {
   nationalExpress: "rail",
@@ -133,7 +133,7 @@ export function normalizeRemarks(raw: unknown[] | undefined): TripRemark[] | und
 }
 
 /**
- * Map an FPTF `loadFactor` (db-vendo-client / hafas-client occupancy, derived
+ * Map an FPTF `loadFactor` (hafas-client occupancy, derived
  * from DB `auslastungsmeldungen` stufe 1–4) to our `OccupancyLevel`:
  * low-to-medium → low · high → medium · very-high → high · exceptionally-high → overcrowded.
  */
