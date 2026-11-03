@@ -195,11 +195,6 @@ overrides:
   jest-expo>jest-watch-typeahead: ^3.0.1
   expo-asset>expo-constants: 57.0.20
   react-native: 0.86.3
-  '@better-auth/expo>expo-constants': '-'
-  '@better-auth/expo>expo-linking': '-'
-  '@better-auth/expo>expo-network': '-'
-  '@better-auth/expo>expo-secure-store': '-'
-  '@better-auth/expo>expo-web-browser': '-'
   better-auth>drizzle-kit: '-'
   better-auth>next: '-'
   better-auth>vitest: '-'
@@ -282,9 +277,6 @@ importers:
       '@better-auth/core':
         specifier: 1.7.16
         version: 1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5)
-      '@better-auth/expo':
-        specifier: 1.7.16
-        version: 1.7.16(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5))(better-auth@1.7.16(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9))(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
       '@better-auth/i18n':
         specifier: 1.7.16
         version: 1.7.16(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5))(better-auth@1.7.16(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9))(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
@@ -3675,12 +3667,6 @@ packages:
     peerDependenciesMeta:
       drizzle-orm:
         optional: true
-
-  '@better-auth/expo@1.7.16':
-    resolution: {integrity: sha512-kThN34FJzXaF/bKNel5oXAP5DbuDp9DkiTe3h5Vm9LeJa7rN3kujaSC71NmMJpzQ+Y5ypeV2o5unRVVPzqucAw==}
-    peerDependencies:
-      '@better-auth/core': ^1.7.16
-      better-auth: ^1.7.16
 
   '@better-auth/i18n@1.7.16':
     resolution: {integrity: sha512-cY/S6oq8QT4xcnDzTLH4JF/w1+GNbj8YBsFmMmNvt6u7A+PH7ROaIjJm2ZA19H8IVC6Vx1dvO1ji1u4Xv+RlLQ==}
@@ -13015,14 +13001,6 @@ snapshots:
       '@better-auth/utils': 0.5.1
     optionalDependencies:
       drizzle-orm: 0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9)
-
-  '@better-auth/expo@1.7.16(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5))(better-auth@1.7.16(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9))(react-dom@19.3.1(react@19.3.1))(react@19.3.1))':
-    dependencies:
-      '@better-auth/core': 1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5)
-      '@better-fetch/fetch': 1.3.3
-      better-auth: 1.7.16(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      better-call: 1.4.5(zod@4.6.7)
-      zod: 4.6.7
 
   '@better-auth/i18n@1.7.16(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.5(zod@4.6.7))(jose@6.2.13)(kysely@0.29.7)(nanostores@1.5.5))(better-auth@1.7.16(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@3.4.9))(react-dom@19.3.1(react@19.3.1))(react@19.3.1))':
     dependencies:

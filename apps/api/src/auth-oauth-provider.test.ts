@@ -69,7 +69,6 @@ describe("managed OAuth provider policy", () => {
     const coreLock = packageLock.split("\n  packages/core:")[1]?.split("\n  packages/")[0] ?? "";
     const apiPackages = [
       "@better-auth/core",
-      "@better-auth/expo",
       "@better-auth/i18n",
       "@better-auth/oauth-provider",
       "@better-auth/passkey",
@@ -223,5 +222,21 @@ describe("managed OAuth provider policy", () => {
     expect(pluginIds?.indexOf("oauth-provider")).toBeLessThan(
       pluginIds?.indexOf("custom-session") ?? -1,
     );
+  });
+
+  // The installed app signs in through `/mobile-auth` and a PKCE-bound code.
+  // Expo's server plugin would add an authorization proxy and copy the session
+  // cookie into redirects to any trusted custom scheme.
+  it("serves no Expo authorization proxy and trusts only web origins", async () => {
+    const { auth } = await import("./auth");
+    const pluginIds = auth.options.plugins?.map((plugin) => plugin.id);
+
+    expect(pluginIds).not.toContain("expo");
+    expect(auth.api).not.toHaveProperty("expoAuthorizationProxy");
+    expect(auth.options.trustedOrigins).not.toHaveLength(0);
+    for (const origin of auth.options.trustedOrigins as string[]) {
+      expect(new URL(origin).origin).toBe(origin);
+      expect(["http:", "https:"]).toContain(new URL(origin).protocol);
+    }
   });
 });
