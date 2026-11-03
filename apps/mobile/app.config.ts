@@ -127,6 +127,14 @@ const config: ExpoConfig = {
         resizeMode: "contain",
         backgroundColor: THEME_COLORS.light.surface,
         dark: { backgroundColor: THEME_COLORS.dark.background },
+        // Android 12 and later draw the splash image on a 288 dp canvas and
+        // crop it to a 192 dp circle, which cut the corners and edges off the
+        // square logo. This image already holds the whole canvas, with the
+        // logo small enough that its rounded corners stay inside the circle.
+        android: {
+          image: "./assets/splash-icon-android.png",
+          imageWidth: 288,
+        },
       },
     ],
     [
