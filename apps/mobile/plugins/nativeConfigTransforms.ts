@@ -32,6 +32,9 @@ export const REQUIRED_ANDROID_PERMISSIONS = [
   "android.permission.FOREGROUND_SERVICE",
   "android.permission.FOREGROUND_SERVICE_LOCATION",
   "android.permission.POST_NOTIFICATIONS",
+  // expo-task-manager delivers every location update through a persisted
+  // JobScheduler job, which Android rejects without it.
+  "android.permission.RECEIVE_BOOT_COMPLETED",
 ] as const;
 
 /* ---------------------------------------------------------------- iOS ---- */

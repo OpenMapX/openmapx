@@ -37,3 +37,8 @@ export function getNavigationAudio(): NavigationAudio {
 export function resetNavigationAudioCache(): void {
   cached = null;
 }
+
+/** Whether this build linked the native synthesiser, for the capability report. */
+export function isNavigationAudioAvailable(): boolean {
+  return requireOptionalNativeModule("OpenMapXNavigationAudio") !== null;
+}

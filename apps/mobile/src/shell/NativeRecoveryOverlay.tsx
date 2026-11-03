@@ -4,6 +4,7 @@ import type { MobileLocale } from "../../config/nativeCopy";
 import { useNativePalette } from "./nativeTheme";
 import { actionsFor, type ShellAction, type ShellState } from "./ShellState";
 import { type ShellCopyKey, shellCopy } from "./shellCopy";
+import { SCROLL_SAFE_AREA, topBarInset } from "./systemBars";
 
 /**
  * The native explanation for the states the page cannot render itself.
@@ -112,7 +113,10 @@ export function NativeRecoveryOverlay({
       style={[styles.fill, { backgroundColor: palette.background }]}
       testID={`shell-state-${state.kind}`}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: 24 + topBarInset() }]}
+        {...SCROLL_SAFE_AREA}
+      >
         <Text accessibilityRole="header" style={[styles.title, { color: palette.title }]}>
           {shellCopy(
             locale,

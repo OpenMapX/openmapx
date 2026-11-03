@@ -8,9 +8,9 @@ sidebar_position: 10
 
 Mobile artifacts are built locally with Xcode and Gradle. Store enrollment,
 agreements, upload, review and publication are manual account-holder operations.
-The current source is not ready for a navigation store submission: the installed
-foreground bridge has no command dispatcher, signing identities are placeholders,
-and physical beta evidence is absent from the repository.
+The current source is not ready for a navigation store submission: signing
+identities are placeholders, iOS has not run on a device, and physical beta
+evidence is absent from the repository.
 
 ## What the stores unavoidably require
 

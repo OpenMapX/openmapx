@@ -809,3 +809,124 @@ describe("NavigationCoordinator effects", () => {
     await context.close();
   });
 });
+
+describe("NavigationCoordinator reroute answers", () => {
+  /** A running session whose engine has asked for reroute `requestId`. */
+  async function awaitingReroute(context: Harness, requestId = "reroute-1") {
+    const { sessionId } = await running(context);
+    const current = await context.repository.loadActive(NOW);
+    if (current?.kind !== "ground") throw new Error("no ground session");
+    await context.repository.compareAndSwap(
+      sessionId,
+      current.revision,
+      (session) => ({
+        session: {
+          ...session,
+          revision: session.revision + 1,
+          payload: {
+            ...(session as typeof current).payload,
+            reroute: { status: "pending", requestId, attempts: 2 },
+          },
+        } as MobileNavigationSession,
+        effects: [],
+      }),
+      NOW,
+    );
+    const pending = await context.repository.loadActive(NOW);
+    return { sessionId, revision: pending?.revision ?? 0 };
+  }
+
+  const groundOf = async (context: Harness) => {
+    const session = await context.repository.loadActive(NOW);
+    if (session?.kind !== "ground") throw new Error("no ground session");
+    return session;
+  };
+
+  it("replaces the route and clears the failure history for the current request", async () => {
+    const context = await harness();
+    const { sessionId, revision } = await awaitingReroute(context);
+
+    await context.coordinator.applyReroute({
+      ok: true,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: revision,
+      route: START_PACKAGE,
+    });
+
+    const session = await groundOf(context);
+    expect(session.revision).toBe(revision + 1);
+    expect(session.payload.reroute).toEqual({ status: "idle", attempts: 0 });
+    expect(context.effectLog).toContain("publish.snapshot");
+    await context.close();
+  });
+
+  it("drops an answer to a request the session no longer waits for", async () => {
+    const context = await harness();
+    const { sessionId, revision } = await awaitingReroute(context, "reroute-2");
+
+    await context.coordinator.applyReroute({
+      ok: true,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: revision,
+      route: START_PACKAGE,
+    });
+
+    expect((await groundOf(context)).revision).toBe(revision);
+    await context.close();
+  });
+
+  it("records a failure with a backoff so the engine can ask again later", async () => {
+    const context = await harness();
+    const { sessionId, revision } = await awaitingReroute(context);
+
+    await context.coordinator.applyReroute({
+      ok: false,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: revision,
+      code: "network",
+    });
+
+    const { reroute } = (await groundOf(context)).payload;
+    expect(reroute.status).toBe("pending");
+    expect(reroute.attempts).toBe(3);
+    expect(reroute.lastFailureCode).toBe("network");
+    expect(reroute.nextAttemptAtMs).toBeGreaterThan(NOW);
+    await context.close();
+  });
+
+  it("ignores a request this side aborted", async () => {
+    const context = await harness();
+    const { sessionId, revision } = await awaitingReroute(context);
+
+    await context.coordinator.applyReroute({
+      ok: false,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: revision,
+      code: "aborted",
+    });
+
+    expect((await groundOf(context)).revision).toBe(revision);
+    await context.close();
+  });
+
+  it("does nothing once the session has stopped", async () => {
+    const context = await harness();
+    const { sessionId, revision } = await awaitingReroute(context);
+    await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
+
+    await context.coordinator.applyReroute({
+      ok: true,
+      requestId: "reroute-1",
+      sessionId,
+      baseRevision: revision,
+      route: START_PACKAGE,
+    });
+
+    expect(await context.repository.loadActive(NOW)).toBeNull();
+    await context.close();
+  });
+});

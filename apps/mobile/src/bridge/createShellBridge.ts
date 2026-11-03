@@ -25,7 +25,7 @@ export interface ShellBridgeOptions {
    */
   dispatch?: (message: WebToNativeMessage) => Promise<unknown>;
   /** Reports what the shell can actually run right now. */
-  capabilities?: () => ShellDescription["capabilities"];
+  capabilities?: () => ShellDescription["capabilities"] | Promise<ShellDescription["capabilities"]>;
   permission?: () => Promise<ShellDescription["permission"]>;
   activeSession?: () => Promise<ShellDescription["activeSession"]>;
 }
@@ -43,7 +43,7 @@ export interface ShellBridge {
  * constant. Until a processor exists the page keeps planning in the browser.
  */
 export async function describeShell(options: ShellBridgeOptions): Promise<ShellDescription> {
-  const capabilities = options.capabilities?.() ?? {
+  const capabilities = (await options.capabilities?.()) ?? {
     groundNavigation: false,
     transitNavigation: false,
     backgroundLocation: false,

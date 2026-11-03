@@ -73,13 +73,16 @@ const config: ExpoConfig = {
       // phone in a pocket. Declared explicitly rather than arriving silently
       // through expo-notifications' own manifest.
       "android.permission.VIBRATE",
+      // Every location update reaches the task through a JobScheduler job, and
+      // expo-task-manager always marks those persisted, which Android refuses
+      // without this permission. Declaring it registers no boot receiver.
+      "android.permission.RECEIVE_BOOT_COMPLETED",
     ],
     // Permissions some bundled Expo modules declare by default but this app
-    // must not ship: no remote push, no boot receiver, no exact alarms, no
-    // media/microphone capability.
+    // must not ship: no remote push, no exact alarms, no media/microphone
+    // capability.
     blockedPermissions: [
       "com.google.android.c2dm.permission.RECEIVE",
-      "android.permission.RECEIVE_BOOT_COMPLETED",
       "android.permission.SCHEDULE_EXACT_ALARM",
       "android.permission.USE_EXACT_ALARM",
       "android.permission.RECORD_AUDIO",
