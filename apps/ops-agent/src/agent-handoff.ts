@@ -21,7 +21,7 @@ import {
  */
 
 export const AGENT_HANDOFF_LABEL = "openmapx.ops-agent.handoff";
-export const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.mjs";
+const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.mjs";
 const MAX_HANDOFF_BYTES = 128 * 1024;
 const MAX_REASON_LENGTH = 256;
 const HANDOFF_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -59,7 +59,7 @@ export interface AgentHandoffRecord {
   importedFromLegacy?: boolean;
 }
 
-export function agentHandoffPath(rootDir: string): string {
+function agentHandoffPath(rootDir: string): string {
   return coreServices.agentStatePaths(join(rootDir, "infra", "docker")).handoff;
 }
 
@@ -248,7 +248,7 @@ export async function inspectAgentContainer(
   };
 }
 
-export function agentHandoffContainerName(handoffId: string): string {
+function agentHandoffContainerName(handoffId: string): string {
   return `openmapx-ops-agent-handoff-${handoffId.slice(0, 64)}`;
 }
 
@@ -330,7 +330,7 @@ export function agentHandoffRunArgs(
   ];
 }
 
-export interface AgentHandoffTimeouts {
+interface AgentHandoffTimeouts {
   /** Lets the old agent return the operation result before it is stopped. */
   graceMs: number;
   /** How long other agent operations may take to finish before giving up. */
@@ -340,7 +340,7 @@ export interface AgentHandoffTimeouts {
   pollMs: number;
 }
 
-export const DEFAULT_AGENT_HANDOFF_TIMEOUTS: AgentHandoffTimeouts = {
+const DEFAULT_AGENT_HANDOFF_TIMEOUTS: AgentHandoffTimeouts = {
   graceMs: 3_000,
   drainMs: 60_000,
   healthMs: 180_000,
