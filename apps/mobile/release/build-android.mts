@@ -2,6 +2,9 @@
 /**
  * Builds and signs the Android App Bundle locally.
  *
+ * `--apk` builds a signed APK instead, to install directly on a test phone;
+ * `--unsigned` builds an unsigned APK as a tooling rehearsal.
+ *
  * Keystore path, alias and passwords come from a mode-0600 properties file
  * outside the repository, never from command-line arguments — arguments land in
  * shell history and in every process listing on the machine.
@@ -11,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { distDir, mobileRoot, readToolchains, readVersion } from "./context.ts";
@@ -33,6 +36,7 @@ const propertiesPath =
   resolve(homedir(), ".openmapx/android-release.properties");
 
 const unsigned = process.argv.includes("--unsigned");
+const apk = unsigned || process.argv.includes("--apk");
 
 if (!unsigned) {
   if (!existsSync(propertiesPath)) {
@@ -54,6 +58,9 @@ if (!unsigned) {
     process.exit(1);
   }
   copyFileSync(propertiesPath, resolve(androidDir, "release-signing.properties"));
+} else {
+  // A copy left by an earlier signed build would sign this one after all.
+  rmSync(resolve(androidDir, "release-signing.properties"), { force: true });
 }
 
 const javaHome = process.env.JAVA_HOME;
@@ -65,7 +72,7 @@ if (!javaHome) {
   process.exit(1);
 }
 
-const task = unsigned ? "assembleRelease" : "bundleRelease";
+const task = apk ? "assembleRelease" : "bundleRelease";
 console.log(`[release:android] gradle :app:${task}`);
 execFileSync("./gradlew", [`:app:${task}`, "--no-daemon"], {
   cwd: androidDir,
@@ -73,8 +80,12 @@ execFileSync("./gradlew", [`:app:${task}`, "--no-daemon"], {
   env: { ...process.env, JAVA_HOME: javaHome },
 });
 
-const built = unsigned
-  ? resolve(androidDir, "app/build/outputs/apk/release/app-release.apk")
+// Gradle names an APK without a signing configuration `-unsigned`.
+const built = apk
+  ? resolve(
+      androidDir,
+      `app/build/outputs/apk/release/app-release${unsigned ? "-unsigned" : ""}.apk`,
+    )
   : resolve(androidDir, "app/build/outputs/bundle/release/app-release.aab");
 
 if (!existsSync(built)) {
