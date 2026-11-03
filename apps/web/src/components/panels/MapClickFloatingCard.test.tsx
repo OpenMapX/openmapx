@@ -1,10 +1,27 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { render, screen, userEvent, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({ flyTo: vi.fn() }) }));
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({
+    flyTo: vi.fn(),
+    mapRef: { current: { project: () => ({ x: 120, y: 140 }) } },
+  }),
+}));
+const basemap = vi.hoisted(() => ({
+  poi: null as null | {
+    featureId: string;
+    name: string;
+    coordinates: [number, number];
+    category?: string;
+  },
+}));
+vi.mock("@/components/map/mapStylePoiTarget", () => ({
+  getStylePoiLayerIds: () => ["poi-label"],
+  findStylePoiAtPoint: () => basemap.poi,
+}));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useReverseGeocoding: () => ({
@@ -22,14 +39,22 @@ vi.mock("@/lib/deepLink", async (importOriginal) => ({
   shareUrl: share.shareUrl,
 }));
 
-import { PANEL, useDirectionsStore, useMapClickStore, useSidebarStore } from "@openmapx/core";
+import {
+  PANEL,
+  useDirectionsStore,
+  useMapClickStore,
+  usePlaceStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { MapClickFloatingCard } from "./MapClickFloatingCard";
 
 const PIN: [number, number] = [6.083, 50.776];
 
-function asPhone(phone: boolean): void {
+function asDevice(device: "phone" | "touch tablet" | "desktop"): void {
   vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: phone && query.includes("max-width"),
+    matches:
+      (device === "phone" && query.includes("max-width")) ||
+      (device !== "desktop" && query.includes("pointer: coarse")),
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -38,7 +63,15 @@ function asPhone(phone: boolean): void {
   }));
 }
 
+function installClipboard() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  return writeText;
+}
+
 beforeEach(() => {
+  basemap.poi = null;
+  usePlaceStore.getState().setSelectedPlace(null);
   useMapClickStore.getState().setClickedLngLat(PIN);
   useDirectionsStore.getState().close();
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
@@ -51,7 +84,7 @@ afterEach(() => {
 });
 
 describe("MapClickFloatingCard on a phone", () => {
-  beforeEach(() => asPhone(true));
+  beforeEach(() => asDevice("phone"));
 
   it("offers the context menu's actions as a row", () => {
     render(<MapClickFloatingCard />);
@@ -92,8 +125,69 @@ describe("MapClickFloatingCard on a phone", () => {
   });
 });
 
+describe("MapClickFloatingCard on a touch screen wider than a phone", () => {
+  beforeEach(() => asDevice("touch tablet"));
+
+  it("offers the same row of actions", () => {
+    render(<MapClickFloatingCard />);
+    for (const name of ["mapContextMenu.fromHere", "common.share", "parking.saveParking"]) {
+      expect(screen.getByRole("button", { name })).toBeDefined();
+    }
+  });
+});
+
+describe("MapClickFloatingCard's Copy", () => {
+  beforeEach(() => asDevice("phone"));
+
+  it("offers the coordinates and the address, as the right-click menu does", async () => {
+    const writeText = installClipboard();
+    render(<MapClickFloatingCard />);
+    await userEvent.click(screen.getByRole("button", { name: "common.copy" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("50.776000, 6.083000")).toBeDefined();
+    await userEvent.click(within(menu).getByText("Marktplatz 1"));
+    expect(writeText).toHaveBeenCalledWith("Marktplatz 1");
+    expect(await screen.findByText("mapContextMenu.copied")).toBeDefined();
+  });
+});
+
+describe("MapClickFloatingCard on a basemap place", () => {
+  beforeEach(() => {
+    asDevice("phone");
+    basemap.poi = {
+      featureId: "42",
+      name: "Café Kaiser",
+      coordinates: [6.0831, 50.7761],
+      category: "cafe",
+    };
+  });
+
+  it("names the place and opens it, as right-click does", async () => {
+    render(<MapClickFloatingCard />);
+    expect(screen.getByText("Café Kaiser")).toBeDefined();
+    await userEvent.click(screen.getByRole("button", { name: "common.details" }));
+    const selected = usePlaceStore.getState().selectedPlace;
+    expect(selected?.name).toBe("Café Kaiser");
+    expect(selected?.id).toBe("stylePoi:42");
+  });
+
+  it("offers its name to copy", async () => {
+    installClipboard();
+    render(<MapClickFloatingCard />);
+    await userEvent.click(screen.getByRole("button", { name: "common.copy" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("Café Kaiser")).toBeDefined();
+  });
+
+  it("routes to it under its name", async () => {
+    render(<MapClickFloatingCard />);
+    await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
+    expect(useDirectionsStore.getState().waypoints[0].label).toBe("Café Kaiser");
+  });
+});
+
 describe("MapClickFloatingCard on a desktop", () => {
-  beforeEach(() => asPhone(false));
+  beforeEach(() => asDevice("desktop"));
 
   it("keeps the compact card without the action row", () => {
     render(<MapClickFloatingCard />);

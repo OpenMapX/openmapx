@@ -11,6 +11,8 @@ import TripOriginIcon from "@mui/icons-material/TripOrigin";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
+import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Snackbar from "@mui/material/Snackbar";
@@ -18,8 +20,6 @@ import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
-  coordinateId,
-  createPlace,
   PANEL,
   type Place,
   useMapClickStore,
@@ -29,9 +29,18 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useMemo, useState, useSyncExternalStore } from "react";
+import {
+  describeMapLocation,
+  type MapLocation,
+  mapLocationCopyRows,
+  mapLocationPlace,
+} from "@/components/map/mapLocation";
+import { findStylePoiAtPoint, getStylePoiLayerIds } from "@/components/map/mapStylePoiTarget";
 import { useSaveParking } from "@/components/panels/parking/useSaveParking";
+import Menu from "@/components/ui/Menu";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
@@ -65,34 +74,53 @@ export function MapClickFloatingCard() {
   const locale = useLocale();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // Touch-first screens wider than a phone (tablets, a phone held sideways)
+  // get the same actions: touch has no right-click menu to fall back on.
+  const touchFirst = useMediaQuery("(pointer: coarse)");
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
   const { setQuery, setIsFocused } = useSearchStore();
-  const { flyTo } = useMap();
+  const { flyTo, mapRef } = useMap();
   const { saveAt } = useSaveParking();
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [copyAnchor, setCopyAnchor] = useState<HTMLElement | null>(null);
   const phoneCardBottom = usePhoneCardBottom();
 
   const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat, locale);
   useBackDismiss(clickedLngLat !== null, () => setClickedLngLat(null));
 
-  const coordLabel = clickedLngLat
-    ? `${clickedLngLat[1].toFixed(6)}, ${clickedLngLat[0].toFixed(6)}`
-    : "";
-  const placeName = reverseGeo?.city || reverseGeo?.address || coordLabel;
-  const address = reverseGeo?.address ?? coordLabel;
+  // The basemap place under the pin, as the right-click menu finds it, read
+  // once when the pin lands: the pin stands where the finger or pointer was.
+  const location = useMemo<MapLocation | null>(() => {
+    if (!clickedLngLat) return null;
+    const map = mapRef?.current;
+    const poi = map
+      ? findStylePoiAtPoint(
+          map,
+          map.project(clickedLngLat),
+          getStylePoiLayerIds(map),
+          INTERACTIVE_LAYER_IDS,
+        )
+      : null;
+    return { coordinates: clickedLngLat, poi };
+  }, [clickedLngLat, mapRef]);
+  const text = location ? describeMapLocation(location, reverseGeo) : null;
+  const coordLabel = text?.coordinates ?? "";
+  const placeName = text?.title ?? "";
 
   const place = useMemo<Place | null>(
+    () => (location ? mapLocationPlace(location, reverseGeo) : null),
+    [location, reverseGeo],
+  );
+  const copyRows = useMemo(
     () =>
-      clickedLngLat
-        ? createPlace({
-            primaryScheme: "coordinate",
-            ids: { coordinate: coordinateId(clickedLngLat) },
-            name: placeName,
-            address,
-            coordinates: clickedLngLat,
+      location
+        ? mapLocationCopyRows(location, reverseGeo, {
+            coordinates: tm("coordinates"),
+            name: tm("name"),
+            address: tm("address"),
           })
-        : null,
-    [address, clickedLngLat, placeName],
+        : [],
+    [location, reverseGeo, tm],
   );
 
   const feedbackToast = (
@@ -104,11 +132,11 @@ export function MapClickFloatingCard() {
     />
   );
 
-  if (!clickedLngLat || !place) return feedbackToast;
+  if (!clickedLngLat || !place || !location || !text) return feedbackToast;
 
   const handleCoordClick = () => {
     flyTo(clickedLngLat, 15);
-    setQuery(coordLabel);
+    setQuery(location.poi ? text.title : coordLabel);
     setIsFocused(false);
     usePlaceStore.getState().setSelectedPlace(place);
     useSidebarStore.getState().openSidebar(PANEL.PLACE);
@@ -116,7 +144,7 @@ export function MapClickFloatingCard() {
   };
 
   const handleRoute = (endpoint: "origin" | "destination") => {
-    routeFromOrTo(endpoint, clickedLngLat, address);
+    routeFromOrTo(endpoint, clickedLngLat, text.routeLabel);
     setClickedLngLat(null);
   };
 
@@ -126,14 +154,22 @@ export function MapClickFloatingCard() {
     else if (result === "copied") setFeedback(tm("linkCopied"));
   };
 
-  const handleCopy = async () => {
+  const copyValue = async (value: string) => {
+    setCopyAnchor(null);
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(coordLabel);
+      await navigator.clipboard.writeText(value);
       setFeedback(tm("copied"));
     } catch {
       setFeedback(tm("copyFailed"));
     }
+  };
+
+  // One thing to copy goes straight to the clipboard; more offer a choice, as
+  // the right-click menu's Copy location does.
+  const handleCopy = (button: HTMLElement) => {
+    if (copyRows.length > 1) setCopyAnchor(button);
+    else void copyValue(copyRows[0]?.value ?? coordLabel);
   };
 
   const handleSaveParking = async () => {
@@ -157,8 +193,8 @@ export function MapClickFloatingCard() {
     </Typography>
   );
 
-  if (isMobile) {
-    // A dropped pin is where a phone user lands after a long-press, so the
+  if (isMobile || touchFirst) {
+    // A dropped pin is where a touch user lands after a long-press, so the
     // card carries what the desktop context menu offers, as a row of actions
     // within thumb reach instead of a menu under the finger.
     return (
@@ -169,12 +205,17 @@ export function MapClickFloatingCard() {
           aria-label={tm("ariaLabel", { location: placeName })}
           sx={{
             position: "absolute",
-            left: CARD_GAP,
-            right: CARD_GAP,
-            bottom: phoneCardBottom,
             zIndex: 11,
             borderRadius: 3,
             overflow: "hidden",
+            ...(isMobile
+              ? { left: CARD_GAP, right: CARD_GAP, bottom: phoneCardBottom }
+              : {
+                  bottom: 24,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: "min(480px, calc(100% - 32px))",
+                }),
           }}
         >
           <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, px: 2, pt: 1.5 }}>
@@ -217,9 +258,15 @@ export function MapClickFloatingCard() {
               px: 2,
               pt: 1.5,
               pb: 1.5,
-              overflowX: "auto",
-              scrollbarWidth: "none",
-              "&::-webkit-scrollbar": { display: "none" },
+              // A phone scrolls the row under the thumb; wider screens have
+              // the room to show every action at once.
+              ...(isMobile
+                ? {
+                    overflowX: "auto",
+                    scrollbarWidth: "none",
+                    "&::-webkit-scrollbar": { display: "none" },
+                  }
+                : { flexWrap: "wrap" }),
             }}
           >
             <Action
@@ -242,11 +289,30 @@ export function MapClickFloatingCard() {
             <Action
               icon={<ContentCopyIcon />}
               label={tc("copy")}
-              onClick={() => void handleCopy()}
+              onClick={(event) => handleCopy(event.currentTarget)}
+              menuOpen={copyRows.length > 1 ? copyAnchor !== null : undefined}
             />
             <Action icon={<InfoOutlinedIcon />} label={tc("details")} onClick={handleCoordClick} />
           </Box>
         </Paper>
+        <Menu
+          anchorEl={copyAnchor}
+          open={copyAnchor !== null}
+          onClose={() => setCopyAnchor(null)}
+          anchorOrigin={{ vertical: "top", horizontal: "left" }}
+          transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+          slotProps={{ paper: { sx: { minWidth: 240, maxWidth: "calc(100vw - 16px)" } } }}
+        >
+          {copyRows.map((row) => (
+            <MenuItem
+              key={row.value}
+              onClick={() => void copyValue(row.value)}
+              sx={{ minHeight: "48px !important" }}
+            >
+              <ListItemText primary={row.label} secondary={row.value} />
+            </MenuItem>
+          ))}
+        </Menu>
         {feedbackToast}
       </>
     );
@@ -334,17 +400,24 @@ function Action({
   label,
   onClick,
   primary,
+  menuOpen,
 }: {
   icon: ReactNode;
   label: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   primary?: boolean;
+  /** Set on a button that opens a menu: whether that menu is open. */
+  menuOpen?: boolean;
 }) {
   return (
     <Button
       variant={primary ? "contained" : "outlined"}
       startIcon={icon}
       onClick={onClick}
+      {...(menuOpen !== undefined && {
+        "aria-haspopup": "menu" as const,
+        "aria-expanded": menuOpen,
+      })}
       sx={{
         flexShrink: 0,
         minHeight: 40,
