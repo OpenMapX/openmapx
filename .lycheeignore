@@ -23,3 +23,7 @@
 
 # Digitransit returns 403 to automated link checkers; the pages work in a browser.
 ^https://digitransit\.fi/en/developers/
+
+# German federal law portal times out from GitHub-hosted runners on nearly every
+# run; the pages load normally from a browser in Germany.
+^https://www\.gesetze-im-internet\.de/

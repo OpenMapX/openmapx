@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write # to open/update the broken-links issue
+      issues: write # to open, update or close the broken-links issue
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,7 +39,6 @@ jobs:
           fail: false # don't fail the run; we report via an issue instead
       - name: Find existing broken-links issue
         id: find-issue
-        if: steps.lychee.outputs.exit_code != 0
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -67,3 +66,25 @@ jobs:
           # Token-created issues do not trigger the lifecycle workflow. Add
           # initial triage here without re-triaging an existing report.
           labels: ${{ steps.find-issue.outputs.issue-number == '' && 'documentation, needs-triage' || 'documentation' }}
+      - name: Close the broken-links issue after a clean run
+        if: steps.lychee.outputs.exit_code == 0 && steps.find-issue.outputs.issue-number != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ISSUE_NUMBER: ${{ steps.find-issue.outputs.issue-number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const issue_number = Number(process.env.ISSUE_NUMBER);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body: `The [latest link check](${process.env.RUN_URL}) found no broken links.`,
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              state: 'closed',
+              state_reason: 'completed',
+            });
