@@ -252,7 +252,7 @@ describe("live-transit-motis provider", () => {
     mod.setup(ctx);
     const provider = getProvider();
 
-    const result = await provider.getTripUpdate?.("db-hafas:1234");
+    const result = await provider.getTripUpdate?.("entur:1234");
     expect(motisClient.trip).not.toHaveBeenCalled();
     expect(result?.data).toBeNull();
   });

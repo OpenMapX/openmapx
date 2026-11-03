@@ -67,7 +67,6 @@
       "ignoreDependencies": [
         "@openmapx/mobility-formats",
         "cached-hafas-client",
-        "db-vendo-client",
         "gtfs-realtime-bindings-transit",
         "hafas-client"
       ]

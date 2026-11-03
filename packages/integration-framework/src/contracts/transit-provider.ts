@@ -155,8 +155,8 @@ export interface TripPlanRequest {
   /**
    * Restrict results to Deutschlandticket-valid connections (regional/local
    * transport only). Each provider applies this its own way — MOTIS intersects
-   * the mode allow-list with the covered set, db-vendo uses DB's native
-   * "Nur Deutschlandticket-Verbindungen" filter.
+   * the mode allow-list with the covered set; a provider that cannot honour it
+   * returns no itineraries or steps aside.
    */
   deutschlandticketOnly?: boolean;
 }

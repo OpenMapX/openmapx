@@ -237,7 +237,7 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getTripUpdate(tripId, stopId) {
       // We can only resolve MOTIS-prefixed trip ids. For anything else
-      // (e.g. db-hafas:, entur:) return null so the orchestrator can move on
+      // (e.g. entur:, tfl:) return null so the orchestrator can move on
       // to the next realtime provider without burning a HTTP round-trip.
       if (!MOTIS_ID_PREFIX_RE.test(tripId)) {
         return withAttribution(null, attribution.all(), freshnessNow({ hasRealtimeData: true }));

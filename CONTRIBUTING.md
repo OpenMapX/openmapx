@@ -234,7 +234,7 @@ enforced by commitlint via Husky and by the `pr-title` GitHub Action.
 Examples:
 
 ```text
-feat(transit-hafas): add support for DB long-distance services
+feat(transit-irail): add support for Belgian long-distance services
 fix(routing): handle empty Valhalla isochrone response
 docs(readme): clarify community integration install flow
 ```

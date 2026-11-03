@@ -566,7 +566,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
           const durationMs =
             startTime && endTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
           const transfers = Math.max(0, legs.filter((l) => l.route !== undefined).length - 1);
-          // Walk distance: use the distance field from raw legs (consistent with hafas/db-vendo)
+          // Walk distance: use the distance field from raw legs
           const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
             .filter((l) => l.walking === true)
             .reduce((sum, l) => sum + (l.distance ?? 0), 0);

@@ -359,20 +359,12 @@ export function embeddedBuiltInIntegrationManifests(): BuiltInManifestSource | n
       import.meta.url,
     ),
     transit: new URL("../../../../integrations/transit/manifest.json", import.meta.url),
-    "transit-db-vendo": new URL(
-      "../../../../integrations/transit-db-vendo/manifest.json",
-      import.meta.url,
-    ),
     "transit-dynamic-registry": new URL(
       "../../../../integrations/transit-dynamic-registry/manifest.json",
       import.meta.url,
     ),
     "transit-entur": new URL(
       "../../../../integrations/transit-entur/manifest.json",
-      import.meta.url,
-    ),
-    "transit-hafas": new URL(
-      "../../../../integrations/transit-hafas/manifest.json",
       import.meta.url,
     ),
     "transit-irail": new URL(
