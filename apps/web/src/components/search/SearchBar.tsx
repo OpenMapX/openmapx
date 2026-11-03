@@ -93,7 +93,7 @@ import {
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
-import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET } from "@/lib/layout";
+import { SEARCH_BAR_CLEARANCE, SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET } from "@/lib/layout";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useBackDismiss } from "@/lib/useBackDismiss";
@@ -1367,7 +1367,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
           onBlurCapture={handleBlur}
           sx={{
             position: "absolute",
-            top: 72,
+            // Below the bar, which itself sits below the top safe area. Inside
+            // the installed app the page draws under the status bar, so a
+            // fixed offset would put the results over the search input.
+            top: SEARCH_BAR_CLEARANCE,
             left: 0,
             right: 0,
             bottom: 0,

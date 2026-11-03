@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { createShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
@@ -18,6 +18,7 @@ import { createNavigationRecoveryController } from "./lifecycle/createNavigation
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
+import { type NativePalette, useNativePalette } from "./shell/nativeTheme";
 import { classifyNavigation } from "./shell/originPolicy";
 import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
@@ -33,12 +34,28 @@ import { useHardwareBack } from "./shell/useHardwareBack";
  */
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFFFFF" },
+  root: { flex: 1 },
   webView: { flex: 1 },
 });
 
+/**
+ * The app draws edge to edge, so the status bar sits over whatever is behind
+ * it: a native screen in the system appearance, or the page, which follows the
+ * same appearance by default. Its icons have to contrast with that.
+ */
+function ShellStatusBar({ palette }: { palette: NativePalette }): ReactElement {
+  return (
+    <StatusBar
+      barStyle={palette.scheme === "dark" ? "light-content" : "dark-content"}
+      backgroundColor="transparent"
+      translucent
+    />
+  );
+}
+
 function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement {
   const locale = useMemo(() => deviceMobileLocale(), []);
+  const palette = useNativePalette();
   const [shellState, dispatchShell] = useReducer(shellReducer, INITIAL_SHELL);
   // Remounting the WebView is the only reliable way to retry a load that failed
   // before any document existed; `reload()` on a blank view is a no-op.
@@ -81,16 +98,24 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
    */
   const [publishedNonce, setPublishedNonce] = useState(() => shell.registry.mintNonce());
 
-  const handleLoadStart = useCallback(() => {
-    // A real top-level navigation or reload. In-document history changes do not
-    // reach here, so a same-origin `pushState` keeps its negotiated channel.
-    //
-    // A reload resets the bridge and nothing else: the native session and the
-    // location driver are unaffected, because the page is not their authority.
-    shell.registry.adoptDocument(publishedNonce, Date.now());
-    shell.bridge.discardQueue();
-    dispatchShell({ type: "document-load-started" });
-  }, [publishedNonce, shell]);
+  const handleLoadStart = useCallback(
+    (event?: { nativeEvent?: { loading?: boolean } }) => {
+      // Android also reports every same-document history change (`pushState`,
+      // `replaceState`) as a load start, from `doUpdateVisitedHistory`, with
+      // `loading: false` because the document has already finished. That is not
+      // a new document: adopting the next nonce there would orphan the page's
+      // negotiated channel and put the loading screen back over a working page.
+      if (event?.nativeEvent?.loading === false) return;
+      // A real top-level navigation or reload.
+      //
+      // A reload resets the bridge and nothing else: the native session and the
+      // location driver are unaffected, because the page is not their authority.
+      shell.registry.adoptDocument(publishedNonce, Date.now());
+      shell.bridge.discardQueue();
+      dispatchShell({ type: "document-load-started" });
+    },
+    [publishedNonce, shell],
+  );
 
   const handleLoadEnd = useCallback(() => {
     dispatchShell({ type: "document-load-succeeded" });
@@ -205,7 +230,8 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: palette.background }]}>
+      <ShellStatusBar palette={palette} />
       <WebView
         key={loadAttempt}
         ref={webViewRef}
@@ -251,6 +277,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onLoadEnd={handleLoadEnd}
         onError={handleLoadFailure}
         onHttpError={handleLoadFailure}
+        // Remote inspection only in development builds; a release WebView stays
+        // closed to debuggers.
+        webviewDebuggingEnabled={__DEV__}
         testID="product-webview"
       />
       {shellState.state.kind === "loading" ? <LoadingOverlay locale={locale} /> : null}
@@ -275,10 +304,12 @@ export function App(): ReactElement {
     }
   }, []);
   const locale = useMemo(() => deviceMobileLocale(), []);
+  const palette = useNativePalette();
 
   if (!configuration.ok) {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { backgroundColor: palette.background }]}>
+        <ShellStatusBar palette={palette} />
         <NativeRecoveryOverlay
           locale={locale}
           state={{ kind: "fatal-config" }}

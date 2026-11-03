@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileLocale } from "../../config/nativeCopy";
+import { useNativePalette } from "../shell/nativeTheme";
 import { permissionCopy } from "./permissionCopy";
 import type { PermissionFlowState } from "./permissionMachine";
 
@@ -56,6 +57,25 @@ const styles = StyleSheet.create({
   secondaryLabel: { color: "#1B3A5C", fontSize: 16, fontWeight: "600" },
 });
 
+/** The static layout above, coloured for the current system appearance. */
+function useDisclosureStyles() {
+  const palette = useNativePalette();
+  return useMemo(
+    () => ({
+      fill: [styles.fill, { backgroundColor: palette.background }],
+      content: styles.content,
+      title: [styles.title, { color: palette.title }],
+      paragraph: [styles.paragraph, { color: palette.body }],
+      actions: styles.actions,
+      primary: [styles.primary, { backgroundColor: palette.accent }],
+      primaryLabel: [styles.primaryLabel, { color: palette.onAccent }],
+      secondary: [styles.secondary, { borderColor: palette.outline }],
+      secondaryLabel: [styles.secondaryLabel, { color: palette.secondaryLabel }],
+    }),
+    [palette],
+  );
+}
+
 export interface PermissionDisclosureProps {
   locale: MobileLocale;
   onAccept: () => void;
@@ -69,46 +89,47 @@ export function PermissionDisclosure({
   onForegroundOnly,
   onDismiss,
 }: PermissionDisclosureProps): ReactElement {
+  const s = useDisclosureStyles();
   const text = (key: Parameters<typeof permissionCopy>[1]) => permissionCopy(locale, key);
   return (
-    <View style={styles.fill} testID="permission-disclosure">
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <View style={s.fill} testID="permission-disclosure">
+      <ScrollView contentContainerStyle={s.content}>
+        <Text accessibilityRole="header" style={s.title}>
           {text("title")}
         </Text>
-        <Text style={styles.paragraph}>{text("purpose")}</Text>
-        <Text style={styles.paragraph}>{text("precise")}</Text>
-        <Text style={styles.paragraph}>{text("processing")}</Text>
-        <Text style={styles.paragraph}>{text("transmission")}</Text>
-        <Text style={styles.paragraph}>{text("stopping")}</Text>
-        <Text style={styles.paragraph}>{text("foregroundOnlyNote")}</Text>
-        <View style={styles.actions}>
+        <Text style={s.paragraph}>{text("purpose")}</Text>
+        <Text style={s.paragraph}>{text("precise")}</Text>
+        <Text style={s.paragraph}>{text("processing")}</Text>
+        <Text style={s.paragraph}>{text("transmission")}</Text>
+        <Text style={s.paragraph}>{text("stopping")}</Text>
+        <Text style={s.paragraph}>{text("foregroundOnlyNote")}</Text>
+        <View style={s.actions}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={text("continue")}
             onPress={onAccept}
-            style={styles.primary}
+            style={s.primary}
             testID="permission-continue"
           >
-            <Text style={styles.primaryLabel}>{text("continue")}</Text>
+            <Text style={s.primaryLabel}>{text("continue")}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={text("foregroundOnly")}
             onPress={onForegroundOnly}
-            style={styles.secondary}
+            style={s.secondary}
             testID="permission-foreground-only"
           >
-            <Text style={styles.secondaryLabel}>{text("foregroundOnly")}</Text>
+            <Text style={s.secondaryLabel}>{text("foregroundOnly")}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={text("notNow")}
             onPress={onDismiss}
-            style={styles.secondary}
+            style={s.secondary}
             testID="permission-not-now"
           >
-            <Text style={styles.secondaryLabel}>{text("notNow")}</Text>
+            <Text style={s.secondaryLabel}>{text("notNow")}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -133,6 +154,7 @@ export function PermissionOutcome({
   onOpenSettings,
   onDismiss,
 }: PermissionOutcomeProps): ReactElement | null {
+  const s = useDisclosureStyles();
   const text = (key: Parameters<typeof permissionCopy>[1]) => permissionCopy(locale, key);
 
   if (state.state === "settings-required") {
@@ -143,30 +165,30 @@ export function PermissionOutcome({
           ? text("settingsBackground")
           : text("settingsCannotEscalate");
     return (
-      <View style={styles.fill} testID="permission-settings-required">
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text accessibilityRole="header" style={styles.title}>
+      <View style={s.fill} testID="permission-settings-required">
+        <ScrollView contentContainerStyle={s.content}>
+          <Text accessibilityRole="header" style={s.title}>
             {text("settingsTitle")}
           </Text>
-          <Text style={styles.paragraph}>{body}</Text>
-          <View style={styles.actions}>
+          <Text style={s.paragraph}>{body}</Text>
+          <View style={s.actions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={text("openSettings")}
               onPress={onOpenSettings}
-              style={styles.primary}
+              style={s.primary}
               testID="permission-open-settings"
             >
-              <Text style={styles.primaryLabel}>{text("openSettings")}</Text>
+              <Text style={s.primaryLabel}>{text("openSettings")}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={text("notNow")}
               onPress={onDismiss}
-              style={styles.secondary}
+              style={s.secondary}
               testID="permission-settings-dismiss"
             >
-              <Text style={styles.secondaryLabel}>{text("notNow")}</Text>
+              <Text style={s.secondaryLabel}>{text("notNow")}</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -176,21 +198,21 @@ export function PermissionOutcome({
 
   if (state.state === "denied") {
     return (
-      <View style={styles.fill} testID="permission-denied">
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text accessibilityRole="header" style={styles.title}>
+      <View style={s.fill} testID="permission-denied">
+        <ScrollView contentContainerStyle={s.content}>
+          <Text accessibilityRole="header" style={s.title}>
             {text("deniedTitle")}
           </Text>
-          <Text style={styles.paragraph}>{text("deniedBody")}</Text>
-          <View style={styles.actions}>
+          <Text style={s.paragraph}>{text("deniedBody")}</Text>
+          <View style={s.actions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={text("notNow")}
               onPress={onDismiss}
-              style={styles.secondary}
+              style={s.secondary}
               testID="permission-denied-dismiss"
             >
-              <Text style={styles.secondaryLabel}>{text("notNow")}</Text>
+              <Text style={s.secondaryLabel}>{text("notNow")}</Text>
             </Pressable>
           </View>
         </ScrollView>
