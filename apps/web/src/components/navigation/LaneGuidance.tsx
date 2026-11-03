@@ -12,6 +12,7 @@ import {
   laneIndicationIcon,
   type Maneuver,
   normalizeLaneToken,
+  unmarkedLaneIcon,
 } from "@/lib/navigation/maneuverIcon";
 
 /**
@@ -19,7 +20,9 @@ import {
  * indication. Lanes you may take are highlighted; the recommended arrow (the
  * engine's active indication, or the sole arrow of a single-option valid lane)
  * is drawn brightest, other arrows mid, and arrows in lanes you must not take
- * are dimmed. A lane with no real indication (`none`) renders as a blank cell.
+ * are dimmed. A lane with no real indication (`none`) renders as a blank cell,
+ * unless the engine chose it for this maneuver: an unmarked lane the engine
+ * sends you down then carries the maneuver's own arrow.
  */
 export function LaneGuidance({
   lanes,
@@ -48,6 +51,10 @@ export function LaneGuidance({
   // unrestricted) so under-tagged lanes still light up.
   const resolved = resolveGuidanceLanes(lanes, maneuver, { sign, laneDestinations });
   if (resolved.length === 0) return null;
+  // Only the engine knows an unmarked lane leads into the maneuver; lanes we
+  // recommended ourselves stay blank rather than gain a guessed arrow.
+  const engineChose = lanes?.some((l) => l.valid) ?? false;
+  const unmarkedIcon = engineChose ? unmarkedLaneIcon(maneuver) : null;
   const banner = variant === "banner";
   const cell = size === "compact" ? 28 : banner ? 38 : 36;
   const arrowSize = size === "compact" ? 24 : banner ? 32 : 30;
@@ -61,16 +68,20 @@ export function LaneGuidance({
       }}
     >
       {resolved.map((lane, i) => {
-        const arrows = lane.indications
+        const marked = lane.indications
           .map((ind) => ({ ind, icon: laneIndicationIcon(ind) }))
           .filter((a): a is { ind: string; icon: NonNullable<typeof a.icon> } => a.icon !== null);
-        const activeNorm = lane.active ? normalizeLaneToken(lane.active) : null;
+        const fallback = marked.length === 0 && lane.valid ? unmarkedIcon : null;
+        const inferred = fallback !== null;
+        const arrows = fallback ? [{ ind: "none", icon: fallback }] : marked;
+        const activeNorm = lane.active && !inferred ? normalizeLaneToken(lane.active) : null;
         return (
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
             key={i}
             data-valid={String(lane.valid)}
             data-arrow-count={String(arrows.length)}
+            data-inferred={inferred ? "true" : undefined}
             sx={{
               position: "relative",
               width: cell,

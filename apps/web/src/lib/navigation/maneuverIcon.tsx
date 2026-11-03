@@ -140,6 +140,20 @@ export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
   return ARROW_ICONS[normalizeLaneToken(m)] ?? ARROW_ICONS.straight;
 }
 
+const DIRECTION_ICONS = new Set(Object.values(ARROW_ICONS));
+
+/**
+ * The arrow for a lane without painted markings (`none`) that the routing
+ * engine says serves the maneuver: the maneuver's own direction, as in the
+ * banner. `null` when the maneuver has no plain direction to draw in a lane
+ * (arrival, roundabout, merge, stairs) or is unknown.
+ */
+export function unmarkedLaneIcon(maneuver: Maneuver | undefined): ResolvedIcon | null {
+  if (!maneuver) return null;
+  const icon = maneuverIconFor(maneuver);
+  return DIRECTION_ICONS.has(icon) ? icon : null;
+}
+
 /**
  * Resolve a single lane *indication* token to an MUI icon, covering the full
  * OSRM and Valhalla vocabularies (space- or underscore-separated; `through`≈
