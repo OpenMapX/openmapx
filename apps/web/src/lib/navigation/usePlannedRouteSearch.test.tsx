@@ -1,0 +1,220 @@
+// @vitest-environment jsdom
+
+import type { BoundingBox, CategoryPlace, LngLat, OverpassFilter } from "@openmapx/core";
+import { act, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderHookWithQuery } from "@/test";
+
+interface Pending {
+  key: string;
+  bbox: BoundingBox;
+  resolve: (value: { results: CategoryPlace[]; partial: boolean; truncated?: boolean }) => void;
+  reject: (error: Error) => void;
+}
+
+const search = vi.hoisted(() => ({
+  pending: [] as Pending[],
+  calls: [] as string[],
+  filterCalls: [] as string[],
+}));
+const directions = vi.hoisted(() => vi.fn());
+
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  const options = (kind: string, value: string, bbox: BoundingBox, lang?: string) => ({
+    queryKey: [kind, value, bbox, lang] as const,
+    queryFn: () =>
+      new Promise((resolve, reject) => {
+        const key = `${kind}:${value}:${bbox.west.toFixed(3)}`;
+        (kind === "filter-search" ? search.filterCalls : search.calls).push(key);
+        search.pending.push({ key, bbox, resolve, reject });
+      }),
+    gcTime: 0,
+    retry: false,
+  });
+  return {
+    ...actual,
+    fetchDirections: directions,
+    categorySearchQueryOptions: (category: string, bbox: BoundingBox, lang?: string) =>
+      options("category-search", category, bbox, lang),
+    filterSearchQueryOptions: (filter: OverpassFilter, bbox: BoundingBox, lang?: string) =>
+      options("filter-search", JSON.stringify(filter), bbox, lang),
+  };
+});
+
+import { usePlannedRouteSearch, usePlannedStopDetour } from "./usePlannedRouteSearch";
+
+/** Due east along the equator; 1 km ≈ 1/111.32°. */
+const KM = 1 / 111.32;
+const eastLine = (km: number): LngLat[] =>
+  Array.from({ length: km + 1 }, (_, i) => [i * KM, 0] as LngLat);
+const place = (id: string, km: number, offMeters = 100): CategoryPlace => ({
+  id,
+  name: id,
+  coordinates: [km * KM, offMeters / 111_320],
+});
+const settle = async (index: number, results: CategoryPlace[], extra: object = {}) => {
+  await act(async () => {
+    search.pending[index].resolve({ results, partial: false, ...extra });
+  });
+};
+
+beforeEach(() => {
+  search.pending = [];
+  search.calls = [];
+  search.filterCalls = [];
+  directions.mockReset();
+});
+
+describe("usePlannedRouteSearch", () => {
+  it("issues no request without a search", () => {
+    const geometry = eastLine(60);
+    const { result } = renderHookWithQuery(() => usePlannedRouteSearch(geometry, null, "en"));
+    expect(search.calls).toEqual([]);
+    expect(result.current.results).toEqual([]);
+    expect(result.current.isSearching).toBe(false);
+  });
+
+  it("keeps at most two areas in flight, in route order", async () => {
+    const geometry = eastLine(60);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "ev_charging" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    expect(result.current).toMatchObject({ totalChunks: 3, settledChunks: 0, isSearching: true });
+    expect(search.pending.map((p) => p.bbox.west < 1 * KM)).toEqual([true, false]);
+    await settle(0, []);
+    await waitFor(() => expect(search.calls).toHaveLength(3));
+    expect(search.pending[2].bbox.east).toBeGreaterThan(59 * KM);
+  });
+
+  it("merges overlapping areas once each, in route order, within the corridor", async () => {
+    const geometry = eastLine(40);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "preset:amenity/fuel" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    await settle(1, [place("late", 30), place("shared", 25)]);
+    await settle(0, [place("shared", 25), place("early", 5), place("far-off", 10, 2000)]);
+    await waitFor(() => expect(result.current.isSearching).toBe(false));
+    expect(result.current.results.map((r) => r.place.id)).toEqual(["early", "shared", "late"]);
+    expect(result.current.results[0].alongMeters).toBeCloseTo(5000, -2);
+    expect(result.current).toMatchObject({
+      settledChunks: 2,
+      failedChunks: 0,
+      truncated: false,
+      incomplete: false,
+      capped: false,
+    });
+  });
+
+  it("reports how far a very long route was searched", async () => {
+    const geometry = eastLine(1200);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "hotels" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    expect(result.current).toMatchObject({
+      capped: true,
+      searchedMeters: 1_000_000,
+      totalChunks: 40,
+    });
+  });
+
+  it("does not let a failed area block the rest, and retries only that area", async () => {
+    const geometry = eastLine(60);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "parking" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(2));
+    await act(async () => search.pending[0].reject(new Error("overpass_unavailable")));
+    await waitFor(() => expect(search.calls).toHaveLength(3));
+    await settle(1, [place("p", 30)]);
+    await settle(2, [], { truncated: true });
+    await waitFor(() => expect(result.current.isSearching).toBe(false));
+    expect(result.current).toMatchObject({ failedChunks: 1, truncated: true, settledChunks: 3 });
+    expect(result.current.results.map((r) => r.place.id)).toEqual(["p"]);
+    act(() => result.current.retry());
+    await waitFor(() => expect(search.calls).toHaveLength(4));
+    expect(search.calls[3]).toBe(search.calls[0]);
+  });
+
+  it("marks a partial area answer as incomplete", async () => {
+    const geometry = eastLine(20);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "cafes" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(1));
+    await settle(0, [], { partial: true });
+    await waitFor(() => expect(result.current.incomplete).toBe(true));
+  });
+
+  it("searches a chain with the filter search", async () => {
+    const geometry = eastLine(20);
+    const filter: OverpassFilter = {
+      selectors: [{ tags: [{ key: "brand:wikidata", op: "=", value: "Q1" }] }],
+    };
+    renderHookWithQuery(() => usePlannedRouteSearch(geometry, { filter }, "en"));
+    await waitFor(() => expect(search.filterCalls).toHaveLength(1));
+    expect(search.calls).toEqual([]);
+  });
+});
+
+describe("usePlannedStopDetour", () => {
+  const geometry = eastLine(20);
+  const waypoints: LngLat[] = [
+    [0, 0],
+    [10 * KM, 0],
+    [20 * KM, 0],
+  ];
+  const routeOf = (seconds: number) => ({
+    routes: [{ distance: seconds * 10, duration: seconds, geometry, legs: [], steps: [] }],
+    provider: "valhalla",
+  });
+
+  it("compares the itinerary with and without the stop using the displayed route's request", async () => {
+    directions.mockImplementation(async (request: unknown) =>
+      routeOf(
+        (request as { waypoints: LngLat[] }).waypoints.length === waypoints.length ? 1000 : 1180,
+      ),
+    );
+    const candidate = { id: "aral", coordinates: [15 * KM, 0.0005] as LngLat };
+    const { result } = renderHookWithQuery(() =>
+      usePlannedStopDetour({
+        geometry,
+        waypoints,
+        candidate,
+        provider: "valhalla",
+        request: { mode: "motorcycle", avoidHighways: true, avoidTolls: true, lang: "de" },
+      }),
+    );
+    await waitFor(() => expect(result.current.detour?.kind).toBe("network"));
+    expect(result.current.detour).toMatchObject({ kind: "network", seconds: 180 });
+    const requests = directions.mock.calls.map(([request]) => request as { waypoints: LngLat[] });
+    expect(requests.map((r) => r.waypoints)).toEqual([
+      waypoints,
+      [waypoints[0], waypoints[1], candidate.coordinates, waypoints[2]],
+    ]);
+    for (const request of requests) {
+      expect(request).toMatchObject({
+        mode: "motorcycle",
+        avoidHighways: false,
+        avoidTolls: false,
+        lang: "de",
+        provider: "valhalla",
+      });
+    }
+  });
+
+  it("does not request anything without a selected stop", () => {
+    renderHookWithQuery(() =>
+      usePlannedStopDetour({
+        geometry,
+        waypoints,
+        candidate: null,
+        request: { mode: "driving", lang: "en" },
+      }),
+    );
+    expect(directions).not.toHaveBeenCalled();
+  });
+});
