@@ -37,6 +37,7 @@
     "expo-sqlite": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-task-manager": "~57.0.21",
+    "expo-web-browser": "~57.0.3",
     "react": "19.3.1",
     "react-native": "0.86.3",
     "react-native-webview": "13.16.1",

@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import { useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
+import { AuthDialog } from "@/components/auth/AuthDialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /**
@@ -48,6 +49,18 @@ export function MobileAuthClient({
   const { data: session, isPending } = useSession();
   const [phase, setPhase] = useState<Phase>("idle");
   const authenticated = Boolean(session);
+  // Signing in happens here, in the real browser, where OAuth providers and
+  // platform passkeys work. Every sign-in route returns to this exact handoff
+  // so the app's state and challenge survive a provider round trip.
+  const returnPath = useMemo(() => {
+    const query = new URLSearchParams({
+      purpose,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+    return `/mobile-auth?${query.toString()}`;
+  }, [codeChallenge, purpose, state]);
 
   const purposeText = useMemo(() => {
     if (purpose === "link-provider") return t("purposeLinkProvider");
@@ -100,9 +113,12 @@ export function MobileAuthClient({
       <Typography sx={{ mb: 3, color: "text.secondary" }}>{purposeText}</Typography>
 
       {!authenticated && !isPending && (
-        <Alert severity="info" sx={{ mb: 3, textAlign: "left" }}>
-          {t("signInFirst")}
-        </Alert>
+        <>
+          <Alert severity="info" sx={{ mb: 3, textAlign: "left" }}>
+            {t("signInFirst")}
+          </Alert>
+          <AuthDialog open dismissible={false} onClose={() => {}} callbackPath={returnPath} />
+        </>
       )}
 
       {phase === "error" && (

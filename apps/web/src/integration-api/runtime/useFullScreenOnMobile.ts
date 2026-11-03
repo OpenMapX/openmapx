@@ -15,8 +15,8 @@ import type { SystemStyleObject } from "@mui/system/styleFunctionSx";
  *     slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
  *   />
  *
- * The shared paper sx squares off the corners on mobile and vertically
- * centers DialogContent when its children don't fill the viewport (using
+ * The shared paper sx squares off the corners on mobile, keeps the content
+ * clear of the system bars, and vertically centers DialogContent when its children don't fill the viewport (using
  * `safe center` so long, scrollable content still starts at the top).
  */
 export function useFullScreenOnMobile(): boolean {
@@ -26,6 +26,11 @@ export function useFullScreenOnMobile(): boolean {
 
 export const mobileFullScreenDialogPaperSx: SystemStyleObject<Theme> = {
   borderRadius: { xs: 0, sm: "12px" },
+  // A full-screen dialog covers the status bar and home indicator wherever the
+  // page draws edge to edge (an installed PWA, the installed app), so its
+  // content keeps clear of the system bars there.
+  paddingTop: { xs: "var(--omx-safe-top)", sm: 0 },
+  paddingBottom: { xs: "var(--omx-safe-bottom)", sm: 0 },
   "& .MuiDialogContent-root": {
     display: { xs: "flex", sm: "block" },
     flexDirection: "column",
