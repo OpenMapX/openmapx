@@ -172,6 +172,15 @@ describe("RouteStopSearch", () => {
     expect(screen.queryByText("Station a")).toBeNull();
   });
 
+  it("renders each chip icon in the chip's icon slot, so it gets the chip's icon spacing", () => {
+    render(view());
+    for (const name of ["Fuel", "Charging", "Hotels", "Chain"]) {
+      const icon = chip(name).querySelector(".MuiChip-icon");
+      expect(icon).not.toBeNull();
+      expect(icon?.querySelector("svg")).not.toBeNull();
+    }
+  });
+
   it("searches the chosen kind and lists results by distance from the start", () => {
     render(view());
     fireEvent.click(chip("Fuel"));

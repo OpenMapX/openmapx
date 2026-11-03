@@ -30,7 +30,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { RouteSearchResultsLayer } from "@/components/navigation/RouteSearchResultsLayer";
 import {
   PLACE_ICON_PATH,
@@ -39,6 +39,7 @@ import {
 } from "@/components/navigation/routeSearchCategories";
 import { useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
+import { floatingChipSx } from "@/components/search/floatingChipSx";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -64,6 +65,16 @@ function formatRouteDistance(meters: number, units: Units): string {
 function formatRoundDistance(meters: number, units: Units, locale: string): string {
   const value = units === "imperial" ? meters / METERS_PER_MILE : meters / 1000;
   return `${new Intl.NumberFormat(locale).format(Math.round(value))} ${units === "imperial" ? "mi" : "km"}`;
+}
+
+/**
+ * A chip icon in the same wrapper the Explore category chips use: the wrapper
+ * takes the chip's icon class (and its spacing), a bare SVG would not.
+ */
+function chipIcon(icon: ReactElement): ReactElement {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>{icon}</Box>
+  );
 }
 
 export interface RouteStopSearchProps {
@@ -337,22 +348,22 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
               key={c.key}
               clickable
               aria-pressed={active}
-              color={active ? "primary" : "default"}
               variant={active ? "filled" : "outlined"}
-              icon={<RouteSearchGlyph path={c.iconPath} size={18} />}
+              icon={chipIcon(<RouteSearchGlyph path={c.iconPath} size={16} />)}
               label={t(c.labelKey)}
               onClick={() => chooseCategory(c.key)}
+              sx={floatingChipSx(active, "category")}
             />
           );
         })}
         <Chip
           clickable
           aria-pressed={brand !== null || chainOpen}
-          color={brand ? "primary" : "default"}
-          variant={brand || chainOpen ? "filled" : "outlined"}
-          icon={<StorefrontIcon sx={{ fontSize: 18 }} />}
+          variant={brand !== null || chainOpen ? "filled" : "outlined"}
+          icon={chipIcon(<StorefrontIcon sx={{ fontSize: 16 }} />)}
           label={brand ? brand.name : t("rsPlanChain")}
           onClick={toggleChain}
+          sx={floatingChipSx(brand !== null || chainOpen, "category")}
         />
       </Box>
 
