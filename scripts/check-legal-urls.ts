@@ -2,9 +2,9 @@
  * Liveness check for the legal URLs declared in integration manifests.
  *
  * Every `manifest.json` data source carries a `url` (data portal / homepage) and
- * `providerPrivacyUrl` (privacy policy), and optionally a `licenseUrl` (license
- * text) and `dpaUrl` (data-processing agreement) — all of which the /privacy,
- * /terms, and /licenses pages link to. A dead link there is a real legal/UX
+ * `providerPrivacyUrl` (privacy policy), and optionally licence, terms, DPA,
+ * methodology and attribution-evidence links — which the /privacy, /terms, and
+ * /licenses pages and source panels link to. A dead link there is a real legal/UX
  * problem (we already found one 404'd privacy URL by hand). This script collects
  * those URLs across all integrations, dedupes them, and HTTP-checks each.
  *
@@ -18,8 +18,10 @@
  * Each negative HEAD is confirmed with a real GET first, since HEAD is widely
  * mishandled.
  *
- * Covers the `url`, `providerPrivacyUrl`, `licenseUrl`, and `dpaUrl` source fields
- * (not the few hardcoded URLs in the legal page content).
+ * Covers every http(s) URL anywhere inside a data source, including nested
+ * `licensing` bindings, declarations and evidence, so a schema change cannot
+ * silently drop links from the check. The few hardcoded URLs in the legal page
+ * content are not covered.
  *
  * NOTE: this makes real network requests, so it is inherently slower and less
  * deterministic than the offline check-legal-tables guard. Run on demand with
@@ -33,15 +35,28 @@ import pMap from "p-map";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
 
-/** The manifest data-source URL fields this check covers. */
-const URL_FIELDS = ["url", "providerPrivacyUrl", "licenseUrl", "dpaUrl"] as const;
-type UrlField = (typeof URL_FIELDS)[number];
-
 /** How many requests to run at once, and how long to wait for each. */
 const CONCURRENCY = 12;
 const TIMEOUT_MS = 12_000;
 /** A browser-like UA cuts down on bot-blocking false positives. */
 const USER_AGENT = "Mozilla/5.0";
+
+/**
+ * Exact URLs that serve their page in a real browser but answer automated clients
+ * with HTTP 404. Each is reported as unverified, never as OK, until `reviewBy`;
+ * after that it blocks again until someone re-checks it in a browser and renews
+ * the entry (about 30 days at a time). A 410 is never exempt.
+ *
+ * Uber's developer docs render client-side: the server returns 404 and an empty
+ * shell for every docs path, so the terms text cannot be checked automatically.
+ */
+const BROWSER_VERIFIED_FALSE_404S = [
+  {
+    url: "https://developer.uber.com/docs/businesses/terms-of-use",
+    verifiedOn: "2026-11-03",
+    reviewBy: "2026-12-03",
+  },
+];
 
 type Verdict = "ok" | "dead" | "unverified";
 
@@ -49,7 +64,8 @@ interface Usage {
   dir: string;
   integrationId: string;
   sourceId: string;
-  field: UrlField;
+  /** Path of the URL inside its data source, e.g. `licensing.bindings[0].license.url`. */
+  field: string;
 }
 
 interface UrlResult {
@@ -61,10 +77,21 @@ interface UrlResult {
 
 interface ManifestDataSource {
   sourceId?: string;
-  url?: string;
-  providerPrivacyUrl?: string;
-  licenseUrl?: string;
-  dpaUrl?: string;
+  [field: string]: unknown;
+}
+
+/** Yield every http(s) URL string nested anywhere in `value`, with its path. */
+function* nestedUrls(value: unknown, path = ""): Generator<[string, string]> {
+  if (typeof value === "string") {
+    const url = value.trim();
+    if (/^https?:\/\//i.test(url)) yield [path, url];
+  } else if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) yield* nestedUrls(item, `${path}[${index}]`);
+  } else if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      yield* nestedUrls(item, path ? `${path}.${key}` : key);
+    }
+  }
 }
 
 /**
@@ -102,10 +129,7 @@ function collectUrls(): Map<string, Usage[]> {
     }
 
     for (const ds of manifest.dataSources ?? []) {
-      for (const field of URL_FIELDS) {
-        const value = ds[field];
-        if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) continue;
-        const url = value.trim();
+      for (const [field, url] of nestedUrls(ds)) {
         const usage: Usage = { dir, integrationId, sourceId: ds.sourceId ?? "?", field };
         const list = usages.get(url) ?? [];
         list.push(usage);
@@ -141,19 +165,17 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<number> {
 function classify(url: string, status: number | undefined, err: unknown): UrlResult {
   if (status !== undefined) {
     if (status < 400) return { url, status, verdict: "ok" };
-    // This exact URL serves current API terms in a real browser, but returns
-    // 404 to automated clients (verified 2026-10-04). Keep it visible as
-    // unverified and require renewed evidence after 30 days; never exempt 410.
+    const falseNotFound = BROWSER_VERIFIED_FALSE_404S.find((entry) => entry.url === url);
     if (
       status === 404 &&
-      url === "https://developer.uber.com/docs/businesses/terms-of-use" &&
-      Date.now() < Date.parse("2026-11-03T00:00:00Z")
+      falseNotFound &&
+      Date.now() < Date.parse(`${falseNotFound.reviewBy}T00:00:00Z`)
     ) {
       return {
         url,
         status,
         verdict: "unverified",
-        error: "Browser verified on 2026-10-04; automated false 404. Review by 2026-11-03.",
+        error: `Browser verified on ${falseNotFound.verifiedOn}; automated false 404. Review by ${falseNotFound.reviewBy}.`,
       };
     }
     // Only GET-confirmed missing resources block the check.
@@ -217,7 +239,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`Checking ${urls.length} unique legal URL(s) (source, privacy, license, DPA)…`);
+  console.log(
+    `Checking ${urls.length} unique legal URL(s) (source, privacy, licence, terms, DPA, evidence)…`,
+  );
   const results = await pMap(urls, checkUrl, { concurrency: CONCURRENCY });
   const dead = results.filter((r) => r.verdict === "dead");
   const unverified = results.filter((r) => r.verdict === "unverified");

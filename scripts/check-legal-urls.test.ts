@@ -11,7 +11,8 @@ function runCheck(
   gets: (number | string)[],
   blockedUa = false,
   url = "https://provider.example/privacy",
-  now = "2026-10-04T00:00:00Z",
+  now = "2026-11-04T00:00:00Z",
+  dataSource: Record<string, unknown> = { sourceId: "source", url },
 ) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-legal-urls-"));
   mkdirSync(join(root, "scripts"));
@@ -31,7 +32,7 @@ function runCheck(
     join(root, "integrations/provider/manifest.json"),
     JSON.stringify({
       id: "provider",
-      dataSources: [{ sourceId: "source", url }],
+      dataSources: [dataSource],
     }),
   );
   const preload = join(root, "http.cjs");
@@ -103,8 +104,8 @@ describe("legal URL liveness CLI", () => {
       "https://developer.uber.com/docs/businesses/terms-of-use",
     );
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain("Browser verified on 2026-10-04");
-    expect(result.stderr).toContain("2026-11-03");
+    expect(result.stderr).toContain("Browser verified on 2026-11-03");
+    expect(result.stderr).toContain("Review by 2026-12-03");
   });
   it("stops exempting Uber after its manual verification expires", () => {
     const result = runCheck(
@@ -112,7 +113,7 @@ describe("legal URL liveness CLI", () => {
       [404],
       false,
       "https://developer.uber.com/docs/businesses/terms-of-use",
-      "2026-11-03T00:00:00Z",
+      "2026-12-03T00:00:00Z",
     );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("HTTP 404");
@@ -125,6 +126,21 @@ describe("legal URL liveness CLI", () => {
       "https://developer.uber.com/docs/businesses/terms-of-use",
     );
     expect(result.status).toBe(1);
+  });
+  it("checks licence URLs nested in the licensing block and names their path", () => {
+    const result = runCheck(404, [404], false, undefined, undefined, {
+      sourceId: "source",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", license: { kind: "unknown", url: "https://provider.example/terms" } },
+        ],
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'licensing.bindings[0].license.url · source "source" → https://provider.example/terms',
+    );
   });
   it("accepts a working GET even when HEAD reports 404", () => {
     const result = runCheck(404, [200]);
