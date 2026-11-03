@@ -11,7 +11,9 @@ function runCheck(
   gets: (number | string)[],
   blockedUa = false,
   url = "https://provider.example/privacy",
-  now = "2026-10-04T00:00:00Z",
+  // Simulate a server that answers 404 to every request that doesn't ask for HTML.
+  htmlOnly = false,
+  dataSource: Record<string, unknown> = { sourceId: "source", url },
 ) {
   const root = mkdtempSync(join(tmpdir(), "openmapx-legal-urls-"));
   mkdirSync(join(root, "scripts"));
@@ -31,7 +33,7 @@ function runCheck(
     join(root, "integrations/provider/manifest.json"),
     JSON.stringify({
       id: "provider",
-      dataSources: [{ sourceId: "source", url }],
+      dataSources: [dataSource],
     }),
   );
   const preload = join(root, "http.cjs");
@@ -39,11 +41,11 @@ function runCheck(
     preload,
     `
     const gets = ${JSON.stringify(gets)};
-    Date.now = () => Date.parse(${JSON.stringify(now)});
     let next = 0;
     global.fetch = async (_url, options) => {
       let result = options.method === 'HEAD' ? ${JSON.stringify(head)} : gets[Math.min(next++, gets.length - 1)];
       if (${blockedUa} && options.headers['user-agent'].includes('OpenMapX-LinkCheck')) result = 502;
+      if (${htmlOnly} && !options.headers.accept.startsWith('text/html')) result = 404;
       if (typeof result === 'string') throw new Error(result, { cause: { code: result } });
       return new Response(null, { status: result });
     };
@@ -95,36 +97,25 @@ describe("legal URL liveness CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`HTTP ${status}`);
   });
-  it("reports the browser-verified Uber false 404 as unverified, with evidence", () => {
-    const result = runCheck(
-      404,
-      [404],
-      false,
-      "https://developer.uber.com/docs/businesses/terms-of-use",
-    );
+  it("asks for HTML so servers that 404 wildcard requests are not reported dead", () => {
+    const result = runCheck(200, [200], false, undefined, true);
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain("Browser verified on 2026-10-04");
-    expect(result.stderr).toContain("2026-11-03");
+    expect(result.stderr).toBe("");
   });
-  it("stops exempting Uber after its manual verification expires", () => {
-    const result = runCheck(
-      404,
-      [404],
-      false,
-      "https://developer.uber.com/docs/businesses/terms-of-use",
-      "2026-11-03T00:00:00Z",
-    );
+  it("checks licence URLs nested in the licensing block and names their path", () => {
+    const result = runCheck(404, [404], false, undefined, false, {
+      sourceId: "source",
+      licensing: {
+        version: 1,
+        bindings: [
+          { scope: "data", license: { kind: "unknown", url: "https://provider.example/terms" } },
+        ],
+      },
+    });
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("HTTP 404");
-  });
-  it("does not exempt a newly gone Uber page returning 410", () => {
-    const result = runCheck(
-      410,
-      [410],
-      false,
-      "https://developer.uber.com/docs/businesses/terms-of-use",
+    expect(result.stderr).toContain(
+      'licensing.bindings[0].license.url · source "source" → https://provider.example/terms',
     );
-    expect(result.status).toBe(1);
   });
   it("accepts a working GET even when HEAD reports 404", () => {
     const result = runCheck(404, [200]);

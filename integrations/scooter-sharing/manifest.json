@@ -156,7 +156,7 @@
               "reviewedAt": "2026-10-14",
               "evidenceUrls": [
                 "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
-                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+                "https://github.com/MobilityData/gbfs/blob/master/README.md#common-data-licenses"
               ],
               "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
@@ -175,7 +175,7 @@
               "reviewedAt": "2026-10-14",
               "evidenceUrls": [
                 "https://github.com/MobilityData/gbfs/blob/master/gbfs.md",
-                "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
+                "https://github.com/MobilityData/gbfs/blob/master/README.md#common-data-licenses"
               ],
               "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
