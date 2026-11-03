@@ -144,17 +144,19 @@ WORKDIR /app
 # would hand a compromised API the tooling for host control the moment any
 # socket became reachable.
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456, and git
-# pulls in libexpat, whose CVE-2026-66046 fix landed after this base was cut.
+# pulls in libexpat; 2.10.0-r0 fixes CVE-2026-117610 and CVE-2026-118370.
 # curl pulls in brotli-libs; 1.2.1-r0 fixes CVE-2026-111497. curl and libcurl
 # 8.23.0-r0 fix CVE-2026-92392. `apk add` alone is not enough: a release build
-# can restore this layer from the registry build cache with the curl it held
-# then. Naming curl here, and the version floor checked after, change this
-# instruction, which keeps such a layer from being reused; the floor also
-# fails the build on a mirror that doesn't have the fix yet.
+# can restore this layer from the registry build cache with the packages it
+# held then. The version floors checked after the upgrade change this
+# instruction, which keeps such a layer from being reused; they also fail the
+# build on a mirror that doesn't have the fixes yet.
 RUN apk add --no-cache curl ca-certificates git && \
     apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl && \
     libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
     test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
+    libexpat="$(apk query --fields version libexpat)" && libexpat="${libexpat#Version: }" && \
+    test -n "$libexpat" && test "$(apk version -t "$libexpat" 2.10.0-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
