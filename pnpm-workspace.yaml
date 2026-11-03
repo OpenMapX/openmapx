@@ -33,9 +33,24 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-# Install this exact security patch immediately; retain the age gate elsewhere.
+# Install these exact security patches immediately; retain the age gate elsewhere.
 minimumReleaseAgeExclude:
   - "node-forge@1.4.2"
+  # Better Auth security release of 2026-11-03 (GHSA-4wq4-2ppv-q3hg and others).
+  # better-auth pins its adapters, telemetry and better-call to these versions.
+  - "better-auth@1.7.16"
+  - "@better-auth/core@1.7.16"
+  - "@better-auth/drizzle-adapter@1.7.16"
+  - "@better-auth/expo@1.7.16"
+  - "@better-auth/i18n@1.7.16"
+  - "@better-auth/kysely-adapter@1.7.16"
+  - "@better-auth/memory-adapter@1.7.16"
+  - "@better-auth/mongo-adapter@1.7.16"
+  - "@better-auth/oauth-provider@1.7.16"
+  - "@better-auth/passkey@1.7.16"
+  - "@better-auth/prisma-adapter@1.7.16"
+  - "@better-auth/telemetry@1.7.16"
+  - "better-call@1.4.5"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler

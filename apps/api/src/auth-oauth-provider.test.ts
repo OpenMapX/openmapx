@@ -3,6 +3,7 @@ import { getTableColumns } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+const BETTER_AUTH_VERSION = "1.7.16";
 const ORIGINAL_SECRET = process.env.BETTER_AUTH_SECRET;
 
 function policyIdentity(id: string, role: string) {
@@ -52,7 +53,7 @@ afterAll(() => {
 });
 
 describe("managed OAuth provider policy", () => {
-  it("pins every runtime Better Auth package and the schema CLI to 1.7.14", () => {
+  it(`pins every runtime Better Auth package and the schema CLI to ${BETTER_AUTH_VERSION}`, () => {
     const apiManifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
@@ -83,21 +84,21 @@ describe("managed OAuth provider policy", () => {
     const webPackages = ["@better-auth/core", "@better-auth/passkey", "better-auth"];
 
     for (const packageName of apiPackages) {
-      expect(apiManifest.dependencies[packageName]).toBe("1.7.14");
+      expect(apiManifest.dependencies[packageName]).toBe(BETTER_AUTH_VERSION);
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.14`);
+      expect(apiLock).toContain(`${lockName}:\n        specifier: ${BETTER_AUTH_VERSION}`);
     }
     for (const packageName of corePackages) {
-      expect(coreManifest.dependencies[packageName]).toBe("1.7.14");
+      expect(coreManifest.dependencies[packageName]).toBe(BETTER_AUTH_VERSION);
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.14`);
+      expect(coreLock).toContain(`${lockName}:\n        specifier: ${BETTER_AUTH_VERSION}`);
     }
     for (const packageName of webPackages) {
-      expect(webManifest.dependencies[packageName]).toBe("1.7.14");
+      expect(webManifest.dependencies[packageName]).toBe(BETTER_AUTH_VERSION);
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.14`);
+      expect(webLock).toContain(`${lockName}:\n        specifier: ${BETTER_AUTH_VERSION}`);
     }
-    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.14 generate");
+    expect(apiManifest.scripts["auth:generate"]).toContain(`auth@${BETTER_AUTH_VERSION} generate`);
     for (const importer of [apiLock, coreLock, webLock]) {
       expect(importer).not.toContain("specifier: 1.6.");
     }
