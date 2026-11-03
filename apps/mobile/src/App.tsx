@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Linking, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
-import { createShellBridge } from "./bridge/createShellBridge";
+import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
@@ -24,6 +24,7 @@ import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
+import { answerCommand, createShellServices } from "./shell/shellServices";
 import { useHardwareBack } from "./shell/useHardwareBack";
 
 /**
@@ -67,18 +68,29 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
 
   const webViewRef = useRef<WebView>(null);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
-  const shell = useMemo(
+  const services = useMemo(
     () =>
-      createShellBridge({
-        webOrigin: config.webOrigin,
-        inject: (script) => webViewRef.current?.injectJavaScript(script),
-        // Native navigation is deliberately unavailable until the foreground
-        // coordinator, permissions and effect ports are composed here. The web
-        // app then keeps using its complete browser fallbacks instead of acting
-        // on a capability this shell cannot yet fulfil.
+      createShellServices({
+        config,
+        isAppActive: () => visibilityRef.current === "active",
       }),
-    [config.webOrigin],
+    [config],
   );
+  const shell = useMemo(() => {
+    const composed: ShellBridge = createShellBridge({
+      webOrigin: config.webOrigin,
+      inject: (script) => webViewRef.current?.injectJavaScript(script),
+      // One-off location, settings and system-browser sign-in are answered
+      // here. Native navigation is not composed yet, so its commands are
+      // refused and every navigation capability is reported false.
+      dispatch: (message) =>
+        answerCommand(message, services.auxiliary, (type, payload, options) =>
+          composed.bridge.send(type, payload, options),
+        ),
+      permission: () => services.permission(),
+    });
+    return composed;
+  }, [config.webOrigin, services]);
   const recovery = useMemo(
     () =>
       config.feasibilityMode

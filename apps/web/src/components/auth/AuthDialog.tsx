@@ -284,6 +284,9 @@ export function AuthDialog({
       const route = systemAuth.routeFor("oauth");
       if (route === "system-browser") {
         const outcome = await systemAuth.runSystemAuth("sign-in");
+        // Unlike the in-page redirect, the page stays here afterwards, so the
+        // form has to become usable again whatever the outcome.
+        setLoading(false);
         if (outcome === "ok") {
           handleAuthenticated();
           return;
@@ -294,6 +297,7 @@ export function AuthDialog({
         return;
       }
       if (route !== "in-page") {
+        setLoading(false);
         setError(tMobile("openInBrowserBody"));
         return;
       }
@@ -322,7 +326,7 @@ export function AuthDialog({
         <IconButton
           onClick={handleClose}
           aria-label={tc("close")}
-          sx={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}
+          sx={{ position: "absolute", top: "calc(8px + var(--omx-safe-top))", right: 8, zIndex: 1 }}
         >
           <CloseIcon />
         </IconButton>

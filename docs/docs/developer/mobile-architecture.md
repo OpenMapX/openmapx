@@ -7,15 +7,18 @@ sidebar_position: 9
 # Mobile architecture
 
 The installed app renders the web UI in a React Native WebView at a fixed origin.
-The shell restricts navigation and exposes a versioned bridge. Native navigation
-processors, persistence, audio and recovery components exist, but the foreground
-app does not yet connect them to bridge commands.
+The shell restricts navigation and exposes a versioned bridge. It answers the
+page's one-shot requests: a location fix, opening OS settings and a
+system-browser sign-in. Native navigation processors, persistence, audio and
+recovery components exist, but the foreground app does not yet connect them to
+bridge commands.
 
-`apps/mobile/src/App.tsx` calls `createShellBridge` without a dispatcher or
-capability providers. The handshake therefore reports ground navigation, transit
-navigation, background location, local notifications and speech as unavailable.
-Commands other than event acknowledgements receive `unsupported-capability`.
-Do not describe this composition as a working background-navigation release.
+`apps/mobile/src/App.tsx` composes `createShellServices` (`src/shell/shellServices.ts`)
+into `createShellBridge`. The handshake reports the OS location grant and reports
+ground navigation, transit navigation, background location, local notifications
+and speech as unavailable. Navigation-session commands receive
+`unsupported-capability`. Do not describe this composition as a working
+background-navigation release.
 
 ## Why there is a split at all
 
@@ -38,7 +41,8 @@ leaves installed navigation unavailable.
 | Ground and transit navigation                                         | Browser engine                            | Native authority selected; capability currently false                   |
 | Background location, local alerts and speech                          | Subject to browser limits                 | Capability currently false                                              |
 | Durable native session                                                | Not used                                  | SQLite components and recovery exist; session commands are not composed |
-| One-shot location, settings, authentication and deep-link commands    | Browser flows                             | Protocol vocabulary exists; dispatch is not composed                    |
+| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                          |
+| Deep-link delivery                                                    | Browser flows                             | Protocol vocabulary and parser exist; OS delivery is not composed       |
 | Community frontend bundles                                            | Disabled                                  | Disabled                                                                |
 | Microphone input                                                      | Subject to browser support and permission | Disabled                                                                |
 
@@ -46,6 +50,15 @@ The immutable descriptor is injected before page scripts run. Shell restrictions
 use that descriptor, so they apply during negotiation, incompatibility and errors.
 `MobileRuntimeProvider.tsx` is the web authority boundary;
 `createShellBridge.ts` supplies the current capability report.
+
+## One-shot location
+
+`location.request` reads one position through the process-wide location driver
+and never opens a stream beside a running session. When the app has never asked
+for location, the request comes from the user's own tap on a location control,
+so the shell shows the When-In-Use prompt, and only while the app is in front.
+It never asks for background access; that belongs to the navigation start flow.
+After a refusal it answers `denied` without prompting again.
 
 ## The bridge protocol
 
@@ -101,10 +114,13 @@ associations, origin and trademark-compliant name.
 ## Authentication
 
 Email/password, verification, email OTP and TOTP use the web UI and its session
-cookie. The system-browser handoff components support sign-in, provider linking
-and passkey setup, but `App.tsx` does not currently dispatch `auth.open` to them.
-Successful helper tests therefore do not establish installed OAuth or passkey
-sign-in.
+cookie. OAuth and passkeys go through `auth.open`: the shell opens `/mobile-auth`
+with `expo-web-browser` (a Custom Tab on Android, `ASWebAuthenticationSession`
+on iOS). That page signs the user in inside the real browser when needed and
+then hands back a callback code on the compiled scheme. The page's callback
+scheme comes from `NEXT_PUBLIC_MOBILE_SCHEME` (default `openmapx`), so a
+development build, whose scheme is `openmapx-dev`, completes the handoff only
+against a web build configured with that scheme.
 
 ### The handoff, and its threat model
 

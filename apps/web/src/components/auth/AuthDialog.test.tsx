@@ -23,9 +23,56 @@ vi.mock("@openmapx/core", () => ({
   oauthProviders: [{ providerId: "openstreetmap", name: "OpenStreetMap", icon: "/osm.svg" }],
 }));
 
+// The installed app routes OAuth to the system browser; an ordinary browser
+// keeps it in the page. Tests choose per case.
+const systemAuth = {
+  route: "in-page" as "in-page" | "system-browser",
+  runSystemAuth: vi.fn(),
+};
+vi.mock("@/lib/mobile/useSystemAuth", () => ({
+  useSystemAuth: () => ({
+    routeFor: () => systemAuth.route,
+    thirdPartyPrimarySignIn: true,
+    runSystemAuth: systemAuth.runSystemAuth,
+  }),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  systemAuth.route = "in-page";
   signInEmail.mockResolvedValue({ data: {}, error: null });
+});
+
+describe("AuthDialog in the installed app", () => {
+  it("is usable again after a cancelled system-browser sign-in", async () => {
+    systemAuth.route = "system-browser";
+    systemAuth.runSystemAuth.mockResolvedValue("cancelled");
+    const { AuthDialog } = await import("./AuthDialog");
+    render(<AuthDialog open onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "auth.continueWith" }));
+
+    await screen.findByText("mobileAuth.systemAuthCancelled");
+    expect(
+      (screen.getByRole("button", { name: "auth.continueWith" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "auth.signIn" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(signInSocial).not.toHaveBeenCalled();
+  });
+
+  it("reports a completed system-browser sign-in as authenticated", async () => {
+    systemAuth.route = "system-browser";
+    systemAuth.runSystemAuth.mockResolvedValue("ok");
+    const { AuthDialog } = await import("./AuthDialog");
+    const onAuthenticated = vi.fn();
+    render(<AuthDialog open onClose={vi.fn()} onAuthenticated={onAuthenticated} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "auth.continueWith" }));
+
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe("AuthDialog dismissal policy", () => {
