@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { currentOpeningHoursInfo } from "./currentOpeningHours";
+import { currentlyOpen, currentOpeningHoursInfo } from "./currentOpeningHours";
 import { matchingOpeningHours, presentOpeningHoursInfo } from "./openingHoursClient";
 
 const raw = "Tu-Su,PH 10:00-18:00";
@@ -68,5 +68,16 @@ describe("current opening hours", () => {
     );
     expect(chosen.info?.status).toMatchObject({ isUnknown: true, text: "Mo-Fr 09:00-17:00" });
     expect(chosen.source).toBeUndefined();
+  });
+
+  it("says whether a place is open now with the holiday context its list verdict uses", async () => {
+    vi.useFakeTimers();
+    // Saturday 2026-09-26, 20:00 in Aachen: after Tu-Su 10:00-18:00.
+    vi.setSystemTime(new Date("2026-09-26T18:00:00Z"));
+    expect(await currentlyOpen(raw, point)).toBe(false);
+    vi.setSystemTime(new Date("2026-09-26T10:00:00Z"));
+    expect(await currentlyOpen(raw, point)).toBe(true);
+    expect(await currentlyOpen(raw, { lat: 0, lon: 0 })).toBeUndefined();
+    expect(await currentlyOpen(undefined, point)).toBeUndefined();
   });
 });

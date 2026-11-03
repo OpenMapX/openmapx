@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildOpeningHoursInfo, isAlwaysOpen, parseOpeningHours } from "./openingHours";
+import { buildOpeningHoursInfo, isAlwaysOpen, isOpenNow, parseOpeningHours } from "./openingHours";
 
 // Berlin (CEST = UTC+2 in May). The schedule is evaluated against the place's
 // local wall-clock, not the server's (which is UTC in production).
@@ -134,5 +134,26 @@ describe("parseOpeningHours — unevaluable values", () => {
     expect(status?.isUnknown).toBe(true);
     expect(status?.text).toBe("by appointment");
     vi.useRealTimers();
+  });
+});
+
+describe("isOpenNow", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("judges the place's own local time, not the server's", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T23:30:00Z")); // 01:30 in Berlin, 08:30 in Tokyo
+    expect(isOpenNow(HOURS, BERLIN)).toBe(false);
+    expect(isOpenNow(HOURS, { lat: 35.68, lon: 139.76, countryCode: "jp" })).toBe(true);
+    vi.setSystemTime(new Date("2026-05-28T10:00:00Z")); // 12:00 in Berlin
+    expect(isOpenNow(HOURS, BERLIN)).toBe(true);
+  });
+
+  it("states no verdict without hours or for hours it cannot evaluate now", () => {
+    expect(isOpenNow(undefined, BERLIN)).toBeUndefined();
+    expect(isOpenNow("not a schedule", BERLIN)).toBeUndefined();
+    expect(isOpenNow("Mo-Su unknown", BERLIN)).toBeUndefined();
+    expect(isOpenNow('"by appointment"', BERLIN)).toBeUndefined();
+    expect(isOpenNow("off", BERLIN)).toBe(false);
   });
 });

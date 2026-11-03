@@ -120,6 +120,11 @@ function buildPresetQuery(tags: Record<string, string>, bbox: BoundingBox): stri
 // lean — add a key here when introducing a new facet filter (see CATEGORY_FACETS).
 const FILTERABLE_TAG_KEYS = [
   "wheelchair",
+  // Who may use a place and whether it costs: the arrival card's parking
+  // suggestions leave out private and reserved spaces and show the fee.
+  "access",
+  "fee",
+  "parking_space",
   "outdoor_seating",
   "takeaway",
   "delivery",

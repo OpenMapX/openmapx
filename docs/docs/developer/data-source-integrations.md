@@ -146,6 +146,8 @@ export interface DataSourceResult {
   status?: string; // "operational" | "non-operational" | …
   summary?: I18nToken; // short localized label under the marker
   operator?: string;
+  fee?: "free" | "paid"; // when the source says whether use costs money
+  access?: "public" | "customers" | "permit" | "private" | "restricted"; // who may use it
   kind?: "station" | "vehicle"; // fixed vs free-floating; gates OSM snapping
   attributions?: Attribution[]; // legacy per-record compatibility credit
   sortValues?: Record<string, number>; // for client-side sorting

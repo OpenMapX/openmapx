@@ -12,10 +12,11 @@ import { useMapAttributionStore } from "@/integration-api/overlay/mapAttribution
 import { markerMapContributors } from "@/integration-api/overlay/markerMapContribution";
 import { renderedMapAttributionTracker } from "@/integration-api/overlay/renderedMapAttributionTracker";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+import type { NearbyParkingPlace } from "./nearbyParking";
 import { getParkingCoords } from "./parkingCoords";
 
 export interface ArrivalParkingMarkersProps {
-  places: CategoryPlace[];
+  places: NearbyParkingPlace[];
   selectedPlace: CategoryPlace | null;
   onSelectPlace: (place: CategoryPlace | null) => void;
   disabled?: boolean;
@@ -91,7 +92,14 @@ export function ArrivalParkingMarkers({
       const marker = new Marker({ element: el }).setLngLat(coords).addTo(map);
 
       markersRef.current.push(marker);
-      evidence.push({ element: el, contributors: contributorsForField(place, "coordinates") });
+      // The card beside the map shows each marker's walk, measured by a router.
+      evidence.push({
+        element: el,
+        contributors: snapshotContributors(
+          contributorsForField(place, "coordinates"),
+          place.walk?.contributors ?? [],
+        ),
+      });
     });
 
     const unsubscribe = renderedMapAttributionTracker(map).subscribe(owner, {

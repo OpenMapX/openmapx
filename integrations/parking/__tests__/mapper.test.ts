@@ -154,6 +154,9 @@ describe("mapParkingSiteToResult", () => {
       $t: "summary.totalSpaces",
       values: { count: 120 },
     });
+    expect(text(mapParkingSiteToResult(makeSite({ capacity: 120 })).summary)).toBe("120 spaces");
+    expect(text(mapParkingSiteToResult(makeSite({ capacity: 1 })).summary)).toBe("1 space");
+    expect(text(mapParkingSiteToResult(makeSite({ capacity: 1 })).summary, "de")).toBe("1 Platz");
     expect(text(mapParkingSiteToResult(makeSite({ layout: "underground" })).summary)).toBe(
       "Underground Garage",
     );
@@ -213,6 +216,43 @@ describe("mapParkingSiteToResult", () => {
     ]);
     expect(result.fallbackName).toEqual({ $t: "siteFallbackName" });
     expect(mapParkingSiteToResult(makeSite())).not.toHaveProperty("fallbackName");
+  });
+
+  it("says whether a site is free and who may park there, only when the site says", () => {
+    const rate = { currency: "EUR", rows: [{ kind: "per_hour" as const, amount: 2 }] };
+    const result = (over: Partial<ParkingSite>) => mapParkingSiteToResult(makeSite(over));
+    expect(result({ free: true })).toMatchObject({ fee: "free" });
+    expect(result({ free: false })).toMatchObject({ fee: "paid" });
+    expect(result({ rates: [rate] })).toMatchObject({ fee: "paid" });
+    expect(result({ audience: "permit" })).toMatchObject({ access: "permit" });
+    expect(result({ audience: "public" })).toMatchObject({ access: "public" });
+    const unknown = result({ audience: "unknown" });
+    expect(unknown).not.toHaveProperty("access");
+    expect(unknown).not.toHaveProperty("fee");
+  });
+
+  it("restricts a site whose every space a user group keeps, as a lone disabled bay", () => {
+    const access = (over: Partial<ParkingSite>) => mapParkingSiteToResult(makeSite(over)).access;
+    // A bay published as a site of one space, kept for disabled drivers.
+    expect(access({ capacity: 1, areas: [area("car", "disabled")] })).toBe("restricted");
+    expect(access({ capacity: 4, areas: [area("car", "disabled", { capacity: 4 })] })).toBe(
+      "restricted",
+    );
+    // A garage that also has disabled spaces, counted or not, is open to anyone.
+    expect(access({ capacity: 260, areas: [area("car", "disabled")] })).toBeUndefined();
+    expect(
+      access({ capacity: 40, areas: [area("car", "disabled", { capacity: 4 })] }),
+    ).toBeUndefined();
+    // Kept at some hours only, or with untyped spaces, the site is not reserved.
+    expect(
+      access({ capacity: 1, areas: [area("car", "residents", { hours: "Mo-Fr 08:00-18:00" })] }),
+    ).toBeUndefined();
+    expect(access({ capacity: 1, areas: [area("car", "any")] })).toBeUndefined();
+    expect(access({ areas: [area("car", "disabled")] })).toBeUndefined();
+    // A stated audience wins.
+    expect(access({ capacity: 1, areas: [area("car", "disabled")], audience: "public" })).toBe(
+      "public",
+    );
   });
 });
 

@@ -1,24 +1,33 @@
-import type { CategoryPlace } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 import { NearbyParkingCarousel } from "./NearbyParkingCarousel";
+import type { NearbyParkingPlace } from "./nearbyParking";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
-const mockPlaces: CategoryPlace[] = [
+const resolver = vi.hoisted(() => ({ integrationId: undefined as string | undefined }));
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: (integrationId: string | undefined) => {
+    resolver.integrationId = integrationId;
+    return (value: unknown) =>
+      value && typeof value === "object" && "$t" in value ? `resolved ${String(value.$t)}` : "";
+  },
+}));
+
+const mockPlaces: NearbyParkingPlace[] = [
   {
     id: "p1",
     name: "Central Garage",
     category: "parking",
     coordinates: [10.01, 50.01],
-    osmTags: { fee: "yes", parking: "multi-storey" },
+    fee: "paid",
   },
   {
     id: "p2",
     name: "Free Lot",
     category: "parking",
     coordinates: [10.02, 50.02],
-    osmTags: { fee: "no", parking: "surface" },
+    fee: "free",
   },
   {
     id: "p3",
@@ -134,14 +143,14 @@ describe("NearbyParkingCarousel", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("ignores non-canonical tags fee structure (osmTags is the contract)", () => {
-    const legacyPlace = {
+  it("shows a fee only from the candidate's own fee, not from raw tags", () => {
+    const legacyPlace: NearbyParkingPlace = {
       id: "p4",
       name: "Legacy Lot",
       category: "parking",
-      coordinates: [10.04, 50.04] as [number, number],
-      tags: { fee: "yes" },
-    } as unknown as CategoryPlace;
+      coordinates: [10.04, 50.04],
+      osmTags: { fee: "yes" },
+    };
 
     render(
       <NearbyParkingCarousel
@@ -205,5 +214,107 @@ describe("NearbyParkingCarousel", () => {
 
     expect(screen.getAllByText(/navigation.straightLineDistance/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/navigation.walkDetour/)).toBeNull();
+  });
+
+  it("shows the parking source's free-space line in the parking strings", () => {
+    render(
+      <NearbyParkingCarousel
+        places={[{ ...mockPlaces[0], summary: { $t: "summary.spaces", values: { count: 12 } } }]}
+        selectedPlace={null}
+        isLoading={false}
+        onSelectPlace={vi.fn()}
+        onDriveToPlace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("resolved summary.spaces")).toBeInTheDocument();
+    expect(resolver.integrationId).toBe("parking");
+  });
+
+  it("marks a car park kept for customers", () => {
+    render(
+      <NearbyParkingCarousel
+        places={[{ ...mockPlaces[0], access: "customers" }, mockPlaces[1]]}
+        selectedPlace={null}
+        isLoading={false}
+        onSelectPlace={vi.fn()}
+        onDriveToPlace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("navigation.parkingCustomersOnly")).toHaveLength(1);
+  });
+
+  it("shows the measured walk to the destination instead of the straight-line distance", () => {
+    render(
+      <NearbyParkingCarousel
+        places={[
+          {
+            ...mockPlaces[0],
+            walk: { seconds: 250, meters: 320, contributors: [] },
+          },
+          mockPlaces[1],
+        ]}
+        selectedPlace={null}
+        isLoading={false}
+        onSelectPlace={vi.fn()}
+        onDriveToPlace={vi.fn()}
+        destinationCoords={[10.01, 50.01]}
+      />,
+    );
+
+    const [measured, straight] = screen.getAllByRole("article");
+    expect(measured).toHaveTextContent("navigation.parkingWalkToDestination");
+    expect(measured).not.toHaveTextContent("navigation.straightLineDistance");
+    expect(straight).toHaveTextContent("navigation.straightLineDistance");
+  });
+
+  it("starts from the first card when the order changes, so the best one is in view", () => {
+    const props = {
+      selectedPlace: null,
+      isLoading: false,
+      onSelectPlace: vi.fn(),
+      onDriveToPlace: vi.fn(),
+    };
+    const { rerender } = render(<NearbyParkingCarousel {...props} places={mockPlaces} />);
+    const scroller = screen.getAllByRole("article")[0]?.parentElement;
+    if (!scroller) throw new Error("Expected the card scroller");
+    const scrolledTo = vi.fn();
+    Object.defineProperty(scroller, "scrollLeft", { configurable: true, set: scrolledTo });
+
+    rerender(<NearbyParkingCarousel {...props} places={[...mockPlaces]} />);
+    expect(scrolledTo).not.toHaveBeenCalled();
+    rerender(<NearbyParkingCarousel {...props} places={[...mockPlaces].reverse()} />);
+    expect(scrolledTo).toHaveBeenCalledWith(0);
+  });
+
+  it("keeps a selected card in view through a new order, and reveals a card chosen on the map", () => {
+    const reveal = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+      reveal(this.getAttribute("data-parking-id"));
+    };
+    try {
+      const props = { isLoading: false, onSelectPlace: vi.fn(), onDriveToPlace: vi.fn() };
+      const { rerender } = render(
+        <NearbyParkingCarousel {...props} places={mockPlaces} selectedPlace={null} />,
+      );
+      reveal.mockClear();
+      rerender(
+        <NearbyParkingCarousel {...props} places={mockPlaces} selectedPlace={mockPlaces[2]} />,
+      );
+      expect(reveal).toHaveBeenLastCalledWith("p3");
+      reveal.mockClear();
+      rerender(
+        <NearbyParkingCarousel
+          {...props}
+          places={[...mockPlaces].reverse()}
+          selectedPlace={mockPlaces[2]}
+        />,
+      );
+      expect(reveal).toHaveBeenCalledWith("p3");
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
   });
 });

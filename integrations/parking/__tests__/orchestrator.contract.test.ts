@@ -335,7 +335,9 @@ describe("parking orchestrator", () => {
           ["park-and-ride", "Park & Ride"],
         ],
       ],
+      ["open_now", "Open now", undefined],
     ]);
+    expect(filters.find((f) => f.id === "open_now")?.type).toBe("toggle");
     expect(source.id).toBe("parking");
     expect(source.meta.minZoom).toBe(12);
     expect(source.meta.placeCategoryRaw).toBe("parking");
@@ -400,6 +402,51 @@ describe("parking orchestrator", () => {
     expect(await ids({ availability: ["available"] })).not.toContain("status-full");
     expect(await ids({ availability: ["available"] })).toContain("stale-status-full");
     expect(await ids({ availability: ["available", "full"] })).toContain("full");
+  });
+
+  test("open now leaves out closed sites and those closed by their hours, unless a live status says open", async () => {
+    vi.useFakeTimers();
+    // A Tuesday, 23:30 in Karlsruhe.
+    vi.setSystemTime(new Date("2026-11-03T22:30:00Z"));
+    try {
+      const day = "Mo-Sa 07:00-22:00";
+      const sites = [
+        site({ id: "no-hours" }),
+        site({ id: "night", openingHours: day, country: "DE" }),
+        site({ id: "night-2", openingHours: day, country: "DE", coordinates: [8.401, 49.011] }),
+        site({ id: "always", openingHours: "24/7", country: "DE" }),
+        site({ id: "late-event", openingHours: day, country: "DE", status: "spaces_available" }),
+        site({ id: "stale-open", openingHours: day, country: "DE", status: "open", stale: true }),
+        site({ id: "unknown-hours", openingHours: '"by appointment"', country: "DE" }),
+        site({ id: "retired", closed: true }),
+        site({ id: "reported-closed", status: "closed" }),
+      ];
+      const source = createParkingDataSource(ctxWith([provider("a", sites)]));
+      const ids = async (filters?: Record<string, unknown>) =>
+        (await source.search(BBOX, filters)).data.map((r) => r.id);
+
+      expect(await ids({ open_now: true })).toEqual([
+        "no-hours",
+        "always",
+        "late-event",
+        "unknown-hours",
+      ]);
+      expect(await ids({ open_now: false })).toHaveLength(sites.length);
+      expect(await ids()).toHaveLength(sites.length);
+
+      vi.setSystemTime(new Date("2026-11-03T10:00:00Z"));
+      expect(await ids({ open_now: true })).toEqual([
+        "no-hours",
+        "night",
+        "night-2",
+        "always",
+        "late-event",
+        "stale-open",
+        "unknown-hours",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("a provider failing again for the same reason is logged once, and its recovery once", async () => {

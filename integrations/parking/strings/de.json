@@ -50,7 +50,7 @@
     "stale": "Auslastung veraltet",
     "spacesOf": "{free}/{capacity} frei",
     "spaces": "{count} frei",
-    "totalSpaces": "{count} Plätze"
+    "totalSpaces": "{count, plural, =1 {1 Platz} other {# Plätze}}"
   },
   "area": {
     "forVehicle": "{group} ({vehicle})",

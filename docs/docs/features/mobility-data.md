@@ -30,7 +30,7 @@ request results for the new view.
 An open panel uses the same [place information](./places.md) as other map
 results, with additional details for that category. Filters depend on the
 selected source; charging can expose connector, speed, or available-now filters,
-for example.
+and parking can show only car parks open now, for example.
 
 A webcam can have several views. Stills refresh while the panel is open;
 external streams and players load only after you allow external media. Offline

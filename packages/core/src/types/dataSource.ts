@@ -133,6 +133,10 @@ export interface DataSourceResult extends ContributingRecord {
    */
   labelSummary?: I18nToken;
   operator?: string;
+  /** Whether using the item costs money, when the source says. */
+  fee?: "free" | "paid";
+  /** Who may use the item, when the source says; absent when it does not. */
+  access?: "public" | "customers" | "permit" | "private" | "restricted";
   branding?: DataSourceBranding;
   mapContext?: DataSourceMapContextSelection;
   /** Structured numeric values for client-side sorting (e.g., fuel prices by type). */

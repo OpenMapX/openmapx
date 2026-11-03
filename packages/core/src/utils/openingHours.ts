@@ -217,6 +217,25 @@ export function isOpenAt(raw: string | undefined, date: Date, location?: Locatio
 }
 
 /**
+ * Whether a place is open right now in its own local time: undefined without
+ * hours, or when they cannot be stated now (an ambiguous or unevaluable value).
+ * Cheaper than `parseOpeningHours`: it builds no schedule and seeks no change.
+ */
+export function isOpenNow(
+  raw: string | undefined,
+  location?: LocationContext,
+): boolean | undefined {
+  if (!raw) return undefined;
+  try {
+    const oh = new opening_hours(raw, buildNominatim(location));
+    const now = placeNow(location);
+    return oh.getUnknown(now) ? undefined : oh.getState(now);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Returns whether a place is always open (24/7 or semantically equivalent).
  */
 export function isAlwaysOpen(raw: string | undefined, location?: LocationContext): boolean {
