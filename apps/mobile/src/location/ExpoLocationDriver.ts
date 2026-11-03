@@ -1,3 +1,4 @@
+import { THEME_COLORS } from "@openmapx/core/theme";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { ANDROID_FOREGROUND_SERVICE_COPY, type MobileLocale } from "../../config/nativeCopy";
@@ -121,7 +122,7 @@ export class ExpoLocationDriver implements LocationDriver {
               foregroundService: {
                 notificationTitle: ANDROID_FOREGROUND_SERVICE_COPY[this.locale].notificationTitle,
                 notificationBody: ANDROID_FOREGROUND_SERVICE_COPY[this.locale].notificationBody,
-                notificationColor: "#1B69D6",
+                notificationColor: THEME_COLORS.light.primary,
                 killServiceOnDestroy: false,
               },
             }

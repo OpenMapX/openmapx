@@ -1,3 +1,4 @@
+import { THEME_COLORS } from "@openmapx/core/theme";
 import type { ExpoConfig } from "expo/config";
 // Explicit `.ts` specifiers: Expo's config loader transpiles only this entry
 // file, so its imports are resolved by Node, which needs the real extension to
@@ -14,8 +15,11 @@ import { IOS_USAGE_DESCRIPTIONS } from "./config/nativeCopy.ts";
  */
 const mobile = readMobileConfig(process.env);
 
-/** OpenMapX brand blue, used for the Android notification tint and splash. */
-const BRAND_COLOR = "#1B69D6";
+/**
+ * The web UI's primary colour, used for the Android notification tint and the
+ * adaptive icon's background, so the app's own surfaces match the page.
+ */
+const BRAND_COLOR = THEME_COLORS.light.primary;
 
 /**
  * Associated domains exist only when a real Apple Team ID is present, which
@@ -121,8 +125,8 @@ const config: ExpoConfig = {
         image: "./assets/splash-icon.png",
         imageWidth: 180,
         resizeMode: "contain",
-        backgroundColor: "#FFFFFF",
-        dark: { backgroundColor: "#0B0F14" },
+        backgroundColor: THEME_COLORS.light.surface,
+        dark: { backgroundColor: THEME_COLORS.dark.background },
       },
     ],
     [

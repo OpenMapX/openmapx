@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileLocale } from "../../config/nativeCopy";
-import { useNativePalette } from "./nativeTheme";
+import { BUTTON_SHAPE, useNativePalette } from "./nativeTheme";
 import { actionsFor, type ShellAction, type ShellState } from "./ShellState";
 import { type ShellCopyKey, shellCopy } from "./shellCopy";
 import { SCROLL_SAFE_AREA, topBarInset } from "./systemBars";
@@ -27,34 +27,31 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "#FFFFFF",
   },
   content: { padding: 24, paddingBottom: 40, flexGrow: 1, justifyContent: "center" },
-  title: { fontSize: 21, fontWeight: "600", marginBottom: 12, color: "#101418" },
-  body: { fontSize: 16, lineHeight: 23, marginBottom: 24, color: "#3C4650" },
+  title: { fontSize: 21, fontWeight: "600", marginBottom: 12 },
+  body: { fontSize: 16, lineHeight: 23, marginBottom: 24 },
   primary: {
     minHeight: 48,
-    borderRadius: 10,
+    borderRadius: BUTTON_SHAPE.borderRadius,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: "#1B69D6",
     marginBottom: 12,
   },
-  primaryLabel: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  primaryLabel: { fontSize: 16, fontWeight: BUTTON_SHAPE.labelWeight },
   secondary: {
     minHeight: 48,
-    borderRadius: 10,
+    borderRadius: BUTTON_SHAPE.borderRadius,
     borderWidth: 1,
-    borderColor: "#C3CBD3",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
     marginBottom: 12,
   },
-  secondaryLabel: { color: "#1B3A5C", fontSize: 16, fontWeight: "600" },
+  secondaryLabel: { fontSize: 16, fontWeight: BUTTON_SHAPE.labelWeight },
 });
 
 const COPY: Partial<Record<ShellState["kind"], { title: ShellCopyKey; body: ShellCopyKey }>> = {

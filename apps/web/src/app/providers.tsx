@@ -8,6 +8,7 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { THEME_COLORS, THEME_CORNER_RADIUS, type ThemeColors } from "@openmapx/core/theme";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -48,30 +49,25 @@ const WEB_BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? "dev";
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
 
+/** The shared OpenMapX colours, which the installed app's native screens use too. */
+function muiPalette(colors: ThemeColors) {
+  return {
+    primary: { main: colors.primary, contrastText: colors.onPrimary },
+    secondary: { main: colors.secondary },
+    background: { default: colors.background, paper: colors.surface },
+    text: { primary: colors.text, secondary: colors.textSecondary },
+    error: { main: colors.error },
+  };
+}
+
 const theme = createTheme({
   cssVariables: {
     colorSchemeSelector: "class",
     disableCssColorScheme: true,
   },
   colorSchemes: {
-    light: {
-      palette: {
-        primary: { main: "#207E23", contrastText: "#ffffff" },
-        secondary: { main: "#34A853" },
-        background: { default: "#f5f5f5", paper: "#ffffff" },
-        text: { primary: "#202124", secondary: "#5f6368" },
-        error: { main: "#d32f2f" },
-      },
-    },
-    dark: {
-      palette: {
-        primary: { main: "#71D674", contrastText: "#000000" },
-        secondary: { main: "#81C995" },
-        background: { default: "#1C1C1C", paper: "#2D2D2D" },
-        text: { primary: "#E8EAED", secondary: "#9AA0A6" },
-        error: { main: "#F28B82" },
-      },
-    },
+    light: { palette: muiPalette(THEME_COLORS.light) },
+    dark: { palette: muiPalette(THEME_COLORS.dark) },
   },
   defaultColorScheme: "light",
   typography: {
@@ -83,7 +79,7 @@ const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 8,
+    borderRadius: THEME_CORNER_RADIUS,
   },
   components: {
     MuiPaper: {
@@ -103,7 +99,7 @@ const theme = createTheme({
     MuiIconButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
+          borderRadius: THEME_CORNER_RADIUS,
         },
       },
     },

@@ -70,6 +70,10 @@
       "types": "./src/legal.ts",
       "default": "./src/legal.ts"
     },
+    "./theme": {
+      "types": "./src/theme.ts",
+      "default": "./src/theme.ts"
+    },
     "./privacy": {
       "types": "./src/privacy/index.ts",
       "default": "./src/privacy/index.ts"

@@ -1,7 +1,7 @@
 import { type ReactElement, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileLocale } from "../../config/nativeCopy";
-import { useNativePalette } from "../shell/nativeTheme";
+import { BUTTON_SHAPE, useNativePalette } from "../shell/nativeTheme";
 import { SCROLL_SAFE_AREA, topBarInset } from "../shell/systemBars";
 import { permissionCopy } from "./permissionCopy";
 import type { PermissionFlowState } from "./permissionMachine";
@@ -27,35 +27,32 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "#FFFFFF",
   },
   content: { padding: 24, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: "600", marginBottom: 16, color: "#101418" },
-  paragraph: { fontSize: 16, lineHeight: 23, marginBottom: 12, color: "#3C4650" },
+  title: { fontSize: 22, fontWeight: "600", marginBottom: 16 },
+  paragraph: { fontSize: 16, lineHeight: 23, marginBottom: 12 },
   actions: { marginTop: 12 },
   primary: {
     minHeight: 48,
-    borderRadius: 10,
+    borderRadius: BUTTON_SHAPE.borderRadius,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: "#1B69D6",
     marginBottom: 12,
   },
-  primaryLabel: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  primaryLabel: { fontSize: 16, fontWeight: BUTTON_SHAPE.labelWeight },
   secondary: {
     minHeight: 48,
-    borderRadius: 10,
+    borderRadius: BUTTON_SHAPE.borderRadius,
     borderWidth: 1,
-    borderColor: "#C3CBD3",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
     marginBottom: 12,
   },
-  secondaryLabel: { color: "#1B3A5C", fontSize: 16, fontWeight: "600" },
+  secondaryLabel: { fontSize: 16, fontWeight: BUTTON_SHAPE.labelWeight },
 });
 
 /** The static layout above, coloured for the current system appearance. */

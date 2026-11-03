@@ -1,13 +1,12 @@
+import { THEME_CHROME_COLOR } from "@openmapx/core/theme";
+
 /**
  * The browser chrome colour (Android's status bar, the installed app's title
  * bar) for each colour scheme. The root layout declares one `theme-color` per
  * system scheme; `ThemeColorSync` keeps them on the scheme the user picked in
  * settings when that is not the system one.
  */
-export const THEME_COLOR = {
-  light: "#207E23",
-  dark: "#1c1c1c",
-} as const;
+export const THEME_COLOR = THEME_CHROME_COLOR;
 
 type ThemeScheme = keyof typeof THEME_COLOR;
 
