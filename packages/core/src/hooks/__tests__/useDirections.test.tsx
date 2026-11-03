@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { LngLat } from "../../types/geometry";
-import { directionsQueryKey, useDirections } from "../useDirections";
+import { directionsQueryKey, directionsRequestFor, useDirections } from "../useDirections";
 
 const fetchDirections = vi.fn();
 vi.mock("../../api/directions", () => ({
@@ -162,5 +162,46 @@ describe("directionsQueryKey", () => {
   it("produces identical keys for identical params", () => {
     const p = { waypoints, mode: "driving" as const, avoidClosures: true, lang: "de" };
     expect(directionsQueryKey(p)).toEqual(directionsQueryKey(p));
+  });
+});
+
+describe("directionsRequestFor", () => {
+  it("is the request a motorcycle route was fetched with: no highway or toll avoidance", () => {
+    expect(
+      directionsRequestFor({
+        waypoints,
+        mode: "motorcycle",
+        avoidHighways: true,
+        avoidTolls: true,
+        avoidFerries: true,
+        avoidClosures: true,
+        units: "imperial",
+        lang: "de",
+        departAt: "2026-11-04T08:00",
+      }),
+    ).toEqual({
+      waypoints,
+      mode: "motorcycle",
+      avoidHighways: false,
+      avoidTolls: false,
+      avoidFerries: true,
+      avoidClosures: true,
+      units: "imperial",
+      lang: "de",
+      departAt: "2026-11-04T08:00",
+      arriveBy: undefined,
+    });
+  });
+
+  it("keeps highway and toll avoidance for driving", () => {
+    expect(
+      directionsRequestFor({
+        waypoints,
+        mode: "driving",
+        avoidHighways: true,
+        avoidTolls: true,
+        lang: "en",
+      }),
+    ).toMatchObject({ mode: "driving", avoidHighways: true, avoidTolls: true, lang: "en" });
   });
 });

@@ -5,6 +5,7 @@ import {
   evaluateRouteStopDetours,
   insertRouteStop,
   remainingRouteStopWaypoints,
+  routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "../routeStopDetours";
 
@@ -104,6 +105,12 @@ describe("remaining-itinerary stop detours", () => {
       D,
     ]);
     expect(insertRouteStop(route.geometry, [O, W, D], urban)).toEqual([O, W, urban, D]);
+  });
+  it("reports the insertion index the stop rule chooses", () => {
+    expect(routeStopInsertIndex(route.geometry, [O, D], urban)).toBe(1);
+    expect(routeStopInsertIndex(route.geometry, [O, W, D], [0.0005, 0.0001])).toBe(1);
+    expect(routeStopInsertIndex(route.geometry, [O, W, D], urban)).toBe(2);
+    expect(routeStopInsertIndex(route.geometry, [O], urban)).toBe(-1);
   });
   it("uses independent road access rather than perpendicular-distance minutes", async () => {
     const results = await evaluateRouteStopDetours({
@@ -240,5 +247,28 @@ describe("remaining-itinerary stop detours", () => {
       }),
     ).rejects.toThrow();
     expect(calls).toBe(1);
+  });
+
+  it("compares a stop with the displayed route instead of requesting a new baseline", async () => {
+    const requested: LngLat[][] = [];
+    const displayed = { ...route, duration: 230, distance: 2300 };
+    const [result] = await evaluateRouteStopDetours({
+      ...input,
+      baseline: { route: displayed, provider: "routing-fixture" },
+      candidates: [{ id: "urban", coordinates: urban }],
+      requestRoute: async ({ waypoints }) => {
+        requested.push(waypoints);
+        return graphRoute(waypoints);
+      },
+    });
+    expect(requested).toEqual([[O, W, urban, D]]);
+    expect(result).toMatchObject({ kind: "network", seconds: 0, meters: 0 });
+    const [slower] = await evaluateRouteStopDetours({
+      ...input,
+      baseline: { route: { ...route, duration: 150, distance: 1500 }, provider: "routing-fixture" },
+      candidates: [{ id: "urban", coordinates: urban }],
+      requestRoute: async ({ waypoints }) => graphRoute(waypoints),
+    });
+    expect(slower).toMatchObject({ kind: "network", seconds: 70, meters: 600 });
   });
 });

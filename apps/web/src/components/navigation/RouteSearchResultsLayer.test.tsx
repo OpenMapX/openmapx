@@ -42,6 +42,7 @@ vi.mock("@/integration-api/overlay/useRenderedMapAttributions", () => ({
   useRenderedMapAttributions: fixtures.rendered,
 }));
 
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
 
 const results = [
@@ -250,5 +251,16 @@ describe("RouteSearchResultsLayer brand pins", () => {
       finish(true);
     });
     expect(lastImage()).toBe("route-search-pin-brand:Q151954");
+  });
+});
+
+describe("RouteSearchResultsLayer tap ownership", () => {
+  it("claims its pins and labels as interactive while mounted", () => {
+    const view = render(<RouteSearchResultsLayer {...props} />);
+    expect(INTERACTIVE_LAYER_IDS.has("route-search-layer")).toBe(true);
+    expect(INTERACTIVE_LAYER_IDS.has("route-search-labels")).toBe(true);
+    view.unmount();
+    expect(INTERACTIVE_LAYER_IDS.has("route-search-layer")).toBe(false);
+    expect(INTERACTIVE_LAYER_IDS.has("route-search-labels")).toBe(false);
   });
 });

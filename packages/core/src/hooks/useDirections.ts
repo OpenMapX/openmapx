@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchDirections } from "../api/directions";
+import { type FetchDirectionsParams, fetchDirections } from "../api/directions";
 import { type BikeRoutingOptions, bicycleOptions } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode } from "../types/routing";
 import { useRoadConditionLease } from "./useRoadConditionLease";
 
-interface UseDirectionsParams extends BikeRoutingOptions {
+export interface DirectionsQueryParams extends BikeRoutingOptions {
   waypoints: LngLat[];
   mode?: TravelMode;
   avoidHighways?: boolean;
@@ -54,7 +54,7 @@ export function directionsQueryKey({
   bikePreferQuietRoads,
   bikePreferSmoothSurfaces,
   bikeSpeedKmh,
-}: UseDirectionsParams): (string | number | boolean | undefined)[] {
+}: DirectionsQueryParams): (string | number | boolean | undefined)[] {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
   return [
@@ -83,7 +83,12 @@ export function directionsQueryKey({
   ];
 }
 
-export function useDirections(params: UseDirectionsParams) {
+/**
+ * The exact request {@link useDirections} sends for these params. A caller
+ * comparing other itineraries against a displayed route (a stop detour) uses
+ * this, so both requests carry the same effective options.
+ */
+export function directionsRequestFor(params: DirectionsQueryParams): FetchDirectionsParams {
   const {
     waypoints,
     mode = "driving",
@@ -97,23 +102,27 @@ export function useDirections(params: UseDirectionsParams) {
     arriveBy,
   } = params;
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
+  return {
+    waypoints,
+    mode,
+    avoidHighways: eff.avoidHighways,
+    avoidTolls: eff.avoidTolls,
+    avoidFerries,
+    avoidClosures,
+    units,
+    lang,
+    departAt,
+    arriveBy,
+    ...bicycleOptions(mode, params),
+  };
+}
+
+export function useDirections(params: DirectionsQueryParams) {
+  const { waypoints, mode = "driving", avoidClosures = false } = params;
 
   const query = useQuery({
     queryKey: directionsQueryKey(params),
-    queryFn: () =>
-      fetchDirections({
-        waypoints,
-        mode,
-        avoidHighways: eff.avoidHighways,
-        avoidTolls: eff.avoidTolls,
-        avoidFerries,
-        avoidClosures,
-        units,
-        lang,
-        departAt,
-        arriveBy,
-        ...bicycleOptions(mode, params),
-      }),
+    queryFn: () => fetchDirections(directionsRequestFor(params)),
     enabled: waypoints.length >= 2,
     staleTime: mode === "driving" || mode === "motorcycle" || avoidClosures ? 0 : 120_000,
     gcTime: 600_000,

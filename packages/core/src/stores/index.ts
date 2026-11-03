@@ -12,7 +12,7 @@ export {
 } from "./createOverlayStore";
 export { useDataSourceStore } from "./dataSourceStore";
 export type { DirectionsState } from "./directionsStore";
-export { useDirectionsStore } from "./directionsStore";
+export { MAX_DIRECTIONS_WAYPOINTS, useDirectionsStore } from "./directionsStore";
 export { type FlightEndpoint, useFlightStore } from "./flightStore";
 export { useHotelSearchStore } from "./hotelSearchStore";
 export {

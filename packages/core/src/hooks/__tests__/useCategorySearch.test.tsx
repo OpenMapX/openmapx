@@ -4,7 +4,11 @@ import { ApiClientError, apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { BoundingBox } from "../../types/geometry";
-import { isAreaTooLarge, useCategorySearch } from "../useCategorySearch";
+import {
+  categorySearchQueryOptions,
+  isAreaTooLarge,
+  useCategorySearch,
+} from "../useCategorySearch";
 
 const bbox: BoundingBox = { south: 52.4, west: 13.3, north: 52.6, east: 13.5 };
 
@@ -71,5 +75,34 @@ describe("useCategorySearch", () => {
     expect(isAreaTooLarge(new Error("API error 413: area_too_large"))).toBe(true);
     expect(isAreaTooLarge(new Error("network failure"))).toBe(false);
     expect(isAreaTooLarge("not an error")).toBe(false);
+  });
+});
+
+describe("categorySearchQueryOptions", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("shares the hook's cache key and request, so a whole-route search reuses cached areas", async () => {
+    const spy = vi
+      .spyOn(apiClient, "get")
+      .mockResolvedValue({ results: [], partial: false } as never);
+    const options = categorySearchQueryOptions("ev_charging", bbox, "de");
+    expect(options.queryKey).toEqual(["category-search", "ev_charging", bbox, "de"]);
+    const signal = new AbortController().signal;
+    await options.queryFn({ signal } as never);
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.categorySearch,
+      {
+        category: "ev_charging",
+        south: "52.4",
+        west: "13.3",
+        north: "52.6",
+        east: "13.5",
+        lang: "de",
+      },
+      expect.objectContaining({ signal }),
+    );
+    expect(options.retry(0, new Error("area_too_large"))).toBe(false);
+    expect(options.retry(1, new Error("boom"))).toBe(true);
+    expect(options.retry(2, new Error("boom"))).toBe(false);
   });
 });
