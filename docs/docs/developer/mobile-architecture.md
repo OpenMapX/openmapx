@@ -80,6 +80,15 @@ only when the OS starts the task without the app.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 
+## Native screens
+
+The loading and error overlays, the recovery screen and the permission screens
+are drawn natively. They use the web UI's colours from `@openmapx/core/theme`,
+the same module the web's MUI theme is built from, and follow the system light
+or dark appearance. The Android notification tint, the adaptive icon background
+and the splash backgrounds in `app.config.ts` come from the same module. The
+native screens use the system font, not the web's Plus Jakarta Sans.
+
 ## One-shot location
 
 `location.request` reads one position through the process-wide location driver
