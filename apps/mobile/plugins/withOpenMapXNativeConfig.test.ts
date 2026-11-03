@@ -4,6 +4,7 @@ import {
   type AndroidManifestLike,
   applyAndroidApplicationSecurity,
   applyAndroidPermissions,
+  applyAndroidReleaseSigning,
   applyAppBoundDomains,
   applyAppTransportSecurity,
   applyAssociatedDomains,
@@ -340,5 +341,68 @@ describe("iOS storage protection", () => {
   it("is idempotent", () => {
     const once = applyDataProtection({ UIFileSharingEnabled: true });
     expect(JSON.stringify(applyDataProtection(once))).toBe(JSON.stringify(once));
+  });
+});
+
+describe("Android release signing", () => {
+  // The signing and build-type blocks of Expo's generated `app/build.gradle`.
+  const EXPO_APP_GRADLE = `android {
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
+            minifyEnabled enableMinifyInReleaseBuilds
+        }
+    }
+}
+`;
+
+  function releaseBlock(gradle: string): string {
+    const start = gradle.indexOf("        release {", gradle.indexOf("buildTypes {"));
+    return gradle.slice(start, gradle.indexOf("\n        }", start));
+  }
+
+  it("signs the release build type from the external properties file", () => {
+    const gradle = applyAndroidReleaseSigning(EXPO_APP_GRADLE);
+    expect(gradle).toContain('rootProject.file("release-signing.properties")');
+    for (const key of ["storeFile", "storePassword", "keyAlias", "keyPassword"]) {
+      expect(gradle).toContain(`"${key}"`);
+    }
+    expect(releaseBlock(gradle)).toContain('signingConfig signingConfigs.findByName("release")');
+  });
+
+  it("never signs a release with the template's public debug key", () => {
+    expect(releaseBlock(applyAndroidReleaseSigning(EXPO_APP_GRADLE))).not.toContain(
+      "signingConfigs.debug",
+    );
+  });
+
+  it("keeps the debug build type on the debug key", () => {
+    const gradle = applyAndroidReleaseSigning(EXPO_APP_GRADLE);
+    const debugStart = gradle.indexOf("        debug {", gradle.indexOf("buildTypes {"));
+    expect(gradle.slice(debugStart, gradle.indexOf("}", debugStart))).toContain(
+      "signingConfig signingConfigs.debug",
+    );
+  });
+
+  it("is idempotent", () => {
+    const once = applyAndroidReleaseSigning(EXPO_APP_GRADLE);
+    expect(applyAndroidReleaseSigning(once)).toBe(once);
+  });
+
+  it("refuses a build file whose signing blocks it does not recognise", () => {
+    expect(() => applyAndroidReleaseSigning("android {}\n")).toThrow(/signing/);
   });
 });
