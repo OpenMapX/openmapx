@@ -796,14 +796,14 @@ export function setup(ctx: IntegrationContext): void {
         key,
         NAVIGATION_ALERTS_TTL_SECONDS,
         async () => {
-          const data = await overpassQuerySafe<{
-            elements?: AlertOverpassElement[];
-            remark?: string;
-          }>(buildNavigationAlertsQuery(bounds), null);
+          const data = await overpassQuerySafe(buildNavigationAlertsQuery(bounds), null);
           // Overpass reports a timeout or memory limit hit mid-query with a 200
           // and a `remark`, over elements that may be cut short: no answer.
           if (!data || data.remark) return { alerts: [], complete: false };
-          return { alerts: mapAlertElements(data.elements ?? []), complete: true };
+          // `out geom` adds each way's node coordinates, which the shared
+          // Overpass element type does not declare.
+          const elements = (data.elements ?? []) as AlertOverpassElement[];
+          return { alerts: mapAlertElements(elements), complete: true };
         },
         undefined,
         (value) => value.complete,
