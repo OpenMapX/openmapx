@@ -208,6 +208,35 @@ describe("App bridge channel", () => {
     expect(nonceIn(bootstrap())).not.toBe(first);
   });
 
+  it("keeps the negotiated channel across Android's same-document history reports", async () => {
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: true } });
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    await emitAsync(mockWebViewProps.onLoadEnd);
+
+    // `replaceState` after the page finished: Android reports it as a load
+    // start with `loading: false`.
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: false } });
+    await post(nonce, {
+      messageId: "prepare-after-history",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    });
+
+    // Still the page's channel: the command reaches dispatch and is answered,
+    // rather than being dropped as coming from an unknown document.
+    const error = decodedMessages().find((message) => message.type === "native.error");
+    expect(error?.payload).toMatchObject({ forMessageId: "prepare-after-history" });
+  });
+
   it("ignores a message from outside the compiled origin", async () => {
     await renderApp();
     await emitAsync(mockWebViewProps.onLoadStart);
@@ -344,6 +373,17 @@ describe("App load states", () => {
     const view = await renderApp();
     expect(view.getByTestId("shell-loading")).toBeTruthy();
     await emit(mockWebViewProps.onLoadEnd);
+    expect(view.queryByTestId("shell-loading")).toBeNull();
+  });
+
+  it("does not cover a loaded page again for a same-document history change", async () => {
+    const view = await renderApp();
+    await emit(mockWebViewProps.onLoadEnd);
+    await act(async () => {
+      (mockWebViewProps.onLoadStart as (event: unknown) => void)({
+        nativeEvent: { loading: false },
+      });
+    });
     expect(view.queryByTestId("shell-loading")).toBeNull();
   });
 

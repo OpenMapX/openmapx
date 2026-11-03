@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileLocale } from "../../config/nativeCopy";
+import { useNativePalette } from "./nativeTheme";
 import { actionsFor, type ShellAction, type ShellState } from "./ShellState";
 import { type ShellCopyKey, shellCopy } from "./shellCopy";
 
@@ -95,6 +96,7 @@ export function NativeRecoveryOverlay({
   state,
   onAction,
 }: NativeRecoveryOverlayProps): ReactElement | null {
+  const palette = useNativePalette();
   const copy = COPY[state.kind];
   // `loading` and `web` have nothing to say, and saying nothing is the point.
   if (!copy) return null;
@@ -106,25 +108,38 @@ export function NativeRecoveryOverlay({
       : shellCopy(locale, copy.body);
 
   return (
-    <View style={styles.fill} testID={`shell-state-${state.kind}`}>
+    <View
+      style={[styles.fill, { backgroundColor: palette.background }]}
+      testID={`shell-state-${state.kind}`}
+    >
       <ScrollView contentContainerStyle={styles.content}>
-        <Text accessibilityRole="header" style={styles.title}>
+        <Text accessibilityRole="header" style={[styles.title, { color: palette.title }]}>
           {shellCopy(
             locale,
             state.kind === "load-error" && state.offline ? "offlineTitle" : copy.title,
           )}
         </Text>
-        <Text style={styles.body}>{offlineHint}</Text>
+        <Text style={[styles.body, { color: palette.body }]}>{offlineHint}</Text>
         {actions.map((action, index) => (
           <Pressable
             key={action}
             accessibilityRole="button"
             accessibilityLabel={shellCopy(locale, ACTION_LABELS[action])}
             onPress={() => onAction(action)}
-            style={index === 0 ? styles.primary : styles.secondary}
+            style={
+              index === 0
+                ? [styles.primary, { backgroundColor: palette.accent }]
+                : [styles.secondary, { borderColor: palette.outline }]
+            }
             testID={TEST_IDS[action]}
           >
-            <Text style={index === 0 ? styles.primaryLabel : styles.secondaryLabel}>
+            <Text
+              style={
+                index === 0
+                  ? [styles.primaryLabel, { color: palette.onAccent }]
+                  : [styles.secondaryLabel, { color: palette.secondaryLabel }]
+              }
+            >
               {shellCopy(locale, ACTION_LABELS[action])}
             </Text>
           </Pressable>

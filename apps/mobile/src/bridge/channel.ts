@@ -97,9 +97,9 @@ export class ChannelRegistry {
    * publishes one nonce, waits for the load it belongs to, and only then
    * prepares a different one for the load after it.
    *
-   * Called from the WebView's main-frame load start, which fires for a real
-   * navigation or reload but not for in-document history changes — so a
-   * same-origin `pushState` keeps its channel, exactly as intended.
+   * Called from the WebView's main-frame load start for a real navigation or
+   * reload. The shell filters out Android's load-start reports for in-document
+   * history changes, so a same-origin `pushState` keeps its channel.
    */
   adoptDocument(nonce: string, nowMs: number): BridgeChannel {
     this.channel = { nonce, createdAtMs: nowMs, handshake: null, seenMessageIds: new Set() };
