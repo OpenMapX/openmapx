@@ -5,6 +5,7 @@ import { registerMapOverlayInteraction } from "@/integration-api/map/mapInteract
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
+import { TRAFFIC_FLOW_WITH_DATA_FILTER } from "../visual-style";
 
 let fake: FakeMap;
 
@@ -147,6 +148,9 @@ describe("TrafficFlowLayer", () => {
 
     const paint = color?.paint as Record<string, unknown>;
     expect(paint["line-color"]).toEqual(COLOR_EXPR);
+    // Both layers leave out roads without traffic data, outline included.
+    expect(casing?.filter).toEqual(TRAFFIC_FLOW_WITH_DATA_FILTER);
+    expect(color?.filter).toEqual(TRAFFIC_FLOW_WITH_DATA_FILTER);
   });
 
   it("registers COLOR as an interactive layer and opens a popup with speed/LOS/confidence on click", () => {

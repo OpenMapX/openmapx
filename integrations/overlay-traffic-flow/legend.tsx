@@ -52,6 +52,9 @@ export function TrafficFlowLegend() {
             {ts("slow")}
           </Typography>
         </Box>
+        <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5 }}>
+          {t("dataOnly")}
+        </Typography>
       </Box>
 
       <TrafficOverlayContext hosted={false} visible={layerVisible}>

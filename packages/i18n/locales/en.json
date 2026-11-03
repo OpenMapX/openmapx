@@ -805,6 +805,7 @@
       "typical": "Typical",
       "unknown": "Unknown"
     },
+    "dataOnly": "Only roads with traffic data are colored.",
     "los": {
       "free_flow": "Free flow",
       "heavy": "Heavy traffic",
