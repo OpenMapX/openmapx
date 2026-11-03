@@ -191,3 +191,31 @@ function toFix(position: Location.LocationObject): LocationFix {
     ...(position.coords.altitude === null ? {} : { altitudeMeters: position.coords.altitude }),
   };
 }
+
+/**
+ * The grant as the start-permission flow needs it: which level, whether it is
+ * precise, and whether the system will still show a prompt.
+ */
+export async function readLocationPermissionSnapshot(): Promise<{
+  permission: LocationPermissionState;
+  accuracy?: "precise" | "approximate";
+  canAskAgain: boolean;
+}> {
+  const foreground = await Location.getForegroundPermissionsAsync();
+  const background = foreground.granted ? await Location.getBackgroundPermissionsAsync() : null;
+  const permission = combinePermissionState(foreground, background);
+  const accuracy = foreground.granted ? grantedAccuracy(foreground) : undefined;
+  return {
+    permission,
+    ...(accuracy ? { accuracy } : {}),
+    canAskAgain: foreground.canAskAgain,
+  };
+}
+
+function grantedAccuracy(
+  response: Location.LocationPermissionResponse,
+): "precise" | "approximate" | undefined {
+  if (response.android) return response.android.accuracy === "coarse" ? "approximate" : "precise";
+  if (response.ios) return response.ios.accuracy === "reduced" ? "approximate" : "precise";
+  return undefined;
+}

@@ -8,17 +8,18 @@ sidebar_position: 9
 
 The installed app renders the web UI in a React Native WebView at a fixed origin.
 The shell restricts navigation and exposes a versioned bridge. It answers the
-page's one-shot requests: a location fix, opening OS settings and a
-system-browser sign-in. Native navigation processors, persistence, audio and
-recovery components exist, but the foreground app does not yet connect them to
-bridge commands.
+page's one-shot requests (a location fix, opening OS settings and a
+system-browser sign-in) and runs native ground and transit navigation sessions.
 
 `apps/mobile/src/App.tsx` composes `createShellServices` (`src/shell/shellServices.ts`)
-into `createShellBridge`. The handshake reports the OS location grant and reports
-ground navigation, transit navigation, background location, local notifications
-and speech as unavailable. Navigation-session commands receive
-`unsupported-capability`. Do not describe this composition as a working
-background-navigation release.
+and `createForegroundNavigation` (`src/navigation/createForegroundNavigation.ts`)
+into `createShellBridge`. Navigation commands go to the `NavigationCoordinator`;
+everything else falls back to the shell services, and a command neither handles
+receives `unsupported-capability`. The handshake reports ground and transit
+navigation and background location as available, local notifications once the
+notification permission is granted, and speech when the native audio module is
+present. Installed-device evidence covers Android only; see
+[Mobile feasibility](./mobile-feasibility.md) for what has been qualified.
 
 ## Why there is a split at all
 
@@ -28,28 +29,56 @@ session state. The web UI owns rendering, search, route planning and place detai
 
 A browser or PWA uses browser navigation facilities. Inside the installed shell,
 the web runtime selects native authority before the handshake and disables its
-browser engine. Missing native composition does not enable a browser fallback.
-This avoids competing location streams, speech and session records, but currently
-leaves installed navigation unavailable.
+browser engine. A shell that reports no navigation capability does not enable a
+browser fallback. This avoids competing location streams, speech and session
+records.
 
 ## The authority matrix
 
-| Concern                                                               | Browser or PWA                            | Installed shell                                                         |
-| --------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
-| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                  |
-| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                        |
-| Ground and transit navigation                                         | Browser engine                            | Native authority selected; capability currently false                   |
-| Background location, local alerts and speech                          | Subject to browser limits                 | Capability currently false                                              |
-| Durable native session                                                | Not used                                  | SQLite components and recovery exist; session commands are not composed |
-| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                          |
-| Deep-link delivery                                                    | Browser flows                             | Protocol vocabulary and parser exist; OS delivery is not composed       |
-| Community frontend bundles                                            | Disabled                                  | Disabled                                                                |
-| Microphone input                                                      | Subject to browser support and permission | Disabled                                                                |
+| Concern                                                               | Browser or PWA                            | Installed shell                                                   |
+| --------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                            |
+| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                  |
+| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                            |
+| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                        |
+| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                   |
+| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                    |
+| Deep-link delivery                                                    | Browser flows                             | Protocol vocabulary and parser exist; OS delivery is not composed |
+| Community frontend bundles                                            | Disabled                                  | Disabled                                                          |
+| Microphone input                                                      | Subject to browser support and permission | Disabled                                                          |
 
 The immutable descriptor is injected before page scripts run. Shell restrictions
 use that descriptor, so they apply during negotiation, incompatibility and errors.
 `MobileRuntimeProvider.tsx` is the web authority boundary;
 `createShellBridge.ts` supplies the current capability report.
+
+## Native navigation
+
+`createForegroundNavigation` builds one coordinator per foreground app and
+registers it, so the background location task feeds the same instance instead
+of opening a second, headless one beside it. The headless coordinator is used
+only when the OS starts the task without the app.
+
+- **Start.** `session.start` runs the `PermissionController`. Its screens are
+  native (`PermissionPrompts.tsx`) because the page may be suspended during the
+  OS prompts. On Android 11 and later the background step is the system's
+  background-location request, which opens the app's own location page with
+  "Allow all the time". The first start also asks once for notification
+  permission, for transit alight alerts.
+- **Location.** expo-location delivers batches to the task registered in
+  `defineNavigationTask.ts`. expo-task-manager schedules a persisted job, so the
+  app holds `RECEIVE_BOOT_COMPLETED`; without it the first location update
+  crashes the process. The app does not start anything at boot.
+- **Storage.** expo-sqlite runs each exclusive transaction on its own
+  connection, so `getDatabase` queues writes on the one handle and sets a busy
+  timeout. Without the queue a diagnostic write and a batch commit collide with
+  "database is locked".
+- **Reroute.** A `reroute` effect only starts the request
+  (`createRemoteWork.ts`). The answer re-enters the coordinator as a queued
+  `applyReroute`, which applies it only while the session and its pending
+  request id still match. A newer request aborts the one in flight.
+- **Transit refresh and replan** are not wired yet. Their effects are no-ops,
+  and the session keeps running on its captured itinerary.
 
 ## One-shot location
 

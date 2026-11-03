@@ -1,6 +1,7 @@
 import type { LocationObject } from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { getRuntimeConfig } from "../config/runtimeConfig";
+import { foregroundCoordinator } from "../navigation/foregroundCoordinator";
 import { getHeadlessCoordinator } from "./createHeadlessCoordinator";
 import { NAVIGATION_LOCATION_TASK } from "./taskName";
 
@@ -44,7 +45,7 @@ TaskManager.defineTask<LocationTaskPayload>(NAVIGATION_LOCATION_TASK, async ({ d
       return;
     }
 
-    const coordinator = await getHeadlessCoordinator();
+    const coordinator = foregroundCoordinator() ?? (await getHeadlessCoordinator());
     await coordinator.handleLocationBatch(batch);
   } catch {
     // Deliberately silent: logging here could not be redacted reliably, and the

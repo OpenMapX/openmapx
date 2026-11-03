@@ -84,6 +84,12 @@ export const ANDROID_PERMISSIONS: PermissionEntry[] = [
     reason:
       "The get-off alert vibrates, which is the part a rider notices with the phone in a pocket. Not a dangerous permission and not runtime-requested.",
   },
+  {
+    id: "android.permission.RECEIVE_BOOT_COMPLETED",
+    practiceId: "background-location-active-navigation",
+    reason:
+      "expo-task-manager delivers every location update to the navigation task through a JobScheduler job it always marks persisted, and Android refuses a persisted job without this permission. The app registers no boot receiver and starts nothing at boot. Not a dangerous permission and not runtime-requested.",
+  },
 ];
 
 /**
@@ -108,7 +114,6 @@ export const FORBIDDEN_ANDROID_PERMISSIONS: Record<string, string> = {
   "android.permission.READ_MEDIA_IMAGES": "The app reads no photos.",
   "android.permission.READ_MEDIA_VIDEO": "The app reads no videos.",
   "android.permission.READ_MEDIA_AUDIO": "The app reads no audio files.",
-  "android.permission.RECEIVE_BOOT_COMPLETED": "Nothing starts at boot.",
   "android.permission.SYSTEM_ALERT_WINDOW": "The app draws over nothing.",
   "android.permission.BIND_VPN_SERVICE": "The app is not a VPN.",
   "android.permission.BIND_ACCESSIBILITY_SERVICE": "The app is not an accessibility service.",

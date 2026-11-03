@@ -2,6 +2,7 @@ import { type ReactElement, useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MobileLocale } from "../../config/nativeCopy";
 import { useNativePalette } from "../shell/nativeTheme";
+import { SCROLL_SAFE_AREA, topBarInset } from "../shell/systemBars";
 import { permissionCopy } from "./permissionCopy";
 import type { PermissionFlowState } from "./permissionMachine";
 
@@ -93,7 +94,10 @@ export function PermissionDisclosure({
   const text = (key: Parameters<typeof permissionCopy>[1]) => permissionCopy(locale, key);
   return (
     <View style={s.fill} testID="permission-disclosure">
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView
+        contentContainerStyle={[s.content, { paddingTop: 24 + topBarInset() }]}
+        {...SCROLL_SAFE_AREA}
+      >
         <Text accessibilityRole="header" style={s.title}>
           {text("title")}
         </Text>
@@ -166,7 +170,10 @@ export function PermissionOutcome({
           : text("settingsCannotEscalate");
     return (
       <View style={s.fill} testID="permission-settings-required">
-        <ScrollView contentContainerStyle={s.content}>
+        <ScrollView
+          contentContainerStyle={[s.content, { paddingTop: 24 + topBarInset() }]}
+          {...SCROLL_SAFE_AREA}
+        >
           <Text accessibilityRole="header" style={s.title}>
             {text("settingsTitle")}
           </Text>
@@ -199,7 +206,10 @@ export function PermissionOutcome({
   if (state.state === "denied") {
     return (
       <View style={s.fill} testID="permission-denied">
-        <ScrollView contentContainerStyle={s.content}>
+        <ScrollView
+          contentContainerStyle={[s.content, { paddingTop: 24 + topBarInset() }]}
+          {...SCROLL_SAFE_AREA}
+        >
           <Text accessibilityRole="header" style={s.title}>
             {text("deniedTitle")}
           </Text>

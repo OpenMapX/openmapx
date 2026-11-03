@@ -16,6 +16,12 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { createLocationDriver } from "./location/createLocationDriver";
+import {
+  createForegroundNavigation,
+  type ForegroundNavigation,
+} from "./navigation/createForegroundNavigation";
+import { createPermissionPrompter, PermissionPrompts } from "./permissions/PermissionPrompts";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { type NativePalette, useNativePalette } from "./shell/nativeTheme";
@@ -33,6 +39,15 @@ import { useHardwareBack } from "./shell/useHardwareBack";
  * WebView cannot render itself: the first load, a failed load, a session that
  * outlived its process, and a fatally misconfigured build.
  */
+
+/** What a shell without native navigation reports. */
+const NO_NAVIGATION = {
+  groundNavigation: false,
+  transitNavigation: false,
+  backgroundLocation: false,
+  localNotifications: false,
+  speech: false,
+};
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -76,21 +91,63 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       }),
     [config],
   );
-  const shell = useMemo(() => {
+  const prompter = useMemo(
+    () =>
+      createPermissionPrompter({
+        locale,
+        requestBackgroundAccess: () => createLocationDriver().requestBackgroundPermission(),
+      }),
+    [locale],
+  );
+  // Shell states follow guidance starting and ending; repeated reports of the
+  // same state are dropped so a stream of snapshots is not a stream of renders.
+  const navigatingRef = useRef(false);
+  const setNavigating = useCallback((navigating: boolean) => {
+    if (navigatingRef.current === navigating) return;
+    navigatingRef.current = navigating;
+    dispatchShell({ type: navigating ? "session-started" : "session-ended" });
+  }, []);
+  const { shell, navigation } = useMemo(() => {
+    let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
     const composed: ShellBridge = createShellBridge({
       webOrigin: config.webOrigin,
       inject: (script) => webViewRef.current?.injectJavaScript(script),
-      // One-off location, settings and system-browser sign-in are answered
-      // here. Native navigation is not composed yet, so its commands are
-      // refused and every navigation capability is reported false.
-      dispatch: (message) =>
-        answerCommand(message, services.auxiliary, (type, payload, options) =>
+      // Every command goes through the navigation coordinator, which also
+      // answers the one-shot location, settings and sign-in requests. A build
+      // without it (the feasibility probe) answers only those.
+      dispatch: async (message) => {
+        const composedNavigation = await navigation;
+        if (composedNavigation) {
+          await composedNavigation.coordinator.dispatch(message);
+          return;
+        }
+        await answerCommand(message, services.auxiliary, (type, payload, options) =>
           composed.bridge.send(type, payload, options),
-        ),
+        );
+      },
+      capabilities: async () => (await navigation)?.capabilities() ?? NO_NAVIGATION,
       permission: () => services.permission(),
+      activeSession: async () => (await navigation)?.activeSession() ?? null,
     });
-    return composed;
-  }, [config.webOrigin, services]);
+    if (!config.feasibilityMode) {
+      navigation = createForegroundNavigation({
+        apiOrigin: config.apiOrigin,
+        locale,
+        send: (type, payload, options) => composed.bridge.send(type, payload, options),
+        permissionUi: prompter.ui,
+        isAppActive: () => visibilityRef.current === "active",
+        auxiliary: services.auxiliary,
+        onNavigatingChanged: setNavigating,
+      }).catch(() => null);
+    }
+    return { shell: composed, navigation };
+  }, [config, locale, prompter, services, setNavigating]);
+  useEffect(
+    () => () => {
+      void navigation.then((composed) => composed?.dispose());
+    },
+    [navigation],
+  );
   const recovery = useMemo(
     () =>
       config.feasibilityMode
@@ -300,6 +357,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         state={shellState.state}
         onAction={handleShellAction}
       />
+      <PermissionPrompts prompter={prompter} locale={locale} />
       {config.feasibilityMode ? <FeasibilityOverlay /> : null}
     </View>
   );
