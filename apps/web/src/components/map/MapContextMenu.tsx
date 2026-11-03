@@ -44,6 +44,7 @@ import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { openLocationDetails, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
+import { cameFromTouch } from "@/lib/mapTouch";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 
 interface MapContextTarget {
@@ -57,13 +58,6 @@ const ACTION_ORDER: ActionId[] = ["from", "to", "copy", "details", "parking", "s
 
 function formatContextCoordinates([lng, lat]: [number, number]): string {
   return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-}
-
-function cameFromTouch(event: MouseEvent & { pointerType?: string }): boolean {
-  const capabilities = (
-    event as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }
-  ).sourceCapabilities;
-  return event.pointerType === "touch" || capabilities?.firesTouchEvents === true;
 }
 
 export function MapContextMenu(): React.ReactNode {
@@ -200,6 +194,10 @@ export function MapContextMenu(): React.ReactNode {
         originalEvent.preventDefault();
         return;
       }
+      // Touch never opens this menu: a long-press drops the pin, whose card
+      // carries these actions (MapClickHandler). That includes the contextmenu
+      // MapLibre makes up for a held finger, which would otherwise open the
+      // menu under it only for the click-away listener to close it on the lift.
       if (cameFromTouch(originalEvent)) return;
       originalEvent.preventDefault();
       captureTarget([event.lngLat.lng, event.lngLat.lat], event.point, {

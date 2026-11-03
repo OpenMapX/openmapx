@@ -5,6 +5,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { isBackNavigationIdle, resetBackNavigationForTests } from "@/lib/backNavigation";
+import { resetMapTouchForTests } from "@/lib/mapTouch";
 import { settleHistory } from "./history";
 
 // jsdom does not implement Element.scrollIntoView; components that scroll a
@@ -24,4 +25,7 @@ afterEach(async () => {
   if (typeof window === "undefined") return;
   if (!vi.isFakeTimers() && !isBackNavigationIdle()) await settleHistory();
   resetBackNavigationForTests();
+  // A touch one test made would otherwise pass for the source of the next
+  // test's mouse events.
+  resetMapTouchForTests();
 });

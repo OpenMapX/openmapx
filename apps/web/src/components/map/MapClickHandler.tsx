@@ -21,7 +21,7 @@ import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivati
 import { closePlaceSelection } from "@/lib/closeSurfaces";
 import { haptics } from "@/lib/haptics";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
-import { bindMapLongPress, consumeLongPressClick, isTouchClick } from "@/lib/mapTouch";
+import { bindMapLongPress, cameFromTouch, consumeLongPressClick } from "@/lib/mapTouch";
 
 // Configure before any map listener mounts. Read live mode state at the first
 // callback for each click; capture may clear that state before later callbacks.
@@ -106,7 +106,7 @@ export function MapClickHandler() {
         }
       }
 
-      if (isTouchClick(e.originalEvent)) {
+      if (cameFromTouch(e.originalEvent)) {
         dismissOnTap();
         return;
       }
