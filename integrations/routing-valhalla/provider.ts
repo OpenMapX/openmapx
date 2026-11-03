@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { type CoverageTraceResponse, traceRouteCoverage } from "./live-coverage.js";
 import { readTrafficProof } from "./traffic-proof.js";
 /**
  * Valhalla multi-modal routing service client (walking, cycling).
@@ -8,7 +9,14 @@ import { readTrafficProof } from "./traffic-proof.js";
  * self-hosted Valhalla works key-less.
  */
 
-import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
+import type {
+  DirectionsResult,
+  Route,
+  RouteLeg,
+  RouteStep,
+  RoutingTrafficProof,
+  TravelMode,
+} from "@openmapx/core";
 import { decodePolyline, FetchJsonHttpError, fetchJson } from "@openmapx/core";
 import type {
   ManeuverLane,
@@ -96,6 +104,38 @@ const REQUESTED_ALTERNATES = 2;
 function valhallaErrorMessage(prefix: string) {
   return ({ status, body }: { status: number; body?: string }) =>
     `${prefix} ${status}${body ? `: ${body.replace(/\s+/g, " ").slice(0, 512)}` : ""}`;
+}
+
+/** A coverage trace is a cheap walk of a known path; a slow one leaves coverage unknown. */
+const COVERAGE_TRACE_TIMEOUT_MS = 3_000;
+
+/**
+ * Attach live-speed coverage evidence to routes the engine proved against its
+ * current traffic write. Coverage is extra evidence: a failed trace leaves it
+ * absent and never fails the route.
+ */
+async function attachTrafficCoverage(
+  routes: Route[],
+  proof: RoutingTrafficProof,
+  costingOptions: Record<string, unknown>,
+): Promise<void> {
+  const post = (body: Record<string, unknown>) =>
+    fetchJson<CoverageTraceResponse>(endpoint("/trace_attributes"), {
+      timeoutMs: COVERAGE_TRACE_TIMEOUT_MS,
+      userAgent: null,
+      headers: { "Content-Type": "application/json" },
+      errorMessage: valhallaErrorMessage("Valhalla coverage trace error"),
+      init: { method: "POST", body: JSON.stringify(body) },
+    });
+  const coverage = await Promise.all(
+    routes.map((route) =>
+      traceRouteCoverage(route, proof, costingOptions, post).catch(() => undefined),
+    ),
+  );
+  routes.forEach((route, index) => {
+    const evidence = coverage[index];
+    if (evidence) route.trafficCoverage = evidence;
+  });
 }
 
 interface ValhallaLaneRaw {
@@ -904,6 +944,7 @@ export const valhallaService: RoutingProvider = {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;
     }
+    if (trafficProof) await attachTrafficCoverage(routes, trafficProof, costingOptions);
 
     return {
       waypoints,
@@ -972,6 +1013,7 @@ export const valhallaService: RoutingProvider = {
       route.sourceIds = sourceIds;
       if (trafficProof) route.trafficProof = trafficProof;
     }
+    if (trafficProof) await attachTrafficCoverage(routes, trafficProof, costingOptions);
 
     return {
       waypoints,

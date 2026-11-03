@@ -1,14 +1,22 @@
 import type { RoutingTrafficProof } from "@openmapx/core";
 
+/** The engine endpoints the proxy proves: a route, or a trace of a route's own shape. */
+export type ProvenEndpoint = RoutingTrafficProof["endpoint"] | "trace_attributes";
+
+/** A proxy proof for one outbound request to `E`. */
+export type EngineTrafficProof<E extends ProvenEndpoint> = Omit<RoutingTrafficProof, "endpoint"> & {
+  endpoint: E;
+};
+
 /** Accept only a fresh proxy proof bound to this exact outbound request. */
-export function readTrafficProof(
+export function readTrafficProof<E extends ProvenEndpoint>(
   value: unknown,
   requestId: string,
-  endpoint: RoutingTrafficProof["endpoint"],
+  endpoint: E,
   costing: string,
   startedAt: number,
   now = Date.now(),
-): RoutingTrafficProof | undefined {
+): EngineTrafficProof<E> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const p = value as Record<string, unknown>;
   if (

@@ -79,9 +79,11 @@ export interface WriteLiveTrafficDeps {
   /**
    * Per-directed-edge closures and speed caps from bound road conditions,
    * keyed by `edgeKey` (`level:tile:index`). Merged ON TOP of the live speeds:
-   * a closure outranks any speed, a cap yields `min(live, cap)`. An override
-   * edge is written even when the CSV has no row for it, and its identity
-   * joins the staleness set — so a lifted closure reverts next cycle.
+   * a closure outranks any speed, a cap yields `min(live, cap)`. A closure is
+   * written even when the CSV has no row for its edge; a cap is not, because
+   * it only lowers a measured speed (routing's live-speed coverage relies on
+   * that). Written override edges join the staleness set, so a lifted closure
+   * reverts next cycle.
    */
   overrides?: Map<string, EdgeOverride & { edge: WayEdge }>;
   /** Where the write-state (successfully-written edge identities) is persisted. Defaults under `DATA_DIR`. */
@@ -399,7 +401,8 @@ async function saveIdentities(
  * speeds per edge: a closure wins over any speed (written as a CLOSED record,
  * NOT as speed 0-via-`encodeTrafficSpeed`, and never as the no-data sentinel),
  * a cap yields `min(live, cap)`, and a cap on an edge with no live speed is
- * written on its own. Override edges are ordinary writes in every other
+ * left unresolved: a current speed on an edge always rests on a measured one.
+ * Override edges are ordinary writes in every other
  * respect — same bounds check, same identity set — so a lifted closure or an
  * expired cap is cleared by the staleness pass on the very next cycle. An
  * observation is credited in `appliedObservationIds` only when EVERY one of its

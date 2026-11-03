@@ -315,6 +315,16 @@ per-effect receipts. Source revision, intended spans, licence and attribution
 must match. Missing or expired proof retains the fallback/limited assessment;
 an ID appearing in a writer response alone is insufficient.
 
+The engine's proof proxy also proves `trace_attributes` requests. For each
+proven depart-now car or motorcycle route, the Valhalla provider walks every
+leg's own shape (`shape_match: edge_walk`) and reads each edge's current speed.
+The route's live-speed coverage counts only when every trace carries proof of the
+same write, graph generation and engine boot as the route. Coverage is complete
+when every edge carried a current speed; the writer puts one only on edges with a
+measured speed, and a road-event cap only lowers it. A failed or unproven trace
+leaves coverage unknown and does not fail the route. Until the engine runs a
+watchdog that proves traces, no route carries coverage.
+
 The [Coverage & freshness](./coverage-freshness.md) sidecar remains historical
 publication evidence and does not carry the route's serving-process proof.
 A successful graph-write row cannot by itself qualify traffic-aware routing.

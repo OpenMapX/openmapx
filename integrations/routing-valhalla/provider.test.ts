@@ -1005,6 +1005,54 @@ describe("Valhalla proof propagation", () => {
       expect(result.routes[0]?.trafficProof?.writeId).toBe("write");
     },
   );
+  it("attaches coverage when a trace of the route's shape is proven against the same write", async () => {
+    setValhallaUrl("http://localhost:8002");
+    const proofFor = (requestId: string, endpoint: string) => ({
+      schemaVersion: 1,
+      requestId,
+      writeId: "write",
+      graphGeneration: "graph",
+      engineBootId: "boot",
+      validUntil: new Date(Date.now() + 60000).toISOString(),
+      evaluatedAt: new Date().toISOString(),
+      endpoint,
+      costing: "auto",
+    });
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        urls.push(new URL(url).pathname);
+        const request = JSON.parse(init?.body as string);
+        if (new URL(url).pathname === "/trace_attributes") {
+          expect(request.shape_match).toBe("edge_walk");
+          return Response.json({
+            units: "kilometers",
+            edges: [{ length: 1, speeds_non_faded: { current_flow: 80 } }],
+            openmapx_traffic_proof: proofFor(request.openmapx_request_id, "trace_attributes"),
+          });
+        }
+        return Response.json({
+          ...MINIMAL_VALHALLA_RESPONSE,
+          openmapx_traffic_proof: proofFor(request.openmapx_request_id, "route"),
+        });
+      }),
+    );
+    const result = await valhallaService.getRoute(
+      [
+        [7, 50],
+        [7.1, 50.1],
+      ],
+      "driving",
+      { useLiveTraffic: true },
+    );
+    expect(urls).toEqual(["/route", "/trace_attributes"]);
+    expect(result.routes[0]?.trafficCoverage).toEqual({
+      complete: true,
+      evaluatedAt: result.routes[0]?.trafficProof?.evaluatedAt,
+      validUntil: expect.any(String),
+    });
+  });
   it("does not accept Stadia proof even when its nonce matches", async () => {
     setValhallaUrl("https://api.stadiamaps.com");
     vi.stubGlobal(
