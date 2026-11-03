@@ -4,6 +4,7 @@ import { createNavigationRuntimeRoute } from "./serviceWorkerNavigation";
 import {
   appShellCacheNames,
   handleNetworkOnlyNavigation,
+  isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
   isNetworkOnlyApiPath,
   isOfflinePackageArchivePath,
@@ -16,6 +17,7 @@ import {
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
   PUBLIC_CACHEABLE_API_PATH_TEMPLATES,
+  responseAllowsStorage,
 } from "./swCaches";
 
 afterEach(() => {
@@ -352,5 +354,37 @@ describe("network-only offline map requests", () => {
       "https://maps.example/api/maptiler/tiles.json?openmapxReachability=true",
     ])
       expect(isOnlineStyleReachabilityProbe(new URL(url))).toBe(false);
+  });
+});
+
+describe("directions caching", () => {
+  it("matches only the directions and optimize paths", () => {
+    expect(isDirectionsApiPath("/api/integrations/routing/directions")).toBe(true);
+    expect(isDirectionsApiPath("/api/integrations/routing/directions/optimize")).toBe(true);
+
+    for (const path of [
+      "/api/integrations/routing/directions/ev",
+      "/api/integrations/routing/directions/schedule",
+      "/api/integrations/routing/match",
+      "/api/integrations/geocoding/geocode",
+    ])
+      expect(isDirectionsApiPath(path)).toBe(false);
+  });
+
+  it("stores only successful responses the server lets a cache keep", () => {
+    const response = (status: number, cacheControl?: string) =>
+      new Response("{}", {
+        status,
+        headers: cacheControl ? { "Cache-Control": cacheControl } : {},
+      });
+
+    expect(responseAllowsStorage(response(200))).toBe(true);
+    expect(
+      responseAllowsStorage(response(200, "public, max-age=30, stale-while-revalidate=60")),
+    ).toBe(true);
+    expect(responseAllowsStorage(response(200, "no-store"))).toBe(false);
+    expect(responseAllowsStorage(response(200, "public, No-Store"))).toBe(false);
+    expect(responseAllowsStorage(response(200, "private, max-age=60"))).toBe(false);
+    expect(responseAllowsStorage(response(502))).toBe(false);
   });
 });
