@@ -100,7 +100,7 @@
       "url": "https://yango.com/",
       "commercialUse": "conditional",
       "providerCountry": "NL",
-      "providerPrivacyUrl": "https://yango.com/en_int/legal/confidential/",
+      "providerPrivacyUrl": "https://yango.com/legal/yango_privacy_notice/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -119,7 +119,7 @@
               "surfaces": ["map", "content", "image"],
               "basis": "unresolved",
               "reviewedAt": "2026-10-14",
-              "evidenceUrls": ["https://yango.com/en_int/legal/"],
+              "evidenceUrls": ["https://yango.com/legal/yango_termsofuse/"],
               "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           },
@@ -128,14 +128,14 @@
             "subject": "Yango access/account contract",
             "license": {
               "kind": "unknown",
-              "url": "https://yango.com/en_int/legal/"
+              "url": "https://yango.com/legal/yango_termsofuse/"
             },
             "attribution": {
               "placement": "visible",
               "surfaces": ["map", "content", "image"],
               "basis": "unresolved",
               "reviewedAt": "2026-10-14",
-              "evidenceUrls": ["https://yango.com/en_int/legal/"],
+              "evidenceUrls": ["https://yango.com/legal/yango_termsofuse/"],
               "reason": "Exact product/operator/file grant or placement remains unresolved; no generic licence-only collapse clearance"
             }
           }
@@ -143,7 +143,7 @@
         "declarations": [
           {
             "text": "Proprietary (partner agreement)",
-            "url": "https://yango.com/en_int/legal/"
+            "url": "https://yango.com/legal/yango_termsofuse/"
           }
         ]
       }
