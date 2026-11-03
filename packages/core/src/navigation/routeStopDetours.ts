@@ -58,6 +58,27 @@ export function remainingRouteStopWaypoints(
   ];
 }
 
+/**
+ * The index in `remaining` before which `target` is inserted: before the next
+ * original stop beyond the target's position on the route, retaining user
+ * order. -1 when there is no itinerary to insert into.
+ */
+export function routeStopInsertIndex(
+  route: RouteMatcherInput,
+  remaining: LngLat[],
+  target: LngLat,
+  fromAlongMeters = 0,
+): number {
+  if (remaining.length < 2) return -1;
+  if (remaining.length === 2) return 1;
+  const along = projectWaypointAfter(route, target, fromAlongMeters).alongMeters;
+  const positions = routeStopWaypointPositions(route, remaining, fromAlongMeters);
+  for (let i = 1; i < remaining.length - 1; i++) {
+    if (positions[i - 1].alongMeters > along) return i;
+  }
+  return remaining.length - 1;
+}
+
 /** Insert before the next original stop beyond this target, retaining user order. */
 export function insertRouteStop(
   route: RouteMatcherInput,
@@ -65,17 +86,8 @@ export function insertRouteStop(
   target: LngLat,
   fromAlongMeters = 0,
 ): LngLat[] {
-  if (remaining.length < 2) return [];
-  if (remaining.length === 2) return [remaining[0], target, remaining[1]];
-  const along = projectWaypointAfter(route, target, fromAlongMeters).alongMeters;
-  const positions = routeStopWaypointPositions(route, remaining, fromAlongMeters);
-  let index = remaining.length - 1;
-  for (let i = 1; i < remaining.length - 1; i++) {
-    if (positions[i - 1].alongMeters > along) {
-      index = i;
-      break;
-    }
-  }
+  const index = routeStopInsertIndex(route, remaining, target, fromAlongMeters);
+  if (index < 0) return [];
   return [...remaining.slice(0, index), target, ...remaining.slice(index)];
 }
 

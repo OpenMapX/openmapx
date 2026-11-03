@@ -5,6 +5,7 @@ import {
   evaluateRouteStopDetours,
   insertRouteStop,
   remainingRouteStopWaypoints,
+  routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "../routeStopDetours";
 
@@ -104,6 +105,12 @@ describe("remaining-itinerary stop detours", () => {
       D,
     ]);
     expect(insertRouteStop(route.geometry, [O, W, D], urban)).toEqual([O, W, urban, D]);
+  });
+  it("reports the insertion index the stop rule chooses", () => {
+    expect(routeStopInsertIndex(route.geometry, [O, D], urban)).toBe(1);
+    expect(routeStopInsertIndex(route.geometry, [O, W, D], [0.0005, 0.0001])).toBe(1);
+    expect(routeStopInsertIndex(route.geometry, [O, W, D], urban)).toBe(2);
+    expect(routeStopInsertIndex(route.geometry, [O], urban)).toBe(-1);
   });
   it("uses independent road access rather than perpendicular-distance minutes", async () => {
     const results = await evaluateRouteStopDetours({

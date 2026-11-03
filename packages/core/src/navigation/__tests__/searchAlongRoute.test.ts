@@ -7,7 +7,9 @@ import {
   poiAlongRoute,
   progressBucket,
   progressBucketStartMeters,
+  ROUTE_SEARCH_CORRIDOR_METERS,
   routeAheadBounds,
+  routeSearchChunks,
 } from "../searchAlongRoute";
 
 // Due-east route; 0.001° ≈ 111 m at the equator.
@@ -254,5 +256,59 @@ describe("progressBucket", () => {
     expect(progressBucketStartMeters(1)).toBe(5000);
     expect(progressBucketStartMeters(2)).toBe(10_000);
     expect(progressBucketStartMeters(progressBucket(12_345))).toBe(10_000);
+  });
+});
+
+describe("routeSearchChunks", () => {
+  // Due east along the equator; 1° of longitude ≈ 111.32 km.
+  const eastLine = (km: number): LngLat[] => {
+    const points: LngLat[] = [];
+    for (let i = 0; i <= km; i++) points.push([i / 111.32, 0]);
+    return points;
+  };
+  const contains = (
+    boxes: { west: number; east: number; south: number; north: number }[],
+    [lng, lat]: LngLat,
+  ) => boxes.some((b) => lng >= b.west && lng <= b.east && lat >= b.south && lat <= b.north);
+
+  it("splits a whole route into 25 km windows ending at the route's end", () => {
+    const { chunks, totalMeters, searchedMeters } = routeSearchChunks(eastLine(60));
+    expect(chunks.map((c) => Math.round(c.endMeters / 1000))).toEqual([25, 50, 60]);
+    expect(chunks.map((c) => Math.round(c.startMeters / 1000))).toEqual([0, 25, 50]);
+    expect(Math.round(totalMeters / 1000)).toBe(60);
+    expect(searchedMeters).toBe(totalMeters);
+  });
+
+  it("caps a long route at 40 windows and reports the searched length", () => {
+    const { chunks, totalMeters, searchedMeters } = routeSearchChunks(eastLine(1200));
+    expect(chunks).toHaveLength(40);
+    expect(searchedMeters).toBe(1_000_000);
+    expect(totalMeters).toBeGreaterThan(1_190_000);
+    expect(chunks.at(-1)?.endMeters).toBe(1_000_000);
+  });
+
+  it("pads each window by the 1,200 m corridor", () => {
+    expect(ROUTE_SEARCH_CORRIDOR_METERS).toBe(1200);
+    const { chunks } = routeSearchChunks(eastLine(30));
+    const lat = 1100 / 111_320;
+    for (const along of [1, 12, 24]) {
+      expect(contains(chunks[0].boxes, [along / 111.32, lat])).toBe(true);
+      expect(contains(chunks[0].boxes, [along / 111.32, -lat])).toBe(true);
+    }
+  });
+
+  it("returns two boxes for a window crossing the antimeridian", () => {
+    const route: LngLat[] = [
+      [179.95, 0],
+      [-179.95, 0],
+    ];
+    const { chunks } = routeSearchChunks(route);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].boxes).toHaveLength(2);
+  });
+
+  it("returns no windows for geometry too short to bound", () => {
+    expect(routeSearchChunks([[0, 0]]).chunks).toEqual([]);
+    expect(routeSearchChunks([]).chunks).toEqual([]);
   });
 });
