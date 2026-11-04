@@ -1,19 +1,9 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import {
-  type LaneDestinations,
-  type ManeuverLane,
-  type ManeuverSign,
-  resolveGuidanceLanes,
-} from "@openmapx/core";
-import {
-  laneArrowStemShiftEm,
-  laneIndicationIcon,
-  type Maneuver,
-  normalizeLaneToken,
-  unmarkedLaneIcon,
-} from "@/lib/navigation/maneuverIcon";
+import type { LaneDestinations, ManeuverLane, ManeuverSign } from "@openmapx/core";
+import { presentGuidanceLanes } from "@openmapx/core/navigation";
+import { guidanceIconComponent, type Maneuver } from "@/lib/navigation/maneuverIcon";
 
 /**
  * Turn-lane guidance: one cell per lane, with an overlaid arrow for each allowed
@@ -46,15 +36,10 @@ export function LaneGuidance({
   /** "compact" shrinks the cells for the directions list rows. */
   size?: "regular" | "compact";
 }) {
-  // Trust the engine's valid/active lanes; otherwise recommend them from the
-  // lanes' signed destinations, then from the maneuver (exact → same-side →
-  // unrestricted) so under-tagged lanes still light up.
-  const resolved = resolveGuidanceLanes(lanes, maneuver, { sign, laneDestinations });
-  if (resolved.length === 0) return null;
-  // Only the engine knows an unmarked lane leads into the maneuver; lanes we
-  // recommended ourselves stay blank rather than gain a guessed arrow.
-  const engineChose = lanes?.some((l) => l.valid) ?? false;
-  const unmarkedIcon = engineChose ? unmarkedLaneIcon(maneuver) : null;
+  // Shared with the Android Auto routing card: which lanes light up and which arrow
+  // in each is recommended (see `presentGuidanceLanes`).
+  const cells = presentGuidanceLanes(lanes, maneuver, { sign, laneDestinations });
+  if (cells.length === 0) return null;
   const banner = variant === "banner";
   const cell = size === "compact" ? 28 : banner ? 38 : 36;
   const arrowSize = size === "compact" ? 24 : banner ? 32 : 30;
@@ -67,21 +52,15 @@ export function LaneGuidance({
         ...(banner ? { flex: 1 } : { p: 1, bgcolor: "background.paper", borderRadius: 2 }),
       }}
     >
-      {resolved.map((lane, i) => {
-        const marked = lane.indications
-          .map((ind) => ({ ind, icon: laneIndicationIcon(ind) }))
-          .filter((a): a is { ind: string; icon: NonNullable<typeof a.icon> } => a.icon !== null);
-        const fallback = marked.length === 0 && lane.valid ? unmarkedIcon : null;
-        const inferred = fallback !== null;
-        const arrows = fallback ? [{ ind: "none", icon: fallback }] : marked;
-        const activeNorm = lane.active && !inferred ? normalizeLaneToken(lane.active) : null;
+      {cells.map((lane, i) => {
+        const arrows = lane.arrows;
         return (
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
             key={i}
             data-valid={String(lane.valid)}
             data-arrow-count={String(arrows.length)}
-            data-inferred={inferred ? "true" : undefined}
+            data-inferred={lane.inferred ? "true" : undefined}
             sx={{
               position: "relative",
               width: cell,
@@ -108,17 +87,13 @@ export function LaneGuidance({
                 }}
               />
             ) : (
-              arrows.map(({ ind, icon }) => {
-                const Icon = icon.component;
-                const isActive =
-                  lane.valid &&
-                  (activeNorm ? normalizeLaneToken(ind) === activeNorm : arrows.length === 1);
-                // Align the stems of a multi-indication lane onto one line so
-                // only the tips diverge; a lone arrow stays centered as drawn.
-                const stemShift = arrows.length > 1 ? laneArrowStemShiftEm(icon.name) : 0;
+              arrows.map(({ indication, icon, active: isActive, stemShift: shift }) => {
+                const Icon = guidanceIconComponent(icon);
+                // Stems of a multi-indication lane share one line; only the tips diverge.
+                const stemShift = shift;
                 return (
                   <Icon
-                    key={ind}
+                    key={indication}
                     data-active={String(isActive)}
                     sx={{
                       position: "absolute",

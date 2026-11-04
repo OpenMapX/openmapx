@@ -25,6 +25,8 @@ export const LOCATION_FOREGROUND_SERVICE_TYPE = "location";
 export const EXPO_LOCATION_SERVICE_NAMES = ["expo.modules.location.services.LocationTaskService"];
 
 export const REQUIRED_ANDROID_PERMISSIONS = [
+  "androidx.car.app.NAVIGATION_TEMPLATES",
+  "androidx.car.app.ACCESS_SURFACE",
   "android.permission.INTERNET",
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",

@@ -13,6 +13,7 @@ import {
 // Node resolves these imports and needs the real extension.
 import type { MobileBuildConfig } from "../config/mobileConfig.ts";
 import { readMobileConfig } from "../config/mobileConfig.ts";
+import { applyCarConfig } from "./carConfigTransforms.ts";
 import {
   type AndroidManifestLike,
   applyAndroidApplicationSecurity,
@@ -97,7 +98,10 @@ export const withOpenMapXNativeConfig: ConfigPlugin = (config) => {
   next = withAndroidManifest(next, (manifestConfig) => {
     const manifest = manifestConfig.modResults as unknown as AndroidManifestLike;
     const updated = applyAndroidApplicationSecurity(
-      applyLocationServiceType(applyAndroidPermissions(manifest)),
+      applyCarConfig(
+        applyLocationServiceType(applyAndroidPermissions(manifest)),
+        readMobileConfig(process.env).webOrigin,
+      ),
       input,
     );
     manifestConfig.modResults = updated as unknown as typeof manifestConfig.modResults;

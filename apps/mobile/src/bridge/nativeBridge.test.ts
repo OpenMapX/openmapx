@@ -597,11 +597,11 @@ describe("intake protocol compatibility", () => {
     expect(messages.map((m) => m.protocolVersion)).toEqual([3, 3, 3]);
   });
 
-  it("omits intake capability when an older web negotiates version 3", async () => {
+  it("omits new capabilities when an older web negotiates version 3", async () => {
     const { bridge, registry, injected } = harness({
       describeShell: () => ({
         ...SHELL,
-        capabilities: { ...SHELL.capabilities, nativeIntake: true },
+        capabilities: { ...SHELL.capabilities, nativeIntake: true, carDestinations: true },
       }),
     });
     const channel = registry.beginDocumentLoad(NOW);
@@ -611,6 +611,7 @@ describe("intake protocol compatibility", () => {
       capabilities: Record<string, unknown>;
     };
     expect(payload.capabilities).not.toHaveProperty("nativeIntake");
+    expect(payload.capabilities).not.toHaveProperty("carDestinations");
   });
 });
 
@@ -638,13 +639,13 @@ describe("intake protocol gates", () => {
     const { bridge, registry, injected } = harness({
       describeShell: () => ({
         ...SHELL,
-        capabilities: { ...SHELL.capabilities, nativeIntake: true },
+        capabilities: { ...SHELL.capabilities, nativeIntake: true, carDestinations: true },
       }),
     });
     const c = registry.beginDocumentLoad(NOW);
     await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce) });
     expect(decodePayload(injected[0]).payload).toMatchObject({
-      capabilities: { nativeIntake: true },
+      capabilities: { nativeIntake: true, carDestinations: true },
       selectedProtocolVersion: 4,
     });
   });

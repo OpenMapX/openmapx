@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
+import { fetchGeocode } from "../api/geocoding";
 import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
-import type { SearchResult } from "../types/geocoding";
 import type { LngLat } from "../types/geometry";
 
 /** `proximity` biases results towards a point, rounded to 2 dp (~1 km) like the server cache. */
@@ -13,9 +12,9 @@ export function useGeocoding(query: string, lang?: string, proximity?: LngLat | 
   return useQuery({
     queryKey: ["geocode", query, lang, location?.lat, location?.lng],
     queryFn: ({ signal }) =>
-      apiClient.get<SearchResult[]>(
-        API_ENDPOINTS.geocode,
-        { q: query, ...(lang && { lang }), ...location },
+      fetchGeocode(
+        { q: query, lang, proximity },
+        apiClient,
         apiQueryRequestOptions(signal, RAPID_QUERY_POLICY),
       ),
     enabled: query.trim().length >= 3,

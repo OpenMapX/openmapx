@@ -56,6 +56,7 @@ export interface ShellDescription {
     localNotifications: boolean;
     speech: boolean;
     nativeIntake?: boolean;
+    carDestinations?: boolean;
   };
   permission: "not-determined" | "foreground" | "background" | "denied" | "limited";
   locationDriver: "expo" | "native";
@@ -207,7 +208,13 @@ export class NativeBridge {
         protocolVersion: selected,
       });
     }
-    const { nativeIntake: _intake, ...legacyCapabilities } = shell.capabilities;
+    // Pre-intake v3 clients use a strict capability schema. Neither new key
+    // may leak into their hello, including Android Auto's destination sync.
+    const {
+      nativeIntake: _intake,
+      carDestinations: _carDestinations,
+      ...legacyCapabilities
+    } = shell.capabilities;
     this.emit(
       {
         type: "native.hello",

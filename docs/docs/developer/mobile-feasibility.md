@@ -21,10 +21,11 @@ Start, Profile, Arm audio, End and recovery scenarios were not exercised. All
 hardware observations remain `not-verified`. Their `virtual-pass` conclusions
 apply to the recorded build/install/launch observations only.
 
-The current foreground app does not dispatch native navigation commands. Read
+The current foreground app dispatches native navigation commands through the
+shared coordinator; the historical launch reports do not qualify that flow. Read
 [Mobile architecture](./mobile-architecture.md) before trying an end-to-end
-navigation scenario. Processor, repository and bridge tests can pass without a
-working installed navigation flow.
+navigation scenario. Processor, repository and bridge tests alone do not establish
+a working installed navigation flow.
 
 Virtual-device runs can exercise launch, layout, permissions and injected
 lifecycle conditions. Physical devices are required for real suspension,
@@ -32,6 +33,27 @@ background delivery, OEM power management, audio routing, battery and thermal
 behavior. `qa/assumptions/location-driver.json` remains
 `expo-location-provisional` and blocks public rollout until the volunteer matrix
 is complete.
+
+## Android Auto qualification
+
+The source includes Android Auto templates, a service-owned map WebView and a car
+runtime sharing the phone navigation authority. Follow the [Android Auto
+runbook](./android-auto.md) for the macOS Desktop Head Unit (DHU), debug test drive
+and protocol details. Android Automotive OS is outside scope; CarPlay remains
+blocked on Apple's entitlement.
+
+Keep protocol/JVM/browser tests, the device-only Presentation/WebGL harness,
+DHU checks, real head-unit acceptance and Play review as separate evidence. A
+browser map capture or virtual-display test does not establish locked-phone,
+Activity-absent runtime bootstrap, notification/foreground-service coexistence or
+real vehicle audio. The current car start gate requires background permission
+and either a focused phone Activity or an already-running location service;
+general car-only cold-start trip creation remains unqualified.
+
+Store metadata must not claim Android Auto until qualification on a real head
+unit and Google Play car review are complete. The DHU screenshot slot in the
+runbook is reserved for inspected integration evidence, not synthetic browser
+fixtures.
 
 ## The automated gate
 

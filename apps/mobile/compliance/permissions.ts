@@ -44,6 +44,16 @@ export const IOS_BACKGROUND_MODES: PermissionEntry[] = [
 
 export const ANDROID_PERMISSIONS: PermissionEntry[] = [
   {
+    id: "androidx.car.app.NAVIGATION_TEMPLATES",
+    practiceId: "background-location-active-navigation",
+    reason: "Host-rendered navigation guidance in Android Auto.",
+  },
+  {
+    id: "androidx.car.app.ACCESS_SURFACE",
+    practiceId: "background-location-active-navigation",
+    reason: "Map-only rendering on the Android Auto surface.",
+  },
+  {
     id: "android.permission.INTERNET",
     practiceId: "route-request-coordinates",
     reason: "The product UI is served over the network.",

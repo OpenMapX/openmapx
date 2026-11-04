@@ -6,6 +6,12 @@
 // `pnpm mobile:bundle:check` repeats the check against the real Metro graph.
 
 export type { Route } from "../types/routing";
+// Guidance distance rounding, here so the mobile shell needn't load the core root.
+export {
+  formatMeasurementDistance,
+  type MeasurementDistanceParts,
+  measurementDistanceParts,
+} from "../utils/formatting";
 export {
   type ActiveAlert,
   brakingDistanceMeters,
@@ -16,6 +22,23 @@ export {
   shouldWarnCamera,
 } from "./alerts";
 export { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
+export {
+  type CarCamera,
+  type CarNativeToWebMessage,
+  type CarPosition,
+  type CarPreview,
+  type CarSurfaceMessage,
+  type CarViewport,
+  type CarWebToNativeMessage,
+  carCameraSchema,
+  carNativeToWebSchema,
+  carPositionSchema,
+  carPreviewSchema,
+  carSurfaceMessageSchema,
+  carViewportSchema,
+  carWebToNativeSchema,
+  parseCarSurfaceMessage,
+} from "./carSurfaceProtocol";
 export { type CoastOptions, type CoastResult, coastState } from "./coast";
 export {
   cumulativeDistances,
@@ -45,6 +68,17 @@ export type {
   GroundPackageError,
 } from "./groundPackage";
 export { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
+export {
+  type GuidanceIconName,
+  type GuidanceLaneArrow,
+  type GuidanceLaneCell,
+  laneArrowStemShift,
+  laneIndicationIconName,
+  maneuverIconName,
+  normalizeLaneToken,
+  presentGuidanceLanes,
+  unmarkedLaneIconName,
+} from "./guidanceIcons";
 export { formatIncidentAnnouncement, incidentTypeLabelKey } from "./incidentAnnounce";
 export {
   type IncidentAlert,
@@ -81,6 +115,10 @@ export {
   maneuverArrowTipBearing,
 } from "./maneuverArrow";
 export {
+  type CarDestination,
+  type CarDestinations,
+  carDestinationSchema,
+  carDestinationsSchema,
   enforceAggregateBounds,
   type GroundNavigationStartPackage,
   groundStartPackageSchema,
@@ -186,6 +224,7 @@ export {
   updateOffRouteScore,
 } from "./reroute";
 export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
+export { isNearRoute, ROUTE_CORRIDOR_METERS } from "./routeCorridor";
 export {
   appendCountrySpans,
   countryAtMeters,

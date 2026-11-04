@@ -17,6 +17,8 @@ const PASS_THROUGH = new Set([
   "apps/web/src/components/map/ElevationHoverMarker.tsx",
   // Navigation puck: decoration under the follow camera, nothing to activate.
   "apps/web/src/lib/navigation/useNavCamera.ts",
+  // Android Auto location dot: the car surface's DOM receives no pointer input.
+  "apps/web/src/app/car/useCarPositionMarker.ts",
   // Standalone preview map with no click handling of its own.
   "apps/web/src/integration-api/components/LocationMinimap.tsx",
 ]);

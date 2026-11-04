@@ -66,6 +66,7 @@ export interface HandshakeResult {
     localNotifications: boolean;
     speech: boolean;
     nativeIntake?: boolean;
+    carDestinations?: boolean;
   };
   permission: string;
   activeSession: { sessionId: string; revision: number; kind: "ground" | "transit" } | null;

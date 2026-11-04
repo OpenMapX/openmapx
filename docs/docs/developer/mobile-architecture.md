@@ -25,7 +25,9 @@ present. Installed-device evidence covers Android only; see
 
 Native navigation components are intended to own work that must continue when
 the WebView is suspended: location delivery, progress, cues, alerts and durable
-session state. The web UI owns rendering, search, route planning and place details.
+session state. The web UI owns phone rendering, search, route planning and place details.
+Android Auto adds the narrow exception described below: the shell plans car trips
+and owns a second map WebView and host templates.
 
 A browser or PWA uses browser navigation facilities. Inside the installed shell,
 the web runtime selects native authority before the handshake and disables its
@@ -80,6 +82,30 @@ only when the OS starts the task without the app.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 
+## Android Auto surface and runtime
+
+The native car surface is a deliberate, narrow exception to the rule that map
+rendering belongs to the phone WebView. It is still web map rendering: the car
+service owns a second WebView inside a Presentation on a VirtualDisplay supplied
+with the host surface. It loads the map-only `/car` page. Directions, lanes and
+arrival estimates use Android for Cars templates rather than phone web chrome.
+The headless navigation bundle does not import the web renderer or MapLibre GL JS.
+
+`OpenMapXCarRuntime` runs through the application's existing ReactHost without
+requiring the phone Activity. It reuses the foreground coordinator when present,
+or composes car-capable reroute/audio ports over the same executor and SQLite
+repository. Committed snapshots fan out independently to phone and car; the car
+page is a passive projection, not another navigation engine. Car commands enter
+the same authority, including host stop. Car route planning uses the compiled
+public API and a bounded instance/account-scoped destinations cache from the phone.
+
+A connected car does not imply permission to start an Android location foreground
+service. Car starts currently need background location permission plus a focused
+phone Activity or an already-running location service. General car-only cold-start
+trip creation remains unqualified. See [Android Auto](./android-auto.md) for the
+surface protocol, privacy boundaries, DHU procedure and release limits. This does
+not add Android Automotive OS or CarPlay support.
+
 ## Native screens
 
 The loading and error overlays, the recovery screen and the permission screens
@@ -111,7 +137,9 @@ alone does not establish that a command is implemented.
 Before changing the protocol, identify the actually deployed shell and web
 versions. Define and test their overlap, deploy a compatible web build, then ship
 the native build and enable the new capability. New web builds accept older protocol-3 shells. New shells omit `nativeIntake`
-from protocol-3 hello replies and suppress intake events. Queued navigation
+from protocol-3 hello replies and suppress intake events. Android Auto’s optional
+`carDestinations` key is also omitted for these older strict hello schemas; a
+protocol-4 peer receives both capabilities. Queued navigation
 messages are stamped only after negotiation, so a pre-handshake restore remains
 readable by the older page. Pending inbox items survive until a compatible page
 opens them, the user discards them, or their 24-hour expiry.

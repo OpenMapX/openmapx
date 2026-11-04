@@ -62,7 +62,11 @@ export class ExpoLocationDriver implements LocationDriver {
   private queue: Promise<unknown> = Promise.resolve();
   private activeProfile: LocationProfile | null = null;
 
-  constructor(private readonly locale: MobileLocale = "en") {}
+  constructor(private locale: MobileLocale = "en") {}
+
+  setLocale(locale: MobileLocale): void {
+    this.locale = locale;
+  }
 
   private serialise<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.queue.then(operation, operation);

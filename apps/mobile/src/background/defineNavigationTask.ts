@@ -1,5 +1,6 @@
 import type { LocationObject } from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { carCoordinator } from "../car/carRuntime";
 import { getRuntimeConfig } from "../config/runtimeConfig";
 import { foregroundCoordinator } from "../navigation/foregroundCoordinator";
 import { settleSurfaces } from "../navigation/surfaces/createSurfacePort";
@@ -46,7 +47,8 @@ TaskManager.defineTask<LocationTaskPayload>(NAVIGATION_LOCATION_TASK, async ({ d
       return;
     }
 
-    const coordinator = foregroundCoordinator() ?? (await getHeadlessCoordinator());
+    const coordinator =
+      foregroundCoordinator() ?? (await carCoordinator()) ?? (await getHeadlessCoordinator());
     await coordinator.handleLocationBatch(batch);
     await coordinator.settleRemoteWork?.();
     await settleSurfaces();

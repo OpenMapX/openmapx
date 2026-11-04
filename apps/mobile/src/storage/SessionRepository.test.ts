@@ -566,6 +566,7 @@ describe("SessionRepository", () => {
         { kind: "stop-audio" },
         { kind: "cancel-session-alerts", sessionId: "session-1" },
         { kind: "reconcile-surface" },
+        { kind: "publish-snapshot", immediate: true },
       ]);
       expect(await repository.loadActive(NOW)).toBeNull();
       expect(await repository.listPendingEvents("session-1")).toEqual([]);

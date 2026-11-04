@@ -61,7 +61,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import type { RoadConditionEvent } from "@openmapx/core";
+import { type RoadConditionEvent, useNavigationStore } from "@openmapx/core";
 import { eventsToFeatureCollection } from "../eventsToGeojson";
 import { buildSources, RoadConditionsLayer } from "../map-layer";
 import { buildIncidentCard, type RoadConditionPopupInput } from "../popup";
@@ -262,6 +262,47 @@ describe("RoadConditionsLayer marker images", () => {
 
     unmount();
     expect(fake.state.missingStyleImageResolver).toBeNull();
+  });
+});
+
+describe("RoadConditionsLayer during navigation", () => {
+  const point = (id: string, lng: number, lat: number) => ({
+    geometry: { type: "Point", coordinates: [lng, lat] },
+    properties: props({ id }),
+  });
+  afterEach(() => {
+    useNavigationStore.setState({ status: "idle", kind: "ground", route: null } as never);
+  });
+
+  it("shows only events along and beside the route while a trip runs, all otherwise", async () => {
+    // On the route, 500 m beside it, and 5 km away.
+    respondWith([
+      point("on", 6.05, 50.0),
+      point("beside", 6.05, 50.0045),
+      point("far", 6.05, 50.045),
+    ]);
+    const ids = () => sourceFeatures("Point").map((f) => f.properties?._id);
+    render(<RoadConditionsLayer />);
+    await waitFor(() => expect(ids()).toEqual(["on", "beside", "far"]));
+
+    act(() => {
+      useNavigationStore.setState({
+        status: "navigating",
+        kind: "ground",
+        route: {
+          geometry: [
+            [6.0, 50.0],
+            [6.1, 50.0],
+          ],
+        },
+      } as never);
+    });
+    await waitFor(() => expect(ids()).toEqual(["on", "beside"]));
+
+    act(() => {
+      useNavigationStore.setState({ status: "idle", route: null } as never);
+    });
+    await waitFor(() => expect(ids()).toEqual(["on", "beside", "far"]));
   });
 });
 

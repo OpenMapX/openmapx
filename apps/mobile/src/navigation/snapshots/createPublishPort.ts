@@ -1,3 +1,4 @@
+import { publishCarState } from "../../car/publishCarState";
 import type { SessionRepository } from "../../storage/SessionRepository";
 import type { PublishPort } from "../effects";
 import { groundFullSnapshot, groundProgressSnapshot } from "./groundSnapshot";
@@ -36,6 +37,11 @@ export function createPublishPort(deps: PublishPortDeps): PublishPortHandle {
     snapshot: async (immediate) => {
       // Independent of bridge availability, including a terminal/no-row state.
       await deps.reconcileSurface?.().catch(() => undefined);
+      try {
+        await publishCarState(deps.repository, deps.now(), immediate);
+      } catch {
+        /* Car renderer failure must not suppress phone delivery. */
+      }
       const session = await deps.repository.loadActive(deps.now());
       if (!session) return;
 

@@ -31,6 +31,9 @@ const ALLOWED = new Set([
   "apps/web/src/components/share/SharedMapView.tsx",
   // Small embedded preview map that fills its own box.
   "apps/web/src/integration-api/components/LocationMinimap.tsx",
+  // Android Auto car surface: a standalone map without the app's panels; it frames
+  // previews and route overviews inside the car host's stable area itself.
+  "apps/web/src/app/car/carSurface.ts",
   // Tilts the map into a 3D pose when the buildings overlay turns on.
   "integrations/overlay-3d-buildings/map-layer.tsx",
 ]);
@@ -48,7 +51,7 @@ function collect(dir: string): string[] {
   return out;
 }
 
-export function rawCameraOffenders(files: Array<{ file: string; source: string }>): string[] {
+function rawCameraOffenders(files: Array<{ file: string; source: string }>): string[] {
   const offenders: string[] = [];
   for (const { file, source } of files) {
     if (ALLOWED.has(file)) continue;

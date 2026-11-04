@@ -9,11 +9,14 @@ It is not store-release acceptance.
 - Full repository verification passed: 2,023 test files passed, 58 skipped;
   24,916 tests passed, 277 skipped. This includes lint, types, policy and OpenAPI
   gates. Later focused checks cover the final intake changes.
-- Final mobile Jest: 70 suites / 1,314 tests passed.
+- After merging Android Auto from main, mobile Jest: 80 suites / 1,344 tests passed.
 - Earlier web bridge/PWA/parser checks: 21 suites / 258 tests passed. After review,
   3 focused preview/transfer/parser suites passed 24 tests, including refresh-stable
   drafts, navigation-start races, settings routing, chunks and the deadline.
-- Final classifier/generated-native policy checks: 3 suites / 72 tests passed.
+- After merging Android Auto, core/config checks: 6 suites / 160 tests passed;
+  web bridge/intake/car checks: 6 suites / 74 tests passed. The shell advertises
+  both new capabilities to protocol-4 peers and omits them from older strict
+  protocol-3 hello replies. The intake UI stays outside the car surface.
 - SwiftPM inbox and share selection: 12 tests passed, covering restart, explicit
   completion, limits, expiry, document authority, staging age, concurrent writers, malformed metadata,
   actual file size, cancellation, chunk alignment, combined text/URL selection,
@@ -25,7 +28,8 @@ It is not store-release acceptance.
   thumbnails on both text and single-file sharing. Robolectric uses temporary
   files for `createPipe` and does not implement `Os.poll/read`: the IO adapter tests verify
   descriptor ownership and deadlines; they do **not** qualify a real provider pipe.
-- Android debug APK and iOS Simulator host + navigation/share extension builds
+- After merging Android Auto, the regenerated Android APK and all four native
+  JVM suites passed (67 tests total). iOS Simulator host + navigation/share extension builds
   passed. Generated CNG policy, dependency inventory, headless bundle boundary and
   documentation build passed. No production provisioning/signing was attempted.
 

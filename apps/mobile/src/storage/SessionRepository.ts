@@ -315,6 +315,7 @@ export class SessionRepository {
             { kind: "stop-audio" },
             { kind: "cancel-session-alerts", sessionId },
             { kind: "reconcile-surface" },
+            { kind: "publish-snapshot", immediate: true },
           ]
         : [],
     };

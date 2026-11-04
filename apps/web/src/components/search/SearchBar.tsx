@@ -850,7 +850,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       launchTextSearch(mapRef.current, q);
       return;
     }
-    if (recordHistory) addRecentSearch(result.label);
+    if (recordHistory) {
+      addRecentSearch(result.label);
+      useRecentSearchStore.getState().addDestination({
+        id: result.id,
+        label: result.label.slice(0, 160),
+        coordinates: result.coordinates,
+      });
+    }
     if (result.type === "labeled_place" && result.coordinates) {
       setQuery(result.label);
       setIsFocused(false);
