@@ -4,6 +4,7 @@ import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -85,7 +86,16 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
   const inShell = useMemo(() => isInstalledShell(scope ?? globalThis), [scope]);
   const [state, setState] = useState<MobileRuntimeState>(inShell ? "negotiating" : "browser");
   const [handshake, setHandshake] = useState<HandshakeResult | null>(null);
-  const [readModel, setReadModel] = useState<NativeReadModel | null>(null);
+  const [readModel, setReadModelState] = useState<NativeReadModel | null>(null);
+  // The read model as of the last message, for the message handler. Bridge
+  // messages are applied as they arrive, never inside a state updater: React
+  // runs updaters while rendering, and applying the navigation store there
+  // updated every component subscribed to it in the middle of a render.
+  const readModelRef = useRef<NativeReadModel | null>(null);
+  const setReadModel = useCallback((next: NativeReadModel | null) => {
+    readModelRef.current = next;
+    setReadModelState(next);
+  }, []);
   const clientRef = useRef<BridgeClient | null>(null);
   const [commands, setCommands] = useState<NativeNavigationCommands | null>(null);
 
@@ -117,28 +127,26 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
       if (message.type === "snapshot.update") {
         const incoming = envelopeOf((message.payload as { snapshot?: unknown }).snapshot);
         if (!incoming) return;
-        setReadModel((current) => {
-          const outcome = applyNativeSnapshot(current, incoming);
-          if (!outcome.ok) {
-            // A gap or a changed route means the page is behind; ask for the
-            // whole thing rather than render an interpolation.
-            if (outcome.reason === "need-full-snapshot") void nativeCommands.requestSnapshot();
-            return current;
-          }
-          // The store re-checks the step against what it actually rendered,
-          // which is what catches a batched render dropping one in between.
-          const projection = projectionOf(outcome.model, incoming.type);
-          const store = useNavigationStore.getState();
-          const applied =
-            incoming.type === "full"
-              ? store.applyNativeFullSnapshot(projection)
-              : store.applyNativeDelta(projection);
-          if (applied === "needs-full-snapshot") {
-            void nativeCommands.requestSnapshot();
-            return current;
-          }
-          return outcome.model;
-        });
+        const outcome = applyNativeSnapshot(readModelRef.current, incoming);
+        if (!outcome.ok) {
+          // A gap or a changed route means the page is behind; ask for the
+          // whole thing rather than render an interpolation.
+          if (outcome.reason === "need-full-snapshot") void nativeCommands.requestSnapshot();
+          return;
+        }
+        // The store re-checks the step against what it actually rendered,
+        // which is what catches a batched render dropping one in between.
+        const projection = projectionOf(outcome.model, incoming.type);
+        const store = useNavigationStore.getState();
+        const applied =
+          incoming.type === "full"
+            ? store.applyNativeFullSnapshot(projection)
+            : store.applyNativeDelta(projection);
+        if (applied === "needs-full-snapshot") {
+          void nativeCommands.requestSnapshot();
+          return;
+        }
+        setReadModel(outcome.model);
         return;
       }
 
@@ -169,11 +177,13 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
           .getState()
           .applyNativeEvent({ eventId, type: String(message.type) });
         if (outcome !== "applied") return;
-        setReadModel((current) => (current ? rememberEvent(current, eventId) : current));
+        const current = readModelRef.current;
+        if (current) setReadModel(rememberEvent(current, eventId));
         // Acknowledged immediately: the durable copy lives natively, and leaving
         // it unacknowledged would replay it on every reconnect.
         void nativeCommands.acknowledgeEvents([eventId]);
-        setReadModel((current) => (current ? forgetEvents(current, [eventId]) : current));
+        const remembered = readModelRef.current;
+        if (remembered) setReadModel(forgetEvents(remembered, [eventId]));
       }
     });
 
@@ -200,7 +210,7 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
       clientRef.current = null;
       setCommands(null);
     };
-  }, [inShell, webBuildId, scope]);
+  }, [inShell, webBuildId, scope, setReadModel]);
 
   // Reconcile whenever the page could have missed something: returning to the
   // foreground, or coming back online. Native state wins in both directions —
