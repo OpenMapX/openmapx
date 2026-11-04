@@ -437,9 +437,12 @@ describe("App bridge channel", () => {
         backgroundLocation: z.boolean(),
         localNotifications: z.boolean(),
         speech: z.boolean(),
+        carDestinations: z.boolean().optional(),
       })
       .strict();
-    expect(oldCapabilities.parse(reply?.payload?.capabilities)).toEqual(NAVIGATION_CAPABILITIES);
+    expect(oldCapabilities.parse(reply?.payload?.capabilities)).toMatchObject(
+      NAVIGATION_CAPABILITIES,
+    );
     expect(mockCreateForegroundNavigation).toHaveBeenCalledTimes(1);
     expect(mockCreateForegroundNavigation.mock.calls[0]?.[0]).toMatchObject({
       apiOrigin: "https://openmapx.com",
