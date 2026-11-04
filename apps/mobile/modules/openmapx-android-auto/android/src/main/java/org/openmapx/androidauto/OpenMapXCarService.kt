@@ -20,6 +20,7 @@ import androidx.car.app.navigation.model.RoutingInfo
 import androidx.car.app.validation.HostValidator
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 
 /** Android Auto service with signed production host validation. */
@@ -39,6 +40,14 @@ class OpenMapXCarService : CarAppService() {
       init {
         lifecycle.addObserver(
           object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+              CarState.visible = true
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+              CarState.visible = false
+            }
+
             override fun onDestroy(owner: LifecycleOwner) {
               CarState.connected = false
               CarState.command("detach")
@@ -103,14 +112,31 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
       invalidate()
     }
   private val manager = context.getCarService(NavigationManager::class.java)
+  private val positions = CarPositionFeed(context) { surface.position(it) }
   private val observer: () -> Unit = {
     updateNavigation()
+    updatePositions()
     invalidate()
+  }
+
+  private fun updatePositions() {
+    val wanted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && CarState.projection == null
+    if (!wanted && CarState.projection != null) surface.position(null)
+    positions.update(wanted)
+  }
+
+  override fun onStart(owner: LifecycleOwner) {
+    updatePositions()
+  }
+
+  override fun onStop(owner: LifecycleOwner) {
+    positions.update(false)
   }
 
   init {
     lifecycle.addObserver(this)
     context.getCarService(AppManager::class.java).setSurfaceCallback(surface)
+    CarState.camera = { action, fields -> surface.camera(action, *fields) }
     manager.setNavigationManagerCallback(
       context.mainExecutor,
       object : NavigationManagerCallback {
@@ -145,53 +171,25 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
   }
 
   override fun onGetTemplate(): Template {
-    val mapActions =
-      ActionStrip.Builder()
-        .addAction(Action.PAN)
-        .addAction(
-          Action.Builder()
-            .setIcon(
-              CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_zoom_in))
-                .build()
-            )
-            .setOnClickListener { surface.camera("zoom", "factor" to 2) }
-            .build()
-        )
-        .addAction(
-          Action.Builder()
-            .setIcon(
-              CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_zoom_out))
-                .build()
-            )
-            .setOnClickListener { surface.camera("zoom", "factor" to 0.5) }
-            .build()
-        )
-    if (!following)
-      mapActions.addAction(
-        Action.Builder()
-          .setIcon(
-            CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.car_recenter))
-              .build()
-          )
-          .setOnClickListener { surface.camera("recenter") }
-          .build()
-      )
     val p = CarState.projection
-    val actions = ActionStrip.Builder()
-    if (p == null)
-      actions.addAction(
-        Action.Builder()
-          .setTitle(carContext.carString(R.string.car_destinations))
-          .setOnClickListener { screenManager.push(DestinationsScreen(carContext)) }
-          .build()
-      )
-    else
-      actions.addAction(
-        Action.Builder()
-          .setTitle(carContext.carString(R.string.car_stop))
-          .setOnClickListener { CarState.command("stop") }
-          .build()
-      )
+    val mapActions = CarMapActions.zoom(carContext)
+    fun mapAction(icon: Int, onClick: () -> Unit) = CarMapActions.action(carContext, icon, onClick)
+    if (!following)
+      mapActions.addAction(mapAction(R.drawable.car_recenter) { surface.camera("recenter") })
+    else if (p != null)
+      mapActions.addAction(mapAction(R.drawable.car_overview) { surface.camera("overview") })
+    // Android Auto draws its own end-trip X on the arrival card and reports it through
+    // onStopNavigation, so the strip carries no Stop of its own.
+    val actions =
+      ActionStrip.Builder()
+        .addAction(
+          Action.Builder()
+            .setTitle(carContext.carString(R.string.car_destinations))
+            // Persistent like the map controls: search stays one tap away, as in other car maps.
+            .setFlags(Action.FLAG_IS_PERSISTENT)
+            .setOnClickListener { screenManager.push(DestinationsScreen(carContext)) }
+            .build()
+        )
     if (p != null && carContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
       actions.addAction(
         Action.Builder()
@@ -226,8 +224,27 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
     CarState.command("detach")
     carContext.stopService(Intent(carContext, CarRuntimeService::class.java))
     CarState.observers.remove(observer)
+    positions.update(false)
+    CarState.camera = null
     surface.dispose()
     carContext.getCarService(AppManager::class.java).setSurfaceCallback(null)
     if (navigating) manager.navigationEnded()
   }
+}
+
+/** Map controls shared by the map screen and the route preview. */
+object CarMapActions {
+  // Persistent, so zoom stays on screen instead of hiding after 10 seconds.
+  fun action(context: CarContext, icon: Int, onClick: () -> Unit): Action =
+    Action.Builder()
+      .setIcon(context.carIcon(icon))
+      .setFlags(Action.FLAG_IS_PERSISTENT)
+      .setOnClickListener(onClick)
+      .build()
+
+  fun zoom(context: CarContext): ActionStrip.Builder =
+    ActionStrip.Builder()
+      .addAction(Action.PAN)
+      .addAction(action(context, R.drawable.car_zoom_in) { CarState.camera?.invoke("zoom", arrayOf("factor" to 2)) })
+      .addAction(action(context, R.drawable.car_zoom_out) { CarState.camera?.invoke("zoom", arrayOf("factor" to 0.5)) })
 }

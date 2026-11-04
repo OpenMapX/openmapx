@@ -3,7 +3,7 @@ import { TrafficFlowLayer } from "@integrations/overlay-traffic-flow/map-layer";
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
 import { isOverSpeed, useNavigationStore } from "@openmapx/core";
-import type { CarPreview, CarViewport } from "@openmapx/core/navigation";
+import type { CarPosition, CarPreview, CarViewport } from "@openmapx/core/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BaseAttributions } from "@/components/map/BaseAttributions";
 import { ContextualOverlays } from "@/components/map/ContextualOverlays";
@@ -18,16 +18,29 @@ import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { CarConditionsLayer } from "./CarConditionsLayer";
-import { carLayout } from "./carSurface";
+import {
+  boundsOf,
+  carLabelSize,
+  carLayout,
+  fitCarBounds,
+  routeLabelPoints,
+  routeLetter,
+} from "./carSurface";
+import { useCarPositionMarker } from "./useCarPositionMarker";
+
+/** Width of the host's map control column (buttons plus margin) on Android Auto. */
+const MAP_CONTROLS_WIDTH = 88;
 
 export function CarMap({
   viewport,
   preview,
+  position,
   units,
   error,
 }: {
   viewport: CarViewport;
   preview: CarPreview | null;
+  position: CarPosition | null;
   units: "metric" | "imperial";
   error: (code: string) => void;
 }) {
@@ -38,8 +51,19 @@ export function CarMap({
   const speed = useNavigationStore((s) => s.progress?.speedMps);
   const limit = useNavigationStore((s) => s.currentSpeedLimit);
   const active = useNavigationStore((s) => s.status !== "idle");
+  useCarPositionMarker({
+    position: active || preview?.routes.length ? null : position,
+    // Centre in what is visible now; the stable area can still hold a closed list's inset.
+    stable: viewport.visible,
+  });
+  // Without a trip the speed comes from the idle position feed; choosing a route shows none.
+  const previewing = !!preview?.routes.length;
+  const shownSpeed = previewing ? undefined : active ? speed : position?.speedMps;
   const credits = useMapAttributionPresentation();
   const s = viewport.stable;
+  // The map controls stay on screen, but hosts do not always exclude them from the stable
+  // area; overlays keep clear of the column they occupy.
+  const right = Math.max(s.right, viewport.visible.right, MAP_CONTROLS_WIDTH);
   const creditsRef = useRef<HTMLDivElement>(null);
   const [creditsHeight, setCreditsHeight] = useState(24);
   useEffect(() => {
@@ -64,9 +88,11 @@ export function CarMap({
     if (!map || !mapReady) return;
     const apply = () => {
       for (const layer of map.getStyle().layers ?? []) {
-        if (layer.type === "symbol" && layer.layout?.["text-field"]) {
-          map.setLayoutProperty(layer.id, "text-size", 24);
-        }
+        if (layer.type !== "symbol" || !layer.layout?.["text-field"]) continue;
+        const enlarged = carLabelSize(layer.layout);
+        map.setLayoutProperty(layer.id, "text-size", enlarged.textSize);
+        if (enlarged.iconSize !== undefined)
+          map.setLayoutProperty(layer.id, "icon-size", enlarged.iconSize);
       }
     };
     apply();
@@ -78,6 +104,20 @@ export function CarMap({
   const group = useMemo(
     () => ({
       sources: {
+        "car-preview-labels": {
+          type: "geojson" as const,
+          data: {
+            type: "FeatureCollection" as const,
+            features: routeLabelPoints(preview?.routes ?? []).map((point, i) => ({
+              type: "Feature" as const,
+              properties: {
+                letter: routeLetter(i),
+                selected: preview && "selected" in preview && preview.selected === i,
+              },
+              geometry: { type: "Point" as const, coordinates: point },
+            })),
+          },
+        },
         "car-preview": {
           type: "geojson" as const,
           data: {
@@ -95,7 +135,17 @@ export function CarMap({
           id: "car-preview-lines",
           type: "line" as const,
           source: "car-preview",
-          layout: { "line-cap": "round" as const, "line-join": "round" as const },
+          layout: {
+            "line-cap": "round" as const,
+            "line-join": "round" as const,
+            // The selected route is drawn above the alternatives it overlaps.
+            "line-sort-key": [
+              "case",
+              ["get", "selected"],
+              1,
+              0,
+            ] as import("maplibre-gl").ExpressionSpecification,
+          },
           paint: {
             "line-color": [
               "case",
@@ -108,6 +158,41 @@ export function CarMap({
           slot: "route-active" as const,
           order: 10,
         },
+        // The same letters as the car's route list, on each route where it leaves the others,
+        // above the base map's labels so a place name cannot hide one.
+        {
+          id: "car-preview-label-badges",
+          type: "circle" as const,
+          source: "car-preview-labels",
+          paint: {
+            "circle-radius": 17,
+            "circle-color": [
+              "case",
+              ["get", "selected"],
+              "#1a73e8",
+              "#5f6f86",
+            ] as import("maplibre-gl").ExpressionSpecification,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 3,
+          },
+          slot: "route-markers" as const,
+          order: 11,
+        },
+        {
+          id: "car-preview-label-letters",
+          type: "symbol" as const,
+          source: "car-preview-labels",
+          layout: {
+            "text-field": ["get", "letter"] as import("maplibre-gl").ExpressionSpecification,
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 20,
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: { "text-color": "#ffffff" },
+          slot: "route-markers" as const,
+          order: 12,
+        },
       ],
     }),
     [preview],
@@ -116,36 +201,9 @@ export function CarMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !preview?.routes.length) return;
-    let west = 180,
-      south = 90,
-      east = -180,
-      north = -90;
-    for (const route of preview.routes)
-      for (const [lng, lat] of route.coordinates) {
-        west = Math.min(west, lng);
-        east = Math.max(east, lng);
-        south = Math.min(south, lat);
-        north = Math.max(north, lat);
-      }
-    map.fitBounds(
-      [
-        [west, south],
-        [east, north],
-      ],
-      {
-        padding: {
-          ...s,
-          top: s.top + 32,
-          bottom: s.bottom + 90,
-          left: s.left + 32,
-          right: s.right + 32,
-        },
-        pitch: 0,
-        bearing: 0,
-        duration: 0,
-        maxZoom: 16,
-      },
-    );
+    const bounds = boundsOf(preview.routes.flatMap((route) => route.coordinates));
+    // Framing a preview is not a user zoom; follow mode keeps its own zoom afterwards.
+    if (bounds) fitCarBounds(map, bounds, s, 0);
   }, [preview, mapReady, mapRef, s]);
   return (
     <>
@@ -158,35 +216,41 @@ export function CarMap({
       <ContextualOverlays />
       <Box
         sx={{
+          // Bottom right of the safe area, beside the map controls, as Google Maps places it.
           position: "absolute",
-          left: s.left + 12,
+          right: right + 12,
           bottom: s.bottom + creditsHeight + 12,
           display: "flex",
           alignItems: "center",
-          gap: 1.5,
+          gap: 1,
           pointerEvents: "none",
         }}
       >
         <SpeedLimitBadge
-          speedLimit={active ? limit : null}
+          size={72}
+          speedLimit={active && !previewing ? limit : null}
           units={units}
           over={isOverSpeed(speed ?? 0, limit)}
         />
-        {active && speed !== undefined && (
+        {shownSpeed !== undefined && (
           <Box
             sx={{
               bgcolor: "background.paper",
-              color: "text.primary",
-              borderRadius: 2,
-              px: 1.5,
-              py: 0.5,
-              textAlign: "center",
+              color: active && isOverSpeed(speed ?? 0, limit) ? "error.main" : "text.primary",
+              borderRadius: "50%",
+              width: 84,
+              height: 84,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: 2,
             }}
           >
-            <Box sx={{ fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
-              {Math.round(speed * (units === "imperial" ? 2.23694 : 3.6))}
+            <Box sx={{ fontSize: 36, lineHeight: 1, fontWeight: 700 }}>
+              {Math.round(shownSpeed * (units === "imperial" ? 2.23694 : 3.6))}
             </Box>
-            <Box sx={{ fontSize: 16 }}>{units === "imperial" ? "mph" : "km/h"}</Box>
+            <Box sx={{ fontSize: 15 }}>{units === "imperial" ? "mph" : "km/h"}</Box>
           </Box>
         )}
       </Box>
@@ -195,7 +259,7 @@ export function CarMap({
         sx={{
           position: "absolute",
           left: s.left,
-          right: s.right,
+          right,
           bottom: s.bottom,
           color: "text.primary",
           fontSize: 12,

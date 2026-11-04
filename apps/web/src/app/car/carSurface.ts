@@ -34,16 +34,145 @@ export function carLayout(viewport: CarViewport) {
   };
   return { padding, compact, maxPitch: compact ? 25 : 55 };
 }
-export function applyCarCamera(map: LibreMap | null, message: CarCamera) {
+export function boundsOf(
+  coordinates: readonly (readonly [number, number])[],
+): [[number, number], [number, number]] | null {
+  if (!coordinates.length) return null;
+  let west = 180;
+  let south = 90;
+  let east = -180;
+  let north = -90;
+  for (const [lng, lat] of coordinates) {
+    west = Math.min(west, lng);
+    east = Math.max(east, lng);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  }
+  return [
+    [west, south],
+    [east, north],
+  ];
+}
+/**
+ * Frames bounds inside the host's stable area. MapLibre adds fitBounds padding to the
+ * camera's own padding, which follow mode leaves large, so that is cleared first.
+ */
+export function fitCarBounds(
+  map: LibreMap,
+  bounds: [[number, number], [number, number]],
+  stable: CarViewport["stable"],
+  duration: number,
+) {
+  map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 }, { programmatic: true });
+  map.fitBounds(
+    bounds,
+    {
+      padding: {
+        top: stable.top + 48,
+        right: stable.right + 48,
+        bottom: stable.bottom + 48,
+        left: stable.left + 48,
+      },
+      pitch: 0,
+      bearing: 0,
+      duration,
+      maxZoom: 16,
+    },
+    { programmatic: true },
+  );
+}
+/** Car labels are read at arm's length: plain labels at 24 px. */
+const CAR_LABEL_PX = 24;
+/** Labels inside an image, such as road shields, grow with their image instead. */
+const CAR_ICON_LABEL_SCALE = 1.6;
+
+/**
+ * Text and icon sizes for a symbol layer on the car map. Shield images have a fixed
+ * width per reference length, so their text must scale with the image, not on its own.
+ */
+export function carLabelSize(layout: Record<string, unknown>): {
+  textSize: number;
+  iconSize?: number;
+} {
+  const text = layout["text-size"];
+  const icon = layout["icon-size"];
+  if (layout["icon-image"] !== undefined && typeof text === "number")
+    return {
+      textSize: text * CAR_ICON_LABEL_SCALE,
+      iconSize: (typeof icon === "number" ? icon : 1) * CAR_ICON_LABEL_SCALE,
+    };
+  return { textSize: CAR_LABEL_PX };
+}
+
+/** Route letters shared by the car's route list and the map: A, B, C … */
+export function routeLetter(index: number): string {
+  return String.fromCharCode(65 + index);
+}
+
+/**
+ * Where to put each route's letter: the point in its middle stretch that lies furthest
+ * from every other route, so badges sit on the part that tells the routes apart.
+ */
+export function routeLabelPoints(
+  routes: readonly { coordinates: readonly (readonly [number, number])[] }[],
+): [number, number][] {
+  const samples = routes.map((route) => {
+    const step = Math.max(1, Math.floor(route.coordinates.length / 200));
+    return route.coordinates.filter((_, i) => i % step === 0);
+  });
+  // Planar degrees with longitude scaled by latitude: enough to compare nearby distances.
+  const distance = (a: readonly [number, number], b: readonly [number, number]) => {
+    const kx = Math.cos(((a[1] + b[1]) / 2) * (Math.PI / 180));
+    return Math.hypot((a[0] - b[0]) * kx, a[1] - b[1]);
+  };
+  return routes.map((route, index) => {
+    const candidates = samples[index]?.length ? samples[index] : route.coordinates;
+    const from = Math.floor(candidates.length * 0.2);
+    const to = Math.max(from + 1, Math.ceil(candidates.length * 0.8));
+    let best = candidates[Math.floor(candidates.length / 2)] ?? route.coordinates[0];
+    let bestScore = -1;
+    for (const point of candidates.slice(from, to)) {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const [other, others] of samples.entries()) {
+        if (other === index) continue;
+        for (const q of others) nearest = Math.min(nearest, distance(point, q));
+      }
+      if (nearest > bestScore) {
+        bestScore = nearest;
+        best = point;
+      }
+    }
+    return [best[0], best[1]];
+  });
+}
+export function applyCarCamera(
+  map: LibreMap | null,
+  message: CarCamera,
+  stable: CarViewport["stable"] = { top: 0, right: 0, bottom: 0, left: 0 },
+) {
   const store = useNavigationStore.getState();
   if (message.action === "recenter") {
     store.setCameraMode("follow");
     return;
   }
+  if (message.action === "overview") {
+    // The rest of the trip, north-up and level, inside the area the host keeps free.
+    const geometry = store.route?.geometry ?? [];
+    const progress = store.progress;
+    const remaining = progress
+      ? [progress.snapped, ...geometry.slice(progress.segmentIndex + 1)]
+      : geometry;
+    const bounds = boundsOf(remaining);
+    if (!map || !bounds) return;
+    store.setCameraMode("overview");
+    fitCarBounds(map, bounds, stable, 600);
+    return;
+  }
   if (!map) return;
   if (message.action === "zoom") {
+    // Following keeps the car in place; only a free map zooms around the gesture point.
     const around =
-      message.x !== undefined && message.y !== undefined
+      store.cameraMode !== "follow" && message.x !== undefined && message.y !== undefined
         ? map.unproject([message.x, message.y])
         : undefined;
     map.zoomTo(map.getZoom() + Math.log2(message.factor), { around, duration: 150 });
@@ -86,12 +215,10 @@ export function createCarSnapshotReceiver(error: (code: string) => void) {
         message.payload.revision < model.revision
       )
         return;
-      const projection = projectionOf(model, "full");
-      useNavigationStore.getState().applyNativeFullSnapshot({
-        ...projection,
-        revision: message.payload.revision,
-        status: "idle",
-      });
+      // Like the phone page: drop the trip's whole read model, route and puck included.
+      // An idle full snapshot would keep drawing the route that just ended.
+      useNavigationStore.getState().clearNativeReadModel();
+      useNavigationStore.getState().setCameraMode("follow");
       model = null;
       return;
     }

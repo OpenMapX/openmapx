@@ -1,5 +1,6 @@
 package org.openmapx.androidauto
 
+import android.app.ActivityManager
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -11,7 +12,19 @@ class OpenMapXAndroidAutoModule : Module() {
     Name("OpenMapXAndroidAuto")
     Events("onCommand")
     AsyncFunction("isConnected") { CarState.connected }.runOnQueue(Queues.MAIN)
-    AsyncFunction("startEligible") { appContext.currentActivity?.hasWindowFocus() == true }
+    // A location foreground service may start while the process is foreground:
+    // a focused phone Activity, or the car host binding a visible car session.
+    AsyncFunction("startEligible") {
+        val state = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(state)
+        val carForeground =
+          CarState.connected &&
+            state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+        // expo-location tracks foreground state from Activity events only and
+        // would refuse the location service a visible car session may start.
+        if (carForeground) markLocationForeground()
+        appContext.currentActivity?.hasWindowFocus() == true || carForeground
+      }
       .runOnQueue(Queues.MAIN)
     AsyncFunction("destinations") { json: String ->
         require(json.toByteArray().size <= 64 * 1024)
@@ -84,4 +97,15 @@ class OpenMapXAndroidAutoModule : Module() {
       .runOnQueue(Queues.MAIN)
     OnDestroy { CarState.listener = null }
   }
+}
+
+/** Missing or changed expo-location internals leave the start refused, never crash. */
+private fun markLocationForeground() {
+  runCatching {
+    val singleton = Class.forName("expo.modules.location.AppForegroundedSingleton")
+    singleton
+      .getMethod("setForegrounded", Boolean::class.javaPrimitiveType)
+      .invoke(singleton.getField("INSTANCE").get(null), true)
+  }
+    .onFailure { android.util.Log.w("OpenMapXCar", "location foreground marker unavailable") }
 }

@@ -9,6 +9,27 @@ import { createLocationDriver } from "../location/createLocationDriver";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import type { NavigationStartContext } from "../navigation/startContext";
 
+/** Car-facing failure codes; the car shows a distinct message for each. */
+export type CarPlanError =
+  | "phone-setup"
+  | "location-unavailable"
+  | "no-route"
+  | "network"
+  | "unavailable";
+
+export function carPlanError(error: unknown): CarPlanError {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "phone-setup" || message === "location-unavailable" || message === "no-route")
+    return message;
+  const name = error instanceof Error ? error.name : "";
+  if (name === "ApiRequestAbortedError" || error instanceof TypeError) return "network";
+  // The directions API answers an unroutable request with a client error.
+  const status = (error as { status?: unknown } | null)?.status;
+  if (name === "ApiClientError" && typeof status === "number" && [400, 404, 422].includes(status))
+    return "no-route";
+  return "unavailable";
+}
+
 /** Network work runs outside the coordinator queue and loses authority on stop/supersede. */
 export class CarRoutePlanner {
   private generation = 0;
@@ -81,6 +102,14 @@ export class CarRoutePlanner {
       return built.ok ? [built.startPackage] : [];
     });
     if (!this.candidates.length) throw new Error("no-route");
+    return this.candidates.map((candidate) => ({
+      coordinates: candidate.route.geometry,
+      durationSeconds: Math.max(0, Math.round(candidate.route.duration ?? 0)),
+      distanceMeters: Math.max(0, Math.round(candidate.route.distance ?? 0)),
+    }));
+  }
+  /** Preview lines of the current candidates, for re-highlighting another one. */
+  previewRoutes() {
     return this.candidates.map((candidate) => ({ coordinates: candidate.route.geometry }));
   }
   async start(index: number, replaceSessionId?: string) {

@@ -22,27 +22,7 @@ object GuidanceNotification {
   private var lastId = ID
   private var lastManeuver: String? = null
 
-  fun maneuverIcon(maneuver: String): android.graphics.Bitmap {
-    val bitmap =
-      android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
-    val arrow =
-      when {
-        maneuver.contains("roundabout") -> "↻"
-        maneuver.contains("uturn") -> "↶"
-        maneuver.contains("left") -> "↰"
-        maneuver.contains("right") -> "↱"
-        maneuver == "arrive" -> "⚑"
-        else -> "↑"
-      }
-    val paint =
-      android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 56f
-        textAlign = android.graphics.Paint.Align.CENTER
-      }
-    android.graphics.Canvas(bitmap).drawText(arrow, 32f, 54f, paint)
-    return bitmap
-  }
+  fun maneuverIcon(maneuver: String): android.graphics.Bitmap = ManeuverIcons.bitmap(maneuver)
 
   fun distanceText(p: JSONObject): String {
     val distance =
@@ -50,12 +30,21 @@ object GuidanceNotification {
         p.optDouble("distanceToManeuver"),
         p.optString("units", CarState.units),
       )
-    val locale = Locale.forLanguageTag(p.optString("locale", CarState.locale))
-    val number = NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 1 }
+    // The host formats the routing card with the system locale; the rail matches it.
+    val number =
+      NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+        val decimal =
+          distance.displayUnit == androidx.car.app.model.Distance.UNIT_KILOMETERS_P1 ||
+            distance.displayUnit == androidx.car.app.model.Distance.UNIT_MILES_P1
+        minimumFractionDigits = if (decimal) 1 else 0
+        maximumFractionDigits = if (decimal) 1 else 0
+      }
     val unit =
       when (distance.displayUnit) {
-        androidx.car.app.model.Distance.UNIT_KILOMETERS -> "km"
-        androidx.car.app.model.Distance.UNIT_MILES -> "mi"
+        androidx.car.app.model.Distance.UNIT_KILOMETERS,
+        androidx.car.app.model.Distance.UNIT_KILOMETERS_P1 -> "km"
+        androidx.car.app.model.Distance.UNIT_MILES,
+        androidx.car.app.model.Distance.UNIT_MILES_P1 -> "mi"
         androidx.car.app.model.Distance.UNIT_FEET -> "ft"
         else -> "m"
       }
@@ -123,8 +112,11 @@ object GuidanceNotification {
         .setLargeIcon(maneuverIcon(p.optString("maneuver")))
         .setContentTitle(p.optString("instruction"))
         .setContentText(distanceText(p))
+        // The routing card already shows a new maneuver while OpenMapX is on the car screen;
+        // the heads-up alert is for when another app is in front.
         .setImportance(
-          if (changed) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_LOW
+          if (changed && !CarState.visible) NotificationManager.IMPORTANCE_HIGH
+          else NotificationManager.IMPORTANCE_LOW
         )
     if (intent != null) extender.setContentIntent(intent)
     val builder =

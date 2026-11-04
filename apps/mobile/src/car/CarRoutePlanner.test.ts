@@ -95,12 +95,32 @@ it("validates a real route package and starts only through the shared coordinato
     () => context,
   );
   const preview = await planner.plan(destination, preferences);
-  expect(preview).toEqual([{ coordinates: route.geometry }]);
+  expect(preview).toEqual([
+    { coordinates: route.geometry, durationSeconds: 300, distanceMeters: 1200 },
+  ]);
+  expect(planner.previewRoutes()).toEqual([{ coordinates: route.geometry }]);
   await planner.start(0, "previous-session");
   expect(startCarTrip).toHaveBeenCalledWith(
     expect.objectContaining({ locale: "de", units: "imperial", mode: "driving" }),
     expect.any(Function),
     expect.any(Function),
     "previous-session",
+  );
+});
+
+test("maps planning failures to the car's distinct messages", () => {
+  const { carPlanError } = require("./CarRoutePlanner");
+  expect(carPlanError(new Error("phone-setup"))).toBe("phone-setup");
+  expect(carPlanError(new Error("location-unavailable"))).toBe("location-unavailable");
+  expect(carPlanError(new Error("no-route"))).toBe("no-route");
+  expect(carPlanError(new TypeError("Network request failed"))).toBe("network");
+  expect(carPlanError(Object.assign(new Error("x"), { name: "ApiRequestAbortedError" }))).toBe(
+    "network",
+  );
+  expect(carPlanError(Object.assign(new Error("x"), { name: "ApiClientError", status: 400 }))).toBe(
+    "no-route",
+  );
+  expect(carPlanError(Object.assign(new Error("x"), { name: "ApiClientError", status: 503 }))).toBe(
+    "unavailable",
   );
 });

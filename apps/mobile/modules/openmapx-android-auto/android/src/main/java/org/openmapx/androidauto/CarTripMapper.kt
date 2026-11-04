@@ -20,16 +20,28 @@ import org.json.JSONObject
 
 /** Pure mapping from committed trip projections to Android for Cars metadata. */
 object CarTripMapper {
+  /** Rounded like spoken guidance: no "614.8 m", whole tens and fifties, one km decimal below 10. */
   fun distance(meters: Double, units: String = CarState.units): Distance {
     val safe = if (meters.isFinite()) meters.coerceAtLeast(0.0) else 0.0
     return if (units == "imperial") {
-      if (safe < 160.9344) Distance.create(safe / 0.3048, Distance.UNIT_FEET)
-      else Distance.create(safe / 1609.344, Distance.UNIT_MILES)
+      val feet = safe / 0.3048
+      val miles = safe / 1609.344
+      when {
+        feet < 528 -> Distance.create(roundTo(feet, if (feet < 100) 10.0 else 50.0), Distance.UNIT_FEET)
+        miles < 10 -> Distance.create(Math.round(miles * 10) / 10.0, Distance.UNIT_MILES_P1)
+        else -> Distance.create(Math.round(miles).toDouble(), Distance.UNIT_MILES)
+      }
     } else {
-      if (safe < 1000) Distance.create(safe, Distance.UNIT_METERS)
-      else Distance.create(safe / 1000, Distance.UNIT_KILOMETERS)
+      when {
+        safe < 950 -> Distance.create(roundTo(safe, if (safe < 100) 10.0 else 50.0), Distance.UNIT_METERS)
+        safe < 9950 ->
+          Distance.create(Math.round(safe / 100) / 10.0, Distance.UNIT_KILOMETERS_P1)
+        else -> Distance.create(Math.round(safe / 1000).toDouble(), Distance.UNIT_KILOMETERS)
+      }
     }
   }
+
+  private fun roundTo(value: Double, step: Double) = Math.round(value / step) * step
 
   fun step(p: JSONObject): Step =
     Step.Builder(p.getString("instruction"))
@@ -40,6 +52,8 @@ object CarTripMapper {
               "right" -> Maneuver.TYPE_TURN_NORMAL_RIGHT
               "slight-left" -> Maneuver.TYPE_TURN_SLIGHT_LEFT
               "slight-right" -> Maneuver.TYPE_TURN_SLIGHT_RIGHT
+              "keep-left" -> Maneuver.TYPE_KEEP_LEFT
+              "keep-right" -> Maneuver.TYPE_KEEP_RIGHT
               "sharp-left" -> Maneuver.TYPE_TURN_SHARP_LEFT
               "sharp-right" -> Maneuver.TYPE_TURN_SHARP_RIGHT
               "uturn-left" -> Maneuver.TYPE_U_TURN_LEFT
@@ -53,55 +67,30 @@ object CarTripMapper {
           .apply {
             if (p.optString("maneuver").startsWith("roundabout"))
               setRoundaboutExitNumber(p.optInt("exit", 1).coerceIn(1, 99))
+            setIcon(
+              CarIcon.Builder(IconCompat.createWithBitmap(ManeuverIcons.bitmap(p.optString("maneuver"))))
+                .build()
+            )
           }
           .build()
       )
       .apply {
         val lanes = p.optJSONArray("lanes")
-        if (lanes != null && lanes.length() > 0) {
-          val bitmap = Bitmap.createBitmap(lanes.length() * 48, 64, Bitmap.Config.ARGB_8888)
-          val canvas = Canvas(bitmap)
-          val paint =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-              strokeWidth = 4f
-              style = Paint.Style.STROKE
-            }
+        // Lanes without any marking say nothing; an empty image would only leave a blank band.
+        if (lanes != null && lanes.length() > 0 && LaneImage.hasMarkings(lanes)) {
           for (i in 0 until lanes.length()) {
             val lane = lanes.getJSONObject(i)
             val indications = lane.getJSONArray("indications")
             val builder = Lane.Builder()
             for (j in 0 until indications.length()) {
               val indication = indications.getString(j)
-              val recommended =
-                lane.optBoolean("valid") &&
-                  (lane.optString("active").isEmpty() || lane.optString("active") == indication)
-              val shape =
-                when (indication) {
-                  "straight" -> LaneDirection.SHAPE_STRAIGHT
-                  "left" -> LaneDirection.SHAPE_NORMAL_LEFT
-                  "right" -> LaneDirection.SHAPE_NORMAL_RIGHT
-                  "slight left" -> LaneDirection.SHAPE_SLIGHT_LEFT
-                  "slight right" -> LaneDirection.SHAPE_SLIGHT_RIGHT
-                  "sharp left" -> LaneDirection.SHAPE_SHARP_LEFT
-                  "sharp right" -> LaneDirection.SHAPE_SHARP_RIGHT
-                  "uturn" -> LaneDirection.SHAPE_U_TURN_LEFT
-                  else -> LaneDirection.SHAPE_UNKNOWN
-                }
-              builder.addDirection(LaneDirection.create(shape, recommended))
-              if (shape == LaneDirection.SHAPE_UNKNOWN) continue
-              paint.color = if (recommended) Color.WHITE else Color.GRAY
-              val x = i * 48f + 24f
-              val dx =
-                if (indication.contains("left")) -14f
-                else if (indication.contains("right")) 14f else 0f
-              canvas.drawLine(x, 56f, x, 32f, paint)
-              canvas.drawLine(x, 32f, x + dx, 12f, paint)
-              canvas.drawLine(x + dx, 12f, x + dx - 7f, 22f, paint)
-              canvas.drawLine(x + dx, 12f, x + dx + 7f, 22f, paint)
+              builder.addDirection(
+                LaneDirection.create(LaneImage.shape(indication), LaneImage.recommended(lane, indication))
+              )
             }
             if (indications.length() > 0) addLane(builder.build())
           }
-          setLanesImage(CarIcon.Builder(IconCompat.createWithBitmap(bitmap)).build())
+          setLanesImage(CarIcon.Builder(IconCompat.createWithBitmap(LaneImage.bitmap(lanes))).build())
         }
       }
       .build()

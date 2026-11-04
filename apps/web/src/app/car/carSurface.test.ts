@@ -1,7 +1,16 @@
 import { useNavigationStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap } from "@/test";
-import { applyCarCamera, attachCarHost, carLayout, createCarSnapshotReceiver } from "./carSurface";
+import {
+  applyCarCamera,
+  attachCarHost,
+  boundsOf,
+  carLabelSize,
+  carLayout,
+  createCarSnapshotReceiver,
+  routeLabelPoints,
+  routeLetter,
+} from "./carSurface";
 import { fixtureSnapshot } from "./harness";
 
 describe("car surface", () => {
@@ -100,6 +109,10 @@ describe("car surface", () => {
       payload: { sessionId: "car-fixture", revision: 2, finalStatus: "stopped" },
     });
     expect(useNavigationStore.getState().status).toBe("idle");
+    // The ended trip's route and position must not stay drawn on the car map.
+    expect(useNavigationStore.getState().route).toBeNull();
+    expect(useNavigationStore.getState().progress).toBeNull();
+    expect(useNavigationStore.getState().nativeSessionId).toBeNull();
     if (fixture.message.type !== "snapshot.update") throw Error();
     receive({
       ...fixture.message,
@@ -108,5 +121,49 @@ describe("car surface", () => {
       },
     });
     expect(error).toHaveBeenCalledWith("invalid-snapshot");
+  });
+});
+
+describe("route preview labels", () => {
+  it("letters routes in list order", () => {
+    expect([0, 1, 2].map(routeLetter)).toEqual(["A", "B", "C"]);
+  });
+
+  it("places each label where its route leaves the others", () => {
+    // Shared start and end; route B bows north in the middle.
+    const a = Array.from({ length: 11 }, (_, i) => [6 + i * 0.1, 50] as [number, number]);
+    const b = a.map(([lng, lat], i) => [lng, lat + (i > 2 && i < 8 ? 0.5 : 0)] as [number, number]);
+    const [labelA, labelB] = routeLabelPoints([{ coordinates: a }, { coordinates: b }]);
+    expect(labelB?.[1]).toBe(50.5);
+    expect(labelA?.[1]).toBe(50);
+    expect(labelA?.[0]).toBeGreaterThan(6.2);
+    expect(labelA?.[0]).toBeLessThan(6.8);
+  });
+
+  it("frames all route coordinates", () => {
+    expect(
+      boundsOf([
+        [6, 50],
+        [13.4, 52.5],
+      ]),
+    ).toEqual([
+      [6, 50],
+      [13.4, 52.5],
+    ]);
+    expect(boundsOf([])).toBeNull();
+  });
+});
+
+describe("car label sizes", () => {
+  it("enlarges plain labels and scales shield text with its shield", () => {
+    expect(carLabelSize({ "text-field": "{name}", "text-size": 12 })).toEqual({ textSize: 24 });
+    expect(
+      carLabelSize({
+        "text-field": "{ref}",
+        "text-size": 10,
+        "icon-image": "road_yellow_{ref_length}",
+        "icon-size": 1,
+      }),
+    ).toEqual({ textSize: 16, iconSize: 1.6 });
   });
 });

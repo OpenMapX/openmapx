@@ -36,6 +36,7 @@ class CarSurfaceHost(private val context: CarContext, private val following: (Bo
   private var visible = Rect()
   private var lastPreview: JSONObject? = null
   private var lastSnapshot: JSONObject? = null
+  private var lastPosition: JSONObject? = null
   private val observer: () -> Unit = { sync() }
 
   init {
@@ -61,8 +62,9 @@ class CarSurfaceHost(private val context: CarContext, private val following: (Bo
     handler.removeCallbacksAndMessages(null)
     release()
     container = value
-    stable = Rect(0, 0, value.width, value.height)
-    visible = Rect(stable)
+    // The host may report its areas before the surface; keep them rather than reset to full.
+    if (stable.isEmpty) stable = Rect(0, 0, value.width, value.height)
+    if (visible.isEmpty) visible = Rect(stable)
     val manager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
     display =
       manager.createVirtualDisplay(
@@ -161,6 +163,7 @@ class CarSurfaceHost(private val context: CarContext, private val following: (Bo
                 .put("dark", context.isDarkMode)
             )
             viewport()
+            lastPosition?.let { send(it) }
             lastPreview = null
             lastSnapshot = null
             sync()
@@ -191,6 +194,12 @@ class CarSurfaceHost(private val context: CarContext, private val following: (Bo
 
   private fun send(message: JSONObject) {
     reply?.postMessage(message.toString())
+  }
+
+  /** Idle-map position; replayed when the car page reloads. */
+  fun position(message: JSONObject?) {
+    lastPosition = message
+    if (message != null) send(message)
   }
 
   fun camera(action: String, vararg fields: Pair<String, Number>) {

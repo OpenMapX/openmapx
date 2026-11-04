@@ -45,7 +45,20 @@ export const carCameraSchema = z.discriminatedUnion("action", [
     })
     .strict(),
   z.object({ ...base, type: z.literal("car-camera"), action: z.literal("recenter") }).strict(),
+  z.object({ ...base, type: z.literal("car-camera"), action: z.literal("overview") }).strict(),
 ]);
+/** The car's position while no trip runs; a trip's snapshots carry their own. */
+export const carPositionSchema = z
+  .object({
+    ...base,
+    type: z.literal("car-position"),
+    lng: z.number().finite().min(-180).max(180),
+    lat: z.number().finite().min(-90).max(90),
+    accuracy: z.number().finite().min(0).max(10000),
+    bearing: z.number().finite().min(0).max(360).optional(),
+    speedMps: z.number().finite().min(0).max(200).optional(),
+  })
+  .strict();
 export const carViewportSchema = z
   .object({
     ...base,
@@ -105,6 +118,7 @@ export const carNativeToWebSchema = z.union([
     .strict(),
   carPreviewSchema,
   carCameraSchema,
+  carPositionSchema,
 ]);
 export const carWebToNativeSchema = z.discriminatedUnion("type", [
   z.object({ ...base, type: z.literal("car-ready") }).strict(),
@@ -128,6 +142,7 @@ export type CarSurfaceMessage = z.infer<typeof carSurfaceMessageSchema>;
 export type CarViewport = z.infer<typeof carViewportSchema>;
 export type CarCamera = z.infer<typeof carCameraSchema>;
 export type CarPreview = z.infer<typeof carPreviewSchema>;
+export type CarPosition = z.infer<typeof carPositionSchema>;
 
 export function parseCarSurfaceMessage(raw: string): ParseResult<CarSurfaceMessage> {
   if (typeof raw !== "string") return { ok: false, error: { code: "invalid-message" } };

@@ -13,6 +13,8 @@ export const carTripProjectionSchema = z.object({
     "right",
     "slight-left",
     "slight-right",
+    "keep-left",
+    "keep-right",
     "sharp-left",
     "sharp-right",
     "uturn-left",
@@ -114,6 +116,17 @@ export function buildCarTripProjection(
       uturn: "uturn-left",
     };
     maneuver = mapped[m.modifier] ?? "straight";
+    // Keeping, forking, ramping or merging to one side is "keep left/right", not a turn.
+    if (
+      ["keep", "fork", "on ramp", "off ramp", "merge"].includes(m.type) &&
+      (maneuver === "left" || maneuver === "slight-left")
+    )
+      maneuver = "keep-left";
+    if (
+      ["keep", "fork", "on ramp", "off ramp", "merge"].includes(m.type) &&
+      (maneuver === "right" || maneuver === "slight-right")
+    )
+      maneuver = "keep-right";
   }
   const reroute = z.object({ status: z.string() }).safeParse(snapshot.reroute);
   const currentStep = route.data.steps[Math.max(0, p.currentStepIndex)];

@@ -7,6 +7,8 @@ object CarState {
   var destinations = JSONObject()
   var result = JSONObject()
   var connected = false
+  /** OpenMapX is the app on the car screen (session started), not just connected. */
+  var visible = false
   var locale = "en"
   var units = "metric"
   var projection: JSONObject? = null
@@ -14,6 +16,8 @@ object CarState {
   var preview: JSONObject =
     JSONObject().put("v", 1).put("type", "car-preview").put("routes", org.json.JSONArray())
   var origin: String? = null
+  /** Camera commands for the one car map surface, for screens stacked above the map screen. */
+  var camera: ((String, Array<out Pair<String, Number>>) -> Unit)? = null
   var listener: ((String) -> Unit)? = null
   private val pending = linkedSetOf<String>()
   val observers = mutableSetOf<() -> Unit>()

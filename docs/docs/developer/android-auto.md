@@ -37,8 +37,21 @@ obstructions in the safe map area. OpenMapX follows that split:
   lanes, ETA panel, bottom bar, search, dialogs or sheets.
 - Destination lists, search, preview and Start belong to host templates.
   `SearchTemplate` handles search; `MapWithContentTemplate` with `ListTemplate`
-  handles preview. Pan, zoom and conditional recenter are host map actions.
-  Surface DOM ignores pointer input; host gestures become camera commands.
+  handles preview. The map action strip carries pan, zoom in/out and, during a
+  trip, route overview or (when the map no longer follows) recenter; zoom also
+  appears on the preview. These and the Destinations action are persistent, so
+  they do not hide after the host's ten-second idle timeout. Surface DOM ignores
+  pointer input; host gestures become camera commands.
+- Layout follows Google Maps on Android Auto: current speed sits bottom right
+  beside the speed-limit sign, next to the map controls, and is hidden while a
+  route is chosen. Road shields scale with their sign image (1.6×) rather than
+  with the 24 px car label size, because shield images are fixed per reference
+  length. Turn arrows and lane images are drawn as bitmaps: the host renders no
+  maneuver icon of its own.
+- Without a trip, a native position feed (`car-position`, fused provider, 1 s)
+  places a location dot and follows the car at street zoom; it stops while a
+  trip runs, because trip snapshots carry their own position. Fixes go to the
+  car surface only and are not stored.
 
 `CarSurfaceHost.kt` receives the host's `SurfaceContainer`, creates a
 `VirtualDisplay` with its surface, dimensions and density, and shows a
@@ -71,8 +84,9 @@ remains the map viewport.
 
 A safe width below 500 CSS pixels or height below 300 selects compact framing,
 reducing forward offset and maximum pitch from 55 to 25 degrees. Preview fitting
-uses safe padding. Credits wrap and their measured height offsets the speed
-panel. Actual host callback geometry and WebView density identity still need DHU
+clears the follow camera's padding before fitting into the safe area. Credits wrap
+and their measured height offsets the speed panel; overlays keep clear of the map
+control column even when the host leaves it inside the stable area. Actual host callback geometry and WebView density identity still need DHU
 verification; synthetic wide, narrow, short and tall fixtures are not universal
 host split-screen dimensions.
 
@@ -108,8 +122,10 @@ car projection. The car page uses the phone snapshot reducer/store path; a gap
 requests a full snapshot through `car-error: snapshot-gap` and native `attach`.
 Rendering snapshots never replay speech cues.
 
-The native mailbox retains commands until JS acknowledgment. Template Stop and
-`NavigationManagerCallback.onStopNavigation` send `stop` through
+The native mailbox retains commands until JS acknowledgment. The template has no
+Stop action of its own: Android Auto draws an end-trip button on the arrival card
+and reports it, like a host takeover, through
+`NavigationManagerCallback.onStopNavigation`, which sends `stop` through
 `CarSessionAdapter` to the shared coordinator. That path cancels pending car
 planning/replay and stops the shared trip, including its guidance effects.
 Ordinary detach cancels car work and releases rendering/runtime resources without
@@ -150,16 +166,26 @@ end-to-end external-intent delivery needs device verification.
 and requests driving directions through `fetchDirections`, outside the coordinator
 queue. It rejects a missing fix, one older than 15 seconds or accuracy worse than
 100 meters, builds validated ground navigation packages and keeps up to eight
-candidates. Preview draws candidate lines; native rows select which candidate to
-start. The initial map selection remains candidate zero. Start enters the shared
+candidates. Preview rows show each candidate's duration and distance with a
+letter badge (A, B, C …); the map draws the same letter where that route departs
+furthest from the others, and the selected route above the alternatives. A row
+tap re-highlights its route (`select` command); Start sits in the template's
+action strip, because the host draws no action below a list there. The initial
+selection is candidate zero. Search requests pass the car's last fix rounded to
+about 1 km as `lat`/`lng`, so nearby places rank first, as on the phone. Start enters the shared
 executor with command-generation checks. Replacing an active trip requires
 confirmation bound to its session ID.
 
 **Car-only cold-start boundary:** a connected host and background location grant
 alone do not establish Android location foreground-service start eligibility.
-The current gate requires a focused phone Activity or an already-running location
-service, plus host authorization and the background grant. Otherwise the car asks
-the user to finish setup on the phone. The car runtime does not fabricate phone
+The current gate requires a foreground process (a focused phone Activity, or the
+car host showing OpenMapX, which Android reports as foreground importance) or an
+already-running location service, plus host authorization and the background
+grant. expo-location tracks foreground state from Activity events only, so the
+module marks it foreground while the car shows OpenMapX; Android then permits the
+location service start. Otherwise the car asks the user to finish setup on the
+phone. Each planning failure has its own car message: phone setup, location not
+yet available, no route, no connection, or unavailable. The car runtime does not fabricate phone
 visibility or present first-time permission prompts. General Activity-absent
 cold-start trip creation remains unqualified, even though runtime bootstrap and
 existing-trip attachment have code paths without an Activity.
@@ -167,8 +193,11 @@ existing-trip attachment have code paths without an Activity.
 ### Notifications and audio
 
 Connected guidance uses `NotificationCompat` with `CarAppExtender`, maneuver
-icons and localized distances. New maneuvers may alert; ordinary progress uses
-only-alert-once behavior. The adapter reuses the active Expo navigation-location
+icons and distances rounded like spoken guidance, formatted with the phone locale
+as the host's routing card is. A new maneuver alerts only while another app is on
+the car screen; while OpenMapX is shown, its routing card already presents it, so
+the notification only updates the rail. Ordinary progress uses only-alert-once
+behavior. The adapter reuses the active Expo navigation-location
 notification ID when present and restores its service content on disconnect;
 otherwise it uses a stable car notification ID. Android notification permission
 denial is respected. Actual foreground-service/notification coexistence and
@@ -185,16 +214,17 @@ phone bridge's protocol v3. The page sends through
 `OpenMapXCar.postMessage(JSON.stringify(message))`; native replies through
 `JavaScriptReplyProxy`, delivered to `OpenMapXCar.onmessage`.
 
-| Direction     | Type            | Fields and meaning                                                                                               |
-| ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Native → page | `car-hello`     | `locale: "en" \| "de"`, `units: "metric" \| "imperial"`, `dark: boolean`; after ready                            |
-| Native → page | `car-viewport`  | `width`, `height`, `stable` and `visible` edge insets `{top,right,bottom,left}`, `dark`; CSS pixels              |
-| Native → page | `car-snapshot`  | `message`: validated phone `snapshot.update` (full/progress) or `session.stopped` envelope                       |
-| Native → page | `car-preview`   | `routes: [{coordinates: [lng,lat][]}]`, `selected` index; `{routes: []}` clears, without `selected`              |
-| Native → page | `car-camera`    | `action: "pan"` with `dx,dy`; `"zoom"` with `factor` and optional `x,y`; `"fling"` with `vx,vy`; or `"recenter"` |
-| Page → native | `car-ready`     | No extra fields; listener installed                                                                              |
-| Page → native | `car-map-state` | `following: boolean`; controls recenter visibility                                                               |
-| Page → native | `car-error`     | Bounded lowercase/hyphen/digit `code`; gap requests full state, style/WebGL loss requests recovery               |
+| Direction     | Type            | Fields and meaning                                                                                                             |
+| ------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Native → page | `car-hello`     | `locale: "en" \| "de"`, `units: "metric" \| "imperial"`, `dark: boolean`; after ready                                          |
+| Native → page | `car-viewport`  | `width`, `height`, `stable` and `visible` edge insets `{top,right,bottom,left}`, `dark`; CSS pixels                            |
+| Native → page | `car-snapshot`  | `message`: validated phone `snapshot.update` (full/progress) or `session.stopped` envelope                                     |
+| Native → page | `car-preview`   | `routes: [{coordinates: [lng,lat][]}]`, `selected` index; `{routes: []}` clears, without `selected`                            |
+| Native → page | `car-camera`    | `action: "pan"` with `dx,dy`; `"zoom"` with `factor` and optional `x,y`; `"fling"` with `vx,vy`; `"recenter"`; or `"overview"` |
+| Native → page | `car-position`  | `lng`, `lat`, `accuracy`, optional `bearing`, `speedMps`; idle map position only                                               |
+| Page → native | `car-ready`     | No extra fields; listener installed                                                                                            |
+| Page → native | `car-map-state` | `following: boolean`; controls recenter visibility                                                                             |
+| Page → native | `car-error`     | Bounded lowercase/hyphen/digit `code`; gap requests full state, style/WebGL loss requests recovery                             |
 
 The shared parser uses strict shapes, finite bounds, the 8 MiB mobile message
 ceiling and aggregate snapshot limits. Preview permits up to nine routes and

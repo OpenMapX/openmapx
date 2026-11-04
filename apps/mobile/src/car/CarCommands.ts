@@ -3,8 +3,12 @@ import { z } from "zod";
 import { readCarDestinations } from "../bridge/receiveCarDestinations";
 import { createLocationDriver } from "../location/createLocationDriver";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
-import { CarRoutePlanner } from "./CarRoutePlanner";
+import { CarRoutePlanner, carPlanError } from "./CarRoutePlanner";
 import type { NativeCar } from "./nativeCar";
+
+const EMPTY_PREVIEW = JSON.stringify({ v: 1, type: "car-preview", routes: [] });
+/** Start refusals the driver can only resolve on the phone. */
+const PHONE_SETUP_CODES = new Set(["app-not-visible", "permission-denied"]);
 
 const searchResponse = z
   .array(
@@ -22,6 +26,7 @@ export class CarCommands {
   private planner: CarRoutePlanner;
   private connected = true;
   private eligible = false;
+  private previewing = false;
   private search: AbortController | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private searchGeneration = 0;
@@ -40,6 +45,10 @@ export class CarCommands {
   }
   cancel() {
     this.commandGeneration++;
+    if (this.previewing) {
+      this.previewing = false;
+      void this.native.preview(EMPTY_PREVIEW).catch(() => {});
+    }
     this.planner.cancel();
     this.searchGeneration++;
     this.search?.abort();
@@ -96,16 +105,44 @@ export class CarCommands {
         await this.native.result(JSON.stringify({ error: "phone-setup" }));
         return true;
       }
-      const routes = await this.planner.plan(
-        carDestinationSchema.parse(command.destination),
-        preferences,
-      );
-      if (routes && this.connected && generation === this.commandGeneration) {
-        await this.native.preview(
-          JSON.stringify({ v: 1, type: "car-preview", routes, selected: 0 }),
+      let routes: Awaited<ReturnType<CarRoutePlanner["plan"]>>;
+      try {
+        routes = await this.planner.plan(
+          carDestinationSchema.parse(command.destination),
+          preferences,
         );
-        await this.native.result(JSON.stringify({ routes: routes.length }));
+      } catch (error) {
+        if (this.connected && generation === this.commandGeneration)
+          await this.native.result(JSON.stringify({ error: carPlanError(error) }));
+        return true;
       }
+      if (routes && this.connected && generation === this.commandGeneration) {
+        this.previewing = true;
+        await this.native.preview(
+          JSON.stringify({
+            v: 1,
+            type: "car-preview",
+            routes: routes.map((route) => ({ coordinates: route.coordinates })),
+            selected: 0,
+          }),
+        );
+        await this.native.result(
+          JSON.stringify({
+            routes: routes.map(({ durationSeconds, distanceMeters }) => ({
+              durationSeconds,
+              distanceMeters,
+            })),
+          }),
+        );
+      }
+    }
+    if (command.action === "select" && this.previewing) {
+      const routes = this.planner.previewRoutes();
+      const index = command.index ?? 0;
+      if (index >= 0 && index < routes.length)
+        await this.native.preview(
+          JSON.stringify({ v: 1, type: "car-preview", routes, selected: index }),
+        );
     }
     if (command.action === "start") {
       this.eligible =
@@ -116,10 +153,24 @@ export class CarCommands {
         return true;
       }
       const response = await this.planner.start(command.index ?? 0, command.replaceSessionId);
+      const started = response?.type === "session.started";
+      if (started && this.previewing) {
+        // A replayed preview would pull a reconnecting car out of follow mode.
+        this.previewing = false;
+        await this.native.preview(EMPTY_PREVIEW);
+      }
+      const code =
+        response?.type === "native.error"
+          ? (response.payload as { code?: string }).code
+          : undefined;
       await this.native.result(
         JSON.stringify({
-          started: response?.type === "session.started",
-          error: response?.type === "native.error" ? "phone-setup" : undefined,
+          started,
+          error: started
+            ? undefined
+            : code && PHONE_SETUP_CODES.has(code)
+              ? "phone-setup"
+              : "unavailable",
         }),
       );
     }
@@ -134,6 +185,15 @@ export class CarCommands {
       url.searchParams.set("q", query);
       url.searchParams.set("lang", preferences.locale);
       url.searchParams.set("limit", "10");
+      // Rank places near the car first, as the phone search does; ~1 km precision suffices.
+      const near = await createLocationDriver()
+        .getCurrentFix({ accuracy: "balanced", maxAgeMs: 300000, timeoutMs: 2000 })
+        .catch(() => null);
+      if (near) {
+        url.searchParams.set("lat", near.coords[1].toFixed(2));
+        url.searchParams.set("lng", near.coords[0].toFixed(2));
+      }
+      if (generation !== this.searchGeneration || !this.connected) return;
       const response = await fetch(url.toString(), {
         credentials: "omit",
         signal: controller.signal,

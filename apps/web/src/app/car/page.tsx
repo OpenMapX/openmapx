@@ -2,6 +2,7 @@
 import { setNavigationAuthority, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import type {
   CarNativeToWebMessage,
+  CarPosition,
   CarPreview,
   CarViewport,
   CarWebToNativeMessage,
@@ -37,6 +38,11 @@ const initialViewport: CarViewport = {
 function Surface({ host, harness }: { host?: CarHost; harness: boolean }) {
   const [viewport, setViewport] = useState(initialViewport);
   const [preview, setPreview] = useState<CarPreview | null>(null);
+  const [position, setPosition] = useState<CarPosition | null>(null);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
   const [locale, setLocale] = useState<"en" | "de">("en");
   const [units, setUnits] = useState<"metric" | "imperial">("metric");
   const messages = useMessages();
@@ -66,9 +72,15 @@ function Surface({ host, harness }: { host?: CarHost; harness: boolean }) {
             .setCameraMode(message.routes.length ? "overview" : "follow");
           break;
         case "car-camera":
-          applyCarCamera(mapRef.current, message);
+          applyCarCamera(mapRef.current, message, viewportRef.current.stable);
+          break;
+        case "car-position":
+          setPosition(message);
           break;
         case "car-snapshot":
+          // A trip that starts after a preview drives in follow mode, not the preview's overview.
+          if (previewRef.current?.routes.length)
+            useNavigationStore.getState().setCameraMode("follow");
           setPreview(null);
           snapshot.current(message.message);
           break;
@@ -119,7 +131,13 @@ function Surface({ host, harness }: { host?: CarHost; harness: boolean }) {
         }}
       >
         <IntegrationProvider publicOnly>
-          <CarMap viewport={viewport} preview={preview} units={units} error={error} />
+          <CarMap
+            viewport={viewport}
+            preview={preview}
+            position={position}
+            units={units}
+            error={error}
+          />
         </IntegrationProvider>
       </div>
     </NextIntlClientProvider>

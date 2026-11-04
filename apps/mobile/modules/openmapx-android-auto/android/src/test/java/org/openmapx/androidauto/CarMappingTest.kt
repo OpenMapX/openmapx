@@ -29,6 +29,8 @@ class CarMappingTest {
         "right" to Maneuver.TYPE_TURN_NORMAL_RIGHT,
         "slight-left" to Maneuver.TYPE_TURN_SLIGHT_LEFT,
         "slight-right" to Maneuver.TYPE_TURN_SLIGHT_RIGHT,
+        "keep-left" to Maneuver.TYPE_KEEP_LEFT,
+        "keep-right" to Maneuver.TYPE_KEEP_RIGHT,
         "sharp-left" to Maneuver.TYPE_TURN_SHARP_LEFT,
         "sharp-right" to Maneuver.TYPE_TURN_SHARP_RIGHT,
         "uturn-left" to Maneuver.TYPE_U_TURN_LEFT,
@@ -44,6 +46,7 @@ class CarMappingTest {
           JSONObject().put("instruction", "Continue").put("maneuver", name).put("exit", 3)
         )
       assertEquals(name, type, step.maneuver!!.type)
+      assertNotNull("$name has a routing-card icon", step.maneuver!!.icon)
       if (name.startsWith("roundabout")) assertEquals(3, step.maneuver!!.roundaboutExitNumber)
     }
   }
@@ -52,11 +55,64 @@ class CarMappingTest {
   fun distanceUnitsAndInvalidValues() {
     assertEquals(Distance.UNIT_FEET, CarTripMapper.distance(100.0, "imperial").displayUnit)
     assertEquals(1.0, CarTripMapper.distance(1609.344, "imperial").displayDistance, 0.0001)
-    assertEquals(Distance.UNIT_KILOMETERS, CarTripMapper.distance(2000.0, "metric").displayUnit)
+    assertEquals(Distance.UNIT_MILES_P1, CarTripMapper.distance(1609.344, "imperial").displayUnit)
+    assertEquals(Distance.UNIT_KILOMETERS_P1, CarTripMapper.distance(2000.0, "metric").displayUnit)
+    assertEquals(Distance.UNIT_KILOMETERS, CarTripMapper.distance(23400.0, "metric").displayUnit)
     assertEquals(0.0, CarTripMapper.distance(Double.NaN).displayDistance, 0.0)
     assertEquals(0.0, CarTripMapper.distance(-1.0).displayDistance, 0.0)
-    val p = JSONObject().put("distanceToManeuver", 1500).put("locale", "de").put("units", "metric")
-    assertEquals("1,5 km", GuidanceNotification.distanceText(p))
+    val previous = java.util.Locale.getDefault()
+    java.util.Locale.setDefault(java.util.Locale.GERMANY)
+    try {
+      val p = JSONObject().put("distanceToManeuver", 1500).put("locale", "en").put("units", "metric")
+      // The rail matches the host's routing card, which follows the phone's locale.
+      assertEquals("1,5 km", GuidanceNotification.distanceText(p))
+    } finally {
+      java.util.Locale.setDefault(previous)
+    }
+  }
+
+  @Test
+  fun guidanceDistancesAreRounded() {
+    assertEquals(600.0, CarTripMapper.distance(614.8, "metric").displayDistance, 0.0)
+    assertEquals(90.0, CarTripMapper.distance(87.0, "metric").displayDistance, 0.0)
+    assertEquals(3.3, CarTripMapper.distance(3312.0, "metric").displayDistance, 0.0)
+    assertEquals(Distance.UNIT_KILOMETERS_P1, CarTripMapper.distance(960.0, "metric").displayUnit)
+    assertEquals(500.0, CarTripMapper.distance(152.4, "imperial").displayDistance, 0.0)
+  }
+
+  @Test
+  fun maneuverIconsAndLaneImagesDrawInsideTheirBitmaps() {
+    for (name in
+      listOf(
+        "straight",
+        "left",
+        "right",
+        "slight-left",
+        "slight-right",
+        "sharp-left",
+        "sharp-right",
+        "keep-left",
+        "keep-right",
+        "uturn-left",
+        "uturn-right",
+        "roundabout",
+        "roundabout-cw",
+        "arrive",
+      )) {
+      val bitmap = ManeuverIcons.bitmap(name)
+      assertEquals(128, bitmap.width)
+    }
+    val unmarked =
+      org.json
+        .JSONArray()
+        .put(JSONObject().put("valid", true).put("indications", org.json.JSONArray().put("none")))
+    assertTrue(!LaneImage.hasMarkings(unmarked))
+    // Unmarked lanes add no lane image, so the routing card has no blank band.
+    val step =
+      CarTripMapper.step(
+        JSONObject().put("instruction", "Keep left").put("maneuver", "keep-left").put("lanes", unmarked)
+      )
+    assertNull(step.lanesImage)
   }
 
   @Test
@@ -64,7 +120,32 @@ class CarMappingTest {
     val context = TestCarContext.createCarContext(RuntimeEnvironment.getApplication())
     assertNotNull(DestinationsScreen(context).onGetTemplate())
     assertNotNull(DestinationsScreen(context, true).onGetTemplate())
-    assertNotNull(PreviewScreen(context, 2).onGetTemplate())
+    // Building validates every host constraint the car would otherwise crash on.
+    val routes =
+      org.json
+        .JSONArray()
+        .put(JSONObject().put("durationSeconds", 23580).put("distanceMeters", 637300))
+        .put(JSONObject().put("durationSeconds", 24000).put("distanceMeters", 640000))
+    val preview =
+      PreviewScreen(context, routes).onGetTemplate()
+        as androidx.car.app.navigation.model.MapWithContentTemplate
+    assertEquals(listOf("A", "B", "C"), (0..2).map(RouteBadge::letter))
+    // Start must be in the action strip: the host draws no action below a list here.
+    assertEquals(1, preview.actionStrip!!.actions.size)
+    // Replacing a running trip asks first, with its own Start.
+    CarState.projection = JSONObject().put("sessionId", "running")
+    try {
+      val screen = PreviewScreen(context, routes)
+      screen.onGetTemplate()
+      assertNotNull(screen)
+    } finally {
+      CarState.projection = null
+    }
+    for (code in listOf("phone-setup", "location-unavailable", "no-route", "network", "other")) {
+      CarState.result = JSONObject().put("error", code)
+      assertNotNull(PreviewScreen(context, routes).onGetTemplate())
+    }
+    CarState.result = JSONObject()
   }
 
   @Test
@@ -248,5 +329,72 @@ class CarMappingTest {
         .getString(android.app.Notification.EXTRA_TITLE),
     )
     manager.cancel(123)
+  }
+
+  @Test
+  fun maneuverAlertsOnlyWhileAnotherAppIsOnTheCarScreen() {
+    val context = RuntimeEnvironment.getApplication()
+    org.robolectric.Shadows.shadowOf(context)
+      .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+    val manager = context.getSystemService(android.app.NotificationManager::class.java)
+    val p =
+      JSONObject()
+        .put("sessionId", "s")
+        .put("instruction", "Turn left")
+        .put("maneuver", "left")
+        .put("distanceToManeuver", 300)
+        .put("locale", "en")
+        .put("units", "metric")
+    CarState.connected = true
+    CarState.visible = true
+    try {
+      GuidanceNotification.update(context, p)
+      val shown = manager.activeNotifications.single { it.id == 406 }.notification
+      assertEquals(
+        android.app.NotificationManager.IMPORTANCE_LOW,
+        androidx.car.app.notification.CarAppExtender(shown).importance,
+      )
+    } finally {
+      CarState.visible = false
+      CarState.connected = false
+      GuidanceNotification.update(context, null)
+    }
+  }
+
+  @Test
+  fun navigationTemplatesKeepMapControlsWithinHostLimits() {
+    val context = TestCarContext.createCarContext(RuntimeEnvironment.getApplication())
+    CarState.projection = null
+    assertNotNull(NavigationScreen(context).onGetTemplate())
+    CarState.projection =
+      JSONObject()
+        .put("sessionId", "s")
+        .put("instruction", "Keep left")
+        .put("maneuver", "keep-left")
+        .put("distanceToManeuver", 3312)
+        .put("remainingDistance", 572000)
+        .put("remainingSeconds", 21180)
+        .put("etaMs", 1700000000000)
+        .put("locale", "en")
+        .put("units", "metric")
+    try {
+      val template =
+        NavigationScreen(context).onGetTemplate()
+          as androidx.car.app.navigation.model.NavigationTemplate
+      // No Stop of our own during a trip: the host's X ends it through onStopNavigation.
+      assertEquals(
+        listOf("Destinations"),
+        template.actionStrip!!.actions.mapNotNull { it.title?.toString() }.filter { it != "Test drive" },
+      )
+      val actions = template.mapActionStrip!!.actions
+      assertEquals(4, actions.size)
+      assertTrue(
+        actions.filter { it.type != androidx.car.app.model.Action.TYPE_PAN }.all {
+          it.flags and androidx.car.app.model.Action.FLAG_IS_PERSISTENT != 0
+        }
+      )
+    } finally {
+      CarState.projection = null
+    }
   }
 }

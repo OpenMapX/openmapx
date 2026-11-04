@@ -161,7 +161,7 @@ export class NavigationCoordinator {
       const current = await this.deps.repository.loadActive(now);
       const base = {
         protocolVersion: 3,
-        messageId: `car-start-${globalThis.crypto.randomUUID()}`,
+        messageId: `car-start-${this.deps.newSessionId()}`,
         channelNonce: "car-native",
         sentAtMs: now,
       };

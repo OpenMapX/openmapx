@@ -5,23 +5,40 @@ import android.net.Uri
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
+import android.text.SpannableString
+import android.text.Spanned
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
+import androidx.car.app.model.CarText
+import androidx.car.app.model.DistanceSpan
+import androidx.car.app.model.DurationSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.SearchTemplate
 import androidx.car.app.model.Template
+import androidx.car.app.navigation.model.MapController
 import androidx.car.app.navigation.model.MapWithContentTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.LifecycleOwner
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Destination browsing respects the host's item limit and keeps the map renderer passive. */
 class DestinationsScreen(context: CarContext, private val search: Boolean = false) :
   Screen(context), DefaultLifecycleObserver {
   private var planning = false
-  private val observer: () -> Unit = { invalidate() }
+  // Screen changes happen outside onGetTemplate, which the host only renders.
+  private val observer: () -> Unit = {
+    val routes = CarState.result.optJSONArray("routes")
+    if (planning && routes != null && routes.length() > 0) {
+      planning = false
+      screenManager.push(PreviewScreen(carContext, routes))
+    } else invalidate()
+  }
 
   init {
     lifecycle.addObserver(this)
@@ -38,19 +55,15 @@ class DestinationsScreen(context: CarContext, private val search: Boolean = fals
   override fun onGetTemplate(): Template {
     val result = CarState.result
     if (planning) {
-      if (result.has("routes")) {
-        planning = false
-        screenManager.push(PreviewScreen(carContext, result.optInt("routes", 1)))
-      } else {
-        return MessageTemplate.Builder(
-            carContext.carString(
-              if (result.has("error")) R.string.car_phone_setup else R.string.car_planning
-            )
+      return MessageTemplate.Builder(
+          carContext.carString(
+            if (result.has("error")) CarErrors.message(result.optString("error"))
+            else R.string.car_planning
           )
-          .setTitle(carContext.carString(R.string.car_destinations))
-          .setHeaderAction(Action.BACK)
-          .build()
-      }
+        )
+        .setTitle(carContext.carString(R.string.car_destinations))
+        .setHeaderAction(Action.BACK)
+        .build()
     }
     val list = ItemList.Builder()
     val limit =
@@ -71,7 +84,11 @@ class DestinationsScreen(context: CarContext, private val search: Boolean = fals
       }
       list.setNoItemsMessage(
         carContext.carString(
-          if (result.has("error")) R.string.car_search_unavailable else R.string.car_search
+          when {
+            result.has("error") -> R.string.car_search_unavailable
+            result.has("results") -> R.string.car_search_none
+            else -> R.string.car_search_hint
+          }
         )
       )
       return SearchTemplate.Builder(
@@ -129,7 +146,7 @@ class DestinationsScreen(context: CarContext, private val search: Boolean = fals
 }
 
 /** Starting a preview asks before replacing the currently active trip. */
-class PreviewScreen(context: CarContext, private val count: Int) :
+class PreviewScreen(context: CarContext, private val routes: JSONArray) :
   Screen(context), DefaultLifecycleObserver {
   private val observer: () -> Unit = {
     if (CarState.result.optBoolean("started")) screenManager.popToRoot() else invalidate()
@@ -148,6 +165,13 @@ class PreviewScreen(context: CarContext, private val count: Int) :
   private var confirm = false
   private var confirmedSession: String? = null
 
+  private fun select(index: Int) {
+    if (index == selected) return
+    selected = index
+    CarState.command("car:" + JSONObject().put("action", "select").put("index", index))
+    invalidate()
+  }
+
   private fun start() {
     val current = CarState.projection
     if (current != null && !confirm) {
@@ -165,39 +189,58 @@ class PreviewScreen(context: CarContext, private val count: Int) :
     )
   }
 
+  private fun startAction(primary: Boolean, onClick: () -> Unit) =
+    Action.Builder()
+      .setTitle(carContext.carString(R.string.car_start))
+      .setIcon(carContext.carIcon(R.drawable.car_navigate))
+      .apply { if (primary) setFlags(Action.FLAG_PRIMARY) }
+      .setOnClickListener(onClick)
+      .build()
+
   override fun onGetTemplate(): Template {
     if (CarState.result.has("error"))
-      return MessageTemplate.Builder(carContext.carString(R.string.car_phone_setup))
+      return MessageTemplate.Builder(
+          carContext.carString(CarErrors.message(CarState.result.optString("error")))
+        )
         .setHeaderAction(Action.BACK)
         .build()
     if (confirm)
       return MessageTemplate.Builder(carContext.carString(R.string.car_replace))
         .setHeaderAction(Action.BACK)
-        .addAction(
-          Action.Builder()
-            .setTitle(carContext.carString(R.string.car_start))
-            .setOnClickListener { start() }
-            .build()
-        )
+        .addAction(startAction(primary = true) { start() })
         .build()
     val list = ItemList.Builder()
-    for (i in 0 until count.coerceIn(1, 8)) {
-      list.addItem(
-        Row.Builder()
-          .setTitle(carContext.carString(R.string.car_route, i + 1))
-          .addAction(
-            Action.Builder()
-              .setTitle(carContext.carString(R.string.car_start))
-              .setOnClickListener {
-                selected = i
-                start()
-              }
-              .build()
-          )
-          .build()
+    for (i in 0 until routes.length().coerceIn(1, 8)) {
+      val route = routes.optJSONObject(i) ?: JSONObject()
+      val duration = SpannableString(" ")
+      duration.setSpan(
+        DurationSpan.create(route.optLong("durationSeconds").coerceAtLeast(0)),
+        0,
+        1,
+        Spanned.SPAN_INCLUSIVE_INCLUSIVE,
       )
+      val distance = SpannableString(" ")
+      distance.setSpan(
+        DistanceSpan.create(CarTripMapper.distance(route.optDouble("distanceMeters", 0.0))),
+        0,
+        1,
+        Spanned.SPAN_INCLUSIVE_INCLUSIVE,
+      )
+      val row =
+        Row.Builder()
+          .setTitle(CarText.create(duration))
+          .addText(CarText.create(distance))
+          .setOnClickListener { select(i) }
+      // The same letter as the route's badge on the map; the selected one in blue.
+      row.setImage(
+        CarIcon.Builder(IconCompat.createWithBitmap(RouteBadge.bitmap(i, i == selected))).build()
+      )
+      list.addItem(row.build())
     }
     return MapWithContentTemplate.Builder()
+      .setMapController(
+        MapController.Builder().setMapActionStrip(CarMapActions.zoom(carContext).build()).build()
+      )
       .setContentTemplate(
         ListTemplate.Builder()
           .setTitle(carContext.carString(R.string.car_destinations))
@@ -205,8 +248,24 @@ class PreviewScreen(context: CarContext, private val count: Int) :
           .setSingleList(list.build())
           .build()
       )
+      // The host draws no action below a list in a map template; Start sits in the action strip.
+      .setActionStrip(
+        ActionStrip.Builder().addAction(startAction(primary = false) { start() }).build()
+      )
       .build()
   }
+}
+
+/** One message per planning failure, so the driver knows what can fix it. */
+object CarErrors {
+  fun message(code: String): Int =
+    when (code) {
+      "phone-setup" -> R.string.car_phone_setup
+      "location-unavailable" -> R.string.car_location_unavailable
+      "no-route" -> R.string.car_no_route
+      "network" -> R.string.car_network
+      else -> R.string.car_unavailable
+    }
 }
 
 /** Coordinates from external apps are validated before they reach the planner. */
@@ -230,5 +289,38 @@ object CarNavigationIntent {
           ?: "$lat, $lng",
       )
       .put("coordinates", org.json.JSONArray().put(lng).put(lat))
+  }
+}
+
+/** Round route letter badges matching the map: A, B, C …; blue when selected. */
+object RouteBadge {
+  fun letter(index: Int): String = ('A' + index).toString()
+
+  fun bitmap(index: Int, selected: Boolean): android.graphics.Bitmap {
+    val size = 96
+    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val fill =
+      android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (selected) 0xFF1A73E8.toInt() else 0xFF5F6F86.toInt()
+      }
+    val ring =
+      android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 6f
+      }
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, fill)
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, ring)
+    val text =
+      android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 52f
+        textAlign = android.graphics.Paint.Align.CENTER
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+      }
+    val baseline = size / 2f - (text.descent() + text.ascent()) / 2f
+    canvas.drawText(letter(index), size / 2f, baseline, text)
+    return bitmap
   }
 }
