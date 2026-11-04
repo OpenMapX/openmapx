@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
+import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
 import {
   canonicalJson,
   createControlRootOperationKey,
@@ -17,113 +17,55 @@ import {
   offlinePackageJobOwners,
   offlinePackageJobs,
 } from "@openmapx/db-schema";
+import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import postgres from "postgres";
-import { describe, expect, it } from "vitest";
-import { registerApi } from "../../api.js";
-import { registerAuth } from "../../auth.js";
-import { setupCron } from "../../cron.js";
-import { PostgresOfflinePackageAccountingStore } from "../../offline-packages/postgres-accounting.js";
-import type { OfflinePackageJobRecord } from "../../offline-packages/types.js";
-import { StateStore } from "../../state.js";
-import { createJobRow } from "../persistence.js";
-import { resolveOperationsProfile } from "../transitous/operations-profile.js";
-import { createSingleFlightController } from "../transitous/single-flight.js";
-import { installDataMutationAdmission } from "./admission.js";
-import { createDataConfigurationMaintenance } from "./configuration-maintenance.js";
-import { createDataExecutionDispatcher } from "./dispatch.js";
-import { startLegacyDataMutation } from "./legacy-mutation.js";
-import { createDataExecutionReceiver } from "./receiver.js";
-import { createDataExecutionRuntime } from "./runtime.js";
-import { createPostgresDataExecutionStore } from "./store.js";
+import { describe, expect, it, vi } from "vitest";
+import * as apiSchema from "../../../../../apps/api/src/db/schema";
+import type { JobContext } from "../../../../../apps/api/src/services/job-runner";
+import { createConfigurationPostgresFixture } from "../../../../../apps/api/src/test/configuration-postgres-fixture";
+import { ownedDataManager } from "../../../../../apps/ops-agent/src/__fixtures__/owned-data-manager";
+import { ownedServiceHost } from "../../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
+import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
+import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
+
+const apiState = vi.hoisted(() => ({
+  fixture: null as unknown as Awaited<ReturnType<typeof createConfigurationPostgresFixture>>,
+}));
+// Only the API database connection boundary changes; its real producer,
+// transactions, parent attestation and agent HTTP admission remain installed.
+vi.mock("../../../../../apps/api/src/db", () => ({
+  get db() {
+    return apiState.fixture.db;
+  },
+  get sql() {
+    return apiState.fixture.sql;
+  },
+}));
+
+import { registerApi } from "../../../../../services/data-manager/src/api.js";
+import { registerAuth } from "../../../../../services/data-manager/src/auth.js";
+import { setupCron } from "../../../../../services/data-manager/src/cron.js";
+import { installDataMutationAdmission } from "../../../../../services/data-manager/src/jobs/execution/admission.js";
+import { createDataConfigurationMaintenance } from "../../../../../services/data-manager/src/jobs/execution/configuration-maintenance.js";
+import { createDataExecutionDispatcher } from "../../../../../services/data-manager/src/jobs/execution/dispatch.js";
+import { startLegacyDataMutation } from "../../../../../services/data-manager/src/jobs/execution/legacy-mutation.js";
+import { createDataExecutionReceiver } from "../../../../../services/data-manager/src/jobs/execution/receiver.js";
+import { createDataExecutionRuntime } from "../../../../../services/data-manager/src/jobs/execution/runtime.js";
+import { createPostgresDataExecutionStore } from "../../../../../services/data-manager/src/jobs/execution/store.js";
+import { createJobRow } from "../../../../../services/data-manager/src/jobs/persistence.js";
+import { resolveOperationsProfile } from "../../../../../services/data-manager/src/jobs/transitous/operations-profile.js";
+import { createSingleFlightController } from "../../../../../services/data-manager/src/jobs/transitous/single-flight.js";
+import { PostgresOfflinePackageAccountingStore } from "../../../../../services/data-manager/src/offline-packages/postgres-accounting.js";
+import type { OfflinePackageJobRecord } from "../../../../../services/data-manager/src/offline-packages/types.js";
+import { StateStore } from "../../../../../services/data-manager/src/state.js";
 
 describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
   it("prepares a terminal logical guard, blocks concurrent admissions, and restores it before new mutation", async () => {
-    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
-    if (!url) throw Error("Owned PostgreSQL required");
-    const sql = postgres(url, { max: 4 }),
-      root = mkdtempSync(join(tmpdir(), "omx-data-fence-"));
-    mkdirSync(join(root, "data"), { mode: 0o700 });
-    await control.provisionControlInstallation(root);
-    const services = ["data-manager", "motis"],
-      agent = control.openControlInstallation({
-        infraDir: root,
-        role: "ops-agent",
-        serviceIds: services,
-      }),
-      dm = control.openControlInstallation({
-        infraDir: root,
-        role: "data-manager",
-        serviceIds: services,
-      });
-    const now = Date.now(),
-      deadlineAt = now + 60000,
-      rootBody = { kind: "configurationMaintenance.prepare", maintenanceId: randomUUID() },
-      operationFingerprint = createHash("sha256").update(canonicalJson(rootBody)).digest("hex");
-    const owner: ExecutionRef = {
-      executor: "ops-agent",
-      principal: "api",
-      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
-      operationFingerprint,
-      deadlineAt,
-      fingerprint: executionFingerprint({ kind: rootBody.kind, operationFingerprint, deadlineAt }),
-    };
-    const input = {
-      maintenanceId: rootBody.maintenanceId,
-      candidateId: randomUUID(),
-      ownerPrepare: owner,
-      planDigest: "1".repeat(64),
-      serviceIds: services,
-      revisionId: `cfg1_${"a".repeat(43)}`,
-      hardlinkPlanDigest: null,
-      coordinatorMode: "require-running" as const,
-    };
-    const body = { kind: "configuration-maintenance.prepare", ...input },
-      bodyHash = createHash("sha256").update(canonicalJson(body)).digest("hex");
-    const child: ExecutionRef = {
-      executor: "data-manager",
-      principal: "api",
-      executionId: randomUUID(),
-      operationKey: control.controlChildOperationKey(owner.operationKey, "configuration-fence", 0),
-      operationFingerprint: bodyHash,
-      deadlineAt,
-      fingerprint: executionFingerprint({
-        kind: body.kind,
-        operationFingerprint: bodyHash,
-        deadlineAt,
-        parent: control.retainedControlParent(owner),
-      }),
-    };
-    const plan = {
-      phase: "configuration-fence" as const,
-      ordinal: 0,
-      kind: body.kind,
-      execution: child,
-      serviceIds: services,
-      recipient: "data-manager" as const,
-    };
-    const authority = control.retainAdmittedControlExecution(agent, {
-      execution: owner,
-      kind: rootBody.kind,
-      operation: rootBody,
-      admittedAt: now,
-      requestedDeadlineAt: deadlineAt,
-      serviceIds: services,
-      plan: [plan],
-    });
-    const lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
-      serviceIds: services,
-      owner: authority,
-    });
-    const assertion = await control.delegateArtifactTargetLease(lease, {
-      ...plan,
-      childPublicKey: dm.publicKey,
-    });
+    const f = await ownedFenceFixture(),
+      { sql, root, dm, child, input, assertion, lease } = f;
     try {
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
@@ -141,11 +83,14 @@ describe.skipIf(
       const rows =
         await sql`SELECT status,finished_at,metadata FROM data_manager.jobs WHERE id=${child.executionId}`;
       expect(rows[0]?.status).toBe("ok");
-      expect(rows[0]?.finished_at).toBeInstanceOf(Date);
+      const finishedAt = rows[0]?.finished_at,
+        preparedTerminalAt =
+          finishedAt instanceof Date ? finishedAt.getTime() : Date.parse(String(finishedAt));
+      expect(Number.isFinite(preparedTerminalAt)).toBe(true);
       const preparedSource = control.verifyPublishedDataConfigurationFencePrepared(lease, child);
       expect(control.preparedDataConfigurationFenceState(preparedSource)).toMatchObject({
         preparedReceipt: receipt,
-        preparedTerminalAt: (rows[0]!.finished_at as Date).getTime(),
+        preparedTerminalAt,
       });
       expect(() =>
         control.preparedDataConfigurationFenceState({} as typeof preparedSource),
@@ -361,12 +306,7 @@ describe.skipIf(
       );
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
-      await sql`DELETE FROM data_manager.jobs WHERE id=${child.executionId}`;
-      control.closeArtifactTargetLeaseHandle(lease);
-      control.closeControlInstallation(dm);
-      control.closeControlInstallation(agent);
-      await sql.end();
-      rmSync(root, { recursive: true, force: true });
+      await f.close();
     }
   }, 60000);
 });
@@ -375,98 +315,180 @@ import { existsSync, readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 async function ownedFenceFixture() {
-  const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
-  if (!url) throw Error("Owned PostgreSQL required");
-  const sql = postgres(url, { max: 4 });
-  drizzle(sql);
-  const root = mkdtempSync(join(tmpdir(), "omx-fence-race-"));
-  mkdirSync(join(root, "data"), { mode: 0o700 });
-  await control.provisionControlInstallation(root);
-  const services = ["data-manager", "motis"],
-    agent = control.openControlInstallation({
-      infraDir: root,
-      role: "ops-agent",
-      serviceIds: [...services, "foreign-consumer"].sort(),
-    }),
-    dm = control.openControlInstallation({
-      infraDir: root,
-      role: "data-manager",
-      serviceIds: [...services, "foreign-consumer"].sort(),
-    }),
-    now = Date.now(),
-    deadlineAt = now + 60000,
-    operation = { kind: "configurationMaintenance.prepare", maintenanceId: randomUUID() },
-    bodyHash = createHash("sha256").update(canonicalJson(operation)).digest("hex"),
-    owner: ExecutionRef = {
-      executor: "ops-agent",
-      principal: "api",
-      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
-      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
-      operationFingerprint: bodyHash,
-      deadlineAt,
-      fingerprint: executionFingerprint({
-        kind: operation.kind,
-        operationFingerprint: bodyHash,
-        deadlineAt,
-      }),
-    };
-  const hardlinkPlanDigest = createHash("sha256")
-      .update(canonicalJson({ plan: [], prune: true }))
-      .digest("hex"),
-    input = {
-      maintenanceId: operation.maintenanceId,
-      candidateId: randomUUID(),
-      ownerPrepare: owner,
-      planDigest: "a".repeat(64),
-      serviceIds: services,
-      revisionId: `cfg1_${"a".repeat(43)}`,
-      hardlinkPlanDigest,
-      coordinatorMode: "require-running" as const,
+  const fixture = await createConfigurationPostgresFixture();
+  apiState.fixture = fixture;
+  const host = await ownedServiceHost({
+    withCoordinator: true,
+    selectedRoots: ["data-manager", "motis"],
+    extraServiceIds: ["foreign-consumer"],
+    schemas: {
+      "data-manager": {
+        type: "object",
+        properties: { TOKEN: { type: "string", "x-openmapx-secret": true } },
+      },
     },
-    prepare = { kind: "configuration-maintenance.prepare", ...input },
-    fingerprint = createHash("sha256").update(canonicalJson(prepare)).digest("hex"),
-    child: ExecutionRef = {
-      executor: "data-manager",
-      principal: "api",
-      executionId: randomUUID(),
-      operationKey: control.controlChildOperationKey(owner.operationKey, "configuration-fence", 0),
-      operationFingerprint: fingerprint,
-      deadlineAt,
-      fingerprint: executionFingerprint({
-        kind: prepare.kind,
-        operationFingerprint: fingerprint,
-        deadlineAt,
-        parent: control.retainedControlParent(owner),
-      }),
+  });
+  host.setRows([
+    host.row,
+    {
+      ...host.row,
+      Id: "c".repeat(64),
+      ConfigImage: "example/data-manager:1",
+      Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
     },
-    slot = {
-      phase: "configuration-fence" as const,
-      ordinal: 0,
-      kind: prepare.kind,
-      execution: child,
-      serviceIds: services,
-      recipient: "data-manager" as const,
-    };
-  const authority = control.retainAdmittedControlExecution(agent, {
-      execution: owner,
-      kind: operation.kind,
-      operation,
-      admittedAt: now,
-      requestedDeadlineAt: deadlineAt,
-      serviceIds: services,
-      plan: [slot],
+  ]);
+  const serviceIds = host.loaded.map((s) => s.manifest.id),
+    root = host.infraDir,
+    agent = control.openControlInstallation({ infraDir: root, role: "ops-agent", serviceIds }),
+    data = await ownedDataManager({ sql: fixture.sql, infraDir: root, serviceIds }),
+    dm = control.openControlInstallation({ infraDir: root, role: "data-manager", serviceIds }),
+    app = buildOpsAgentServer({
+      runtime: host.runtime,
+      resourceClaimer: host.claimer,
+      controlInstallation: agent,
+      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      journal: await openOpsJobJournal(join(root, "state/ops-agent/jobs-v1.json")),
     }),
-    lease = await control.acquireArtifactTargetLease({
+    tokenFile = join(host.root, "api-token");
+  writeFileSync(tokenFile, host.token, { mode: 0o600 });
+  for (const [key, value] of Object.entries({
+    OPS_AGENT_URL: await app.listen({ host: "127.0.0.1", port: 0 }),
+    OPS_AGENT_TOKEN_FILE: tokenFile,
+    OPS_TRUSTED_CONFIG_DIR: host.queue,
+    OPS_TRUSTED_CONFIG_UID: String(statSync(host.queue).uid),
+    OPS_TRUSTED_CONFIG_GID: String(statSync(host.queue).gid),
+    OPENMAPX_ROOT_DIR: host.root,
+    OPENMAPX_SECRETS_KEY: "71".repeat(32),
+    OPENMAPX_RELEASE: "local",
+    BETTER_AUTH_SECRET: "owned-fence-synthetic-secret-at-least-32",
+    DOMAIN: "example.test",
+    DATA_MANAGER_URL: data.baseUrl,
+    DATA_MANAGER_AUTH_TOKEN: data.token,
+  }))
+    vi.stubEnv(key, value);
+  const { initServiceRegistry } = await import(
+    "../../../../../apps/api/src/services/service-registry"
+  );
+  await initServiceRegistry({ strict: true });
+  const jobId = randomUUID(),
+    execution = { owner: randomUUID(), version: 1 },
+    operationKey = `opk1_${jobId.replaceAll("-", "")}`;
+  await fixture.db.insert(apiSchema.adminJob).values({
+    id: jobId,
+    type: "service.apply",
+    payload: {},
+    status: "running",
+    result: { _execution: execution },
+  });
+  const ctx: JobContext = {
+    jobId,
+    jobType: "service.apply",
+    execution,
+    payload: {},
+    signal: new AbortController().signal,
+    checkpointResult: { _execution: execution },
+    log: async () => {},
+    setProgress: async () => {},
+    checkpoint: async (result, progress, admissionKey, stepAddress) => {
+      if ((result.opsProjection as { version?: number } | undefined)?.version === 3) {
+        const { checkpointOwnedAdminJob } = await import(
+          "../../../../../apps/api/src/services/admin-job-checkpoint"
+        );
+        ctx.checkpointResult = await checkpointOwnedAdminJob(
+          jobId,
+          execution,
+          result,
+          progress,
+          admissionKey,
+          stepAddress,
+          ctx.checkpointResult ?? {},
+        );
+      } else {
+        await fixture.db
+          .update(apiSchema.adminJob)
+          .set({ result })
+          .where(eq(apiSchema.adminJob.id, jobId));
+        ctx.checkpointResult = result;
+      }
+    },
+  };
+  const captured = Promise.withResolvers<{
+      input: import("@openmapx/core/data-manager-contracts").DataConfigurationFencePrepare;
+      assertion: string;
+    }>(),
+    response = Promise.withResolvers<Response>(),
+    originalFetch = globalThis.fetch;
+  // Hold only the actual signed HTTP request. Tests deliver its exact body to
+  // the real receiver/store, including their named SQL crash boundary.
+  const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (
+      String(url) === `${data.baseUrl}/executions/configuration-maintenance/prepare` &&
+      init?.method === "POST"
+    ) {
+      const assertion = new Headers(init.headers).get("x-openmapx-control-delegation");
+      if (!assertion) throw Error("Actual maintenance grant required");
+      captured.resolve({
+        input: dataConfigurationFencePrepareSchema.parse(JSON.parse(String(init.body))),
+        assertion,
+      });
+      return response.promise;
+    }
+    return originalFetch(url, init);
+  });
+  const writer = await import(
+      "../../../../../apps/api/src/services/administrative-configuration-writer"
+    ),
+    prospective = await import("../../../../../apps/api/src/services/prospective-configuration");
+  const preparation = writer.withAdministrativeConfigurationJob(ctx, () =>
+    writer.withAdministrativeConfigurationWriter(
+      { actorId: jobId, operationKey, integrationIds: [] },
+      async () => {
+        const candidate = await prospective.prepareProspectiveConfiguration({
+          actorId: jobId,
+          operationKey,
+          expectedCurrentRevisionId: host.initial.revisionId,
+          followUp: "service-apply",
+          overlay: {
+            purpose: "service-secret",
+            coordinatorMode: "ensure-running",
+            changes: [
+              {
+                kind: "service-secret",
+                serviceId: "data-manager",
+                key: "TOKEN",
+                action: "set",
+                value: "synthetic-guard-credential",
+              },
+            ],
+          },
+        });
+        await prospective.stageProspectiveConfigurationMaintenance(candidate);
+        return (
+          await import("../../../../../apps/api/src/services/configuration-maintenance")
+        ).prepareConfigurationMaintenance(candidate);
+      },
+    ),
+  );
+  const pending = preparation.then(
+    () => {
+      throw Error("Preparation completed before receiver delivery");
+    },
+    (error) => {
+      throw Error(`${String(error)}; ${JSON.stringify(error?.result)}`);
+    },
+  );
+  // The original API producer must reach the actual agent-issued child grant.
+  const { input, assertion } = await Promise.race([captured.promise, pending]);
+  const child = control.inspectArtifactDelegation({
       dataRoot: join(root, "data"),
-      serviceIds: services,
-      owner: authority,
-    }),
-    assertion = await control.delegateArtifactTargetLease(lease, {
-      ...slot,
-      childPublicKey: dm.publicKey,
-    });
+      assertion,
+      installation: dm,
+    }).execution,
+    owner = input.ownerPrepare,
+    authority = control.restoreAdmittedControlExecution(agent, owner),
+    lease = control.restoreArtifactTargetLeaseForSettlement(authority);
   return {
-    sql,
+    sql: fixture.sql,
     root,
     agent,
     dm,
@@ -477,15 +499,22 @@ async function ownedFenceFixture() {
     assertion,
     input,
     async close() {
-      await sql`DELETE FROM data_manager.jobs WHERE id=${child.executionId}`;
+      response.reject(Error("Named fixture HTTP transport closed"));
+      await preparation.catch(() => {});
+      transport.mockRestore();
+      await app.close();
+      await data.close();
+      await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${child.executionId}`;
       control.closeArtifactTargetLeaseHandle(lease);
       control.closeControlInstallation(agent);
       control.closeControlInstallation(dm);
-      await sql.end();
-      rmSync(root, { recursive: true, force: true });
+      await fixture.stop();
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+      vi.unstubAllEnvs();
     },
   };
 }
+
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
   "refuses settlement capacity authority from a valid ordinary prepare grant without the original published reservation preimage",
   async () => {
@@ -497,9 +526,23 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         execution: f.child,
         kind: "configuration-maintenance.prepare",
       });
+      const reservation = join(
+          f.root,
+          "data/.admin-target-control/executions/ops-agent",
+          `${f.owner.operationKey}.configuration-settlement-control.json`,
+        ),
+        held = `${reservation}.held`;
       expect(() =>
         control.verifyPublishedConfigurationSettlementReservation(f.dm, peer, f.input),
-      ).toThrow();
+      ).not.toThrow();
+      renameSync(reservation, held);
+      try {
+        expect(() =>
+          control.verifyPublishedConfigurationSettlementReservation(f.dm, peer, f.input),
+        ).toThrow();
+      } finally {
+        renameSync(held, reservation);
+      }
       expect(() =>
         control.publishedConfigurationSettlementReservationState({} as never, f.dm),
       ).toThrow();
@@ -636,27 +679,31 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
             deadlineAt: deadline,
           }),
         },
-        plan = { plan: [], prune: true as const };
+        plan = { plan: [], prune: true as const },
+        planDigest = control.controlDigest(plan);
       const requests = [
         {
           revisionId: f.input.revisionId,
-          planDigest: f.input.hardlinkPlanDigest,
-          coordinatorMode: "require-running" as const,
+          planDigest,
+          coordinatorMode: f.input.coordinatorMode,
         },
         {
           revisionId: `cfg1_${"b".repeat(43)}`,
-          planDigest: f.input.hardlinkPlanDigest,
-          coordinatorMode: "require-running" as const,
+          planDigest,
+          coordinatorMode: f.input.coordinatorMode,
         },
         {
           revisionId: f.input.revisionId,
           planDigest: "b".repeat(64),
-          coordinatorMode: "require-running" as const,
+          coordinatorMode: f.input.coordinatorMode,
         },
         {
           revisionId: f.input.revisionId,
-          planDigest: f.input.hardlinkPlanDigest,
-          coordinatorMode: "ensure-running" as const,
+          planDigest,
+          coordinatorMode:
+            f.input.coordinatorMode === "ensure-running"
+              ? ("require-running" as const)
+              : ("ensure-running" as const),
         },
       ].map((body, ordinal) => {
         const input = { kind: "generation-hardlinks" as const, ...body },

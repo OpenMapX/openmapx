@@ -17,6 +17,8 @@ vi.mock("node:fs", async (original) => {
 });
 const cleanup: (() => void)[] = [];
 afterEach(() => {
+  // restoreAllMocks restores spies, but not the factory-created vi.fn above.
+  vi.mocked(fs.renameSync).mockReset();
   vi.restoreAllMocks();
   for (const close of cleanup.reverse().splice(0)) close();
 });
