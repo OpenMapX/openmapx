@@ -371,10 +371,11 @@ separate cluster-map feature.
 
 On a debuggable native build with development JS, start a ground trip after phone
 setup, then select **Test drive** in the car navigation actions. It substitutes
-the shared location driver and sends one route coordinate per second through the
-same coordinator batch path, with synthetic speed 10 m/s and accuracy 5 m.
-Permission checks still read real OS grants. This is geometry replay, not a
-physically timed road simulation. Stop or detach restores the production driver;
+the shared location driver and sends one fix per second through the same
+coordinator batch path: positions 10 m apart along the route (10 m/s, accuracy
+5 m) from core's `simulatePositions`, the generator behind the web's navigation
+simulator. Permission checks still read real OS grants. Speed is constant; it is
+not a traffic or road-speed simulation. Stop or detach restores the production driver;
 it is not a production template action.
 
 **Play review test drive (NF-7).** Release builds implement
