@@ -38,5 +38,7 @@ export function panoramaxPictureAssetUrl(
   size: PanoramaxAssetSize,
 ): string | undefined {
   if (!pictureId || !PANORAMAX_PICTURE_ID.test(pictureId)) return undefined;
-  return `${apiBase.replace(/\/+$/, "")}/pictures/${pictureId.toLowerCase()}/${size}.jpg`;
+  let base = apiBase;
+  while (base.endsWith("/")) base = base.slice(0, -1);
+  return `${base}/pictures/${pictureId.toLowerCase()}/${size}.jpg`;
 }
