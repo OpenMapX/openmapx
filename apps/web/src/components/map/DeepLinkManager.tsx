@@ -40,6 +40,7 @@ import {
   getOverlayEntry,
   type IsochroneTravelMode,
   idsFromPrimaryOrCoords,
+  isOverlayOpenOnlyByContext,
   type LngLat,
   type MapLayer,
   OVERLAY_REGISTRY,
@@ -253,10 +254,13 @@ function closeOverlay(id: string): void {
   runOverlayTransaction(id, { panelOpen: false }, { kind: "user" });
 }
 
+// An overlay open only because the current trip context switched it on is not
+// part of the link. Written as `ov`, a reload mid-trip would read it back as a
+// user choice (openOverlay above), which the context's end never closes.
 function activeOverlayIds(): string[] {
   return overlayIds().filter((id) => {
     const state = getOverlayState(id);
-    return Boolean(state?.panelOpen && state.layerVisible);
+    return Boolean(state?.panelOpen && state.layerVisible) && !isOverlayOpenOnlyByContext(id);
   });
 }
 

@@ -2,7 +2,10 @@ export { useCategoryFacetStore } from "./categoryFacetStore";
 export { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "./categorySearchStore";
 export { useCommandPaletteStore } from "./commandPaletteStore";
 export type { ContextualOverlayOwnership } from "./contextualOverlayOwnership";
-export { createContextualOverlayOwnership } from "./contextualOverlayOwnership";
+export {
+  createContextualOverlayOwnership,
+  isOverlayOpenOnlyByContext,
+} from "./contextualOverlayOwnership";
 export type { OverlayStoreBase } from "./createOverlayStore";
 export {
   createOverlayStore,

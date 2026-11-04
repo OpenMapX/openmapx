@@ -15,11 +15,15 @@ import {
   PANEL,
   registerOverlayEntry,
   runOverlayTransaction,
+  setOverlayLayerVisible,
+  toggleOverlay,
   useCategorySearchStore,
+  useDirectionsStore,
+  useNavigationStore,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integration-api/map/MapContext", () => ({
@@ -29,6 +33,7 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 import { resetBackNavigationForTests } from "@/lib/backNavigation";
 import { DEEPLINK_OPEN_EVENT, DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
 import { settleHistory } from "@/test/history";
+import { ContextualOverlays } from "./ContextualOverlays";
 import { DeepLinkManager } from "./DeepLinkManager";
 
 const FALLBACK: OverlayStoreBase = {
@@ -200,6 +205,72 @@ describe("DeepLinkManager overlay application", () => {
     expect(isOverlayActive("air-quality")).toBe(true);
     expect(getRegisteredOverlayStore("air-quality")?.getState().userRevision).toBe(0);
     expect(window.location.search).toContain("ov=air-quality");
+  });
+});
+
+describe("DeepLinkManager and trip overlays", () => {
+  function page() {
+    return (
+      <>
+        <ContextualOverlays />
+        <DeepLinkManager />
+      </>
+    );
+  }
+
+  function writeNow(): void {
+    act(() => {
+      window.dispatchEvent(new Event(DEEPLINK_UPDATE_EVENT));
+    });
+  }
+
+  beforeEach(() => {
+    resetOverlay("traffic-flow");
+    useDirectionsStore.setState({ isOpen: false, mode: "driving" });
+    useNavigationStore.setState({ status: "idle", kind: "ground", mode: "driving" });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useNavigationStore.setState({ status: "idle", kind: "ground", mode: "driving" });
+  });
+
+  it("keeps an overlay the trip switched on out of the URL, so a reload mid-trip still turns it off at End", () => {
+    render(page());
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    expect(isOverlayActive("traffic-flow")).toBe(true);
+    writeNow();
+    expect(window.location.search).not.toContain("traffic-flow");
+
+    // The page reloads mid-trip (the shell's WebView restarts) at the same
+    // URL, and the native session brings navigation back.
+    const tripUrl = `${window.location.pathname}${window.location.search}`;
+    cleanup();
+    resetOverlay("traffic-flow");
+    useNavigationStore.setState({ status: "idle" });
+    window.history.replaceState(null, "", tripUrl);
+    render(page());
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    expect(isOverlayActive("traffic-flow")).toBe(true);
+
+    act(() => useNavigationStore.setState({ status: "idle" }));
+    expect(isOverlayActive("traffic-flow")).toBe(false);
+  });
+
+  it("still writes a trip overlay the user had on before the trip", () => {
+    toggleOverlay("traffic-flow", { kind: "user" });
+    render(page());
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    writeNow();
+    expect(window.location.search).toContain("ov=traffic-flow");
+  });
+
+  it("writes a trip overlay once the user chooses it during the trip", () => {
+    render(page());
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    act(() => setOverlayLayerVisible("traffic-flow", true, { kind: "user" }));
+    writeNow();
+    expect(window.location.search).toContain("ov=traffic-flow");
   });
 });
 
