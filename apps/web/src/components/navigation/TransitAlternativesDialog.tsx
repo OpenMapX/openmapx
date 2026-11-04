@@ -1,4 +1,7 @@
 "use client";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -10,6 +13,8 @@ import Typography from "@mui/material/Typography";
 import {
   apiClient,
   fetchTransitPlan,
+  formatDuration,
+  formatMeasurementDistance,
   haversineDistance,
   useNavigationStore,
   useSettingsStore,
@@ -18,6 +23,8 @@ import { transitAlternativeOrigin, transitItineraryFingerprint } from "@openmapx
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { LegBadge } from "@/components/panels/transit/LegBadge";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import Dialog from "@/components/ui/Dialog";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
@@ -36,7 +43,9 @@ export function TransitAlternativesDialog({
   onClose: () => void;
 }) {
   const t = useTranslations("navigation");
+  const td = useTranslations("directions");
   const locale = useLocale();
+  const units = useSettingsStore((s) => s.units);
   const fmt = useDateTimeFormat();
   const runtime = useMobileRuntimeContext();
   const itinerary = useNavigationStore((s) => s.itinerary);
@@ -174,7 +183,7 @@ export function TransitAlternativesDialog({
   return (
     <Dialog open={open} onClose={adopting ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t("findTransitAlternatives")}</DialogTitle>
-      <DialogContent>
+      <DialogContent dividers sx={{ bgcolor: "background.default" }}>
         <Typography variant="body2" sx={{ mb: 2 }}>
           {t("transitAlternativesKeepJourney")}
         </Typography>
@@ -195,39 +204,104 @@ export function TransitAlternativesDialog({
         ) : results.length === 0 && !error ? (
           <Typography>{t("transitAlternativesEmpty")}</Typography>
         ) : null}
-        {results.map((trip, index) => (
-          <Box
-            key={trip.id ?? `${index}`}
-            sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 2, mb: 1.5 }}
-          >
-            <Typography variant="subtitle1">
-              {trip.legs
-                .filter((l) => l.route)
-                .map((l) => l.route?.shortName ?? l.route?.longName)
-                .join(" → ") || t("walkTo", { place: trip.legs.at(-1)?.to.name ?? "" })}
-            </Typography>
-            <Typography variant="body2">
-              {fmt.time(trip.startTime)} – {fmt.time(trip.endTime)} ·{" "}
-              {t("alternativeTransfers", { count: trip.transfers })}
-            </Typography>
-            <Typography variant="caption" sx={{ display: "block" }}>
-              {trip.legs
-                .map((l) => l.from.name)
-                .concat(trip.legs.at(-1)?.to.name ?? [])
-                .join(" → ")}
-            </Typography>
-            <Button
-              disabled={adopting || preview !== null}
-              onClick={() => void adopt(trip)}
-              sx={{ mt: 1, minHeight: 44 }}
+        {results.map((trip, index) => {
+          const boarding = trip.legs.find((leg) => leg.route);
+          return (
+            <Box
+              key={trip.id ?? `${index}`}
+              sx={{
+                border: 1,
+                borderColor: "divider",
+                bgcolor: "background.paper",
+                borderRadius: 2,
+                p: 2,
+                mb: 1.5,
+                "&:last-child": { mb: 0 },
+              }}
             >
-              {t("useTransitJourney")}
-            </Button>
-          </Box>
-        ))}
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 2,
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Typography
+                  variant="body1"
+                  sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
+                >
+                  {fmt.time(trip.startTime)} – {fmt.time(trip.endTime)}
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                  {formatDuration(trip.duration)}
+                </Typography>
+              </Box>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 1 }}
+              >
+                {trip.legs.map((leg, i) => (
+                  <Box
+                    key={`${leg.tripId ?? leg.mode}:${leg.startTime}:${leg.from.stopId ?? leg.from.name}:${leg.to.stopId ?? leg.to.name}`}
+                    sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
+                  >
+                    {i > 0 && <ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
+                    <LegBadge leg={leg} />
+                  </Box>
+                ))}
+                <Typography variant="caption" color="text.secondary">
+                  {t("alternativeTransfers", { count: trip.transfers })}
+                </Typography>
+                {trip.walkDistance > 0 && (
+                  <Typography variant="caption" color="text.secondary">
+                    ·{" "}
+                    {td("walkDistance", {
+                      distance: formatMeasurementDistance(trip.walkDistance, units),
+                    })}
+                  </Typography>
+                )}
+              </Box>
+              {boarding && (
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 1 }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {boarding.from.name}
+                  </Typography>
+                  {boarding.from.platformCode && (
+                    <PlatformBadge
+                      code={boarding.from.platformCode}
+                      scheduledCode={boarding.from.scheduledPlatformCode}
+                    />
+                  )}
+                  {boarding.headsign && (
+                    <Typography variant="caption" color="text.secondary">
+                      {t("towards", { headsign: boarding.headsign })}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              <Button
+                disabled={adopting || preview !== null}
+                onClick={() => void adopt(trip)}
+                variant="outlined"
+                fullWidth
+                endIcon={<ArrowForwardIcon />}
+                sx={{ mt: 1.5, minHeight: 44 }}
+              >
+                {t("useTransitJourney")}
+              </Button>
+            </Box>
+          );
+        })}
       </DialogContent>
       <DialogActions>
-        <Button disabled={loading || adopting} onClick={() => setNonce((n) => n + 1)}>
+        <Button
+          startIcon={<RefreshIcon />}
+          disabled={loading || adopting}
+          onClick={() => setNonce((n) => n + 1)}
+        >
           {t("refreshTransitAlternatives")}
         </Button>
         <Button disabled={adopting} onClick={onClose}>

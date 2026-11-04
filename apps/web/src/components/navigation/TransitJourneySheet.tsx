@@ -47,15 +47,24 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: stops are ordered by sequence
             key={i}
-            sx={{ display: "flex", gap: 1, alignItems: "stretch", opacity: passed ? 0.5 : 1 }}
+            sx={{ display: "flex", gap: 1, alignItems: "stretch" }}
           >
-            <Box sx={{ width: 52, textAlign: "right", flexShrink: 0, pt: "1px" }}>
+            <Box
+              sx={{
+                width: "5.5em",
+                fontSize: ".75rem",
+                textAlign: "right",
+                flexShrink: 0,
+                pt: "1px",
+              }}
+            >
               <Typography
                 variant="caption"
                 sx={{
                   fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
                   fontWeight: emphasized ? 700 : 400,
-                  color: delayMin > 0 ? "error.main" : "text.primary",
+                  color: delayMin > 0 ? "error.main" : passed ? "text.secondary" : "text.primary",
                 }}
               >
                 {time ? fmt.time(time) : ""}
@@ -109,18 +118,23 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
                 <Typography
                   variant="body2"
-                  noWrap
                   sx={{
+                    overflowWrap: "anywhere",
+                    lineHeight: 1.5,
                     fontWeight: emphasized ? 600 : 400,
                     textDecoration: stop.canceled ? "line-through" : "none",
-                    color: stop.canceled ? "error.main" : "text.primary",
+                    color: stop.canceled
+                      ? "error.main"
+                      : passed
+                        ? "text.secondary"
+                        : "text.primary",
                   }}
                 >
                   {stop.name}
                 </Typography>
                 {stop.alerts && stop.alerts.length > 0 && (
                   <Tooltip title={stop.alerts[0].title} placement="top" arrow>
-                    <WarningAmberIcon sx={{ fontSize: 15, color: "#E65100", flexShrink: 0 }} />
+                    <WarningAmberIcon sx={{ fontSize: 15, color: "warning.main", flexShrink: 0 }} />
                   </Tooltip>
                 )}
               </Box>
@@ -150,8 +164,11 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
-      <Box sx={{ width: 52, textAlign: "right", flexShrink: 0 }}>
-        <Typography variant="caption" sx={{ fontVariantNumeric: "tabular-nums" }}>
+      <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
+        <Typography
+          variant="caption"
+          sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
+        >
           {leg.startTime ? fmt.time(leg.startTime) : ""}
         </Typography>
       </Box>

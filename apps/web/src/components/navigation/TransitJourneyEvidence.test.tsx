@@ -131,12 +131,11 @@ describe("journey and navigation use the same transit evidence", () => {
       <TransitLegBanner
         leg={{ ...leg, cancelled: true }}
         legIndex={0}
-        totalLegs={2}
         transitProgress={null}
         source="ms"
       />,
     );
-    expect(screen.getByText("transit.canceled")).toBeInTheDocument();
+    expect(screen.getByText("RE1 · transit.canceled")).toBeInTheDocument();
     expect(state.speak).not.toHaveBeenCalled();
   });
   it("keeps browser live queries disabled in the installed shell", () => {
@@ -144,7 +143,7 @@ describe("journey and navigation use the same transit evidence", () => {
     render(
       <>
         <TransitJourneySheet itinerary={itinerary} currentLegIndex={0} transitProgress={null} />
-        <TransitLegBanner leg={leg} legIndex={0} totalLegs={2} transitProgress={null} source="ms" />
+        <TransitLegBanner leg={leg} legIndex={0} transitProgress={null} source="ms" />
       </>,
     );
     expect(state.journey.mock.calls.map((call) => call[0])).toEqual([null, null]);
@@ -159,7 +158,6 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
     <TransitLegBanner
       leg={leg}
       legIndex={0}
-      totalLegs={2}
       source="ms"
       transitProgress={{
         currentLegIndex: 0,

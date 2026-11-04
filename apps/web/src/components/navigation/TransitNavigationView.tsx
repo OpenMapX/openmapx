@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { useMapObstructionExtent } from "@/lib/mapObstructions";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
@@ -75,6 +76,7 @@ export function TransitNavigationView() {
 
   // This view is mounted for the whole session and renders nothing until a
   // transit trip runs, so an idle mount must not reserve the column either.
+  const bannerClearance = useMapObstructionExtent("transit-nav-banner");
   const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
   useNavChromeObstructions("transit", { isMobile, arrived: !active || !itinerary, bannerEl });
 
@@ -198,15 +200,10 @@ export function TransitNavigationView() {
                   leg={currentLeg}
                   source={itinerary.source ?? itinerary.instance}
                   legIndex={currentLegIndex}
-                  totalLegs={legs.length}
                   transitProgress={transitProgress}
                   transfer={transfer}
                 />
               ))}
-            <TransitJourneyControls
-              walkRepair={walkRepair}
-              onAlternatives={() => setAlternativesOpen(true)}
-            />
             <TransitAlertBanner
               itinerary={itinerary}
               currentLegIndex={currentLegIndex}
@@ -229,9 +226,18 @@ export function TransitNavigationView() {
           >
             {isMobile ? (
               <NavSwipeSheet
+                topClearance={bannerClearance}
                 expanded={sheetOpen}
                 onExpandedChange={setSheetOpen}
-                header={<TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />}
+                header={
+                  <>
+                    <TransitJourneyControls
+                      walkRepair={walkRepair}
+                      onAlternatives={() => setAlternativesOpen(true)}
+                    />
+                    <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
+                  </>
+                }
               >
                 <TransitJourneySheet
                   itinerary={itinerary}
@@ -264,6 +270,10 @@ export function TransitNavigationView() {
                 }}
               >
                 <Box sx={{ flexShrink: 0 }}>
+                  <TransitJourneyControls
+                    walkRepair={walkRepair}
+                    onAlternatives={() => setAlternativesOpen(true)}
+                  />
                   <TransitNavBottomBar
                     itinerary={itinerary}
                     currentLeg={currentLeg}

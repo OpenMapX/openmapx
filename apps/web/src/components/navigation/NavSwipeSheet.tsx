@@ -42,11 +42,14 @@ export function NavSwipeSheet({
   onExpandedChange,
   header,
   children,
+  topClearance = 0,
 }: {
   expanded: boolean;
   onExpandedChange: (next: boolean) => void;
   header: ReactNode;
   children: ReactNode;
+  /** Keep expanded content below the measured instruction banner. */
+  topClearance?: number;
 }) {
   const t = useTranslations("navigation");
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -88,10 +91,13 @@ export function NavSwipeSheet({
   const detents = useMemo<DetentConfig>(
     () => ({
       peek: `calc(${Math.round(headerPx)}px + var(--omx-safe-bottom))`,
-      maxHeight: `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`,
+      maxHeight:
+        topClearance > 0
+          ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - ${Math.ceil(topClearance + 8)}px))`
+          : `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`,
       initial: "peek",
     }),
-    [headerPx, expandedContentPx],
+    [headerPx, expandedContentPx, topClearance],
   );
 
   return (
@@ -107,10 +113,29 @@ export function NavSwipeSheet({
     >
       <Box ref={headerRef}>
         <Box
+          component="button"
+          type="button"
           onClick={() => onExpandedChange(!expanded)}
           aria-label={t("resizePanel")}
-          role="separator"
-          sx={{ display: "flex", justifyContent: "center", pt: 1, pb: 0.5 }}
+          aria-expanded={expanded}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            minHeight: 44,
+            border: 0,
+            bgcolor: "transparent",
+            color: "inherit",
+            cursor: "pointer",
+            p: 0,
+            "&:focus-visible": {
+              outline: "2px solid",
+              outlineColor: "primary.main",
+              outlineOffset: -2,
+              borderRadius: 2,
+            },
+          }}
         >
           <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
         </Box>
