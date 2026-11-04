@@ -20,6 +20,31 @@ private const val PREFS = "openmapx.navigation.surface"
 private const val CHANNEL = "openmapx-navigation-progress"
 private val lock = Any()
 
+/**
+ * Lets the Android Auto module add its extension to this card instead of posting a
+ * second navigation notification. `decorate` runs on every post; `refresh` re-posts the
+ * last accepted payload when the car's turn or connection changes between updates.
+ */
+object NavigationSurfaceHooks {
+  @Volatile var decorate: ((Context, JSONObject, Notification.Builder) -> Unit)? = null
+  private var last: Pair<String, String>? = null
+
+  internal fun remember(raw: String, scheme: String) {
+    last = raw to scheme
+  }
+
+  internal fun forget() {
+    last = null
+  }
+
+  fun refresh(context: Context) {
+    synchronized(lock) {
+      val (raw, scheme) = last ?: return
+      postSurface(context, raw, scheme)
+    }
+  }
+}
+
 class SurfaceDismissReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     synchronized(lock) {
@@ -39,7 +64,7 @@ class OpenMapXNavigationSurfacesModule : Module() {
     Name("OpenMapXNavigationSurfaces")
     AsyncFunction("updateAsync") { raw: String, scheme: String, _: Boolean ->
       val context = appContext.reactContext ?: return@AsyncFunction false
-      synchronized(lock) { update(context, raw, scheme) }
+      synchronized(lock) { postSurface(context, raw, scheme) }
     }
     AsyncFunction("clearAsync") { expected: String? ->
       val context = appContext.reactContext ?: return@AsyncFunction
@@ -48,11 +73,14 @@ class OpenMapXNavigationSurfacesModule : Module() {
         if (SurfacePolicy.canClear(prefs.getString("owner", null), expected)) {
           context.getSystemService(NotificationManager::class.java).cancel(SurfacePolicy.TAG, SurfacePolicy.ID)
           prefs.edit().remove("owner").remove("revision").apply()
+          NavigationSurfaceHooks.forget()
         }
       }
     }
   }
-  private fun update(context: Context, raw: String, scheme: String): Boolean {
+}
+
+internal fun postSurface(context: Context, raw: String, scheme: String): Boolean {
     if (raw.toByteArray(Charsets.UTF_8).size > SurfacePolicy.MAX_BYTES || !scheme.matches(Regex("[a-z][a-z0-9+.-]{0,100}"))) return false
     val data = try { JSONObject(raw) } catch (_: Exception) { return false }
     val keys = setOf("version", "sessionId", "revision", "kind", "status", "title", "instruction", "detail", "compactText", "observedAtMs", "staleAtMs", "expiresAtMs", "locale", "eventAtMs")
@@ -107,8 +135,9 @@ class OpenMapXNavigationSurfacesModule : Module() {
     // AndroidX uses this public compatibility extra; the framework setter is
     // only in SDK36.1, while this project deliberately compiles against36.
     if (Build.VERSION.SDK_INT >= 36 && data.optString("status") != "arrived") builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }).setShortCriticalText(SurfacePolicy.boundedText(data.getString("compactText"), 7))
+    NavigationSurfaceHooks.decorate?.invoke(context, data, builder)
     manager.notify(SurfacePolicy.TAG, SurfacePolicy.ID, builder.build())
     prefs.edit().putString("owner", owner).putLong("revision", revision).apply()
+    NavigationSurfaceHooks.remember(raw, scheme)
     return true
-  }
 }

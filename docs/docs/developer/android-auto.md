@@ -202,16 +202,16 @@ existing-trip attachment have code paths without an Activity.
 
 ### Notifications and audio
 
-Connected guidance uses `NotificationCompat` with `CarAppExtender`, maneuver
-icons and distances rounded like spoken guidance, formatted with the phone locale
-as the host's routing card is. A new maneuver alerts only while another app is on
-the car screen; while OpenMapX is shown, its routing card already presents it, so
-the notification only updates the rail. Ordinary progress uses only-alert-once
-behavior. The adapter reuses the active Expo navigation-location
-notification ID when present and restores its service content on disconnect;
-otherwise it uses a stable car notification ID. Android notification permission
-denial is respected. Actual foreground-service/notification coexistence and
-vehicle delivery require device checks.
+The turn-by-turn notification Android Auto requires (NF-3) is the trip's existing
+phone navigation card from the navigation-surfaces module, not a second
+notification. While a car is connected, the car module decorates that card through
+`NavigationSurfaceHooks` with a `CarAppExtender`: turn instruction, distance and
+the phone's turn glyph for the car rail. A new turn re-posts the card and alerts
+only while another app is on the car screen; while OpenMapX is shown, its routing
+card already presents it. Distances otherwise follow the card's own update
+cadence. Disconnecting re-posts the card without the extension. A card the user
+dismissed on the phone stays dismissed, so the car rail then shows no turn either;
+notification permission denial is respected the same way.
 
 Speech uses the existing navigation audio ports. No second car TTS engine or
 forced Bluetooth SCO routing is introduced. Real vehicle focus, ducking, calls

@@ -52,7 +52,8 @@ class OpenMapXCarService : CarAppService() {
               CarState.connected = false
               CarState.autoDrive = false
               CarState.command("detach")
-              GuidanceNotification.update(carContext, null)
+              // Drops the car extension from the phone's navigation card.
+              GuidanceNotification.refresh(carContext)
               carContext.stopService(Intent(carContext, CarRuntimeService::class.java))
             }
           }
@@ -135,6 +136,7 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
   }
 
   init {
+    GuidanceNotification.install()
     lifecycle.addObserver(this)
     context.getCarService(AppManager::class.java).setSurfaceCallback(surface)
     CarState.camera = { action, fields -> surface.camera(action, *fields) }
@@ -178,8 +180,15 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
       manager.updateTrip(
         CarTripMapper.trip(carContext, p, carContext.carString(R.string.car_destination))
       )
-    GuidanceNotification.update(carContext, p)
+    // The card updates its distances itself; a new turn re-posts it for the car alert.
+    val turn = p?.let { "${it.optString("sessionId")}:${it.optString("maneuverId")}" }
+    if (turn != notifiedTurn) {
+      notifiedTurn = turn
+      GuidanceNotification.refresh(carContext)
+    }
   }
+
+  private var notifiedTurn: String? = null
 
   override fun onGetTemplate(): Template {
     val p = CarState.projection
@@ -231,7 +240,7 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
 
   override fun onDestroy(owner: LifecycleOwner) {
     CarState.connected = false
-    GuidanceNotification.update(carContext, null)
+    GuidanceNotification.refresh(carContext)
     CarState.command("detach")
     carContext.stopService(Intent(carContext, CarRuntimeService::class.java))
     CarState.observers.remove(observer)

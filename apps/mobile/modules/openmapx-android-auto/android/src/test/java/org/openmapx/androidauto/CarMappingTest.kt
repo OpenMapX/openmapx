@@ -176,57 +176,6 @@ class CarMappingTest {
   }
 
   @Test
-  fun disconnectedPhoneDoesNotReceiveCarNotification() {
-    val context = RuntimeEnvironment.getApplication()
-    CarState.connected = false
-    GuidanceNotification.update(context, JSONObject().put("instruction", "Continue"))
-    assertTrue(
-      context
-        .getSystemService(android.app.NotificationManager::class.java)
-        .activeNotifications
-        .none { it.id == 406 }
-    )
-  }
-
-  @Test
-  fun connectedNotificationCarriesCarMetadataAndCancelsOnDisconnect() {
-    val context = RuntimeEnvironment.getApplication()
-    org.robolectric.Shadows.shadowOf(context)
-      .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-    val manager = context.getSystemService(android.app.NotificationManager::class.java)
-    val p =
-      JSONObject()
-        .put("instruction", "Turn right")
-        .put("maneuver", "right")
-        .put("distanceToManeuver", 200)
-        .put("locale", "en")
-        .put("units", "metric")
-    CarState.connected = true
-    try {
-      GuidanceNotification.update(context, p)
-      val notification = manager.activeNotifications.single { it.id == 406 }.notification
-      assertEquals(android.app.Notification.CATEGORY_NAVIGATION, notification.category)
-      assertTrue(notification.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
-      assertTrue(androidx.car.app.notification.CarAppExtender.isExtended(notification))
-      val car = androidx.car.app.notification.CarAppExtender(notification)
-      assertEquals("Turn right", car.contentTitle)
-      assertEquals("200 m", car.contentText)
-      assertNotNull(car.largeIcon)
-      assertEquals(android.app.NotificationManager.IMPORTANCE_HIGH, car.importance)
-      GuidanceNotification.update(context, p)
-      val progress = manager.activeNotifications.single { it.id == 406 }.notification
-      assertEquals(
-        android.app.NotificationManager.IMPORTANCE_LOW,
-        androidx.car.app.notification.CarAppExtender(progress).importance,
-      )
-    } finally {
-      CarState.connected = false
-      GuidanceNotification.update(context, null)
-    }
-    assertTrue(manager.activeNotifications.none { it.id == 406 })
-  }
-
-  @Test
   fun projectionParserRejectsMalformedFieldsAndLaneBounds() {
     val p =
       JSONObject()
@@ -294,85 +243,6 @@ class CarMappingTest {
   }
 
   @Test
-  fun guidanceReusesAndRestoresTheLocationServiceNotification() {
-    val context = RuntimeEnvironment.getApplication()
-    org.robolectric.Shadows.shadowOf(context)
-      .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-    val manager = context.getSystemService(android.app.NotificationManager::class.java)
-    val channel = "${context.packageName}:openmapx-navigation-location"
-    manager.createNotificationChannel(
-      android.app.NotificationChannel(
-        channel,
-        "Location",
-        android.app.NotificationManager.IMPORTANCE_LOW,
-      )
-    )
-    val original =
-      androidx.core.app.NotificationCompat.Builder(context, channel)
-        .setSmallIcon(android.R.drawable.ic_dialog_map)
-        .setContentTitle("Tracking")
-        .setOngoing(true)
-        .build()
-    manager.notify(123, original)
-    val p =
-      JSONObject()
-        .put("instruction", "Turn right")
-        .put("maneuver", "right")
-        .put("distanceToManeuver", 100)
-        .put("locale", "en")
-        .put("units", "metric")
-    CarState.connected = true
-    try {
-      GuidanceNotification.update(context, p)
-      GuidanceNotification.update(context, p)
-      assertEquals(1, manager.activeNotifications.size)
-      assertEquals(123, manager.activeNotifications.single().id)
-    } finally {
-      CarState.connected = false
-      GuidanceNotification.update(context, null)
-    }
-    assertEquals(
-      "Tracking",
-      manager.activeNotifications
-        .single()
-        .notification
-        .extras
-        .getString(android.app.Notification.EXTRA_TITLE),
-    )
-    manager.cancel(123)
-  }
-
-  @Test
-  fun maneuverAlertsOnlyWhileAnotherAppIsOnTheCarScreen() {
-    val context = RuntimeEnvironment.getApplication()
-    org.robolectric.Shadows.shadowOf(context)
-      .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-    val manager = context.getSystemService(android.app.NotificationManager::class.java)
-    val p =
-      JSONObject()
-        .put("sessionId", "s")
-        .put("instruction", "Turn left")
-        .put("maneuver", "left")
-        .put("distanceToManeuver", 300)
-        .put("locale", "en")
-        .put("units", "metric")
-    CarState.connected = true
-    CarState.visible = true
-    try {
-      GuidanceNotification.update(context, p)
-      val shown = manager.activeNotifications.single { it.id == 406 }.notification
-      assertEquals(
-        android.app.NotificationManager.IMPORTANCE_LOW,
-        androidx.car.app.notification.CarAppExtender(shown).importance,
-      )
-    } finally {
-      CarState.visible = false
-      CarState.connected = false
-      GuidanceNotification.update(context, null)
-    }
-  }
-
-  @Test
   fun navigationTemplatesKeepMapControlsWithinHostLimits() {
     val context = TestCarContext.createCarContext(RuntimeEnvironment.getApplication())
     CarState.projection = null
@@ -425,6 +295,82 @@ class CarMappingTest {
       assertEquals(13.3777, place.getJSONArray("coordinates").getDouble(0), 0.0)
     } finally {
       CarState.autoDrive = false
+    }
+  }
+
+  private fun card(sessionId: String = "s") = JSONObject().put("sessionId", sessionId)
+
+  private fun projection() =
+    JSONObject()
+      .put("sessionId", "s")
+      .put("maneuverId", "s:3")
+      .put("instruction", "Turn right")
+      .put("maneuverIcon", "TurnRight")
+      .put("distanceToManeuver", 200)
+      .put("locale", "en")
+      .put("units", "metric")
+
+  private fun decorated(): android.app.Notification {
+    val context = RuntimeEnvironment.getApplication()
+    val builder =
+      android.app.Notification.Builder(context, "test")
+        .setSmallIcon(android.R.drawable.ic_dialog_map)
+        .setOnlyAlertOnce(true)
+    GuidanceNotification.decorate(context, card(), builder)
+    return builder.build()
+  }
+
+  @Test
+  fun carExtendsThePhoneNavigationCardInsteadOfPostingItsOwn() {
+    CarState.connected = true
+    CarState.projection = projection()
+    try {
+      val notification = decorated()
+      assertTrue(androidx.car.app.notification.CarAppExtender.isExtended(notification))
+      val car = androidx.car.app.notification.CarAppExtender(notification)
+      assertEquals("Turn right", car.contentTitle)
+      assertEquals("200 m", car.contentText)
+      assertNotNull(car.largeIcon)
+      // A new turn alerts in the car; the same turn again only updates the rail.
+      assertEquals(android.app.NotificationManager.IMPORTANCE_HIGH, car.importance)
+      val again = androidx.car.app.notification.CarAppExtender(decorated())
+      assertEquals(android.app.NotificationManager.IMPORTANCE_LOW, again.importance)
+    } finally {
+      CarState.connected = false
+      CarState.projection = null
+    }
+  }
+
+  @Test
+  fun noCarExtensionWithoutAConnectedCarOrForAnotherTrip() {
+    CarState.connected = false
+    CarState.projection = projection()
+    try {
+      assertTrue(!androidx.car.app.notification.CarAppExtender.isExtended(decorated()))
+      CarState.connected = true
+      val context = RuntimeEnvironment.getApplication()
+      val builder =
+        android.app.Notification.Builder(context, "test").setSmallIcon(android.R.drawable.ic_dialog_map)
+      GuidanceNotification.decorate(context, card("other-trip"), builder)
+      assertTrue(!androidx.car.app.notification.CarAppExtender.isExtended(builder.build()))
+    } finally {
+      CarState.connected = false
+      CarState.projection = null
+    }
+  }
+
+  @Test
+  fun turnsDoNotPopUpWhileOpenMapXIsOnTheCarScreen() {
+    CarState.connected = true
+    CarState.visible = true
+    CarState.projection = projection().put("maneuverId", "s:9")
+    try {
+      val car = androidx.car.app.notification.CarAppExtender(decorated())
+      assertEquals(android.app.NotificationManager.IMPORTANCE_LOW, car.importance)
+    } finally {
+      CarState.visible = false
+      CarState.connected = false
+      CarState.projection = null
     }
   }
 }
