@@ -18,6 +18,7 @@ export interface PublishPortDeps {
   /** Sends a native-to-web message; false when no document can receive it. */
   send(type: "snapshot.update" | "navigation.event", payload: unknown): boolean;
   now: () => number;
+  reconcileSurface?: () => Promise<void>;
 }
 
 export interface PublishPortHandle {
@@ -33,6 +34,8 @@ export function createPublishPort(deps: PublishPortDeps): PublishPortHandle {
 
   const port: PublishPort = {
     snapshot: async (immediate) => {
+      // Independent of bridge availability, including a terminal/no-row state.
+      await deps.reconcileSurface?.().catch(() => undefined);
       const session = await deps.repository.loadActive(deps.now());
       if (!session) return;
 

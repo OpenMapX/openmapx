@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, StatusBar, StyleSheet, View } from "react-native";
+import { Alert, Linking, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
@@ -24,6 +24,7 @@ import {
   createForegroundNavigation,
   type ForegroundNavigation,
 } from "./navigation/createForegroundNavigation";
+import { surfaceCopy } from "./navigation/surfaces/surfaceModel";
 import { createPermissionPrompter, PermissionPrompts } from "./permissions/PermissionPrompts";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
@@ -154,7 +155,37 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     },
     [shell],
   );
-  const incomingLinks = useIncomingLinks(config, deliverLink);
+  const requestNativeEnd = useCallback(
+    (sessionId: string) => {
+      void navigation
+        .then(async (composed) => {
+          if (!composed) return;
+          const copy = surfaceCopy[locale];
+          if ((await composed.activeSession())?.sessionId !== sessionId) {
+            Alert.alert(copy.ended);
+            return;
+          }
+          Alert.alert(copy.end, copy.confirm, [
+            { text: copy.cancel, style: "cancel" },
+            {
+              text: copy.end,
+              style: "destructive",
+              onPress: () => {
+                void composed.coordinator
+                  .stopFromSurface(sessionId)
+                  .then((stopped) => {
+                    if (stopped) setNavigating(false);
+                  })
+                  .catch(() => undefined);
+              },
+            },
+          ]);
+        })
+        .catch(() => undefined);
+    },
+    [navigation, locale, setNavigating],
+  );
+  const incomingLinks = useIncomingLinks(config, deliverLink, requestNativeEnd);
   useEffect(
     () => () => {
       void navigation.then((composed) => composed?.dispose());

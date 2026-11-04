@@ -1,0 +1,12 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'org.openmapx.navigationsurfaces'
+version = '1.0.0'
+android {
+  namespace "expo.modules.openmapxnavigationsurfaces"
+  defaultConfig { versionCode 1; versionName "1.0.0" }
+  testOptions { unitTests { returnDefaultValues = false } }
+}
+dependencies { testImplementation 'junit:junit:4.13.2' }

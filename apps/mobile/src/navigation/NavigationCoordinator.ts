@@ -123,6 +123,21 @@ export class NavigationCoordinator {
     private readonly queue = new SerialExecutor(),
   ) {}
 
+  /** A confirmed OS action cannot act on whichever trip happens to be current. */
+  stopFromSurface(expectedSessionId: string): Promise<boolean> {
+    return this.queue.run(async () => {
+      const current = await this.deps.repository.loadActive(this.deps.clock());
+      if (!current || current.sessionId !== expectedSessionId) return false;
+      const response = await this.terminate(
+        { sessionId: expectedSessionId, messageId: "native-surface" },
+        "stopped",
+        this.deps.clock(),
+      );
+      this.deps.bridge.send(response.type, response.payload, { sessionId: expectedSessionId });
+      return true;
+    });
+  }
+
   // Commands from the page.
 
   async dispatch(command: WebToNativeMessage): Promise<CommandResponse | null> {
@@ -497,7 +512,7 @@ export class NavigationCoordinator {
   // Ending a session.
 
   private async terminate(
-    command: WebToNativeMessage,
+    command: { sessionId?: string; messageId: string },
     finalStatus: "stopped" | "arrived",
     now: number,
   ): Promise<CommandResponse> {
@@ -568,14 +583,20 @@ export class NavigationCoordinator {
     const { repository, processors, clock, diagnostics } = this.deps;
     const now = clock();
     const session = await repository.loadActive(now);
-    if (!session) return;
+    if (!session) {
+      await this.deps.effects.run([{ kind: "reconcile-surface" }]);
+      return;
+    }
 
     if (isMobileSessionExpired(session, now)) {
       const expired = await repository.terminate(session.sessionId, "expired", now);
       await this.deps.effects.run(expired.effects);
       return;
     }
-    if (session.status !== "active") return;
+    if (session.status !== "active") {
+      await this.deps.effects.run([{ kind: "reconcile-surface" }]);
+      return;
+    }
 
     const processor = processors.get(session.kind);
     if (!processor) return;

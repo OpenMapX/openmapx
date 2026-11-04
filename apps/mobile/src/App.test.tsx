@@ -1,6 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { AppState, BackHandler, Linking } from "react-native";
+import { Alert, AppState, BackHandler, Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
@@ -43,7 +43,7 @@ jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
 
 /** A composed foreground navigation graph, standing in for the native one. */
 const mockNavigation = {
-  coordinator: { dispatch: jest.fn() },
+  coordinator: { dispatch: jest.fn(), stopFromSurface: jest.fn() },
   capabilities: jest.fn(),
   activeSession: jest.fn(),
   dispose: jest.fn(),
@@ -101,6 +101,8 @@ beforeEach(async () => {
   // graph fails to compose, as it would on a device missing one of them.
   mockCreateForegroundNavigation.mockReset();
   mockCreateForegroundNavigation.mockRejectedValue(new Error("no native modules"));
+  mockNavigation.coordinator.stopFromSurface.mockReset();
+  mockNavigation.coordinator.stopFromSurface.mockResolvedValue(true);
   mockNavigation.coordinator.dispatch.mockReset();
   mockNavigation.coordinator.dispatch.mockResolvedValue(undefined);
   mockNavigation.capabilities.mockReturnValue(NAVIGATION_CAPABILITIES);
@@ -668,4 +670,38 @@ describe("App WebView protected capabilities", () => {
     expect(mockWebViewProps.setSupportMultipleWindows).toBe(false);
     expect(mockWebViewProps.javaScriptCanOpenWindowsAutomatically).toBe(false);
   });
+});
+
+it("requires native confirmation before ending the exact cold-launch surface owner", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "session-1",
+    revision: 1,
+    kind: "ground",
+  });
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
+  await renderApp();
+  expect(alert).toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  const buttons = alert.mock.calls.at(-1)?.[2];
+  await act(async () => buttons?.find((b) => b.style === "destructive")?.onPress?.());
+  expect(mockNavigation.coordinator.stopFromSurface).toHaveBeenCalledWith("session-1");
+});
+it("does not offer an old End action against a newer session", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "new-session",
+    revision: 1,
+    kind: "ground",
+  });
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=old-session");
+  await renderApp();
+  expect(alert.mock.calls.at(-1)?.[0]).toContain("ended");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
 });

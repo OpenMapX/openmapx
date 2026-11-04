@@ -34,6 +34,7 @@ export interface ExpectedNativeSurface {
 
 export interface GeneratedNativeSurface {
   infoPlist: Record<string, unknown>;
+  navigationExtension?: Record<string, unknown>;
   entitlements: Record<string, unknown>;
   /** Raw `project.pbxproj` text. */
   pbxproj: string;
@@ -88,6 +89,22 @@ function checkIos(
   fail: (message: string) => void,
 ): void {
   const { infoPlist, entitlements } = generated;
+  if (infoPlist.NSSupportsLiveActivities !== true) fail("NSSupportsLiveActivities must be enabled");
+  const extension = generated.navigationExtension;
+  const point = extension?.NSExtension as Record<string, unknown> | undefined;
+  if (
+    point?.NSExtensionPointIdentifier !== "com.apple.widgetkit-extension" ||
+    extension?.CFBundleVersion !== "$(CURRENT_PROJECT_VERSION)" ||
+    extension?.CFBundleShortVersionString !== "$(MARKETING_VERSION)"
+  ) {
+    fail("navigation extension must be WidgetKit with host-derived versions");
+  }
+  if (
+    !generated.pbxproj.includes("APPLICATION_EXTENSION_API_ONLY = YES;") ||
+    !generated.pbxproj.includes("OpenMapXNavigationSurface.appex in Copy Files")
+  ) {
+    fail("navigation extension must be extension-safe and embedded in the app");
+  }
 
   const bundleIds = [
     ...new Set(
@@ -96,10 +113,11 @@ function checkIos(
       ),
     ),
   ];
-  if (bundleIds.length !== 1) {
-    fail(`expected exactly one iOS bundle identifier, found ${bundleIds.length}`);
-  } else if (bundleIds[0] !== expected.appId) {
-    fail(`iOS bundle identifier is ${bundleIds[0]}, expected ${expected.appId}`);
+  const expectedIds = [expected.appId, `${expected.appId}.NavigationSurface`];
+  if (bundleIds.length !== 2 || expectedIds.some((id) => !bundleIds.includes(id))) {
+    fail(
+      `expected exactly app and navigation extension bundle identifiers: ${expectedIds.join(", ")}`,
+    );
   }
 
   const deploymentTargets = [

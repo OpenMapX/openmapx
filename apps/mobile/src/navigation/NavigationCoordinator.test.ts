@@ -975,3 +975,23 @@ describe("native rider action authority", () => {
     },
   );
 });
+
+describe("native surface stop", () => {
+  it("uses durable teardown and emits an unsolicited matching stopped event", async () => {
+    const h = await harness();
+    try {
+      await h.repository.createPreparing(groundSessionFixture({ status: "active" }));
+      expect(await h.coordinator.stopFromSurface("old-session")).toBe(false);
+      expect((await h.repository.loadActive(NOW))?.sessionId).toBe("session-1");
+      expect(await h.coordinator.stopFromSurface("session-1")).toBe(true);
+      expect(await h.repository.loadActive(NOW)).toBeNull();
+      expect(
+        h.sent.some((m) => m.type === "session.stopped" && !("forMessageId" in m.options)),
+      ).toBe(true);
+      expect(h.effectLog).toContain("driver.stop");
+      expect(await h.coordinator.stopFromSurface("session-1")).toBe(false);
+    } finally {
+      await h.close();
+    }
+  });
+});

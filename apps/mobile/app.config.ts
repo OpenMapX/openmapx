@@ -81,6 +81,7 @@ const config: ExpoConfig = {
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_LOCATION",
       "android.permission.POST_NOTIFICATIONS",
+      "android.permission.POST_PROMOTED_NOTIFICATIONS",
       // The get-off alert vibrates, which is the part a rider notices with the
       // phone in a pocket. Declared explicitly rather than arriving silently
       // through expo-notifications' own manifest.
@@ -115,6 +116,7 @@ const config: ExpoConfig = {
     // declaration another plugin added (an unused usage description, a push
     // entitlement, the bundle-identifier URL scheme).
     "./plugins/withOpenMapXNativeConfig",
+    "./plugins/withNavigationSurfaces",
     [
       "expo-build-properties",
       {

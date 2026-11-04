@@ -48,7 +48,13 @@ function androidManifest(): AndroidManifestLike {
 
 function surface(): GeneratedNativeSurface {
   return {
+    navigationExtension: {
+      NSExtension: { NSExtensionPointIdentifier: "com.apple.widgetkit-extension" },
+      CFBundleVersion: "$(CURRENT_PROJECT_VERSION)",
+      CFBundleShortVersionString: "$(MARKETING_VERSION)",
+    },
     infoPlist: {
+      NSSupportsLiveActivities: true,
       WKAppBoundDomains: ["openmapx.com"],
       UIBackgroundModes: ["location"],
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: false },
@@ -65,7 +71,8 @@ function surface(): GeneratedNativeSurface {
         "webcredentials:openmapx.com",
       ],
     },
-    pbxproj: "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app;\nIPHONEOS_DEPLOYMENT_TARGET = 16.4;\n",
+    pbxproj:
+      "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app;\nPRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.NavigationSurface;\nIPHONEOS_DEPLOYMENT_TARGET = 16.4;\nAPPLICATION_EXTENSION_API_ONLY = YES;\nOpenMapXNavigationSurface.appex in Copy Files\n",
     podfileProperties: { "ios.deploymentTarget": "16.4" },
     androidManifest: androidManifest(),
     networkSecurityConfig: '<base-config cleartextTrafficPermitted="false">',
@@ -103,12 +110,14 @@ describe("iOS policy", () => {
     ).toContainEqual(expect.stringContaining("bundle identifier"));
   });
 
-  it("rejects more than one bundle identifier", () => {
+  it("rejects unreviewed extra bundle identifiers", () => {
     expect(
       failuresAfter((value) => {
         value.pbxproj += "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.extra;\n";
       }),
-    ).toContainEqual(expect.stringContaining("exactly one iOS bundle identifier"));
+    ).toContainEqual(
+      expect.stringContaining("exactly app and navigation extension bundle identifiers"),
+    );
   });
 
   it.each([
@@ -402,4 +411,12 @@ describe("storage and component exposure", () => {
       }),
     ).toEqual([]);
   });
+});
+
+it("requires the generated ActivityKit support flag", () => {
+  const value = surface();
+  delete value.infoPlist.NSSupportsLiveActivities;
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("NSSupportsLiveActivities"),
+  );
 });

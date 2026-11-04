@@ -31,6 +31,8 @@ function setup(
   let stopCount = 0;
   let audioStopCount = 0;
   let alertClearCount = 0;
+  let surfaceClears = 0;
+  let surfaceSyncs = 0;
   const store: RecoverySessionStore = {
     inspect: async () => {
       if (options.loadKind === "quarantined") return { kind: "quarantined" };
@@ -62,6 +64,12 @@ function setup(
     clearAlerts: async () => {
       alertClearCount += 1;
     },
+    clearSurface: async () => {
+      surfaceClears++;
+    },
+    reconcileSurface: async () => {
+      surfaceSyncs++;
+    },
     isAppActive: () => options.appActive ?? true,
     now: () => NOW,
     executor: new SerialExecutor(),
@@ -70,6 +78,7 @@ function setup(
     controller,
     ended,
     starts,
+    surfaceCounts: () => ({ surfaceClears, surfaceSyncs }),
     counts: () => ({ stopCount, audioStopCount, alertClearCount }),
   };
 }
@@ -170,4 +179,23 @@ describe("NavigationRecoveryController", () => {
     await recovery;
     expect(inspect).toHaveBeenCalledTimes(1);
   });
+});
+
+it("reconciles surfaces on recovery and resume, and clears suspension/quarantine/no-session", async () => {
+  const running = setup({ driverRunning: true });
+  await running.controller.reconcile("active");
+  expect(running.surfaceCounts().surfaceSyncs).toBe(1);
+  const foreground = setup({
+    session: activeSession({ permissionMode: "foreground-only" }),
+    driverRunning: true,
+  });
+  await foreground.controller.reconcile("background");
+  expect(foreground.surfaceCounts().surfaceClears).toBe(1);
+  await foreground.controller.resume();
+  expect(foreground.surfaceCounts().surfaceSyncs).toBe(1);
+  for (const options of [{ session: null }, { loadKind: "quarantined" as const }]) {
+    const c = setup(options);
+    await c.controller.reconcile("active");
+    expect(c.surfaceCounts().surfaceClears).toBe(1);
+  }
 });

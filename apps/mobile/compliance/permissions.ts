@@ -79,6 +79,12 @@ export const ANDROID_PERMISSIONS: PermissionEntry[] = [
     reason: "The transit get-off alert, and the foreground-service notification.",
   },
   {
+    id: "android.permission.POST_PROMOTED_NOTIFICATIONS",
+    practiceId: "local-alerts",
+    reason:
+      "Requests OS-controlled promotion of the local active-navigation trip card; no remote push or runtime prompt.",
+  },
+  {
     id: "android.permission.VIBRATE",
     practiceId: "local-alerts",
     reason:

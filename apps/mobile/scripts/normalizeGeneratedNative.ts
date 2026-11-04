@@ -16,6 +16,7 @@ import type { GeneratedNativeSurface } from "./generatedNativeChecks.ts";
 export interface NormalizedNativeSurface {
   ios: {
     bundleIdentifiers: string[];
+    navigationExtension: Record<string, unknown> | null;
     deploymentTargets: string[];
     appBoundDomains: string[];
     backgroundModes: string[];
@@ -72,6 +73,7 @@ export function normalizeGeneratedNativeSurface(
 
   return {
     ios: {
+      navigationExtension: generated.navigationExtension ?? null,
       bundleIdentifiers: sortedUnique(
         matchAll(generated.pbxproj, /PRODUCT_BUNDLE_IDENTIFIER = ("?[^";\n]+"?);/g),
       ),

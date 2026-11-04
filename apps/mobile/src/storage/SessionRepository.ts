@@ -56,6 +56,7 @@ import {
  * process recreation these records exist to tolerate.
  */
 export type SessionEffect =
+  | { kind: "reconcile-surface" }
   | { kind: "start-location"; permissionMode: "background" | "foreground-only" }
   | { kind: "stop-location" }
   | { kind: "update-location-profile"; profile: string }
@@ -313,6 +314,7 @@ export class SessionRepository {
             { kind: "stop-location" },
             { kind: "stop-audio" },
             { kind: "cancel-session-alerts", sessionId },
+            { kind: "reconcile-surface" },
           ]
         : [],
     };
