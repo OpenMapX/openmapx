@@ -174,6 +174,13 @@ export/restore and all-groups runs require that variable explicitly:
 pnpm --filter @openmapx/api exec drizzle-kit migrate
 ```
 
+The ingestion group runs the Transitous Python worker directly. In a Python
+environment, install its production dependencies first:
+
+```bash
+python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
+```
+
 The export group and all-groups command also require the real retained-backup
 fixture. Pull the reviewed Dawarich image and generate the archive before running:
 

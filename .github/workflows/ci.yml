@@ -391,6 +391,19 @@ jobs:
       - name: Apply the production database migrations
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
 
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: matrix.group == 'ingestion'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/motis/tools/transitous/requirements.txt
+
+      - name: Install Transitous runner Python dependencies
+        if: matrix.group == 'ingestion'
+        # Catalog workflows execute the real runner on the host in this job.
+        # Its feed-proxy renderer needs the same packages as the runner image.
+        run: python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
+
       # Docker Hub throttles and fails transiently. Pull the pinned digest with
       # backoff here so the fixtures, which forbid pulling themselves, only
       # spend their budget on the fixture itself. No Docker Hub login: the
