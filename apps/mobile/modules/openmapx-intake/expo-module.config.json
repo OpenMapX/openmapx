@@ -1,0 +1,4 @@
+{
+  "platforms": ["android", "apple"],
+  "android": { "modules": ["expo.modules.openmapxintake.OpenMapXIntakeModule"] }
+}
