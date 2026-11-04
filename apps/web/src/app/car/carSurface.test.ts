@@ -4,6 +4,7 @@ import { createFakeMap } from "@/test";
 import {
   applyCarCamera,
   attachCarHost,
+  carFitMargin,
   carLabelSize,
   carLayout,
   createCarSnapshotReceiver,
@@ -162,5 +163,19 @@ describe("car label sizes", () => {
         "icon-size": 1,
       }),
     ).toEqual({ textSize: 16, iconSize: 1.6 });
+  });
+});
+
+describe("car framing margin", () => {
+  const none = { top: 0, right: 0, bottom: 0, left: 0 };
+  it("keeps a generous margin on a full screen and shrinks it in a narrow split", () => {
+    expect(carFitMargin({ width: 1190, height: 700 }, none)).toBe(48);
+    // Split screen: the list on the left, the media panel and controls on the right.
+    expect(
+      carFitMargin({ width: 1190, height: 700 }, { top: 92, right: 512, bottom: 12, left: 440 }),
+    ).toBe(19);
+    expect(
+      carFitMargin({ width: 400, height: 300 }, { top: 0, right: 300, bottom: 0, left: 90 }),
+    ).toBe(8);
   });
 });

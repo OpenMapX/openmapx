@@ -35,6 +35,22 @@ export function carLayout(viewport: CarViewport) {
   return { padding, compact, maxPitch: compact ? 25 : 55 };
 }
 /**
+ * Margin around framed content: generous on a full screen, small when the host leaves
+ * only a narrow strip free (a split screen beside a list and a media panel), so the
+ * content still fills what is visible.
+ */
+export function carFitMargin(
+  size: { width: number; height: number },
+  stable: CarViewport["stable"],
+) {
+  const free = Math.min(
+    size.width - stable.left - stable.right,
+    size.height - stable.top - stable.bottom,
+  );
+  return Math.max(8, Math.min(48, Math.round(free * 0.08)));
+}
+
+/**
  * Frames bounds inside the host's stable area. MapLibre adds fitBounds padding to the
  * camera's own padding, which follow mode leaves large, so that is cleared first.
  */
@@ -45,6 +61,8 @@ export function fitCarBounds(
   duration: number,
 ) {
   map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 }, { programmatic: true });
+  const canvas = map.getCanvas();
+  const margin = carFitMargin({ width: canvas.clientWidth, height: canvas.clientHeight }, stable);
   map.fitBounds(
     [
       [west, south],
@@ -52,10 +70,10 @@ export function fitCarBounds(
     ],
     {
       padding: {
-        top: stable.top + 48,
-        right: stable.right + 48,
-        bottom: stable.bottom + 48,
-        left: stable.left + 48,
+        top: stable.top + margin,
+        right: stable.right + margin,
+        bottom: stable.bottom + margin,
+        left: stable.left + margin,
       },
       pitch: 0,
       bearing: 0,
