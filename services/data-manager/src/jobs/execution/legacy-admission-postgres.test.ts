@@ -1,10 +1,11 @@
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { OpsClient } from "@openmapx/core/ops";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { db, rawSql } from "../../db";
 import { resetOpsClient, runOpsOperation } from "../../ops-client";
 import { StateStore } from "../../state";
@@ -16,6 +17,11 @@ import {
   reconcileLegacyCatalogPreflightRejections,
   withLegacyDataMutation,
 } from "./legacy-mutation";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, statfsSync: vi.fn(actual.statfsSync) };
+});
 
 const enabled =
   Boolean(process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL) ||
@@ -636,6 +642,13 @@ it.skipIf(!enabled)(
       }),
     });
     try {
+      // This case exercises source drift, independently of the runner's free space.
+      vi.mocked(fs.statfsSync).mockReturnValue({
+        ...fs.statfsSync(join(root, "data")),
+        bavail: 2 ** 30,
+        bsize: 4096,
+        ffree: 10 ** 9,
+      });
       writeFileSync(
         join(root, "transitous.lock.json"),
         JSON.stringify({
@@ -721,6 +734,10 @@ it.skipIf(!enabled)(
       await server.close();
       control.closeControlInstallation(agent);
       resetOpsClient();
+      vi.mocked(fs.statfsSync).mockReset();
+      vi.mocked(fs.statfsSync).mockImplementation(
+        (await vi.importActual<typeof fs>("node:fs")).statfsSync,
+      );
       envNames.forEach((name, n) => {
         if (old[n] === undefined) delete process.env[name];
         else process.env[name] = old[n];

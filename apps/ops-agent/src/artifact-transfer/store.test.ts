@@ -114,18 +114,22 @@ it("cleans a conclusively failed upload using its retained original content inod
 it("shutdown waits for the original body and file cleanup before reporting the byte drain complete", async () => {
   const { store } = await fixture();
   const stage = await store.createStage({ ...input(), declaredBytes: 4 });
-  let release!: () => void,
-    cancelCalled = false,
-    drained = false;
-  const canceled = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const body = new ReadableStream<Uint8Array>({
-    cancel() {
-      cancelCalled = true;
-      return canceled;
+  let drained = false;
+  const reading = Promise.withResolvers<void>(),
+    canceling = Promise.withResolvers<void>(),
+    canceled = Promise.withResolvers<void>();
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull() {
+        reading.resolve();
+      },
+      cancel() {
+        canceling.resolve();
+        return canceled.promise;
+      },
     },
-  });
+    { highWaterMark: 0 },
+  );
   const upload = store
     .upload({
       stageId: stage.stageId,
@@ -136,20 +140,22 @@ it("shutdown waits for the original body and file cleanup before reporting the b
       body,
     })
     .catch((error) => error);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await reading.promise;
   const closing = store.drainByteStreams().then(() => {
     drained = true;
   });
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  expect(cancelCalled).toBe(true);
-  expect(drained).toBe(false);
-  expect(store.activeStreams).toBe(1);
-  await expect(store.createStage(input())).rejects.toMatchObject({ statusCode: 503 });
-  await expect(store.deleteStage({ stageId: stage.stageId, ownerId })).rejects.toMatchObject({
-    statusCode: 409,
-  });
-  release();
-  await closing;
+  try {
+    await canceling.promise;
+    expect(drained).toBe(false);
+    expect(store.activeStreams).toBe(1);
+    await expect(store.createStage(input())).rejects.toMatchObject({ statusCode: 503 });
+    await expect(store.deleteStage({ stageId: stage.stageId, ownerId })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+  } finally {
+    canceled.resolve();
+    await closing;
+  }
   expect(await upload).toBeInstanceOf(Error);
   expect(store.activeStreams).toBe(0);
   await store.deleteStage({ stageId: stage.stageId, ownerId });
