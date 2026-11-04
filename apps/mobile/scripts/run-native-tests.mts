@@ -87,6 +87,7 @@ function runKotlinTests(): void {
     [
       ":openmapx-navigation-audio:testDebugUnitTest",
       ":openmapx-navigation-surfaces:testDebugUnitTest",
+      ":openmapx-android-auto:testDebugUnitTest",
       "--no-daemon",
     ],
     androidProject,

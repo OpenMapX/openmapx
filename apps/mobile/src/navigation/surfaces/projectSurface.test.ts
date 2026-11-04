@@ -35,7 +35,8 @@ it("honors imperial units and German copy", () => {
   const s = ground();
   s.locale = "de";
   s.units = "imperial";
-  expect(projectSurface(s, now)?.detail).toContain("mi");
+  // The phone banner's rule: feet below a mile, no thousands separator.
+  expect(projectSurface(s, now)?.detail).toContain("3937 ft");
   s.payload.weakGps = true;
   expect(projectSurface(s, now)?.instruction).toMatch(/GPS/);
 });

@@ -54,6 +54,7 @@ export interface ShellDescription {
     backgroundLocation: boolean;
     localNotifications: boolean;
     speech: boolean;
+    carDestinations?: boolean;
   };
   permission: "not-determined" | "foreground" | "background" | "denied" | "limited";
   locationDriver: "expo" | "native";

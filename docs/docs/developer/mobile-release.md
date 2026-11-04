@@ -50,6 +50,24 @@ pnpm -C apps/mobile test -- App.test.tsx
 The source assertion checks the synchronous shell boundary. It does not inspect a
 store-delivered binary or qualify provider behavior on a device.
 
+## Car support release gate
+
+The [Android Auto implementation](./android-auto.md) uses phone-projected
+navigation templates and a separate service-owned map WebView. It does not add
+Android Automotive OS. CarPlay remains blocked on Apple's entitlement.
+
+Keep the store metadata prohibition on Android Auto claims until the shipping
+candidate is qualified on a real head unit and passes Google Play car review.
+Source tests, DHU runs and local builds do not satisfy those gates. Review all
+applicable navigation quality requirements and recheck target API policy at
+submission time. Preserve evidence for host stop, notifications/foreground-service
+coexistence, vehicle audio, lock/reconnect and the documented car-only cold-start
+boundary. The current start gate accepts a focused phone Activity or an already
+running location service with background permission; it is not general headless
+first-time onboarding. The Android Auto module bundles Material Icons glyph paths
+(Apache-2.0, via MIT `@mui/icons-material`) for turn arrows and lanes; the release
+licence notices must list them.
+
 ## Licensing: the audit, and what it found
 
 `apps/mobile/package.json` declares `AGPL-3.0-or-later`. The repository's licensing

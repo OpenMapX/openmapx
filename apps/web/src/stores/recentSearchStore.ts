@@ -1,4 +1,5 @@
 import { getStorage, useSettingsStore } from "@openmapx/core";
+import { type CarDestination, carDestinationSchema } from "@openmapx/core/navigation";
 import { create } from "zustand";
 
 const STORAGE_KEY = "openmapx:recentSearches";
@@ -33,6 +34,8 @@ function readEntries(): string[] {
 
 interface RecentSearchState {
   entries: string[];
+  destinations: CarDestination[];
+  addDestination: (input: unknown) => void;
   add: (query: string) => void;
   clear: () => void;
   /** Re-read saved queries after the browser storage adapter is configured. */
@@ -41,6 +44,18 @@ interface RecentSearchState {
 
 export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
   entries: [],
+  destinations: [],
+  addDestination: (input) => {
+    if (!useSettingsStore.getState().searchHistoryEnabled) return;
+    const parsed = carDestinationSchema.safeParse(input);
+    if (!parsed.success) return;
+    const destinations = [
+      parsed.data,
+      ...get().destinations.filter((p) => p.id !== parsed.data.id),
+    ].slice(0, 20);
+    getStorage().setString("openmapx:recentDestinations", JSON.stringify(destinations));
+    set({ destinations });
+  },
   add: (query) => {
     if (
       !useSettingsStore.getState().searchHistoryEnabled ||
@@ -56,7 +71,8 @@ export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
   },
   clear: () => {
     getStorage().remove(STORAGE_KEY);
-    set({ entries: [] });
+    getStorage().remove("openmapx:recentDestinations");
+    set({ entries: [], destinations: [] });
   },
   hydrate: () => {
     if (
@@ -66,7 +82,20 @@ export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
       get().clear();
       return;
     }
-    set({ entries: readEntries() });
+    let destinations: CarDestination[] = [];
+    try {
+      const parsed: unknown = JSON.parse(
+        getStorage().getString("openmapx:recentDestinations") ?? "[]",
+      );
+      if (Array.isArray(parsed))
+        destinations = parsed
+          .flatMap((p) => {
+            const result = carDestinationSchema.safeParse(p);
+            return result.success ? [result.data] : [];
+          })
+          .slice(0, 20);
+    } catch {}
+    set({ entries: readEntries(), destinations });
   },
 }));
 
@@ -86,4 +115,17 @@ export function subscribeRecentSearchStorage(): () => void {
   };
   window.addEventListener("storage", onStorage);
   return () => window.removeEventListener("storage", onStorage);
+}
+
+/** An account switch must not republish the previous user's coordinate history. */
+export function scopeRecentDestinations(account: string | null) {
+  const storage = getStorage();
+  const scope = account ?? "signed-out";
+  if (storage.getString("openmapx:recentDestinationAccount") !== scope) {
+    storage.setString("openmapx:recentDestinationAccount", scope);
+    storage.remove("openmapx:recentDestinations");
+    useRecentSearchStore.setState({ destinations: [] });
+    return [];
+  }
+  return useRecentSearchStore.getState().destinations;
 }

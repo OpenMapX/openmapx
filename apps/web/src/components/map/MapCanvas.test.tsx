@@ -175,7 +175,12 @@ vi.mock("maplibre-gl", () => {
     removeControl = vi.fn(() => {
       this.container.querySelector(".maplibregl-ctrl-bottom-left")?.remove();
     });
-    remove = vi.fn();
+    canvas = document.createElement("canvas");
+    getCanvas = () => this.canvas;
+    // Like MapLibre: tearing the map down loses its WebGL context.
+    remove = vi.fn(() => {
+      this.canvas.dispatchEvent(new Event("webglcontextlost"));
+    });
     emitError(error: Error, data: Record<string, unknown> = {}) {
       const listener = this.on.mock.calls.find(([event]: unknown[]) => event === "error")?.[1] as
         | ((event: unknown) => void)
@@ -359,6 +364,23 @@ describe("MapCanvas", () => {
       "Building",
       "shipbuilding-monument",
     ]);
+  });
+
+  it("reports a lost WebGL context on the car surface, but not its own teardown", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const onSurfaceError = vi.fn();
+    const { unmount } = render(<MapCanvas carSurface onSurfaceError={onSurfaceError} />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    const map = maplibreTest.instances[0] as unknown as { canvas: HTMLCanvasElement };
+    await waitFor(() => {
+      map.canvas.dispatchEvent(new Event("webglcontextlost"));
+      expect(onSurfaceError).toHaveBeenCalledWith("webgl-lost");
+    });
+    onSurfaceError.mockClear();
+    unmount();
+    expect(onSurfaceError).not.toHaveBeenCalled();
   });
 
   it("keeps one scale per map through unit and style changes, then removes it", async () => {

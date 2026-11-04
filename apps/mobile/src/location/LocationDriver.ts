@@ -51,6 +51,7 @@ export interface CurrentFixOptions {
 }
 
 export interface LocationDriver {
+  setLocale?(locale: "en" | "de"): void;
   getPermissionState(): Promise<LocationPermissionState>;
   requestForegroundPermission(): Promise<LocationPermissionState>;
   requestBackgroundPermission(): Promise<LocationPermissionState>;

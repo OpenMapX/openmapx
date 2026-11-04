@@ -13,7 +13,10 @@ import {
   type SlottedLayer,
 } from "@/integration-api/map/mapLayerGroup";
 import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
-import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
+import {
+  type DrawnDirectionsRoutes,
+  useDrawnDirectionsRoutes,
+} from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_WIDTHS } from "@/lib/routeStyle";
@@ -45,8 +48,22 @@ const MOTORISED = new Set(["driving", "motorcycle"]);
  * traffic-flow overlay toggle: that toggle governs other roads, and turning it
  * off must not hide a jam on the road the user is about to drive.
  */
-export function RouteTrafficLayer() {
+const NO_PLANNING: DrawnDirectionsRoutes = {
+  routes: [],
+  activeRouteIndex: 0,
+  mode: "driving",
+  isEvMode: false,
+  evStops: [],
+  navigating: true,
+};
+export function RouteTrafficLayer({ navigationOnly = false }: { navigationOnly?: boolean }) {
+  return navigationOnly ? <RouteTrafficContent drawn={NO_PLANNING} /> : <PlanningTraffic />;
+}
+function PlanningTraffic() {
   const drawn = useDrawnDirectionsRoutes();
+  return <RouteTrafficContent drawn={drawn} />;
+}
+function RouteTrafficContent({ drawn }: { drawn: DrawnDirectionsRoutes }) {
   const navStatus = useNavigationStore((s) => s.status);
   const navRoutes = useNavigationStore((s) => s.routes);
   const navActiveIndex = useNavigationStore((s) => s.activeRouteIndex);

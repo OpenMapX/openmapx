@@ -17,6 +17,7 @@ export {
   isApiRequestAbortedError,
 } from "../api/client";
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
+export { fetchGeocode, type GeocodeParams } from "../api/geocoding";
 export {
   fetchTransitPlan,
   fetchTransitStopArea,

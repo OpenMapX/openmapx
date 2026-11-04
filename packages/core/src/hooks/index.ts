@@ -181,6 +181,7 @@ export { useRouteInGermany } from "./useRouteInGermany";
 export {
   type ImportPlacesInput,
   type ImportPlacesResult,
+  useCarSavedPlaces,
   useCreateList,
   useDeleteLabel,
   useDeleteList,

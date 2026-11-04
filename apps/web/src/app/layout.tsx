@@ -20,6 +20,7 @@ import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
 import { AttributionLabelsSync } from "@/lib/attributionLabels";
 import { loadClientEnv } from "@/lib/serverClientEnv";
 import { THEME_COLOR } from "@/lib/themeColor";
+import { PhoneOnly } from "./car/PhoneOnly";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -79,12 +80,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     would be missed if it lived inside the HamburgerMenu's
                     temporary Drawer subtree). Each component is a client
                     island with its own production / serviceWorker guards. */}
-                <AttributionLabelsSync />
-                <OfflineNotice />
-                <SwUpdateNotice />
-                <InstallPromptCapture />
-                <PersistentStorageRequest />
-                <FileOpenHandler />
+                <PhoneOnly>
+                  <AttributionLabelsSync />
+                  <OfflineNotice />
+                  <SwUpdateNotice />
+                  <InstallPromptCapture />
+                  <PersistentStorageRequest />
+                  <FileOpenHandler />
+                </PhoneOnly>
               </Providers>
             </EnvProvider>
           </NextIntlClientProvider>

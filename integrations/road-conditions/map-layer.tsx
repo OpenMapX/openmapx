@@ -1,8 +1,13 @@
 "use client";
 
 import {
+  isLiveNavigationStatus,
+  isNearRoute,
+  type PreparedRouteMatcher,
+  prepareRouteMatcher,
   type RoadConditionEvent,
   roadConditionFeatureToEvent,
+  useNavigationStore,
   useOverlayExclusion,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
@@ -110,10 +115,13 @@ export function buildSources(
   features: RawFeature[],
   locale = "en",
   atMs: number = Date.now(),
+  /** While navigating: only events near this route (see `isNearRoute`). */
+  route: PreparedRouteMatcher | null = null,
 ): RoadConditionDisplaySources {
   const events = features
     .map(roadConditionFeatureToEvent)
-    .filter((event): event is RoadConditionEvent => event !== null);
+    .filter((event): event is RoadConditionEvent => event !== null)
+    .filter((event) => !route || isNearRoute(event.geometry, route));
   const groups = buildRoadConditionDisplayGroups(events);
   const eventsByDisplayId = new Map(
     groups.map((group) => [group.displayId, group.events] as const),
@@ -157,6 +165,18 @@ export function RoadConditionsLayer() {
     visible: layerVisible,
   });
   const hasViewportDataRef = useRef(false);
+  // While a ground trip runs, the overlay shows what is along and beside the route,
+  // not the whole area; outside navigation it stays complete. Shared by the phone and
+  // the Android Auto car map, which both mount this layer.
+  const navRoute = useNavigationStore((s) =>
+    s.kind === "ground" && isLiveNavigationStatus(s.status) ? (s.route?.geometry ?? null) : null,
+  );
+  const corridor = useMemo(
+    () => (navRoute && navRoute.length >= 2 ? prepareRouteMatcher(navRoute) : null),
+    [navRoute],
+  );
+  const corridorRef = useRef(corridor);
+  const lastFeaturesRef = useRef<RawFeature[] | null>(null);
   // Created once (lazy ref init, same pattern as the GeoJSON bridge below) so
   // it exists before any effect runs — including the mount-time fetch, which
   // must be able to record its bbox into the scheduler no matter which effect
@@ -217,6 +237,26 @@ export function RoadConditionsLayer() {
     [mapRef],
   );
 
+  // Builds the area sources from the last response, narrowed to the route corridor
+  // while navigating; re-run when navigation starts, reroutes or ends.
+  const publishFeatures = useCallback(() => {
+    const features = lastFeaturesRef.current;
+    if (!features) return;
+    const { data, eventsByDisplayId } = buildSources(
+      features,
+      localeRef.current,
+      Date.now(),
+      corridorRef.current,
+    );
+    eventsByDisplayIdRef.current = eventsByDisplayId;
+    refreshPopup(false);
+    publishGeoJson([{ sourceId: AREA_LAYERS.source, data }]);
+  }, [publishGeoJson, refreshPopup]);
+  useEffect(() => {
+    corridorRef.current = corridor;
+    publishFeatures();
+  }, [corridor, publishFeatures]);
+
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
     if (!map) {
@@ -252,15 +292,9 @@ export function RoadConditionsLayer() {
       if (!res.ok) throw new Error(`road conditions request failed (${res.status})`);
       const fc = (await res.json()) as { features?: RawFeature[] };
       if (!request.isCurrent()) return;
-      const { data, eventsByDisplayId } = buildSources(
-        Array.isArray(fc.features) ? fc.features : [],
-        localeRef.current,
-        Date.now(),
-      );
-      eventsByDisplayIdRef.current = eventsByDisplayId;
+      lastFeaturesRef.current = Array.isArray(fc.features) ? fc.features : [];
       viewNeedsRefreshRef.current = false;
-      refreshPopup(false);
-      publishGeoJson([{ sourceId: AREA_LAYERS.source, data }]);
+      publishFeatures();
       hasViewportDataRef.current = true;
       setViewportFetchStatus("ready");
     } catch {
@@ -279,7 +313,7 @@ export function RoadConditionsLayer() {
     minSeverity,
     horizon,
     minZoom,
-    publishGeoJson,
+    publishFeatures,
     refreshPopup,
     setViewportFetchStatus,
   ]);
