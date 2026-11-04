@@ -1,9 +1,9 @@
 import { useNavigationStore } from "@openmapx/core";
+import { buildWebVisibilityScript } from "@openmapx/core/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTO_RELOAD_COOLDOWN_MS, markAutoReloaded } from "@/lib/swAutoUpdate";
-import { buildWebVisibilityScript } from "../../../../mobile/src/lifecycle/webVisibility";
 import { SwUpdateNotice } from "./SwUpdateNotice";
 
 let runtime = {

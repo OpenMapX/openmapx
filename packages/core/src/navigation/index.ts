@@ -318,3 +318,4 @@ export type {
   VoiceScheduleConfig,
 } from "./types";
 export { nextVoiceCue } from "./voiceCue";
+export { buildWebVisibilityScript, type ShellAppVisibility } from "./webVisibility";
