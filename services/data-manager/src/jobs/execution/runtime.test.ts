@@ -843,7 +843,9 @@ describe.skipIf(
         expect((await sql.unsafe(`SELECT hits FROM data_manager.${table}`))[0]?.hits).toBe(0);
         expect((await sql.unsafe(`SELECT value FROM data_manager.${prior}`))[0]?.value).toBe(1);
         expect(callbacks).toBe(0);
-        expect(requireExists(lock)).toBe(false);
+        // Durable terminal SQL precedes asynchronous physical lease release.
+        // The worker connection's barrier above does not await that release.
+        await expect.poll(() => requireExists(lock), { timeout: 5000 }).toBe(false);
       } finally {
         proxy.release();
         start();
