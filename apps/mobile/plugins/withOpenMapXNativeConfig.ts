@@ -121,12 +121,17 @@ export const withOpenMapXNativeConfig: ConfigPlugin = (config) => {
   next = withDangerousMod(next, [
     "android",
     (danger) => {
-      const target = join(
-        danger.modRequest.platformProjectRoot,
-        "app/src/main/res/xml/network_security_config.xml",
-      );
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, buildNetworkSecurityConfigXml(input), "utf8");
+      // Android's XML network policy takes precedence over Expo's debug
+      // manifest cleartext flag. Keep Metro exceptions in debug resources so
+      // they cannot reach a release APK/AAB, even after a release prebuild.
+      for (const variant of ["main", "debug"] as const) {
+        const target = join(
+          danger.modRequest.platformProjectRoot,
+          `app/src/${variant}/res/xml/network_security_config.xml`,
+        );
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, buildNetworkSecurityConfigXml(input, variant), "utf8");
+      }
 
       // Expo's `locales` field is platform-agnostic and writes the iOS usage
       // descriptions into Android string resources too, which fails

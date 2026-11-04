@@ -2,15 +2,14 @@
 /**
  * Runs the project-owned native unit tests.
  *
- * Both suites cover the framework-free half of the navigation audio module —
- * cue deduplication, audio-session and audio-focus transitions, locale
- * selection, rate clamping and input bounds. The platform-touching half is
- * exercised by the local Release builds instead, because committing an XCTest
- * or instrumentation target inside a generated project would contradict the
- * rule that those projects are disposable.
+ * Policy suites cover navigation audio cue deduplication, locale/rate/input
+ * bounds and navigation surface payload/ownership fences. Robolectric also
+ * checks Android notification action intents against Android framework types.
+ * OS presentation, delivery and background execution still require device
+ * checks; neither a unit test nor a native build establishes those behaviors.
  *
- *   - Swift: a SwiftPM package that compiles only `NavigationAudioPolicy.swift`.
- *   - Kotlin: a JVM unit-test source set inside the committed module, run
+ *   - Swift: SwiftPM packages compile policy and surface payload sources.
+ *   - Kotlin: JVM unit-test source sets inside the committed modules, run
  *     through the regenerated Gradle project.
  */
 import { execFileSync } from "node:child_process";
@@ -41,6 +40,7 @@ function runSwiftTests(): void {
   }
   console.log("\n[native-tests] swift test — navigation audio policy");
   run("swift", ["test"], audioModule);
+  run("swift", ["test"], join(mobileRoot, "modules/openmapx-navigation-surfaces"));
 }
 
 /**
@@ -84,7 +84,11 @@ function runKotlinTests(): void {
   const androidSdk = resolveAndroidSdk();
   run(
     "./gradlew",
-    [":openmapx-navigation-audio:testDebugUnitTest", "--no-daemon"],
+    [
+      ":openmapx-navigation-audio:testDebugUnitTest",
+      ":openmapx-navigation-surfaces:testDebugUnitTest",
+      "--no-daemon",
+    ],
     androidProject,
     {
       JAVA_HOME: resolveJavaHome(),

@@ -23,6 +23,7 @@ import {
   projectionOf,
   rememberEvent,
 } from "./nativeSnapshotReducer";
+import { applyNativeSurfaceStop } from "./nativeSurfaceStop";
 import { NativeNavigationCommands } from "./navigationCommands";
 
 /**
@@ -124,6 +125,11 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
     }
 
     const unsubscribe = client.subscribe((message) => {
+      if (message.type === "session.stopped") {
+        if (applyNativeSurfaceStop((message.payload as { sessionId?: unknown }).sessionId))
+          setReadModel(null);
+        return;
+      }
       if (message.type === "snapshot.update") {
         const incoming = envelopeOf((message.payload as { snapshot?: unknown }).snapshot);
         if (!incoming) return;

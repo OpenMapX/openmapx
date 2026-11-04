@@ -109,6 +109,13 @@ Use a simulator/emulator available on the host. A local web origin needs matchin
 build-time origin configuration; a store release refuses non-public origins and
 refuses the official identity against another origin.
 
+Android debug builds permit HTTP to Metro only through `10.0.2.2` (the emulator
+host alias), `localhost` and `127.0.0.1`. For a USB-connected physical device,
+forward the selected Metro port with `adb reverse tcp:8081 tcp:8081` and use
+loopback. These exceptions live in the generated debug resource overlay;
+release builds keep the compiled app's transport policy and ship no Metro
+exceptions. A debug build using an HTTPS web origin still needs this overlay.
+
 With the developer probe running:
 
 1. Press **Start**, read the disclosure, then press **Start** again while the app

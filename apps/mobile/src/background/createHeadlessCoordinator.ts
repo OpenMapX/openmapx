@@ -8,6 +8,7 @@ import { createCoordinator } from "../navigation/createCoordinator";
 import type { EffectPorts } from "../navigation/effects";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import { createPublishPort } from "../navigation/snapshots/createPublishPort";
+import { reconcileNavigationSurface } from "../navigation/surfaces/createSurfacePort";
 import { TransitRefreshService } from "../navigation/transit/TransitRefreshService";
 import { getDatabase } from "../storage/database";
 import { SessionRepository } from "../storage/SessionRepository";
@@ -36,6 +37,7 @@ function ports(
   const diagnostics = new DiagnosticRepository(repository);
 
   return {
+    reconcileSurface: () => reconcileNavigationSurface(repository, false),
     driver: {
       // The permission mode changes when delivery stops, not how it is
       // requested: a foreground-only session uses the same cadence and is
@@ -67,6 +69,7 @@ function ports(
     // position from ten minutes ago would only animate the user backwards.
     publish: createPublishPort({
       repository,
+      reconcileSurface: () => reconcileNavigationSurface(repository, false),
       send: () => false,
       now: () => Date.now(),
     }).port,

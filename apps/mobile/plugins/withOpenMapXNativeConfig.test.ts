@@ -219,6 +219,32 @@ describe("Android transforms", () => {
     expect(xml).toContain('<domain includeSubdomains="false">localhost</domain>');
     expect(xml).not.toContain("openmapx.com");
   });
+
+  it.each([RELEASE, { ...DEVELOPMENT, usesCleartextOrigin: false }])(
+    "allows local Metro in the debug resource even with HTTPS app origins",
+    (input) => {
+      const xml = buildNetworkSecurityConfigXml(input, "debug");
+      expect(xml).toContain('<base-config cleartextTrafficPermitted="false">');
+      expect(
+        [...xml.matchAll(/<domain includeSubdomains="false">(.*?)<\/domain>/g)].map(
+          (match) => match[1],
+        ),
+      ).toEqual(["10.0.2.2", "127.0.0.1", "localhost"]);
+      expect(xml).not.toContain('src="user"');
+    },
+  );
+
+  it("preserves the explicit app host alongside debug Metro without duplicates", () => {
+    const xml = buildNetworkSecurityConfigXml(DEVELOPMENT, "debug");
+    expect(xml.match(/<domain includeSubdomains="false">localhost<\/domain>/g)).toHaveLength(1);
+    expect(xml).toContain('<domain includeSubdomains="false">10.0.2.2</domain>');
+  });
+
+  it("never adds Metro hosts to the release resource", () => {
+    const xml = buildNetworkSecurityConfigXml(RELEASE, "main");
+    expect(xml).not.toContain("domain-config");
+    expect(xml).not.toContain('cleartextTrafficPermitted="true"');
+  });
 });
 
 describe("Android string resources", () => {

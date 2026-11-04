@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["OpenMapXNavigationSurfacesModule"] },
+  "android": {
+    "modules": ["expo.modules.openmapxnavigationsurfaces.OpenMapXNavigationSurfacesModule"]
+  }
+}

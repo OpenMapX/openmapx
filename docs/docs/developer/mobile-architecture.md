@@ -273,3 +273,66 @@ and the [Android compatibility correction](https://github.com/mdn/browser-compat
 The native registration follows [Android's map intent contract](https://developer.android.com/guide/components/intents-common#Maps).
 This change does not claim iOS default navigation app support or vendor-specific
 navigation URI schemes.
+
+## Live navigation surfaces
+
+The installed app projects its committed ground or transit session into a bounded
+native trip card, independently of WebView rendering. Foreground and headless
+publication, recovery and teardown reconcile the same process-wide surface
+controller. Its OS queue is separate from the navigation executor, so publishing
+inside a committed effect cannot re-enter and deadlock session mutation. An OS
+failure never prevents location/audio teardown or a durable session commit.
+
+Android has a silent ongoing navigation card alongside Expo Location's mandatory
+tracking indicator. The latter has a private, dynamically allocated ID; OpenMapX
+does not overwrite it or replace the location service. Android 16 promotion is
+requested through the platform compatibility extra, with an ordinary notification
+fallback when the OS or user does not promote it. API 24/25 show a generic card
+because those versions lack notification timeouts. Later versions expire the
+trip card when its observation is stale. A user dismissal suppresses reposting
+for that session; a freshness timeout allows restoration on fresh observations.
+
+On iOS, a project-owned ActivityKit module renders a WidgetKit extension generated
+from committed sources by `withNavigationSurfaces`. It starts only in foreground
+and updates existing activities during location-driven background runtime. It
+uses no push service, app group, shared database or additional background mode.
+The encoded content is limited to 3,000 UTF-8 bytes, and combined static/dynamic
+ActivityKit content is checked below 4 KB. A stale activity hides old guidance;
+expiry can only end it at the next runtime opportunity. Force-quit survival and
+continuous delivery without OS runtime are not promised. ActivityKit's finite
+lifetime can require recreation on a later foreground opportunity.
+
+SDK 57 builds opt in to Expo's single-window scene lifecycle through
+`expo-build-properties` so binaries built with the iOS 27 SDK can launch.
+Location input normalizes Core Location's fractional millisecond timestamps to
+integer epoch milliseconds before ordering and persistence; otherwise a valid
+iOS fix fails the durable session schema and quarantines the trip.
+
+Both surfaces show bounded English/German instructions and session-selected units.
+Ground progress uses the upcoming maneuver, not the step already performed.
+Transit countdowns use captured departure/arrival times, expire at their target,
+and never turn schedule-only confidence into a live position. Schedule-based
+walk, wait and ride progress keeps its phase and stop guidance with an explicit
+schedule label; it expires 60 seconds after the last progress observation or at
+the captured event time, whichever comes first. Coasted fixes do
+not renew GPS freshness. The ordinary update cadence is at most one per five
+seconds; maneuver, session and health changes bypass the throttle. No geometry,
+raw fix, refresh token or credential crosses into the surface payload.
+
+Tapping a card reopens native navigation. End opens an identity-bound native
+confirmation and requires unlocking/foregrounding the app. Only confirmation
+calls `NavigationCoordinator.stopFromSurface`, through the shared session
+executor and the same durable teardown used by the web command. Replayed links
+from Recents or an old card cannot stop a replacement trip. The existing
+`session.stopped` message also clears a matching web read model and releases the
+shell's keep-awake state; older web versions may ignore the unsolicited message.
+
+Lock-screen content follows system privacy settings. Android's private visibility
+and generic public version do not override a user's decision to show sensitive
+notification content. iOS marks the trip text privacy-sensitive, but physical
+device verification remains necessary for user-specific redaction behavior.
+
+For App Store distribution, register and provision the additional
+`<app bundle identifier>.NavigationSurface` App ID. Its versions and signing team
+follow the host application. Simulator builds and screenshots do not establish
+physical-device background/force-quit behavior or App Store signing acceptance.

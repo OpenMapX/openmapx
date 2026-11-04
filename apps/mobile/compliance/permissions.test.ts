@@ -45,7 +45,7 @@ describe("the permitted surface is minimal", () => {
     expect(expectedPermissionSurface().iosBackgroundModes).toEqual(["location"]);
   });
 
-  it("asks for nine Android permissions and no more", () => {
+  it("asks for ten Android permissions and no more", () => {
     expect(expectedPermissionSurface().androidPermissions).toEqual([
       "android.permission.INTERNET",
       "android.permission.ACCESS_COARSE_LOCATION",
@@ -54,6 +54,7 @@ describe("the permitted surface is minimal", () => {
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_LOCATION",
       "android.permission.POST_NOTIFICATIONS",
+      "android.permission.POST_PROMOTED_NOTIFICATIONS",
       "android.permission.VIBRATE",
       "android.permission.RECEIVE_BOOT_COMPLETED",
     ]);

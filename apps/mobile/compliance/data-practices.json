@@ -180,18 +180,18 @@
     },
     {
       "id": "local-alerts",
-      "dataType": "Scheduled local notifications for the get-off alert",
+      "dataType": "Scheduled local get-off alerts and bounded active-navigation summaries",
       "source": "derived",
       "leavesDevice": false,
-      "purpose": "Native transit components can schedule an operating-system notification before the alighting stop, without a remote push service. App.tsx does not currently compose the navigation and notification ports.",
+      "purpose": "The native app schedules local transit alerts and projects committed ground/transit guidance into an Android notification or iOS Live Activity. No remote push service, coordinates, route geometry, refresh token or account credential is included in the surface payload.",
       "linkedToAccount": false,
       "retention": {
         "kind": "bounded",
         "maxHours": 24,
-        "note": "Components reconcile or cancel alerts when legs or sessions end. The proposed 24-hour budget requires verification of OS delivery and cancellation in the candidate runtime."
+        "note": "Local alerts are reconciled with the session. Trip surfaces use observation-based freshness deadlines; iOS marks stale content without runtime and ends it at the next runtime opportunity. OS delivery, retention and cancellation need platform qualification."
       },
       "shared": "none",
-      "userControl": "The intended controls are disabling the alight alert or revoking notification permission. Their installed availability and behavior require qualification.",
+      "userControl": "Users can disable alerts or system notification/Live Activity permission, dismiss the trip card, open navigation, or request an identity-bound native End confirmation. Lock-screen text visibility follows system privacy settings.",
       "appleLabel": {
         "collected": false,
         "category": "Other Data",
