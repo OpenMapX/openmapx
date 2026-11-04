@@ -2803,7 +2803,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       { action: "apply", point: "decision" },
       { action: "update", point: "decision" },
       { action: "update", point: "pull" },
-      { action: "update", point: "family retirement" },
+      { action: "update", point: "prepared family retention" },
       { action: "apply", point: "candidate unlink" },
       { action: "update", point: "candidate unlink" },
       { action: "update", point: "mixed pull" },
@@ -2811,7 +2811,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       { action: "update", point: "candidate write" },
       { action: "update", point: "orphan candidate" },
     ] as const)(
-      "reclaims native coordinator $action after original $point without another admission or save",
+      "preserves native coordinator $action after original $point without another admission or save",
       async ({ action, point }) => {
         const pullBoundary =
           point === "pull" || point === "mixed pull" || point === "canceled pull";
@@ -3030,7 +3030,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const { jobRunner } = await import("../job-runner");
             await jobRunner.cancel(id);
           }
-          if (point === "family retirement") {
+          if (point === "prepared family retention") {
             if (!originalNormal || inspected.privateCoordinatorLifecycle?.action !== "update")
               throw Error("Actual original pull source required");
             const normalPath = join(
@@ -3059,12 +3059,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ).toBe(true);
             const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600000);
             try {
-              let retired = 0;
-              for (let round = 0; round < 24 && existsSync(normalPath); round++)
-                retired += (await reconcileControlRetention(installation, { maxFamilies: 64 }))
-                  .retired;
-              expect(retired).toBeGreaterThan(0);
-              expect(existsSync(normalPath)).toBe(false);
+              // The prepared owner's copied baseline does not replace the
+              // LAST staged source needed by the still-running OLD container.
+              await reconcileControlRetention(installation, { maxFamilies: 64 });
+              expect(readFileSync(normalPath).equals(originalNormal)).toBe(true);
+              const privateRoot = join(host.infraDir, "control-private/ops-agent"),
+                originHash = controlDigest(JSON.parse(originalNormal.toString()).payload.origin),
+                location = JSON.parse(
+                  readFileSync(
+                    join(privateRoot, "retention-locations", `${originHash}.json`),
+                    "utf8",
+                  ),
+                ),
+                progress = JSON.parse(
+                  readFileSync(
+                    join(privateRoot, "retention-families", location.name, "progress.json"),
+                    "utf8",
+                  ),
+                );
+              expect(progress.lastError).toBe(
+                "Error: Last staged coordinator source remains required",
+              );
               expect(existsSync(ownerPath)).toBe(true);
               const proof = ownedCoordinatorPullBaseline(authority),
                 old = await inspectOriginalCoordinatorServices(
@@ -3076,10 +3091,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 old.find((value) => value.serviceId === "data-manager")?.provenance.imageId,
               ).toBe(`sha256:${"b".repeat(64)}`);
               expect(
-                (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
+                (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
                   (value) => value.serviceId === "data-manager",
-                ),
-              ).toBe(false);
+                )?.provenance.imageId,
+              ).toBe(`sha256:${"b".repeat(64)}`);
               expect(
                 JSON.stringify(JSON.parse(readFileSync(ownerPath, "utf8")).payload.coordinatorPull),
               ).toBe(copied);
