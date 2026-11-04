@@ -93,6 +93,8 @@ class OpenMapXAndroidAutoModule : Module() {
         CarState.listener = { sendEvent("onCommand", mapOf("command" to it)) }
         CarState.drain()
         CarState.command("attach")
+        // A JS runtime that attaches later still learns the session is a test drive.
+        if (CarState.autoDrive) CarState.command("auto-drive")
       }
       .runOnQueue(Queues.MAIN)
     OnDestroy { CarState.listener = null }

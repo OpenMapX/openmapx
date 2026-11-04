@@ -397,4 +397,23 @@ class CarMappingTest {
       CarState.projection = null
     }
   }
+
+  @Test
+  fun testDriveModeOffersAReachableGermanDestination() {
+    val context = TestCarContext.createCarContext(RuntimeEnvironment.getApplication())
+    fun titles() =
+      ((DestinationsScreen(context).onGetTemplate() as androidx.car.app.model.ListTemplate)
+          .singleList!!
+          .items)
+        .map { (it as androidx.car.app.model.Row).title.toString() }
+    assertTrue(titles().none { it.contains("Brandenburg") })
+    CarState.autoDrive = true
+    try {
+      assertTrue(titles().any { it.contains("Brandenburg") })
+      val place = AutoDrive.destination("Test")
+      assertEquals(13.3777, place.getJSONArray("coordinates").getDouble(0), 0.0)
+    } finally {
+      CarState.autoDrive = false
+    }
+  }
 }

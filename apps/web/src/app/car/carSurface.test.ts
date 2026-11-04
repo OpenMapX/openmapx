@@ -140,6 +140,11 @@ describe("route preview labels", () => {
     expect(labelA?.[0]).toBeLessThan(6.8);
   });
 
+  it("puts a lone route's label halfway along it", () => {
+    const line = Array.from({ length: 5 }, (_, i) => [6 + i, 50] as [number, number]);
+    expect(routeLabelPoints([{ coordinates: line }])).toEqual([[8, 50]]);
+  });
+
   it("frames all route coordinates", () => {
     expect(
       boundsOf([

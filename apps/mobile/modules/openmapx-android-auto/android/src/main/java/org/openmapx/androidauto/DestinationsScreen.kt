@@ -118,6 +118,14 @@ class DestinationsScreen(context: CarContext, private val search: Boolean = fals
         .build()
     )
     var count = 1
+    if (CarState.autoDrive) {
+      // Reachable from the simulated start in Berlin, whatever the reviewer's location.
+      val place = AutoDrive.destination(carContext.carString(R.string.car_auto_drive_destination))
+      list.addItem(
+        Row.Builder().setTitle(place.optString("label")).setOnClickListener { plan(place) }.build()
+      )
+      count++
+    }
     for (key in listOf("recent", "saved")) {
       val places = CarState.destinations.optJSONArray(key) ?: continue
       for (i in 0 until places.length()) {
@@ -323,4 +331,13 @@ object RouteBadge {
     canvas.drawText(letter(index), size / 2f, baseline, text)
     return bitmap
   }
+}
+
+/** The destination offered in Android Auto's test-drive mode: Brandenburg Gate, Berlin. */
+object AutoDrive {
+  fun destination(label: String): JSONObject =
+    JSONObject()
+      .put("id", "auto-drive")
+      .put("label", label)
+      .put("coordinates", JSONArray().put(13.3777).put(52.5163))
 }

@@ -19,4 +19,5 @@
     <string name="car_search_hint">Enter a place or address.</string>
     <string name="car_search_none">No places found.</string>
     <string name="car_overview">Route overview</string>
+    <string name="car_auto_drive_destination">Test drive: Brandenburg Gate, Berlin</string>
 </resources>

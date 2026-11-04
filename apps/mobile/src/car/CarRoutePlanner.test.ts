@@ -124,3 +124,27 @@ test("maps planning failures to the car's distinct messages", () => {
     "unavailable",
   );
 });
+
+it("plans a test drive from the given origin without reading the phone's position", async () => {
+  const route = groundSessionFixture().payload.startPackage.route;
+  const getCurrentFix = jest.fn();
+  (createLocationDriver as jest.Mock).mockReturnValue({
+    getPermissionState: async () => "background",
+    getCurrentFix,
+  });
+  (fetchDirections as jest.Mock).mockClear().mockResolvedValue({ routes: [route] });
+  const planner = new CarRoutePlanner(
+    "https://example.com",
+    async () => ({}) as never,
+    () => ({ kind: "car", hostAuthorized: true, locationServiceStartAllowed: true }),
+  );
+  await planner.plan(destination, preferences, [13.4105, 52.5219]);
+  expect(getCurrentFix).not.toHaveBeenCalled();
+  expect(fetchDirections).toHaveBeenCalledWith(
+    expect.objectContaining({ waypoints: [[13.4105, 52.5219], destination.coordinates] }),
+    expect.anything(),
+    expect.anything(),
+  );
+  expect(planner.candidateGeometry(0)).toEqual(route.geometry);
+  expect(planner.candidateGeometry(5)).toBeNull();
+});

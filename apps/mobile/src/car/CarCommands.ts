@@ -6,6 +6,13 @@ import type { NavigationCoordinator } from "../navigation/NavigationCoordinator"
 import { CarRoutePlanner, carPlanError } from "./CarRoutePlanner";
 import type { NativeCar } from "./nativeCar";
 
+/**
+ * Where Android Auto's simulated test drive starts (NF-7). The instance's routing and
+ * search cover Germany only, so the drive happens in Berlin wherever the reviewer is.
+ */
+// South of Alexanderplatz: the route to the Brandenburg Gate starts without a U-turn.
+export const AUTO_DRIVE_ORIGIN: [number, number] = [13.4124, 52.5194];
+
 const EMPTY_PREVIEW = JSON.stringify({ v: 1, type: "car-preview", routes: [] });
 /** Start refusals the driver can only resolve on the phone. */
 const PHONE_SETUP_CODES = new Set(["app-not-visible", "permission-denied"]);
@@ -27,6 +34,8 @@ export class CarCommands {
   private connected = true;
   private eligible = false;
   private previewing = false;
+  /** Set only by the host's `onAutoDriveEnabled`; lasts for this car session. */
+  private autoDrive = false;
   private search: AbortController | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private searchGeneration = 0;
@@ -36,6 +45,10 @@ export class CarCommands {
     private readonly webOrigin: string,
     private readonly apiOrigin: string,
     coordinator: () => Promise<NavigationCoordinator>,
+    private readonly prepareAutoDrive: (
+      geometry: readonly (readonly [number, number])[],
+    ) => Promise<void> = async () => {},
+    private readonly stopAutoDrive: () => Promise<void> = async () => {},
   ) {
     this.planner = new CarRoutePlanner(apiOrigin, coordinator, () => ({
       kind: "car",
@@ -61,6 +74,10 @@ export class CarCommands {
   async handle(raw: string): Promise<boolean> {
     if (raw === "destinations-changed") {
       this.cancel();
+      return true;
+    }
+    if (raw === "auto-drive") {
+      this.autoDrive = true;
       return true;
     }
     if (!raw.startsWith("car:")) return false;
@@ -98,8 +115,11 @@ export class CarCommands {
       }, 350);
     }
     if (command.action === "plan") {
+      // A simulated drive needs no location service, so the phone's state does not gate it.
       this.eligible =
-        (await this.native.startEligible()) || (await createLocationDriver().isRunning());
+        this.autoDrive ||
+        (await this.native.startEligible()) ||
+        (await createLocationDriver().isRunning());
       if (!this.connected || generation !== this.commandGeneration) return true;
       if (!this.eligible) {
         await this.native.result(JSON.stringify({ error: "phone-setup" }));
@@ -110,6 +130,7 @@ export class CarCommands {
         routes = await this.planner.plan(
           carDestinationSchema.parse(command.destination),
           preferences,
+          this.autoDrive ? AUTO_DRIVE_ORIGIN : undefined,
         );
       } catch (error) {
         if (this.connected && generation === this.commandGeneration)
@@ -146,14 +167,19 @@ export class CarCommands {
     }
     if (command.action === "start") {
       this.eligible =
-        (await this.native.startEligible()) || (await createLocationDriver().isRunning());
+        this.autoDrive ||
+        (await this.native.startEligible()) ||
+        (await createLocationDriver().isRunning());
       if (!this.connected || generation !== this.commandGeneration) return true;
       if (!this.eligible) {
         await this.native.result(JSON.stringify({ error: "phone-setup" }));
         return true;
       }
+      const geometry = this.autoDrive ? this.planner.candidateGeometry(command.index ?? 0) : null;
+      if (geometry) await this.prepareAutoDrive(geometry);
       const response = await this.planner.start(command.index ?? 0, command.replaceSessionId);
       const started = response?.type === "session.started";
+      if (geometry && !started) await this.stopAutoDrive();
       if (started && this.previewing) {
         // A replayed preview would pull a reconnecting car out of follow mode.
         this.previewing = false;
@@ -186,9 +212,11 @@ export class CarCommands {
       url.searchParams.set("lang", preferences.locale);
       url.searchParams.set("limit", "10");
       // Rank places near the car first, as the phone search does; ~1 km precision suffices.
-      const near = await createLocationDriver()
-        .getCurrentFix({ accuracy: "balanced", maxAgeMs: 300000, timeoutMs: 2000 })
-        .catch(() => null);
+      const near = this.autoDrive
+        ? { coords: AUTO_DRIVE_ORIGIN }
+        : await createLocationDriver()
+            .getCurrentFix({ accuracy: "balanced", maxAgeMs: 300000, timeoutMs: 2000 })
+            .catch(() => null);
       if (near) {
         url.searchParams.set("lat", near.coords[1].toFixed(2));
         url.searchParams.set("lng", near.coords[0].toFixed(2));

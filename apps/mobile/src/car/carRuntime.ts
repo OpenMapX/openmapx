@@ -15,7 +15,7 @@ import { CarCommands } from "./CarCommands";
 import { CarSessionAdapter } from "./CarSessionAdapter";
 import { nativeCar } from "./nativeCar";
 import { publishCarState } from "./publishCarState";
-import { startTestDrive, stopTestDrive } from "./testDrive";
+import { prepareAutoDrive, startTestDrive, stopTestDrive } from "./testDrive";
 
 let runtime: Promise<ForegroundNavigation> | null = null;
 export function carCoordinator() {
@@ -80,7 +80,14 @@ async function runCarRuntime(): Promise<void> {
   const unregister = onForegroundCoordinatorChanged(() => {
     void ensureOwner().catch(() => {});
   });
-  const commands = new CarCommands(native, config.webOrigin, config.apiOrigin, ensureOwner);
+  const commands = new CarCommands(
+    native,
+    config.webOrigin,
+    config.apiOrigin,
+    ensureOwner,
+    async (geometry) => prepareAutoDrive(geometry, await ensureOwner(), repository),
+    stopTestDrive,
+  );
   let detach: () => void = () => {};
   const finished = new Promise<void>((resolve) => {
     detach = resolve;

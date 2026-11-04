@@ -50,6 +50,7 @@ class OpenMapXCarService : CarAppService() {
 
             override fun onDestroy(owner: LifecycleOwner) {
               CarState.connected = false
+              CarState.autoDrive = false
               CarState.command("detach")
               GuidanceNotification.update(carContext, null)
               carContext.stopService(Intent(carContext, CarRuntimeService::class.java))
@@ -142,6 +143,14 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
       object : NavigationManagerCallback {
         override fun onStopNavigation() {
           CarState.command("stop")
+        }
+
+        // NF-7: Play review asks for a simulated drive. The next trip started from the car
+        // replays its route from a fixed point in Germany, where the instance has coverage.
+        override fun onAutoDriveEnabled() {
+          CarState.autoDrive = true
+          CarState.command("auto-drive")
+          CarState.changed()
         }
       },
     )

@@ -7,6 +7,8 @@ object CarState {
   var destinations = JSONObject()
   var result = JSONObject()
   var connected = false
+  /** Android Auto's test-drive mode (`onAutoDriveEnabled`), until the car session ends. */
+  var autoDrive = false
   /** OpenMapX is the app on the car screen (session started), not just connected. */
   var visible = false
   var locale = "en"

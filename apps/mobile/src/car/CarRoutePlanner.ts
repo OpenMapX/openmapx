@@ -45,23 +45,28 @@ export class CarRoutePlanner {
     this.controller?.abort();
     this.candidates = [];
   }
-  async plan(destination: unknown, preferences: CarDestinations) {
+  /** `origin` replaces the phone's position, for Android Auto's simulated test drive. */
+  async plan(destination: unknown, preferences: CarDestinations, origin?: [number, number]) {
     this.cancel();
     const generation = this.generation;
     const target = carDestinationSchema.parse(destination);
     const driver = createLocationDriver();
     if ((await driver.getPermissionState()) !== "background") throw new Error("phone-setup");
-    const fix = await driver.getCurrentFix({
-      accuracy: "precise",
-      maxAgeMs: 10000,
-      timeoutMs: 15000,
-    });
-    if (!fix || Date.now() - fix.timestampMs > 15000 || fix.accuracy > 100)
-      throw new Error("location-unavailable");
+    let start = origin;
+    if (!start) {
+      const fix = await driver.getCurrentFix({
+        accuracy: "precise",
+        maxAgeMs: 10000,
+        timeoutMs: 15000,
+      });
+      if (!fix || Date.now() - fix.timestampMs > 15000 || fix.accuracy > 100)
+        throw new Error("location-unavailable");
+      start = fix.coords;
+    }
     if (generation !== this.generation) return null;
     const controller = new AbortController();
     this.controller = controller;
-    const waypoints: [number, number][] = [fix.coords, target.coordinates];
+    const waypoints: [number, number][] = [start, target.coordinates];
     const client = createApiClient({ baseUrl: this.apiOrigin, credentials: "omit" });
     const result = await fetchDirections(
       {
@@ -111,6 +116,10 @@ export class CarRoutePlanner {
   /** Preview lines of the current candidates, for re-highlighting another one. */
   previewRoutes() {
     return this.candidates.map((candidate) => ({ coordinates: candidate.route.geometry }));
+  }
+  /** The geometry a start of candidate `index` would drive. */
+  candidateGeometry(index: number) {
+    return this.candidates[index]?.route.geometry ?? null;
   }
   async start(index: number, replaceSessionId?: string) {
     const candidate = this.candidates[index];

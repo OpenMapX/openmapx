@@ -127,6 +127,11 @@ export function routeLabelPoints(
   };
   return routes.map((route, index) => {
     const candidates = samples[index]?.length ? samples[index] : route.coordinates;
+    // A lone route has nothing to stand apart from: its badge sits halfway along.
+    if (routes.length === 1) {
+      const middle = candidates[Math.floor(candidates.length / 2)] ?? route.coordinates[0];
+      return [middle[0], middle[1]];
+    }
     const from = Math.floor(candidates.length * 0.2);
     const to = Math.max(from + 1, Math.ceil(candidates.length * 0.8));
     let best = candidates[Math.floor(candidates.length / 2)] ?? route.coordinates[0];

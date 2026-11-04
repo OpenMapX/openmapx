@@ -26,6 +26,10 @@ jest.mock("./CarRoutePlanner", () => ({
     plan: mockPlan,
     start: mockStart,
     cancel: jest.fn(),
+    candidateGeometry: () => [
+      [13.41, 52.52],
+      [13.38, 52.52],
+    ],
     previewRoutes: () => [
       {
         coordinates: [
@@ -43,7 +47,7 @@ jest.mock("./CarRoutePlanner", () => ({
   })),
 }));
 
-import { CarCommands } from "./CarCommands";
+import { AUTO_DRIVE_ORIGIN, CarCommands } from "./CarCommands";
 import type { NativeCar } from "./nativeCar";
 
 function native() {
@@ -161,4 +165,83 @@ test("biases search to the car's rounded position", async () => {
     globalThis.fetch = realFetch;
     jest.useRealTimers();
   }
+});
+
+describe("Android Auto test-drive mode", () => {
+  const route = {
+    coordinates: [
+      [13.41, 52.52],
+      [13.38, 52.52],
+    ],
+    durationSeconds: 300,
+    distanceMeters: 2500,
+  };
+
+  test("plans from Berlin and replays the started route, whatever the phone's state", async () => {
+    const { car, results } = native();
+    (car.startEligible as jest.Mock).mockResolvedValue(false);
+    const prepare = jest.fn(async () => {});
+    const stop = jest.fn(async () => {});
+    const c = new CarCommands(
+      car,
+      "https://openmapx.com",
+      "https://openmapx.com",
+      async () => {
+        throw new Error("unused");
+      },
+      prepare,
+      stop,
+    );
+    expect(await c.handle("auto-drive")).toBe(true);
+    mockPlan.mockResolvedValue([route]);
+    await c.handle(`car:${JSON.stringify({ action: "plan", destination })}`);
+    expect(mockPlan).toHaveBeenCalledWith(destination, mockPreferences, AUTO_DRIVE_ORIGIN);
+    mockStart.mockResolvedValue({ type: "session.started", payload: {} });
+    await c.handle(`car:${JSON.stringify({ action: "start", index: 0 })}`);
+    expect(prepare).toHaveBeenCalledWith([
+      [13.41, 52.52],
+      [13.38, 52.52],
+    ]);
+    expect(results.at(-1)).toEqual({ started: true });
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  test("removes the replay when the start fails", async () => {
+    const { car } = native();
+    const stop = jest.fn(async () => {});
+    const c = new CarCommands(
+      car,
+      "https://openmapx.com",
+      "https://openmapx.com",
+      async () => {
+        throw new Error("unused");
+      },
+      async () => {},
+      stop,
+    );
+    await c.handle("auto-drive");
+    mockStart.mockResolvedValue({ type: "native.error", payload: { code: "session-active" } });
+    await c.handle(`car:${JSON.stringify({ action: "start", index: 0 })}`);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  test("ordinary sessions never replay and plan from the phone's position", async () => {
+    const { car } = native();
+    const prepare = jest.fn(async () => {});
+    const c = new CarCommands(
+      car,
+      "https://openmapx.com",
+      "https://openmapx.com",
+      async () => {
+        throw new Error("unused");
+      },
+      prepare,
+    );
+    mockPlan.mockResolvedValue([route]);
+    await c.handle(`car:${JSON.stringify({ action: "plan", destination })}`);
+    expect(mockPlan).toHaveBeenCalledWith(destination, mockPreferences, undefined);
+    mockStart.mockResolvedValue({ type: "session.started", payload: {} });
+    await c.handle(`car:${JSON.stringify({ action: "start", index: 0 })}`);
+    expect(prepare).not.toHaveBeenCalled();
+  });
 });

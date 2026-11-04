@@ -363,6 +363,24 @@ Permission checks still read real OS grants. This is geometry replay, not a
 physically timed road simulation. Stop or detach restores the production driver;
 it is not a production template action.
 
+**Play review test drive (NF-7).** Release builds implement
+`NavigationManagerCallback.onAutoDriveEnabled`, which Play reviewers trigger with:
+
+```bash
+adb shell dumpsys activity service \
+  org.openmapx.app/org.openmapx.androidauto.OpenMapXCarService AUTO_DRIVE
+```
+
+For the rest of that car session, route planning starts from a fixed point south
+of Alexanderplatz in Berlin instead of the phone's position, search ranks results
+around it, and Destinations offers "Test drive: Brandenburg Gate, Berlin". A trip
+started in this mode replays its route through the same simulated driver, installed
+before the start so no real location service runs. The fixed start exists because
+the official instance's routing and search cover Germany only; a reviewer elsewhere
+would otherwise get no route. The phone still needs location permission ("Allow all
+the time"), because the shared start policy reads real grants. Nothing else can
+switch the mode on, and it ends with the car session.
+
 During acceptance, cover phone-start then connect, car search/recent/saved-place
 preview and start, replacement confirmation, pan/zoom/recenter, reroute loading,
 day/night, split/full, reload, lock, Activity removal without force-stop,

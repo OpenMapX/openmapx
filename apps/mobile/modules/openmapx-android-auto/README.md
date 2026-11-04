@@ -39,7 +39,9 @@ detach releases car resources without issuing a trip stop. Guidance notification
 use `CarAppExtender` and reuse/restore the Expo location notification when present;
 actual notification/service coexistence and vehicle audio need device acceptance.
 The debug Test drive action replays route coordinates through the shared location
-port and keeps permission checks tied to real OS grants.
+port and keeps permission checks tied to real OS grants. Release builds offer the
+same replay only through the host's `onAutoDriveEnabled` (Play review), starting
+from a fixed point in Berlin; see the Android Auto developer guide.
 
 ## Checks and handoff
 

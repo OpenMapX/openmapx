@@ -34,9 +34,18 @@ function productionDriver(): ExpoLocationDriver {
   driver ??= new ExpoLocationDriver(deviceMobileLocale());
   return driver;
 }
-/** A developer-only replacement; permission queries always read real OS grants. */
-export async function setDebugLocationDriver(replacement: LocationDriver | null): Promise<void> {
-  if (!__DEV__) return;
+/**
+ * A simulated replacement, for development builds or Android Auto's test-drive mode
+ * (`hostAutoDrive`, set only by the car host's `onAutoDriveEnabled`). Permission queries
+ * always read real OS grants.
+ */
+export async function setDebugLocationDriver(
+  replacement: LocationDriver | null,
+  options: { hostAutoDrive?: boolean } = {},
+): Promise<void> {
+  if (replacement !== null && !__DEV__ && !options.hostAutoDrive) return;
+  // Removing nothing must not stop the real driver.
+  if (replacement === null && debugDriver === null) return;
   await (debugDriver ?? productionDriver()).stop();
   debugDriver = replacement;
 }

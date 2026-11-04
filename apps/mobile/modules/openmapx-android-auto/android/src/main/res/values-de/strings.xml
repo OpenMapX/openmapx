@@ -19,4 +19,5 @@
     <string name="car_search_hint">Ort oder Adresse eingeben.</string>
     <string name="car_search_none">Keine Orte gefunden.</string>
     <string name="car_overview">Routenübersicht</string>
+    <string name="car_auto_drive_destination">Testfahrt: Brandenburger Tor, Berlin</string>
 </resources>
