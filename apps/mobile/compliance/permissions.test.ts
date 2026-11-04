@@ -18,6 +18,11 @@ const registry = JSON.parse(
 
 const practiceIds = new Set(registry.practices.map((practice) => practice.id));
 const appConfig = readFileSync(resolve(import.meta.dirname, "../app.config.ts"), "utf8");
+// Android Auto's car-app permissions are added by its config plugin, not app.config.ts.
+const carConfig = readFileSync(
+  resolve(import.meta.dirname, "../plugins/carConfigTransforms.ts"),
+  "utf8",
+);
 
 describe("every permission is justified", () => {
   it.each([...IOS_USAGE_DESCRIPTION_KEYS, ...IOS_BACKGROUND_MODES, ...ANDROID_PERMISSIONS])(
@@ -45,8 +50,10 @@ describe("the permitted surface is minimal", () => {
     expect(expectedPermissionSurface().iosBackgroundModes).toEqual(["location"]);
   });
 
-  it("asks for ten Android permissions and no more", () => {
+  it("asks for twelve Android permissions and no more", () => {
     expect(expectedPermissionSurface().androidPermissions).toEqual([
+      "androidx.car.app.NAVIGATION_TEMPLATES",
+      "androidx.car.app.ACCESS_SURFACE",
       "android.permission.INTERNET",
       "android.permission.ACCESS_COARSE_LOCATION",
       "android.permission.ACCESS_FINE_LOCATION",
@@ -63,7 +70,7 @@ describe("the permitted surface is minimal", () => {
 
 describe("the app config matches the permitted surface", () => {
   it.each(ANDROID_PERMISSIONS.map((entry) => entry.id))("declares %s", (id) => {
-    expect(appConfig).toContain(id);
+    expect(id.startsWith("androidx.car.app.") ? carConfig : appConfig).toContain(id);
   });
 
   it("requests no permission the surface does not name", () => {
