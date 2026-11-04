@@ -327,8 +327,13 @@ export function stripIosOnlyStringResources(xml: string): string | null {
 /**
  * Network security configuration. Release denies cleartext for every domain;
  * a development build permits it only for the explicitly compiled host.
+ * The debug source-set overlay additionally allows local Metro connections,
+ * independent of whether the compiled app origins use HTTPS.
  */
-export function buildNetworkSecurityConfigXml(input: NativeConfigInput): string {
+export function buildNetworkSecurityConfigXml(
+  input: NativeConfigInput,
+  variant: "main" | "debug" = "main",
+): string {
   const lines = [
     '<?xml version="1.0" encoding="utf-8"?>',
     "<network-security-config>",
@@ -338,14 +343,21 @@ export function buildNetworkSecurityConfigXml(input: NativeConfigInput): string 
     "    </trust-anchors>",
     "  </base-config>",
   ];
+  const hosts = new Set<string>();
   if (!input.release && input.usesCleartextOrigin) {
-    for (const host of [...new Set([input.webHost, input.apiHost])].sort()) {
-      lines.push(
-        '  <domain-config cleartextTrafficPermitted="true">',
-        `    <domain includeSubdomains="false">${host}</domain>`,
-        "  </domain-config>",
-      );
-    }
+    hosts.add(input.webHost);
+    hosts.add(input.apiHost);
+  }
+  if (variant === "debug") {
+    // Emulator host alias, plus adb-reverse loopback for physical devices.
+    for (const host of ["10.0.2.2", "127.0.0.1", "localhost"]) hosts.add(host);
+  }
+  for (const host of [...hosts].sort()) {
+    lines.push(
+      '  <domain-config cleartextTrafficPermitted="true">',
+      `    <domain includeSubdomains="false">${host}</domain>`,
+      "  </domain-config>",
+    );
   }
   lines.push("</network-security-config>", "");
   return lines.join("\n");
