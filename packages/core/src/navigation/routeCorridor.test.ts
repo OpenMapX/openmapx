@@ -74,6 +74,25 @@ describe("isNearRoute", () => {
     expect(isNearRoute(elsewhere, route)).toBe(false);
   });
 
+  it("stays bounded for huge or malformed geometry from a feed", () => {
+    const huge = {
+      type: "LineString" as const,
+      coordinates: Array.from({ length: 200_000 }, (_, i) => [6 + (i % 2) * 100, 50]),
+    };
+    const start = Date.now();
+    isNearRoute(huge, route);
+    expect(Date.now() - start).toBeLessThan(2000);
+    // Out-of-range coordinates are ignored rather than interpolated across.
+    const malformed = {
+      type: "LineString" as const,
+      coordinates: [
+        [1e9, 1e9],
+        [-1e9, -1e9],
+      ],
+    };
+    expect(isNearRoute(malformed, route)).toBe(false);
+  });
+
   it("treats missing or empty geometry as not near", () => {
     expect(isNearRoute(null, route)).toBe(false);
     expect(isNearRoute({ type: "MultiPoint", coordinates: [] }, route)).toBe(false);

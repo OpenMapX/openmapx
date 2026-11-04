@@ -9,8 +9,13 @@ import { type PreparedRouteMatcher, snapPreparedRoute } from "./routeMatcher";
  */
 export const ROUTE_CORRIDOR_METERS = 1000;
 
-/** Points checked per geometry; beyond this a long line is sampled more sparsely. */
-const MAX_SAMPLES = 400;
+/** Vertices checked per geometry; a geometry with more is thinned evenly. */
+const MAX_VERTICES = 1000;
+/** Interior points added along segments per geometry, whatever its length. */
+const MAX_INTERIOR = 400;
+/** Areas, and vertices per area, tested for containing the route. */
+const MAX_RINGS = 32;
+const MAX_RING_VERTICES = 5000;
 /** Route vertices tested against an area that might enclose the route. */
 const MAX_ROUTE_PROBES = 64;
 const METERS_PER_DEGREE = 111_320;
@@ -48,31 +53,53 @@ function collect(geometry: Geometry, parts: Parts): Parts {
   return parts;
 }
 
-const finite = (p: Position | undefined): p is Position =>
-  !!p && Number.isFinite(p[0]) && Number.isFinite(p[1]);
+/** A usable WGS84 position; feed data outside these ranges is ignored, not sampled. */
+const valid = (p: Position | undefined): p is Position =>
+  !!p &&
+  Number.isFinite(p[0]) &&
+  Number.isFinite(p[1]) &&
+  Math.abs(p[0] as number) <= 180 &&
+  Math.abs(p[1] as number) <= 90;
+
+function thin<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  const step = items.length / max;
+  return Array.from({ length: max }, (_, i) => items[Math.floor(i * step)] as T);
+}
 
 /** Planar metres between two positions; enough to space samples along a segment. */
 function metres(a: Position, b: Position): number {
-  const kx = Math.cos((((a[1] ?? 0) + (b[1] ?? 0)) / 2) * (Math.PI / 180));
+  const kx = Math.cos((((a[1] as number) + (b[1] as number)) / 2) * (Math.PI / 180));
   return (
-    Math.hypot(((b[0] ?? 0) - (a[0] ?? 0)) * kx, (b[1] ?? 0) - (a[1] ?? 0)) * METERS_PER_DEGREE
+    Math.hypot(((b[0] as number) - (a[0] as number)) * kx, (b[1] as number) - (a[1] as number)) *
+    METERS_PER_DEGREE
   );
 }
 
 /**
- * Sample points along every line: vertices plus interior points no further apart than
- * the corridor, so a line crossing the route always has a sample within the corridor.
+ * Sample points: the vertices plus interior points along each segment, spaced at most
+ * one corridor apart so a line crossing the route has a sample within it. The spacing
+ * widens for very long geometry so the total stays bounded before any is generated.
  */
-function samples(parts: Parts, spacing: number): Position[] {
-  const out: Position[] = parts.points.filter(finite);
-  for (const line of parts.lines) {
-    const vertices = line.filter(finite);
-    for (let i = 0; i < vertices.length; i++) {
-      const a = vertices[i] as Position;
+function samples(parts: Parts, corridorMeters: number): Position[] {
+  // Each line keeps its share of the vertex budget (at least its two ends).
+  const total = parts.points.length + parts.lines.reduce((n, line) => n + line.length, 0);
+  const lines = parts.lines.map((line) =>
+    thin(line.filter(valid), Math.max(2, Math.floor((MAX_VERTICES * line.length) / total))),
+  );
+  const out: Position[] = thin(parts.points.filter(valid), MAX_VERTICES);
+  let length = 0;
+  for (const line of lines)
+    for (let i = 1; i < line.length; i++)
+      length += metres(line[i - 1] as Position, line[i] as Position);
+  const spacing = Math.max(corridorMeters, length / MAX_INTERIOR);
+  for (const line of lines) {
+    for (let i = 0; i < line.length; i++) {
+      const a = line[i] as Position;
       out.push(a);
-      const b = vertices[i + 1];
+      const b = line[i + 1];
       if (!b) continue;
-      const steps = Math.floor(metres(a, b) / spacing);
+      const steps = Math.min(MAX_INTERIOR, Math.floor(metres(a, b) / spacing));
       for (let k = 1; k <= steps; k++) {
         const t = k / (steps + 1);
         out.push([
@@ -112,18 +139,14 @@ export function isNearRoute(
 ): boolean {
   if (!geometry) return false;
   const parts = collect(geometry, { points: [], lines: [], rings: [] });
-  let points = samples(parts, corridorMeters);
-  if (points.length > MAX_SAMPLES) {
-    // Very long geometry: coarser spacing keeps the cost bounded.
-    const sparse = (corridorMeters * points.length) / MAX_SAMPLES;
-    points = samples(parts, sparse);
-  }
-  for (const p of points) {
+  for (const p of samples(parts, corridorMeters)) {
     const snap = snapPreparedRoute(route, [p[0], p[1]] as LngLat);
     if (snap.segmentIndex >= 0 && snap.deviationMeters <= corridorMeters) return true;
   }
   // An area the route runs through, with every edge far from it.
-  const outer = parts.rings.filter((ring) => ring.length >= 4);
+  const outer = parts.rings
+    .filter((ring) => ring.length >= 4 && ring.length <= MAX_RING_VERTICES && ring.every(valid))
+    .slice(0, MAX_RINGS);
   if (outer.length === 0) return false;
   const step = Math.max(1, Math.ceil(route.geometry.length / MAX_ROUTE_PROBES));
   for (let i = 0; i < route.geometry.length; i += step) {
