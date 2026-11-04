@@ -93,6 +93,7 @@ beforeEach(async () => {
   mockWebViewProps = {};
   mockInjectedScripts = [];
   jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+  jest.spyOn(Linking, "getInitialURL").mockResolvedValue(null);
   mockRecoveryController.reconcile.mockResolvedValue("session-ended");
   mockRecoveryController.resume.mockResolvedValue("session-started");
   mockRecoveryController.end.mockResolvedValue("session-ended");
@@ -199,6 +200,51 @@ describe("App bridge channel", () => {
       },
     });
   };
+
+  it("delivers an initial geo link only after a successful handshake", async () => {
+    let receiveUrl!: (event: { url: string }) => void;
+    jest.spyOn(Linking, "addEventListener").mockImplementation((_type, handler) => {
+      receiveUrl = handler;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof Linking.addEventListener>;
+    });
+    jest.spyOn(Linking, "getInitialURL").mockResolvedValue("geo:48.137,11.575");
+    await renderApp();
+    expect(decodedMessages().some((m) => m.type === "deep-link.open")).toBe(false);
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "test",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    const intent = decodedMessages().find((m) => m.type === "deep-link.open");
+    expect(intent?.payload?.kind).toBe("map");
+    expect(new URLSearchParams(intent?.payload?.query as string).get("at")).toBe("48.137,11.575");
+    await act(async () => receiveUrl({ url: "geo:52.52,13.405" }));
+    const warm = decodedMessages().filter((m) => m.type === "deep-link.open");
+    expect(warm).toHaveLength(2);
+    expect(new URLSearchParams(warm[1].payload?.query as string).get("at")).toBe("52.52,13.405");
+    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("does not deliver a pending link to an incompatible bridge", async () => {
+    jest.spyOn(Linking, "getInitialURL").mockResolvedValue("geo:48,11");
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "future",
+        minProtocolVersion: MOBILE_PROTOCOL_MAX + 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX + 1,
+      },
+    });
+    expect(decodedMessages().some((m) => m.type === "deep-link.open")).toBe(false);
+  });
 
   it("publishes a channel nonce to the main frame only", async () => {
     await renderApp();

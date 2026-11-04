@@ -16,6 +16,8 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import type { DeepLinkIntent } from "./links/deepLinkIntent";
+import { useIncomingLinks } from "./links/useIncomingLinks";
 import { createLocationDriver } from "./location/createLocationDriver";
 import {
   createForegroundNavigation,
@@ -142,6 +144,13 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     }
     return { shell: composed, navigation };
   }, [config, locale, prompter, services, setNavigating]);
+  const deliverLink = useCallback(
+    (intent: DeepLinkIntent) => {
+      shell.bridge.send("deep-link.open", intent);
+    },
+    [shell],
+  );
+  const incomingLinks = useIncomingLinks(config, deliverLink);
   useEffect(
     () => () => {
       void navigation.then((composed) => composed?.dispose());
@@ -179,11 +188,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       //
       // A reload resets the bridge and nothing else: the native session and the
       // location driver are unaffected, because the page is not their authority.
+      incomingLinks.documentStarted();
       shell.registry.adoptDocument(publishedNonce, Date.now());
       shell.bridge.discardQueue();
       dispatchShell({ type: "document-load-started" });
     },
-    [publishedNonce, shell],
+    [publishedNonce, shell, incomingLinks],
   );
 
   const handleLoadEnd = useCallback(() => {
@@ -194,17 +204,29 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
 
   const handleLoadFailure = useCallback(() => {
     dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
+    incomingLinks.documentStarted();
     shell.registry.invalidate();
     shell.bridge.discardQueue();
-  }, [shell, connectivity.displayed]);
+  }, [shell, connectivity.displayed, incomingLinks]);
 
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
       // Rejections are silent by design: an error reply to an unauthenticated
       // sender is itself an oracle, and every rejection path is side-effect free.
-      void shell.bridge.receive(event.nativeEvent).catch(() => undefined);
+      void shell.bridge
+        .receive(event.nativeEvent)
+        .then((outcome) => {
+          if (
+            outcome.status === "handled" &&
+            outcome.type === "web.hello" &&
+            shell.registry.handshake()
+          ) {
+            incomingLinks.bridgeReady();
+          }
+        })
+        .catch(() => undefined);
     },
-    [shell],
+    [shell, incomingLinks],
   );
 
   const openExternally = useCallback((url: string) => {
