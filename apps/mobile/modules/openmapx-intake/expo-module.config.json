@@ -1,4 +1,10 @@
 {
   "platforms": ["android", "apple"],
-  "android": { "modules": ["expo.modules.openmapxintake.OpenMapXIntakeModule"] }
+  "android": {
+    "modules": ["expo.modules.openmapxintake.OpenMapXIntakeModule"]
+  },
+  "apple": {
+    "modules": ["OpenMapXIntakeModule"],
+    "appDelegateSubscribers": ["IntakeAppDelegateSubscriber"]
+  }
 }
