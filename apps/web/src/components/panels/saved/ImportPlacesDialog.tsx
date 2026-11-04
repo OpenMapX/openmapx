@@ -8,7 +8,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -34,6 +33,7 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import Dialog from "@/components/ui/Dialog";
 import type { ImportList, ImportPlace, ParsedImport } from "@/lib/savedPlacesImport/types";
 
 interface ReviewList extends ImportList {

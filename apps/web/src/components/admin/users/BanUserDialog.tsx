@@ -1,13 +1,13 @@
 "use client";
 
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAccountAction } from "@/lib/admin/accountAdmin";
 import { useAdminToast } from "../shared/AdminToast";
 

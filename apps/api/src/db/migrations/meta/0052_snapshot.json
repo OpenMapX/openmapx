@@ -1,6 +1,6 @@
 {
-  "id": "4f0db974-6157-45b7-9478-54bd16a30cc7",
-  "prevId": "0aa5791a-a19b-489f-9999-00d604524afe",
+  "id": "0aa5791a-a19b-489f-9999-00d604524afe",
+  "prevId": "8ee8e5bb-6745-4202-ba28-f7579b4c192f",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -1668,7 +1684,7 @@
         },
         "installed_extension_standalone_provenance_check": {
           "name": "installed_extension_standalone_provenance_check",
-          "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact','legacy_unknown') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
+          "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
         }
       },
       "isRLSEnabled": false

@@ -221,3 +221,31 @@ it("credits secondary forecast metadata with an empty parent and envelope receip
     secondaryJourney.current = null;
   }
 });
+
+it("shows the departure's train number while the trip lookup has none", () => {
+  secondaryJourney.current = {
+    attributions: [],
+    data: { contributors: [], stops: [] },
+    isLoading: false,
+    isError: false,
+  };
+  try {
+    const markup = renderToStaticMarkup(
+      <TripDetailView
+        departure={{
+          tripId: "oebb:trip",
+          providers: ["oebb"],
+          route: { id: "oebb:s11", shortName: "S11", longName: "DB", mode: "rail" },
+          headsign: "Bergisch Gladbach",
+          scheduledAt: "2026-10-31T17:08:00Z",
+          serviceInfo: { trainNumber: "33192" },
+        }}
+        onBack={() => {}}
+      />,
+    );
+    expect(markup).toContain("Train number");
+    expect(markup).toContain("33192");
+  } finally {
+    secondaryJourney.current = null;
+  }
+});

@@ -38,7 +38,10 @@ const mockDownloadOsm = vi.hoisted(() =>
   })),
 );
 
-vi.mock("../src/jobs/download-osm.js", () => ({ downloadOsm: mockDownloadOsm }));
+vi.mock("../src/jobs/download-osm.js", () => ({
+  backfillOsmHeaders: () => 0,
+  downloadOsm: mockDownloadOsm,
+}));
 
 function observedUnitReceiver(
   kind: import("@openmapx/core/data-manager-contracts").DataExecutionInput["kind"],

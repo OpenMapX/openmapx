@@ -5,7 +5,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -30,6 +29,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useReducer } from "react";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
@@ -76,7 +76,7 @@ export function consumeContributeCallbackMarker(): boolean {
   const url = new URL(window.location.href);
   if (url.searchParams.get(OSM_CONTRIBUTE_CALLBACK_PARAM) !== "1") return false;
   url.searchParams.delete(OSM_CONTRIBUTE_CALLBACK_PARAM);
-  window.history.replaceState(null, "", url.toString());
+  window.history.replaceState(window.history.state, "", url.toString());
   return true;
 }
 

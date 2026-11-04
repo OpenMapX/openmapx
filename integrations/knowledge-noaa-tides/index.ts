@@ -90,6 +90,13 @@ async function refreshLiveReadings(
   return { currentLevel, met };
 }
 
+/**
+ * `@openmapx/noaa-coops-data` requests `datum=MLLW&time_zone=lst_ldt`, which
+ * https://api.tidesandcurrents.noaa.gov/api/prod/ documents as "heights
+ * relative to Mean Lower Low Water (MLLW) for the station" and "Local Standard
+ * Time, corrected for Daylight Saving Time when appropriate, local to the
+ * requested station".
+ */
 async function buildTidesResponse(
   station: NoaaStation,
   distanceKm: number,
@@ -131,6 +138,7 @@ async function buildTidesResponse(
     datum: "MLLW",
     units: "english",
     timeZone: "lst_ldt",
+    heightSource: "prediction",
     currentLevel: live.currentLevel,
     met: live.met,
   };
@@ -191,7 +199,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      const cacheKey = `tides:height-source-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
       const cached = await ctx.cache.get<TidesResponse | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in cached) {
@@ -242,7 +250,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!stationParam && lat && lng) {
       const latNum = Number.parseFloat(lat);
       const lngNum = Number.parseFloat(lng);
-      const cacheKey = `tides:contributors-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
+      const cacheKey = `tides:height-source-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
       await ctx.cache.set(cacheKey, withContributors(result, captured), PREDICTIONS_CACHE_TTL);
     }
 

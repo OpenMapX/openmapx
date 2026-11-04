@@ -9,7 +9,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -21,6 +20,7 @@ import Typography from "@mui/material/Typography";
 import { authClient, oauthProviders } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
@@ -284,6 +284,9 @@ export function AuthDialog({
       const route = systemAuth.routeFor("oauth");
       if (route === "system-browser") {
         const outcome = await systemAuth.runSystemAuth("sign-in");
+        // Unlike the in-page redirect, the page stays here afterwards, so the
+        // form has to become usable again whatever the outcome.
+        setLoading(false);
         if (outcome === "ok") {
           handleAuthenticated();
           return;
@@ -294,6 +297,7 @@ export function AuthDialog({
         return;
       }
       if (route !== "in-page") {
+        setLoading(false);
         setError(tMobile("openInBrowserBody"));
         return;
       }
@@ -322,7 +326,7 @@ export function AuthDialog({
         <IconButton
           onClick={handleClose}
           aria-label={tc("close")}
-          sx={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}
+          sx={{ position: "absolute", top: "calc(8px + var(--omx-safe-top))", right: 8, zIndex: 1 }}
         >
           <CloseIcon />
         </IconButton>

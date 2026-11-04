@@ -17,7 +17,7 @@
     "panel": false
   },
   "backend": {
-    "routes": true
+    "routes": false
   },
   "configSchema": {
     "type": "object",

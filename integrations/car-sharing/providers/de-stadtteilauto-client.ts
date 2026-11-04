@@ -52,13 +52,6 @@ interface DeStadtteilautoVehicle {
   equipment?: { id: string; displayName: string }[];
 }
 
-const ATTRIBUTION = {
-  label: "Stadtteilauto Münster",
-  url: "https://opendata.stadt-muenster.de",
-  license: "dl-de/by-2-0",
-  licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
-};
-
 /** Fetch + cache both endpoints, join vehicle metadata to stations. */
 async function fetchData(
   cache: CacheClient,
@@ -116,10 +109,10 @@ async function fetchData(
         id: `de-stadtteilauto/${raw.id}`,
         name,
         coordinates: [lng, lat] as LngLat,
-        availableVehicles: raw.vehicleCount ?? 0,
+        // The feed lists the vehicles assigned to a station, not those free to book now.
+        capacity: raw.vehicleCount,
         operator: "Stadtteilauto Münster",
         vehicleTypes: ["car"],
-        isActive: (raw.vehicleCount ?? 0) > 0,
         sources: ["de-stadtteilauto"],
         ...(contributors === undefined ? {} : { contributors: snapshotContributors(contributors) }),
         accessMethod: raw.information?.access,
@@ -156,7 +149,6 @@ export const deStadtteilautoClient: RegionalCarSharingClient = {
   name: "Stadtteilauto Münster",
   // Münster center, ~20km radius covers all stations
   regions: [{ center: [7.626, 51.962] as LngLat, radiusKm: 20 }],
-  attribution: ATTRIBUTION,
   async search(
     bbox: BoundingBox,
     cache: CacheClient,

@@ -14,3 +14,16 @@
 
 # npm package page returns 403 to lychee although the documentation link is valid.
 ^https://www\.npmjs\.com/package/@openmapx/extension-sdk$
+
+# OTP GraphQL API endpoints accept POST queries only; a plain GET returns 405/500.
+^https://api\.stadtnavi\.de/otp/gtfs/v1$
+^https://api\.peatus\.ee/routing/v1/routers/estonia/index/graphql$
+^https://mapi\.5t\.torino\.it/routing/v1/routers/mat/index/graphql$
+^https://otp281\.trufi\.app/otp/transmodel/v3$
+
+# Digitransit returns 403 to automated link checkers; the pages work in a browser.
+^https://digitransit\.fi/en/developers/
+
+# German federal law portal times out from GitHub-hosted runners on nearly every
+# run; the pages load normally from a browser in Germany.
+^https://www\.gesetze-im-internet\.de/

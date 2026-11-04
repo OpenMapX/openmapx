@@ -32,7 +32,8 @@ import retains local data so it can be retried.
 
 Save where you parked from three places, all of them a deliberate press:
 
-- right-click (or the context key) on the map → **Save parking here**
+- right-click (or the context key) on the map → **Save parking here**; on a phone,
+  long-press the map → **Save parking**
 - tap the blue location dot → **Save parking**
 - the arrival card after driving or motorcycling → **Save parking**
 
@@ -42,6 +43,31 @@ an expiry countdown. Tapping either opens the parking panel, where you can get
 walking directions back to it, share its coordinates, add a note (up to 500 characters),
 record when parking expires (up to 30 days ahead), move the pin, or clear it. Moving or dragging the pin clears the old address so it is not shown at the new
 location.
+
+## Parking near your destination
+
+After a drive or motorcycle trip, the arrival card suggests up to four car parks
+within 500 m of the destination. **Drive here** routes you to one, and on
+arrival there the card offers the walk to your original destination.
+
+The card leaves out car parks you cannot use now: closed ones, ones outside
+their opening hours, ones for permit holders, residents or other private users,
+and car parks whose every space is kept for a group, such as a single disabled
+bay. A car park that only
+customers may use is marked **Customers only**. Each suggestion shows whether it
+is free or paid and, where the source counts them, its free spaces.
+
+The closest six are then measured: the drive from where you stopped to the car
+park, and the walk from it to your destination. The quickest drive and walk
+together comes first, and the card shows the walk instead of the straight-line
+distance. A car park no route reaches is left out, and one reported full comes
+after the others. Until the routes are measured, or when they cannot be, the
+card orders the car parks by straight-line distance.
+
+When the instance offers the parking data source, the suggestions come from
+it, with live free-space counts and access details. Without that source, or
+when it does not answer, the card uses the mapped parking places from the
+place search, which carries no live counts and lists only named car parks.
 
 ## What OpenMapX does not do here
 

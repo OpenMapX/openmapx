@@ -13,7 +13,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -40,6 +39,7 @@ import {
 } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { MangroveExportDialog } from "./MangroveExportDialog";
 import { MangroveSetupWizard } from "./MangroveSetupWizard";

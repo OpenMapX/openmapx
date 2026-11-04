@@ -155,8 +155,8 @@ export interface TripPlanRequest {
   /**
    * Restrict results to Deutschlandticket-valid connections (regional/local
    * transport only). Each provider applies this its own way — MOTIS intersects
-   * the mode allow-list with the covered set, db-vendo uses DB's native
-   * "Nur Deutschlandticket-Verbindungen" filter.
+   * the mode allow-list with the covered set; a provider that cannot honour it
+   * returns no itineraries or steps aside.
    */
   deutschlandticketOnly?: boolean;
 }
@@ -184,7 +184,12 @@ export type TimetableEntry = Departure;
 export interface TransitProvider {
   readonly id: string;
   readonly prefix: string;
-  readonly coverage: { bbox: BBox } | { all: true };
+  /**
+   * Where the provider has data. `home`, within `bbox`, is the area it is the
+   * source for, such as a regional operator's own network, where `bbox` also
+   * spans the long-distance trains it sells. Its failure leaves gaps only there.
+   */
+  readonly coverage: { bbox: BBox; home?: BBox } | { all: true };
   readonly priority: number;
   /** Operation policy role. */
   readonly role: TransitProviderRole;

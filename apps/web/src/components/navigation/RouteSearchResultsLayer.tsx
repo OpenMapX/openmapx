@@ -15,6 +15,7 @@ import {
   loadBrandMarkerImage,
   loadedBrandMarkerContributors,
 } from "@/components/map/CategoryResultMarkers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
@@ -217,6 +218,17 @@ export function RouteSearchResultsLayer({
       map.off("mouseleave", layers, onLeave);
     };
   }, [mapRef, results, onSelect]);
+
+  // Taps on a pin belong to it: the plain-map click handler, base-map POI
+  // taps and the directions route line all skip interactive layers.
+  useEffect(() => {
+    INTERACTIVE_LAYER_IDS.add(LAYER);
+    INTERACTIVE_LAYER_IDS.add(LABEL_LAYER);
+    return () => {
+      INTERACTIVE_LAYER_IDS.delete(LAYER);
+      INTERACTIVE_LAYER_IDS.delete(LABEL_LAYER);
+    };
+  }, []);
 
   // Closing the search unmounts the layer; take its pins off the map.
   useSlottedLayersCleanup(mapRef, () => ({ layerIds: [LABEL_LAYER, LAYER], sourceIds: [SOURCE] }));

@@ -8,6 +8,19 @@ export const adminServiceDataQuerySchema = z.strictObject({
   osmOffset: z.coerce.number().int().min(0).max(1000000).optional(),
 });
 export const adminServiceDataSchema = dataInspectionResultSchema.extend({
+  /**
+   * How current the OSM extract on disk is, from its header as data-manager
+   * recorded it; absent when the file names no time or data-manager has none.
+   */
+  osmExtract: z
+    .strictObject({
+      timestamp: adminTimestampSchema,
+      replicationUrl: z
+        .url({ protocol: /^https$/ })
+        .max(2048)
+        .optional(),
+    })
+    .optional(),
   fetchedAt: adminTimestampSchema,
 });
 export const adminServiceSelectionSchema = z.strictObject({

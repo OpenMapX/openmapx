@@ -1,10 +1,13 @@
 /** Independent process: a wedged or dead poller cannot prevent traffic expiry. */
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recoverTrafficWriterLock } from "./jobs/traffic/supervision.js";
+import {
+  createMaintenancePauseReporter,
+  recoverTrafficWriterLock,
+} from "./jobs/traffic/supervision.js";
 import { expireLiveTraffic } from "./jobs/traffic/write-live.js";
 import { runOpsOperation } from "./ops-client.js";
 import { entryExecArgv } from "./utils/entry-module.js";
@@ -13,6 +16,10 @@ const dataDir = process.env.DATA_DIR ?? "/data";
 const statePath = join(dataDir, "traffic", "live-state.json");
 const tarPath =
   process.env.TRAFFIC_TAR_PATH?.trim() || join(dataDir, "valhalla", "osm-pbf", "traffic.tar");
+const maintenanceFence = join(dirname(tarPath), ".traffic-maintenance.json");
+const maintenancePause = createMaintenancePauseReporter({
+  report: (message) => console.error(message),
+});
 let worker: ChildProcess | undefined;
 let stopping = false;
 let fenced = false;
@@ -62,7 +69,14 @@ process.on("SIGINT", () => {
 
 while (!stopping) {
   try {
-    if (existsSync(join(dirname(tarPath), ".traffic-maintenance.json"))) {
+    if (existsSync(maintenanceFence)) {
+      maintenancePause.paused(() => {
+        try {
+          return readFileSync(maintenanceFence, "utf8").slice(0, 4096);
+        } catch {
+          return null; // Gone again, or unreadable: reported as an unknown job.
+        }
+      });
       const workerPid = worker?.pid;
       await stopWorker();
       await recoverTrafficWriterLock({
@@ -74,6 +88,7 @@ while (!stopping) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       continue;
     }
+    maintenancePause.resumed();
     await recoverTrafficWriterLock({ statePath, workerPid: worker?.pid, stopWorker });
     if (existsSync(tarPath)) await expireLiveTraffic({ tarPath, statePath });
     if (!worker && !fenced) {

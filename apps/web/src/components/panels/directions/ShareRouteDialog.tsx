@@ -1,7 +1,6 @@
 "use client";
 
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -11,6 +10,7 @@ import { useCreateShare, useDirectionsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ShareLinkCreated } from "@/components/share/ShareLinkCreated";
+import Dialog from "@/components/ui/Dialog";
 
 const SHAREABLE_MODES = new Set(["driving", "walking", "cycling", "motorcycle"]);
 

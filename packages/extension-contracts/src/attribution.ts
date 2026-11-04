@@ -24,11 +24,13 @@ export interface Attribution {
   /** Supplied credit/modification notices, never operator configuration or privacy prose. */
   notes?: string;
   /**
-   * The data this credit covers was changed from what the source published:
-   * normalised, combined or derived (a route shaped by its closures). Credits
-   * say so, as change-notice licences require (CC BY's "indicate if You
-   * modified", the Datenlizenz Deutschland's and GeoNutzV's
-   * "Veränderungshinweis").
+   * The data this credit covers is shown changed from what the source
+   * published, or derived from it: a value it did not state, values of several
+   * sources blended, a redrawn shape, a computed value. Presenting the data in
+   * another form (units, formats, labels of the same meaning) is not a change.
+   * Hosts say so beside the credit where its licence asks a changed version
+   * to (CC BY's "indicate if You modified", the Datenlizenz Deutschland's and
+   * GeoNutzV's "Veränderungshinweis").
    */
   modified?: true;
 }

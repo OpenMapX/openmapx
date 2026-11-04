@@ -29,7 +29,8 @@ export interface AlongRouteOptions {
   speedMps?: number;
 }
 
-const DEFAULT_CORRIDOR_M = 1200;
+/** Max perpendicular distance (m) from the route a stop result may lie. */
+export const ROUTE_SEARCH_CORRIDOR_METERS = 1200;
 const DEFAULT_LOOKAHEAD_M = 25_000;
 const DEFAULT_SPEED_MPS = 14;
 
@@ -62,7 +63,7 @@ export function filterRoutePois<T>(
   currentAlongMeters: number,
   opts: AlongRouteOptions = {},
 ): AlongRoutePoi<T>[] {
-  const corridor = opts.corridorMeters ?? DEFAULT_CORRIDOR_M;
+  const corridor = opts.corridorMeters ?? ROUTE_SEARCH_CORRIDOR_METERS;
   const lookahead = opts.lookaheadMeters ?? DEFAULT_LOOKAHEAD_M;
   const speed = opts.speedMps && opts.speedMps > 0 ? opts.speedMps : DEFAULT_SPEED_MPS;
   const out: AlongRoutePoi<T>[] = [];
@@ -280,4 +281,55 @@ export function progressBucket(alongMeters: number): number {
 /** The along-route distance (metres) a progress bucket starts at. */
 export function progressBucketStartMeters(bucket: number): number {
   return bucket * PROGRESS_BUCKET_METERS;
+}
+
+/** One along-route window of a whole-route search and its padded query boxes. */
+export interface RouteSearchChunk {
+  startMeters: number;
+  endMeters: number;
+  /** One box, or two where the window crosses the antimeridian. */
+  boxes: BoundingBox[];
+}
+
+export interface RouteSearchChunks {
+  chunks: RouteSearchChunk[];
+  /** Length of the whole route. */
+  totalMeters: number;
+  /** Length the chunks cover; shorter than the route once the chunk cap is reached. */
+  searchedMeters: number;
+}
+
+export const ROUTE_SEARCH_CHUNK_METERS = 25_000;
+export const ROUTE_SEARCH_MAX_CHUNKS = 40;
+
+/**
+ * Splits a whole route into consecutive windows for a planning search, each
+ * bounded like the navigation look-ahead box but padded by the full corridor,
+ * so a result the corridor filter keeps is never outside every box. Long
+ * routes stop at `maxChunks` windows, which bounds how many requests one
+ * search can issue.
+ */
+export function routeSearchChunks(
+  geometry: LngLat[],
+  {
+    chunkMeters = ROUTE_SEARCH_CHUNK_METERS,
+    maxChunks = ROUTE_SEARCH_MAX_CHUNKS,
+    padMeters = ROUTE_SEARCH_CORRIDOR_METERS,
+  }: { chunkMeters?: number; maxChunks?: number; padMeters?: number } = {},
+): RouteSearchChunks {
+  if (geometry.length < 2 || !(chunkMeters > 0) || !(maxChunks > 0)) {
+    return { chunks: [], totalMeters: 0, searchedMeters: 0 };
+  }
+  const cumulative = cumulativeDistances(geometry);
+  const totalMeters = cumulative[cumulative.length - 1] ?? 0;
+  if (!Number.isFinite(totalMeters)) return { chunks: [], totalMeters: 0, searchedMeters: 0 };
+  const searchedMeters = Math.min(totalMeters, chunkMeters * maxChunks);
+  const chunks: RouteSearchChunk[] = [];
+  for (let start = 0; start < searchedMeters || chunks.length === 0; start += chunkMeters) {
+    const end = Math.min(start + chunkMeters, searchedMeters);
+    const boxes = paddedRouteAheadBounds(geometry, start, end - start, padMeters);
+    if (!boxes) return { chunks: [], totalMeters: 0, searchedMeters: 0 };
+    chunks.push({ startMeters: start, endMeters: end, boxes });
+  }
+  return { chunks, totalMeters, searchedMeters };
 }

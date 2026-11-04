@@ -656,7 +656,7 @@ describe.each(["direct", "worker"] as const)("writeLiveTraffic overrides %s", (m
     expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
   });
 
-  it("caps a live speed and writes the cap alone when there is no live speed", async () => {
+  it("caps a live speed and leaves a cap with no live speed unwritten", async () => {
     const wayId = 6001;
     const res = await writeLiveTraffic({
       tarPath,
@@ -669,8 +669,8 @@ describe.each(["direct", "worker"] as const)("writeLiveTraffic overrides %s", (m
       ),
     });
 
-    // `written` is 2, not 3: the forward edge's CSV row and its cap merge into
-    // ONE planned record because both key on `level:tile:index`.
+    // The forward edge's CSV row and its cap merge into ONE record because both
+    // key on `level:tile:index`; the backward cap has no measured speed to lower.
     expect(res).toEqual({
       written: 1,
       matched: 1,

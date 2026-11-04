@@ -180,4 +180,16 @@ export interface Place extends Identified, ContributingRecord {
   names?: Record<string, string>;
   /** Actual upstream records that supplied this place or individual properties. */
   provenance?: PlaceProvenance[];
+  /**
+   * The transit stop this place was opened for, such as a stop chosen in
+   * search or a journey's stop. The place's departure board treats it as its
+   * main stop, so departures from it stay unlabelled.
+   */
+  transitStop?: { id?: string; name: string };
+  /**
+   * The name in the place's own language (OSM's `name` tag), when it is known
+   * and `name` may be a translation: "München Hauptbahnhof" for "Munich
+   * Central Station". Transit sources name stops locally.
+   */
+  localName?: string;
 }

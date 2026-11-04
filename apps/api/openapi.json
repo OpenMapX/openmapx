@@ -77291,6 +77291,25 @@
                       ],
                       "additionalProperties": false
                     },
+                    "osmExtract": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        "replicationUrl": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "format": "uri"
+                        }
+                      },
+                      "required": [
+                        "timestamp"
+                      ],
+                      "additionalProperties": false
+                    },
                     "fetchedAt": {
                       "type": "string",
                       "format": "date-time",
@@ -117247,23 +117266,6 @@
         "x-openmapx-source": "packages/integration-framework/src/tides-integration-factory.ts"
       }
     },
-    "/api/integrations/overlay-air-quality/air-quality/stations": {
-      "get": {
-        "operationId": "getApiIntegrationsOverlayAirQualityAirQualityStations",
-        "responses": {
-          "default": {
-            "description": "Integration response"
-          }
-        },
-        "summary": "GET /air-quality/stations (overlay-air-quality)",
-        "tags": [
-          "integrations"
-        ],
-        "x-openmapx-auth": "public",
-        "x-openmapx-integration": "overlay-air-quality",
-        "x-openmapx-source": "integrations/overlay-air-quality/index.ts"
-      }
-    },
     "/api/integrations/overlay-earthquakes/earthquakes": {
       "get": {
         "operationId": "getApiIntegrationsOverlayEarthquakesEarthquakes",
@@ -119933,23 +119935,6 @@
         "x-openmapx-auth": "public",
         "x-openmapx-integration": "transit",
         "x-openmapx-source": "integrations/transit/index.ts"
-      }
-    },
-    "/api/integrations/weather-open-meteo-air-quality/aqi": {
-      "get": {
-        "operationId": "getApiIntegrationsWeatherOpenMeteoAirQualityAqi",
-        "responses": {
-          "default": {
-            "description": "Integration response"
-          }
-        },
-        "summary": "GET /aqi (weather-open-meteo-air-quality)",
-        "tags": [
-          "integrations"
-        ],
-        "x-openmapx-auth": "public",
-        "x-openmapx-integration": "weather-open-meteo-air-quality",
-        "x-openmapx-source": "integrations/weather-open-meteo-air-quality/index.ts"
       }
     },
     "/api/integrations/weather/current": {

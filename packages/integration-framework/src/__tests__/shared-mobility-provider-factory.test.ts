@@ -204,6 +204,24 @@ describe("createSharedMobilityProvider", () => {
     );
   });
 
+  it("maps a cached station without published availability as a station", async () => {
+    const { availableVehicles: _available, isActive: _active, ...staticStation } = station();
+    const shared = definition(
+      vi.fn(async () => ({ stations: [{ ...staticStation, capacity: 3 }], vehicles: [] })),
+    );
+    await shared.search(BBOX);
+    vi.mocked(enrichEnturMobilityItems).mockClear();
+
+    const detail = await shared.getDetail("s:gbfs/provider/station-1");
+
+    expect(detail.data?.id).toBe("s:gbfs/provider/station-1");
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith(
+      [expect.objectContaining({ capacity: 3 })],
+      [],
+      expect.objectContaining({ scope: "detail" }),
+    );
+  });
+
   it("delegates map context selection and marks it as static", async () => {
     const context: DataSourceMapContext = {
       geojson: { type: "FeatureCollection", features: [] },

@@ -39,6 +39,7 @@ import { AmbientPlacesMaintenance } from "./AmbientPlacesMaintenance";
 import { ArtifactTransfersSection } from "./ArtifactTransfersSection";
 import { DataInventorySection } from "./DataInventorySection";
 import { NotablePlacesMaintenance, notablePlacesStatusQueryKey } from "./NotablePlacesMaintenance";
+import { OsmExtractDetails } from "./OsmExtractDetails";
 import { OvertureMaintenance, overtureStatusQueryKey } from "./OvertureMaintenance";
 import { SearchIndexMaintenance, searchIndexStatusQueryKey } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
@@ -429,6 +430,16 @@ function DataWorkflowsView() {
       </Box>
       <Stack spacing={2}>
         <DataOperationsSection apiUrl={apiUrl} />
+        {data.osm.total > 0 && (
+          <Paper variant="outlined" sx={{ p: 2.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+              OSM Planet Data
+            </Typography>
+            <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: "wrap" }}>
+              <OsmExtractDetails extract={data.osmExtract} />
+            </Stack>
+          </Paper>
+        )}
         <DataInventorySection osm={data.osm} builds={data.builds} onPageChange={setOsmOffset} />
         <ArtifactTransfersSection apiUrl={apiUrl} />
         <OvertureMaintenance apiUrl={apiUrl} />

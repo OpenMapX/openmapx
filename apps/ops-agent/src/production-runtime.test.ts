@@ -27,7 +27,7 @@ import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runti
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
 import { createAgentHandoffBindings, createDefaultReleaseEffects } from "./administrative-runtime";
-import { agentHandoffPath, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
+import { readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
 import { startOpsAgentServer } from "./bootstrap";
 import { runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
@@ -207,7 +207,9 @@ describe("assembled production service authority", () => {
     expect(
       existsSync(join(services.releaseStatePaths(host.infraDir).store, "transaction.json")),
     ).toBe(false);
-    expect(existsSync(agentHandoffPath(host.root))).toBe(false);
+    expect(existsSync(services.agentStatePaths(join(host.root, "infra/docker")).handoff)).toBe(
+      false,
+    );
     expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
     await expect(effects.inspect()).resolves.toBeDefined();
     await expect(effects.runtimeInspect?.()).resolves.toEqual({});
@@ -226,9 +228,12 @@ describe("assembled production service authority", () => {
       createdAt: "2026-10-20T00:00:00.000Z",
       updatedAt: "2026-10-20T00:00:00.000Z",
     };
-    mkdirSync(dirname(agentHandoffPath(host.root)), { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(services.agentStatePaths(join(host.root, "infra/docker")).handoff), {
+      recursive: true,
+      mode: 0o700,
+    });
     writeAgentHandoff(host.root, record);
-    const path = agentHandoffPath(host.root),
+    const path = services.agentStatePaths(join(host.root, "infra/docker")).handoff,
       bytes = readFileSync(path);
     const bindings = createAgentHandoffBindings(host.root);
     expect(() => bindings.writeOverlay(record.releaseId, record.digest)).toThrow(OpsNotWiredError);
@@ -302,7 +307,10 @@ describe("assembled production service authority", () => {
         await host.context({ kind: "configuration.inspect" }),
       ),
     ).rejects.toThrow("actual legacy prepared interruption");
-    mkdirSync(dirname(agentHandoffPath(host.root)), { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(services.agentStatePaths(join(host.root, "infra/docker")).handoff), {
+      recursive: true,
+      mode: 0o700,
+    });
     writeAgentHandoff(host.root, {
       version: 1,
       handoffId: "handoff-legacy",
@@ -314,7 +322,7 @@ describe("assembled production service authority", () => {
       updatedAt: "2026-10-20T00:00:00.000Z",
     });
     const transaction = join(directory, "transaction.json"),
-      handoff = agentHandoffPath(host.root);
+      handoff = services.agentStatePaths(join(host.root, "infra/docker")).handoff;
     const before = [readFileSync(transaction), readFileSync(handoff)];
     const restarted = await createProductionOpsRuntime({
       rootDir: host.root,

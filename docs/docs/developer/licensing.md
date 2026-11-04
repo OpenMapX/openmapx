@@ -87,17 +87,40 @@ credits. Put required wording in `attribution`, or in the relevant binding's
 `notice`/`conditions`. A captured receipt's own `notes` is reserved for supplied
 credit or modification notices and remains available in Credits.
 
-Set `modified: true` on a receipt whose data the result shows changed from what
-the source published: normalised into another model, combined with other data,
-or derived from it (a route shaped by a source's closures). Many licences
-require that a changed version's credit say so: CC BY's "indicate if You
-modified the Licensed Material", the Datenlizenz Deutschland's and GeoNutzV's
-"Veränderungshinweis", NLOD's "indicate that changes have been made".
-`buildAttributionPresentation` then adds the viewer's wording ("data
-modified") beside that source's credit, in both the compact notice and the
-full credit; it is a fact about the data, so it is set wherever data was
-changed, whatever the licence. A modified receipt and an unchanged receipt of
-the same source stay separate credits.
+Set `modified: true` on a receipt whose shown data was changed or derived from
+what the source published. Many licences require that a changed version's
+credit say so: CC BY's "indicate if You modified the Licensed Material", the
+Datenlizenz Deutschland's and GeoNutzV's "Veränderungshinweis", NLOD's
+"indicate that changes have been made". Presenting data is not changing it, and
+CC BY allows the technical changes another format needs. So the flag is set
+only where what is shown says something the source did not:
+
+- Presentation, never flagged:
+  - encoding, units, rounding, number and date formatting, reprojection;
+  - tiles and images shown as served;
+  - choosing which records and fields to show;
+  - a stated value shown by a label or icon of the same or a coarser but true
+    meaning, including a standard scale (WMO precipitation intensity, the
+    Douglas sea state);
+  - arithmetic restatement (a delay from two stated times);
+  - drawing a location a source references;
+  - several sources side by side, each with its own credit.
+- Modified: a value mapped to a different meaning (fix such a mapping rather
+  than flag it), a value filled in as if the source stated it, values of
+  several sources blended into one, or a line or area redrawn.
+- Derived: a value computed from the data, such as an assessed severity, an
+  index, an aggregate like a mean rating, or a speed rated against a baseline.
+- Changed upstream: a service an integration reads documents that it changed
+  the original data (a weather provider set with `changesSourceData`). CC BY asks
+  to retain such an indication.
+
+`buildAttributionPresentation` adds the viewer's wording ("data modified")
+beside a flagged credit, in both the compact notice and the full credit, when
+the credit's data licence asks for a change notice. Licences that ask none (CC0,
+DL-DE-ZERO, ODbL, OGL and the others `requiresChangeNotice` lists) get no
+wording. A licence it cannot place, or a credit without one, gets it. A
+modified receipt and an unchanged receipt of the same source stay separate
+credits.
 
 `parseLicensing` validates and copies the complete bounded structure. Unknown
 versions, malformed expressions, undefined custom references and unsafe licence

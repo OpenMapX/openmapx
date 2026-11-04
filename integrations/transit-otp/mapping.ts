@@ -7,6 +7,15 @@ type Itinerary = NonNullable<
   NonNullable<NonNullable<OtpPlanQuery["planConnection"]>["edges"]>[number]
 >["node"];
 type Leg = NonNullable<Itinerary["legs"][number]>;
+/**
+ * Qualify an OTP GTFS id with this provider's prefix, like every other transit
+ * id, so a follow-up lookup is routed to this provider and never to one whose
+ * prefix happens to match the feed id.
+ */
+function otpId(gtfsId: string | null | undefined): string | undefined {
+  return gtfsId ? `otp:${gtfsId}` : undefined;
+}
+
 const knownModes = new Set([
   "BUS",
   "COACH",
@@ -37,7 +46,12 @@ function place(value: Leg["from"]): TripLeg["from"] {
     Math.abs(value.lon) > 180
   )
     throw new OtpError("payload");
-  return { name: value.name ?? "", lat: value.lat, lng: value.lon, stopId: value.stop?.gtfsId };
+  return {
+    name: value.name ?? "",
+    lat: value.lat,
+    lng: value.lon,
+    stopId: otpId(value.stop?.gtfsId),
+  };
 }
 function geometry(encoded: string | null | undefined): TripLeg["geometry"] {
   if (encoded === null || encoded === undefined || encoded === "")
@@ -88,7 +102,7 @@ function leg(value: Leg | null): TripLeg {
           color: value.route.color?.replace(/^#/, ""),
         }
       : undefined,
-    tripId: value.trip?.gtfsId,
+    tripId: otpId(value.trip?.gtfsId),
     cancelled: state?.canceled,
     realtime:
       state?.updated === true ||

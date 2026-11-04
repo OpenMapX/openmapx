@@ -8,9 +8,9 @@ sidebar_position: 10
 
 Mobile artifacts are built locally with Xcode and Gradle. Store enrollment,
 agreements, upload, review and publication are manual account-holder operations.
-The current source is not ready for a navigation store submission: the installed
-foreground bridge has no command dispatcher, signing identities are placeholders,
-and physical beta evidence is absent from the repository.
+The current source is not ready for a navigation store submission: signing
+identities are placeholders, iOS has not run on a device, and physical beta
+evidence is absent from the repository.
 
 ## What the stores unavoidably require
 
@@ -111,10 +111,22 @@ keyPassword=REPLACE_LOCALLY
 ```
 
 Keep it outside the repository. `OPENMAPX_ANDROID_SIGNING_PROPERTIES` overrides
-its path. The script copies it into the ignored generated Android directory;
-protect and clean that copy as secret material. Never pass passwords as command
-arguments. `pnpm mobile:release:android --unsigned` selects an APK rehearsal
-instead of the signed AAB path; it is not a store candidate.
+its path. The script copies it into the ignored generated Android directory as
+`release-signing.properties`; protect and clean that copy as secret material.
+Never pass passwords as command arguments.
+
+A release prebuild signs the release build type from that copy. It never falls
+back to the template's `debug.keystore`, whose password is public, so a release
+built without the file is unsigned. A development build's release variant keeps
+the debug key.
+
+The script builds a signed AAB by default. `--apk` builds a signed APK instead,
+to install directly on a test phone. `--unsigned` builds an unsigned APK as a
+tooling rehearsal. Neither APK is a store candidate.
+
+To test a release build on your own phone, sign it with a separate local test
+key, not the upload key. Android refuses to update an app with an APK signed by
+another key, so uninstall the test build before installing a store build.
 
 ### Version and signing checks before building
 
@@ -126,10 +138,9 @@ absence or an unreadable tag is treated by the script as no previous release.
 
 The descriptor is **not wired into all native build inputs**: `app.config.ts`
 hardcodes `version: "1.0.0"` and does not set iOS `buildNumber` or Android
-`versionCode` from it. The committed Android build script copies signing
-properties but does not itself configure Gradle to consume them. Confirm and fix
-native version/signing configuration before release; a manifest copied from the
-descriptor cannot establish the values or signing identity inside the binary.
+`versionCode` from it. Confirm and fix native version configuration before
+release; a manifest copied from the descriptor cannot establish the values
+inside the binary. Inspect the signing identity of the built artifact as well.
 
 ### What the manifest promises
 

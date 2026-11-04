@@ -5,6 +5,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
+import { closePlaceSelection } from "@/lib/closeSurfaces";
 import { DetailShell } from "./DetailShell";
 import { DETAIL_PANELS, SIDEBAR_PANELS } from "./panel-map";
 import { SidebarShell } from "./SidebarShell";
@@ -77,6 +78,9 @@ export function PanelHost() {
             searchBarClearance={sidebarEntry.searchBarClearance}
             detents={sidebarEntry.detents}
             obscured={Boolean(DetailContent)}
+            // A place swipes away like a card in a native map app; lists and
+            // directions stop at their lowest detent and close explicitly.
+            onDismiss={activeSidebarId === PANEL.PLACE ? closePlaceSelection : undefined}
           >
             <Suspense fallback={null}>
               <sidebarEntry.component />
@@ -86,7 +90,7 @@ export function PanelHost() {
       </HideDuringNavigation>
       {/* A place tapped mid-route still opens its card over the nav overlay. */}
       {DetailContent && (
-        <DetailShell>
+        <DetailShell onDismiss={closePlaceSelection}>
           <Suspense fallback={null}>
             <DetailContent />
           </Suspense>

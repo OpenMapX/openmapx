@@ -105,10 +105,14 @@ unavailable** appears in the details and screen-reader description. A positive
 delay estimate does not establish complete fresh congestion coverage for every
 road.
 
-The interface supports a green duration when fresh, complete evidence confirms
-that current congestion data was used and delay is below the display threshold.
-The current built-in providers do not emit that coverage evidence, so a small or
-zero comparison alone does not produce green.
+A green duration means fresh, complete evidence confirms that current congestion
+data was used for every road of the route and the delay is below the display
+threshold. A self-hosted Valhalla engine provides that evidence for depart-now
+car and motorcycle routes: it walks each route's own path against the same live
+traffic write the route came from and finds a current speed on every road. The
+evidence lasts at most two minutes. A route with any road lacking live speed
+data, a hosted engine, another provider, or a planned departure keeps the normal
+color, so a small or zero comparison alone does not produce green.
 
 Road-update verification is separate from estimated delay. It applies only while
 matching engine and server evidence remains current. Map overlay colors also do
@@ -188,6 +192,40 @@ stop appointments or dwell times. Review the opened route before relying on it.
 The dialog creates a non-expiring snapshot link. It counts against the account's
 100 stored share links. Rotate or delete it under **Account settings → Shared
 links** to revoke the old URL. Anyone with the URL can view the shared inputs.
+
+### Find stops before you start
+
+Driving and motorcycle directions offer **Stops along the route** below the
+route cards, so you can plan a fuel, charging, parking, food, shopping or hotel
+stop, or a specific chain, while still comparing routes. The route cards,
+alternatives and **Start** stay where they are. EV charge plans, trips with stop
+appointments or dwell times, and walking, cycling and transit directions do not
+show it.
+
+The search covers the selected route from its start, in 25 km windows, keeping
+two requests in flight at a time. Results appear in route order with their
+distance from the start, as a list and as pins on the map. Routes longer than
+1,000 km are searched for their first 1,000 km, and the panel says so. Like the
+navigation search, it keeps places within 1,200 m of the route. The panel says
+when part of the route could not be searched (with **Retry**), or when a busy
+area returned only a selection of its places. Fuel and charging stations come
+from map data. A station mapped without a name is listed under its brand or
+operator, here and in other category results.
+
+The straight-line estimate shown for each result does not prove road access.
+Selecting a result plans the trip through that stop by road, with the same
+routing provider and options as the displayed route. The card shows the extra
+time and distance compared with the route you selected, which may be an
+alternative, or that the stop is unreachable. Only the selected result is
+compared.
+
+**Add stop** inserts it as an ordinary waypoint, before the next of your stops
+beyond its position on the route, so your stops keep their order. The routes are
+then recalculated as for any waypoint change; with an intermediate stop the
+engine returns no alternatives. The search stays available for the next stop.
+A route takes at most ten waypoints in total,
+and the panel says when that limit is reached. The search does not check
+opening hours or prices.
 
 ## Elevation
 
@@ -283,6 +321,17 @@ layer choice is respected and restored when the trip ends. Incidents ahead can
 produce approach alerts, including confirmation/negation prompts for compatible
 [crowd reports](./crowd-reports.md).
 
+Approach alerts also cover stop signs, railway level crossings, speed bumps and,
+when enabled where they are legal, speed cameras from OpenStreetMap. An alert is
+shown only when the route drives along the road that carries it, in a direction
+it applies to: a stop sign on a side street, or a speed bump on a parallel street
+or on a road passing under a bridge, is not announced. Stop signs follow their
+mapped `direction` or `stop:direction`. A stop sign mapped on the junction itself
+applies to the junction's minor roads unless it is tagged `stop=all`. An
+undirected one applies toward the nearest junction. Speed bumps are height
+changes (humps, tables, cushions, rumble strips); chicanes and narrowings are not
+announced. These alerts need a connection.
+
 Navigation requires usable location fixes. Browser wake locks, speech, background
 behavior, and connectivity depend on the device. Prepare
 [offline coverage](./offline-maps.md) before losing connectivity; offline
@@ -290,7 +339,8 @@ continuation cannot calculate an arbitrary new route.
 
 ### Search for a stop along your route
 
-Choose a category or chain from **Search along route** while navigating. Discovery
+Choose a category (fuel, charging, restaurants, cafés, supermarkets, parking or
+hotels) or a chain from **Search along route** while navigating. Discovery
 looks up to 25 km ahead within a 1,200 m geometric corridor. That cheap discovery
 step does not prove road access: a nearby service area may be across a motorway
 or river.

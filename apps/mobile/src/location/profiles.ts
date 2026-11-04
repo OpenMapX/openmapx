@@ -78,3 +78,18 @@ export function profileFor(kind: LocationProfileKind): LocationProfile {
   if (!profile) throw new Error(`unknown location profile: ${String(kind)}`);
   return profile;
 }
+
+/**
+ * The profile a session starts with: its travel mode for ground guidance, the
+ * cruising cadence for transit (whose batch logic tightens it near an event).
+ */
+export function initialProfileFor(
+  session:
+    | { kind: "ground"; payload: { startPackage: { mode: string } } }
+    | { kind: "transit" }
+    | null,
+): LocationProfileKind {
+  if (!session || session.kind === "transit") return session ? "transit-cruise" : "driving";
+  const mode = session.payload.startPackage.mode;
+  return mode === "walking" || mode === "cycling" || mode === "motorcycle" ? mode : "driving";
+}

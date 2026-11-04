@@ -63,6 +63,39 @@ const geometry: [number, number][] = [
   [0, 0],
   [0.02, 0],
 ];
+
+/** ~33 m of longitude or latitude at the equator. */
+const ROAD_HALF = 0.0003;
+
+/**
+ * An alert at `lng` on the route's own road (running east, the way's forward
+ * direction), applying both ways unless told otherwise.
+ */
+function onRoad(
+  id: string,
+  lng: number,
+  type: RoadAlertType = "stop",
+  flags: { forward: boolean; backward: boolean } = { forward: true, backward: true },
+) {
+  return {
+    id,
+    type,
+    lat: 0,
+    lng,
+    roads: [
+      {
+        wayId: 1,
+        line: [
+          [lng - ROAD_HALF, 0],
+          [lng, 0],
+          [lng + ROAD_HALF, 0],
+        ] as LngLat[],
+        anchorIndex: 1,
+        ...flags,
+      },
+    ],
+  };
+}
 function makeRoute(overrides: Partial<Route> = {}): Route {
   return {
     distance: 2226,
@@ -155,9 +188,7 @@ describe("useNavAlerts — bounded ahead window", () => {
       // approach window at 20 m/s) — it must still make it into the merged
       // result.
       if (box.west > 0) {
-        return Promise.resolve([
-          { id: "second-window", type: "stop", lat: 0, lng: 0.0009, speedLimitKmh: undefined },
-        ]);
+        return Promise.resolve([onRoad("second-window", 0.0009)]);
       }
       return Promise.resolve([]);
     });
@@ -184,7 +215,7 @@ describe("useNavAlerts — bounded ahead window", () => {
     await flush();
 
     const routeB = makeRoute({ distance: 3000 });
-    fetchRoadAlerts.mockResolvedValue([{ id: "route-b-alert", type: "stop", lat: 0, lng: 0.01 }]);
+    fetchRoadAlerts.mockResolvedValue([onRoad("route-b-alert", 0.01)]);
     act(() => {
       useNavigationStore.getState().applyReroute(routeB);
     });
@@ -193,22 +224,18 @@ describe("useNavAlerts — bounded ahead window", () => {
 
     // Route A's stale response arrives after route B's fetch has already
     // resolved; it must not overwrite route B's data.
-    act(() => releaseA([{ id: "route-a-alert", type: "stop", lat: 0, lng: 0.01 }]));
+    act(() => releaseA([onRoad("route-a-alert", 0.01)]));
     await flush();
 
     expect(result.current?.alert.id).not.toBe("route-a-alert");
   });
 });
 
-describe("useNavAlerts — prepared-matcher projection matches snapToRoute", () => {
+describe("useNavAlerts — road-aware projection", () => {
   const route = makeRoute();
 
-  function place(id: string, lat: number, lng = 0.01) {
-    return { id, type: "stop" as const, lat, lng };
-  }
-
-  it("surfaces an on-route alert with the exact snapToRoute alongMeters", async () => {
-    const alert = place("onroute", 0);
+  it("surfaces an alert on the route's road at the route's own alongMeters", async () => {
+    const alert = onRoad("onroute", 0.01);
     const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
@@ -217,30 +244,46 @@ describe("useNavAlerts — prepared-matcher projection matches snapToRoute", () 
     await flush();
 
     expect(result.current?.alert.id).toBe("onroute");
-    expect(result.current?.alert.alongMeters).toBeCloseTo(expected.alongMeters, 6);
-    expect(result.current?.distanceMeters).toBeCloseTo(90, 6);
+    expect(result.current?.alert.alongMeters).toBeCloseTo(expected.alongMeters, 1);
+    expect(result.current?.distanceMeters).toBeCloseTo(90, 1);
   });
 
-  it("surfaces an alert just inside the 25 m deviation cutoff", async () => {
-    const lat = 20 / 110_540; // ~20 m north of the line
-    const alert = place("inside25", lat);
-    const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
-    expect(expected.deviationMeters).toBeLessThan(25);
-    start(route, expected.alongMeters - 90, 20);
-    fetchRoadAlerts.mockResolvedValue([alert]);
+  it("drops a stop sign on a side street a few metres off the route", async () => {
+    // The side street leaves the route northward at lng 0.01; its stop sign
+    // stands 7 m up it, for traffic heading back down to the route.
+    const north = (metres: number) => metres / 110_574;
+    const sideStreet = {
+      id: "side-street",
+      type: "stop" as const,
+      lat: north(7),
+      lng: 0.01,
+      roads: [
+        {
+          wayId: 2,
+          line: [
+            [0.01, 0],
+            [0.01, north(7)],
+            [0.01, north(40)],
+          ] as LngLat[],
+          anchorIndex: 1,
+          forward: false,
+          backward: true,
+        },
+      ],
+    };
+    const junction = snapToRoute(geometry, [0.01, 0]);
+    start(route, junction.alongMeters - 60, 20);
+    fetchRoadAlerts.mockResolvedValue([sideStreet]);
 
     const { result } = renderHook(() => useNavAlerts(noIncidents));
     await flush();
 
-    expect(result.current?.alert.id).toBe("inside25");
-    expect(result.current?.alert.alongMeters).toBeCloseTo(expected.alongMeters, 6);
+    expect(result.current).toBeNull();
   });
 
-  it("drops an alert just outside the 25 m deviation cutoff", async () => {
-    const lat = 30 / 110_540; // ~30 m north of the line
-    const alert = place("outside25", lat);
+  it("drops an alert on the route's road that applies only to the opposite direction", async () => {
+    const alert = onRoad("oncoming", 0.01, "stop", { forward: false, backward: true });
     const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
-    expect(expected.deviationMeters).toBeGreaterThan(25);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
 
@@ -250,11 +293,9 @@ describe("useNavAlerts — prepared-matcher projection matches snapToRoute", () 
     expect(result.current).toBeNull();
   });
 
-  it("drops an alert far off the route", async () => {
-    const lat = 1000 / 110_540; // ~1000 m north of the line
-    const alert = place("faroff", lat);
+  it("drops an alert whose answer carries no roads", async () => {
+    const alert = { ...onRoad("no-roads", 0.01), roads: [] };
     const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
-    expect(expected.deviationMeters).toBeGreaterThan(25);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
 
@@ -264,9 +305,9 @@ describe("useNavAlerts — prepared-matcher projection matches snapToRoute", () 
     expect(result.current).toBeNull();
   });
 
-  it("resolves duplicate coordinates deterministically, matching snapToRoute's projection", async () => {
-    const a = place("dupA", 0);
-    const b = place("dupB", 0);
+  it("resolves duplicate coordinates deterministically, in input order", async () => {
+    const a = onRoad("dupA", 0.01);
+    const b = onRoad("dupB", 0.01);
     const expected = snapToRoute(geometry, [a.lng, a.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([a, b]);
@@ -277,13 +318,13 @@ describe("useNavAlerts — prepared-matcher projection matches snapToRoute", () 
     // Same priority and distance: input order breaks the tie, matching
     // `selectActiveAlert`'s documented behaviour.
     expect(result.current?.alert.id).toBe("dupA");
-    expect(result.current?.alert.alongMeters).toBeCloseTo(expected.alongMeters, 6);
+    expect(result.current?.alert.alongMeters).toBeCloseTo(expected.alongMeters, 1);
   });
 });
 
 describe("useNavAlerts — speed-camera country gate", () => {
   const route = makeRoute();
-  const camera = { id: "cam1", type: "speed_camera" as const, lat: 0, lng: 0.01 };
+  const camera = onRoad("cam1", 0.01, "speed_camera");
 
   beforeEach(() => {
     const expected = snapToRoute(geometry, [camera.lng, camera.lat]);
@@ -327,7 +368,7 @@ describe("useNavAlerts — approach-window constant tracks the real maximum", ()
   // is the only way to observe its real numbers without duplicating them.
   const MAX_APPROACH_M = 500;
   // Every type the OSM alert endpoint can actually emit — see
-  // `mapAlertElements` in integrations/routing/index.ts. `traffic_incident`
+  // `mapAlertElements` in integrations/routing/navigation-alerts.ts. `traffic_incident`
   // is excluded: it never comes from this endpoint (it arrives via the
   // road-conditions capability instead), and `pedestrian_crossing`/`tunnel`
   // are part of the shared `RoadAlertType` union but are never produced

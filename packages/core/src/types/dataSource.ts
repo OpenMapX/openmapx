@@ -126,7 +126,17 @@ export interface DataSourceResult extends ContributingRecord {
   /** Live EVSE availability rollup, present only for live-covered results. */
   availability?: { available: number; total: number };
   summary?: I18nToken;
+  /**
+   * The shorter text the map shows under the name at close zoom, when it
+   * differs from `summary` (e.g. one fuel grade's price rather than every
+   * grade's); the map shows `summary` when it is absent.
+   */
+  labelSummary?: I18nToken;
   operator?: string;
+  /** Whether using the item costs money, when the source says. */
+  fee?: "free" | "paid";
+  /** Who may use the item, when the source says; absent when it does not. */
+  access?: "public" | "customers" | "permit" | "private" | "restricted";
   branding?: DataSourceBranding;
   mapContext?: DataSourceMapContextSelection;
   /** Structured numeric values for client-side sorting (e.g., fuel prices by type). */

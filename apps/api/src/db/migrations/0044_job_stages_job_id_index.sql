@@ -1,0 +1,1 @@
+CREATE INDEX "job_stages_job_id_idx" ON "data_manager"."job_stages" USING btree ("job_id");

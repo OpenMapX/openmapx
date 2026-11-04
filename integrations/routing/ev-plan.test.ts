@@ -259,6 +259,53 @@ describe("runEvPlan", () => {
     });
     // still produces a plan (or a clean warning) rather than throwing
     expect(result.warnings.length + result.stops.length).toBeGreaterThan(0);
+    expect(result.warnings).toContainEqual({ kind: "straight-line-distances" });
+  });
+
+  it("says nothing of straight-line distances when the road matrix answered", async () => {
+    const ctx = fakeCtx();
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(result.stops.length).toBeGreaterThanOrEqual(1);
+    expect(result.warnings.some((w) => w.kind === "straight-line-distances")).toBe(false);
+  });
+
+  it("marks a stop costed on a member or roaming tariff, and not one costed ad hoc", async () => {
+    const plan = async (tariff: EnergyTariff) => {
+      const ctx = fakeCtx({
+        getIntegrationsByDomain: chargingDomain(
+          sitesProvider([chargingSite({ tariffs: [tariff] })]),
+        ),
+      });
+      const getProviders = (): ResolvedRoutingProvider[] => [
+        { integrationId: "valhalla", provider: ctx._valhalla },
+      ];
+      return runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+        waypoints: [
+          [0, 50],
+          [2.7, 50],
+        ],
+        vehicleId: "tesla:model_3:2024:model_3_long_range",
+        socStartPct: 40,
+        avoidClosures: false,
+      });
+    };
+    const member = await plan({ ...energyTariff("m", 0.29), type: "profile_cheap" });
+    expect(member.stops[0].contractTariff).toBe(true);
+    const adHoc = await plan({ ...energyTariff("a", 0.59), type: "ad_hoc" });
+    expect(adHoc.stops[0]).not.toHaveProperty("contractTariff");
+    const untyped = await plan(energyTariff("u", 0.59));
+    expect(untyped.stops[0]).not.toHaveProperty("contractTariff");
   });
 
   it("omits trip cost when a planned stop has no tariff, even with a home price", async () => {

@@ -47,26 +47,86 @@ function stationCurrency(station: FuelStation): string | undefined {
 }
 
 /**
- * Each grade's lowest per-litre price among its self-service or standard
- * products. Served-pump prices, lorry-only pumps and per-kg/m³ grades are left
- * out: a sort by price must compare what a driver pays at the pump they work
- * themselves.
+ * The products a price comparison counts: priced per litre in the station's
+ * currency, at a self-service or standard pump cars can use. Served-pump
+ * prices, lorry-only pumps and per-kg/m³ grades are left out: a sort by price
+ * must compare what a driver pays at the pump they work themselves.
  */
+function comparableProducts(station: FuelStation, currency: string | undefined): PricedProduct[] {
+  return station.products.filter(
+    (product): product is PricedProduct =>
+      isPriced(product) &&
+      product.per === "L" &&
+      product.service !== "served" &&
+      product.vehicleScope !== "hgv" &&
+      product.price.currency === currency,
+  );
+}
+
+/** The cheapest of a grade's comparable products, if any. */
+function cheapestOf(products: readonly PricedProduct[], grade: string): PricedProduct | undefined {
+  let best: PricedProduct | undefined;
+  for (const product of products) {
+    if (product.grade !== grade) continue;
+    if (best === undefined || product.price.amount < best.price.amount) best = product;
+  }
+  return best;
+}
+
+/** Each grade's lowest comparable price, the values the result list sorts by. */
 function buildSortValues(
   station: FuelStation,
   currency: string | undefined,
 ): Record<string, number> | undefined {
   const values: Record<string, number> = {};
-  for (const product of station.products) {
-    if (!isPriced(product) || product.per !== "L" || product.service === "served") continue;
-    if (product.vehicleScope === "hgv") continue;
-    if (product.price.currency !== currency) continue;
+  for (const product of comparableProducts(station, currency)) {
     const current = values[product.grade];
     if (current === undefined || product.price.amount < current) {
       values[product.grade] = product.price.amount;
     }
   }
   return Object.keys(values).length > 0 ? values : undefined;
+}
+
+/**
+ * The grade a search compares stations by: the first grade asked for, else
+ * diesel. The result list sorts by the same grade, so the map's labels and
+ * the list's order agree.
+ */
+export function comparisonGrade(grades: readonly string[]): string {
+  return grades[0] ?? "diesel";
+}
+
+const MINUTE_MS = 60_000;
+
+/** How long ago a price was reported, coarsely: minutes within the hour, hours within two days, else days. */
+function priceAge(at: number, now: number): I18nToken {
+  const minutes = Math.max(1, Math.floor((now - at) / MINUTE_MS));
+  if (minutes < 60) return token("summary.age", { unit: "minutes", count: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return token("summary.age", { unit: "hours", count: hours });
+  return token("summary.age", { unit: "days", count: Math.floor(hours / 24) });
+}
+
+/**
+ * The map label's price: only the comparison grade's cheapest comparable
+ * price, with how long ago it was reported, so neighbouring labels compare
+ * like with like. A station with no such price says so under that grade's
+ * label rather than showing another grade's price.
+ */
+function formatLabelSummary(
+  station: FuelStation,
+  currency: string | undefined,
+  grade: string,
+  now: number,
+): I18nToken {
+  const label = summaryLabel(grade);
+  const product = cheapestOf(comparableProducts(station, currency), grade);
+  if (!product) return token("summary.noGradePrice", { label });
+  const amount = fuelMoney(product.price.amount, product.price.currency);
+  const priceAt = validObservedAt(product.priceAt);
+  if (!priceAt) return token("summary.price", { label, amount });
+  return token("summary.priceAge", { label, amount, age: priceAge(Date.parse(priceAt), now) });
 }
 
 /** The oldest report time among the priced products: the result is no fresher than that. */
@@ -216,7 +276,18 @@ function stationIdentity(station: FuelStation): OsmIdentity | undefined {
   return { brand: station.brand, operator: station.brand };
 }
 
-export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
+/** What a search result is mapped for: the grade its map label compares, and the time it is read at. */
+export interface FuelResultOptions {
+  /** The grade the map label shows; diesel when none is given. */
+  grade?: string;
+  /** Epoch milliseconds a price's age is counted to; now when not given. */
+  now?: number;
+}
+
+export function mapFuelStationToResult(
+  station: FuelStation,
+  { grade = comparisonGrade([]), now = Date.now() }: FuelResultOptions = {},
+): DataSourceResult {
   const currency = stationCurrency(station);
   const sortValues = buildSortValues(station, currency);
   const variant = openVariant(station);
@@ -232,6 +303,7 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     variant,
     status: variant,
     summary,
+    labelSummary: formatLabelSummary(station, currency, grade, now),
     operator: station.brand,
     sortValues,
     observedAt: oldestPriceAt(station),

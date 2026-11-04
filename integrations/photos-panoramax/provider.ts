@@ -1,7 +1,9 @@
 import type { PlacePhoto } from "@openmapx/core";
 import {
+  type PanoramaxAssetSize,
   type PanoramaxCreatorMetadata,
   panoramaxAuthor,
+  panoramaxPictureAssetUrl,
   withPhotoContributors,
 } from "@openmapx/core";
 import type { PhotoProvider } from "@openmapx/integration-framework";
@@ -24,6 +26,20 @@ interface PanoramaxFeature extends PanoramaxCreatorMetadata {
   };
 }
 
+/** The federated catalogue that answers the search. */
+const CATALOGUE = "https://api.panoramax.xyz/api";
+
+/**
+ * A picture's image through the catalogue's per-picture endpoint, which
+ * redirects to the instance or bucket holding the file; the item's own asset
+ * link when it has no picture UUID.
+ */
+function assetUrl(feature: PanoramaxFeature, size: PanoramaxAssetSize): string | undefined {
+  const href = feature.assets?.[size]?.href;
+  if (!href) return undefined;
+  return panoramaxPictureAssetUrl(CATALOGUE, feature.id, size) ?? href;
+}
+
 interface PanoramaxSearchResponse {
   type?: string;
   features?: PanoramaxFeature[];
@@ -36,7 +52,7 @@ export const panoramaxPhotoProvider: PhotoProvider =
     deltaDeg: 0.003, // ~330m
     buildUrl(bbox, query) {
       const limit = query.limit ?? 6;
-      const url = new URL("https://api.panoramax.xyz/api/search");
+      const url = new URL(`${CATALOGUE}/search`);
       url.searchParams.set("bbox", `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`);
       url.searchParams.set("limit", String(limit));
       return url.toString();
@@ -51,11 +67,8 @@ export const panoramaxPhotoProvider: PhotoProvider =
         .slice(0, limit)
         .map((feature): PlacePhoto => {
           const imageUrl =
-            feature.assets?.sd?.href ??
-            feature.assets?.hd?.href ??
-            feature.assets?.thumb?.href ??
-            "";
-          const thumbUrl = feature.assets?.thumb?.href;
+            assetUrl(feature, "sd") ?? assetUrl(feature, "hd") ?? assetUrl(feature, "thumb") ?? "";
+          const thumbUrl = assetUrl(feature, "thumb");
           const author = panoramaxAuthor(feature);
           const capturedAt = feature.properties?.datetime;
           const licensing = licensingFromDeclaration(

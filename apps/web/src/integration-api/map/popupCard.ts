@@ -1,4 +1,4 @@
-import { escapeHtml } from "@openmapx/core";
+import { creditLicensing, escapeHtml } from "@openmapx/core";
 import {
   DISPLAY_LICENSE_SCOPES,
   formatLicensing,
@@ -98,7 +98,8 @@ function attributionText(raw: unknown): string {
   if (raw != null && typeof raw === "object") {
     const o = raw as Record<string, unknown>;
     const provider = typeof o.provider === "string" ? o.provider : "";
-    const licensing = parseLicensing(o.licensing);
+    const parsed = parseLicensing(o.licensing);
+    const licensing = parsed && creditLicensing(parsed);
     const license = licensing ? formatLicensing(licensing, { scopes: DISPLAY_LICENSE_SCOPES }) : "";
     return provider && license ? `${provider} · ${license}` : provider || license;
   }

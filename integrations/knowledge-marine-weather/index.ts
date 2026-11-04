@@ -32,6 +32,8 @@ const HOURLY_FIELDS = [
 export interface OpenMeteoMarineResponse {
   latitude?: number;
   longitude?: number;
+  /** Offset of the wall-clock `hourly.time` strings from UTC. */
+  utc_offset_seconds?: number;
   hourly?: {
     time: string[];
     wave_height?: Array<number | null>;
@@ -53,6 +55,7 @@ export interface OpenMeteoMarineResponse {
 }
 
 export interface MarineHourlyPoint {
+  /** UTC instant, e.g. `2026-10-31T14:00:00.000Z`. */
   time: string;
   waveHeightM?: number;
   waveDirectionDeg?: number;
@@ -126,11 +129,18 @@ function pickNumber(arr: Array<number | null> | undefined, idx: number): number 
   return v === null || v === undefined ? undefined : v;
 }
 
+// Open-Meteo writes `hourly.time` as offset-less wall-clock strings in the
+// requested zone; `Date` would read them in the server's own zone.
+function toUtcInstant(wallClock: string, utcOffsetSeconds: number): string {
+  return new Date(Date.parse(`${wallClock}Z`) - utcOffsetSeconds * 1000).toISOString();
+}
+
 export function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] {
   const h = data.hourly;
   if (!h?.time) return [];
+  const offsetSeconds = data.utc_offset_seconds ?? 0;
   return h.time.map((time, i) => ({
-    time,
+    time: toUtcInstant(time, offsetSeconds),
     waveHeightM: pickNumber(h.wave_height, i),
     waveDirectionDeg: pickNumber(h.wave_direction, i),
     wavePeriodS: pickNumber(h.wave_period, i),
@@ -148,7 +158,6 @@ export function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] 
 
 export function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null {
   if (hourly.length === 0) return null;
-  // Find the hour closest to "now" — Open-Meteo returns hourly aligned to UTC.
   const now = Date.now();
   let bestIdx = 0;
   let bestDiff = Number.POSITIVE_INFINITY;
@@ -175,9 +184,11 @@ export function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null 
 }
 
 async function fetchMarine(lat: number, lng: number): Promise<OpenMeteoMarineResponse | null> {
+  // GMT, because a local zone can change offset (DST) inside the forecast
+  // window while the response states only one `utc_offset_seconds`.
   const url =
     `${BASE}?latitude=${round2(lat)}&longitude=${round2(lng)}` +
-    `&hourly=${HOURLY_FIELDS}&forecast_days=3&timezone=auto`;
+    `&hourly=${HOURLY_FIELDS}&forecast_days=3&timezone=GMT`;
   return fetchJson<OpenMeteoMarineResponse>(url, {
     timeoutMs: FETCH_TIMEOUT_MS,
     nullOnError: true,
@@ -198,7 +209,7 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const captured = resolveIntegrationContributors(ctx, ["open-meteo-marine"]);
-    const cacheKey = `marine:contributors-v1:${round2(lat)},${round2(lng)}`;
+    const cacheKey = `marine:utc-v1:${round2(lat)},${round2(lng)}`;
     const cached = await ctx.cache.get<MarineResponse | { notFound: true }>(cacheKey);
     if (cached) {
       if ("notFound" in cached) {

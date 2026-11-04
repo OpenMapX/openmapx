@@ -4,6 +4,7 @@ import type { ExpoConfig } from "expo/config";
 import type { ConfigPlugin } from "expo/config-plugins";
 import {
   withAndroidManifest,
+  withAppBuildGradle,
   withDangerousMod,
   withEntitlementsPlist,
   withInfoPlist,
@@ -16,6 +17,7 @@ import {
   type AndroidManifestLike,
   applyAndroidApplicationSecurity,
   applyAndroidPermissions,
+  applyAndroidReleaseSigning,
   applyAppBoundDomains,
   applyAppTransportSecurity,
   applyAssociatedDomains,
@@ -101,6 +103,20 @@ export const withOpenMapXNativeConfig: ConfigPlugin = (config) => {
     manifestConfig.modResults = updated as unknown as typeof manifestConfig.modResults;
     return manifestConfig;
   });
+
+  // Release builds only: a development build's release variant keeps Expo's
+  // debug signing, so a contributor can still install it locally.
+  if (input.release) {
+    next = withAppBuildGradle(next, (gradleConfig) => {
+      if (gradleConfig.modResults.language !== "groovy") {
+        throw new Error("release signing expects the generated app/build.gradle to be Groovy");
+      }
+      gradleConfig.modResults.contents = applyAndroidReleaseSigning(
+        gradleConfig.modResults.contents,
+      );
+      return gradleConfig;
+    });
+  }
 
   next = withDangerousMod(next, [
     "android",

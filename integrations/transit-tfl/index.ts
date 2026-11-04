@@ -39,7 +39,8 @@ export function setup(ctx: IntegrationContext): void {
       return wrap(await tfl.getStop(id));
     },
     async getDepartures(id, min) {
-      return wrapRT(await tfl.getDepartures(id, min));
+      const board = await tfl.getDepartures(id, min);
+      return wrapRT(board.departures, undefined, { dataAsOf: board.dataAsOf });
     },
     async searchStopsByName(q, limit, context) {
       return wrap(await tfl.searchByName(q, limit ?? 10, context?.signal));

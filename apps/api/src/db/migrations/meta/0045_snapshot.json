@@ -1,6 +1,6 @@
 {
-  "id": "d549466e-6409-4b63-9307-604353bbbf8c",
-  "prevId": "ea53844f-257b-4be6-aefc-34ee5145df6c",
+  "id": "ea53844f-257b-4be6-aefc-34ee5145df6c",
+  "prevId": "39ad6e90-4e44-4d1e-a9fe-dd0194a1526d",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -2619,7 +2619,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -3176,61 +3192,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_policy_state": {
-      "name": "auth_policy_state",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "activation_version": {
-          "name": "activation_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settings": {
-          "name": "settings",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activated_by": {
-          "name": "activated_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activated_at": {
-          "name": "activated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "auth_policy_singleton": {
-          "name": "auth_policy_singleton",
-          "value": "\"auth_policy_state\".\"id\"=1 AND \"auth_policy_state\".\"activation_version\"=1"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.data_subject_request_attachment": {
@@ -7007,50 +6968,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_policy_application": {
-      "name": "auth_policy_application",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_digest": {
-          "name": "intent_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

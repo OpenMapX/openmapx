@@ -20,6 +20,7 @@ function harness(options: {
   sessionFix?: LocationFix | null;
   onCurrentFix?: () => void;
   nowSteps?: number[];
+  prompt?: LocationPermissionState;
 }) {
   const calls = { getCurrentFix: 0, requestBackground: 0, requestForeground: 0, start: 0 };
   const steps = options.nowSteps ?? [];
@@ -52,6 +53,14 @@ function harness(options: {
     driver,
     clock,
     latestSessionFix: () => options.sessionFix ?? null,
+    ...(options.prompt
+      ? {
+          requestForegroundPermission: async () => {
+            calls.requestForeground += 1;
+            return options.prompt as LocationPermissionState;
+          },
+        }
+      : {}),
   });
   return { service, calls };
 }
@@ -84,10 +93,35 @@ describe("ForegroundLocationService", () => {
     expect(calls.getCurrentFix).toBe(0);
   });
 
-  it("does not prompt when permission has never been asked for", async () => {
+  it("cannot prompt where the composition offers no prompt", async () => {
     const { service, calls } = harness({ permission: "not-determined" });
 
-    // The disclosure that earns that prompt belongs to starting navigation.
+    await expect(service.getFix(OPTIONS)).resolves.toEqual({ status: "denied" });
+    expect(calls.requestForeground).toBe(0);
+  });
+
+  it("asks for When-In-Use once when it was never asked for", async () => {
+    const { service, calls } = harness({
+      permission: "not-determined",
+      prompt: "foreground",
+      fix: fixAt(1_000),
+    });
+
+    await expect(service.getFix(OPTIONS)).resolves.toEqual({ status: "ok", fix: fixAt(1_000) });
+    expect(calls.requestForeground).toBe(1);
+    expect(calls.requestBackground).toBe(0);
+  });
+
+  it("reports a refused prompt as a denial without reading a position", async () => {
+    const { service, calls } = harness({ permission: "not-determined", prompt: "denied" });
+
+    await expect(service.getFix(OPTIONS)).resolves.toEqual({ status: "denied" });
+    expect(calls.getCurrentFix).toBe(0);
+  });
+
+  it("does not prompt again after a refusal", async () => {
+    const { service, calls } = harness({ permission: "denied", prompt: "foreground" });
+
     await expect(service.getFix(OPTIONS)).resolves.toEqual({ status: "denied" });
     expect(calls.requestForeground).toBe(0);
   });

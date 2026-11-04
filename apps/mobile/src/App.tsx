@@ -8,21 +8,30 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
-import { createShellBridge } from "./bridge/createShellBridge";
+import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { createLocationDriver } from "./location/createLocationDriver";
+import {
+  createForegroundNavigation,
+  type ForegroundNavigation,
+} from "./navigation/createForegroundNavigation";
+import { createPermissionPrompter, PermissionPrompts } from "./permissions/PermissionPrompts";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
+import { type NativePalette, useNativePalette } from "./shell/nativeTheme";
 import { classifyNavigation } from "./shell/originPolicy";
 import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
+import { answerCommand, createShellServices } from "./shell/shellServices";
+import { useHardwareBack } from "./shell/useHardwareBack";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
@@ -31,13 +40,38 @@ import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
  * outlived its process, and a fatally misconfigured build.
  */
 
+/** What a shell without native navigation reports. */
+const NO_NAVIGATION = {
+  groundNavigation: false,
+  transitNavigation: false,
+  backgroundLocation: false,
+  localNotifications: false,
+  speech: false,
+};
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFFFFF" },
+  root: { flex: 1 },
   webView: { flex: 1 },
 });
 
+/**
+ * The app draws edge to edge, so the status bar sits over whatever is behind
+ * it: a native screen in the system appearance, or the page, which follows the
+ * same appearance by default. Its icons have to contrast with that.
+ */
+function ShellStatusBar({ palette }: { palette: NativePalette }): ReactElement {
+  return (
+    <StatusBar
+      barStyle={palette.scheme === "dark" ? "light-content" : "dark-content"}
+      backgroundColor="transparent"
+      translucent
+    />
+  );
+}
+
 function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement {
   const locale = useMemo(() => deviceMobileLocale(), []);
+  const palette = useNativePalette();
   const [shellState, dispatchShell] = useReducer(shellReducer, INITIAL_SHELL);
   // Remounting the WebView is the only reliable way to retry a load that failed
   // before any document existed; `reload()` on a blank view is a no-op.
@@ -48,17 +82,71 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
-  const shell = useMemo(
+  const handleNavigationStateChange = useHardwareBack(webViewRef);
+  const services = useMemo(
     () =>
-      createShellBridge({
-        webOrigin: config.webOrigin,
-        inject: (script) => webViewRef.current?.injectJavaScript(script),
-        // Native navigation is deliberately unavailable until the foreground
-        // coordinator, permissions and effect ports are composed here. The web
-        // app then keeps using its complete browser fallbacks instead of acting
-        // on a capability this shell cannot yet fulfil.
+      createShellServices({
+        config,
+        isAppActive: () => visibilityRef.current === "active",
       }),
-    [config.webOrigin],
+    [config],
+  );
+  const prompter = useMemo(
+    () =>
+      createPermissionPrompter({
+        locale,
+        requestBackgroundAccess: () => createLocationDriver().requestBackgroundPermission(),
+      }),
+    [locale],
+  );
+  // Shell states follow guidance starting and ending; repeated reports of the
+  // same state are dropped so a stream of snapshots is not a stream of renders.
+  const navigatingRef = useRef(false);
+  const setNavigating = useCallback((navigating: boolean) => {
+    if (navigatingRef.current === navigating) return;
+    navigatingRef.current = navigating;
+    dispatchShell({ type: navigating ? "session-started" : "session-ended" });
+  }, []);
+  const { shell, navigation } = useMemo(() => {
+    let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
+    const composed: ShellBridge = createShellBridge({
+      webOrigin: config.webOrigin,
+      inject: (script) => webViewRef.current?.injectJavaScript(script),
+      // Every command goes through the navigation coordinator, which also
+      // answers the one-shot location, settings and sign-in requests. A build
+      // without it (the feasibility probe) answers only those.
+      dispatch: async (message) => {
+        const composedNavigation = await navigation;
+        if (composedNavigation) {
+          await composedNavigation.coordinator.dispatch(message);
+          return;
+        }
+        await answerCommand(message, services.auxiliary, (type, payload, options) =>
+          composed.bridge.send(type, payload, options),
+        );
+      },
+      capabilities: async () => (await navigation)?.capabilities() ?? NO_NAVIGATION,
+      permission: () => services.permission(),
+      activeSession: async () => (await navigation)?.activeSession() ?? null,
+    });
+    if (!config.feasibilityMode) {
+      navigation = createForegroundNavigation({
+        apiOrigin: config.apiOrigin,
+        locale,
+        send: (type, payload, options) => composed.bridge.send(type, payload, options),
+        permissionUi: prompter.ui,
+        isAppActive: () => visibilityRef.current === "active",
+        auxiliary: services.auxiliary,
+        onNavigatingChanged: setNavigating,
+      }).catch(() => null);
+    }
+    return { shell: composed, navigation };
+  }, [config, locale, prompter, services, setNavigating]);
+  useEffect(
+    () => () => {
+      void navigation.then((composed) => composed?.dispose());
+    },
+    [navigation],
   );
   const recovery = useMemo(
     () =>
@@ -79,16 +167,24 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
    */
   const [publishedNonce, setPublishedNonce] = useState(() => shell.registry.mintNonce());
 
-  const handleLoadStart = useCallback(() => {
-    // A real top-level navigation or reload. In-document history changes do not
-    // reach here, so a same-origin `pushState` keeps its negotiated channel.
-    //
-    // A reload resets the bridge and nothing else: the native session and the
-    // location driver are unaffected, because the page is not their authority.
-    shell.registry.adoptDocument(publishedNonce, Date.now());
-    shell.bridge.discardQueue();
-    dispatchShell({ type: "document-load-started" });
-  }, [publishedNonce, shell]);
+  const handleLoadStart = useCallback(
+    (event?: { nativeEvent?: { loading?: boolean } }) => {
+      // Android also reports every same-document history change (`pushState`,
+      // `replaceState`) as a load start, from `doUpdateVisitedHistory`, with
+      // `loading: false` because the document has already finished. That is not
+      // a new document: adopting the next nonce there would orphan the page's
+      // negotiated channel and put the loading screen back over a working page.
+      if (event?.nativeEvent?.loading === false) return;
+      // A real top-level navigation or reload.
+      //
+      // A reload resets the bridge and nothing else: the native session and the
+      // location driver are unaffected, because the page is not their authority.
+      shell.registry.adoptDocument(publishedNonce, Date.now());
+      shell.bridge.discardQueue();
+      dispatchShell({ type: "document-load-started" });
+    },
+    [publishedNonce, shell],
+  );
 
   const handleLoadEnd = useCallback(() => {
     dispatchShell({ type: "document-load-succeeded" });
@@ -203,7 +299,8 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: palette.background }]}>
+      <ShellStatusBar palette={palette} />
       <WebView
         key={loadAttempt}
         ref={webViewRef}
@@ -232,6 +329,8 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         thirdPartyCookiesEnabled={false}
         allowsBackForwardNavigationGestures
         onShouldStartLoadWithRequest={handleNavigationRequest}
+        // Android's Back button goes back in the page before it leaves the app.
+        onNavigationStateChange={handleNavigationStateChange}
         onOpenWindow={(event) => {
           // Popups get the same structural policy as ordinary navigation; they
           // never open a second in-app browser.
@@ -247,6 +346,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onLoadEnd={handleLoadEnd}
         onError={handleLoadFailure}
         onHttpError={handleLoadFailure}
+        // Remote inspection only in development builds; a release WebView stays
+        // closed to debuggers.
+        webviewDebuggingEnabled={__DEV__}
         testID="product-webview"
       />
       {shellState.state.kind === "loading" ? <LoadingOverlay locale={locale} /> : null}
@@ -255,6 +357,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         state={shellState.state}
         onAction={handleShellAction}
       />
+      <PermissionPrompts prompter={prompter} locale={locale} />
       {config.feasibilityMode ? <FeasibilityOverlay /> : null}
     </View>
   );
@@ -271,10 +374,12 @@ export function App(): ReactElement {
     }
   }, []);
   const locale = useMemo(() => deviceMobileLocale(), []);
+  const palette = useNativePalette();
 
   if (!configuration.ok) {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { backgroundColor: palette.background }]}>
+        <ShellStatusBar palette={palette} />
         <NativeRecoveryOverlay
           locale={locale}
           state={{ kind: "fatal-config" }}

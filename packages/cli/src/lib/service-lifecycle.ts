@@ -99,6 +99,7 @@ export async function runCliServiceLifecycle(options: {
   const { readGeneratedHardlinkPlan } = await import("./hardlinks");
   const release = await import("./release");
   const { refuseAgentSwitchOrExit } = await import("./agent-layout");
+  const { API_SERVICE_ID, migrateBeforeApiUpdate } = await import("./api-migrations");
   const paths = repoPaths();
   assertCliDeploymentSecrets();
   mkdirSync(join(paths.infraDir, "data"), { recursive: true });
@@ -416,6 +417,17 @@ export async function runCliServiceLifecycle(options: {
         throw Error("Lifecycle generation changed before recreation");
       await assertNativeCreation();
       await refuseAgentSwitchOrExit(noDeps ? [...selected] : "all");
+      if (selected.includes(API_SERVICE_ID)) {
+        if (!ownership) throw Error("Lifecycle receipt owner unavailable");
+        forward(ownership);
+        const migrationCode = await migrateBeforeApiUpdate({ deps: !noDeps });
+        if (migrationCode !== 0)
+          throw new ServiceLifecycleCommandError(
+            migrationCode,
+            "Database migration failed; services were not replaced",
+          );
+        forward(ownership);
+      }
       const code = await dockerComposeStream([
         "up",
         "-d",

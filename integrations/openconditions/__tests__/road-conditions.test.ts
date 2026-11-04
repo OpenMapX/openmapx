@@ -791,7 +791,6 @@ describe("situationToRoadConditionEvent", () => {
       contributors: [
         {
           sourceId: "fi-digitraffic-events",
-          modified: true,
           name: "Fintraffic / Digitraffic",
           attributionText: "Fintraffic / Digitraffic",
           licensing: licensingFromDeclaration(
@@ -992,7 +991,6 @@ describe("situationToRoadConditionEvent", () => {
         declarations: [{ text: "CC-BY-4.0" }],
       },
       attributionText: BAST,
-      modified: true,
     };
 
     const event = situationToRoadConditionEvent(placed())!;

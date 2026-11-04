@@ -313,6 +313,37 @@ describe("MapContextMenu opening", () => {
     });
   }
 
+  it("leaves MapLibre's own long-press contextmenu to the dropped pin", () => {
+    render(<MapContextMenu />);
+    act(() => useMapClickStore.setState({ clickedLngLat: [1, 2] }));
+    const fingers = (type: string, count: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "touches", {
+        value: Array.from({ length: count }, () => ({ clientX: 120, clientY: 140 })),
+      });
+      document.body.dispatchEvent(event);
+    };
+    fingers("touchstart", 1);
+    // What MapLibre fires once a finger has rested on the map: a plain
+    // MouseEvent, with no pointer type or source capabilities to tell touch.
+    act(() => {
+      fake.emit("contextmenu", {
+        point: { x: 40, y: 50 },
+        lngLat: { lng: 6.08, lat: 50.77 },
+        originalEvent: new MouseEvent("contextmenu", {
+          clientX: 120,
+          clientY: 140,
+          button: 2,
+          cancelable: true,
+        }),
+      });
+    });
+    fingers("touchend", 0);
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(useMapClickStore.getState().clickedLngLat).toEqual([1, 2]);
+  });
+
   for (const status of ["navigating", "rerouting"] as const) {
     it(`suppresses the native menu without opening or mutating state while ${status}`, () => {
       useNavigationStore.setState({ status });

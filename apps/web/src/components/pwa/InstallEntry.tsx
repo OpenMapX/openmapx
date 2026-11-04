@@ -3,7 +3,6 @@
 import GetAppIcon from "@mui/icons-material/GetApp";
 import IosShareIcon from "@mui/icons-material/IosShare";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
@@ -12,6 +11,7 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import { useTranslations } from "next-intl";
+import Dialog from "@/components/ui/Dialog";
 import { useInstallPrompt } from "./useInstallPrompt";
 
 interface InstallEntryProps {

@@ -294,6 +294,10 @@ paths. This is the trusted web host's app-local API, not an extension SDK.
 Installed community integrations cannot execute presentation JavaScript and
 cannot consume these modules; they remain declarative-only.
 
+Dialogs use `@/integration-api/components/Dialog` instead of
+`@mui/material/Dialog`, so the system Back gesture closes them on a phone; lint
+rejects the direct import.
+
 The full `frontend.overlay` schema and the community-code restriction are documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
 
@@ -431,8 +435,10 @@ export function setup(ctx: IntegrationContext): void {
 `createWeatherProvider` is your implementation, not a framework export. Its
 required `getCurrentWeather(coords, options?)` returns `Promise<WeatherResponse>`;
 optional hourly/daily methods return their own `WeatherForecastResponse`
-envelopes. Use `ctx.http`, captured contributors and shutdown handling inside the
-factory.
+envelopes. Daily points name calendar days at the location, with their IANA
+`timeZone`; group UTC readings with `groupByLocalDay` and `forecastTimeZone` from
+`@openmapx/integration-weather/lib`. Use `ctx.http`, captured contributors and
+shutdown handling inside the factory.
 
 The same shape holds for `registerGeocodingProvider`, `registerRoutingProvider`,
 `registerKnowledgeProvider`, `registerPhotoProvider`, and the rest. The typed

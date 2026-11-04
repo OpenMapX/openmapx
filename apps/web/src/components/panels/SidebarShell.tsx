@@ -30,6 +30,8 @@ interface SidebarShellProps {
    * never sets it.
    */
   obscured?: boolean;
+  /** Mobile: swiping the sheet down past its lowest detent closes the panel this way. */
+  onDismiss?: () => void;
 }
 
 export function SidebarShell({
@@ -37,6 +39,7 @@ export function SidebarShell({
   searchBarClearance = "shell",
   detents = LIST_DETENTS,
   obscured,
+  onDismiss,
 }: SidebarShellProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -50,6 +53,7 @@ export function SidebarShell({
           zIndex={11}
           detents={detents}
           obscured={obscured}
+          onDismiss={onDismiss}
           ariaLabel={t("resultsPanelAriaLabel")}
         >
           {children}

@@ -1,6 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import { platformChanged } from "@openmapx/mobility-core/platform";
 import { useTranslations } from "next-intl";
 
 /**
@@ -23,7 +24,8 @@ export function PlatformBadge({
   tone?: "surface" | "onBanner";
 }) {
   const t = useTranslations("transit");
-  const wasChanged = changed || (!!scheduledCode && scheduledCode !== code);
+  const moved = platformChanged(scheduledCode, code);
+  const wasChanged = changed || moved;
   const surface = wasChanged
     ? { bgcolor: "warning.main", color: "warning.contrastText" }
     : { bgcolor: "action.selected", color: "text.primary" };
@@ -47,8 +49,7 @@ export function PlatformBadge({
         ...(tone === "onBanner" ? onBanner : surface),
       }}
     >
-      {t("platform")}{" "}
-      {wasChanged && scheduledCode && scheduledCode !== code ? `${scheduledCode} → ${code}` : code}
+      {t("platform")} {moved ? `${scheduledCode} → ${code}` : code}
       {wasChanged && ` (${t("platformChanged")})`}
     </Box>
   );

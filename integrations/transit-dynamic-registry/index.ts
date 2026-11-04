@@ -1,3 +1,4 @@
+import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   type IntegrationContext,
@@ -11,6 +12,7 @@ import { getAdapter } from "./adapters.js";
 import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { RegistryManager, registry } from "./registry.js";
+import type { RegistryEntry } from "./registry-types.js";
 
 // Provider receipts belong to each captured catalog entry; infrastructure disclosures
 // remain in the manifest rather than replacing the actual operator credit.
@@ -28,12 +30,28 @@ function buildAttributionFor(
       name: entryAttribution.name,
       url: entryAttribution.homepage,
       licensing: licensingFromDeclaration(
-        entryAttribution.license,
+        // The catalogue writes "todo" where an entry's licence is yet to be found.
+        /^todo$/i.test(entryAttribution.license?.trim() ?? "")
+          ? undefined
+          : entryAttribution.license,
         undefined,
         entryAttribution.name,
       ),
     },
   ];
+}
+
+/**
+ * The area an entry is the source for: its live coverage, else its regular
+ * coverage. ÖBB's is Austria, though its timetable spans Europe.
+ */
+function homeArea(entry: RegistryEntry): BBox {
+  const tiers = entry.coverage.tiers;
+  return (
+    tiers.find((tier) => tier.level === "realtimeCoverage")?.bbox ??
+    tiers.find((tier) => tier.level === "regularCoverage")?.bbox ??
+    entry.coverage.bbox
+  );
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
@@ -97,17 +115,16 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         freshnessNow(),
       );
     };
-    const wrapRT = <T>(data: T) =>
-      withAttribution(
-        captureTransitContributors(data, entryAttribution),
-        entryAttribution,
-        freshnessNow({ hasRealtimeData: true }),
-      );
+    const wrapRT = <T>(data: T, dataAsOf?: string) =>
+      withAttribution(captureTransitContributors(data, entryAttribution), entryAttribution, {
+        ...freshnessNow({ hasRealtimeData: true }),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      });
 
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
-      coverage: { bbox: entry.coverage.bbox },
+      coverage: { bbox: entry.coverage.bbox, home: homeArea(entry) },
       priority: 5,
       role: "enrichment",
       attribution: entryAttribution,
@@ -143,7 +160,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         ? async (id, min) => {
             const fn = adapter.getDepartures;
             if (!fn) return wrapRT([]);
-            const departures = await fn(entry, id, min);
+            const { departures, dataAsOf } = await fn(entry, id, min);
             await assertPublication();
             assertNotRetired();
             return entry.protocol === "otpGraphQl"
@@ -156,7 +173,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
                     ),
                   }),
                 )
-              : wrapRT(departures);
+              : wrapRT(departures, dataAsOf);
           }
         : undefined,
       searchStopsByName: adapter.searchByName

@@ -40,6 +40,11 @@ import {
   parseJunctionPoints,
 } from "./junctions.js";
 import { routeUsesLocalAccessRoad } from "./local-access.js";
+import {
+  type AlertOverpassElement,
+  buildNavigationAlertsQuery,
+  mapAlertElements,
+} from "./navigation-alerts.js";
 import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
 import { avoidPlannedClosures, plannedClosureImpact } from "./planned-closures.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
@@ -55,21 +60,20 @@ import { parseDateTime, parseTravelMode } from "./validation.js";
 
 export { evidenceBoundCacheTtlSeconds } from "./road-condition-routing.js";
 
-/** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
-interface RawRoadAlert {
-  id: string;
-  type: "speed_camera" | "railway_crossing" | "stop" | "traffic_calming";
-  lat: number;
-  lng: number;
-  speedLimitKmh?: number;
-}
-
 /**
  * A route bounding box wider than this (deg², ~a large region) is skipped: a
  * single Overpass query over a cross-country corridor would time out, and the
  * alerts wouldn't fit on screen anyway.
  */
 const MAX_ALERT_BBOX_DEG2 = 0.6;
+/**
+ * Cache namespace of `/navigation/alerts` answers. Versioned with their shape:
+ * answers cached before hazards carried their roads must not be served.
+ */
+const NAVIGATION_ALERTS_CACHE_PREFIX = "cache:nav:alerts:v2";
+const NAVIGATION_ALERTS_TTL_SECONDS = 86_400;
+/** How long an answer Overpass could not give is held before asking again. */
+const NAVIGATION_ALERTS_RETRY_SECONDS = 60;
 
 function routeMetricValues(result: DirectionsResult): {
   routeCount: number;
@@ -160,51 +164,6 @@ function markLocalAccessRoutes(routes: readonly Route[], lines: readonly LngLat[
   for (const route of routes) {
     if (routeUsesLocalAccessRoad(route.geometry, lines)) route.usesLocalAccessRoad = true;
   }
-}
-
-/** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
-function parseMaxspeedKmh(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n > 0 ? n : undefined;
-}
-
-/** Map Overpass nodes to raw approach alerts, by their distinguishing OSM tags. */
-function mapAlertElements(
-  elements: {
-    type: string;
-    id: number;
-    lat?: number;
-    lon?: number;
-    tags?: Record<string, string>;
-  }[],
-): RawRoadAlert[] {
-  const out: RawRoadAlert[] = [];
-  for (const el of elements) {
-    if (el.type !== "node" || el.lat === undefined || el.lon === undefined) continue;
-    const tags = el.tags ?? {};
-    let type: RawRoadAlert["type"] | null = null;
-    let speedLimitKmh: number | undefined;
-    if (tags.highway === "speed_camera") {
-      type = "speed_camera";
-      speedLimitKmh = parseMaxspeedKmh(tags.maxspeed);
-    } else if (tags.railway === "level_crossing") {
-      type = "railway_crossing";
-    } else if (tags.highway === "stop") {
-      type = "stop";
-    } else if (tags.traffic_calming) {
-      type = "traffic_calming";
-    }
-    if (!type) continue;
-    out.push({
-      id: `${type}:${el.id}`,
-      type,
-      lat: el.lat,
-      lng: el.lon,
-      ...(speedLimitKmh ? { speedLimitKmh } : {}),
-    });
-  }
-  return out;
 }
 
 /**
@@ -775,10 +734,13 @@ export function setup(ctx: IntegrationContext): void {
 
   /**
    * GET /navigation/alerts — approach alerts (speed cameras, level crossings,
-   * stop signs, traffic calming) from OSM within a bounding box, for the live
-   * navigation alert layer. Static-ish, so cached for a day. Bounding boxes
-   * larger than {@link MAX_ALERT_BBOX_DEG2} return empty to avoid Overpass
-   * timeouts on long routes. Speed-camera legality is enforced client-side.
+   * stop signs, speed bumps) from OSM within a bounding box, each with the
+   * roads it applies to and in which travel directions (see
+   * `navigation-alerts.ts`), for the live navigation alert layer. Static-ish,
+   * so a complete answer is cached for a day; a failed or cut-short Overpass
+   * answer is returned empty and not cached. Bounding boxes larger than
+   * {@link MAX_ALERT_BBOX_DEG2} return empty to avoid Overpass timeouts on long
+   * routes. Speed-camera legality is enforced client-side.
    */
   ctx.registerRoute("GET", "/navigation/alerts", async (req, reply) => {
     const { bbox } = scalarQueries(req.query);
@@ -813,22 +775,51 @@ export function setup(ctx: IntegrationContext): void {
       reply.send({ alerts: [] });
       return;
     }
-    const [west, south, east, north] = parsed;
+    // The box is widened to the 0.001° grid the cache is keyed on, so a cached
+    // answer covers every box that shares its key.
+    const grid = (n: number, snap: (x: number) => number) => snap(round(n * 1000, 6)) / 1000;
+    const bounds = {
+      south: grid(parsed[1], Math.floor),
+      west: grid(parsed[0], Math.floor),
+      north: grid(parsed[3], Math.ceil),
+      east: grid(parsed[2], Math.ceil),
+    };
 
-    const key = hashKey(
-      "cache:nav:alerts",
-      [south, west, north, east].map((n) => round(n, 3)),
-    );
+    const key = hashKey(NAVIGATION_ALERTS_CACHE_PREFIX, [
+      bounds.south,
+      bounds.west,
+      bounds.north,
+      bounds.east,
+    ]);
     try {
-      const result = await ctx.cache.withCache(key, 86_400, async () => {
-        const b = `${south},${west},${north},${east}`;
-        const query = `[out:json][timeout:25];(node["highway"="speed_camera"](${b});node["railway"="level_crossing"](${b});node["highway"="stop"](${b});node["traffic_calming"](${b}););out body;`;
-        const data = await overpassQuerySafe(query, null);
-        return { alerts: data ? mapAlertElements(data.elements) : [] };
-      });
-      reply.header("Cache-Control", "public, max-age=86400");
-      reply.send(result);
+      const result = await ctx.cache.withCache(
+        key,
+        NAVIGATION_ALERTS_TTL_SECONDS,
+        async () => {
+          const data = await overpassQuerySafe(buildNavigationAlertsQuery(bounds), null);
+          // Overpass reports a timeout or memory limit hit mid-query with a 200
+          // and a `remark`, over elements that may be cut short: no answer.
+          if (!data || data.remark) return { alerts: [], complete: false };
+          // `out geom` adds each way's node coordinates, which the shared
+          // Overpass element type does not declare.
+          const elements = (data.elements ?? []) as AlertOverpassElement[];
+          return { alerts: mapAlertElements(elements), complete: true };
+        },
+        undefined,
+        (value) => value.complete,
+      );
+      if (!result.complete) {
+        // Hold the miss briefly so a box Overpass cannot answer is not
+        // re-queried by every client on every request.
+        await ctx.cache.set(key, result, NAVIGATION_ALERTS_RETRY_SECONDS).catch(() => undefined);
+      }
+      reply.header(
+        "Cache-Control",
+        result.complete ? `public, max-age=${NAVIGATION_ALERTS_TTL_SECONDS}` : "no-store",
+      );
+      reply.send({ alerts: result.alerts });
     } catch {
+      reply.header("Cache-Control", "no-store");
       reply.send({ alerts: [] }); // optional layer: never fail navigation over it
     }
   });

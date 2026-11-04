@@ -450,6 +450,7 @@ function costOn(
     amount,
     currency: tariff.currency,
     tariffId: tariff.id,
+    ...(tariff.type !== undefined ? { tariffType: tariff.type } : {}),
     price: {
       // Up to four decimals, as prices are shown; VAT grossing adds float noise.
       amount: Math.round(main.price * gross(main) * 10_000) / 10_000,

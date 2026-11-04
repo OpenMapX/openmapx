@@ -44,6 +44,7 @@ import {
   type TransitReachabilityCheckRequest,
   type TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
+import { getPlaceResolver } from "@openmapx/place-ids";
 import { planTransitChain } from "./chain-plan.js";
 import { ChainRequestValidationError, parseChainRequest } from "./chain-request.js";
 import {
@@ -61,7 +62,7 @@ import {
   transitRequestFingerprint,
   verifyTransitPageToken,
 } from "./page-token.js";
-import { createPlaceTransit } from "./place-transit.js";
+import { createPlaceTransit, type PlaceQuery } from "./place-transit.js";
 import {
   thinTransitReachabilitySurface,
   transitCheckCacheKey,
@@ -83,6 +84,15 @@ function toEnvelope<T>(result: MobilityResult<T>): MobilityEnvelope<T> {
     attributions: result.attributions,
     freshness: result.freshness,
   };
+}
+
+/**
+ * Browser and shared-cache policy for a result. A partial answer is not stored,
+ * so a recovered source shows up on the next request. Set it once the result
+ * exists, so a failed request doesn't carry a cacheable header either.
+ */
+function cacheControl(freshness: Freshness, complete: string): string {
+  return freshness.isPartial ? "no-store" : complete;
 }
 
 /** Build an envelope from raw data + a fresh attribution/freshness pair. */
@@ -164,14 +174,21 @@ const TRANSIT_BBOX_LIMITS: BoundingBoxLimits = {
   maxArea: 900,
 };
 
-function parsePlaceQuery(
-  q: Record<string, string>,
-): { lat: number; lng: number; name: string } | null {
+function parsePlaceQuery(q: Record<string, string>): PlaceQuery | null {
   const name = q.name?.trim();
   const point = parseWgs84Point(q.lng, q.lat);
   if (!point || !name) return null;
   const [lng, lat] = point;
-  return { lat, lng, name };
+  const osmRef = q.osm_id?.trim();
+  const stopName = q.stop_name?.trim().slice(0, 200);
+  return {
+    lat,
+    lng,
+    name,
+    ...(q.place_id ? { placeId: q.place_id } : {}),
+    ...(osmRef ? { osmRef } : {}),
+    ...(stopName ? { stopName } : {}),
+  };
 }
 
 function parseMinutes(raw: string | undefined, defaultVal = 60, max = 120): number | null {
@@ -311,7 +328,14 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "private, max-age=60");
     reply.send({ providers });
   });
-  const placeTransit = createPlaceTransit(ctx, orchestrator);
+  const placeTransit = createPlaceTransit(ctx, orchestrator, {
+    // The OSM place resolver, which the geocoding integration registers with the
+    // operator's Nominatim; without it, places link by their shown name.
+    lookupLocalName: async (osmRef) => {
+      const resolve = getPlaceResolver<{ localName?: string }>("osm");
+      return resolve ? ((await resolve(osmRef, {}))?.localName ?? undefined) : undefined;
+    },
+  });
 
   // GET /stops
   ctx.registerRoute("GET", "/stops", async (req, reply) => {
@@ -362,8 +386,11 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const limit = Math.min(Math.max(Number(scalarQueries(req.query).limit) || 5, 1), 20);
-    reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const stops = await orchestrator.searchByName(query, limit);
+    reply.header(
+      "Cache-Control",
+      cacheControl(stops.freshness, "public, max-age=300, s-maxage=300"),
+    );
     reply.send(toEnvelope(stops));
   });
 
@@ -374,12 +401,10 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    const result = await placeTransit.getLinkedStops(
-      place.lat,
-      place.lng,
-      place.name,
-      scalarQueries(req.query).place_id,
+    const result = await placeTransit.getLinkedStops(place);
+    reply.header(
+      "Cache-Control",
+      cacheControl(result.freshness, "public, max-age=86400, s-maxage=86400"),
     );
     reply.send(toEnvelope(result));
   });
@@ -527,13 +552,13 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/alerts
   ctx.registerRoute("GET", "/stops/:id/alerts", async (req, reply) => {
-    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const stopId = req.params.id;
     const cacheKey = `transit:stop-alerts:${stopId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getStopAlerts(stopId);
       return toEnvelope(res);
     });
+    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     reply.send(alerts);
   });
 
@@ -581,12 +606,10 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-    const result = await placeTransit.getMergedRoutes(
-      place.lat,
-      place.lng,
-      place.name,
-      scalarQueries(req.query).place_id,
+    const result = await placeTransit.getMergedRoutes(place);
+    reply.header(
+      "Cache-Control",
+      cacheControl(result.freshness, "public, max-age=300, s-maxage=300"),
     );
     reply.send(toEnvelope(result));
   });
@@ -1347,13 +1370,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
-    const result = await placeTransit.getMergedDepartures(
-      place.lat,
-      place.lng,
-      place.name,
-      minutes,
-      scalarQueries(req.query).place_id,
-    );
+    const result = await placeTransit.getMergedDepartures(place, minutes);
     reply.send(toEnvelope(result));
   });
 
@@ -1370,13 +1387,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
-    const result = await placeTransit.getMergedArrivals(
-      place.lat,
-      place.lng,
-      place.name,
-      minutes,
-      scalarQueries(req.query).place_id,
-    );
+    const result = await placeTransit.getMergedArrivals(place, minutes);
     reply.send(toEnvelope(result));
   });
 
@@ -1387,12 +1398,10 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-    const result = await placeTransit.getMergedAlerts(
-      place.lat,
-      place.lng,
-      place.name,
-      scalarQueries(req.query).place_id,
+    const result = await placeTransit.getMergedAlerts(place);
+    reply.header(
+      "Cache-Control",
+      cacheControl(result.freshness, "public, max-age=60, s-maxage=60"),
     );
     reply.send(toEnvelope(result));
   });
@@ -1404,12 +1413,10 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    const result = await placeTransit.getMergedFacilities(
-      place.lat,
-      place.lng,
-      place.name,
-      scalarQueries(req.query).place_id,
+    const result = await placeTransit.getMergedFacilities(place);
+    reply.header(
+      "Cache-Control",
+      cacheControl(result.freshness, "public, max-age=86400, s-maxage=86400"),
     );
     reply.send(toEnvelope(result));
   });

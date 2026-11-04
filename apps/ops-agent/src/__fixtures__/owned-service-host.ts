@@ -246,7 +246,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const token = Buffer.alloc(32, 17).toString("base64url");
   let competingRevisionId: string | undefined;
   const defaultCli = options.defaultCliEntry ? createDefaultFixedCli(root, options.defaultCliEntry) : undefined;
-  const runtime = await createProductionOpsRuntime({
+  const reopenRuntime = () => createProductionOpsRuntime({
     rootDir: root,
     stack,
     loadAuthority,
@@ -267,6 +267,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       },
     },
   });
+  const runtime = await reopenRuntime();
   const authority = await loadAuthority();
   const trustedData = createFileTrustedOpsDataSource({
     directory: queue,
@@ -364,6 +365,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     firstCompose,
     stack,
     runtime,
+    reopenRuntime,
     repositories,
     claimer,
     createResourceClaimer,

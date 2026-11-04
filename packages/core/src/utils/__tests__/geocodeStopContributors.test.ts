@@ -33,3 +33,13 @@ it("keeps matched geocoder fields separate from retained stop IDs", async () => 
   expect(place.fieldContributors?.name).toEqual([b]);
   expect(place.fieldContributors?.ids).toEqual([a, b]);
 });
+
+it("remembers the stop a place was opened for, also when the geocoder names it differently", async () => {
+  expect(makeSyntheticStopPlace(stop).transitStop).toEqual({ id: "ms:stop", name: "Central" });
+  vi.spyOn(apiClient, "get").mockResolvedValue([
+    { id: "osm:node/1", label: "Central Station", coordinates: [8, 50], type: "poi" },
+  ]);
+  const place = await resolveStopAsPlace(stop);
+  expect(place.name).toBe("Central Station");
+  expect(place.transitStop).toEqual({ id: "ms:stop", name: "Central" });
+});

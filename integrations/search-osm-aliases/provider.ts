@@ -125,6 +125,16 @@ export function createOsmAliasSuggestionProvider(
     ): Promise<SearchSuggestionProviderResult> {
       signal.throwIfAborted();
       if (!ctx.db) return { suggestions: [], attributions: [], freshnessSeconds: 86_400 };
+      // Until the data-manager builds a first index there is no schema to
+      // read, which is not a fault of the provider.
+      const published = await ctx.db.execute<{ exists: boolean }[]>(
+        "SELECT to_regclass('osm_search.index_state') IS NOT NULL AS exists",
+        undefined,
+        { signal },
+      );
+      if (!published[0]?.exists) {
+        return { suggestions: [], attributions: [], freshnessSeconds: 86_400 };
+      }
       const states = await ctx.db.execute<IndexStateRow[]>(
         "SELECT epoch, status FROM osm_search.index_state WHERE singleton = 1",
         undefined,

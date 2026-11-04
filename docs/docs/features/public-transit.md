@@ -64,7 +64,47 @@ cancellations, and predicted times appear only when reported.
 Scheduled data comes from the stop's source. Compatible realtime providers can
 add updates; sources that already include realtime times do not need a second
 lookup. Similar station names alone do not make different source IDs
-interchangeable, and a failed stop lookup can leave a place without a board.
+interchangeable.
+
+A place's board starts by searching its stops by name. It uses the place's name
+in its own language from OpenStreetMap, because transit sources name stops
+locally: a station shown as "Munich Central Station" is searched as "München
+Hauptbahnhof". A stop you opened, from search or a planned journey, is searched
+by its own name too. If a stop source does not answer, the board warns that
+departures may be missing instead of showing an empty board, and the place is
+looked up again within about a minute. If no source answers, the board shows a
+failure with a retry action. Departures that cannot be loaded for some of the
+place's stops get the same warning. Lines, alerts and facilities that cannot be
+loaded are left out rather than kept as "none", and are loaded again on a later
+visit or within about a minute.
+
+A place's board includes the stops within 1 km whose name is the place's name.
+Sources spell it differently, with or without the town ("Neumarkt", "Köln
+Neumarkt", "Marienplatz, München"). It also includes stops whose name says
+they belong to the station, such as "Köln Dom/Hbf" at Köln Hauptbahnhof or
+"S+U Alexanderplatz Bhf/Gontardstr." at Alexanderplatz. A stop that only shares
+the district is left out: "Köln Deutz Suevenstr." is not on the board for
+"Köln Messe/Deutz". Some bus stops beside a station are left out too, when
+their name doesn't say they belong to it.
+
+A place's stops can have different names, for example a main station and a bus
+stop beside it. A departure from a stop other than the place's main one shows
+that stop's name next to its line, so you know where to board. When you open a
+stop from search, the map or a planned journey, that stop is the main one;
+otherwise it is the stop named like the place. Different spellings of one name,
+such as "Köln Hbf" and "Köln Hauptbahnhof", count as one stop and are not
+labelled.
+
+Lines appear under the name riders know, such as "S11" or "RE1". Some sources
+write the train number or their operator into the line's name ("DB S11
+(Zug-Nr. 33192)"); the number then appears in the trip's details instead. A
+train that two sources, or one source twice, list under different spellings
+shows as one departure.
+
+When sources give one departure different platforms, the board shows the
+platform most sources give: some timetables number a station's platforms
+differently from its signs. A platform change one source reports is shown when
+it moves the departure off the platform most sources plan.
 
 ### Understanding timetable status
 
@@ -72,9 +112,14 @@ interchangeable, and a failed stop lookup can leave a place without a board.
 can show a different time, including an early departure. Missing freshness
 information does not establish that a prediction is current.
 
-**Times may have changed** warns about known outdated predictions. Some sources,
-including current MOTIS/Transitous timetable wrappers, do not supply an upstream
-publication time, so the absence of this warning does not prove freshness.
+**Times may have changed** warns about known outdated predictions: the source's
+realtime data was more than 90 seconds old when OpenMapX fetched it. Only some
+sources state when they last updated their realtime data: HAFAS-based regional
+sources and Transport for London do. MOTIS/Transitous, Entur, OTP-based sources
+and the Swiss timetable do not, and a board that combines
+sources only has an age when every realtime source on it states one. The absence
+of this warning therefore does not prove freshness.
+
 Platform changes show planned and current values when available; cancellations
 retain a clear label and struck-through times.
 

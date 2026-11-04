@@ -146,6 +146,8 @@ export interface DataSourceResult {
   status?: string; // "operational" | "non-operational" | …
   summary?: I18nToken; // short localized label under the marker
   operator?: string;
+  fee?: "free" | "paid"; // when the source says whether use costs money
+  access?: "public" | "customers" | "permit" | "private" | "restricted"; // who may use it
   kind?: "station" | "vehicle"; // fixed vs free-floating; gates OSM snapping
   attributions?: Attribution[]; // legacy per-record compatibility credit
   sortValues?: Record<string, number>; // for client-side sorting
@@ -340,6 +342,16 @@ on the returned envelope, for example
 `{ ...freshnessNow({ hasRealtimeData: true }), dataAsOf: upstreamTimestamp }`. Keep the
 actual evidence time when serving stale/cached data; a new request time cannot
 make old data fresh.
+
+For transit departures, `dataAsOf` is when the upstream last updated the
+realtime data. The web marks a board stale when the source was more than 90
+seconds behind at `fetchedAt`; time the board then spends in caches or on screen
+is not counted. A response's
+generation time (for example SIRI `ResponseTimestamp`) or a static dataset's
+publication time does not qualify. Transit providers built with
+`defineTransitProvider` pass it as `wrapRT(data, sourceIds, { dataAsOf })`;
+`upstreamDataAsOf` reads Unix-second or ISO stamps and leaves missing or future
+ones unknown.
 
 ## How a request flows
 

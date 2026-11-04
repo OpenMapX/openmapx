@@ -17,7 +17,10 @@ export type TransportMode =
   // (door-to-door) legs returned by the transit planner. `cycling` also covers
   // bike-share rentals; `driving` covers car, park-and-ride and car-share.
   | "cycling"
-  | "driving";
+  | "driving"
+  // A public transport service whose source mode has no category here, such as a
+  // flight or taxi. Shown neutrally rather than as a guessed mode.
+  | "other";
 
 /** A public, source-backed identifier that riders can search for. */
 export interface TransitStopCode extends ContributingRecord {
@@ -244,6 +247,12 @@ export interface Departure extends ContributingRecord {
   remarks?: TripRemark[];
   serviceInfo?: TransitServiceInfo;
   provenance?: TransitObservationProvenance;
+  /**
+   * The stop this departure leaves from, or an arrival reaches. Sources set it
+   * when they state it: a stop's board can include departures of related
+   * stops. A place's merged board sets it on every row.
+   */
+  stop?: { id: string; name: string };
 }
 
 export interface TransitObservationProvenance extends ContributingRecord {
@@ -789,9 +798,23 @@ export interface MergedRoute extends TransitRoute {
   hintStopId?: string;
 }
 
+/**
+ * A stop's departures or arrivals, with the time their realtime data was last
+ * updated upstream when the source states one (see `Freshness.dataAsOf`).
+ */
+export interface DepartureBoard {
+  departures: Departure[];
+  dataAsOf?: string;
+}
+
 /** A departure merged across multiple providers/stops. */
 export interface MergedDeparture extends Departure {
   providers: string[];
   /** All non-empty trip IDs collected from all providers (for fallback trip lookups). */
   tripIds?: string[];
+  /**
+   * True when the place's departures come from differently named stops and
+   * this one's stop is not the place's main stop, so riders need its name.
+   */
+  atOtherStop?: boolean;
 }

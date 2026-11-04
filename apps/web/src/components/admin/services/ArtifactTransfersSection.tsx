@@ -2,7 +2,6 @@
 
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -18,6 +17,7 @@ import type { ArtifactImportPreview, TransferStage } from "@openmapx/core/ops";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import {
   artifactFileSinkSupported,

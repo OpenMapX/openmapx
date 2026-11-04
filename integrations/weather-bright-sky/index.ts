@@ -6,34 +6,78 @@ import type {
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
+import { localDateInZone } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import {
+  fetchJsonWithTimeout,
+  forecastTimeZone,
+  groupByLocalDay,
+  round4,
+} from "@openmapx/integration-weather/lib";
 import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.brightsky.dev";
 
-const ICON_TO_WMO: Record<string, number> = {
+type Intensity = "slight" | "moderate" | "heavy";
+
+/**
+ * WMO codes for the precipitation types in Bright Sky's `condition` and `icon`
+ * vocabularies (https://api.brightsky.dev/openapi.json), graded by intensity.
+ */
+const PRECIPITATION_TO_WMO: Record<string, Record<Intensity, number>> = {
+  rain: { slight: 61, moderate: 63, heavy: 65 },
+  snow: { slight: 71, moderate: 73, heavy: 75 },
+  sleet: { slight: 68, moderate: 69, heavy: 69 },
+  hail: { slight: 89, moderate: 90, heavy: 90 },
+};
+
+const SKY_ICON_TO_WMO: Record<string, number> = {
   "clear-day": 0,
   "clear-night": 0,
   "partly-cloudy-day": 2,
   "partly-cloudy-night": 2,
   cloudy: 3,
-  fog: 45,
-  wind: 3,
-  rain: 63,
-  sleet: 67,
-  snow: 73,
-  hail: 96,
-  thunderstorm: 95,
 };
 
-function iconToWmo(icon: string | null, cloudCover: number | null): number {
-  if (icon && icon in ICON_TO_WMO) return ICON_TO_WMO[icon];
+/**
+ * Grades a rate on the WMO rain-intensity bands (mm/h). An unknown amount gets
+ * the slight code: it is the weakest claim the stated precipitation type allows.
+ */
+function intensity(rateMmPerHour: number | null): Intensity {
+  if (rateMmPerHour == null || rateMmPerHour < 2.5) return "slight";
+  return rateMmPerHour < 7.6 ? "moderate" : "heavy";
+}
+
+function cloudCoverToWmo(cloudCover: number | null): number {
   if (cloudCover != null) {
     if (cloudCover < 25) return 0;
     if (cloudCover < 75) return 2;
   }
   return 3;
+}
+
+interface BrightSkyConditions {
+  condition?: string | null;
+  icon: string | null;
+  cloud_cover: number | null;
+}
+
+/**
+ * Bright Sky's `icon` shows precipitation only above 0.5 mm and otherwise
+ * prefers `wind` to the sky state, so the stated `condition` decides the
+ * precipitation type and the measured cloud cover stands in for a `wind` icon.
+ */
+export function brightSkyWeatherCode(
+  record: BrightSkyConditions,
+  precipitationRateMmPerHour: number | null,
+): number {
+  const stated =
+    record.condition && record.condition !== "dry" ? record.condition : (record.icon ?? "");
+  if (stated === "fog") return 45;
+  if (stated === "thunderstorm") return 95;
+  const precipitation = PRECIPITATION_TO_WMO[stated];
+  if (precipitation) return precipitation[intensity(precipitationRateMmPerHour)];
+  return SKY_ICON_TO_WMO[stated] ?? cloudCoverToWmo(record.cloud_cover);
 }
 
 function iconIsDay(icon: string | null): boolean {
@@ -44,6 +88,7 @@ function iconIsDay(icon: string | null): boolean {
 interface BrightSkyCurrent {
   timestamp: string;
   cloud_cover: number | null;
+  condition?: string | null;
   icon: string | null;
   precipitation_10: number | null;
   pressure_msl: number | null;
@@ -57,6 +102,7 @@ interface BrightSkyCurrent {
 interface BrightSkyHourly {
   timestamp: string;
   cloud_cover: number | null;
+  condition?: string | null;
   icon: string | null;
   precipitation: number | null;
   precipitation_probability: number | null;
@@ -74,6 +120,11 @@ function fetchBrightSky<T>(url: string): Promise<T> {
 const brightSkyProvider: WeatherProvider = {
   id: "bright-sky",
   priority: 3,
+  // Bright Sky documents that it changes DWD's data: `icon` and `condition`
+  // are "calculated from different fields in the raw data as a best effort",
+  // `/current_weather` compiles SYNOP observations, and gaps are filled from
+  // fallback stations (https://brightsky.dev/docs/).
+  changesSourceData: true,
 
   async getCurrentWeather(coords: LngLat, options?: WeatherOptions): Promise<WeatherResponse> {
     const lat = round4(coords[1]);
@@ -86,23 +137,26 @@ const brightSkyProvider: WeatherProvider = {
     if (!w || w.temperature == null) throw new Error("No Bright Sky data (outside Germany?)");
 
     const isImperial = options?.units === "imperial";
-    // Bright Sky returns wind in km/h already
-    const windSpeed = w.wind_speed_10 ?? 0;
-    const windGusts = w.wind_gust_speed_10 ?? undefined;
+    const temperature = w.temperature;
+    // Bright Sky reports wind in km/h.
+    const speed = (kmh: number | null) =>
+      kmh == null ? undefined : isImperial ? kmh / 1.609 : kmh;
 
     return {
       location: coords,
       current: {
-        temperature: isImperial ? ((w.temperature ?? 0) * 9) / 5 + 32 : (w.temperature ?? 0),
-        feelsLike: isImperial ? ((w.temperature ?? 0) * 9) / 5 + 32 : (w.temperature ?? 0),
-        humidity: w.relative_humidity ?? 0,
-        pressure: w.pressure_msl ?? 0,
-        windSpeed: isImperial ? windSpeed / 1.609 : windSpeed,
-        windDirection: w.wind_direction_10 ?? 0,
-        windGusts: windGusts != null ? (isImperial ? windGusts / 1.609 : windGusts) : undefined,
-        precipitation: w.precipitation_10 ?? 0,
-        cloudCover: w.cloud_cover ?? 0,
-        weatherCode: iconToWmo(w.icon, w.cloud_cover),
+        temperature: isImperial ? (temperature * 9) / 5 + 32 : temperature,
+        humidity: w.relative_humidity ?? undefined,
+        pressure: w.pressure_msl ?? undefined,
+        windSpeed: speed(w.wind_speed_10),
+        windDirection: w.wind_direction_10 ?? undefined,
+        windGusts: speed(w.wind_gust_speed_10),
+        precipitation: w.precipitation_10 ?? undefined,
+        cloudCover: w.cloud_cover ?? undefined,
+        weatherCode: brightSkyWeatherCode(
+          w,
+          w.precipitation_10 == null ? null : w.precipitation_10 * 6,
+        ),
         isDay: iconIsDay(w.icon),
         time: w.timestamp,
       },
@@ -131,7 +185,7 @@ const brightSkyProvider: WeatherProvider = {
     const points = data.weather.slice(0, hours).map((h) => ({
       time: h.timestamp,
       temperature: isImperial ? ((h.temperature ?? 0) * 9) / 5 + 32 : (h.temperature ?? 0),
-      weatherCode: iconToWmo(h.icon, h.cloud_cover),
+      weatherCode: brightSkyWeatherCode(h, h.precipitation),
       precipitationProbability: h.precipitation_probability ?? 0,
       precipitation: h.precipitation ?? 0,
       windSpeed: isImperial ? (h.wind_speed ?? 0) / 1.609 : (h.wind_speed ?? 0),
@@ -149,11 +203,15 @@ const brightSkyProvider: WeatherProvider = {
   ): Promise<WeatherForecastResponse<DailyForecastPoint>> {
     const lat = round4(coords[1]);
     const lon = round4(coords[0]);
+    const timeZone = forecastTimeZone(coords);
     const now = new Date();
     const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
+    // With `tz`, Bright Sky reads `date`/`last_date` as local dates and returns
+    // timestamps with the zone's offset, so the window covers whole local days.
     const data = await fetchBrightSky<{ weather: BrightSkyHourly[] }>(
-      `${BASE_URL}/weather?lat=${lat}&lon=${lon}&date=${now.toISOString().slice(0, 10)}&last_date=${end.toISOString().slice(0, 10)}`,
+      `${BASE_URL}/weather?lat=${lat}&lon=${lon}&date=${localDateInZone(now, timeZone)}` +
+        `&last_date=${localDateInZone(end, timeZone)}&tz=${encodeURIComponent(timeZone)}`,
     );
 
     if (!data.weather?.length) throw new Error("No forecast data from Bright Sky");
@@ -161,16 +219,12 @@ const brightSkyProvider: WeatherProvider = {
     const isImperial = options?.units === "imperial";
     const convertTemp = (c: number) => (isImperial ? (c * 9) / 5 + 32 : c);
 
-    const byDate = new Map<string, BrightSkyHourly[]>();
-    for (const h of data.weather) {
-      const date = h.timestamp.slice(0, 10);
-      const arr = byDate.get(date);
-      if (arr) arr.push(h);
-      else byDate.set(date, [h]);
-    }
-
     const results: DailyForecastPoint[] = [];
-    for (const [date, entries] of byDate) {
+    for (const { date, records, noon } of groupByLocalDay(
+      data.weather,
+      (h) => h.timestamp,
+      timeZone,
+    )) {
       if (results.length >= days) break;
 
       let minTemp = Number.POSITIVE_INFINITY;
@@ -178,7 +232,7 @@ const brightSkyProvider: WeatherProvider = {
       let precipSum = 0;
       let maxWind = 0;
 
-      for (const h of entries) {
+      for (const h of records) {
         const temp = h.temperature ?? 0;
         if (temp < minTemp) minTemp = temp;
         if (temp > maxTemp) maxTemp = temp;
@@ -186,11 +240,10 @@ const brightSkyProvider: WeatherProvider = {
         if ((h.wind_speed ?? 0) > maxWind) maxWind = h.wind_speed ?? 0;
       }
 
-      const midday = entries.find((h) => h.timestamp.includes("T12:")) ?? entries[0];
-
       results.push({
         date,
-        weatherCode: iconToWmo(midday.icon, midday.cloud_cover),
+        timeZone,
+        weatherCode: brightSkyWeatherCode(noon, noon.precipitation),
         temperatureMax: convertTemp(maxTemp),
         temperatureMin: convertTemp(minTemp),
         precipitationSum: precipSum,

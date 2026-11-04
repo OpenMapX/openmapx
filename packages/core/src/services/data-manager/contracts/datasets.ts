@@ -24,6 +24,10 @@ export const datasetMetadataSchema = z.strictObject({
   sha256: z.string().optional(),
   md5: z.string().optional(),
   path: z.string().min(1),
+  /** An OSM PBF's replication timestamp: the time its data is current to. */
+  osmTimestamp: z.string().optional(),
+  /** The diff feed an OSM PBF's header names as continuing it. */
+  osmReplicationUrl: z.string().optional(),
 });
 export const datasetsSchema = z.strictObject({ datasets: z.array(datasetMetadataSchema) });
 export const reloadDatasetsSchema = z.strictObject({ ok: z.literal(true), datasets: countSchema });

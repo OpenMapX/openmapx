@@ -2,7 +2,6 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -14,6 +13,7 @@ import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
 type Preview = Extract<

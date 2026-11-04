@@ -1,4 +1,3 @@
-import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Wuppertal car-sharing open data client.
  * GeoJSON with stations from Cambio, Flinkster, and RUHRAUTOE.
@@ -48,7 +47,7 @@ function parseAddress(
   return { street: adresse, city, postcode };
 }
 
-function parse(body: string): SharedMobilityStation[] {
+export function parseDeNwWuppertalGeoJson(body: string): SharedMobilityStation[] {
   const geojson = JSON.parse(body) as DeNwWuppertalGeoJSON;
   const stations: SharedMobilityStation[] = [];
 
@@ -59,17 +58,15 @@ function parse(body: string): SharedMobilityStation[] {
     const [lng, lat] = coords;
     const props = feature.properties;
     const name = props.NAME_STAT || "Station";
-    const vehicleCount = props.ANZ_FAHRZ ?? 0;
-    const provider = props.ANBIETER || "Unknown";
 
     stations.push({
       id: `de-nw-wuppertal/${lng.toFixed(5)},${lat.toFixed(5)}`,
       name,
       coordinates: [lng, lat] as LngLat,
-      availableVehicles: vehicleCount,
-      operator: provider,
+      // ANZ_FAHRZ counts the vehicles stationed here, not those free to book now.
+      capacity: props.ANZ_FAHRZ,
+      operator: props.ANBIETER || undefined,
       vehicleTypes: ["car"],
-      isActive: vehicleCount > 0,
       sources: ["de-nw-wuppertal"],
       address: parseAddress(props.ADRESSE, props.ORT),
       website: props.URL || undefined,
@@ -89,13 +86,5 @@ export const deNwWuppertalClient = createStaticCarSharingClient({
   name: "Wuppertal Open Data",
   url: "https://daten.wuppertal.de/Transport_Verkehr/Carsharing_EPSG4326_JSON.json",
   regions: [{ center: [7.18, 51.26] as LngLat, radiusKm: 15 }],
-  attribution: {
-    label: "Stadt Wuppertal",
-    url: "https://www.offenedaten-wuppertal.de",
-    licensing: licensingFromDeclaration(
-      "CC-BY-4.0",
-      "https://creativecommons.org/licenses/by/4.0/",
-    ),
-  },
-  parse,
+  parse: parseDeNwWuppertalGeoJson,
 });

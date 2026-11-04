@@ -2,7 +2,6 @@
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -16,6 +15,7 @@ import { timeZoneAt, tzOffsetLabel } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { DateTimeField } from "@/components/ui/DateTimeField";
+import Dialog from "@/components/ui/Dialog";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Matches the wall-clock shape the routing API accepts. */

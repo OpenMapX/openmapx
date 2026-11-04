@@ -59,7 +59,9 @@ const noRelativeIntegrationsImports = {
 };
 
 await build({
-  entryPoints: ["src/server.ts"],
+  // migrate.ts is the one-shot migration step `openmapx services update` runs
+  // before it replaces app-api.
+  entryPoints: ["src/server.ts", "src/migrate.ts"],
   bundle: true,
   platform: "node",
   target: "node24",
@@ -68,6 +70,6 @@ await build({
   define: {
     __OPENMAPX_PRIVACY_SOURCE_FINGERPRINT__: JSON.stringify(privacySourceFingerprint),
   },
-  outfile: "dist/server.js",
+  outdir: "dist",
   plugins: [noRelativeIntegrationsImports],
 });

@@ -8,7 +8,6 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
@@ -22,6 +21,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import Menu from "@/components/ui/Menu";
 
 interface AccountMenuProps {
   anchorEl: HTMLElement | null;

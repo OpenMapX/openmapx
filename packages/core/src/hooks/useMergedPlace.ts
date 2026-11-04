@@ -38,8 +38,9 @@ function prettifyCategory(raw: string): string {
  * Merges place data from all available sources into a single Place.
  *
  * Priority rules (per field):
- *  1. Identity fields (id, name, category, rawCategory, dataSourceDetail):
- *     selectedPlace always wins — these define what the user clicked.
+ *  1. Identity fields (id, name, category, rawCategory, transitStop,
+ *     dataSourceDetail): selectedPlace always wins — these define what the
+ *     user clicked.
  *  2. Address selection retains explicit object tags and data-source ownership;
  *     unknown legacy candidates keep the existing resolver-first precedence.
  *  3. OSM-sourced fields (city, phone, website, openingHours, osmTags,
@@ -78,6 +79,7 @@ function mergePlaceFields(
           ? prettifyCategory(selected.category ?? "") || nom.category
           : nom.category || prettifyCategory(selected.category ?? ""),
         rawCategory: selected.rawCategory || nom.rawCategory,
+        transitStop: selected.transitStop,
       }
     : {
         ...selected,

@@ -1,3 +1,4 @@
+import { THEME_COLORS } from "@openmapx/core/theme";
 import type { ExpoConfig } from "expo/config";
 // Explicit `.ts` specifiers: Expo's config loader transpiles only this entry
 // file, so its imports are resolved by Node, which needs the real extension to
@@ -14,8 +15,11 @@ import { IOS_USAGE_DESCRIPTIONS } from "./config/nativeCopy.ts";
  */
 const mobile = readMobileConfig(process.env);
 
-/** OpenMapX brand blue, used for the Android notification tint and splash. */
-const BRAND_COLOR = "#1B69D6";
+/**
+ * The web UI's primary colour, used for the Android notification tint and the
+ * adaptive icon's background, so the app's own surfaces match the page.
+ */
+const BRAND_COLOR = THEME_COLORS.light.primary;
 
 /**
  * Associated domains exist only when a real Apple Team ID is present, which
@@ -73,13 +77,16 @@ const config: ExpoConfig = {
       // phone in a pocket. Declared explicitly rather than arriving silently
       // through expo-notifications' own manifest.
       "android.permission.VIBRATE",
+      // Every location update reaches the task through a JobScheduler job, and
+      // expo-task-manager always marks those persisted, which Android refuses
+      // without this permission. Declaring it registers no boot receiver.
+      "android.permission.RECEIVE_BOOT_COMPLETED",
     ],
     // Permissions some bundled Expo modules declare by default but this app
-    // must not ship: no remote push, no boot receiver, no exact alarms, no
-    // media/microphone capability.
+    // must not ship: no remote push, no exact alarms, no media/microphone
+    // capability.
     blockedPermissions: [
       "com.google.android.c2dm.permission.RECEIVE",
-      "android.permission.RECEIVE_BOOT_COMPLETED",
       "android.permission.SCHEDULE_EXACT_ALARM",
       "android.permission.USE_EXACT_ALARM",
       "android.permission.RECORD_AUDIO",
@@ -118,8 +125,16 @@ const config: ExpoConfig = {
         image: "./assets/splash-icon.png",
         imageWidth: 180,
         resizeMode: "contain",
-        backgroundColor: "#FFFFFF",
-        dark: { backgroundColor: "#0B0F14" },
+        backgroundColor: THEME_COLORS.light.surface,
+        dark: { backgroundColor: THEME_COLORS.dark.background },
+        // Android 12 and later draw the splash image on a 288 dp canvas and
+        // crop it to a 192 dp circle, which cut the corners and edges off the
+        // square logo. This image already holds the whole canvas, with the
+        // logo small enough that its rounded corners stay inside the circle.
+        android: {
+          image: "./assets/splash-icon-android.png",
+          imageWidth: 288,
+        },
       },
     ],
     [

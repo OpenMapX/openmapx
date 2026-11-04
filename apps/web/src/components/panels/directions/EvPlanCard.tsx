@@ -45,6 +45,9 @@ export function EvPlanCard({
   const hasPartialChargers = result.warnings.some((w) => w.kind === "partial-charger-data");
   const hasNoAllowedNetwork = result.warnings.some((w) => w.kind === "no-allowed-network");
   const hasTightMargin = result.warnings.some((w) => w.kind === "tight-margin");
+  const hasStraightLineDistances = result.warnings.some(
+    (w) => w.kind === "straight-line-distances",
+  );
 
   const totalSeconds = result.totals.driveSeconds + result.totals.chargeSeconds;
   const estimatedCost = result.totals.estimatedCost;
@@ -166,6 +169,12 @@ export function EvPlanCard({
         </Alert>
       )}
 
+      {hasStraightLineDistances && (
+        <Alert severity="info" sx={{ mx: 2, my: 1.5 }}>
+          {t("straightLineDistances")}
+        </Alert>
+      )}
+
       {hasNoAllowedNetwork && (
         <Alert
           severity="warning"
@@ -227,6 +236,17 @@ function EvPlanStopRow({
         unit: stop.tariffPrice.unit,
       })
     : null;
+  // A member or roaming rate is what holders of that contract pay, not the price at the charger.
+  const contractFmt = tariffFmt && stop.contractTariff ? t("contractTariff") : null;
+  const availabilityTime = stop.availability?.updatedAt
+    ? new Date(stop.availability.updatedAt)
+    : null;
+  const availabilityAsOf =
+    availabilityTime && !Number.isNaN(availabilityTime.getTime())
+      ? new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(
+          availabilityTime,
+        )
+      : null;
   const attributions =
     stop.fieldContributors === undefined
       ? snapshotContributors(stop.contributors ?? stop.attributions)
@@ -305,10 +325,16 @@ function EvPlanStopRow({
           </Typography>
           {stop.availability && (
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              {t("availability", {
-                available: stop.availability.available,
-                total: stop.availability.total,
-              })}
+              {availabilityAsOf
+                ? t("availabilityAsOf", {
+                    available: stop.availability.available,
+                    total: stop.availability.total,
+                    time: availabilityAsOf,
+                  })
+                : t("availability", {
+                    available: stop.availability.available,
+                    total: stop.availability.total,
+                  })}
             </Typography>
           )}
         </Box>
@@ -317,7 +343,7 @@ function EvPlanStopRow({
             variant="caption"
             sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
           >
-            {[costFmt, tariffFmt].filter(Boolean).join(" · ")}
+            {[costFmt, tariffFmt, contractFmt].filter(Boolean).join(" · ")}
           </Typography>
         )}
       </ButtonBase>

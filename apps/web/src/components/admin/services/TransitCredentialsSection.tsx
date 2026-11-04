@@ -4,7 +4,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -29,6 +28,7 @@ type FeedCredentialChange = FeedCredentialPreviewInput["changes"][number];
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";

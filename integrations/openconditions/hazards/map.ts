@@ -8,7 +8,10 @@ import type {
 } from "@openmapx/integration-framework";
 import { parseContributors, snapshotContributors } from "@openmapx/integration-framework";
 import {
+  type Attribution,
+  asModified,
   credit,
+  derivedShown,
   list,
   locationTableCredits,
   type Rec,
@@ -77,10 +80,14 @@ function tableCreditsOf(record: Rec) {
  * since the record itself names it.
  */
 function contributorsOf(record: Rec, sources: LiveSources) {
+  const changed = (credits: Attribution[]) =>
+    derivedShown(record, { severity: true }) ? asModified(credits) : credits;
   const captured = parseContributors(
     record["contributors"] ?? rec(record["provenance"])["contributors"],
   );
-  if (captured !== undefined) return snapshotContributors(captured, tableCreditsOf(record));
+  if (captured !== undefined) {
+    return snapshotContributors(changed(captured), tableCreditsOf(record));
+  }
   const members = sourcesOf(record);
   return snapshotContributors(
     members.flatMap((member) => {
@@ -89,11 +96,17 @@ function contributorsOf(record: Rec, sources: LiveSources) {
       const notice = sources.noticeOf(member.id);
       const catalogue = described.find((a) => a.name !== notice);
       const captured = { ...catalogue, ...own };
-      return [captured, ...(notice ? [{ sourceId: member.id, name: notice }] : [])];
+      return [...changed([captured]), ...(notice ? [{ sourceId: member.id, name: notice }] : [])];
     }),
-    upstreamCredits(members, sources),
+    changed(upstreamCredits(members, sources)),
     tableCreditsOf(record),
   );
+}
+
+/** The credits of a record's own sources, as changed data where it shows a derived value. */
+function sourceCreditsOf(record: Rec, credits: readonly RecordSource[], sources: LiveSources) {
+  const own = credits.map((s) => credit(s, sources));
+  return derivedShown(record, { severity: true }) ? asModified(own) : own;
 }
 
 function creditsOf(record: Rec): { ids: string[]; credits: RecordSource[] } {
@@ -151,7 +164,7 @@ export function situationToAlert(
     ...field("senderName", textOf(cap["senderName"], lang)),
     ...field("web", str(cap["web"])),
     sources: ids,
-    attributions: [...credits.map((s) => credit(s, sources)), ...tableCreditsOf(record)],
+    attributions: [...sourceCreditsOf(record, credits, sources), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
     notices,
   };
@@ -301,7 +314,7 @@ export function situationToNaturalHazard(
     ...field("locality", str(admin["municipality"])),
     ...field("detailUrl", str(details["detailUrl"])),
     sources: ids,
-    attributions: [...credits.map((s) => credit(s, sources)), ...tableCreditsOf(record)],
+    attributions: [...sourceCreditsOf(record, credits, sources), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
   };
 }

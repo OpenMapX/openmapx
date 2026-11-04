@@ -56,7 +56,8 @@ function makeEmptyWaypoint(): Waypoint {
   return { id: newWaypointId(), coords: null, label: "", type: "waypoint" };
 }
 
-const MAX_WAYPOINTS = 10;
+/** Origin, destination and stops together; routing requests are bounded by this. */
+export const MAX_DIRECTIONS_WAYPOINTS = 10;
 
 function hasWindow(schedule: WaypointSchedule | undefined): boolean {
   return (
@@ -140,6 +141,12 @@ export interface DirectionsState {
   close: () => void;
   setWaypoint: (index: number, coords: LngLat | null, label: string) => void;
   addWaypoint: (afterIndex: number) => void;
+  /**
+   * Insert a filled stop before `index` (between the origin and destination).
+   * False, with nothing changed, at the waypoint cap or for an index outside
+   * the itinerary's interior.
+   */
+  insertWaypoint: (index: number, coords: LngLat, label: string) => boolean;
   removeWaypoint: (index: number) => void;
   reorderWaypoints: (fromIndex: number, toIndex: number) => void;
   reverseWaypoints: () => void;
@@ -261,11 +268,20 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
 
     addWaypoint: (afterIndex) => {
       const wps = [...get().waypoints];
-      if (wps.length >= MAX_WAYPOINTS) return;
+      if (wps.length >= MAX_DIRECTIONS_WAYPOINTS) return;
       const newWp = makeEmptyWaypoint();
       wps.splice(afterIndex + 1, 0, newWp);
       const typed = deriveTypes(wps);
       set({ waypoints: typed, activeRouteIndex: 0 });
+    },
+
+    insertWaypoint: (index, coords, label) => {
+      const wps = [...get().waypoints];
+      if (wps.length >= MAX_DIRECTIONS_WAYPOINTS) return false;
+      if (!Number.isInteger(index) || index < 1 || index > wps.length - 1) return false;
+      wps.splice(index, 0, { ...makeEmptyWaypoint(), coords, label });
+      set({ waypoints: deriveTypes(wps), activeRouteIndex: 0 });
+      return true;
     },
 
     removeWaypoint: (index) => {

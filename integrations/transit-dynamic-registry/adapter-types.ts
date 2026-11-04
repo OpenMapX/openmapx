@@ -1,6 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import type {
-  Departure,
+  DepartureBoard,
   ServiceAlert,
   TransitStop,
   TripPlan,
@@ -16,8 +16,8 @@ export interface ProtocolAdapter {
     lng: number,
     radiusMeters: number,
   ): Promise<TransitStop[]>;
-  getDepartures(entry: RegistryEntry, stopId: string, minutes: number): Promise<Departure[]>;
-  getArrivals(entry: RegistryEntry, stopId: string, minutes: number): Promise<Departure[]>;
+  getDepartures(entry: RegistryEntry, stopId: string, minutes: number): Promise<DepartureBoard>;
+  getArrivals(entry: RegistryEntry, stopId: string, minutes: number): Promise<DepartureBoard>;
   /** Optional: text search for stops by name. */
   searchByName?(entry: RegistryEntry, query: string, limit: number): Promise<TransitStop[]>;
   /** Optional: fetch a single stop by its full prefixed ID. */

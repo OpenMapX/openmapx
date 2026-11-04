@@ -62,9 +62,8 @@ it("shows one captured MapTiler credit across owners while earlier basemap credi
   expect(
     notices.getByRole("link", { name: "OpenStreetMap contributors" }).getAttribute("href"),
   ).toBe("https://www.openstreetmap.org/copyright");
-  expect(notices.getByRole("link", { name: "Licence not specified" }).getAttribute("href")).toBe(
-    "https://www.maptiler.com/terms/cloud/",
-  );
+  // MapTiler states no licence for its material, so its credit names none.
+  expect(notices.queryByText(/Licence not specified/)).toBeNull();
   act(() => useMapAttributionStore.setState({ byLayer: { base: [osm] } }));
   expect(notices.queryByRole("link", { name: "MapTiler" })).toBeNull();
 });

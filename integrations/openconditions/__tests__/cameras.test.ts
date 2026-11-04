@@ -235,7 +235,6 @@ describe("cameras-openconditions", () => {
 
     expect(attributions[0]).toEqual({
       sourceId: DIGITRAFFIC,
-      modified: true,
       name: "Transport for London",
       licensing: provenance.attribution && (provenance.attribution as Rec).licensing,
       attributionText: "Transport for London",

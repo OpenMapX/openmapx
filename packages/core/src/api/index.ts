@@ -70,7 +70,12 @@ export {
   OFFLINE_RETENTION_GC_TIME_MS,
   RAPID_QUERY_POLICY,
 } from "./queryPolicy";
-export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";
+export {
+  type AlertBBox,
+  fetchRoadAlerts,
+  type RawRoadAlert,
+  type RoadAlertRoad,
+} from "./roadAlerts";
 export {
   type FetchRoadConditionsOptions,
   type FetchRoadConditionsResult,

@@ -232,9 +232,18 @@ describe("alerts", () => {
         declarations: [{ text: "LicenseRef-OD-HR" }],
       },
       attributionText: DGU,
+      // The county outlines are simplified into the alert's area: the table's data is changed.
       modified: true,
     };
     expect(croatia!.contributors).toContainEqual(credit);
+    // MeteoAlarm's warning only names the counties; drawing them changes nothing it said.
+    const meteoalarm = (alert: typeof croatia) =>
+      alert!.contributors!.filter(
+        (c) => c.sourceId === METEOALARM && !c.attributionText?.startsWith("Contains"),
+      );
+    expect(meteoalarm(croatia).every((c) => c.modified === undefined)).toBe(true);
+    // Austria's area is unioned and simplified from MeteoAlarm's own region shapes.
+    expect(meteoalarm(austria).some((c) => c.modified === true)).toBe(true);
     expect(croatia!.attributions).toContainEqual(credit);
     expect(croatia!.contributors!.filter((c) => c.attributionText === DGU)).toHaveLength(1);
     // The Open Licence's statement stays beside the drawn area, with its licence linked.

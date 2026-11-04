@@ -452,7 +452,6 @@ export function recordAirQuality(metric: AirQualityMetrics): void {
     headline_class: metric.headlineClass,
     rejection_code: metric.rejectionCode,
     quota_truncated: String(metric.quotaTruncated),
-    compatibility_use: metric.compatibilityUse,
   };
   const handle = getMetrics();
   handle.airQualityRequestCounter.add(1, labels);

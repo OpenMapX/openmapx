@@ -47,6 +47,7 @@
     "reserved": "Reserviert",
     "disabled": "Deaktiviert",
     "available": "Verfügbar",
+    "availabilityNotPublished": "Von dieser Quelle nicht veröffentlicht",
     "vehicleFallback": "Roller",
     "yes": "Ja",
     "no": "Nein",
@@ -87,6 +88,7 @@
   },
   "summary": {
     "available": "{count, plural, =0 {Keine Roller verfügbar} one {1 Roller verfügbar} other {# Roller verfügbar}}",
+    "capacity": "{count, plural, =0 {Keine Roller angegeben} one {Station für 1 Roller} other {Station für # Roller}}",
     "slots": "{count, plural, =0 {Keine freien Stellplätze} one {1 freier Stellplatz} other {# freie Stellplätze}}",
     "batteryRange": "{battery} % · {km} km"
   },

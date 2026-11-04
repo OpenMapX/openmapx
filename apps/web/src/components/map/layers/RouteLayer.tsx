@@ -18,6 +18,7 @@ import type * as maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import {
@@ -357,6 +358,20 @@ export function RouteLayer() {
     if (!map) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
       if (getMapClickOwner(e)) return;
+      // A pin or label drawn over an alternative (an along-route result, a
+      // category marker) owns its tap; selecting the route beneath would replan
+      // away from what the user tapped. Area fills lie under the route and keep
+      // it selectable.
+      const interactive = [...INTERACTIVE_LAYER_IDS].filter((id) => {
+        const type = map.getLayer(id)?.type;
+        return type === "symbol" || type === "circle";
+      });
+      if (
+        interactive.length > 0 &&
+        map.queryRenderedFeatures(e.point, { layers: interactive }).length > 0
+      ) {
+        return;
+      }
       const idx = e.features?.[0]?.properties?.routeIndex as number | undefined;
       if (idx !== undefined) setActiveRouteIndex(idx);
     };

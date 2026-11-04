@@ -2,7 +2,6 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -27,6 +26,7 @@ import {
   credentialTransferEnvelopeSchema,
 } from "@openmapx/core/api-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";

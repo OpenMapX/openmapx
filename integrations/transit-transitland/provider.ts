@@ -147,7 +147,8 @@ export async function getDepartures(stopId: string, minutes = 60): Promise<Depar
     const departures = data?.stops?.[0]?.departures ?? [];
     return departures.map((d) => normalizeDeparture(d));
   } catch {
-    return [];
+    // A failed board must not read as "no departures"; callers decide how to degrade.
+    throw new Error("Transitland timetable unavailable");
   }
 }
 

@@ -6,7 +6,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -16,6 +15,7 @@ import { authClient } from "@openmapx/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 
 function ResetPasswordDialogInner() {
   const t = useTranslations("auth");

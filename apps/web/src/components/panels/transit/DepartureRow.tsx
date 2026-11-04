@@ -1,12 +1,13 @@
 "use client";
 
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
-import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
+import type { Departure, MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { departureRealtimeEvidence } from "@/lib/transit-data-status";
@@ -17,7 +18,8 @@ import { RouteBadge } from "./RouteBadge";
 import { TransitDataStatus } from "./TransitDataStatus";
 
 interface DepartureRowProps {
-  departure: Departure;
+  /** A place board's rows also say whether they leave from another of the place's stops. */
+  departure: Departure & Pick<MergedDeparture, "atOtherStop">;
   showPlatform?: boolean;
   freshness?: Freshness;
   queryFailed?: boolean;
@@ -26,6 +28,15 @@ interface DepartureRowProps {
   /** Show a warning indicator when the route has an active severe/critical alert. */
   hasAlert?: boolean;
 }
+
+const VISUALLY_HIDDEN = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+} as const;
 
 function topRemark(remarks: TripRemark[]): TripRemark {
   return [...remarks].sort((a, b) => REMARK_PRIORITY[b.type] - REMARK_PRIORITY[a.type])[0];
@@ -52,6 +63,8 @@ export function DepartureRow({
   const expectedTime = validExpectedAt ? fmt.time(validExpectedAt) : undefined;
   const timeChanged = expectedTime !== undefined && expectedTime !== scheduledTime;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
+  // Only named when the place has differently named stops and this is not its main one.
+  const otherStopName = departure.atOtherStop ? departure.stop?.name : undefined;
 
   const inner = (
     <>
@@ -79,6 +92,25 @@ export function DepartureRow({
                 code={departure.platform}
                 scheduledCode={departure.scheduledPlatform}
               />
+            )}
+            {otherStopName && (
+              <Typography
+                component="span"
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.25, minWidth: 0 }}
+              >
+                <PlaceOutlinedIcon aria-hidden sx={{ fontSize: 14, flexShrink: 0 }} />
+                <Box component="span" sx={VISUALLY_HIDDEN}>
+                  {t("rowStop")}:{" "}
+                </Box>
+                <Box
+                  component="span"
+                  sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {otherStopName}
+                </Box>
+              </Typography>
             )}
             {hasAlert && (
               <Tooltip title={t("activeServiceAlert")} placement="top" arrow>

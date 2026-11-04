@@ -68,6 +68,12 @@ export function WeatherWidget() {
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
+  const readings: string[] = [];
+  if (current.humidity != null) readings.push(`H:${current.humidity}%`);
+  if (current.windSpeed != null) {
+    readings.push(`W:${Math.round(current.windSpeed)}km/h`);
+    if (current.windDirection != null) readings.push(windDirectionLabel(current.windDirection));
+  }
 
   return (
     <Box
@@ -126,8 +132,7 @@ export function WeatherWidget() {
               whiteSpace: "nowrap",
             }}
           >
-            H:{current.humidity}% W:{Math.round(current.windSpeed)}km/h{" "}
-            {windDirectionLabel(current.windDirection)}
+            {readings.join(" ")}
           </Typography>
         </Paper>
       </Tooltip>

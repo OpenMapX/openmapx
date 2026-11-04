@@ -64,7 +64,6 @@ export const FORBIDDEN_ANDROID_PERMISSIONS = [
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.READ_MEDIA_AUDIO",
-  "android.permission.RECEIVE_BOOT_COMPLETED",
   "android.permission.SCHEDULE_EXACT_ALARM",
   "android.permission.USE_EXACT_ALARM",
   "android.permission.SYSTEM_ALERT_WINDOW",

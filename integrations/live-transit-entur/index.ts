@@ -60,6 +60,7 @@ function extractCodespaceId(...values: Array<string | null | undefined>): string
   return undefined;
 }
 
+/** Entur vehicle modes without an OpenMapX equivalent (AIR, TAXI, absent) become "other". */
 function toTransportMode(raw: string | null | undefined): TransportMode {
   const normalized = (raw ?? "").toLowerCase();
   if (normalized === "rail") return "rail";
@@ -72,7 +73,7 @@ function toTransportMode(raw: string | null | undefined): TransportMode {
   if (normalized === "cableway" || normalized === "cablecar" || normalized === "cable_car")
     return "cable_car";
   if (normalized === "monorail") return "monorail";
-  return "bus";
+  return "other";
 }
 
 function pickLocalizedText(

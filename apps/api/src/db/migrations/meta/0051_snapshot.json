@@ -1,6 +1,6 @@
 {
-  "id": "0aa5791a-a19b-489f-9999-00d604524afe",
-  "prevId": "8ee8e5bb-6745-4202-ba28-f7579b4c192f",
+  "id": "8ee8e5bb-6745-4202-ba28-f7579b4c192f",
+  "prevId": "615f75f9-83ef-45de-a7be-63ec7174bae3",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -1573,25 +1589,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'community'"
-        },
-        "installation_kind": {
-          "name": "installation_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'catalog'"
-        },
-        "provenance": {
-          "name": "provenance",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_operation_id": {
-          "name": "last_operation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "installed_version": {
           "name": "installed_version",
@@ -1661,16 +1658,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "installed_extension_installation_kind_check": {
-          "name": "installed_extension_installation_kind_check",
-          "value": "\"installed_extension\".\"installation_kind\" in ('catalog','standalone')"
-        },
-        "installed_extension_standalone_provenance_check": {
-          "name": "installed_extension_standalone_provenance_check",
-          "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.oauth_client_assertion": {
@@ -7664,8 +7652,67 @@
       "isRLSEnabled": false
     },
     "public.installed_integration": {
-      "isRLSEnabled": false,
       "name": "installed_integration",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "repository": {
+          "name": "repository",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "installed_version": {
+          "name": "installed_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'registry'"
+        },
+        "installed_at": {
+          "name": "installed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "installed_by": {
+          "name": "installed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "managed_by_extension": {
+          "name": "managed_by_extension",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_transaction_id": {
+          "name": "last_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
       "indexes": {
         "installedIntegration_sourceType_idx": {
           "name": "installedIntegration_sourceType_idx",
@@ -7683,7 +7730,6 @@
           "with": {}
         }
       },
-      "checkConstraints": {},
       "foreignKeys": {
         "installed_integration_installed_by_user_id_fk": {
           "name": "installed_integration_installed_by_user_id_fk",
@@ -7699,69 +7745,11 @@
           "onUpdate": "no action"
         }
       },
-      "policies": {},
-      "schema": "",
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "columns": {
-        "installed_by": {
-          "name": "installed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "installed_at": {
-          "name": "installed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "managed_by_extension": {
-          "name": "managed_by_extension",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_transaction_id": {
-          "name": "last_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "repository": {
-          "name": "repository",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "installed_version": {
-          "name": "installed_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_type": {
-          "name": "source_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'registry'"
-        }
-      }
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     },
     "public.oauth_client_resource": {
       "name": "oauth_client_resource",

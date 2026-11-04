@@ -33,6 +33,7 @@ import {
   TRANSIT_CREDENTIAL_MANAGED_CODE,
 } from "../services/managed-service-credentials";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
+import { osmExtractFor, readDataManagerDatasets } from "../services/osm-extract";
 import { isSecretsConfigured } from "../services/secrets";
 import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
@@ -851,14 +852,19 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
   registerServiceAdminRoute(app, "getAdminServiceData", async (request) => {
-    const inventory = await executeAndWait(
-      createApiOpsClient(),
-      { kind: "data.inspect", ...request.query },
-      createDurableOpsKey("admin.data.inspect", JSON.stringify(request.query)),
-      { signal: AbortSignal.timeout(30_000) },
-    );
+    const [inventory, datasets] = await Promise.all([
+      executeAndWait(
+        createApiOpsClient(),
+        { kind: "data.inspect", ...request.query },
+        createDurableOpsKey("admin.data.inspect", JSON.stringify(request.query)),
+        { signal: AbortSignal.timeout(30_000) },
+      ),
+      readDataManagerDatasets(),
+    ]);
+    const osmExtract = osmExtractFor(inventory.osm, datasets);
     return {
       ...inventory,
+      ...(osmExtract ? { osmExtract } : {}),
       fetchedAt: new Date().toISOString(),
     };
   });

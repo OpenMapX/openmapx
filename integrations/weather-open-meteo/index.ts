@@ -13,6 +13,8 @@ import type { WeatherProvider } from "@openmapx/integration-weather/types";
 const BASE = "https://api.open-meteo.com/v1/forecast";
 
 interface OpenMeteoResponse {
+  /** IANA zone the times are local to, resolved from `timezone=auto`. */
+  timezone?: string;
   current: {
     time: string;
     temperature_2m: number;
@@ -118,8 +120,10 @@ function parseHourly(data: OpenMeteoResponse): HourlyForecastPoint[] {
 function parseDaily(data: OpenMeteoResponse): DailyForecastPoint[] {
   const d = data.daily;
   if (!d) return [];
+  // `timezone=auto` makes these the location's calendar days, in `timezone`.
   return d.time.map((date, i) => ({
     date,
+    ...(data.timezone ? { timeZone: data.timezone } : {}),
     weatherCode: d.weather_code[i],
     temperatureMax: d.temperature_2m_max[i],
     temperatureMin: d.temperature_2m_min[i],

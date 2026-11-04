@@ -1,6 +1,6 @@
 {
-  "id": "047fd431-c171-45c5-83c9-9be92a888d7f",
-  "prevId": "9a25f282-f0dc-428e-a3a0-9a79d9d3d9e9",
+  "id": "9a25f282-f0dc-428e-a3a0-9a79d9d3d9e9",
+  "prevId": "4f0db974-6157-45b7-9478-54bd16a30cc7",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -4641,136 +4657,6 @@
         "session_auth_assurance_method_check": {
           "name": "session_auth_assurance_method_check",
           "value": "\"session_auth_assurance\".\"method\" in ('password', 'password_totp', 'password_recovery', 'passkey', 'federated')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.configuration_migration_preview": {
-      "name": "configuration_migration_preview",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_fingerprint": {
-          "name": "intent_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ciphertext": {
-          "name": "ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "iv": {
-          "name": "iv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tag": {
-          "name": "tag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_by_job_id": {
-          "name": "consumed_by_job_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "configuration_migration_preview_actor_kind_idx": {
-          "name": "configuration_migration_preview_actor_kind_idx",
-          "columns": [
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "configuration_migration_preview_expiry_idx": {
-          "name": "configuration_migration_preview_expiry_idx",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "configuration_migration_preview_actor_id_user_id_fk": {
-          "name": "configuration_migration_preview_actor_id_user_id_fk",
-          "tableFrom": "configuration_migration_preview",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "configuration_migration_preview_bounds": {
-          "name": "configuration_migration_preview_bounds",
-          "value": "\"configuration_migration_preview\".\"kind\" in ('migration','credentials') and length(\"configuration_migration_preview\".\"id\") = 36 and \"configuration_migration_preview\".\"intent_fingerprint\" ~ '^[a-f0-9]{64}$' and octet_length(\"configuration_migration_preview\".\"ciphertext\") <= 1572864 and length(\"configuration_migration_preview\".\"iv\") = 16 and length(\"configuration_migration_preview\".\"tag\") = 24 and \"configuration_migration_preview\".\"expires_at\" > \"configuration_migration_preview\".\"created_at\" and \"configuration_migration_preview\".\"expires_at\" <= \"configuration_migration_preview\".\"created_at\" + interval '10 minutes' and (\"configuration_migration_preview\".\"consumed_by_job_id\" is null or length(\"configuration_migration_preview\".\"consumed_by_job_id\") = 36)"
         }
       },
       "isRLSEnabled": false

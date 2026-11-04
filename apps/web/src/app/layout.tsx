@@ -19,6 +19,7 @@ import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
 import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
 import { AttributionLabelsSync } from "@/lib/attributionLabels";
 import { loadClientEnv } from "@/lib/serverClientEnv";
+import { THEME_COLOR } from "@/lib/themeColor";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -49,8 +50,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#207E23" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1c1c" },
+    { media: "(prefers-color-scheme: light)", color: THEME_COLOR.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLOR.dark },
   ],
 };
 

@@ -6,6 +6,7 @@ describe("OSM alias suggestion provider", () => {
   it("uses normalized parameterized lookup and maps exact code evidence", async () => {
     const execute = vi
       .fn()
+      .mockResolvedValueOnce([{ exists: true }])
       .mockResolvedValueOnce([{ epoch: "epoch-1", status: "ready" }])
       .mockResolvedValueOnce([
         {
@@ -32,7 +33,7 @@ describe("OSM alias suggestion provider", () => {
       { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
     );
 
-    expect(execute.mock.calls[1]?.[1]).toEqual(["fra", true, 8, null, null, true]);
+    expect(execute.mock.calls[2]?.[1]).toEqual(["fra", true, 8, null, null, true]);
     expect(result.suggestions[0]).toMatchObject({
       id: "osm:node/42",
       ids: { osm: "node/42", wikidata: "Q46033" },
@@ -63,6 +64,7 @@ describe("OSM alias suggestion provider", () => {
   it("passes lowercase acronym intent and proximity to the SQL gate", async () => {
     const execute = vi
       .fn()
+      .mockResolvedValueOnce([{ exists: true }])
       .mockResolvedValueOnce([{ epoch: "epoch-2", status: "ready" }])
       .mockResolvedValueOnce([]);
     const provider = createOsmAliasSuggestionProvider(
@@ -74,7 +76,23 @@ describe("OSM alias suggestion provider", () => {
       { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
     );
 
-    expect(execute.mock.calls[1]?.[1]).toEqual(["uncc", true, 4, -80.73, 35.3, false]);
-    expect(String(execute.mock.calls[1]?.[0])).toContain("ST_DWithin");
+    expect(execute.mock.calls[2]?.[1]).toEqual(["uncc", true, 4, -80.73, 35.3, false]);
+    expect(String(execute.mock.calls[2]?.[0])).toContain("ST_DWithin");
+  });
+
+  it("returns nothing, without reading the index, until an index is built", async () => {
+    const execute = vi.fn().mockResolvedValueOnce([{ exists: false }]);
+    const provider = createOsmAliasSuggestionProvider(
+      createMockIntegrationContext({ db: { execute } }),
+    );
+
+    const result = await provider.searchSuggestions(
+      { query: "FRA", lang: "en", limit: 8 },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
+
+    expect(result).toEqual({ suggestions: [], attributions: [], freshnessSeconds: 86_400 });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(String(execute.mock.calls[0]?.[0])).toContain("to_regclass('osm_search.index_state')");
   });
 });

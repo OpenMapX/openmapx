@@ -81,7 +81,6 @@ describe("message-signs-openconditions", () => {
       attributions: [
         {
           sourceId: "us-ny-511-signs",
-          modified: true,
           name: "511NY / New York State DOT",
           attributionText: "511NY / New York State DOT",
           licensing: {

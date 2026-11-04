@@ -8,11 +8,13 @@ import {
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { THEME_COLORS, THEME_CORNER_RADIUS, type ThemeColors } from "@openmapx/core/theme";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import { ThemeColorSync } from "../components/pwa/ThemeColorSync";
 import { createAppQueryClient } from "../lib/appQueryClient";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
@@ -47,30 +49,25 @@ const WEB_BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? "dev";
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
 
+/** The shared OpenMapX colours, which the installed app's native screens use too. */
+function muiPalette(colors: ThemeColors) {
+  return {
+    primary: { main: colors.primary, contrastText: colors.onPrimary },
+    secondary: { main: colors.secondary },
+    background: { default: colors.background, paper: colors.surface },
+    text: { primary: colors.text, secondary: colors.textSecondary },
+    error: { main: colors.error },
+  };
+}
+
 const theme = createTheme({
   cssVariables: {
     colorSchemeSelector: "class",
     disableCssColorScheme: true,
   },
   colorSchemes: {
-    light: {
-      palette: {
-        primary: { main: "#207E23", contrastText: "#ffffff" },
-        secondary: { main: "#34A853" },
-        background: { default: "#f5f5f5", paper: "#ffffff" },
-        text: { primary: "#202124", secondary: "#5f6368" },
-        error: { main: "#d32f2f" },
-      },
-    },
-    dark: {
-      palette: {
-        primary: { main: "#71D674", contrastText: "#000000" },
-        secondary: { main: "#81C995" },
-        background: { default: "#1C1C1C", paper: "#2D2D2D" },
-        text: { primary: "#E8EAED", secondary: "#9AA0A6" },
-        error: { main: "#F28B82" },
-      },
-    },
+    light: { palette: muiPalette(THEME_COLORS.light) },
+    dark: { palette: muiPalette(THEME_COLORS.dark) },
   },
   defaultColorScheme: "light",
   typography: {
@@ -82,7 +79,7 @@ const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 8,
+    borderRadius: THEME_CORNER_RADIUS,
   },
   components: {
     MuiPaper: {
@@ -102,8 +99,46 @@ const theme = createTheme({
     MuiIconButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
+          borderRadius: THEME_CORNER_RADIUS,
         },
+      },
+    },
+    // The installed app draws the page under the status and navigation bars
+    // (`viewport-fit=cover`), so every dialog and drawer keeps its content out
+    // of them. In a plain browser tab the insets are 0.
+    MuiDialog: {
+      styleOverrides: {
+        // A floating dialog is centred and sized within the safe area.
+        container: ({ ownerState }) =>
+          ownerState.fullScreen
+            ? {}
+            : {
+                boxSizing: "border-box",
+                paddingTop: "var(--omx-safe-top)",
+                paddingBottom: "var(--omx-safe-bottom)",
+                paddingLeft: "var(--omx-safe-left)",
+                paddingRight: "var(--omx-safe-right)",
+              },
+        // A full-screen dialog still covers the bars, with its content inset.
+        paperFullScreen: {
+          boxSizing: "border-box",
+          paddingTop: "var(--omx-safe-top)",
+          paddingBottom: "var(--omx-safe-bottom)",
+          paddingLeft: "var(--omx-safe-left)",
+          paddingRight: "var(--omx-safe-right)",
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        // The screen edge the drawer is attached to and the two beside it;
+        // its open side faces the page, not a system bar.
+        paper: ({ ownerState }) => ({
+          ...(ownerState.anchor !== "bottom" && { paddingTop: "var(--omx-safe-top)" }),
+          ...(ownerState.anchor !== "top" && { paddingBottom: "var(--omx-safe-bottom)" }),
+          ...(ownerState.anchor !== "right" && { paddingLeft: "var(--omx-safe-left)" }),
+          ...(ownerState.anchor !== "left" && { paddingRight: "var(--omx-safe-right)" }),
+        }),
       },
     },
   },
@@ -137,6 +172,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const inner = (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ThemeColorSync />
       {/*
         These teardown-only guards must observe the raw session transition even
         while the private tree is gated, so old in-memory keys and timeline

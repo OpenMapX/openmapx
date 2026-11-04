@@ -12,6 +12,8 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The Android half of the navigation audio module.
@@ -32,8 +34,10 @@ class OpenMapXNavigationAudioModule : Module() {
   private val focusPolicy = AudioFocusPolicy()
 
   private var textToSpeech: TextToSpeech? = null
-  private var initialized = false
-  private var initializationFailed = false
+  @Volatile private var initialized = false
+  @Volatile private var initializationFailed = false
+  /** Released by the engine's initialisation callback, whatever its status. */
+  private var engineReady = CountDownLatch(1)
   private var speaking = false
   private var lastResultCode: String? = null
   private var focusRequest: AudioFocusRequest? = null
@@ -62,6 +66,10 @@ class OpenMapXNavigationAudioModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OpenMapXNavigationAudio")
 
+    // Binding to the platform engine takes a moment; starting it here means the
+    // first cue of a trip rarely has to wait for it.
+    OnCreate { runCatching { ensureEngine() } }
+
     OnDestroy {
       textToSpeech?.stop()
       textToSpeech?.shutdown()
@@ -89,11 +97,20 @@ class OpenMapXNavigationAudioModule : Module() {
     }
     val locale = SpeechLocale.parse(request.locale) ?: return finish(SpeakOutcome.FAILED)
     if (!focusPolicy.acceptsSpeech) return finish(SpeakOutcome.SKIPPED)
-    // A replayed cue is treated as already handled, never repeated.
-    if (!ledger.record(request.cueId)) return finish(SpeakOutcome.SKIPPED)
 
     val engine = ensureEngine() ?: return finish(SpeakOutcome.FAILED)
-    if (!isLanguageAvailable(locale)) return finish(SpeakOutcome.FAILED)
+    // `TextToSpeech` binds to the engine asynchronously, and until it has, every
+    // query answers "not bound". This runs off the main thread, where the
+    // initialisation callback is delivered, so waiting here cannot deadlock.
+    if (!initialized && !engineReady.await(ENGINE_INIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+      return finish(SpeakOutcome.FAILED)
+    }
+    if (!initialized || !isLanguageAvailable(locale)) {
+      return finish(SpeakOutcome.FAILED)
+    }
+    // A replayed cue is treated as already handled, never repeated. Recorded
+    // only once the engine can speak, so a cold engine does not swallow it.
+    if (!ledger.record(request.cueId)) return finish(SpeakOutcome.SKIPPED)
 
     if (focusPolicy.willEnqueue() && !requestFocus()) {
       focusPolicy.didStop()
@@ -121,12 +138,16 @@ class OpenMapXNavigationAudioModule : Module() {
     if (focusPolicy.didStop()) abandonFocus()
   }
 
+  @Synchronized
   private fun ensureEngine(): TextToSpeech? {
     if (initializationFailed) return null
     textToSpeech?.let { return it }
+    val ready = CountDownLatch(1)
+    engineReady = ready
     val engine = TextToSpeech(context) { status ->
       initialized = status == TextToSpeech.SUCCESS
       initializationFailed = !initialized
+      ready.countDown()
     }
     engine.setAudioAttributes(audioAttributes)
     engine.setOnUtteranceProgressListener(
@@ -196,3 +217,6 @@ class SpeakRequestRecord : Record {
 
   @Field var rate: Double? = null
 }
+
+/** How long a cue waits for a cold engine before it is reported as failed. */
+private const val ENGINE_INIT_TIMEOUT_MS = 3_000L

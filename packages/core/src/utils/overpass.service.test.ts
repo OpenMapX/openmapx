@@ -82,4 +82,31 @@ describe("searchByOsmTags", () => {
     });
     expect(result.results[0]?.osmTags).not.toHaveProperty("image:2");
   });
+
+  it("carries the access, fee and space type a parking suggestion is judged by", async () => {
+    mockOverpassQuery.mockResolvedValue({
+      elements: [
+        {
+          type: "node",
+          id: 8,
+          lat: 52.5,
+          lon: 13.4,
+          tags: {
+            name: "Bay",
+            amenity: "parking_space",
+            access: "private",
+            fee: "no",
+            parking_space: "disabled",
+          },
+        },
+      ],
+    });
+
+    const result = await searchByOsmTags({ amenity: "parking_space" }, bbox);
+    expect(result.results[0]?.osmTags).toEqual({
+      access: "private",
+      fee: "no",
+      parking_space: "disabled",
+    });
+  });
 });

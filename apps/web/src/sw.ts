@@ -25,6 +25,7 @@ import {
 } from "serwist";
 import { createNavigationRuntimeRoute } from "./lib/serviceWorkerNavigation";
 import {
+  isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
   isNetworkOnlyApiPath,
   isOfflinePackageArchivePath,
@@ -34,6 +35,7 @@ import {
   navigationFirstRuntimeCaching,
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
+  responseAllowsStorage,
   STATIC_OFFLINE_FALLBACK_URL,
 } from "./lib/swCaches";
 
@@ -267,10 +269,28 @@ const serwist = new Serwist({
         },
       },
 
-      // API geodata without time-dependent place status.
+      // Directions: always the network's answer online. A stored route serves
+      // only offline, and the server's `no-store` (live traffic) is honoured.
+      {
+        matcher: ({ url }: { url: URL }) => isDirectionsApiPath(url.pathname),
+        handler: withRecentMapDataCache(
+          new NetworkFirst({
+            cacheName: "api-geodata",
+            plugins: [
+              {
+                cacheWillUpdate: async ({ response }) =>
+                  responseAllowsStorage(response) ? response : null,
+              },
+              new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 }),
+            ],
+          }),
+        ),
+      },
+
+      // Geocoding results without time-dependent place status.
       {
         matcher: ({ url }: { url: URL }) =>
-          /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname),
+          /\/api\/integrations\/geocoding\/geocode/.test(url.pathname),
         handler: withRecentMapDataCache(
           new StaleWhileRevalidate({
             cacheName: "api-geodata",

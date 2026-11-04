@@ -3,7 +3,9 @@ import {
   getAlerts,
   getDepartures,
   getRouteStopSequence,
+  getStopAlerts,
   getStops,
+  searchByName,
   setTflApiKey,
 } from "./provider.js";
 
@@ -95,7 +97,7 @@ describe("TfL transit provider", () => {
       ]),
     );
 
-    const departures = await getDepartures("tfl:940GZZLUOXC", 10);
+    const { departures } = await getDepartures("tfl:940GZZLUOXC", 10);
 
     expect(departures).toHaveLength(2);
     expect(departures[0]).toMatchObject({
@@ -165,5 +167,57 @@ describe("TfL transit provider", () => {
       { id: "tfl:s2", name: "Stop 2", lat: 51.51, lng: -0.11, sequence: 1 },
     ]);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/Line/central/Route/Sequence/outbound");
+  });
+
+  it("reports a failed stop search without exposing the keyed request URL", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+
+    const failure = await searchByName("Oxford Circus", 5).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe("TfL stop search unavailable");
+    expect((failure as Error).message).not.toContain("test-tfl-key");
+  });
+
+  it("returns no stops when the search succeeds without matches", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk({ matches: [] }));
+
+    expect(await searchByName("Nowhere", 5)).toEqual([]);
+  });
+
+  it.each([
+    ["stop alerts", () => getStopAlerts("tfl:940GZZLUOXC")],
+    ["timetable", () => getDepartures("tfl:940GZZLUOXC", 10)],
+  ])("reports failed %s without exposing the keyed request URL", async (what, lookup) => {
+    mockFetch.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+
+    const failure = await lookup().catch((error: unknown) => error);
+
+    expect((failure as Error).message).toBe(`TfL ${what} unavailable`);
+  });
+});
+
+describe("TfL departure board age", () => {
+  const arrival = (vehicleId: string, timestamp?: string) => ({
+    vehicleId,
+    lineId: "central",
+    lineName: "Central",
+    modeName: "tube",
+    destinationName: "Epping",
+    expectedArrival: "2026-03-10T10:07:00Z",
+    timeToStation: 120,
+    ...(timestamp ? { timestamp } : {}),
+  });
+
+  it("is the oldest prediction time on the board", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([arrival("v1", "2026-03-10T10:00:40Z"), arrival("v2", "2026-03-10T10:00:10Z")]),
+    );
+    expect((await getDepartures("tfl:940GZZLUOXC", 10)).dataAsOf).toBe("2026-03-10T10:00:10.000Z");
+  });
+
+  it("is unknown when a prediction states no time", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk([arrival("v1", "2026-03-10T10:00:40Z"), arrival("v2")]));
+    expect((await getDepartures("tfl:940GZZLUOXC", 10)).dataAsOf).toBeUndefined();
   });
 });

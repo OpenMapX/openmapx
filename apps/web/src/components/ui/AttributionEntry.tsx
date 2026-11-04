@@ -7,6 +7,8 @@ import { safeHref } from "@openmapx/core";
 import {
   type AttributionDetail,
   buildRuntimeAttributionHtml,
+  creditLicensing,
+  isUnstatedLicence,
   parseAttributionHtml,
   sanitizeAttributionHtml,
 } from "@openmapx/core/attribution";
@@ -20,7 +22,8 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
   const attr = entry.attribution;
   const readable = (html: string) => sanitizeAttributionHtml(html, { urlLabel: t("sourceLink") });
   if (!attr) return <AttributionText html={readable(entry.html)} />;
-  const licensing = attr.licensing;
+  // A grant naming no licence shows only as a link to its source's terms.
+  const licensing = attr.licensing && creditLicensing(attr.licensing, { keepLinked: true });
   // Repeated subjects can have different descriptors; preserve their exact positions.
   const bindings = licensing
     ? licensingLinks(licensing).map((binding, index) => ({
@@ -84,11 +87,7 @@ export function AttributionEntry({ entry }: { entry: AttributionDetail }) {
         descriptor.raw === "Determined by each contributing item or operator")
     )
       return t("licenceVariesByItem");
-    if (
-      descriptor?.kind === "unknown" &&
-      (!descriptor.raw || descriptor.raw === "Licence not specified")
-    )
-      return t("licenceNotSpecified");
+    if (descriptor && isUnstatedLicence(descriptor)) return t("terms");
     return binding.label;
   };
   const grant = (binding: (typeof bindings)[number], showSubject: boolean) => (

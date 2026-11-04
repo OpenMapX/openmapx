@@ -31,6 +31,10 @@ MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 # two-minute write cadence, and none may claim more.
 MAX_LEASE_MS = 300_000
 MAX_PROOF_MS = 120_000
+# Endpoints whose answer reads the live traffic write. A trace of a route's own
+# shape reports which of its edges carried a live speed; its proof lets the
+# router tie that report to the write the route itself was served from.
+PROVABLE_PATHS = ("/route", "/optimized_route", "/trace_attributes")
 DEFAULT_BACKEND_TIMEOUT = 45
 DEFAULT_CLIENT_TIMEOUT = 10
 DEFAULT_MAX_CONCURRENCY = 32
@@ -444,7 +448,7 @@ def eligible_request(path, body):
         or path.startswith("//")
         or parsed.scheme
         or parsed.netloc
-        or parsed.path not in ("/route", "/optimized_route")
+        or parsed.path not in PROVABLE_PATHS
     ):
         return body, None
     endpoint = parsed.path[1:]

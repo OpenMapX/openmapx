@@ -2,6 +2,7 @@ import { type EvChargeStop, useParkingStore } from "@openmapx/core";
 import { act, fireEvent, render } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
@@ -311,4 +312,69 @@ it("credits only queried chunks of a composed route, independently of total-dura
   view.unmount();
   drawn.routes = original;
   vi.useRealTimers();
+});
+
+describe("alternative route taps", () => {
+  const tapAlternative = () =>
+    fake.emit("click", {
+      point: { x: 100, y: 100 },
+      lngLat: { lng: 8.01, lat: 50 },
+      originalEvent: new MouseEvent("click"),
+      features: [{ properties: { routeIndex: 1 } }],
+    });
+
+  it("selects the alternative under a plain tap", async () => {
+    activateRoute.mockClear();
+    const view = render(<RouteLayer />);
+    await act(async () => {});
+    tapAlternative();
+    expect(activateRoute).toHaveBeenCalledWith(1);
+    view.unmount();
+  });
+
+  it("still selects the alternative inside an interactive area fill", async () => {
+    activateRoute.mockClear();
+    const view = render(<RouteLayer />);
+    await act(async () => {});
+    fake.map.addSource("areas", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    fake.map.addLayer({ id: "parking-context-fill", type: "fill", source: "areas" });
+    INTERACTIVE_LAYER_IDS.add("parking-context-fill");
+    fake.setRenderedFeatures("parking-context-fill", [
+      { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.01, 50] } },
+    ] as unknown as MapGeoJSONFeature[]);
+    tapAlternative();
+    expect(activateRoute).toHaveBeenCalledWith(1);
+    INTERACTIVE_LAYER_IDS.delete("parking-context-fill");
+    fake.setRenderedFeatures("parking-context-fill", []);
+    fake.map.removeLayer("parking-context-fill");
+    view.unmount();
+  });
+
+  it("leaves the route alone when an interactive pin above it took the tap", async () => {
+    activateRoute.mockClear();
+    const view = render(<RouteLayer />);
+    await act(async () => {});
+    fake.map.addSource("pins", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    fake.map.addLayer({ id: "route-search-layer", type: "symbol", source: "pins" });
+    INTERACTIVE_LAYER_IDS.add("route-search-layer");
+    fake.setRenderedFeatures("route-search-layer", [
+      {
+        type: "Feature",
+        properties: { id: "aral" },
+        geometry: { type: "Point", coordinates: [8.01, 50] },
+      },
+    ] as unknown as MapGeoJSONFeature[]);
+    tapAlternative();
+    expect(activateRoute).not.toHaveBeenCalled();
+    INTERACTIVE_LAYER_IDS.delete("route-search-layer");
+    fake.setRenderedFeatures("route-search-layer", []);
+    fake.map.removeLayer("route-search-layer");
+    view.unmount();
+  });
 });

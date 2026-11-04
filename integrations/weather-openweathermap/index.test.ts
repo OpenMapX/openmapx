@@ -223,4 +223,42 @@ describe("OpenWeatherMap weather provider", () => {
     expect(day2?.date).toBe("2025-03-11");
     expect(day2?.weatherCode).toBe(73); // id 601 -> 73
   });
+
+  it("groups days by the local date at the location, not the UTC date", async () => {
+    // Auckland is UTC+13: its 1 November runs 2026-10-31T11:00Z..2026-11-01T10:59Z.
+    const entry = (iso: string, temp: number, rain3h = 0) => ({
+      dt: Date.parse(iso) / 1000,
+      main: { temp, feels_like: temp, humidity: 70, pressure: 1012 },
+      wind: { speed: 4, deg: 180 },
+      clouds: { all: 60 },
+      weather: [{ id: 803 }],
+      pop: 0.2,
+      rain: { "3h": rain3h },
+      dt_txt: iso.slice(0, 19).replace("T", " "),
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        list: [
+          entry("2026-10-31T09:00:00Z", 25, 5), // 22:00 local on 31 October
+          entry("2026-10-31T12:00:00Z", 9, 1), // 01:00 local on 1 November
+          entry("2026-10-31T18:00:00Z", 6),
+          entry("2026-11-01T00:00:00Z", 17),
+          entry("2026-11-01T09:00:00Z", 12, 2), // 22:00 local
+          entry("2026-11-01T12:00:00Z", 3, 7), // 01:00 local on 2 November
+        ],
+      }),
+    );
+
+    const daily = await getProvider().getDailyForecast([174.7633, -36.8485], 7);
+
+    expect(daily.points.map((p) => [p.date, p.timeZone])).toEqual([
+      ["2026-10-31", "Pacific/Auckland"],
+      ["2026-11-01", "Pacific/Auckland"],
+      ["2026-11-02", "Pacific/Auckland"],
+    ]);
+    const day = daily.points[1];
+    expect(day?.temperatureMin).toBe(6);
+    expect(day?.temperatureMax).toBe(17);
+    expect(day?.precipitationSum).toBeCloseTo(3, 5);
+  });
 });

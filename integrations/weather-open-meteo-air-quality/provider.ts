@@ -345,22 +345,3 @@ export function createOpenMeteoAirQualityProvider(ctx: IntegrationContext): AirQ
     },
   };
 }
-
-export async function getOpenMeteoLegacyCurrent(
-  ctx: IntegrationContext,
-  query: PointAirQualityQuery,
-  call: ProviderCallContext,
-) {
-  const data = await cachedResponse(ctx, "current", query, 1, call);
-  return {
-    pm25: data.current.pm2_5,
-    pm10: data.current.pm10,
-    no2: data.current.nitrogen_dioxide,
-    o3: data.current.ozone,
-    so2: data.current.sulphur_dioxide,
-    co: data.current.carbon_monoxide,
-    europeanAqi: data.current.european_aqi,
-    usAqi: data.current.us_aqi,
-    time: data.current.time,
-  };
-}

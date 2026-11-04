@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { laneArrowStemShiftEm, laneIndicationIcon, maneuverIconFor } from "./maneuverIcon";
+import {
+  laneArrowStemShiftEm,
+  laneIndicationIcon,
+  maneuverIconFor,
+  unmarkedLaneIcon,
+} from "./maneuverIcon";
 
 describe("maneuverIconFor", () => {
   it("maps left/right modifiers", () => {
@@ -132,5 +137,23 @@ describe("laneIndicationIcon", () => {
 
   it("falls back to Straight for an unrecognized token", () => {
     expect(laneIndicationIcon("wat")?.name).toBe("Straight");
+  });
+});
+
+describe("unmarkedLaneIcon", () => {
+  it("uses the maneuver's direction", () => {
+    expect(unmarkedLaneIcon({ type: "fork", modifier: "slight left" })?.name).toBe(
+      "TurnSlightLeft",
+    );
+    expect(unmarkedLaneIcon({ type: "keep", modifier: "right" })?.name).toBe("TurnSlightRight");
+    expect(unmarkedLaneIcon({ type: "turn", modifier: "left" })?.name).toBe("TurnLeft");
+    expect(unmarkedLaneIcon({ type: "continue", modifier: "straight" })?.name).toBe("Straight");
+  });
+
+  it("returns null without a plain lane direction", () => {
+    expect(unmarkedLaneIcon(undefined)).toBeNull();
+    expect(unmarkedLaneIcon({ type: "arrive" })).toBeNull();
+    expect(unmarkedLaneIcon({ type: "roundabout", modifier: "left" })).toBeNull();
+    expect(unmarkedLaneIcon({ type: "merge", modifier: "left" })).toBeNull();
   });
 });

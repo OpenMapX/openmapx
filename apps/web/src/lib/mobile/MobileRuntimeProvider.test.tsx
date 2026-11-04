@@ -1,7 +1,7 @@
 import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "./MobileRuntimeProvider";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
 import { useMobileRuntime, useNavigationModeAvailable } from "./useMobileRuntime";
@@ -352,6 +352,41 @@ describe("MobileRuntimeProvider store integration", () => {
     expect(state.currentSpeedLimit).toBe(50);
     expect(state.permissionMode).toBe("background");
     expect(state.progress).toEqual({ alongMeters: 100 });
+  });
+
+  it("updates the store when a snapshot arrives, never while React renders", async () => {
+    // Applying the store inside a state updater ran it during the provider's
+    // render, updating every map layer subscribed to the store mid-render.
+    function RouteSubscriber() {
+      const revision = useNavigationStore((s) => s.nativeRevision);
+      return <span data-testid="store-revision">{revision ?? "none"}</span>;
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shell = shellScope();
+    render(
+      <MobileRuntimeProvider webBuildId="web-build-1" scope={shell.scope}>
+        <Probe />
+        <RouteSubscriber />
+      </MobileRuntimeProvider>,
+    );
+    deliverHello(shell);
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+
+    shell.deliver(snapshot());
+    shell.deliver(
+      snapshot({ type: "progress", revision: 5, kind: undefined, progress: { alongMeters: 200 } }),
+    );
+    shell.deliver(
+      snapshot({ type: "progress", revision: 6, kind: undefined, progress: { alongMeters: 300 } }),
+    );
+
+    await waitFor(() => expect(text("store-revision")).toBe("6"));
+    expect(text("revision")).toBe("6");
+    const renderPhaseUpdates = errors.mock.calls.filter((call) =>
+      String(call[0]).includes("while rendering a different component"),
+    );
+    errors.mockRestore();
+    expect(renderPhaseUpdates).toEqual([]);
   });
 
   it("advances the store by one revision on a delta", async () => {

@@ -60,3 +60,41 @@ describe("Panoramax gallery creator receipts", () => {
     expect(photo.pageUrl).toBe("https://panoramax.xyz/#focus=pic&pic=photo-1");
   });
 });
+
+describe("Panoramax gallery images", () => {
+  it("loads federated pictures through the catalogue's per-picture endpoint", async () => {
+    // This picture lives on another instance of the federation; the
+    // catalogue's endpoint redirects there, so the proxy trusts one host.
+    const id = "7462790e-3e1c-4ee5-b6b3-b544421afd84";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          type: "FeatureCollection",
+          features: [
+            {
+              ...item,
+              id,
+              assets: {
+                thumb: { href: "https://panoramax.mapcomplete.org/derivatives/t.jpg" },
+                sd: { href: "https://panoramax.mapcomplete.org/derivatives/s.jpg" },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const [photo] = await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 });
+    expect(photo.url).toBe(`https://api.panoramax.xyz/api/pictures/${id}/sd.jpg`);
+    expect(photo.thumbnailUrl).toBe(`https://api.panoramax.xyz/api/pictures/${id}/thumb.jpg`);
+  });
+
+  it("keeps the asset link for an item without a picture UUID", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ type: "FeatureCollection", features: [item] })),
+    );
+    const [photo] = await panoramaxPhotoProvider.search({ lat: 48.8573, lng: 2.3521 });
+    expect(photo.url).toBe("https://example.test/photo.jpg");
+  });
+});

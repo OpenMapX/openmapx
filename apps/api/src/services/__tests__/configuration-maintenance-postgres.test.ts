@@ -5997,6 +5997,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it.each(["journal", "retirement"])(
       "settles actual durable nonempty unused maintenance through the original API control and retains its canonical delivery (%s)",
       async (mode) => {
+        // This synthetic stack uses local example images and selects no product release overlay.
+        vi.stubEnv("OPENMAPX_RELEASE", "local");
         dm = await ownedDataManager({
           sql: fixture.sql,
           infraDir: host.infraDir,
@@ -6016,25 +6018,38 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ]);
         const ctx = await job();
         await owned(ctx, async () => {
-          const candidate = await prospective.prepareProspectiveConfiguration({
-              actorId: ctx.jobId,
-              operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
-              expectedCurrentRevisionId: host.initial.revisionId,
-              followUp: "service-apply",
-              overlay: {
-                purpose: "service-secret",
-                coordinatorMode: "require-running",
-                changes: [
-                  {
-                    kind: "service-secret",
-                    serviceId: "data-manager",
-                    key: "TOKEN",
-                    action: "set",
-                    value: "synthetic-api-unused-final-credential",
-                  },
-                ],
-              },
-            }),
+          const candidate = await prospective
+              .prepareProspectiveConfiguration({
+                actorId: ctx.jobId,
+                operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
+                expectedCurrentRevisionId: host.initial.revisionId,
+                followUp: "service-apply",
+                overlay: {
+                  purpose: "service-secret",
+                  coordinatorMode: "require-running",
+                  changes: [
+                    {
+                      kind: "service-secret",
+                      serviceId: "data-manager",
+                      key: "TOKEN",
+                      action: "set",
+                      value: "synthetic-api-unused-final-credential",
+                    },
+                  ],
+                },
+              })
+              .catch((error: unknown) => {
+                if (error instanceof Error && "result" in error) {
+                  const result = error.result as { configurationPreflight?: unknown };
+                  console.info(
+                    JSON.stringify({
+                      proof: "unused-maintenance-preflight",
+                      configurationPreflight: result.configurationPreflight ?? null,
+                    }),
+                  );
+                }
+                throw error;
+              }),
             maintenance = await import("../configuration-maintenance"),
             prepared = await maintenance.prepareConfigurationMaintenance(candidate),
             decision = await maintenance.prepareConfigurationMaintenanceAbandon(candidate);
@@ -6120,10 +6135,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             role: "ops-agent",
             serviceIds: host.loaded.map((service) => service.manifest.id),
           });
+          const runtime = await host.reopenRuntime();
           app = buildOpsAgentServer({
             tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
-            runtime: host.runtime,
-            resourceClaimer: host.claimer,
+            runtime,
+            resourceClaimer: host.createResourceClaimer(runtime),
             journal,
             controlInstallation: installation,
           });

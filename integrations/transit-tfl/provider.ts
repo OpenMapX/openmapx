@@ -1,7 +1,9 @@
 import { fetchJson } from "@openmapx/core";
+import { oldestDataAsOf, upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   AlertSeverity,
   Departure,
+  DepartureBoard,
   RouteStop,
   ServiceAlert,
   TransitStop,
@@ -34,6 +36,19 @@ export function setTflApiKey(value: string | undefined): void {
 
 function apiKey(): string | null {
   return tflApiKey;
+}
+
+/**
+ * Fetch a TfL resource whose failure must not read as "nothing here". Request
+ * URLs carry the app key, so the upstream error is not passed on.
+ */
+async function tflJson<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
+  try {
+    return await fetchJson<T>(url, { signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error(`TfL ${what} unavailable`);
+  }
 }
 
 function mapTflMode(modeName: string): TransportMode {
@@ -114,11 +129,12 @@ export async function searchByName(
     app_key: key,
   });
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = await fetchJson<{ matches?: any[] }>(
+  const data = await tflJson<{ matches?: any[] }>(
     `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
-    { nullOnError: true, signal },
+    "stop search",
+    signal,
   );
-  return (data?.matches ?? []).slice(0, limit).map(normalizeStop);
+  return (data.matches ?? []).slice(0, limit).map(normalizeStop);
 }
 
 function mapTflSeverity(severityNumber: number): AlertSeverity {
@@ -216,10 +232,11 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const data = await fetchJson<any[]>(`${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`, {
-    nullOnError: true,
-  });
-  if (!Array.isArray(data)) return [];
+  const data = await tflJson<any[]>(
+    `${BASE_URL}/StopPoint/${naptanId}/Disruption?${params}`,
+    "stop alerts",
+  );
+  if (!Array.isArray(data)) throw new Error("TfL stop alerts unavailable");
   return data
     .map(
       // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -245,47 +262,54 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
     .filter((a) => a.title);
 }
 
-export async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
+/**
+ * Live arrival predictions at a stop. Each prediction carries the time TfL made
+ * it; the board's age is the oldest of them.
+ */
+export async function getDepartures(stopId: string, minutes: number): Promise<DepartureBoard> {
   const key = apiKey();
-  if (!key) return [];
+  if (!key) return { departures: [] };
 
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
   // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const arrivals = await fetchJson<any[]>(
+  const arrivals = await tflJson<any[]>(
     `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Arrivals?${params}`,
-    { nullOnError: true },
+    "timetable",
   );
+  if (!Array.isArray(arrivals)) throw new Error("TfL timetable unavailable");
   const cutoff = minutes * 60;
-  return (
-    (arrivals ?? [])
-      // Filter to the requested time window
-      .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
-      // Sort ascending by arrival time
-      .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0))
-      .map(
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        (arr: any): Departure => {
-          // TfL only provides live arrival predictions — no separate scheduled time
-          const expectedAt: string =
-            arr.expectedArrival ??
-            new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
-          return {
-            tripId: arr.vehicleId ?? "",
-            route: {
-              id: `tfl:${arr.lineId ?? ""}`,
-              shortName: arr.lineName ?? arr.lineId ?? "",
-              longName: arr.lineName ?? "",
-              mode: mapTflMode(arr.modeName ?? ""),
-            },
-            headsign: arr.destinationName ?? arr.towards ?? "",
-            // TfL is real-time only; scheduledAt = expectedAt
-            scheduledAt: expectedAt,
-            expectedAt,
-            platform: arr.platformName ?? undefined,
-            canceled: false,
-          };
-        },
-      )
-  );
+  const inWindow = arrivals
+    // Filter to the requested time window
+    .filter((arr) => (arr.timeToStation ?? 0) <= cutoff)
+    // Sort ascending by arrival time
+    .sort((a, b) => (a.timeToStation ?? 0) - (b.timeToStation ?? 0));
+  const dataAsOf = oldestDataAsOf(inWindow.map((arr) => upstreamDataAsOf(arr.timestamp)));
+  return {
+    ...(dataAsOf ? { dataAsOf } : {}),
+    departures: inWindow.map(
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      (arr: any): Departure => {
+        // TfL only provides live arrival predictions — no separate scheduled time
+        const expectedAt: string =
+          arr.expectedArrival ??
+          new Date(Date.now() + (arr.timeToStation ?? 0) * 1000).toISOString();
+        return {
+          tripId: arr.vehicleId ?? "",
+          route: {
+            id: `tfl:${arr.lineId ?? ""}`,
+            shortName: arr.lineName ?? arr.lineId ?? "",
+            longName: arr.lineName ?? "",
+            mode: mapTflMode(arr.modeName ?? ""),
+          },
+          headsign: arr.destinationName ?? arr.towards ?? "",
+          // TfL is real-time only; scheduledAt = expectedAt
+          scheduledAt: expectedAt,
+          expectedAt,
+          platform: arr.platformName ?? undefined,
+          canceled: false,
+        };
+      },
+    ),
+  };
 }

@@ -65,7 +65,14 @@ import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import {
+  isStrictPrefix,
+  samePath,
+  subscribeHistoryRestore,
+  writeNavigation,
+} from "@/lib/backNavigation";
 import { frameBoundsInstant, jumpToView } from "@/lib/cameraFraming";
+import { closePlaceSelection, closeSidebarPanel } from "@/lib/closeSurfaces";
 import {
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
@@ -74,6 +81,7 @@ import {
   formatLngLat,
   formatLngLatList,
   formatScheduleParam,
+  navigationPath,
   type ParsedDeepLink,
   paramsWithoutDeepLink,
   parseDeepLinkSearch,
@@ -135,6 +143,7 @@ const LIVE_TRANSIT_MODES = [
   "funicular",
   "cable_car",
   "monorail",
+  "other",
 ] as const satisfies readonly TransportMode[];
 
 const OVERLAY_STORES: SubscribableStore[] = [
@@ -388,6 +397,7 @@ function makePlace(link: ParsedDeepLink["place"]): Place | null {
     coordinates: link.coords,
     category: link.category,
     rawCategory: link.rawCategory,
+    ...(link.stopName ? { transitStop: { name: link.stopName } } : {}),
   });
 }
 
@@ -446,6 +456,18 @@ function applyCategory(parsed: ParsedDeepLink["category"]): void {
   store.setMapMoved(false);
   const category = CATEGORY_DEFINITIONS.find((item) => item.id === parsed.id);
   useSearchStore.getState().setQuery(category?.label ?? parsed.id);
+  useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+}
+
+function applyTextSearch(parsed: ParsedDeepLink["textSearch"], map: maplibregl.Map | null): void {
+  if (!parsed) return;
+  const bbox = parsed.bbox ?? mapBounds(map);
+  if (!bbox) return;
+  const store = useCategorySearchStore.getState();
+  store.setSearchBbox(bbox);
+  store.setMapMoved(false);
+  store.setExploreText(parsed.text);
+  useSearchStore.getState().setQuery(parsed.text);
   useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
 }
 
@@ -543,17 +565,80 @@ function applyDeepLink(
     syncMapStoreFromMap(map);
   } else if (parsed.category?.bbox && map) {
     fitBbox(map, parsed.category.bbox);
+  } else if (parsed.textSearch?.bbox && map) {
+    fitBbox(map, parsed.textSearch.bbox);
   } else if (parsed.dataSource?.bbox && map) {
     fitBbox(map, parsed.dataSource.bbox);
   }
 
+  applyPanels(parsed, map);
+}
+
+/** The open surfaces of a link: panels, the selected place and the map tools. */
+function applyPanels(parsed: ParsedDeepLink, map: maplibregl.Map | null): void {
   if (parsed.directions || parsed.panel === PANEL.DIRECTIONS) applyDirections(parsed.directions);
   if (parsed.category || parsed.panel === PANEL.CATEGORY) applyCategory(parsed.category);
+  applyTextSearch(parsed.textSearch, map);
   if (parsed.dataSource || parsed.panel === PANEL.DATASOURCE) applyDataSource(parsed.dataSource);
   if (parsed.saved || parsed.panel === PANEL.SAVED) applySaved(parsed.saved);
   if (parsed.place) applyPlace(parsed.place);
   applyMeasurement(parsed.measurement);
   applyTravelTime(parsed.travelTime);
+}
+
+/**
+ * Closes one open surface the way its own close control does. Back uses this
+ * when it only has to step out of something, so whatever stays open keeps its
+ * full in-memory state — the loaded place, the list and its scroll position, a
+ * search the URL cannot express — instead of being rebuilt from the URL.
+ */
+function closeSegment(segment: string): void {
+  const kind = segment.split(":", 1)[0];
+  switch (kind) {
+    case "tool":
+      if (segment === "tool:measure") useMeasurementStore.getState().deactivate();
+      else useTravelTimeStore.getState().deactivate();
+      return;
+    case "place":
+      closePlaceSelection();
+      return;
+    case "item":
+      useDataSourceStore.getState().clearSelection();
+      return;
+    case "list":
+      useSavedPlacesStore.getState().clearSelectedList();
+      return;
+    default:
+      closeSidebarPanel();
+  }
+}
+
+function currentNavigationPath(map: maplibregl.Map | null): string[] {
+  const url = new URL(encodeCurrentUrl(map), window.location.origin);
+  return navigationPath(url.search);
+}
+
+/**
+ * Shows the history entry Back/Forward landed on. Only the open surfaces
+ * follow the entry: the camera, base layer and overlays stay as the user left
+ * them, like in any native map app, where Back closes the card but does not
+ * fly the map back to where it was when the card opened.
+ *
+ * Returns whether anything had to change.
+ */
+function restoreNavigation(map: maplibregl.Map | null): boolean {
+  const target = navigationPath(window.location.search);
+  const current = currentNavigationPath(map);
+  if (samePath(target, current)) return false;
+
+  if (isStrictPrefix(target, current)) {
+    for (const segment of current.slice(target.length).reverse()) closeSegment(segment);
+    if (samePath(currentNavigationPath(map), target)) return true;
+  }
+
+  clearPanelState();
+  applyPanels(parseDeepLinkSearch(window.location.search), map);
+  return true;
 }
 
 function encodePlace(params: URLSearchParams, place: Place): void {
@@ -562,6 +647,8 @@ function encodePlace(params: URLSearchParams, place: Place): void {
   if (place.name) params.set("name", place.name);
   if (place.category) params.set("cat", place.category);
   if (place.rawCategory) params.set("raw", place.rawCategory);
+  // The stop it was opened for, so a reloaded or shared board keeps its main stop.
+  if (place.transitStop) params.set("stop", place.transitStop.name);
 }
 
 function encodeDirections(params: URLSearchParams): void {
@@ -607,6 +694,15 @@ function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): 
   if (category.activeCategory) {
     params.set("panel", PANEL.CATEGORY);
     params.set("categoryId", category.activeCategory);
+    const bbox = category.searchBbox ?? fallbackBbox;
+    if (bbox) params.set("bbox", formatBboxParam(bbox));
+  } else if (
+    sidebar.activeSidebarId === PANEL.CATEGORY &&
+    category.mode === "text" &&
+    category.textQuery
+  ) {
+    params.set("panel", PANEL.CATEGORY);
+    params.set("search", category.textQuery);
     const bbox = category.searchBbox ?? fallbackBbox;
     if (bbox) params.set("bbox", formatBboxParam(bbox));
   }
@@ -771,6 +867,11 @@ export function DeepLinkManager() {
   const timeoutRef = useRef<number | null>(null);
   /** A parsed link whose overlay part is still waiting for the registry. */
   const pendingOverlaysRef = useRef<ParsedDeepLink | null>(null);
+  /**
+   * The page this map lives on. A Back/Forward to another page fires while
+   * this is still mounted; its URL is none of this component's business.
+   */
+  const pagePathRef = useRef<string | null>(null);
 
   const writeUrl = useCallback(() => {
     if (typeof window === "undefined" || applyingRef.current) return;
@@ -778,17 +879,25 @@ export function DeepLinkManager() {
     // place that intent exists. Re-encoding from the current, overlay-less
     // state would silently delete `ov` and every overlay setting.
     if (pendingOverlaysRef.current) return;
-    const nextUrl = encodeCurrentUrl(mapRef.current);
-    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (nextUrl !== currentUrl) {
-      window.history.replaceState(window.history.state, "", nextUrl);
-    }
+    if (pagePathRef.current !== null && window.location.pathname !== pagePathRef.current) return;
+    // Opening a surface pushes a history entry so Back can close it again;
+    // everything else (camera, layers) rewrites the current entry. The URL is
+    // built when the write runs, which may be after a traversal lands.
+    writeNavigation(() => {
+      const url = encodeCurrentUrl(mapRef.current);
+      return {
+        url,
+        path: navigationPath(new URL(url, window.location.origin).search),
+        currentPath: navigationPath(window.location.search),
+      };
+    });
   }, [mapRef]);
 
   useEffect(() => {
     if (!mapReady) return;
 
     const map = mapRef.current;
+    pagePathRef.current = window.location.pathname;
 
     const scheduleWrite = () => {
       if (applyingRef.current) return;
@@ -810,18 +919,31 @@ export function DeepLinkManager() {
       writeUrl();
     };
 
+    const onHistoryRestore = () => {
+      if (window.location.pathname !== pagePathRef.current) return false;
+      applyingRef.current = true;
+      let changed: boolean;
+      try {
+        changed = restoreNavigation(mapRef.current);
+      } finally {
+        applyingRef.current = false;
+      }
+      writeUrl();
+      return changed;
+    };
+
     applyFromLocation();
 
     const unsubscribeStores = APP_STATE_STORES.map((store) => store.subscribe(scheduleWrite));
+    const unsubscribeHistory = subscribeHistoryRestore(onHistoryRestore);
     map?.on("moveend", scheduleWrite);
-    window.addEventListener("popstate", applyFromLocation);
     window.addEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
 
     return () => {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
       for (const unsubscribe of unsubscribeStores) unsubscribe();
+      unsubscribeHistory();
       map?.off("moveend", scheduleWrite);
-      window.removeEventListener("popstate", applyFromLocation);
       window.removeEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
     };
   }, [mapReady, mapRef, writeUrl]);

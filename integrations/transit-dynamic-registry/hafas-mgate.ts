@@ -1,10 +1,12 @@
 import {
   type BBox,
+  fptfLineName,
   mapProducts,
   normalizeFptfDeparture,
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
   GeoJSONLineString,
@@ -96,6 +98,15 @@ function buildProducts(rawProducts: TransportApiProduct[]): Array<{
   }));
 }
 
+/**
+ * HAFAS protocol versions for catalogue entries that state none, where the
+ * endpoint rejects hafas-client's request without one ("Invalid version").
+ * Taken from hafas-client's own profile for the same endpoint.
+ */
+const PROTOCOL_VERSION_FALLBACKS: Readonly<Record<string, string>> = {
+  "de/avv-hafas-mgate": "1.26",
+};
+
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client uses untyped profiles
 function buildProfile(entry: RegistryEntry): Record<string, any> {
   const opts = entry.options;
@@ -107,7 +118,9 @@ function buildProfile(entry: RegistryEntry): Record<string, any> {
   if (opts.endpoint && registryEndpointIsUsable(opts)) profile.endpoint = opts.endpoint;
   if (opts.auth) profile.auth = opts.auth;
   if (opts.client) profile.client = opts.client;
-  if (opts.ver) profile.ver = opts.ver;
+  // Some catalogue entries name the protocol version `version` rather than `ver`.
+  const ver = opts.ver ?? opts.version ?? PROTOCOL_VERSION_FALLBACKS[entry.id];
+  if (ver) profile.ver = ver;
   if (opts.ext) profile.ext = opts.ext;
   if (opts.checksumSalt) profile.salt = opts.checksumSalt;
   if (opts.micMacSalt) profile.micMacSalt = opts.micMacSalt;
@@ -249,7 +262,7 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
     route: isWalking
       ? undefined
       : {
-          shortName: line.name ?? "",
+          shortName: line.name ? fptfLineName(line).name : "",
           longName: line.productName ?? line.name ?? "",
           color: line.color?.bg?.replace(/^#/, "") ?? undefined,
         },
@@ -304,10 +317,19 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       );
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const deps = (result as any).departures ?? result;
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return (Array.isArray(deps) ? deps : []).map((d: any) => normalizeDeparture(d, entry));
+      if (!Array.isArray(deps)) throw new Error("malformed departures response");
+      // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+      );
+      return {
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
+        departures: deps.map((d: any) => normalizeDeparture(d, entry)),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      };
     } catch {
-      return [];
+      // A failed board must not read as "no departures".
+      throw new Error("HAFAS timetable unavailable");
     }
   },
 
@@ -324,10 +346,18 @@ export const hafasMgateAdapter: ProtocolAdapter = {
       );
       // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
       const arrs = (result as any).arrivals ?? result;
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-      return (Array.isArray(arrs) ? arrs : []).map((d: any) => normalizeDeparture(d, entry));
+      if (!Array.isArray(arrs)) throw new Error("malformed arrivals response");
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+      );
+      return {
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
+        departures: arrs.map((d: any) => normalizeDeparture(d, entry)),
+        ...(dataAsOf ? { dataAsOf } : {}),
+      };
     } catch {
-      return [];
+      // A failed board must not read as "no departures".
+      throw new Error("HAFAS timetable unavailable");
     }
   },
 
@@ -348,7 +378,8 @@ export const hafasMgateAdapter: ProtocolAdapter = {
         .filter((s) => s.type === "stop" || s.type === "station")
         .map((s) => normalizeStop(s, entry));
     } catch {
-      return [];
+      // A failed search must not read as "no stop by that name".
+      throw new Error("HAFAS stop search unavailable");
     }
   },
 
@@ -425,6 +456,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
           lat: s.stop?.location?.latitude ?? 0,
           lng: s.stop?.location?.longitude ?? 0,
           platform: s.platform ?? s.plannedPlatform ?? undefined,
+          scheduledPlatform: s.plannedPlatform ?? undefined,
           scheduledArrival: s.plannedArrival ?? undefined,
           scheduledDeparture: s.plannedDeparture ?? undefined,
           expectedArrival: s.arrival ?? undefined,
@@ -445,7 +477,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
           : undefined;
       return {
         id: `${entry.prefix}${trip.id ?? raw}`,
-        name: trip.line?.name ?? trip.direction ?? "",
+        name: (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
         provider: entry.slug,
         remarks: remarks?.length ? remarks : undefined,
         stops,
@@ -488,7 +520,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
             lat: m.location.latitude as number,
             lng: m.location.longitude as number,
             // HAFAS does not return bearing or speed in the radar response
-            label: m.line?.name ?? m.direction,
+            label: (m.line?.name ? fptfLineName(m.line).name : undefined) ?? m.direction,
             currentStopId: m.nextStopovers?.[0]?.stop?.id
               ? `${entry.prefix}${m.nextStopovers[0].stop.id as string}`
               : undefined,
@@ -534,7 +566,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
           const durationMs =
             startTime && endTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
           const transfers = Math.max(0, legs.filter((l) => l.route !== undefined).length - 1);
-          // Walk distance: use the distance field from raw legs (consistent with hafas/db-vendo)
+          // Walk distance: use the distance field from raw legs
           const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
             .filter((l) => l.walking === true)
             .reduce((sum, l) => sum + (l.distance ?? 0), 0);

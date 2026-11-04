@@ -14,77 +14,84 @@ vi.mock("@openmapx/integration-framework/react", () => ({
 }));
 vi.mock("@/components/auth/AuthDialog", () => ({ AuthDialog: () => null }));
 describe("composer local signing recovery", () => {
-  it("offers local unlock after selecting advanced signing while composing", async () => {
-    sessionStorage.clear();
-    const jwk = await keypairToJwk(await generateKeypair());
-    const ciphertext = await encryptWithPassphrase(jwk.privateJwk, "passphrase fixture");
-    const transport = {
-      signer: {
-        getConfig: async () => ({ configured: false }),
-        getAccount: async () => {
-          throw new Error("unused");
-        },
-        signReview: async () => {
-          throw new Error("unused");
-        },
-        revokeSession: async () => undefined,
-      },
-      getKeypairEnvelope: async () => ({
-        state: "ready",
-        revision: "r1",
-        publicJwk: jwk.publicJwk,
-        passphraseCiphertext: ciphertext,
-        recipientsCiphertext: null,
-        wraps: [
-          {
-            id: "pass",
-            wrapType: "passphrase",
-            label: "Passphrase",
-            identityString: null,
-            createdAt: "2026-01-01",
+  // Real age scrypt encrypt + unlock; v8 coverage instrumentation pushes it past
+  // the timeout, so the coverage run skips it and the plain CI gate keeps it.
+  it.skipIf(process.env.OPENMAPX_SKIP_SLOW_CRYPTO === "1")(
+    "offers local unlock after selecting advanced signing while composing",
+    async () => {
+      sessionStorage.clear();
+      const jwk = await keypairToJwk(await generateKeypair());
+      const ciphertext = await encryptWithPassphrase(jwk.privateJwk, "passphrase fixture");
+      const transport = {
+        signer: {
+          getConfig: async () => ({ configured: false }),
+          getAccount: async () => {
+            throw new Error("unused");
           },
-        ],
-      }),
-      fetchPlaceReviews: async () => [],
-      fetchPlaceReviewAggregate: async () => ({ count: 0, stars: 0 }),
-    } as unknown as MangroveTransport;
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <MangroveProvider
-          transport={transport}
-          currentUser={{ id: "owner", authorityId: "session" }}
+          signReview: async () => {
+            throw new Error("unused");
+          },
+          revokeSession: async () => undefined,
+        },
+        getKeypairEnvelope: async () => ({
+          state: "ready",
+          revision: "r1",
+          publicJwk: jwk.publicJwk,
+          passphraseCiphertext: ciphertext,
+          recipientsCiphertext: null,
+          wraps: [
+            {
+              id: "pass",
+              wrapType: "passphrase",
+              label: "Passphrase",
+              identityString: null,
+              createdAt: "2026-01-01",
+            },
+          ],
+        }),
+        fetchPlaceReviews: async () => [],
+        fetchPlaceReviewAggregate: async () => ({ count: 0, stars: 0 }),
+      } as unknown as MangroveTransport;
+      render(
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
         >
-          <WriteReviewDialog
-            open
-            onClose={() => undefined}
-            subject={{ lat: 50, lng: 6, name: "Cafe" }}
-          />
-        </MangroveProvider>
-      </QueryClientProvider>,
-    );
-    await userEvent.type(
-      screen.getByLabelText("place.reviewPlaceholder"),
-      "Draft survives switching",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "account.mangroveReconnect" }));
-    await userEvent.click(screen.getByRole("button", { name: "account.mangroveUseLocal" }));
-    await userEvent.click(await screen.findByRole("button", { name: "account.mangroveUnlockCta" }));
-    await waitFor(() =>
-      expect(screen.getByLabelText("account.mangrovePassphraseLabel")).toBeVisible(),
-    );
-    expect(screen.queryByText("account.mangroveSetupTitle")).toBeNull();
-    await userEvent.type(
-      screen.getByLabelText("account.mangrovePassphraseLabel"),
-      "passphrase fixture",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "account.mangroveUnlockCta" }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText("account.mangrovePassphraseLabel")).toBeNull(),
-    );
-    expect(screen.getByLabelText("place.reviewPlaceholder")).toHaveValue(
-      "Draft survives switching",
-    );
-  });
+          <MangroveProvider
+            transport={transport}
+            currentUser={{ id: "owner", authorityId: "session" }}
+          >
+            <WriteReviewDialog
+              open
+              onClose={() => undefined}
+              subject={{ lat: 50, lng: 6, name: "Cafe" }}
+            />
+          </MangroveProvider>
+        </QueryClientProvider>,
+      );
+      await userEvent.type(
+        screen.getByLabelText("place.reviewPlaceholder"),
+        "Draft survives switching",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "account.mangroveReconnect" }));
+      await userEvent.click(screen.getByRole("button", { name: "account.mangroveUseLocal" }));
+      await userEvent.click(
+        await screen.findByRole("button", { name: "account.mangroveUnlockCta" }),
+      );
+      await waitFor(() =>
+        expect(screen.getByLabelText("account.mangrovePassphraseLabel")).toBeVisible(),
+      );
+      expect(screen.queryByText("account.mangroveSetupTitle")).toBeNull();
+      await userEvent.type(
+        screen.getByLabelText("account.mangrovePassphraseLabel"),
+        "passphrase fixture",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "account.mangroveUnlockCta" }));
+      await waitFor(() =>
+        expect(screen.queryByLabelText("account.mangrovePassphraseLabel")).toBeNull(),
+      );
+      expect(screen.getByLabelText("place.reviewPlaceholder")).toHaveValue(
+        "Draft survives switching",
+      );
+    },
+  );
 });

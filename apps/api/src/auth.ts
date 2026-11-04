@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { expo } from "@better-auth/expo";
 import { i18n } from "@better-auth/i18n";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
@@ -112,13 +111,10 @@ function createPolicyAuth(
     }),
     baseURL: envString("BETTER_AUTH_URL", "http://localhost:3001"),
     secret,
-    trustedOrigins: [
-      ...configuredTrustedWebOrigins(),
-      "openmapx://",
-      ...(process.env.NODE_ENV === "development"
-        ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
-        : []),
-    ],
+    // Web origins only. The installed app never receives a Better Auth redirect:
+    // `/mobile-auth` returns to the app's scheme itself, with a PKCE-bound code
+    // instead of a session, so no custom scheme belongs in this list.
+    trustedOrigins: configuredTrustedWebOrigins(),
     appName: "OpenMapX",
     user: {
       deleteUser: {
@@ -327,9 +323,6 @@ function createPolicyAuth(
       // only legitimate holder redeems it immediately. Stored hashed so a database
       // read never yields a usable token.
       oneTimeToken({ expiresIn: 2, storeToken: "hashed" }),
-      // Kept for server-side compatibility with Expo's redirect handling. No Expo
-      // native auth client is initialised: native never holds a session.
-      expo(),
       emailHarmony({ allowNormalizedSignin: true }),
       passkey({
         rpID: envString("PASSKEY_RP_ID", "localhost"),

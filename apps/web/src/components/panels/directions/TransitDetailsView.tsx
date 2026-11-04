@@ -2,6 +2,7 @@
 
 import type { SvgIconComponent } from "@mui/icons-material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CommuteIcon from "@mui/icons-material/Commute";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
@@ -23,7 +24,10 @@ import {
   formatDistance,
   formatDuration,
   geocodeStopAsPlace,
+  makeSyntheticStopPlace,
   PANEL,
+  parseId,
+  resolveStopAsPlace,
   safeHref,
   tzOffsetLabel,
   usePlaceStore,
@@ -39,11 +43,11 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,
   contributorKey,
-  contributorsForField,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type {
   MergedDeparture,
+  TransitStop,
   TransportMode,
   TripItinerary,
   TripLeg,
@@ -66,10 +70,12 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { legToMergedDeparture } from "./legDeparture";
 import { getWheelchairStatus } from "./transitAccessibility";
 
 /**
@@ -99,27 +105,6 @@ function isPerLegRedundant(
   if (legAttrs.length !== trip.length) return false;
   const legIds = new Set(legAttrs.map(contributorKey));
   return trip.every((a) => legIds.has(contributorKey(a)));
-}
-
-function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
-  return {
-    contributors: snapshotContributors(
-      ...["route", "mode", "from", "to", "startTime", "headsign"].map((field) =>
-        contributorsForField(leg, field),
-      ),
-    ),
-    tripId: leg.tripId ?? "",
-    route: {
-      id: leg.routeId ?? "",
-      shortName: leg.route?.shortName ?? "",
-      longName: leg.route?.longName ?? "",
-      mode: leg.mode,
-      color: leg.route?.color,
-    },
-    headsign: leg.to.name,
-    scheduledAt: leg.startTime,
-    providers: provider ? [provider] : [],
-  };
 }
 
 function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
@@ -247,24 +232,44 @@ export function TransitDetailsView({
   const fmt = useDateTimeFormat();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo } = useMap();
 
+  /**
+   * Open the stop a leg uses. With its source id it opens as that transit stop,
+   * like a stop chosen in search, so its board treats it as the main stop.
+   */
   function handleStopClick(name: string, lat: number, lng: number, stopId?: string) {
     flyTo([lng, lat], 16);
-    void geocodeStopAsPlace({ id: stopId ?? "", name, lat, lng, modes: [], provider: "" }).then(
-      (place) => {
-        setSelectedPlace(
-          place ??
-            ({
-              id: stopId || `place:${name}`,
-              name,
-              address: name,
-              coordinates: [lng, lat],
-            } as Place),
-        );
-        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-      },
-    );
+    if (stopId) {
+      const stop: TransitStop = {
+        id: stopId,
+        name,
+        lat,
+        lng,
+        modes: [],
+        provider: parseId(stopId)?.scheme ?? "",
+      };
+      // Opening the place card replaces this view, so let the enrichment finish.
+      selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop), {
+        continueOnUnmount: true,
+      });
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      return;
+    }
+    // Without a source id the stop can only be found by name.
+    void geocodeStopAsPlace({ id: "", name, lat, lng, modes: [], provider: "" }).then((place) => {
+      setSelectedPlace(
+        place ??
+          ({
+            id: `place:${name}`,
+            name,
+            address: name,
+            coordinates: [lng, lat],
+          } as Place),
+      );
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    });
   }
   // Resolve each offset label before formatting the time it gates: unlike
   // these helpers, `fmt.time({ timeZone })` throws (rather than degrading)
@@ -542,7 +547,9 @@ export function TransitDetailsView({
                                   ? TramIcon
                                   : leg.mode === "ferry"
                                     ? DirectionsBoatIcon
-                                    : DirectionsBusIcon;
+                                    : leg.mode === "other"
+                                      ? CommuteIcon
+                                      : DirectionsBusIcon;
                           return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
                         })()}
                         <Box

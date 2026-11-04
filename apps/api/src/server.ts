@@ -22,11 +22,11 @@ import { createFatalProcessHandler } from "@openmapx/core/server";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
-import { db, sql } from "./db/index";
+import { db, openMigrationSession, sql } from "./db/index";
+import { type MigrationRun, startMigrations } from "./db/migration-runner";
 import { dataSubjectRequest, dataSubjectRequestTask } from "./db/schema";
 import {
   getAllIntegrations,
@@ -89,6 +89,7 @@ import {
   pruneAppLogs,
   pruneAuditLog,
   pruneCompletedJobs,
+  pruneDataManagerJobs,
   pruneExpiredVerifications,
 } from "./services/activity-retention";
 import {
@@ -178,16 +179,52 @@ process.on("unhandledRejection", onFatal);
 
 server.setErrorHandler(uniformErrorHandler);
 
+// Until the graceful handlers below are installed, a stop request ends startup.
+// As PID 1 without a handler, Node would ignore SIGTERM until Docker kills it,
+// and a killed migration's statement would keep running in Postgres.
+let migrationRun: MigrationRun | undefined;
+let stoppingDuringStartup = false;
+const stopDuringStartup = (signal: NodeJS.Signals) => {
+  if (stoppingDuringStartup) return;
+  stoppingDuringStartup = true;
+  server.log.warn({ signal }, "Stopping before startup finished");
+  void (migrationRun?.cancel() ?? Promise.resolve())
+    .catch((err) => server.log.warn(err, "Could not stop the running database migration"))
+    .finally(() => process.exit(signal === "SIGTERM" ? 143 : 130));
+};
+process.on("SIGTERM", stopDuringStartup);
+process.on("SIGINT", stopDuringStartup);
+
 // Run database migrations on startup (idempotent — skips already-applied migrations)
 const migrationsDir = join(import.meta.dirname ?? ".", "db", "migrations");
 try {
+  const migrationStartedAt = Date.now();
+  let applied: string[] = [];
   await applyRequiredMigrations({
     migrationsDirectory: migrationsDir,
     directoryExists: existsSync,
-    migrate: () => migrate(db, { migrationsFolder: migrationsDir }),
+    migrate: async () => {
+      migrationRun = startMigrations({
+        session: openMigrationSession(),
+        control: sql,
+        migrationsFolder: migrationsDir,
+        log: server.log,
+      });
+      applied = await migrationRun.done;
+    },
   });
-  server.log.info("Database migrations applied");
+  server.log.info(
+    { migrations: applied, durationMs: Date.now() - migrationStartedAt },
+    "Database migrations applied",
+  );
 } catch (err) {
+  if (stoppingDuringStartup) {
+    server.log.warn(
+      "Database migration stopped before it finished; it rolled back and runs again on the next start",
+    );
+    // The stop handler exits the process once the migration has rolled back.
+    await new Promise<never>(() => {});
+  }
   // Never bind a socket against an unknown schema. A failed deployment must be
   // visible to the orchestrator as a stopped container, not as a healthy API
   // that turns schema mismatches into request-time errors or partial writes.
@@ -658,6 +695,9 @@ const runRetention = () => {
   void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Admin job prune failed"),
   );
+  void pruneDataManagerJobs(JOB_RETENTION_DAYS).catch((err) =>
+    server.log.warn(err, "Data-manager job prune failed"),
+  );
   void pruneAppLogs(APP_LOG_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Application log prune failed"),
   );
@@ -796,6 +836,7 @@ startAdminJobReconciliation();
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.off(signal, stopDuringStartup);
   process.on(signal, async () => {
     privacyRequestRunner?.stop();
     privacyOperationsMonitor.stop();

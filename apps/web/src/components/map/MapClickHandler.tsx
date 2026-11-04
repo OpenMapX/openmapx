@@ -18,16 +18,42 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { claimMapClick, getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { bindMapMarkerActivation } from "@/integration-api/map/mapMarkerActivation";
+import { closePlaceSelection } from "@/lib/closeSurfaces";
+import { haptics } from "@/lib/haptics";
 import { initializeMapClickModes } from "@/lib/mapClickModes";
+import { bindMapLongPress, cameFromTouch, consumeLongPressClick } from "@/lib/mapTouch";
 
 // Configure before any map listener mounts. Read live mode state at the first
 // callback for each click; capture may clear that state before later callbacks.
 initializeMapClickModes();
 
+/** Drops the gray pin, replacing whatever place was open. */
+function dropPinAt(coordinates: [number, number]): void {
+  usePlaceStore.getState().setSelectedPlace(null);
+  if (useSidebarStore.getState().activeSidebarId === PANEL.PLACE) {
+    useSidebarStore.getState().closeSidebar();
+  }
+  useSidebarStore.getState().closeDetail();
+  useMapClickStore.getState().setClickedLngLat(coordinates);
+}
+
+/**
+ * A tap on empty map on a touch screen only puts away what is open — the
+ * dropped pin's card, then the place — as in native map apps, where people tap
+ * the map to clear it and long-press to drop a pin.
+ */
+function dismissOnTap(): void {
+  if (useMapClickStore.getState().clickedLngLat) {
+    useMapClickStore.getState().setClickedLngLat(null);
+    return;
+  }
+  if (usePlaceStore.getState().selectedPlace) closePlaceSelection();
+}
+
 export function MapClickHandler() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
-  const { selectedPlace, setSelectedPlace } = usePlaceStore();
+  const { selectedPlace } = usePlaceStore();
   const markerRef = useRef<maplibregl.Marker | null>(null);
 
   // Register plain-map click handler
@@ -37,6 +63,8 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      // The click some browsers fire as a long-press lifts: the pin is down.
+      if (consumeLongPressClick()) return;
       const owner = getMapClickOwner(e);
       // Repositioning a parked pin consumes the tap: falling through would also
       // deselect the place and drop a grey pin under the one being moved.
@@ -78,19 +106,28 @@ export function MapClickHandler() {
         }
       }
 
-      setSelectedPlace(null);
-      if (useSidebarStore.getState().activeSidebarId === PANEL.PLACE) {
-        useSidebarStore.getState().closeSidebar();
+      if (cameFromTouch(e.originalEvent)) {
+        dismissOnTap();
+        return;
       }
-      useSidebarStore.getState().closeDetail();
-      setClickedLngLat([e.lngLat.lng, e.lngLat.lat]);
+      dropPinAt([e.lngLat.lng, e.lngLat.lat]);
     };
+
+    // Touch screens drop the pin on a long-press instead. Pickers and tools
+    // own the map's taps while active, and guidance has no use for a pin.
+    const unbindLongPress = bindMapLongPress(map, (coordinates, event) => {
+      if (getMapClickOwner(event)) return;
+      if (useNavigationStore.getState().status !== "idle") return;
+      haptics.tap();
+      dropPinAt(coordinates);
+    });
 
     map.on("click", onClick);
     return () => {
       map.off("click", onClick);
+      unbindLongPress();
     };
-  }, [mapRef, mapReady, styleVersion, setClickedLngLat, setSelectedPlace]);
+  }, [mapRef, mapReady, styleVersion]);
 
   // Clear clicked point when a place is selected externally (search, category click, etc.)
   useEffect(() => {

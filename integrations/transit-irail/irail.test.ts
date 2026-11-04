@@ -200,13 +200,12 @@ describe("irail provider", () => {
       expect(fetchUrl).not.toContain("ir%3A");
     });
 
-    it("returns empty array on non-ok response", async () => {
+    it("reports a non-ok response as unavailable instead of no departures", async () => {
       mockFetch.mockResolvedValueOnce(mockNotOk());
 
       const { getDepartures } = await loadModule();
-      const deps = await getDepartures("stop-1", 30);
 
-      expect(deps).toEqual([]);
+      await expect(getDepartures("stop-1", 30)).rejects.toThrow("iRail timetable unavailable");
     });
   });
 

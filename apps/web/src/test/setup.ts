@@ -3,6 +3,10 @@
 // @testing-library/react auto-cleans the DOM after each test when Vitest globals
 // are enabled, so no explicit afterEach(cleanup) is needed here.
 import "@testing-library/jest-dom/vitest";
+import { afterEach, vi } from "vitest";
+import { isBackNavigationIdle, resetBackNavigationForTests } from "@/lib/backNavigation";
+import { resetMapTouchForTests } from "@/lib/mapTouch";
+import { settleHistory } from "./history";
 
 // jsdom does not implement Element.scrollIntoView; components that scroll a
 // highlighted item into view (autocomplete dropdowns, etc.) call it from a
@@ -12,3 +16,16 @@ import "@testing-library/jest-dom/vitest";
 if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// Dialogs, menus, sheets and panels write history entries, and a Back that
+// crossed only leftovers steps on by itself. jsdom's history lives for the
+// whole file, so let such a step land before the next test, then forget the
+// bookkeeping of the components this test unmounted.
+afterEach(async () => {
+  if (typeof window === "undefined") return;
+  if (!vi.isFakeTimers() && !isBackNavigationIdle()) await settleHistory();
+  resetBackNavigationForTests();
+  // A touch one test made would otherwise pass for the source of the next
+  // test's mouse events.
+  resetMapTouchForTests();
+});

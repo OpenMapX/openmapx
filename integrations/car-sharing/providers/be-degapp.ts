@@ -1,4 +1,3 @@
-import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 /**
  * Belgian cooperative car-sharing on the degapp / Partago platform.
  *
@@ -145,14 +144,6 @@ export const beCoopstroomClient = createStaticCarSharingClient({
   name: "CoopStroom",
   url: "https://app.coopstroom.be/api/partago/v1/fleet/coopstroom",
   regions: [{ center: [3.71, 51.11] as LngLat, radiusKm: 70 }],
-  attribution: {
-    label: "CoopStroom",
-    url: "https://www.coopstroom.be",
-    licensing: licensingFromDeclaration(
-      "Unspecified (see provider terms)",
-      "https://www.coopstroom.be",
-    ),
-  },
   parse: (body) => parseDegapp(body, { sourceId: "be-coopstroom", operator: "CoopStroom" }),
 });
 
@@ -161,13 +152,5 @@ export const beDegageClient = createStaticCarSharingClient({
   name: "Dégage",
   url: "https://degapp.be/api/car/stands",
   regions: [{ center: [3.72, 51.05] as LngLat, radiusKm: 80 }],
-  attribution: {
-    label: "Dégage",
-    url: "https://www.degage.be",
-    licensing: licensingFromDeclaration(
-      "Unspecified (see provider terms)",
-      "https://www.degage.be",
-    ),
-  },
   parse: (body) => parseDegapp(body, { sourceId: "be-degage", operator: "Dégage" }),
 });

@@ -120,6 +120,11 @@ function buildPresetQuery(tags: Record<string, string>, bbox: BoundingBox): stri
 // lean — add a key here when introducing a new facet filter (see CATEGORY_FACETS).
 const FILTERABLE_TAG_KEYS = [
   "wheelchair",
+  // Who may use a place and whether it costs: the arrival card's parking
+  // suggestions leave out private and reserved spaces and show the fee.
+  "access",
+  "fee",
+  "parking_space",
   "outdoor_seating",
   "takeaway",
   "delivery",
@@ -187,12 +192,24 @@ function getCategoryValue(tags: Record<string, string>): string | undefined {
   );
 }
 
+/**
+ * Fuel and charging stations are often mapped without `name`, identified only
+ * by who runs them. Naming them after that keeps them in results instead of
+ * dropping every unnamed one; other unnamed POIs stay excluded.
+ */
+function stationName(tags: Record<string, string>): string | undefined {
+  if (tags.amenity === "charging_station") return tags.brand ?? tags.operator ?? tags.network;
+  if (tags.amenity === "fuel") return tags.brand ?? tags.operator;
+  return undefined;
+}
+
 export function mapOverpassElements(elements: readonly OverpassElement[]): CategoryPlaceResult[] {
   const results: CategoryPlaceResult[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
     const name =
       tags.name ??
+      stationName(tags) ??
       (tags.emergency === "defibrillator" ? "Defibrillator" : undefined) ??
       (tags.amenity === "toilets" ? "Toilet" : undefined) ??
       (tags.amenity === "recycling" ? "Recycling" : undefined) ??

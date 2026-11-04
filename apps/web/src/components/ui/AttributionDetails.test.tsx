@@ -163,11 +163,11 @@ it("uses the supplied linked source credit as the heading without repeating its 
 });
 
 it.each([
-  ["en", "Varies by item", "Licence not specified"],
-  ["de", "Abhängig vom Eintrag", "Lizenz nicht angegeben"],
+  ["en", "Varies by item", "Licence not specified", "Terms"],
+  ["de", "Abhängig vom Eintrag", "Lizenz nicht angegeben", "Nutzungsbedingungen"],
 ] as const)(
   "uses concise generic licence labels in %s while preserving required notices and links",
-  (locale, perItem, unknown) => {
+  (locale, perItem, unknown, terms) => {
     const generic = "Determined by each contributing item or operator";
     const dialog = show(
       {
@@ -188,6 +188,11 @@ it.each([
               conditions: ["Check each image's permission"],
             },
             { scope: "data", subject: "Unknown dataset", license: { kind: "unknown" } },
+            {
+              scope: "data",
+              subject: "Catalogue entry",
+              license: { kind: "unknown", raw: "todo", url: "https://operator.example/terms" },
+            },
           ],
         },
       },
@@ -197,7 +202,14 @@ it.each([
       "href",
       "https://operator.example/licensing",
     );
-    expect(dialog.getByText(unknown)).toBeVisible();
+    // A licence that names nothing is left out, or shown as its terms link.
+    expect(dialog.queryByText(unknown)).toBeNull();
+    expect(dialog.queryByText("Unknown dataset")).toBeNull();
+    expect(dialog.queryByText("todo")).toBeNull();
+    expect(dialog.getByRole("link", { name: terms })).toHaveAttribute(
+      "href",
+      "https://operator.example/terms",
+    );
     expect(dialog.queryByText(generic)).toBeNull();
     expect(dialog.getByText("Credit the individual photographer")).toBeVisible();
     expect(dialog.getByText("Check each image's permission")).toBeVisible();

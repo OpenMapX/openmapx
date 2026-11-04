@@ -480,6 +480,40 @@ it("serializes independent label, paint and logo channels with authoritative emp
   expect(ids("_mapLogoFileAttributions")).toEqual(["actual-file"]);
 });
 
+it("labels the map with a result's label summary, crediting that field, and its summary otherwise", async () => {
+  const { buildGeoJson } = await import("@/integration-api/map/dataSourceFeatures");
+  const credit = (sourceId: string) => [{ sourceId, name: sourceId }];
+  const place = {
+    id: "station",
+    name: "Name",
+    source: "fuel",
+    variant: "open",
+    summary: { $t: "summary.priceList" },
+    labelSummary: { $t: "summary.priceAge" },
+    coordinates: [8, 50] as [number, number],
+    contributors: credit("hidden"),
+    fieldContributors: {
+      coordinates: credit("coords"),
+      name: credit("name"),
+      summary: credit("every-grade"),
+      labelSummary: credit("one-grade"),
+    },
+  };
+  const translate = (value: unknown) => (value as { $t: string } | undefined)?.$t;
+  const [labelled, plain] = buildGeoJson(
+    [place, { ...place, id: "plain", labelSummary: undefined }],
+    translate,
+  ).features;
+  const ids = (f: typeof labelled) =>
+    JSON.parse(f.properties._mapSummaryLabelAttributions).map(
+      (receipt: { sourceId: string }) => receipt.sourceId,
+    );
+  expect(labelled.properties.summary).toBe("summary.priceAge");
+  expect(ids(labelled)).toEqual(["coords", "name", "one-grade"]);
+  expect(plain.properties.summary).toBe("summary.priceList");
+  expect(ids(plain)).toEqual(["coords", "name", "every-grade"]);
+});
+
 it("adds captured file receipts only after the actual logo image loads and only to its rendered logo channel", async () => {
   vi.useFakeTimers();
   fake.state.zoom = 12;

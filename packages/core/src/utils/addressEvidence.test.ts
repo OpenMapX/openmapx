@@ -188,4 +188,24 @@ describe("direct OSM details identity", () => {
     expect(directPlaceDetailsId(place, true)).toBe(place.id);
     expect(directPlaceDetailsId({ ...place, primaryScheme: "coordinate" }, false)).toBe(null);
   });
+  it("uses the reference of the geocoder row a Wikidata place was merged with", () => {
+    const station = {
+      ...place,
+      id: "wikidata:Q6456",
+      primaryScheme: "wikidata",
+      ids: { wikidata: "Q6456", osm: "node/2459919677" },
+      directOsmReference: {
+        source: "geocoding-maptiler",
+        recordId: "maptiler:poi.28525889",
+        osmRef: "node/2459919677",
+      },
+    } satisfies Place;
+    expect(directPlaceDetailsId(station, false)).toBe("osm:node/2459919677");
+    expect(directPlaceDetailsId({ ...station, ids: { wikidata: "Q6456" } }, false)).toBe(
+      "wikidata:Q6456",
+    );
+    expect(directPlaceDetailsId({ ...station, primaryScheme: "osm", id: "osm:way/1" }, false)).toBe(
+      "osm:way/1",
+    );
+  });
 });

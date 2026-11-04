@@ -3,6 +3,7 @@ import { SessionRepository } from "../storage/SessionRepository";
 import { type EffectPorts, EffectRunner } from "./effects";
 import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
 import {
+  type AuxiliaryCommandHandler,
   type BridgePort,
   type CoordinatorDeps,
   type DriverPort,
@@ -38,6 +39,8 @@ export interface CoordinatorOverrides {
   ports: EffectPorts;
   clock?: () => number;
   newSessionId?: () => string;
+  /** Answers the page's one-shot requests; absent in the headless task. */
+  auxiliary?: AuxiliaryCommandHandler;
 }
 
 /** Random enough to be unique, and meaningless on its own. */
@@ -92,6 +95,7 @@ export async function createCoordinator(
     diagnostics: overrides.ports.diagnostics,
     clock: overrides.clock ?? (() => Date.now()),
     newSessionId: overrides.newSessionId ?? randomSessionId,
+    ...(overrides.auxiliary ? { auxiliary: overrides.auxiliary } : {}),
   };
 
   return {

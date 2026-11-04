@@ -71,6 +71,20 @@ describe("RegistryManager (registry singleton)", () => {
     expect(registry.entryCount).toBe(0);
   });
 
+  it("leaves out entries whose endpoint no longer exists", async () => {
+    vi.mocked(fetchRegistryEntries).mockResolvedValue([
+      makeEntry("de/mobil-nrw-hafas-mgate", "mobil:"),
+      makeEntry("de/db-regio-hafas-mgate", "dbregio:"),
+      makeEntry("de/kvb-hafas-mgate", "kvb:"),
+    ]);
+
+    await registry.initialize();
+
+    expect(registry.findByPrefix("mobil:")).toBeNull();
+    expect(registry.findByPrefix("dbregio:")).toBeNull();
+    expect(registry.findByPrefix("kvb:")?.id).toBe("de/kvb-hafas-mgate");
+  });
+
   it("unsupported protocol (otpRest) → filtered out, entryCount = 0", async () => {
     const otpRestEntry = makeEntry("us/some-otp-rest", "some:", "otpRest");
     vi.mocked(fetchRegistryEntries).mockResolvedValue([otpRestEntry]);

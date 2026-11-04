@@ -133,6 +133,7 @@ export function DataSourceFilterContent() {
     isFetching,
     isError,
     partial,
+    refetch,
   } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
     shouldFetch ? searchBbox : null,
@@ -201,6 +202,18 @@ export function DataSourceFilterContent() {
   if (!sourceMeta) return null;
 
   const belowMinZoom = sourceMeta && viewportZoom < sourceMeta.minZoom;
+  const showPartialNotice = partial !== null && !belowMinZoom && !showLoading && !isError;
+  // A source that did not answer may hold matches here, so an empty answer gets
+  // no count: "0 in view" would read as "there are none".
+  const countUnknown =
+    showPartialNotice && partial === "unavailable" && filteredResults.length === 0;
+  const showStatusFooter =
+    !countUnknown &&
+    (belowMinZoom ||
+      showLoading ||
+      isError ||
+      !sourceMeta.showResultsList ||
+      filteredResults.length === 0);
 
   const handleToggleMultiSelect = (filterId: string, optionId: string | number) => {
     const current = (filters[filterId] as (string | number)[] | undefined) ?? [];
@@ -450,18 +463,19 @@ export function DataSourceFilterContent() {
           </Box>
         )}
       </Box>
-      {partial === "area" && !belowMinZoom && !showLoading && !isError && (
+      {showPartialNotice && (
         <>
           <Divider />
-          <DataSourcePartialNotice onZoomIn={zoomIn} />
+          <DataSourcePartialNotice
+            reason={partial}
+            onZoomIn={zoomIn}
+            onRetry={() => void refetch()}
+            retrying={isFetching}
+          />
         </>
       )}
       {/* Status footer */}
-      {(belowMinZoom ||
-        showLoading ||
-        isError ||
-        !sourceMeta.showResultsList ||
-        filteredResults.length === 0) && (
+      {showStatusFooter && (
         <>
           <Divider />
           <Box sx={{ px: 2, py: 1.5, textAlign: "center" }}>

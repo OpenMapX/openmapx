@@ -7,6 +7,7 @@ import {
   formatCameraParam,
   formatLabeledPoint,
   formatScheduleParam,
+  navigationPath,
   paramsWithoutDeepLink,
   parseCameraParam,
   parseDeepLinkSearch,
@@ -41,6 +42,19 @@ describe("deepLink helpers", () => {
       category: "city",
       rawCategory: "place/city",
     });
+  });
+
+  it("parses the transit stop a place was opened for", () => {
+    const parsed = parseDeepLinkSearch(
+      "?place=osm:node:9&at=50.94111,6.975984&name=Bf%20Deutz%2F%20Messe&raw=transit_stop&stop=K%C3%B6ln%20Messe%2FDeutz%20Bf",
+    );
+
+    expect(parsed.place).toMatchObject({
+      name: "Bf Deutz/ Messe",
+      rawCategory: "transit_stop",
+      stopName: "Köln Messe/Deutz Bf",
+    });
+    expect(paramsWithoutDeepLink("?stop=x&token=t").toString()).toBe("token=t");
   });
 
   it("does not parse removed place coordinate aliases", () => {
@@ -289,5 +303,40 @@ describe("schedule deep-link param", () => {
       "?panel=directions&wp=0,0&wp=1,1&sched=1%7C0%2Ca%3D2026-09-02T14%3A00",
     );
     expect(parsed.directions?.schedules).toEqual({ 0: { arriveBy: "2026-09-02T14:00" } });
+  });
+});
+
+describe("navigationPath", () => {
+  it.each<[string, string, string[]]>([
+    ["the bare map", "?map=50,6,12", []],
+    ["a standalone place", "?map=50,6,12&panel=place&place=n1&at=50,6&name=A", ["place:n1"]],
+    [
+      "a place card over a category",
+      "?panel=category&categoryId=food&bbox=1,2,3,4&place=n1&at=50,6",
+      ["category:food", "place:n1"],
+    ],
+    ["a text search", "?panel=category&search=pizza&bbox=1,2,3,4", ["search:pizza"]],
+    ["a saved list", "?panel=saved&savedTab=lists&list=l1", ["saved", "list:l1"]],
+    [
+      "a data-source item",
+      "?panel=datasource&source=s&item=i&bbox=1,2,3,4",
+      ["datasource:s", "item:i"],
+    ],
+    ["directions with waypoints", "?panel=directions&wp=50,6&wp=51,7", ["directions"]],
+    ["a parking panel", "?panel=parking", ["parking"]],
+    [
+      "the measuring tool over a place",
+      "?place=n1&at=50,6&measure=line",
+      ["place:n1", "tool:measure"],
+    ],
+    ["travel time alone", "?iso=walking&isoAt=50,6", ["tool:iso"]],
+  ])("%s", (_name, search, expected) => {
+    expect(navigationPath(search)).toEqual(expected);
+  });
+
+  it("ignores camera, base layer and overlays", () => {
+    expect(navigationPath("?map=1,2,3&base=satellite&ov=weather&weather=radar&globe=1")).toEqual(
+      [],
+    );
   });
 });

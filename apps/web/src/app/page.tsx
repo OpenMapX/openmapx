@@ -53,6 +53,7 @@ import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { NavIncidentsProvider } from "@/components/navigation/NavIncidentsProvider";
+import { NavigationBackHandler } from "@/components/navigation/NavigationBackHandler";
 import { NavigationView } from "@/components/navigation/NavigationView";
 import { TransitNavigationView } from "@/components/navigation/TransitNavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
@@ -109,6 +110,7 @@ export default function HomePage() {
             <NavTrafficSignalsLayer />
             <NavigationView />
             <TransitNavigationView />
+            <NavigationBackHandler />
             <FlightArcLayer />
             <TimelineMapLayer />
             <TransitRouteLayer />

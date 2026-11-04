@@ -1,4 +1,4 @@
-import { safeHref } from "@openmapx/core";
+import { creditLicensing, safeHref } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { contributorKey } from "@openmapx/mobility-core/contributors";
 import {
@@ -50,8 +50,9 @@ const MAX_CHIP_LICENSE_LENGTH = 24;
 
 /** A receipt's licence as a short label, or undefined without licensing. */
 export function creditLicense(attr: Attribution): string | undefined {
-  return attr.licensing
-    ? formatLicensing(attr.licensing, { scopes: DISPLAY_LICENSE_SCOPES }) || undefined
+  const licensing = attr.licensing && creditLicensing(attr.licensing);
+  return licensing
+    ? formatLicensing(licensing, { scopes: DISPLAY_LICENSE_SCOPES }) || undefined
     : undefined;
 }
 

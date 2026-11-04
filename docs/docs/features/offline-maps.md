@@ -53,7 +53,9 @@ text and precise map coordinates. Most entries expire within minutes to 24
 hours; photo lookup caches can last up to seven days.
 
 Cached responses do not provide fresh searches, traffic, or guaranteed coverage.
-Turn the setting off to clear its retained response data, or use **Clear recent
+Routes are always requested from the network first; a remembered route is used
+only when the network is unavailable, and car routes planned with live traffic
+are never remembered. Turn the setting off to clear its retained response data, or use **Clear recent
 map data** in Storage. Removing an offline area and clearing recent data are
 separate actions.
 

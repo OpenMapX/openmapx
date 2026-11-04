@@ -235,6 +235,30 @@ describe("MOTIS static route adapter", () => {
     expect(mocks.routes.mock.calls[0][0].query.zoom).toBe(11);
     expect(mocks.stoptimes).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ["the stop lookup fails", () => mocks.stoptimes.mockRejectedValue(new Error("down"))],
+    [
+      "the stop lookup answers an error",
+      () => mocks.stoptimes.mockResolvedValue({ data: undefined, error: { e: 1 } }),
+    ],
+    [
+      "the route request answers an error",
+      () => {
+        mocks.stoptimes.mockResolvedValue({ data: { place: stop("root", 8, 47), stopTimes: [] } });
+        mocks.routes.mockResolvedValue({ data: undefined, error: { e: 1 } });
+      },
+    ],
+  ])("rejects when %s instead of answering no lines", async (_case, arrange) => {
+    arrange();
+    await expect(getRoutesForStop(instance, "ms:root", "epoch")).rejects.toThrow(/unavailable/);
+  });
+
+  it("answers no lines for a stop MOTIS does not know", async () => {
+    mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
+    expect(await getRoutesForStop(instance, "ms:root", "epoch")).toEqual([]);
+    expect(mocks.routes).not.toHaveBeenCalled();
+  });
 });
 
 describe("MOTIS stops, platforms, and civil-day timetable", () => {
@@ -616,6 +640,66 @@ describe("MOTIS per-service realtime evidence", () => {
       expect(departure.expectedAt).toBeUndefined();
     },
   );
+});
+
+describe("MOTIS stop time's own stop", () => {
+  it("names the stop each stop time leaves from, such as a station's platform", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: {
+          stopId: "de:05315:11201:3:9",
+          name: "Köln Hbf",
+          scheduledDeparture: "2026-10-07T08:00:00Z",
+        },
+        mode: "HIGHSPEED_RAIL",
+      } as never,
+      "departure",
+    );
+    expect(departure.stop).toEqual({ id: "ms:de:05315:11201:3:9", name: "Köln Hbf" });
+  });
+
+  it("leaves the stop out when MOTIS gives none", () => {
+    const departure = normalizeStoptime(
+      instance,
+      { place: { scheduledDeparture: "2026-10-07T08:00:00Z" }, mode: "BUS" } as never,
+      "departure",
+    );
+    expect(departure.stop).toBeUndefined();
+  });
+});
+
+describe("MOTIS line names", () => {
+  it("takes the train number out of a regional line's display name", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: { scheduledDeparture: "2026-10-31T17:08:00Z" },
+        mode: "REGIONAL_RAIL",
+        displayName: "RE1 (26826)",
+        routeShortName: "RE1",
+        tripShortName: "026826",
+      } as never,
+      "departure",
+    );
+    expect(departure.route.shortName).toBe("RE1");
+    expect(departure.serviceInfo?.trainNumber).toBe("26826");
+  });
+
+  it("keeps a long-distance train's display name, whose route name is a bare number", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: { scheduledDeparture: "2026-10-31T17:08:00Z" },
+        mode: "HIGHSPEED_RAIL",
+        displayName: "ICE 203",
+        routeShortName: "43",
+      } as never,
+      "departure",
+    );
+    expect(departure.route.shortName).toBe("ICE 203");
+    expect(departure.serviceInfo).toBeUndefined();
+  });
 });
 
 describe("MOTIS timetable transport evidence", () => {

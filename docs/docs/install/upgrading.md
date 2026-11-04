@@ -391,14 +391,15 @@ dedicated hostname or port.
 ## 5. Database migrations apply automatically
 
 OpenMapX does not have a separate "run migrations" command for a self-host
-upgrade. The `app-api` container **applies pending Drizzle migrations on every
-boot**: at startup it runs the migration files bundled in the image against the
-database, and the migrator is **idempotent**; it skips migrations that are
+upgrade. When `services update` replaces `app-api` (step 4), it first stops the
+old `app-api` and applies the new image's pending Drizzle migrations in a one-off
+container. Their output is part of the update's output. Only then does it start
+the new containers. The migrator is **idempotent**; it skips migrations that are
 already applied and only runs the new ones.
 
-So once the new `app-api` image starts (step 4), any schema changes that shipped
-with the release are applied automatically. You can confirm it ran cleanly in the
-API logs:
+`app-api` also applies pending migrations whenever it starts, so a container
+started any other way catches up too. After the update's migration step there
+are none left. You can confirm it ran cleanly in the API logs:
 
 ```bash
 pnpm openmapx services logs app-api --tail 100
@@ -415,6 +416,33 @@ supported unless you also restore the matching database backup. For upgrades
 that cross a schema change, consider taking the optional backup in step 1 when
 the deployment contains state you cannot readily recreate.
 :::
+
+### While a migration runs
+
+The migration step logs `Applying N database migrations` with their names before
+it starts. The API is unavailable until it finishes and the new containers have
+started. A migration that changes many rows can take a while. To follow it:
+
+- Every minute, it logs `Still applying database migrations` with the statement
+  it is running and for how long. If that statement is waiting for a lock another
+  database session holds, it logs that instead.
+- In PostgreSQL the migration's session is named `openmapx-api-migrations`.
+  From `psql` in the `postgis` container, connected to the `openmapx` database:
+
+  ```sql
+  SELECT state, wait_event_type, now() - query_start AS running, left(query, 80)
+  FROM pg_stat_activity WHERE application_name = 'openmapx-api-migrations';
+  ```
+
+Let a migration that is making progress finish. All pending migrations run in
+one transaction, so stopping the update rolls every one of them back. The
+previous `app-api` then starts again, nothing is replaced, and the next update
+repeats the migrations from the beginning. A migration that fails does the same.
+
+An update from the admin panel stops after 30 minutes, including its backup and
+image pull, and its migration with it. Apply a release whose migration needs
+longer from the host with `pnpm openmapx services update`, which has no time
+limit.
 
 ## 6. Verify the upgrade
 
@@ -703,29 +731,6 @@ as they were at the copy: installs and removals made after the update aren't
 visible there. The integration records in `infra/docker/state/ops-agent/integrations/`
 are shared by both releases, so such an integration shows as needing a
 reinstall, or one removed after the update as not installed through the agent.
-
-## Air-quality API compatibility
-
-The legacy OpenAQ station route
-`GET /api/integrations/overlay-air-quality/air-quality/stations` remains available through
-1 March 2027, but its `aqi` field is now `number | null`. OpenMapX no longer labels one instantaneous
-PM2.5 concentration as a US AQI value. A station receives a numeric index only when a complete,
-locally applicable index can be validated; otherwise clients must display the `pm25` concentration and
-the observation time.
-
-The route sends `Deprecation: true`, `Sunset: Mon, 01 Mar 2027 00:00:00 GMT`, and a
-`rel="successor-version"` link to `/api/integrations/air-quality/stations`. Operators should migrate map
-and API consumers to that canonical route. During the compatibility window, clients must accept
-`aqi: null`, retain the per-station attribution/license, and treat 429/5xx responses as unavailable data,
-not as zero or "good" air quality.
-
-The legacy Open-Meteo route
-`GET /api/integrations/weather-open-meteo-air-quality/aqi` sends a 28 February 2027 sunset (`Sun, 28 Feb 2027 00:00:00 GMT`). Migrate point
-consumers to `GET /api/integrations/air-quality/current`; the canonical response preserves model provenance,
-the locally selected standard, nullable primary evidence/index fields, raw pollutant values, and explicit
-partial or unavailable status. Do not translate a missing canonical primary into the legacy route's
-normalised scalar. The compatibility response sends `Deprecation: true`, that route-specific `Sunset`, and a
-`rel="successor-version"` link to the canonical current route.
 
 ## Where to go next
 

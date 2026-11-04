@@ -37,7 +37,9 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
   const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
   const lineColor = routeColor(departure.route, BRAND);
-  const serviceInfo = journey?.serviceInfo;
+  // The departure's own details, such as the train number sources write into
+  // the line's name, until the trip lookup says more.
+  const serviceInfo = journey?.serviceInfo ?? departure.serviceInfo;
   const formationDetails = journey?.formationDetails;
   const mergedAttributions = contributorsForRecords([
     departure,

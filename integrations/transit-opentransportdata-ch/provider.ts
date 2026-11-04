@@ -2636,10 +2636,11 @@ function dedupeSwissMappedAlerts(alerts: SwissMappedAlert[]): SwissMappedAlert[]
   return [...merged.values()];
 }
 
+/** Mapped alerts from the GTFS-SA feed, or `null` when the feed failed. */
 async function loadGtfsMappedAlerts(
   runtime: SwissProviderRuntime,
   datasets: SwissStopDatasets,
-): Promise<SwissMappedAlert[]> {
+): Promise<SwissMappedAlert[] | null> {
   try {
     const feed = await runtime.client.fetchSwissGtfsSaFeed();
     const entities = (feed.entity ?? []) as SwissGtfsEntity[];
@@ -2648,39 +2649,43 @@ async function loadGtfsMappedAlerts(
       .filter((alert): alert is SwissMappedAlert => alert !== null);
   } catch (error) {
     runtime.client.config.log?.warn?.("Swiss GTFS-SA alert feed failed", error);
-    return [];
+    return null;
   }
 }
 
+/** Mapped alerts from one SIRI-SX feed, or `null` when the feed failed. */
 async function loadSiriMappedAlerts(
   runtime: SwissProviderRuntime,
   datasets: SwissStopDatasets,
-): Promise<SwissMappedAlert[]> {
-  const feeds = await Promise.all([
-    runtime.client
-      .fetchSwissSiriSxFeed("complete")
-      .then((xml) => listSiriSituations(xml))
-      .catch((error) => {
-        runtime.client.config.log?.warn?.("Swiss SIRI-SX feed failed", error);
-        return [] as SiriSituation[];
-      }),
-    runtime.client
-      .fetchSwissSiriSxFeed("unplanned")
-      .then((xml) => listSiriSituations(xml))
-      .catch((error) => {
-        runtime.client.config.log?.warn?.("Swiss SIRI-SX unplanned feed failed", error);
-        return [] as SiriSituation[];
-      }),
-  ]);
-  return feeds.flat().map((situation) => mapSiriSituation(runtime, situation, datasets));
+  feed: "complete" | "unplanned",
+): Promise<SwissMappedAlert[] | null> {
+  try {
+    const situations = listSiriSituations(await runtime.client.fetchSwissSiriSxFeed(feed));
+    return situations.map((situation) => mapSiriSituation(runtime, situation, datasets));
+  } catch (error) {
+    runtime.client.config.log?.warn?.(
+      feed === "complete" ? "Swiss SIRI-SX feed failed" : "Swiss SIRI-SX unplanned feed failed",
+      error,
+    );
+    return null;
+  }
 }
 
+/**
+ * Alerts from the GTFS-SA and SIRI-SX feeds. They describe largely the same
+ * situations, so any feed that answers gives a usable list; only when none
+ * answers is the result unavailable rather than "no alerts".
+ */
 async function loadMappedAlerts(runtime: SwissProviderRuntime): Promise<SwissMappedAlert[]> {
   const datasets = await runtime.datasets.loadSwissStopDatasets();
-  return dedupeSwissMappedAlerts([
-    ...(await loadGtfsMappedAlerts(runtime, datasets)),
-    ...(await loadSiriMappedAlerts(runtime, datasets)),
+  const feeds = await Promise.all([
+    loadGtfsMappedAlerts(runtime, datasets),
+    loadSiriMappedAlerts(runtime, datasets, "complete"),
+    loadSiriMappedAlerts(runtime, datasets, "unplanned"),
   ]);
+  const answered = feeds.filter((alerts): alerts is SwissMappedAlert[] => alerts !== null);
+  if (answered.length === 0) throw new Error("Swiss alert feeds unavailable");
+  return dedupeSwissMappedAlerts(answered.flat());
 }
 
 function alertMatchesStop(

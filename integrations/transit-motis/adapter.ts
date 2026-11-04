@@ -27,6 +27,7 @@ import {
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
+import { type LineName, splitLineName } from "@openmapx/mobility-core/line-name";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { motisMode } from "@openmapx/mobility-core/motis-radar";
@@ -89,6 +90,21 @@ async function resolveRawStop(instance: MotisInstance, stopId: string): Promise<
   } catch {
     return null;
   }
+}
+
+/**
+ * Like `resolveRawStop`, but a failed request rejects instead of reading as an
+ * unknown stop, for lookups whose empty answer must mean "none".
+ */
+async function requireRawStop(instance: MotisInstance, stopId: string): Promise<Place | null> {
+  const response = await stoptimes({
+    client: instance.client,
+    query: { stopId: rawId(instance, stopId), n: 0, window: 0 },
+  }).catch(() => null);
+  if (!response || response.error || !response.data) {
+    throw new Error("MOTIS stop lookup unavailable");
+  }
+  return response.data.place ?? null;
 }
 
 /** Fetch stops within a bounding box. */
@@ -254,12 +270,13 @@ export async function searchByName(
   query: string,
   limit = 10,
 ): Promise<TransitStop[]> {
+  // A failed search must not read as "no stop by that name"; callers decide how to degrade.
   try {
-    const { data } = await geocode({
+    const { data, error } = await geocode({
       client: instance.client,
       query: { text: query, type: ["STOP"] },
     });
-    if (!data || !Array.isArray(data)) return [];
+    if (error || !Array.isArray(data)) throw new Error("MOTIS stop search unavailable");
     return data
       .filter((match) => (match.type === "STOP" || match.type === "PLACE") && match.id != null)
       .slice(0, limit)
@@ -274,7 +291,7 @@ export async function searchByName(
         }),
       );
   } catch {
-    return [];
+    throw new Error("MOTIS stop search unavailable");
   }
 }
 
@@ -282,6 +299,21 @@ export async function searchByName(
  * Compute a Departure from a MOTIS StopTime entry.
  * Handles both departures (arriveBy=false) and arrivals (arriveBy=true).
  */
+/**
+ * The line riders know and the train number. MOTIS's `displayName` appends the
+ * train number to regional lines ("RE1 (26826)") but is the only good name for
+ * long-distance trains, whose route short name is a bare number ("ICE 203").
+ */
+function motisLineName(service: {
+  displayName?: string | null;
+  routeShortName?: string | null;
+  tripShortName?: string | null;
+}): LineName {
+  return splitLineName(
+    service.displayName ?? service.routeShortName ?? service.tripShortName ?? "",
+  );
+}
+
 export function normalizeStoptime(
   instance: MotisInstance,
   st: StopTime,
@@ -313,6 +345,7 @@ export function normalizeStoptime(
 
   const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
   const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
+  const lineName = motisLineName(st);
 
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
@@ -327,7 +360,7 @@ export function normalizeStoptime(
             st.routeId,
           )
         : "",
-      shortName: st.displayName ?? st.routeShortName ?? st.tripShortName ?? "",
+      shortName: lineName.name,
       longName: st.routeLongName ?? "",
       mode: motisMode(st.mode),
       color: st.routeColor?.replace(/^#/, "") ?? undefined,
@@ -340,6 +373,11 @@ export function normalizeStoptime(
     platform,
     scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
+    ...(lineName.trainNumber ? { serviceInfo: { trainNumber: lineName.trainNumber } } : {}),
+    // A station's board includes its platforms' stop times, each naming its own stop.
+    ...(place.stopId && place.name
+      ? { stop: { id: `${instance.prefix}${place.stopId}`, name: place.name } }
+      : {}),
     provenance: {
       baselineSource: instance.provider === "ms" ? "transit-motis-local" : "transitous",
       instance: instance.provider,
@@ -513,7 +551,7 @@ export async function getRoutesForStop(
   stopId: string,
   activeEpoch: string,
 ): Promise<TransitRoute[]> {
-  const requested = await resolveRawStop(instance, stopId);
+  const requested = await requireRawStop(instance, stopId);
   if (!requested?.stopId) return [];
   const requestedIds = new Set(
     [requested.stopId, requested.parentId].filter((id): id is string => typeof id === "string"),
@@ -523,7 +561,7 @@ export async function getRoutesForStop(
   // false-positive guard, so the extra width costs nothing.
   const delta = 0.001;
   try {
-    const { data } = await motisRoutesApi({
+    const { data, error } = await motisRoutesApi({
       client: instance.client,
       query: {
         min: `${requested.lat - delta},${requested.lon - delta}`,
@@ -531,7 +569,8 @@ export async function getRoutesForStop(
         zoom: 11,
       },
     });
-    if (!data?.routes?.length) return [];
+    if (error || !data) throw new Error("MOTIS route lookup unavailable");
+    if (!data.routes?.length) return [];
     if (data.zoomFiltered !== false) {
       throw new Error("MOTIS zoom-11 route response was unexpectedly filtered");
     }
@@ -691,7 +730,8 @@ function mapAlternatives(instance: MotisInstance, alternatives: Leg[][]): Transi
       startTime: transit.startTime,
       endTime: transit.endTime,
       tripId: transit.tripId ? `${instance.prefix}${transit.tripId}` : undefined,
-      routeShortName: transit.displayName ?? transit.routeShortName ?? undefined,
+      routeShortName:
+        transit.displayName || transit.routeShortName ? motisLineName(transit).name : undefined,
     });
   }
   return out;
@@ -816,7 +856,7 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
     },
     route: isTransit
       ? {
-          shortName: leg.displayName ?? leg.routeShortName ?? leg.tripShortName ?? "",
+          shortName: motisLineName(leg).name,
           longName: leg.routeLongName ?? "",
           color: leg.routeColor?.replace(/^#/, "") ?? undefined,
           textColor: leg.routeTextColor?.replace(/^#/, "") ?? undefined,

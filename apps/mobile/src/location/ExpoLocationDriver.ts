@@ -1,3 +1,4 @@
+import { THEME_COLORS } from "@openmapx/core/theme";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 import { ANDROID_FOREGROUND_SERVICE_COPY, type MobileLocale } from "../../config/nativeCopy";
@@ -121,7 +122,7 @@ export class ExpoLocationDriver implements LocationDriver {
               foregroundService: {
                 notificationTitle: ANDROID_FOREGROUND_SERVICE_COPY[this.locale].notificationTitle,
                 notificationBody: ANDROID_FOREGROUND_SERVICE_COPY[this.locale].notificationBody,
-                notificationColor: "#1B69D6",
+                notificationColor: THEME_COLORS.light.primary,
                 killServiceOnDestroy: false,
               },
             }
@@ -190,4 +191,32 @@ function toFix(position: Location.LocationObject): LocationFix {
     ...(position.coords.heading === null ? {} : { headingDegrees: position.coords.heading }),
     ...(position.coords.altitude === null ? {} : { altitudeMeters: position.coords.altitude }),
   };
+}
+
+/**
+ * The grant as the start-permission flow needs it: which level, whether it is
+ * precise, and whether the system will still show a prompt.
+ */
+export async function readLocationPermissionSnapshot(): Promise<{
+  permission: LocationPermissionState;
+  accuracy?: "precise" | "approximate";
+  canAskAgain: boolean;
+}> {
+  const foreground = await Location.getForegroundPermissionsAsync();
+  const background = foreground.granted ? await Location.getBackgroundPermissionsAsync() : null;
+  const permission = combinePermissionState(foreground, background);
+  const accuracy = foreground.granted ? grantedAccuracy(foreground) : undefined;
+  return {
+    permission,
+    ...(accuracy ? { accuracy } : {}),
+    canAskAgain: foreground.canAskAgain,
+  };
+}
+
+function grantedAccuracy(
+  response: Location.LocationPermissionResponse,
+): "precise" | "approximate" | undefined {
+  if (response.android) return response.android.accuracy === "coarse" ? "approximate" : "precise";
+  if (response.ios) return response.ios.accuracy === "reduced" ? "approximate" : "precise";
+  return undefined;
 }

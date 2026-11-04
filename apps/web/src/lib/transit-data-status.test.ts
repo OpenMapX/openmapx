@@ -35,6 +35,19 @@ describe("transit source age and service evidence", () => {
       getTransitDataStatus({ realtime: true, freshness: { ...base, dataAsOf } }, now),
     ).toMatchObject({ freshness: status, ageSeconds: age });
   });
+  it.each([
+    [30, 120, "fresh"],
+    [100, 100, "stale"],
+  ] as const)(
+    "judges a source %ss behind at fetch time, shown %ss later, as %s",
+    (lag, shownAfter, status) => {
+      const fetchedAt = new Date(now - shownAfter * 1000).toISOString();
+      const dataAsOf = new Date(now - (shownAfter + lag) * 1000).toISOString();
+      expect(
+        getTransitDataStatus({ realtime: true, freshness: { ...base, fetchedAt, dataAsOf } }, now),
+      ).toMatchObject({ freshness: status, ageSeconds: shownAfter + lag });
+    },
+  );
   it.each([undefined, "not-a-date", "2026-10-07T08:00:01Z"])(
     "keeps missing, invalid and future upstream time %s unknown",
     (dataAsOf) => {

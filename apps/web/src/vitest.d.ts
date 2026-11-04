@@ -7,6 +7,7 @@ interface VitestTestFunction {
   each<T>(
     cases: readonly T[],
   ): (name: string, callback: (...args: VitestEachArguments<T>) => void | Promise<void>) => void;
+  skipIf(condition: unknown): VitestTestFunction;
 }
 
 /**
@@ -111,6 +112,7 @@ declare module "vitest" {
     useFakeTimers(options?: { shouldAdvanceTime?: boolean }): void;
     setSystemTime(now?: string | number | Date): void;
     useRealTimers(): void;
+    isFakeTimers(): boolean;
     advanceTimersByTime(ms: number): void;
     advanceTimersByTimeAsync(ms: number): Promise<void>;
     waitFor<T>(

@@ -364,7 +364,12 @@ export function isTruthyString(value: string | null | undefined): value is strin
   return typeof value === "string" && value.trim().length > 0;
 }
 
-export function toTransportMode(mode: string | null | undefined): TransportMode {
+/**
+ * Map an Entur mode to its OpenMapX equivalent. Returns undefined for modes with
+ * no equivalent (air, taxi, carpool, snowAndIce, unknown) so callers decide how
+ * to represent them instead of mislabelling them.
+ */
+export function toTransportMode(mode: string | null | undefined): TransportMode | undefined {
   const normalized = (mode ?? "").toLowerCase();
   switch (normalized) {
     case "rail":
@@ -385,12 +390,13 @@ export function toTransportMode(mode: string | null | undefined): TransportMode 
     case "monorail":
       return "monorail";
     case "coach":
+    case "trolleybus":
     case "bus":
       return "bus";
     case "foot":
       return "walking";
     default:
-      return "bus";
+      return undefined;
   }
 }
 
@@ -401,8 +407,8 @@ export function collectStopModes(
 ): TransportMode[] {
   const modes = new Set<TransportMode>();
   for (const raw of transportModes ?? []) {
-    if (!raw) continue;
-    modes.add(toTransportMode(raw));
+    const mapped = toTransportMode(raw);
+    if (mapped) modes.add(mapped);
   }
   for (const category of categories ?? []) {
     const mapped = FEATURE_CATEGORY_MODE_MAP[category];
@@ -415,7 +421,7 @@ export function collectStopModes(
       if (mapped) modes.add(mapped);
     }
   }
-  return modes.size > 0 ? [...modes] : ["bus"];
+  return [...modes];
 }
 
 export function toOccupancyLevel(raw: string | null | undefined): OccupancyLevel | undefined {
@@ -617,7 +623,7 @@ export function normalizeLine(line: LineFieldsFragment | null | undefined): Tran
     id: withEnturPrefix(line.id),
     shortName: line.publicCode ?? line.name ?? "",
     longName: line.name ?? line.publicCode ?? "",
-    mode: toTransportMode(line.transportMode),
+    mode: toTransportMode(line.transportMode) ?? "other",
     color: normalizeColor(line.presentation?.colour),
     textColor: normalizeColor(line.presentation?.textColour),
     operatorName: line.operator?.name ?? line.authority?.name ?? "",
@@ -838,7 +844,7 @@ function normalizeTripLeg(leg: TripLegFieldsFragment): TripLeg | null {
   ].map((status) => toOccupancyLevel(status));
 
   return {
-    mode: leg.ride ? toTransportMode(leg.mode) : "walking",
+    mode: leg.ride ? (toTransportMode(leg.mode) ?? "other") : "walking",
     startTime: leg.expectedStartTime,
     endTime: leg.expectedEndTime,
     from: {
@@ -1185,14 +1191,9 @@ function collectNsrTariffZoneRefs(stopPlace: NsrStopPlaceRecord | null | undefin
 
 function transportModesFromStopPlace(stopPlace: NsrStopPlaceRecord): TransportMode[] {
   if (isTruthyString(stopPlace.transportMode)) {
-    return [toTransportMode(stopPlace.transportMode)];
+    return collectStopModes([stopPlace.transportMode]);
   }
-  const modes = collectNsrQuays(stopPlace)
-    .map((quay) =>
-      isTruthyString(quay.transportMode) ? toTransportMode(quay.transportMode) : null,
-    )
-    .filter((mode): mode is TransportMode => mode !== null);
-  return modes.length > 0 ? Array.from(new Set(modes)) : ["bus"];
+  return collectStopModes(collectNsrQuays(stopPlace).map((quay) => quay.transportMode ?? null));
 }
 
 function firstKnownStopLocation(

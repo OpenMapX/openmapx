@@ -384,6 +384,64 @@ describe("Entur boards and trip planning", () => {
       [10.77, 59.905],
     ]);
   });
+
+  it("keeps a flight leg in the itinerary as another mode instead of a bus", async () => {
+    const place = (name: string, latitude: number, longitude: number) => ({
+      name,
+      latitude,
+      longitude,
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        data: {
+          trip: {
+            fromPlace: place("Oslo lufthavn", 60.193, 11.097),
+            toPlace: place("Tromsø lufthavn", 69.681, 18.919),
+            tripPatterns: [
+              {
+                expectedStartTime: "2026-04-21T08:00:00+02:00",
+                expectedEndTime: "2026-04-21T09:55:00+02:00",
+                duration: 6900,
+                streetDistance: 0,
+                legs: [
+                  {
+                    mode: "air",
+                    ride: true,
+                    expectedStartTime: "2026-04-21T08:00:00+02:00",
+                    expectedEndTime: "2026-04-21T09:55:00+02:00",
+                    serviceDate: "2026-04-21",
+                    fromPlace: place("Oslo lufthavn", 60.193, 11.097),
+                    toPlace: place("Tromsø lufthavn", 69.681, 18.919),
+                    line: {
+                      id: "AVI:Line:DY_OSL-TOS",
+                      publicCode: "DY390",
+                      name: "Oslo-Tromsø",
+                      transportMode: "air",
+                    },
+                    serviceJourney: { id: "AVI:ServiceJourney:DY390-01" },
+                    intermediateEstimatedCalls: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    const { planTrip } = await loadModule();
+    const plan = await planTrip({
+      from: { lat: 60.193, lng: 11.097 },
+      to: { lat: 69.681, lng: 18.919 },
+    });
+
+    expect(plan?.itineraries[0].legs).toHaveLength(1);
+    expect(plan?.itineraries[0].legs[0]).toMatchObject({
+      mode: "other",
+      route: { shortName: "DY390", longName: "Oslo-Tromsø" },
+      routeId: "entur:AVI:Line:DY_OSL-TOS",
+    });
+  });
 });
 
 describe("Entur route, vehicles, journey, and facilities", () => {

@@ -1,6 +1,6 @@
 {
-  "id": "e1901a3d-3001-4fc1-b4a9-1f0c8e34b932",
-  "prevId": "d549466e-6409-4b63-9307-604353bbbf8c",
+  "id": "d549466e-6409-4b63-9307-604353bbbf8c",
+  "prevId": "ea53844f-257b-4be6-aefc-34ee5145df6c",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -2483,40 +2483,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.account_admin_guard": {
-      "name": "account_admin_guard",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "active_count": {
-          "name": "active_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "account_admin_guard_singleton": {
-          "name": "account_admin_guard_singleton",
-          "value": "\"account_admin_guard\".\"id\"=1"
-        },
-        "account_admin_guard_nonnegative": {
-          "name": "account_admin_guard_nonnegative",
-          "value": "\"account_admin_guard\".\"active_count\">=0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "data_manager.offline_package_job_owners": {
       "name": "offline_package_job_owners",
       "schema": "data_manager",
@@ -2653,7 +2619,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -3244,7 +3226,7 @@
           "name": "activated_by",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "activated_at": {
           "name": "activated_at",
@@ -3255,21 +3237,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "auth_policy_state_activated_by_user_id_fk": {
-          "name": "auth_policy_state_activated_by_user_id_fk",
-          "tableFrom": "auth_policy_state",
-          "tableTo": "user",
-          "columnsFrom": [
-            "activated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -7073,7 +7041,7 @@
           "name": "actor_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "intent_digest": {
           "name": "intent_digest",
@@ -7096,21 +7064,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "auth_policy_application_actor_id_user_id_fk": {
-          "name": "auth_policy_application_actor_id_user_id_fk",
-          "tableFrom": "auth_policy_application",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

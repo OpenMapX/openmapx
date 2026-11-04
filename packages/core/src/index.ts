@@ -50,6 +50,7 @@ export * from "./hooks";
 export * from "./impact";
 export {
   type ActiveAlert,
+  type AlongRange,
   type AlongRouteOptions,
   type AlongRoutePoi,
   type ApproachCamera,
@@ -140,14 +141,18 @@ export {
   progressBucketStartMeters,
   projectEventsToRoute,
   projectFlowToRoute,
+  projectRoadAlertsOntoRoute,
   projectRoutePath,
   projectRoutePois,
   pruneRerouteTimes,
   type RecordedReroute,
   type ReplayStep,
+  ROUTE_SEARCH_CORRIDOR_METERS,
   type RoadAlert,
   type RoadAlertType,
   type RouteCountrySpan,
+  type RouteSearchChunk,
+  type RouteSearchChunks,
   readRouteMatcherCounters,
   refKind,
   remainingWaypoints,
@@ -157,6 +162,7 @@ export {
   resolveRecommendedLanes,
   routeAheadBounds,
   routeFingerprint,
+  routeSearchChunks,
   SIGNAL_LOST_GAP_MS,
   sameJunction,
   selectActiveAlert,
@@ -197,6 +203,7 @@ export {
   type RouteStopWaypointPosition,
   remainingRouteStopWaypoints,
   routeStopAccess,
+  routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "./navigation/routeStopDetours";
 export type { TransitProgress } from "./navigation/transitProgress";

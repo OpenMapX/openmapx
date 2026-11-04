@@ -34,13 +34,52 @@ export interface Database {
   closeAsync(): Promise<void>;
 }
 
+/**
+ * Runs every write on `database` one at a time.
+ *
+ * `expo-sqlite` executes `withExclusiveTransactionAsync` on a connection of its
+ * own, and a second writer that finds the file locked fails at once with
+ * "database is locked" rather than waiting. Writes start from independent
+ * places (a location batch, a fire-and-forget diagnostic, a page command), so
+ * without a queue two of them regularly overlap and one is lost. Everything in
+ * this process shares one JavaScript context, so one queue covers all of them.
+ * Reads stay concurrent; WAL lets them proceed beside a writer.
+ *
+ * A transaction body must use the `tx` it is given, never the outer handle,
+ * or it would wait on itself.
+ */
+export function serialiseWrites(database: Database): Database {
+  let tail: Promise<unknown> = Promise.resolve();
+  const queued = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = tail.then(work, work);
+    tail = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+  return {
+    execAsync: (source) => queued(() => database.execAsync(source)),
+    runAsync: (source, params) => queued(() => database.runAsync(source, params)),
+    getFirstAsync: (source, params) => database.getFirstAsync(source, params),
+    getAllAsync: (source, params) => database.getAllAsync(source, params),
+    withExclusiveTransactionAsync: (task) =>
+      queued(() => database.withExclusiveTransactionAsync(task)),
+    closeAsync: () => queued(() => database.closeAsync()),
+  };
+}
+
 let opening: Promise<Database> | null = null;
 
 export function getDatabase(): Promise<Database> {
   opening ??= (async () => {
-    const database = (await SQLite.openDatabaseAsync(DATABASE_NAME)) as unknown as Database;
+    const opened = (await SQLite.openDatabaseAsync(DATABASE_NAME)) as unknown as Database;
+    const database = serialiseWrites(opened);
     await database.execAsync("PRAGMA journal_mode = WAL");
     await database.execAsync("PRAGMA foreign_keys = ON");
+    // A lock held by another process (or a connection this queue does not
+    // see) is waited for briefly instead of failing outright.
+    await database.execAsync("PRAGMA busy_timeout = 5000");
     await migrateSessionSchema(database);
     return database;
   })().catch((error) => {

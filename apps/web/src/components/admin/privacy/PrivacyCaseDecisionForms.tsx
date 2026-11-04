@@ -1,7 +1,6 @@
 "use client";
 import {
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -14,6 +13,7 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { type PrivacyCaseClient, privacyResult } from "@/lib/admin/privacyAdmin";
 export function PrivacyCaseDecisionForms({
   detail,

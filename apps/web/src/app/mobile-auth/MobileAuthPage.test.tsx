@@ -8,6 +8,17 @@ const sessionState: { data: unknown; isPending: boolean } = { data: null, isPend
 vi.mock("@openmapx/core", () => ({
   useSession: () => sessionState,
 }));
+// The dialog's own flows have their own suite; here it matters only whether the
+// page offers it and where it sends the user back to.
+vi.mock("@/components/auth/AuthDialog", () => ({
+  AuthDialog: (props: { callbackPath?: string; dismissible?: boolean }) => (
+    <div
+      data-testid="auth-dialog"
+      data-callback-path={props.callbackPath}
+      data-dismissible={String(props.dismissible)}
+    />
+  ),
+}));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.example.test" }),
 }));
@@ -120,6 +131,59 @@ describe("MobileAuthClient", () => {
 
     expect(view.getByText(en.mobileAuth.signInFirst)).toBeInTheDocument();
     expect(view.getByRole("button", { name: en.mobileAuth.continueToApp })).toBeDisabled();
+  });
+
+  it("offers sign-in here and returns to the same handoff afterwards", () => {
+    sessionState.data = null;
+    const view = renderClient();
+
+    const dialog = view.getByTestId("auth-dialog");
+    expect(dialog).toHaveAttribute("data-dismissible", "false");
+    const returnTo = new URL(dialog.getAttribute("data-callback-path") ?? "", "https://x.test");
+    expect(returnTo.pathname).toBe("/mobile-auth");
+    expect(Object.fromEntries(returnTo.searchParams)).toEqual({
+      purpose: "sign-in",
+      state: STATE,
+      code_challenge: CHALLENGE,
+      code_challenge_method: "S256",
+    });
+  });
+
+  it("offers no sign-in once a session exists", () => {
+    const view = renderClient();
+
+    expect(view.queryByTestId("auth-dialog")).toBeNull();
+  });
+
+  it("keeps the sign-in dialog mounted while a signed-out session refetches", () => {
+    // better-auth reports a refetch of an empty session as pending. The password
+    // step triggers one before it asks for the two-factor code, so unmounting
+    // here would reset the dialog to its password form.
+    sessionState.data = null;
+    const view = renderClient();
+    const dialog = view.getByTestId("auth-dialog");
+
+    sessionState.isPending = true;
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <MobileAuthClient
+          purpose="sign-in"
+          state={STATE}
+          codeChallenge={CHALLENGE}
+          callbackScheme="openmapx"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(view.getByTestId("auth-dialog")).toBe(dialog);
+  });
+
+  it("shows no sign-in dialog before the first session check finishes", () => {
+    sessionState.data = null;
+    sessionState.isPending = true;
+    const view = renderClient();
+
+    expect(view.queryByTestId("auth-dialog")).toBeNull();
   });
 
   it("issues nothing when the server refuses", async () => {

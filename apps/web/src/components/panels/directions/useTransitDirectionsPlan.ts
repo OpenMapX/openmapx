@@ -104,7 +104,7 @@ export function useTransitDirectionsPlan({
 
   // Send the user's raw Prefer selection plus a Deutschlandticket flag; each
   // transit provider applies the D-Ticket restriction its own (most accurate)
-  // way server-side (MOTIS intersects modes, db-vendo uses DB's native filter).
+  // way server-side (MOTIS intersects modes; providers that can't step aside).
   const effectiveMotisModes = useMemo(
     () => preferredModesToMotis(transitPreferredModes),
     [transitPreferredModes],

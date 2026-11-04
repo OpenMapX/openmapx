@@ -1,9 +1,10 @@
-import { and, lt, sql } from "drizzle-orm";
+import { and, desc, isNotNull, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   adminAuditLog,
   adminJob,
   appLog,
+  dataManagerJobs,
   platformConfigurationPreview,
   verification,
 } from "../db/schema";
@@ -99,6 +100,59 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
   return result.length;
 }
 
+/**
+ * The account a data-manager job's `triggered_by` names, in the formats
+ * `parseDataManagerActor` reads; NULL for scheduled and other system runs.
+ */
+const dataManagerJobSubject = sql`substring(${dataManagerJobs.triggeredBy} from '^(?:api:user:|manual:admin:|manual:user:)(.+)$')`;
+
+/**
+ * Delete finished data-manager pipeline jobs, and by cascade their stages,
+ * that finished more than `days` ago. A running job has no finish time and is
+ * never deleted. The newest finished job of each kind is kept, so the transit
+ * state still reports the last sync when the schedule runs rarely or is off.
+ */
+export async function pruneDataManagerJobs(days: number): Promise<number> {
+  if (!Number.isFinite(days) || days <= 0) {
+    console.warn(
+      `Skipping data-manager job prune: retention days must be a positive finite number, got ${days}`,
+    );
+    return 0;
+  }
+  const cutoff = new Date(Date.now() - days * MS_PER_DAY);
+  const result = await withPreservationRetentionLock(db, (tx) => {
+    // Managed execution receipts belong to the all-role proof GC, including
+    // finished rows still referenced by an original owner awaiting recovery.
+    const legacyPipelineJob = and(
+      isNull(dataManagerJobs.executionVersion),
+      ne(dataManagerJobs.kind, "configuration-maintenance"),
+    );
+    const newestFinishedOfEachKind = tx
+      .selectDistinctOn([dataManagerJobs.kind], { id: dataManagerJobs.id })
+      .from(dataManagerJobs)
+      .where(and(legacyPipelineJob, isNotNull(dataManagerJobs.finishedAt)))
+      .orderBy(dataManagerJobs.kind, desc(dataManagerJobs.startedAt));
+    return tx
+      .delete(dataManagerJobs)
+      .where(
+        and(
+          legacyPipelineJob,
+          lt(dataManagerJobs.finishedAt, cutoff),
+          notInArray(dataManagerJobs.id, newestFinishedOfEachKind),
+          preservationAllowsDeletion({
+            registrationId: "data-manager-trigger-attribution",
+            candidateTimestamp: dataManagerJobs.startedAt,
+            subjectIds: [dataManagerJobSubject],
+            // An operator preserves this registration's rows by hand.
+            blockingStatuses: ["held", "action_required"],
+          }),
+        ),
+      )
+      .returning({ id: dataManagerJobs.id });
+  });
+  return result.length;
+}
+
 /** Delete persisted operational log records after the disclosed retention period. */
 export async function pruneAppLogs(days: number): Promise<number> {
   if (!Number.isFinite(days) || days <= 0) {
@@ -118,6 +172,9 @@ export async function pruneAppLogs(days: number): Promise<number> {
             registrationId: "application-logs",
             candidateTimestamp: appLog.createdAt,
             subjectIds: [sql`${appLog.metadata} ->> 'subjectId'`],
+            // An operator preserves this registration's rows by hand; the
+            // catalogue keeps them until 30 days after the request closes.
+            blockingStatuses: ["held", "action_required"],
           }),
         ),
       )

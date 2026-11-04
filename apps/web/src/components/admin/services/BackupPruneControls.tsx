@@ -1,7 +1,6 @@
 "use client";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -12,6 +11,7 @@ import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { formatBytes } from "@/lib/storageFormat";

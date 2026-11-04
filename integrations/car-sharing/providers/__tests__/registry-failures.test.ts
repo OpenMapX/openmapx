@@ -36,7 +36,6 @@ function makeClient(
     id,
     name: `Client ${id}`,
     regions: [{ center: [centerLng, centerLat], radiusKm: 50 }],
-    attribution: { label: `Client ${id}`, url: `https://example.com/${id}` },
     search: searchImpl,
   };
 }

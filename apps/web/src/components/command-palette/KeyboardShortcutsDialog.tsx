@@ -2,7 +2,6 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
-import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
@@ -19,6 +18,7 @@ import {
 } from "@openmapx/command-palette";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import Dialog from "@/components/ui/Dialog";
 
 // Built-in shortcuts that aren't backed by a Command. Pre-parsed once.
 const BUILTIN_SHORTCUTS = {

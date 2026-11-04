@@ -97,6 +97,37 @@
       }
     },
     {
+      "includes": [
+        "apps/web/src/**",
+        "integrations/**",
+        "!apps/web/src/components/ui/Dialog.tsx",
+        "!apps/web/src/components/ui/Menu.tsx",
+        "!apps/web/src/components/ui/Popover.tsx",
+        "!**/*.test.ts",
+        "!**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@mui/material/Dialog": "Use @/components/ui/Dialog (integrations: @/integration-api/components/Dialog), which the Back gesture closes.",
+                  "@mui/material/Menu": "Use @/components/ui/Menu, which the Back gesture closes.",
+                  "@mui/material/Popover": "Use @/components/ui/Popover, which the Back gesture closes.",
+                  "@mui/material": {
+                    "importNames": ["Dialog", "Menu", "Popover"],
+                    "message": "Use the Back-aware wrappers in @/components/ui (Dialog, Menu, Popover)."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],
       "linter": {
         "rules": {

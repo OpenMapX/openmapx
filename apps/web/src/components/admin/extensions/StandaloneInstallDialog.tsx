@@ -1,7 +1,6 @@
 "use client";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -18,6 +17,7 @@ import {
 } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { invalidateExtensionAdministration } from "@/lib/admin/extensionAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";

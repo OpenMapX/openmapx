@@ -103,7 +103,11 @@ it("drops duplicate stop B receipts after real provider fan-out and capping", as
 it("credits no discarded discovery candidates when linked-stop pruning is empty", async () => {
   const { createPlaceTransit } = await import("../place-transit.js");
   const ctx = {
-    cache: { withCache: (_key: string, _ttl: number, load: () => unknown) => load() },
+    cache: {
+      get: async () => null,
+      set: async () => {},
+      withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+    },
   } as unknown as IntegrationContext;
   const orchestrator = {
     searchByNameRaw: async () => ({
@@ -112,7 +116,11 @@ it("credits no discarded discovery candidates when linked-stop pruning is empty"
       freshness: freshnessNow(),
     }),
   };
-  const out = await createPlaceTransit(ctx, orchestrator as never).getLinkedStops(50, 8, "Central");
+  const out = await createPlaceTransit(ctx, orchestrator as never).getLinkedStops({
+    lat: 50,
+    lng: 8,
+    name: "Central",
+  });
   expect(out.data).toEqual([]);
   expect(out.attributions).toEqual([]);
 });

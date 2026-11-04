@@ -32,6 +32,13 @@ describe("resolveSourceHeader", () => {
     expect(of("road-maintenance", "fi-digitraffic-maintenance")).toBe("roadMaintenance");
     expect(of("border-crossings", "us-cbp-waits")).toBe("borderCrossings");
   });
+
+  it("titles German and Belgian Cambio stations as car sharing by their source", () => {
+    const of = (source: string) =>
+      resolveSourceHeader({ ...fuelDetail, providerId: undefined, sources: [source] }).titleKey;
+    expect(of("de-cambio/KOE")).toBe("carSharing");
+    expect(of("be-cambio/BXL")).toBe("carSharing");
+  });
 });
 
 const action = {

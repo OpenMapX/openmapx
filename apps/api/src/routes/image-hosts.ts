@@ -147,3 +147,59 @@ export function isCameraHost(url: URL): boolean {
 export function isAllowedHost(url: URL): boolean {
   return isStaticImageHost(url.hostname) || matchesAdmittedCameraSource(url);
 }
+
+/**
+ * Panoramax catalogues whose per-picture image endpoint may send the proxy on
+ * to the federated instance, or that instance's storage bucket, holding the
+ * file. The federation adds instances and buckets without notice, so they
+ * cannot be listed here; the catalogue decides where a picture lives.
+ */
+const PANORAMAX_CATALOGUE_HOSTS: ReadonlySet<string> = new Set([
+  "api.panoramax.xyz",
+  "panoramax.openstreetmap.fr",
+]);
+
+/** `/api/pictures/<uuid>/<size>.jpg`, the endpoint every Panoramax instance serves. */
+const PANORAMAX_PICTURE_PATH =
+  /^\/api\/pictures\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(?:thumb|sd|hd)\.jpg$/i;
+
+/** True for a request to an allowlisted Panoramax catalogue's per-picture endpoint. */
+export function isPanoramaxPictureRequest(url: URL): boolean {
+  return (
+    url.protocol === "https:" &&
+    PANORAMAX_CATALOGUE_HOSTS.has(url.hostname) &&
+    PANORAMAX_PICTURE_PATH.test(url.pathname)
+  );
+}
+
+/** Redirects a picture may take to reach its file: catalogue → instance → file. */
+const MAX_PANORAMAX_REDIRECTS = 2;
+
+/**
+ * The redirects a request to a catalogue's per-picture endpoint may follow to
+ * hosts no allowlist names, or null for any other request.
+ *
+ * Panoramax sends a picture at most two redirects: the catalogue's endpoint to
+ * the instance holding it (a file, or that instance's own per-picture
+ * endpoint), and that endpoint to its storage bucket. The returned check is
+ * stateful and must see every redirect of the request in order. It admits the
+ * first only from the requested catalogue URL, the second only from a
+ * per-picture endpoint, and nothing after that; each target must be HTTPS on
+ * the default port. Every hop still connects only to public addresses, and the
+ * response must still be a bounded image.
+ */
+export function panoramaxRedirectPolicy(
+  request: URL,
+): ((next: URL, previous: URL | undefined) => boolean) | null {
+  if (!isPanoramaxPictureRequest(request)) return null;
+  let redirects = 0;
+  return (next, previous) => {
+    redirects += 1;
+    if (redirects > MAX_PANORAMAX_REDIRECTS || previous === undefined) return false;
+    const fromPictureEndpoint =
+      previous.protocol === "https:" && PANORAMAX_PICTURE_PATH.test(previous.pathname);
+    const fromRequest = previous.href === request.href;
+    if (redirects === 1 ? !fromRequest : !fromPictureEndpoint) return false;
+    return next.protocol === "https:" && next.port === "";
+  };
+}

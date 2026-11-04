@@ -107,6 +107,31 @@ describe("EvPlanCard", () => {
     screen.getByText("directions.ev.availability");
   });
 
+  it("shows when availability was last reported", () => {
+    render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
+    screen.getByText("directions.ev.availabilityAsOf");
+    expect(screen.queryByText("directions.ev.availability")).toBeNull();
+  });
+
+  it("labels a price costed on a member or roaming tariff", () => {
+    const [stop] = baseResult.stops;
+    const { rerender } = render(<EvPlanCard result={baseResult} />, {
+      wrapper: createQueryWrapper(),
+    });
+    expect(screen.queryByText(/directions\.ev\.contractTariff/)).toBeNull();
+
+    rerender(<EvPlanCard result={{ ...baseResult, stops: [{ ...stop, contractTariff: true }] }} />);
+    screen.getByText(/directions\.ev\.contractTariff/);
+  });
+
+  it("notes when the plan fell back to straight-line distances", () => {
+    render(
+      <EvPlanCard result={{ ...baseResult, warnings: [{ kind: "straight-line-distances" }] }} />,
+      { wrapper: createQueryWrapper() },
+    );
+    screen.getByText("directions.ev.straightLineDistances");
+  });
+
   it("says there is no charger data instead of calling the route unreachable", () => {
     render(
       <EvPlanCard

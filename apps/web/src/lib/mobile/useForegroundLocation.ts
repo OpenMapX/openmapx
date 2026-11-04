@@ -18,21 +18,25 @@ import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
  * native-authority split exists to remove.
  */
 export function useForegroundLocation() {
-  const runtime = useMobileRuntimeContext();
+  // Only what decides where a fix comes from. The runtime context changes with
+  // every native snapshot, and the map is built from this function, so
+  // depending on the whole context rebuilt the map every few seconds while
+  // navigating in the installed app.
+  const { browserAuthority, client, state } = useMobileRuntimeContext();
   const counter = useRef(0);
 
   return useCallback(
     async (options: ForegroundLocationOptions = {}): Promise<ForegroundLocationResult> => {
-      if (runtime.browserAuthority) return browserForegroundFix(options);
-      if (!runtime.client || runtime.state !== "native-compatible") {
+      if (browserAuthority) return browserForegroundFix(options);
+      if (!client || state !== "native-compatible") {
         return { status: "unavailable" };
       }
       counter.current += 1;
       // Per-request so a slow answer to an abandoned request cannot move the map
       // under someone who has since asked again.
       const requestId = `fix-${counter.current}`;
-      return nativeForegroundFix(runtime.client, requestId, options);
+      return nativeForegroundFix(client, requestId, options);
     },
-    [runtime],
+    [browserAuthority, client, state],
   );
 }

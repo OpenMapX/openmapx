@@ -263,7 +263,7 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
   "preserves legacy release recovery sources during guarded preflight: %s",
   async (kind) => {
     const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
-    const { writeAgentHandoff, agentHandoffPath } = await import("./agent-handoff");
+    const { writeAgentHandoff } = await import("./agent-handoff");
     const checkout = join(root, "legacy-checkout"),
       infraDir = join(checkout, "infra/docker"),
       store = services.releaseStatePaths(infraDir).store;
@@ -286,7 +286,7 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
         createdAt: "2026-10-30T00:00:00Z",
         updatedAt: "2026-10-30T00:00:00Z",
       });
-      legacy = agentHandoffPath(checkout);
+      legacy = services.agentStatePaths(join(checkout, "infra/docker")).handoff;
     }
     const before = readFileSync(legacy);
     const execFile = vi.fn(async (_file: string, args: readonly string[]) => ({

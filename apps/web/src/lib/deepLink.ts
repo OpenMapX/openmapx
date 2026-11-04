@@ -28,6 +28,7 @@ export const DEEPLINK_PARAMS = new Set([
   "name",
   "cat",
   "raw",
+  "stop",
   "mode",
   "bikeProfile",
   "bikeHillPreference",
@@ -39,6 +40,7 @@ export const DEEPLINK_PARAMS = new Set([
   "wp",
   "sched",
   "categoryId",
+  "search",
   "bbox",
   "source",
   "item",
@@ -89,6 +91,8 @@ export interface DeepLinkPlace {
   name: string;
   category?: string;
   rawCategory?: string;
+  /** Name of the transit stop the place was opened for (see `Place.transitStop`). */
+  stopName?: string;
 }
 
 export interface ParsedDeepLink {
@@ -110,6 +114,11 @@ export interface ParsedDeepLink {
   };
   category?: {
     id: string;
+    bbox?: BoundingBox;
+  };
+  /** A free-text search of an area (the results list a typed query opens). */
+  textSearch?: {
+    text: string;
     bbox?: BoundingBox;
   };
   dataSource?: {
@@ -396,16 +405,53 @@ export function parseLngLatListParam(value: string | null): LngLat[] {
 }
 
 export function paramsWithoutDeepLink(search: string | URLSearchParams): URLSearchParams {
-  const params =
-    typeof search === "string"
-      ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
-      : new URLSearchParams(search.toString());
+  const params = toSearchParams(search);
 
   for (const key of DEEPLINK_PARAMS) {
     params.delete(key);
   }
 
   return params;
+}
+
+function toSearchParams(search: string | URLSearchParams): URLSearchParams {
+  return typeof search === "string"
+    ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
+    : new URLSearchParams(search.toString());
+}
+
+/**
+ * The surfaces a deep link has open, outermost first — what the Back gesture
+ * steps through, one entry per level. The camera, base layer and overlays are
+ * deliberately not part of it: panning the map or toggling a layer is not a
+ * place to go back to.
+ *
+ * Segments are `kind` or `kind:identity`; two paths that differ only in the
+ * identity of their last segment are siblings (another place in the same list).
+ */
+export function navigationPath(search: string | URLSearchParams): string[] {
+  const params = toSearchParams(search);
+  const panel = params.get("panel");
+  const categoryId = params.get("categoryId");
+  const text = params.get("search");
+  const source = params.get("source");
+  const path: string[] = [];
+
+  if (categoryId) path.push(`category:${categoryId}`);
+  else if (text) path.push(`search:${text}`);
+  else if (source) path.push(`datasource:${source}`);
+  else if (panel && panel !== PANEL.PLACE && panel !== PANEL.PLACE_CARD) path.push(panel);
+
+  const list = params.get("list");
+  if (panel === PANEL.SAVED && list) path.push(`list:${list}`);
+  const item = params.get("item");
+  if (source && item) path.push(`item:${item}`);
+  const place = params.get("place");
+  if (place && params.has("at")) path.push(`place:${place}`);
+
+  if (params.has("measure")) path.push("tool:measure");
+  if (params.has("iso")) path.push("tool:iso");
+  return path;
 }
 
 function hasAnyDeepLinkParam(params: URLSearchParams): boolean {
@@ -416,10 +462,7 @@ function hasAnyDeepLinkParam(params: URLSearchParams): boolean {
 }
 
 export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDeepLink {
-  const params =
-    typeof search === "string"
-      ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
-      : new URLSearchParams(search.toString());
+  const params = toSearchParams(search);
 
   const placeId = params.get("place");
   const placeCoords = parseLngLatParam(params.get("at"));
@@ -432,10 +475,12 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
           name: params.get("name") ?? "",
           category: params.get("cat") ?? undefined,
           rawCategory: params.get("raw") ?? undefined,
+          stopName: params.get("stop") ?? undefined,
         }
       : undefined;
 
   const categoryId = params.get("categoryId");
+  const searchText = params.get("search");
   const sourceId = params.get("source");
   const measureMode = params.get("measure");
   const isoMode = params.get("iso");
@@ -480,6 +525,10 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
     category: categoryId
       ? { id: categoryId, bbox: parseBboxParam(params.get("bbox")) ?? undefined }
       : undefined,
+    textSearch:
+      !categoryId && searchText
+        ? { text: searchText, bbox: parseBboxParam(params.get("bbox")) ?? undefined }
+        : undefined,
     dataSource: sourceId
       ? {
           id: sourceId,

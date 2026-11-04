@@ -1,6 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { Linking } from "react-native";
+import { BackHandler, Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
@@ -22,6 +22,7 @@ jest.mock("react-native-webview", () => {
       mockWebViewProps = props;
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+        goBack: () => mockInjectedScripts.push("<goBack>"),
       }));
       return React.createElement(View, { testID: props.testID as string });
     }),
@@ -39,6 +40,26 @@ jest.mock("./shell/FeasibilityOverlay", () => {
 jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
   createNavigationRecoveryController: jest.fn(async () => mockRecoveryController),
 }));
+
+/** A composed foreground navigation graph, standing in for the native one. */
+const mockNavigation = {
+  coordinator: { dispatch: jest.fn() },
+  capabilities: jest.fn(),
+  activeSession: jest.fn(),
+  dispose: jest.fn(),
+};
+const mockCreateForegroundNavigation = jest.fn();
+jest.mock("./navigation/createForegroundNavigation", () => ({
+  createForegroundNavigation: (...args: unknown[]) => mockCreateForegroundNavigation(...args),
+}));
+
+const NAVIGATION_CAPABILITIES = {
+  groundNavigation: true,
+  transitNavigation: true,
+  backgroundLocation: true,
+  localNotifications: true,
+  speech: true,
+};
 
 const RELEASE_MANIFEST = {
   release: true,
@@ -75,6 +96,15 @@ beforeEach(async () => {
   mockRecoveryController.reconcile.mockResolvedValue("session-ended");
   mockRecoveryController.resume.mockResolvedValue("session-started");
   mockRecoveryController.end.mockResolvedValue("session-ended");
+  // Jest has no native location, storage or audio modules, so by default the
+  // graph fails to compose, as it would on a device missing one of them.
+  mockCreateForegroundNavigation.mockReset();
+  mockCreateForegroundNavigation.mockRejectedValue(new Error("no native modules"));
+  mockNavigation.coordinator.dispatch.mockReset();
+  mockNavigation.coordinator.dispatch.mockResolvedValue(undefined);
+  mockNavigation.capabilities.mockReturnValue(NAVIGATION_CAPABILITIES);
+  mockNavigation.activeSession.mockResolvedValue(null);
+  mockNavigation.dispose.mockReset();
 });
 
 describe("App WebView policy", () => {
@@ -82,6 +112,23 @@ describe("App WebView policy", () => {
     const view = await renderApp();
     expect(view.getByTestId("product-webview")).toBeTruthy();
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("sends Android's Back button into the page's history while it has any", async () => {
+    let press: (() => boolean | null | undefined) | undefined;
+    jest.spyOn(BackHandler, "addEventListener").mockImplementation((_event, handler) => {
+      press = () => handler({} as never);
+      return { remove: jest.fn() };
+    });
+    await renderApp();
+    expect(press?.()).toBe(false);
+    await act(async () => {
+      (mockWebViewProps.onNavigationStateChange as (state: { canGoBack: boolean }) => void)({
+        canGoBack: true,
+      });
+    });
+    expect(press?.()).toBe(true);
+    expect(mockInjectedScripts).toContain("<goBack>");
   });
 
   it("allowlists only the exact configured origin", async () => {
@@ -190,6 +237,35 @@ describe("App bridge channel", () => {
     expect(nonceIn(bootstrap())).not.toBe(first);
   });
 
+  it("keeps the negotiated channel across Android's same-document history reports", async () => {
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: true } });
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    await emitAsync(mockWebViewProps.onLoadEnd);
+
+    // `replaceState` after the page finished: Android reports it as a load
+    // start with `loading: false`.
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: false } });
+    await post(nonce, {
+      messageId: "prepare-after-history",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    });
+
+    // Still the page's channel: the command reaches dispatch and is answered,
+    // rather than being dropped as coming from an unknown document.
+    const error = decodedMessages().find((message) => message.type === "native.error");
+    expect(error?.payload).toMatchObject({ forMessageId: "prepare-after-history" });
+  });
+
   it("ignores a message from outside the compiled origin", async () => {
     await renderApp();
     await emitAsync(mockWebViewProps.onLoadStart);
@@ -212,7 +288,7 @@ describe("App bridge channel", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("advertises no native navigation mode until the foreground graph is composed", async () => {
+  it("advertises no native navigation mode when the foreground graph could not be composed", async () => {
     await renderApp();
     const nonce = nonceIn(bootstrap());
     await emitAsync(mockWebViewProps.onLoadStart);
@@ -233,7 +309,7 @@ describe("App bridge channel", () => {
     });
   });
 
-  it("rejects an uncomposed command instead of accepting and discarding it", async () => {
+  it("rejects a navigation command it cannot run instead of accepting and discarding it", async () => {
     await renderApp();
     const nonce = nonceIn(bootstrap());
     await emitAsync(mockWebViewProps.onLoadStart);
@@ -257,6 +333,68 @@ describe("App bridge channel", () => {
       code: "unsupported-capability",
       forMessageId: "prepare-1",
     });
+  });
+
+  const hello = async () => {
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    return nonce;
+  };
+
+  it("advertises what the composed navigation graph reports", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    await hello();
+
+    const reply = decodedMessages().find((message) => message.type === "native.hello");
+    expect(reply?.payload?.capabilities).toMatchObject(NAVIGATION_CAPABILITIES);
+    expect(mockCreateForegroundNavigation).toHaveBeenCalledTimes(1);
+    expect(mockCreateForegroundNavigation.mock.calls[0]?.[0]).toMatchObject({
+      apiOrigin: "https://openmapx.com",
+    });
+  });
+
+  it("hands every page command to the navigation coordinator", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const nonce = await hello();
+
+    await post(nonce, {
+      messageId: "prepare-1",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    });
+
+    expect(mockNavigation.coordinator.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "session.prepare", messageId: "prepare-1" }),
+    );
+    expect(decodedMessages().some((message) => message.type === "native.error")).toBe(false);
+  });
+
+  it("disposes the navigation graph when the app unmounts", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const view = await renderApp();
+    await act(async () => undefined);
+
+    await act(async () => {
+      await view.unmount();
+    });
+
+    expect(mockNavigation.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not compose native navigation in a feasibility build", async () => {
+    mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
+    await renderApp();
+
+    expect(mockCreateForegroundNavigation).not.toHaveBeenCalled();
   });
 });
 
@@ -326,6 +464,17 @@ describe("App load states", () => {
     const view = await renderApp();
     expect(view.getByTestId("shell-loading")).toBeTruthy();
     await emit(mockWebViewProps.onLoadEnd);
+    expect(view.queryByTestId("shell-loading")).toBeNull();
+  });
+
+  it("does not cover a loaded page again for a same-document history change", async () => {
+    const view = await renderApp();
+    await emit(mockWebViewProps.onLoadEnd);
+    await act(async () => {
+      (mockWebViewProps.onLoadStart as (event: unknown) => void)({
+        nativeEvent: { loading: false },
+      });
+    });
     expect(view.queryByTestId("shell-loading")).toBeNull();
   });
 

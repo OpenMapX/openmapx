@@ -1,6 +1,6 @@
 {
-  "id": "8ee8e5bb-6745-4202-ba28-f7579b4c192f",
-  "prevId": "615f75f9-83ef-45de-a7be-63ec7174bae3",
+  "id": "615f75f9-83ef-45de-a7be-63ec7174bae3",
+  "prevId": "d279e5e1-ae88-41e3-89d9-5e4f6579d86a",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -7020,166 +7036,6 @@
         "data_subject_request_identity_delivery_check": {
           "name": "data_subject_request_identity_delivery_check",
           "value": "\"data_subject_request_identity\".\"delivery_authorized\" in (0, 1) and (\"data_subject_request_identity\".\"delivery_authorized\" = 0 or (\"data_subject_request_identity\".\"party\" = 'representative' and \"data_subject_request_identity\".\"authority_state\" = 'approved' and \"data_subject_request_identity\".\"state\" = 'verified'))"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.transit_credential_preview": {
-      "name": "transit_credential_preview",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "operation_key": {
-          "name": "operation_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_fingerprint": {
-          "name": "intent_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ciphertext": {
-          "name": "ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "iv": {
-          "name": "iv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tag": {
-          "name": "tag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "authorization_ciphertext": {
-          "name": "authorization_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "authorization_iv": {
-          "name": "authorization_iv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "authorization_tag": {
-          "name": "authorization_tag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "candidate_id": {
-          "name": "candidate_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "credentials_revision": {
-          "name": "credentials_revision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "transit_credential_preview_actor_key_uq": {
-          "name": "transit_credential_preview_actor_key_uq",
-          "columns": [
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "operation_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "transit_credential_preview_expiry_idx": {
-          "name": "transit_credential_preview_expiry_idx",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "transit_credential_preview_actor_id_user_id_fk": {
-          "name": "transit_credential_preview_actor_id_user_id_fk",
-          "tableFrom": "transit_credential_preview",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "transit_credential_preview_bounds": {
-          "name": "transit_credential_preview_bounds",
-          "value": "octet_length(\"transit_credential_preview\".\"ciphertext\") <= 1500000 and length(\"transit_credential_preview\".\"intent_fingerprint\") = 64 and length(\"transit_credential_preview\".\"iv\") = 16 and length(\"transit_credential_preview\".\"tag\") = 24"
         }
       },
       "isRLSEnabled": false

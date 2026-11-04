@@ -4,7 +4,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
   DialogContent,
   DialogTitle,
   Divider,
@@ -30,6 +29,7 @@ import { PrivacyCaseDecisionForms } from "@/components/admin/privacy/PrivacyCase
 import { PrivacyIdentityReview } from "@/components/admin/privacy/PrivacyIdentityReview";
 import { PrivacyReadinessChecklist } from "@/components/admin/privacy/PrivacyReadinessChecklist";
 import { PrivacyTaskActions } from "@/components/admin/privacy/PrivacyTaskActions";
+import Dialog from "@/components/ui/Dialog";
 import {
   type PrivacyAdminBinding,
   privacyResult,

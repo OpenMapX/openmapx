@@ -4,7 +4,6 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -18,6 +17,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { invalidateExtensionAdministration } from "@/lib/admin/extensionAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";

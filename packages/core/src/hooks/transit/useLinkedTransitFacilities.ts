@@ -4,8 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { Place } from "../../types/place";
+import { placeTransitKey, placeTransitParams } from "./placeTransitQuery";
 import { isTransitEligiblePlace } from "./transitEligibility";
-import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
+import {
+  type MobilityEnvelopeQueryResult,
+  mobilityEnvelopeTiming,
+  wrapMobilityEnvelope,
+} from "./useMobilityEnvelope";
 
 export function useLinkedTransitFacilities(
   place: Place | null,
@@ -13,19 +18,16 @@ export function useLinkedTransitFacilities(
   const enabled = isTransitEligiblePlace(place);
 
   const query = useQuery({
-    queryKey: ["linked-transit-facilities", place?.id ?? place?.coordinates?.join(",")],
+    queryKey: ["linked-transit-facilities", ...placeTransitKey(place)],
     queryFn: () => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;
       return apiClient.get<MobilityEnvelope<Facility[]>>(API_ENDPOINTS.transitFacilitiesForPlace, {
-        lat: String(p.coordinates[1]),
-        lng: String(p.coordinates[0]),
-        name: p.name,
-        place_id: p.id,
+        ...placeTransitParams(p),
       });
     },
     enabled,
-    staleTime: 24 * 60 * 60 * 1000,
+    ...mobilityEnvelopeTiming(24 * 60 * 60 * 1000),
   });
   return wrapMobilityEnvelope(query);
 }

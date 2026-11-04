@@ -1,6 +1,6 @@
 {
-  "id": "615f75f9-83ef-45de-a7be-63ec7174bae3",
-  "prevId": "d279e5e1-ae88-41e3-89d9-5e4f6579d86a",
+  "id": "d279e5e1-ae88-41e3-89d9-5e4f6579d86a",
+  "prevId": "192c8d43-73dc-4341-a38a-a96cac0602be",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -6233,39 +6249,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.integration_binding_revision": {
-      "name": "integration_binding_revision",
-      "schema": "",
-      "columns": {
-        "integration_id": {
-          "name": "integration_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.app_logs": {
       "name": "app_logs",
       "schema": "",
@@ -6424,131 +6407,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.integration_application_receipt": {
-      "name": "integration_application_receipt",
-      "schema": "",
-      "columns": {
-        "operation_id": {
-          "name": "operation_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "integration_id": {
-          "name": "integration_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "capability": {
-          "name": "capability",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "service_id": {
-          "name": "service_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "candidate_id": {
-          "name": "candidate_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_digest": {
-          "name": "intent_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "saved_binding_revision": {
-          "name": "saved_binding_revision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result": {
-          "name": "result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "integration_application_target_time_idx": {
-          "name": "integration_application_target_time_idx",
-          "columns": [
-            {
-              "expression": "integration_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "integration_application_actor_idx": {
-          "name": "integration_application_actor_idx",
-          "columns": [
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "integration_application_receipt_actor_id_user_id_fk": {
-          "name": "integration_application_receipt_actor_id_user_id_fk",
-          "tableFrom": "integration_application_receipt",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

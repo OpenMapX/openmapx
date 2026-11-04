@@ -70,6 +70,15 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 
 // TransitItineraryCard's real mount needs ~8 module mocks (see its own spec);
 // keep the card shallow while its Details action opens the real detail consumer.
+vi.mock("./RouteStopSearch", () => ({
+  RouteStopSearch: (props: { provider?: string; request: { mode: string }; units: string }) => (
+    <div
+      data-testid="route-stop-search"
+      data-mode={props.request.mode}
+      data-provider={props.provider}
+    />
+  ),
+}));
 vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   TransitItineraryCard: ({
     itinerary,
@@ -1404,4 +1413,97 @@ it("collects transit details, fetched stops and alerts into one mounted credit f
   expect(screen.queryByText("Fetched stop supplier")).not.toBeInTheDocument();
   expect(screen.queryByText("Fetched alert supplier")).not.toBeInTheDocument();
   expect(screen.getAllByText("Transit plan supplier")).toHaveLength(1);
+});
+
+describe("stops along the route", () => {
+  const geometry: [number, number][] = [
+    [13.3, 52.5],
+    [12.4, 50.3],
+    [11.5, 48.1],
+  ];
+  const routesResult = (mode: string) => ({
+    data: {
+      provider: "valhalla",
+      routes: [{ mode, duration: 600, distance: 5000, legs: [], geometry }],
+      activeRouteIndex: 0,
+    },
+    isLoading: false,
+    isError: false,
+  });
+
+  it.each(["driving", "motorcycle"] as const)("is offered under %s routes before Start", (mode) => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode(mode));
+    useDirectionsMock.mockReturnValue(routesResult(mode));
+    renderPanel();
+    const section = screen.getByTestId("route-stop-search");
+    expect(section).toHaveAttribute("data-mode", mode);
+    expect(section).toHaveAttribute("data-provider", "valhalla");
+    const routes = screen.getByRole("radiogroup", { name: "directions.routes" });
+    expect(routes.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("stays available after a stop was added, so a second stop can be found", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().insertWaypoint(1, [12.4, 50.3], "Aral");
+    });
+    useDirectionsMock.mockReturnValue({
+      ...routesResult("driving"),
+      data: {
+        provider: "valhalla",
+        routes: [
+          {
+            mode: "driving",
+            duration: 600,
+            distance: 5000,
+            geometry,
+            legs: [
+              { duration: 300, distance: 2500 },
+              { duration: 300, distance: 2500 },
+            ],
+          },
+        ],
+      },
+    });
+    renderPanel();
+    expect(screen.getByTestId("route-stop-search")).toHaveAttribute("data-mode", "driving");
+  });
+
+  it.each(["walking", "cycling", "transit"] as const)("is not offered for %s", (mode) => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode(mode));
+    useDirectionsMock.mockReturnValue(routesResult(mode));
+    renderPanel();
+    expect(screen.queryByTestId("route-stop-search")).toBeNull();
+  });
+
+  it("is not offered in EV mode or for scheduled trips", () => {
+    seedOriginDestination();
+    useDirectionsMock.mockReturnValue(routesResult("driving"));
+    useScheduledDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+    act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
+    const view = renderPanel();
+    expect(screen.queryByTestId("route-stop-search")).toBeNull();
+    act(() => {
+      useDirectionsStore.getState().setWaypointSchedule(1, null);
+      useDirectionsStore.getState().setEvMode(true);
+    });
+    view.rerender(<DirectionsPanelContent />);
+    expect(screen.queryByTestId("route-stop-search")).toBeNull();
+  });
+
+  it("is not offered for a route without drawable geometry", () => {
+    seedOriginDestination();
+    useDirectionsMock.mockReturnValue({
+      ...routesResult("driving"),
+      data: { routes: [{ mode: "driving", duration: 600, distance: 5000, legs: [] }] },
+    });
+    renderPanel();
+    expect(screen.queryByTestId("route-stop-search")).toBeNull();
+  });
 });

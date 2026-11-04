@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createPlace } from "../../types/placeIds";
-import { isTransitEligiblePlace, isTransitName, isTransitRawCategory } from "./transitEligibility";
+import {
+  hasTransitOsmTags,
+  isTransitEligiblePlace,
+  isTransitName,
+  isTransitRawCategory,
+} from "./transitEligibility";
 
 const basePlace = {
   primaryScheme: "stylePoi",
@@ -71,5 +76,37 @@ describe("isTransitEligiblePlace", () => {
     });
 
     expect(isTransitEligiblePlace(place)).toBe(true);
+  });
+});
+
+describe("transit OSM tags", () => {
+  it("accepts a station whose OSM object is its listed building", () => {
+    const place = createPlace({
+      ...basePlace,
+      name: "Hamburg Hauptbahnhof",
+      address: "Hamburg Hauptbahnhof",
+      category: "Heritage",
+      osmTags: { historic: "heritage", heritage: "4", building: "train_station" },
+    });
+    expect(isTransitEligiblePlace(place)).toBe(true);
+  });
+
+  it("recognises stations and stops by their tags, not former or unrelated ones", () => {
+    expect(hasTransitOsmTags({ public_transport: "station" })).toBe(true);
+    expect(hasTransitOsmTags({ railway: "tram_stop" })).toBe(true);
+    expect(hasTransitOsmTags({ amenity: "bus_station" })).toBe(true);
+    expect(hasTransitOsmTags({ railway: "disused_station" })).toBe(false);
+    expect(hasTransitOsmTags({ historic: "railway_station" })).toBe(false);
+    expect(hasTransitOsmTags({ building: "yes", shop: "stationery" })).toBe(false);
+    expect(hasTransitOsmTags(undefined)).toBe(false);
+  });
+
+  it("keeps rejecting a heritage place without transit tags", () => {
+    const place = createPlace({
+      ...basePlace,
+      category: "Heritage",
+      osmTags: { historic: "heritage", building: "yes" },
+    });
+    expect(isTransitEligiblePlace(place)).toBe(false);
   });
 });

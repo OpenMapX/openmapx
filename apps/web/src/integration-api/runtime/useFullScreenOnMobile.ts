@@ -15,9 +15,10 @@ import type { SystemStyleObject } from "@mui/system/styleFunctionSx";
  *     slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
  *   />
  *
- * The shared paper sx squares off the corners on mobile and vertically
- * centers DialogContent when its children don't fill the viewport (using
- * `safe center` so long, scrollable content still starts at the top).
+ * The shared paper sx squares off the corners on mobile and vertically centers
+ * DialogContent when its children don't fill the viewport (using `safe center`
+ * so long, scrollable content still starts at the top). The theme keeps every
+ * full-screen dialog's content clear of the system bars.
  */
 export function useFullScreenOnMobile(): boolean {
   const theme = useTheme();

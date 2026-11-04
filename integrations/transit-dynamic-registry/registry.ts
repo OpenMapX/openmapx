@@ -15,6 +15,16 @@ const SUPPRESSED_IDS = new Set([
   "no/entur-otp",
 ]);
 
+/**
+ * Catalogue entries whose endpoint no longer exists. Each fails every request,
+ * which would mark every board in its area as possibly missing departures.
+ * Checked 2026-10-31: neither host resolves any more.
+ */
+const RETIRED_ENDPOINT_IDS = new Set([
+  "de/db-regio-hafas-mgate", // bnav.hafas.de
+  "de/mobil-nrw-hafas-mgate", // nrw.hafas.de
+]);
+
 /** Protocols we currently have adapters for */
 const SUPPORTED_ADAPTER_PROTOCOLS = new Set<ProtocolType>(["hafasMgate", "otpGraphQl"]);
 
@@ -55,7 +65,10 @@ export class RegistryManager {
   private index(all: RegistryEntry[]): void {
     // Filter out suppressed entries and protocols without adapters
     const usable = all.filter(
-      (e) => !SUPPRESSED_IDS.has(e.id) && SUPPORTED_ADAPTER_PROTOCOLS.has(e.protocol),
+      (e) =>
+        !SUPPRESSED_IDS.has(e.id) &&
+        !RETIRED_ENDPOINT_IDS.has(e.id) &&
+        SUPPORTED_ADAPTER_PROTOCOLS.has(e.protocol),
     );
 
     // Check for prefix collisions

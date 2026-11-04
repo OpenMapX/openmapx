@@ -44,21 +44,29 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
         <Typography sx={{ color: "text.secondary", fontSize: 14 }}>{info.description}</Typography>
       </Box>
       <Box sx={{ display: "flex", gap: 2, mt: 0.5 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          {t("feelsLike")} {Math.round(current.feelsLike)}°C
-        </Typography>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          {t("windSpeed")}: {Math.round(current.windSpeed)} km/h{" "}
-          {windDirectionLabel(current.windDirection)}
-        </Typography>
+        {current.feelsLike != null && (
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            {t("feelsLike")} {Math.round(current.feelsLike)}°C
+          </Typography>
+        )}
+        {current.windSpeed != null && (
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            {t("windSpeed")}: {Math.round(current.windSpeed)} km/h
+            {current.windDirection != null && ` ${windDirectionLabel(current.windDirection)}`}
+          </Typography>
+        )}
       </Box>
       <Box sx={{ display: "flex", gap: 2 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          {t("humidity")}: {current.humidity}%
-        </Typography>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          {t("pressure")}: {current.pressure} hPa
-        </Typography>
+        {current.humidity != null && (
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            {t("humidity")}: {current.humidity}%
+          </Typography>
+        )}
+        {current.pressure != null && (
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            {t("pressure")}: {current.pressure} hPa
+          </Typography>
+        )}
       </Box>
       {/* Weather providers can require a source link directly beside their readings. */}
       <AttributionStrip

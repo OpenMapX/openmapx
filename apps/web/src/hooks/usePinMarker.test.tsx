@@ -162,6 +162,10 @@ it("reattaches the pin after the map is replaced by a retry", async () => {
   expect(fake.map.getCanvasContainer().querySelector("span")?.textContent).toBe("Station");
 
   const replacement = createFakeMap({ styleLoaded: true });
+  // The visible label is fitted against the new map's container on the next frame.
+  Object.assign(replacement.map.getContainer(), {
+    getBoundingClientRect: () => new DOMRect(0, 0, 1200, 800),
+  });
   mapRef.current = replacement.map;
   styleVersion++;
   view.rerender(<Pin label="Station" />);
@@ -169,6 +173,7 @@ it("reattaches the pin after the map is replaced by a retry", async () => {
 
   expect(fake.map.getCanvasContainer().querySelector("span")).toBeNull();
   expect(replacement.map.getCanvasContainer().querySelector("span")?.textContent).toBe("Station");
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   view.unmount();
   mapRef.current = fake.map;
   styleVersion = 0;

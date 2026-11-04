@@ -26,6 +26,7 @@ import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./covera
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
+import { backfillOsmHeaders } from "./jobs/download-osm.js";
 import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
 import {
   startLegacyDataMutation,
@@ -493,6 +494,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
+  // A PBF downloaded before its header was recorded still reports how current it is.
+  backfillOsmHeaders(store);
   const searchIndexSql = opts.searchIndexSql ?? sql;
   registerAmbientPlacesApi(app, searchIndexSql);
   const searchIndexRuntimeState = opts.searchIndexRuntimeState ?? createSearchIndexRuntimeState();

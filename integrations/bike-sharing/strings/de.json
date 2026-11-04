@@ -47,6 +47,7 @@
     "reserved": "Reserviert",
     "disabled": "Deaktiviert",
     "available": "Verfügbar",
+    "availabilityNotPublished": "Von dieser Quelle nicht veröffentlicht",
     "vehicleFallback": "Fahrrad",
     "yes": "Ja",
     "no": "Nein",
@@ -87,6 +88,7 @@
   },
   "summary": {
     "available": "{count, plural, =0 {Keine Fahrräder verfügbar} one {1 Fahrrad verfügbar} other {# Fahrräder verfügbar}}",
+    "capacity": "{count, plural, =0 {Keine Fahrräder angegeben} one {Station für 1 Fahrrad} other {Station für # Fahrräder}}",
     "slots": "{count, plural, =0 {Keine freien Stellplätze} one {1 freier Stellplatz} other {# freie Stellplätze}}",
     "batteryRange": "{battery} % · {km} km"
   },

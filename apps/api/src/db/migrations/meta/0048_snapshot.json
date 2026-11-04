@@ -1,6 +1,6 @@
 {
-  "id": "d279e5e1-ae88-41e3-89d9-5e4f6579d86a",
-  "prevId": "192c8d43-73dc-4341-a38a-a96cac0602be",
+  "id": "192c8d43-73dc-4341-a38a-a96cac0602be",
+  "prevId": "e1901a3d-3001-4fc1-b4a9-1f0c8e34b932",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -794,139 +794,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.account_action_receipt": {
-      "name": "account_action_receipt",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_id": {
-          "name": "target_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "intent_digest": {
-          "name": "intent_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "result": {
-          "name": "result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "mail_requested": {
-          "name": "mail_requested",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "account_action_actor_time_idx": {
-          "name": "account_action_actor_time_idx",
-          "columns": [
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "account_action_target_time_idx": {
-          "name": "account_action_target_time_idx",
-          "columns": [
-            {
-              "expression": "target_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "account_action_receipt_actor_id_user_id_fk": {
-          "name": "account_action_receipt_actor_id_user_id_fk",
-          "tableFrom": "account_action_receipt",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "account_action_receipt_target_id_user_id_fk": {
-          "name": "account_action_receipt_target_id_user_id_fk",
-          "tableFrom": "account_action_receipt",
-          "tableTo": "user",
-          "columnsFrom": [
-            "target_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.service_repository": {
       "name": "service_repository",
       "schema": "",
@@ -1522,7 +1389,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -5658,173 +5541,6 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.account_mail_outbox": {
-      "name": "account_mail_outbox",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "request_key": {
-          "name": "request_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'queued'"
-        },
-        "ciphertext": {
-          "name": "ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "iv": {
-          "name": "iv",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tag": {
-          "name": "tag",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attempt_started_at": {
-          "name": "attempt_started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "account_mail_action_kind_uq": {
-          "name": "account_mail_action_kind_uq",
-          "columns": [
-            {
-              "expression": "request_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "account_mail_pending_idx": {
-          "name": "account_mail_pending_idx",
-          "columns": [
-            {
-              "expression": "state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "account_mail_outbox_request_key_account_action_receipt_key_fk": {
-          "name": "account_mail_outbox_request_key_account_action_receipt_key_fk",
-          "tableFrom": "account_mail_outbox",
-          "tableTo": "account_action_receipt",
-          "columnsFrom": [
-            "request_key"
-          ],
-          "columnsTo": [
-            "key"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "account_mail_outbox_user_id_user_id_fk": {
-          "name": "account_mail_outbox_user_id_user_id_fk",
-          "tableFrom": "account_mail_outbox",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "account_mail_state_check": {
-          "name": "account_mail_state_check",
-          "value": "\"account_mail_outbox\".\"state\" in ('queued','sending','sent','failed','unknown')"
-        },
-        "account_mail_kind_check": {
-          "name": "account_mail_kind_check",
-          "value": "\"account_mail_outbox\".\"kind\" in ('verification','password_setup')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.mangrove_keypair_wrap": {

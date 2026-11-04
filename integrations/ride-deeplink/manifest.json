@@ -178,7 +178,7 @@
       "url": "https://yango.com/",
       "commercialUse": "conditional",
       "providerCountry": "NL",
-      "providerPrivacyUrl": "https://yango.com/en_int/legal/confidential/",
+      "providerPrivacyUrl": "https://yango.com/legal/yango_privacy_notice/",
       "endUserExposure": "direct",
       "personalData": false,
       "cookies": true,
@@ -192,14 +192,14 @@
             "license": {
               "kind": "unknown",
               "raw": "Proprietary (link-out only); action identity not dataset grant.",
-              "url": "https://yango.com/en_int/legal/"
+              "url": "https://yango.com/legal/yango_termsofuse/"
             }
           }
         ],
         "declarations": [
           {
             "text": "Proprietary (link-out only)",
-            "url": "https://yango.com/en_int/legal/"
+            "url": "https://yango.com/legal/yango_termsofuse/"
           }
         ]
       }

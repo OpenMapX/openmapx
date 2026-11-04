@@ -210,7 +210,10 @@ it to scroll back. Two things worth knowing about retention:
 
 Persisted application logs are pruned daily using
 `LEGAL_SERVER_LOG_RETENTION_DAYS` (30 days by default). Review the value against
-the deployment's published policy.
+the deployment's published policy. Entries about a person with an open
+data-subject request stay while that request still needs them, including while
+an operator still has to handle the logs for it: until they are captured for the
+response or the request is closed.
 
 New application-log entries pass through the same bounded sanitizer before the
 in-memory buffer and database. Request lifecycle entries contain only an internal
@@ -312,6 +315,16 @@ per-effect receipts. Source revision, intended spans, licence and attribution
 must match. Missing or expired proof retains the fallback/limited assessment;
 an ID appearing in a writer response alone is insufficient.
 
+The engine's proof proxy also proves `trace_attributes` requests. For each
+proven depart-now car or motorcycle route, the Valhalla provider walks every
+leg's own shape (`shape_match: edge_walk`) and reads each edge's current speed.
+The route's live-speed coverage counts only when every trace carries proof of the
+same write, graph generation and engine boot as the route. Coverage is complete
+when every edge carried a current speed; the writer puts one only on edges with a
+measured speed, and a road-event cap only lowers it. A failed or unproven trace
+leaves coverage unknown and does not fail the route. Until the engine runs a
+watchdog that proves traces, no route carries coverage.
+
 The [Coverage & freshness](./coverage-freshness.md) sidecar remains historical
 publication evidence and does not carry the route's serving-process proof.
 A successful graph-write row cannot by itself qualify traffic-aware routing.
@@ -332,6 +345,8 @@ Open Data Manager's **Logs** drawer or run
 | `conditions classification failed, writing no overrides`             | Classification failure; do not infer closures from live-speed success                                                             |
 | `span cache save failed`                                             | Persistence permissions; a restart will lose unsaved cache state                                                                  |
 | `skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`      | Rebuild the graph-associated traffic/map artifacts through the normal maintenance workflow                                        |
+| `Traffic worker paused for Valhalla maintenance`                     | Graph maintenance is running; Valhalla and the traffic worker resume when it ends                                                 |
+| `Traffic worker still paused for Valhalla maintenance job`           | The maintenance is no longer running: see [Graph maintenance pauses](#graph-maintenance-pauses)                                   |
 
 ### Why a closure is not applied
 
@@ -368,6 +383,45 @@ start: restored`, or `changed`, `invalid` or `unverifiable` before a rebuild),
 `null` when classification ran.
 `endingBeforeRenewal` counts conditions left out because they end before the
 next lease renewal.
+
+### Graph maintenance pauses
+
+Rebuilding the traffic extract or applying predicted traffic is graph
+maintenance. The operations agent stops Valhalla, writes
+`infra/docker/data/valhalla/osm-pbf/.traffic-maintenance.json`, runs the
+Valhalla tools and starts Valhalla again. While that fence file exists, Data
+Manager keeps its service stopped (its health check fails) and logs
+`Traffic worker paused for Valhalla maintenance`. A rebuild takes a few
+minutes.
+
+If the agent itself is stopped during maintenance (an update recreating it, a
+crash or a reboot), its next start releases the fence and logs
+`Released the Valhalla traffic maintenance fence of interrupted job`. Data
+Manager then requests a fresh maintenance, which starts Valhalla again.
+
+Maintenance that failed on its own keeps the fence, and Valhalla stays stopped.
+The agent's next start logs `Kept the Valhalla traffic maintenance fence` and
+Data Manager repeats `Traffic worker still paused` every 30 minutes. Car,
+walking and cycling routes served by Valhalla fail or fall back to another
+router meanwhile. To recover:
+
+1. Find the failure in `pnpm openmapx services logs ops-agent` (the
+   `valhalla.traffic.maintain` entry) and repair its cause, such as a full disk
+   or a damaged graph.
+2. Move the fence and the generation manifests aside, so Data Manager requests
+   a full rebuild:
+
+   ```bash
+   cd infra/docker/data/valhalla/osm-pbf
+   mv .traffic-maintenance.json .traffic-maintenance.failed.json
+   for f in traffic-generations.json traffic-generations.unverified.json; do
+     [ -e "$f" ] && mv "$f" "$f.withdrawn"
+   done
+   ```
+
+3. Within seconds Data Manager logs `Traffic worker resumed` and
+   `traffic-extract: building`. Valhalla is healthy again once the agent logs
+   the `valhalla.traffic.maintain` result `success`.
 
 ### Closures on a planned trip
 
@@ -439,9 +493,12 @@ The server writes the trail independently of the client. Its operational limits 
   `AUDIT_LOG_RETENTION_DAYS` (default 90), so the table doesn't grow without limit
   on a long-lived instance. Raise or lower it via the env var.
 
-The **Jobs** tab lists running and recently finished background operations with their logs. Job rows are pruned after `ADMIN_JOB_RETENTION_DAYS` (default
-30). Between them, the audit log tells you the _intent_ of every admin action and
-the jobs view shows the _execution_.
+The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished jobs after `ADMIN_JOB_RETENTION_DAYS` (default
+30). That covers the data-manager's pipeline runs too, with their stages, except
+the newest finished run of each kind, so the transit page keeps showing the last
+sync. Jobs that are still running are never pruned, and neither are jobs that a
+pending data-subject request still needs. Between them, the audit log tells you
+the _intent_ of every admin action and the jobs view shows the _execution_.
 
 Application job details are pushed to the browser over Server-Sent Events
 (`GET /api/admin/jobs/<id>/events`). Every event carries a per-job cursor; when

@@ -1,7 +1,7 @@
 import { isI18nToken, resolveToken, sharedStrings } from "@openmapx/integration-framework/strings";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import { describe, expect, it } from "vitest";
-import { mapFuelStationToDetail, mapFuelStationToResult } from "../mapper.js";
+import { comparisonGrade, mapFuelStationToDetail, mapFuelStationToResult } from "../mapper.js";
 import de from "../strings/de.json";
 import en from "../strings/en.json";
 
@@ -202,6 +202,95 @@ describe("mapFuelStationToResult", () => {
       makeStation({ products: [product({ grade: "new_fuel", price: eur(2.1) })] }),
     ).summary;
     expect(text(unknown)).toBe("NEW FUEL €2.100");
+  });
+
+  describe("map label", () => {
+    const NOW = Date.parse(AT) + 25 * 60_000;
+    const label = (station: FuelStation, grade?: string, locale = "en") =>
+      text(mapFuelStationToResult(station, { grade, now: NOW }).labelSummary, locale);
+
+    it("shows only the comparison grade's price, with its age, in every locale", () => {
+      expect(label(makeStation())).toBe("D €1.559 · 25 min");
+      expect(label(makeStation(), "e10")).toBe("E10 €1.639 · 25 min");
+      expect(label(makeStation(), "e10", "de")).toBe(`E10 1,639${NB}€ · 25 Min.`);
+    });
+
+    it("compares diesel when no grade is asked for, as the list's price sort does", () => {
+      expect(comparisonGrade([])).toBe("diesel");
+      expect(comparisonGrade(["e10", "e5"])).toBe("e10");
+      expect(text(mapFuelStationToResult(makeStation()).labelSummary)).toMatch(/^D €1\.559 · /);
+    });
+
+    it("shows the price the list sorts by: the cheapest self-service car price per litre", () => {
+      const station = makeStation({
+        products: [
+          product({
+            key: "d:served",
+            grade: "diesel",
+            service: "served",
+            price: eur(1.399),
+            priceAt: AT,
+          }),
+          product({
+            key: "d:hgv",
+            grade: "diesel",
+            vehicleScope: "hgv",
+            price: eur(1.299),
+            priceAt: AT,
+          }),
+          product({
+            key: "d:self",
+            grade: "diesel",
+            service: "self",
+            price: eur(1.599),
+            priceAt: AT,
+          }),
+          product({ key: "d", grade: "diesel", price: eur(1.649), priceAt: AT }),
+        ],
+      });
+      const result = mapFuelStationToResult(station, { now: NOW });
+      expect(result.sortValues?.diesel).toBe(1.599);
+      expect(text(result.labelSummary)).toBe("D €1.599 · 25 min");
+    });
+
+    it("says the grade's price is missing rather than showing another grade's", () => {
+      const noE10 = makeStation({
+        products: [
+          product({ grade: "diesel", price: eur(1.559), priceAt: AT }),
+          product({ grade: "e10", available: "unknown" }),
+        ],
+      });
+      expect(label(noE10, "e10")).toBe("E10 –");
+      const servedOnly = makeStation({
+        products: [product({ grade: "diesel", service: "served", price: eur(1.699) })],
+      });
+      expect(label(servedOnly)).toBe("D –");
+      expect(label(makeStation({ products: [] }))).toBe("D –");
+    });
+
+    it("counts the age in minutes, then hours, then days", () => {
+      const at = (minutesAgo: number) =>
+        makeStation({
+          products: [
+            product({
+              grade: "diesel",
+              price: eur(1.559),
+              priceAt: new Date(NOW - minutesAgo * 60_000).toISOString(),
+            }),
+          ],
+        });
+      expect(label(at(0))).toBe("D €1.559 · 1 min");
+      expect(label(at(59))).toBe("D €1.559 · 59 min");
+      expect(label(at(60))).toBe("D €1.559 · 1 h");
+      expect(label(at(47 * 60 + 59))).toBe("D €1.559 · 47 h");
+      expect(label(at(48 * 60))).toBe("D €1.559 · 2 d");
+      expect(label(at(48 * 60), undefined, "de")).toBe(`D 1,559${NB}€ · 2 Tg.`);
+    });
+
+    it("leaves the age out when the price carries no report time", () => {
+      const station = makeStation({ products: [product({ grade: "diesel", price: eur(1.559) })] });
+      expect(label(station)).toBe("D €1.559");
+    });
   });
 
   it("has no sort values, summary or time without a priced product", () => {

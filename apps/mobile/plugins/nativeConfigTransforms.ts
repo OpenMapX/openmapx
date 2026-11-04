@@ -32,6 +32,9 @@ export const REQUIRED_ANDROID_PERMISSIONS = [
   "android.permission.FOREGROUND_SERVICE",
   "android.permission.FOREGROUND_SERVICE_LOCATION",
   "android.permission.POST_NOTIFICATIONS",
+  // expo-task-manager delivers every location update through a persisted
+  // JobScheduler job, which Android rejects without it.
+  "android.permission.RECEIVE_BOOT_COMPLETED",
 ] as const;
 
 /* ---------------------------------------------------------------- iOS ---- */
@@ -345,4 +348,72 @@ export function buildNetworkSecurityConfigXml(input: NativeConfigInput): string 
   }
   lines.push("</network-security-config>", "");
   return lines.join("\n");
+}
+
+/* ------------------------------------------------------ release signing ---- */
+
+/** Marks the signing block this transform inserts, so a second pass is a no-op. */
+const RELEASE_SIGNING_MARKER = "// OpenMapX release signing";
+
+/**
+ * The signing configuration a release reads from `release-signing.properties`
+ * in the generated Android project, which `release/build-android.mts` copies
+ * there from the operator's mode-0600 file outside the repository. Without that
+ * file no `release` configuration exists and the build is left unsigned.
+ */
+const RELEASE_SIGNING_CONFIG = `        ${RELEASE_SIGNING_MARKER}: keystore and passwords come from
+        // release-signing.properties, which release/build-android.mts copies here
+        // from a file outside the repository. Without it the release stays unsigned.
+        def openmapxSigningFile = rootProject.file("release-signing.properties")
+        if (openmapxSigningFile.exists()) {
+            def openmapxSigning = new Properties()
+            openmapxSigningFile.withInputStream { openmapxSigning.load(it) }
+            def missing = ["storeFile", "storePassword", "keyAlias", "keyPassword"].findAll {
+                !openmapxSigning.getProperty(it)
+            }
+            if (!missing.isEmpty()) {
+                throw new GradleException("release-signing.properties lacks " + missing.join(", "))
+            }
+            release {
+                storeFile file(openmapxSigning.getProperty("storeFile"))
+                storePassword openmapxSigning.getProperty("storePassword")
+                keyAlias openmapxSigning.getProperty("keyAlias")
+                keyPassword openmapxSigning.getProperty("keyPassword")
+            }
+        }
+`;
+
+/**
+ * Signs the release build type with the operator's own key instead of the
+ * template's debug key.
+ *
+ * Expo's generated `app/build.gradle` signs releases with `debug.keystore`,
+ * whose password is public: an APK signed with it could be replaced on a phone
+ * by anyone's build. A release is now signed only from the external properties
+ * file, and is unsigned when there is none. The debug build type is unchanged.
+ */
+export function applyAndroidReleaseSigning(gradle: string): string {
+  if (gradle.includes(RELEASE_SIGNING_MARKER)) return gradle;
+
+  const signingConfigs = /^([^\S\n]*)signingConfigs \{\n/m.exec(gradle);
+  const releaseType =
+    /(buildTypes \{[\s\S]*?\n[^\S\n]*release \{[\s\S]*?)signingConfig signingConfigs\.debug/.exec(
+      gradle,
+    );
+  if (!signingConfigs || !releaseType) {
+    throw new Error(
+      "app/build.gradle has no signingConfigs block or release signing line to replace; " +
+        "Expo's template changed, so update applyAndroidReleaseSigning",
+    );
+  }
+
+  const withReleaseType =
+    gradle.slice(0, releaseType.index) +
+    releaseType[1] +
+    'signingConfig signingConfigs.findByName("release")' +
+    gradle.slice(releaseType.index + releaseType[0].length);
+  const insertAt = signingConfigs.index + signingConfigs[0].length;
+  return (
+    withReleaseType.slice(0, insertAt) + RELEASE_SIGNING_CONFIG + withReleaseType.slice(insertAt)
+  );
 }

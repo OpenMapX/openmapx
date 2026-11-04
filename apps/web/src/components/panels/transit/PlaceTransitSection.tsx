@@ -2,6 +2,7 @@
 
 import type { SvgIconComponent } from "@mui/icons-material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CommuteIcon from "@mui/icons-material/Commute";
 import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
@@ -45,6 +46,7 @@ const MODE_ICONS: Partial<Record<TransportMode, SvgIconComponent>> = {
   tram: TramIcon,
   bus: DirectionsBusIcon,
   ferry: DirectionsBoatIcon,
+  other: CommuteIcon,
 };
 
 const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
@@ -53,6 +55,7 @@ const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
   tram: "trams",
   bus: "buses",
   ferry: "ferries",
+  other: "otherModes",
 };
 
 function groupByMode(routes: MergedRoute[]): Map<TransportMode, MergedRoute[]> {

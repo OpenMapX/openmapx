@@ -9,6 +9,7 @@ import {
   type FeasibilityProbeState,
   FeasibilityRepository,
 } from "../storage/feasibilityRepository";
+import { BUTTON_SHAPE, DARK_PALETTE } from "./nativeTheme";
 import { deviceMobileLocale } from "./shellCopy";
 
 /**
@@ -42,10 +43,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 14,
     justifyContent: "center",
-    borderRadius: 8,
-    backgroundColor: "#1B69D6",
+    borderRadius: BUTTON_SHAPE.borderRadius,
+    backgroundColor: DARK_PALETTE.accent,
   },
-  buttonLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  buttonLabel: { color: DARK_PALETTE.onAccent, fontSize: 13, fontWeight: BUTTON_SHAPE.labelWeight },
 });
 
 const PROFILE_CYCLE: LocationProfileKind[] = ["driving", "walking", "transit-cruise"];

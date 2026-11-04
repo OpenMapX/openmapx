@@ -137,6 +137,38 @@ describe("ArrivalParkingMarkers", () => {
     mapContainer.remove();
   });
 
+  it("credits the router that measured a marker's walk with its coordinates", () => {
+    document.body.append(mapContainer);
+    const bounds = () =>
+      ({ left: 10, top: 10, right: 100, bottom: 100, width: 90, height: 90 }) as DOMRect;
+    mapContainer.getBoundingClientRect = bounds;
+    const map = { container: mapContainer, getContainer: () => mapContainer };
+    mockMapContext.current = { mapRef: { current: map } };
+    const coordinate = { sourceId: "osm-parking", name: "OpenStreetMap" };
+    const router = { sourceId: "valhalla", name: "Valhalla" };
+    render(
+      <ArrivalParkingMarkers
+        places={[
+          {
+            ...samplePlaces[0],
+            contributors: [coordinate],
+            walk: { seconds: 120, meters: 150, contributors: [router] },
+          },
+        ]}
+        selectedPlace={null}
+        onSelectPlace={vi.fn()}
+      />,
+    );
+    const marker = mapContainer.querySelector<HTMLElement>(".omx-arrival-parking-marker");
+    if (!marker) throw new Error("Expected a painted arrival marker");
+    marker.getBoundingClientRect = bounds;
+    const subscription = receipts.subscribe.mock.calls.at(-1)?.[1] as
+      | { resolveCustomContributors: () => unknown }
+      | undefined;
+    expect(subscription?.resolveCustomContributors()).toEqual([coordinate, router]);
+    mapContainer.remove();
+  });
+
   it("suppresses an arrival marker pointer while picking and keeps keyboard activation", () => {
     mockMapContext.current = { mapRef: { current: { container: mapContainer } } };
     const onSelectPlace = vi.fn();

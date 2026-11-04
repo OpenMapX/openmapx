@@ -1,7 +1,7 @@
 import type { Place, Review, ReviewAggregate } from "@openmapx/core";
 import { MangroveProvider, type MangroveTransport } from "@openmapx/mangrove-react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestQueryClient } from "@/test/query";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
@@ -174,6 +174,43 @@ describe("displayed review receipts", () => {
     await waitFor(() => expect(screen.getByText("reviewsCount")).toBeVisible());
     expect(screen.queryByText("Live registry")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Captured reviews" })).not.toBeInTheDocument();
+  });
+
+  it("credits a CC BY-SA review under its own licence beside the source's CC BY aggregate", async () => {
+    const mangrove = (expression: string, url: string) => ({
+      sourceId: "mangrove",
+      name: "Mangrove.reviews",
+      url: "https://mangrove.reviews/",
+      licensing: {
+        version: 1 as const,
+        bindings: [
+          {
+            scope: "data" as const,
+            subject: "Mangrove.reviews material",
+            license: { kind: "spdx" as const, expression, url },
+          },
+        ],
+      },
+    });
+    const bySa = mangrove("CC-BY-SA-4.0", "https://creativecommons.org/licenses/by-sa/4.0/");
+    const by = mangrove("CC-BY-4.0", "https://creativecommons.org/licenses/by/4.0/");
+    renderTab([{ ...review, source: "mangrove", contributors: [bySa] }], {
+      ...aggregate,
+      source: "mangrove",
+      contributors: [{ ...by, modified: true }],
+    });
+    await screen.findByText("Retained opinion");
+    await waitFor(() => expect(screen.getByText("reviewsCount")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    const credits = within(screen.getByRole("dialog"));
+    expect(credits.getByRole("link", { name: "CC-BY-SA-4.0" })).toHaveAttribute(
+      "href",
+      "https://creativecommons.org/licenses/by-sa/4.0/",
+    );
+    expect(credits.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
+      "href",
+      "https://creativecommons.org/licenses/by/4.0/",
+    );
   });
 
   it("retains the individual review content licence menu", async () => {

@@ -70,6 +70,10 @@
       "types": "./src/legal.ts",
       "default": "./src/legal.ts"
     },
+    "./theme": {
+      "types": "./src/theme.ts",
+      "default": "./src/theme.ts"
+    },
     "./privacy": {
       "types": "./src/privacy/index.ts",
       "default": "./src/privacy/index.ts"
@@ -270,9 +274,9 @@
     }
   },
   "dependencies": {
-    "@better-auth/core": "1.7.14",
-    "@better-auth/oauth-provider": "1.7.14",
-    "@better-auth/passkey": "1.7.14",
+    "@better-auth/core": "1.7.16",
+    "@better-auth/oauth-provider": "1.7.16",
+    "@better-auth/passkey": "1.7.16",
     "@openmapx/air-quality": "workspace:*",
     "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
@@ -282,7 +286,7 @@
     "@turf/nearest-point-on-line": "^7.4.0",
     "@types/geojson": "^7946.0.16",
     "@types/tz-lookup": "^6.1.2",
-    "better-auth": "1.7.14",
+    "better-auth": "1.7.16",
     "escape-html": "1.0.3",
     "js-yaml": "^5.5.0",
     "opening_hours": "^3.15.0",

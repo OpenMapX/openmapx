@@ -86,15 +86,18 @@ export function createOtpGraphQlAdapter(options: Options): RegisteredProtocolAda
               }),
             )
           : gtfsDepartures(entry, raw, await client.sdk.DynamicDepartures({ ...variables, start }));
-      return departures
-        .filter((call) => {
-          const time = Date.parse(call.expectedAt ?? call.scheduledAt);
-          return time >= start * 1000 && time <= (start + variables.range) * 1000;
-        })
-        .sort(
-          (a, b) =>
-            Date.parse(a.expectedAt ?? a.scheduledAt) - Date.parse(b.expectedAt ?? b.scheduledAt),
-        );
+      // OTP states no realtime update time, so the board has no age.
+      return {
+        departures: departures
+          .filter((call) => {
+            const time = Date.parse(call.expectedAt ?? call.scheduledAt);
+            return time >= start * 1000 && time <= (start + variables.range) * 1000;
+          })
+          .sort(
+            (a, b) =>
+              Date.parse(a.expectedAt ?? a.scheduledAt) - Date.parse(b.expectedAt ?? b.scheduledAt),
+          ),
+      };
     },
     async searchByName(entry, name, limit) {
       if (typeof name !== "string" || !name.trim() || name.length > 256)

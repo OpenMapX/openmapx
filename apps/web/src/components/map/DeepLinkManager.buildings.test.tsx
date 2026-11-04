@@ -106,7 +106,7 @@ describe("building camera restoration", () => {
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
   });
 
-  it("round-trips manual-off through sharing and history, and allows explicit selection", () => {
+  it("round-trips manual-off through sharing, keeps it through history, and allows explicit selection", () => {
     initOverlayRegistry([BUILDINGS]);
     window.history.replaceState(null, "", VIEW);
     render(<Scene />);
@@ -116,15 +116,20 @@ describe("building camera restoration", () => {
     const shared = window.location.search;
     expect(shared).toContain("buildings=0");
     expect(shared).not.toContain("ov=");
-    pitch(0);
-    pitch(45);
-    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    // A history traversal changes only the open surfaces, never the layers.
     act(() => {
-      window.history.pushState(null, "", shared);
+      window.history.pushState(null, "", VIEW);
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(useBuildingsStore.getState().layerVisible).toBe(false);
-    expect(fake.map.getPitch()).toBe(45);
+    expect(window.location.search).toContain("buildings=0");
+    pitch(0);
+    pitch(45);
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    act(updateUrl);
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(window.location.search).toContain("buildings=0");
     act(() => toggleOverlay("3d-buildings", { kind: "user" }));
     act(updateUrl);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);

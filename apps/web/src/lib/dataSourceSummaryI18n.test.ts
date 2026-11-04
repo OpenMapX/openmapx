@@ -51,6 +51,11 @@ describe("translateDataSourceLabel", () => {
     ]);
   });
 
+  it("translates the parking open-now toggle in en and de", () => {
+    expect(translateDataSourceLabel("Open now", translator(en))).toBe("Open now");
+    expect(translateDataSourceLabel("Open now", translator(de))).toBe("Jetzt geöffnet");
+  });
+
   it("translates the webcam category filter and its six camera types in en and de", () => {
     const labels = ["Category", "Landscape", "Traffic", "City", "Weather", "Beach", "Other"];
 

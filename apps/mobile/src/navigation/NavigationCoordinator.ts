@@ -7,6 +7,8 @@ import {
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
 import type { DiagnosticSink, EffectRunner } from "./effects";
+import type { RerouteOutcome } from "./ground/GroundRerouteService";
+import { onRerouteFailed, onRerouteSucceeded, type RerouteRuntime } from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
@@ -503,6 +505,77 @@ export class NavigationCoordinator {
     if (committed.code === "revision-conflict" && mayRetry) {
       await this.processBatch(batch, false);
     }
+  }
+
+  // Answers from remote work.
+
+  /**
+   * Applies a reroute answer.
+   *
+   * The request ran outside the queue, so by now the session may have moved on:
+   * fixes advanced the revision, the user stopped, or a newer reroute replaced
+   * this one. Only an answer to the session's current request is committed; a
+   * stale one is dropped. Fixes that arrived while it was in flight do not make
+   * it stale, because the new route starts from where the user actually is.
+   */
+  async applyReroute(outcome: RerouteOutcome): Promise<void> {
+    await this.queue.run(async () => {
+      try {
+        await this.commitReroute(outcome);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "reroute" });
+      }
+    });
+  }
+
+  private async commitReroute(outcome: RerouteOutcome): Promise<void> {
+    const { repository, processors, clock } = this.deps;
+    const now = clock();
+    const session = await repository.loadActive(now);
+    if (session?.kind !== "ground" || session.status !== "active") return;
+    if (session.sessionId !== outcome.sessionId) return;
+    const reroute = session.payload.reroute;
+    if (reroute.requestId !== outcome.requestId) return;
+    // Aborted means this side gave the request up, for a newer one or a stop.
+    if (!outcome.ok && outcome.code === "aborted") return;
+
+    let mutation: ProcessorMutation | null = null;
+    if (outcome.ok) {
+      const processor = processors.get("ground");
+      const replaced = processor?.replace(session as never, outcome.route, now);
+      if (replaced && !("ok" in replaced && replaced.ok === false)) {
+        const applied = replaced as ProcessorMutation;
+        const next = applied.session;
+        mutation =
+          next.kind === "ground"
+            ? {
+                ...applied,
+                session: {
+                  ...next,
+                  payload: { ...next.payload, reroute: onRerouteSucceeded() },
+                },
+              }
+            : applied;
+      }
+    }
+    if (!mutation) {
+      const code = outcome.ok ? "invalid-response" : outcome.code;
+      mutation = {
+        session: {
+          ...session,
+          revision: session.revision + 1,
+          updatedAtMs: now,
+          payload: {
+            ...session.payload,
+            reroute: onRerouteFailed(reroute as RerouteRuntime, code, now, Math.random()),
+          },
+        },
+        effects: [{ kind: "publish-snapshot", immediate: false }],
+      };
+    }
+
+    const committed = await this.commit(session, mutation, now);
+    if (committed.ok) await this.deps.effects.run(committed.effects);
   }
 
   // Internals.

@@ -9,7 +9,13 @@ export interface TransitDataEvidence {
   queryFailed?: boolean;
 }
 
-/** Trip updates: GTFS recommends source observations no more than 90 seconds old. */
+/**
+ * Trip updates: GTFS recommends source observations no more than 90 seconds old.
+ * Staleness is judged by how far behind the source was when its data was
+ * fetched, not by how long the board has been on screen since: our own caches
+ * and refresh interval age every board, and a failed refresh is reported
+ * separately. `ageSeconds` is the age of what is shown now.
+ */
 export function getTransitDataStatus(evidence: TransitDataEvidence, now: number) {
   const timing =
     evidence.realtime === true ? "realtime" : evidence.realtime === false ? "scheduled" : "unknown";
@@ -22,13 +28,15 @@ export function getTransitDataStatus(evidence: TransitDataEvidence, now: number)
     age >= 0
       ? Math.floor(age / 1000)
       : null;
+  const fetched = evidence.freshness ? Date.parse(evidence.freshness.fetchedAt) : NaN;
+  const lagAtFetch = Number.isFinite(fetched) ? Math.max(0, fetched - stamp) : age;
   const freshness = evidence.queryFailed
     ? "unknown"
     : evidence.freshness?.isStale
       ? "stale"
       : ageSeconds === null
         ? "unknown"
-        : age <= 90_000
+        : lagAtFetch <= 90_000
           ? "fresh"
           : "stale";
   const source = ["ms", "transit-motis-local"].includes(evidence.source ?? "")

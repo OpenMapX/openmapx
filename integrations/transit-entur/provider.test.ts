@@ -123,7 +123,7 @@ describe("isTruthyString", () => {
 });
 
 describe("toTransportMode", () => {
-  it.each<[string | null | undefined, TransportMode]>([
+  it.each<[string | null | undefined, TransportMode | undefined]>([
     ["rail", "rail"],
     ["RAIL", "rail"],
     ["metro", "subway"],
@@ -135,11 +135,16 @@ describe("toTransportMode", () => {
     ["funicular", "funicular"],
     ["monorail", "monorail"],
     ["coach", "bus"],
+    ["trolleybus", "bus"],
     ["bus", "bus"],
     ["foot", "walking"],
-    ["unknown", "bus"],
-    [null, "bus"],
-    [undefined, "bus"],
+    ["air", undefined],
+    ["taxi", undefined],
+    ["carpool", undefined],
+    ["snowAndIce", undefined],
+    ["unknown", undefined],
+    [null, undefined],
+    [undefined, undefined],
   ])("toTransportMode(%j) -> %s", (input, expected) => {
     expect(toTransportMode(input)).toBe(expected);
   });
@@ -169,9 +174,14 @@ describe("collectStopModes", () => {
     ]);
   });
 
-  it("defaults to bus when nothing maps", () => {
-    expect(collectStopModes()).toEqual(["bus"]);
-    expect(collectStopModes([null], ["unknownCategory"])).toEqual(["bus"]);
+  it("omits modes without an OpenMapX equivalent", () => {
+    expect(collectStopModes(["air", "rail", "taxi"])).toEqual(["rail"]);
+  });
+
+  it("returns no modes when nothing maps", () => {
+    expect(collectStopModes()).toEqual([]);
+    expect(collectStopModes([], [], [])).toEqual([]);
+    expect(collectStopModes([null, "air", "unknown"], ["unknownCategory"])).toEqual([]);
   });
 });
 
@@ -499,6 +509,12 @@ describe("normalizeLine", () => {
     const line = normalizeLine({ id: "RUT:Line:5", name: "Only Name" });
     expect(line?.shortName).toBe("Only Name");
     expect(line?.longName).toBe("Only Name");
+  });
+
+  it.each(["air", "taxi", "unknown", null])("marks a %j line as another mode", (transportMode) => {
+    expect(normalizeLine({ id: "WIF:Line:1", publicCode: "WF", transportMode })?.mode).toBe(
+      "other",
+    );
   });
 
   it.each([[null], [undefined], [{ id: "" }]])("returns null for %j", (input) => {

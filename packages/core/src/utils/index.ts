@@ -13,7 +13,9 @@ export {
   buildAttributionPresentation,
   buildLicensingHtml,
   buildRuntimeAttributionHtml,
+  creditLicensing,
   extractSourcePrefix,
+  isUnstatedLicence,
   parseAttributionHtml,
   pickIntegrationForSources,
   sanitizeAttributionHtml,
@@ -120,6 +122,7 @@ export {
 } from "./formatting";
 export {
   FPTF_PRODUCT_MODE,
+  fptfLineName,
   mapFptfLoadFactor,
   mapProducts,
   normalizeFptfDeparture,
@@ -271,7 +274,12 @@ export {
   overturePropertyContributors,
   selectOvertureName,
 } from "./overtureSource";
-export { type PanoramaxCreatorMetadata, panoramaxAuthor } from "./panoramax-metadata";
+export {
+  type PanoramaxAssetSize,
+  type PanoramaxCreatorMetadata,
+  panoramaxAuthor,
+  panoramaxPictureAssetUrl,
+} from "./panoramax-metadata";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

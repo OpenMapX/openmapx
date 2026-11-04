@@ -2,7 +2,6 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -16,6 +15,7 @@ import TextField from "@mui/material/TextField";
 import type { AccountProvisioningResult } from "@openmapx/core/api-contracts";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import Dialog from "@/components/ui/Dialog";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useAdminToast } from "../shared/AdminToast";
 import { AccountMailStatus } from "./AccountMailStatus";

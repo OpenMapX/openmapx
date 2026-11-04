@@ -36,6 +36,7 @@ const EXACT_LABEL_KEYS: Record<string, string> = {
   "Include Full": "filterIncludeFull",
   Landscape: "cameraLandscape",
   "On-Street": "onStreet",
+  "Open now": "filterOpenNow",
   Other: "cameraOther",
   "Other work": "workOther",
   "Out of order": "signOutOfOrder",

@@ -182,6 +182,7 @@ export {
   shouldRerouteForClosure,
   updateOffRouteScore,
 } from "./reroute";
+export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
 export {
   appendCountrySpans,
   countryAtMeters,
@@ -214,6 +215,7 @@ export {
   type RouteStopWaypointPosition,
   remainingRouteStopWaypoints,
   routeStopAccess,
+  routeStopInsertIndex,
   routeStopWaypointPositions,
 } from "./routeStopDetours";
 export {
@@ -228,7 +230,11 @@ export {
   progressBucket,
   progressBucketStartMeters,
   projectRoutePois,
+  ROUTE_SEARCH_CORRIDOR_METERS,
+  type RouteSearchChunk,
+  type RouteSearchChunks,
   routeAheadBounds,
+  routeSearchChunks,
 } from "./searchAlongRoute";
 export { refKind, signHeadline, visibleToward } from "./signFormat";
 export { simulatePositions } from "./simulatePositions";

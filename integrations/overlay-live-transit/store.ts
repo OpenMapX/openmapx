@@ -11,6 +11,7 @@ const LIVE_TRANSIT_MODE_ORDER: TransportMode[] = [
   "funicular",
   "cable_car",
   "monorail",
+  "other",
 ];
 
 const MODE_ORDER_INDEX = new Map(

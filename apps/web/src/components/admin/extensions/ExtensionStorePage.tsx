@@ -16,7 +16,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -47,6 +46,7 @@ import type {
 } from "@openmapx/core/api-contracts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
+import Dialog from "@/components/ui/Dialog";
 import {
   useAddExtensionSource,
   useExtensionCatalog,

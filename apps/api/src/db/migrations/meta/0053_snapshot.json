@@ -1,6 +1,6 @@
 {
-  "id": "9a25f282-f0dc-428e-a3a0-9a79d9d3d9e9",
-  "prevId": "4f0db974-6157-45b7-9478-54bd16a30cc7",
+  "id": "4f0db974-6157-45b7-9478-54bd16a30cc7",
+  "prevId": "0aa5791a-a19b-489f-9999-00d604524afe",
   "sequences": {},
   "version": "7",
   "roles": {},
@@ -1522,7 +1522,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "job_stages_job_id_idx": {
+          "name": "job_stages_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "job_stages_job_id_jobs_id_fk": {
           "name": "job_stages_job_id_jobs_id_fk",
@@ -5106,175 +5122,6 @@
         "data_export_artifact_download_count_check": {
           "name": "data_export_artifact_download_count_check",
           "value": "\"data_export_artifact\".\"download_count\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.platform_configuration_preview": {
-      "name": "platform_configuration_preview",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "operation_key": {
-          "name": "operation_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_fingerprint": {
-          "name": "request_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "preview_fingerprint": {
-          "name": "preview_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "auth_policy_revision": {
-          "name": "auth_policy_revision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_revision": {
-          "name": "source_revision",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_current_revision_id": {
-          "name": "expected_current_revision_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "preview": {
-          "name": "preview",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_by_job_id": {
-          "name": "consumed_by_job_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "retired_at": {
-          "name": "retired_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "platform_preview_actor_key_uq": {
-          "name": "platform_preview_actor_key_uq",
-          "columns": [
-            {
-              "expression": "actor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "operation_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "platform_preview_fingerprint_uq": {
-          "name": "platform_preview_fingerprint_uq",
-          "columns": [
-            {
-              "expression": "preview_fingerprint",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "platform_preview_expiry_idx": {
-          "name": "platform_preview_expiry_idx",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "platform_configuration_preview_actor_id_user_id_fk": {
-          "name": "platform_configuration_preview_actor_id_user_id_fk",
-          "tableFrom": "platform_configuration_preview",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "platform_preview_bounds": {
-          "name": "platform_preview_bounds",
-          "value": "length(\"platform_configuration_preview\".\"operation_key\") between 1 and 128 and \"platform_configuration_preview\".\"request_fingerprint\" ~ '^[a-f0-9]{64}$' and \"platform_configuration_preview\".\"preview_fingerprint\" ~ '^[a-f0-9]{64}$' and \"platform_configuration_preview\".\"auth_policy_revision\" ~ '^[a-f0-9]{64}$' and octet_length(\"platform_configuration_preview\".\"preview\"::text) <= 131072 and jsonb_typeof(\"platform_configuration_preview\".\"preview\") = 'object' and \"platform_configuration_preview\".\"expires_at\" > \"platform_configuration_preview\".\"created_at\" and \"platform_configuration_preview\".\"expires_at\" <= \"platform_configuration_preview\".\"created_at\" + interval '10 minutes' and ((\"platform_configuration_preview\".\"consumed_at\" is null) = (\"platform_configuration_preview\".\"consumed_by_job_id\" is null)) and (\"platform_configuration_preview\".\"retired_at\" is null or (\"platform_configuration_preview\".\"consumed_at\" is not null and \"platform_configuration_preview\".\"retired_at\" >= \"platform_configuration_preview\".\"consumed_at\"))"
         }
       },
       "isRLSEnabled": false

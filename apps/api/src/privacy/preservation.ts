@@ -41,6 +41,19 @@ export function preservationReleaseTransition(
     : { status: "released", released: true };
 }
 
+export type PreservationBlockingStatus = "held" | "action_required";
+
+const BLOCKING_STATUS_LITERALS: Record<PreservationBlockingStatus, string> = {
+  held: "'held'",
+  action_required: "'action_required'",
+};
+
+/** The closed set of statuses renders as fixed literals, never caller text. */
+function blockingStatusCondition(statuses: readonly PreservationBlockingStatus[]): SQL {
+  const literals = [...new Set(statuses)].map((status) => BLOCKING_STATUS_LITERALS[status]);
+  return sql.raw(literals.length === 1 ? `= ${literals[0]}` : `in (${literals.join(", ")})`);
+}
+
 /**
  * SQL guard for a source retention DELETE. Keeping the hold check in the same
  * statement as the delete prevents a capture/release worker from creating a
@@ -54,9 +67,18 @@ export function preservationAllowsDeletion(input: {
   registrationId: string;
   candidateTimestamp: SQLWrapper;
   subjectIds: readonly SQLWrapper[];
+  /**
+   * Hold statuses that keep the rows. An `operator_task` registration's hold
+   * becomes `action_required` while the operator still has to preserve the
+   * rows by hand, so its source must also stay through that status.
+   */
+  blockingStatuses?: readonly PreservationBlockingStatus[];
 }): SQL {
   if (input.subjectIds.length === 0)
     throw new Error("A preservation deletion guard requires an exact subject locator");
+  const blockingStatuses = input.blockingStatuses ?? ["held"];
+  if (blockingStatuses.length === 0)
+    throw new Error("A preservation deletion guard requires a blocking hold status");
   const subjectMatch = sql.join(
     input.subjectIds.map((subjectId) => sql`preservation_request.user_id = ${subjectId}`),
     sql` or `,
@@ -67,7 +89,7 @@ export function preservationAllowsDeletion(input: {
     inner join data_subject_request preservation_request
       on preservation_request.id = preservation.request_id
     where preservation.registration_id = ${input.registrationId}
-      and preservation.status = 'held'
+      and preservation.status ${blockingStatusCondition(blockingStatuses)}
       and preservation.released_at is null
       and preservation.source_cutoff_at >= ${input.candidateTimestamp}
       and preservation_request.user_id is not null

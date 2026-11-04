@@ -1,4 +1,17 @@
 /** Shared layout constants for the sidebar panels. */
+
+/**
+ * Padding that keeps a full-screen surface's content out of the system bars
+ * and display cutouts. The installed app and an installed web app draw the
+ * page under them (`viewport-fit=cover`); in a plain browser tab the insets
+ * are 0, so this changes nothing there.
+ */
+export const SAFE_AREA_PADDING = {
+  pt: "var(--omx-safe-top)",
+  pb: "var(--omx-safe-bottom)",
+  pl: "var(--omx-safe-left)",
+  pr: "var(--omx-safe-right)",
+} as const;
 export const PANEL_WIDTH = 400;
 
 /** Offset of the floating search bar from the top and left edges of the map. */
@@ -20,6 +33,13 @@ export const SEARCH_BAR_CLEARANCE = `calc(${SEARCH_BAR_INSET * 2 + SEARCH_BAR_HE
  * stays visible on the right.
  */
 export const NAV_LANDSCAPE_PANEL_WIDTH = 400;
+
+/**
+ * Gap (px) between the turn-by-turn chrome (maneuver banner, bottom bar) and
+ * the safe-area edges of the screen. Overlays shown over that chrome (the
+ * search-along-route picker and stop card) use it too, so they line up.
+ */
+export const NAV_CHROME_INSET = 16;
 
 /**
  * Whether the left sidebar panel is currently occupying horizontal space, so
