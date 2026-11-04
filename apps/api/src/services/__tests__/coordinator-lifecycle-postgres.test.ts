@@ -1080,6 +1080,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           client: createApiClient({ baseUrl }),
           headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
         },
+        credentialView = sdk.unwrapAdminResponse(
+          await sdk.getAdminIntegrationCredentials("alpha", options),
+        ),
         mutations: readonly [
           string,
           (headers: { "idempotency-key": string }) => Promise<{ status: number; data: unknown }>,
@@ -1125,7 +1128,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               sdk.setAdminIntegrationCredential(
                 "alpha",
                 "TOKEN",
-                { value: "synthetic-new-secret", expectedRevision: "a".repeat(64) },
+                {
+                  value: "synthetic-new-secret",
+                  expectedRevision: credentialView.configurationRevision,
+                },
                 headers,
                 options,
               ),
@@ -1136,7 +1142,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               sdk.deleteAdminIntegrationCredential(
                 "alpha",
                 "TOKEN",
-                { expectedRevision: "a".repeat(64) },
+                { expectedRevision: credentialView.configurationRevision },
                 headers,
                 options,
               ),
@@ -1182,7 +1188,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       for (const [name, run] of mutations) {
         const response = await run({ "idempotency-key": `task012-staged-current-${index++}` });
         expect(response.status, `${name}: ${JSON.stringify(response.data)}`).toBe(409);
-        expect(JSON.stringify(response.data)).toContain(
+        expect(JSON.stringify(response.data), name).toContain(
           "Apply or update Data Manager before changing instance configuration.",
         );
         expect(await rows()).toEqual(unchanged);
