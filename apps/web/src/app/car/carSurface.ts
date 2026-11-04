@@ -1,4 +1,4 @@
-import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
+import { type BBox, geoJsonBBox, setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import {
   type CarCamera,
   type CarNativeToWebMessage,
@@ -34,38 +34,22 @@ export function carLayout(viewport: CarViewport) {
   };
   return { padding, compact, maxPitch: compact ? 25 : 55 };
 }
-export function boundsOf(
-  coordinates: readonly (readonly [number, number])[],
-): [[number, number], [number, number]] | null {
-  if (!coordinates.length) return null;
-  let west = 180;
-  let south = 90;
-  let east = -180;
-  let north = -90;
-  for (const [lng, lat] of coordinates) {
-    west = Math.min(west, lng);
-    east = Math.max(east, lng);
-    south = Math.min(south, lat);
-    north = Math.max(north, lat);
-  }
-  return [
-    [west, south],
-    [east, north],
-  ];
-}
 /**
  * Frames bounds inside the host's stable area. MapLibre adds fitBounds padding to the
  * camera's own padding, which follow mode leaves large, so that is cleared first.
  */
 export function fitCarBounds(
   map: LibreMap,
-  bounds: [[number, number], [number, number]],
+  [west, south, east, north]: BBox,
   stable: CarViewport["stable"],
   duration: number,
 ) {
   map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 }, { programmatic: true });
   map.fitBounds(
-    bounds,
+    [
+      [west, south],
+      [east, north],
+    ],
     {
       padding: {
         top: stable.top + 48,
@@ -126,7 +110,7 @@ export function applyCarCamera(
     const remaining = progress
       ? [progress.snapped, ...geometry.slice(progress.segmentIndex + 1)]
       : geometry;
-    const bounds = boundsOf(remaining);
+    const bounds = geoJsonBBox({ type: "MultiPoint", coordinates: remaining });
     if (!map || !bounds) return;
     store.setCameraMode("overview");
     fitCarBounds(map, bounds, stable, 600);

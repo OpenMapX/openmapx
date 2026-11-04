@@ -4,7 +4,6 @@ import { createFakeMap } from "@/test";
 import {
   applyCarCamera,
   attachCarHost,
-  boundsOf,
   carLabelSize,
   carLayout,
   createCarSnapshotReceiver,
@@ -93,6 +92,29 @@ describe("car surface", () => {
     applyCarCamera(map, { v: 1, type: "car-camera", action: "recenter" });
     expect(useNavigationStore.getState().cameraMode).toBe("follow");
   });
+  it("frames the rest of the trip for the route overview", () => {
+    const { map } = createFakeMap();
+    const fitBounds = vi.fn();
+    map.fitBounds = fitBounds as never;
+    map.setPadding = (() => map) as never;
+    useNavigationStore.setState({
+      route: {
+        geometry: [
+          [6, 50],
+          [7, 50.5],
+          [13.4, 52.5],
+        ],
+      } as never,
+      progress: { snapped: [6.5, 50.2], segmentIndex: 0 } as never,
+    });
+    applyCarCamera(map, { v: 1, type: "car-camera", action: "overview" });
+    expect(useNavigationStore.getState().cameraMode).toBe("overview");
+    // From the car's position on, not the part already driven.
+    expect(fitBounds.mock.calls[0]?.[0]).toEqual([
+      [6.5, 50.2],
+      [13.4, 52.5],
+    ]);
+  });
   it("clears the map after matching terminal state and rejects malformed full routes", () => {
     const error = vi.fn();
     const receive = createCarSnapshotReceiver(error);
@@ -126,19 +148,6 @@ describe("car surface", () => {
 describe("route preview labels", () => {
   it("letters routes in list order", () => {
     expect([0, 1, 2].map(routeLetter)).toEqual(["A", "B", "C"]);
-  });
-
-  it("frames all route coordinates", () => {
-    expect(
-      boundsOf([
-        [6, 50],
-        [13.4, 52.5],
-      ]),
-    ).toEqual([
-      [6, 50],
-      [13.4, 52.5],
-    ]);
-    expect(boundsOf([])).toBeNull();
   });
 });
 

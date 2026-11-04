@@ -3,7 +3,7 @@ import { TrafficFlowLayer } from "@integrations/overlay-traffic-flow/map-layer";
 import { RoadConditionsLayer } from "@integrations/road-conditions/map-layer";
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
-import { isOverSpeed, type LngLat, useNavigationStore } from "@openmapx/core";
+import { geoJsonBBox, isOverSpeed, type LngLat, useNavigationStore } from "@openmapx/core";
 import type { CarPosition, CarPreview, CarViewport } from "@openmapx/core/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BaseAttributions } from "@/components/map/BaseAttributions";
@@ -19,7 +19,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
-import { boundsOf, carLabelSize, carLayout, fitCarBounds, routeLetter } from "./carSurface";
+import { carLabelSize, carLayout, fitCarBounds, routeLetter } from "./carSurface";
 import { useCarPositionMarker } from "./useCarPositionMarker";
 
 /** Diameter of a route letter badge, as drawn by the label layers below. */
@@ -234,7 +234,10 @@ export function CarMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !preview?.routes.length) return;
-    const bounds = boundsOf(preview.routes.flatMap((route) => route.coordinates));
+    const bounds = geoJsonBBox({
+      type: "MultiLineString",
+      coordinates: preview.routes.map((route) => route.coordinates),
+    });
     // Framing a preview is not a user zoom; follow mode keeps its own zoom afterwards.
     if (bounds) fitCarBounds(map, bounds, s, 0);
   }, [preview, mapReady, mapRef, s]);
