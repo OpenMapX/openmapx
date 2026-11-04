@@ -274,7 +274,12 @@ export {
   overturePropertyContributors,
   selectOvertureName,
 } from "./overtureSource";
-export { type PanoramaxCreatorMetadata, panoramaxAuthor } from "./panoramax-metadata";
+export {
+  type PanoramaxAssetSize,
+  type PanoramaxCreatorMetadata,
+  panoramaxAuthor,
+  panoramaxPictureAssetUrl,
+} from "./panoramax-metadata";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

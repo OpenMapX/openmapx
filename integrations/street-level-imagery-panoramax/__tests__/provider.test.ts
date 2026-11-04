@@ -132,6 +132,39 @@ describe("stacItemToImage", () => {
     expect(stacItemToImage(ITEM, "panoramax").aspectRatio).toBeUndefined();
   });
 
+  it("loads images through the catalogue's per-picture endpoint", () => {
+    // The asset links point at whichever federated instance holds the file;
+    // the catalogue's endpoint redirects there, so the proxy trusts one host.
+    const image = stacItemToImage(ITEM, "panoramax", "https://api.panoramax.xyz/api");
+    expect(image.assets).toEqual({
+      thumb: `https://api.panoramax.xyz/api/pictures/${ITEM.id}/thumb.jpg`,
+      sd: `https://api.panoramax.xyz/api/pictures/${ITEM.id}/sd.jpg`,
+      hd: `https://api.panoramax.xyz/api/pictures/${ITEM.id}/hd.jpg`,
+    });
+  });
+
+  it("offers only the sizes the item has", () => {
+    const image = stacItemToImage(
+      { ...ITEM, assets: { sd: { href: "https://example.test/sd.jpg" } } },
+      "panoramax",
+      "https://api.panoramax.xyz/api",
+    );
+    expect(image.assets).toEqual({
+      thumb: undefined,
+      sd: `https://api.panoramax.xyz/api/pictures/${ITEM.id}/sd.jpg`,
+      hd: undefined,
+    });
+  });
+
+  it("keeps the asset link for an item without a picture UUID", () => {
+    const image = stacItemToImage(
+      { ...ITEM, id: "legacy-1" },
+      "panoramax",
+      "https://api.panoramax.xyz/api",
+    );
+    expect(image.assets.sd).toBe("https://example.test/sd.jpg");
+  });
+
   it("maps assets and sequence", () => {
     const image = stacItemToImage(ITEM, "panoramax");
     expect(image.assets.hd).toBe("https://example.test/hd.jpg");
