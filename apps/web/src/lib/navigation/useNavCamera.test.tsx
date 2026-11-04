@@ -712,6 +712,68 @@ describe("useNavCamera lifecycle", () => {
     expect(replacement.state.cameraTransitions.some((t) => t.method === "jumpTo")).toBe(true);
   });
 
+  /**
+   * The page swaps in a new map without clearing `mapReady` (a style rebuild,
+   * or the map being re-created), so navigation can start in the gap where
+   * `mapRef` is empty. `styleVersion` is what announces the new map.
+   */
+  async function mountDuringMapReplacement() {
+    const frames = createFrameHarness(CLOCK_START);
+    vi.stubGlobal("requestAnimationFrame", frames.request);
+    vi.stubGlobal("cancelAnimationFrame", frames.cancel);
+    vi.spyOn(performance, "now").mockImplementation(() => frames.now());
+    mapContextTest.mapRef.current = null;
+    mapContextTest.mapReady = true;
+    startRoute();
+    const view = renderHook(() => useNavCamera());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const fake = createFakeMap({ zoom: 10 });
+    mapContextTest.mapRef.current = fake.map;
+    mapContextTest.styleVersion += 1;
+    view.rerender();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    return { frames, fake, view };
+  }
+
+  it("draws the puck when navigation starts while the map is being replaced", async () => {
+    const { frames, fake } = await mountDuringMapReplacement();
+    applyFix(START_ALONG);
+    frames.flush(60, FRAME_MS);
+
+    expect(markerTest.markers[0]?.map).toBe(fake.map);
+    expect(fake.state.cameraTransitions.some((t) => t.method === "jumpTo")).toBe(true);
+  });
+
+  it("enters follow on a map that arrives after navigation started", async () => {
+    const { fake } = await mountDuringMapReplacement();
+    expect(fake.state.cameraTransitions.some((t) => t.method === "easeTo")).toBe(true);
+  });
+
+  it("enters follow again on a replacement map, and not on a style reload", async () => {
+    const harness = await mountNavCamera();
+    applyFix(START_ALONG);
+    harness.frames.flush(60, FRAME_MS);
+    const eases = (fake: FakeMap) =>
+      fake.state.cameraTransitions.filter((t) => t.method === "easeTo").length;
+    const before = eases(harness.fake);
+
+    // A style reload keeps the map, and the camera the user is following.
+    mapContextTest.styleVersion += 1;
+    harness.rerender();
+    expect(eases(harness.fake)).toBe(before);
+
+    // A new map starts from its own default camera and needs follow re-entered.
+    const replacement = createFakeMap({ zoom: 10 });
+    mapContextTest.mapRef.current = replacement.map;
+    mapContextTest.styleVersion += 1;
+    harness.rerender();
+    expect(eases(replacement)).toBe(1);
+  });
+
   it("does not attach a marker that arrives after navigation stopped", async () => {
     const frames = createFrameHarness(CLOCK_START);
     vi.stubGlobal("requestAnimationFrame", frames.request);

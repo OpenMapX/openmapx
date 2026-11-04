@@ -229,6 +229,8 @@ export function useNavCamera(): void {
   // in-progress gesture before it crosses the pan/zoom threshold — the reason a
   // pinch or drag wouldn't take hold while the puck (and camera) were moving.
   const userInteractingRef = useRef(false);
+  // The map follow was last entered on.
+  const followMapRef = useRef<maplibregl.Map | null>(null);
 
   const active = status === "navigating" || status === "rerouting";
 
@@ -244,10 +246,11 @@ export function useNavCamera(): void {
     });
   }, []);
 
-  // Create the heading-puck marker once the map is ready; remove on unmount.
+  // Create the heading-puck marker once; remove on unmount. It does not need a
+  // map: the frame loop attaches it to whichever map is current, so a trip that
+  // starts while the map is being replaced still gets its puck.
   useEffect(() => {
-    const map = mapRef?.current;
-    if (!map || !mapReady || markerRef.current) return;
+    if (markerRef.current) return;
     let destroyed = false;
     void import("maplibre-gl")
       .then((maplibregl) => {
@@ -272,7 +275,7 @@ export function useNavCamera(): void {
     return () => {
       destroyed = true;
     };
-  }, [mapRef, mapReady, requestFrame]);
+  }, [requestFrame]);
 
   useEffect(() => {
     return () => {
@@ -332,42 +335,60 @@ export function useNavCamera(): void {
 
   // (Re)entering follow: establish zoom + pitch with a short ease, then let the
   // per-frame loop take over centre/bearing once it settles.
+  const enterFollow = useCallback(
+    (map: maplibregl.Map) => {
+      followMapRef.current = map;
+      const prog = useNavigationStore.getState().progress;
+      if (prog && displayedRef.current === null) {
+        displayedRef.current = prog.alongMeters;
+        bearingRef.current = prog.bearing;
+      }
+      // Respect a user-chosen zoom on re-entry (recenter); otherwise establish the
+      // default follow zoom.
+      const enterZoom = userZoomedRef.current
+        ? map.getZoom()
+        : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
+      const enterPadding = getCameraPaddingTarget(map);
+      map.easeTo(
+        {
+          zoom: enterZoom,
+          pitch: PITCH[mode] ?? 0,
+          padding: enterPadding,
+          duration: prefersReducedMotion() ? 0 : ENTER_EASE_MS,
+        },
+        { programmatic: true },
+      );
+      // Seed the eased follow-zoom and padding so the per-frame loop continues
+      // from here.
+      displayedZoomRef.current = enterZoom;
+      displayedPitchRef.current = PITCH[mode] ?? 0;
+      displayedPaddingRef.current = enterPadding;
+      paddingTargetRef.current = enterPadding;
+      settleUntilRef.current = performance.now() + SETTLE_MS;
+      // Forget the published poses: a recenter or a mode change is a
+      // discontinuity, and the first frame after the ease must draw it.
+      lastPuckRef.current = null;
+      lastCamRef.current = null;
+      requestFrame();
+    },
+    [mode, requestFrame],
+  );
+
   useEffect(() => {
     const map = mapRef?.current;
     if (!map || !active || cameraMode !== "follow") return;
-    const prog = useNavigationStore.getState().progress;
-    if (prog && displayedRef.current === null) {
-      displayedRef.current = prog.alongMeters;
-      bearingRef.current = prog.bearing;
-    }
-    // Respect a user-chosen zoom on re-entry (recenter); otherwise establish the
-    // default follow zoom.
-    const enterZoom = userZoomedRef.current
-      ? map.getZoom()
-      : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
-    const enterPadding = getCameraPaddingTarget(map);
-    map.easeTo(
-      {
-        zoom: enterZoom,
-        pitch: PITCH[mode] ?? 0,
-        padding: enterPadding,
-        duration: prefersReducedMotion() ? 0 : ENTER_EASE_MS,
-      },
-      { programmatic: true },
-    );
-    // Seed the eased follow-zoom and padding so the per-frame loop continues
-    // from here.
-    displayedZoomRef.current = enterZoom;
-    displayedPitchRef.current = PITCH[mode] ?? 0;
-    displayedPaddingRef.current = enterPadding;
-    paddingTargetRef.current = enterPadding;
-    settleUntilRef.current = performance.now() + SETTLE_MS;
-    // Forget the published poses: a recenter or a mode change is a
-    // discontinuity, and the first frame after the ease must draw it.
-    lastPuckRef.current = null;
-    lastCamRef.current = null;
-    requestFrame();
-  }, [mapRef, active, cameraMode, mode, requestFrame]);
+    enterFollow(map);
+  }, [mapRef, active, cameraMode, enterFollow]);
+
+  // A replacement map arrives without `mapReady` changing, and starts from its
+  // own default camera, so follow is entered again on it. `styleVersion` is what
+  // announces it; a style reload on the same map keeps the camera as it is.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: styleVersion and mapReady are the triggers; the body reads the current map and store.
+  useEffect(() => {
+    const map = mapRef?.current;
+    if (!map || !active || cameraMode !== "follow" || followMapRef.current === map) return;
+    enterFollow(map);
+  }, [styleVersion, mapReady]);
 
   // Chrome moving under the map (a sheet detent, a rewrapped banner) changes
   // the padding target; the next frame resolves it once and eases toward it.
