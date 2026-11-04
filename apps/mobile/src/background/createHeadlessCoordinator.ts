@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { getNavigationAudio } from "../audio/navigationAudioModule";
+import { getRuntimeConfig } from "../config/runtimeConfig";
 import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { type LocationProfileKind, profileFor } from "../location/profiles";
@@ -7,6 +8,8 @@ import { createCoordinator } from "../navigation/createCoordinator";
 import type { EffectPorts } from "../navigation/effects";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import { createPublishPort } from "../navigation/snapshots/createPublishPort";
+import { reconcileNavigationSurface } from "../navigation/surfaces/createSurfacePort";
+import { TransitRefreshService } from "../navigation/transit/TransitRefreshService";
 import { getDatabase } from "../storage/database";
 import { SessionRepository } from "../storage/SessionRepository";
 
@@ -25,12 +28,16 @@ import { SessionRepository } from "../storage/SessionRepository";
  * session rather than two.
  */
 
-function ports(repository: SessionRepository): EffectPorts {
+function ports(
+  repository: SessionRepository,
+  refresh: (requestId: string) => Promise<void>,
+): EffectPorts {
   const driver = createLocationDriver();
   const audio = getNavigationAudio();
   const diagnostics = new DiagnosticRepository(repository);
 
   return {
+    reconcileSurface: () => reconcileNavigationSurface(repository, false),
     driver: {
       // The permission mode changes when delivery stops, not how it is
       // requested: a foreground-only session uses the same cadence and is
@@ -62,13 +69,13 @@ function ports(repository: SessionRepository): EffectPorts {
     // position from ten minutes ago would only animate the user backwards.
     publish: createPublishPort({
       repository,
+      reconcileSurface: () => reconcileNavigationSurface(repository, false),
       send: () => false,
       now: () => Date.now(),
     }).port,
     remote: {
       reroute: async () => undefined,
-      transitRefresh: async () => undefined,
-      transitReplan: async () => undefined,
+      transitRefresh: refresh,
     },
     diagnostics: {
       // Everything goes through the allowlist, including calls from deep inside
@@ -89,6 +96,11 @@ function ports(repository: SessionRepository): EffectPorts {
  */
 export async function getHeadlessCoordinator(): Promise<NavigationCoordinator> {
   const repository = new SessionRepository(await getDatabase());
+  const refreshService = new TransitRefreshService({
+    apiOrigin: getRuntimeConfig().apiOrigin,
+    now: () => Date.now(),
+  });
+  let owner: NavigationCoordinator | null = null;
   const { coordinator } = await createCoordinator({
     // Nothing to send to, and nothing that would accept it: a headless process
     // has no channel, so every outbound message is dropped by design.
@@ -101,8 +113,25 @@ export async function getHeadlessCoordinator(): Promise<NavigationCoordinator> {
       requestForStart: async () => "denied",
     },
     driver: { isRunning: () => createLocationDriver().isRunning() },
-    ports: ports(repository),
+    ports: ports(repository, async (requestId) => {
+      const session = await repository.loadActive(Date.now());
+      const current = owner;
+      if (
+        !current ||
+        session?.kind !== "transit" ||
+        session.status !== "active" ||
+        session.payload.refresh.requestId !== requestId
+      )
+        return;
+      current.trackRemoteWork(
+        refreshService
+          .request({ requestId, generation: session.payload.refresh.generation, session })
+          .then((outcome) => current.applyTransitRefresh(outcome))
+          .catch(() => undefined),
+      );
+    }),
   });
+  owner = coordinator;
   return coordinator;
 }
 

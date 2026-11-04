@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, StatusBar, StyleSheet, View } from "react-native";
+import { Alert, Linking, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
@@ -16,11 +16,15 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
+import type { DeepLinkIntent } from "./links/deepLinkIntent";
+import { useIncomingLinks } from "./links/useIncomingLinks";
 import { createLocationDriver } from "./location/createLocationDriver";
 import {
   createForegroundNavigation,
   type ForegroundNavigation,
 } from "./navigation/createForegroundNavigation";
+import { surfaceCopy } from "./navigation/surfaces/surfaceModel";
 import { createPermissionPrompter, PermissionPrompts } from "./permissions/PermissionPrompts";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
@@ -83,6 +87,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
 
   const webViewRef = useRef<WebView>(null);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
+  }, [visibility]);
   const services = useMemo(
     () =>
       createShellServices({
@@ -142,6 +149,46 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     }
     return { shell: composed, navigation };
   }, [config, locale, prompter, services, setNavigating]);
+  const deliverLink = useCallback(
+    (intent: DeepLinkIntent) => {
+      shell.bridge.send("deep-link.open", intent);
+    },
+    [shell],
+  );
+  const requestNativeEnd = useCallback(
+    (sessionId: string) => {
+      void navigation
+        .then(async (composed) => {
+          const copy = surfaceCopy[locale];
+          if (!composed) {
+            Alert.alert(copy.unavailable);
+            return;
+          }
+          if ((await composed.activeSession())?.sessionId !== sessionId) {
+            Alert.alert(copy.ended);
+            return;
+          }
+          Alert.alert(copy.end, copy.confirm, [
+            { text: copy.cancel, style: "cancel" },
+            {
+              text: copy.end,
+              style: "destructive",
+              onPress: () => {
+                void composed.coordinator
+                  .stopFromSurface(sessionId)
+                  .then((stopped) => {
+                    if (stopped) setNavigating(false);
+                  })
+                  .catch(() => undefined);
+              },
+            },
+          ]);
+        })
+        .catch(() => Alert.alert(surfaceCopy[locale].unavailable));
+    },
+    [navigation, locale, setNavigating],
+  );
+  const incomingLinks = useIncomingLinks(config, deliverLink, requestNativeEnd);
   useEffect(
     () => () => {
       void navigation.then((composed) => composed?.dispose());
@@ -179,14 +226,18 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       //
       // A reload resets the bridge and nothing else: the native session and the
       // location driver are unaffected, because the page is not their authority.
+      incomingLinks.documentStarted();
       shell.registry.adoptDocument(publishedNonce, Date.now());
       shell.bridge.discardQueue();
       dispatchShell({ type: "document-load-started" });
     },
-    [publishedNonce, shell],
+    [publishedNonce, shell, incomingLinks],
   );
 
   const handleLoadEnd = useCallback(() => {
+    // A load can finish while backgrounded; lifecycle delivery to the previous
+    // document must not leave this document thinking the app is visible.
+    webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibilityRef.current));
     dispatchShell({ type: "document-load-succeeded" });
     // Prepare a different nonce for whatever document loads next.
     setPublishedNonce(shell.registry.mintNonce());
@@ -194,17 +245,29 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
 
   const handleLoadFailure = useCallback(() => {
     dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
+    incomingLinks.documentStarted();
     shell.registry.invalidate();
     shell.bridge.discardQueue();
-  }, [shell, connectivity.displayed]);
+  }, [shell, connectivity.displayed, incomingLinks]);
 
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
       // Rejections are silent by design: an error reply to an unauthenticated
       // sender is itself an oracle, and every rejection path is side-effect free.
-      void shell.bridge.receive(event.nativeEvent).catch(() => undefined);
+      void shell.bridge
+        .receive(event.nativeEvent)
+        .then((outcome) => {
+          if (
+            outcome.status === "handled" &&
+            outcome.type === "web.hello" &&
+            shell.registry.handshake()
+          ) {
+            incomingLinks.bridgeReady();
+          }
+        })
+        .catch(() => undefined);
     },
-    [shell],
+    [shell, incomingLinks],
   );
 
   const openExternally = useCallback((url: string) => {

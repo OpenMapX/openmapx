@@ -61,6 +61,7 @@ export interface HandshakeResult {
   capabilities: {
     groundNavigation: boolean;
     transitNavigation: boolean;
+    transitActions?: boolean;
     backgroundLocation: boolean;
     localNotifications: boolean;
     speech: boolean;
@@ -97,6 +98,8 @@ const EXPECTED_REPLY: Partial<Record<WebToNativeMessage["type"], NativeToWebMess
   "session.prepare": "session.prepared",
   "session.start": "session.started",
   "session.replace": "session.replaced",
+  "transit.action": "snapshot.update",
+  "transit.walk-route": "snapshot.update",
   "settings.update": "snapshot.update",
   "snapshot.request": "snapshot.update",
   "session.stop": "session.stopped",

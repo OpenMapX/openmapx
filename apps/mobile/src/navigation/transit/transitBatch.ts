@@ -1,4 +1,5 @@
 import {
+  composeWalkInstruction,
   DEFAULT_TRANSIT_TICK_OPTIONS,
   type FixInput,
   type PreparedTransitProgress,
@@ -6,59 +7,61 @@ import {
   processTransitFix,
   type TransitMobileSession,
   type TransitNavigationEvent,
+  type TransitRiderAction,
   type TransitTickState,
   transitProgressFromTick,
+  transitWalkVoiceCue,
+  walkStepInfo,
 } from "@openmapx/core/navigation";
+import { createTranslator } from "@openmapx/i18n";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import type { SessionEffect } from "../../storage/SessionRepository";
 import type { ProcessorMutation } from "../processor";
-import { transitCueEffect } from "./transitCue";
+import { transitCueEffect, transitWalkCueEffect } from "./transitCue";
 import { transitProfileForTime } from "./transitSession";
 
 /**
  * One batch of fixes — or one wake-up with no fix at all — becomes one committed
  * revision.
  *
- * The no-fix case is not an edge case here the way it is for driving. A rider on
- * an underground train produces no usable position for twenty minutes, and the
- * engine still has to advance the leg from the schedule so the banner does not
- * freeze on a stop the train left long ago. So every legitimate wake-up ticks the
- * engine, with or without a position, and the engine labels the result
- * `gps | schedule | stale` rather than pretending they are the same thing.
+ * No-fix wake-ups update freshness while retaining the selected leg and last
+ * known rider position. Timetable estimates never commit a physical transition.
  *
  * What this deliberately does not do is run a timer. A tick happens because the
  * operating system delivered a callback or the app is visible — never because
  * JavaScript decided it was time, which it cannot know while suspended.
  */
 
-/**
- * A prepared itinerary index, keyed by the itinerary object it indexes.
- *
- * Keyed by identity rather than fingerprint for the same reason as the ground
- * cache: a session reloaded from storage produces a new object with identical
- * values, and a prepared index belongs to the one it was built from.
- */
+/** Prepared geometry and occurrence projections survive per-fix storage deserialization. */
 export class TransitItineraryCache {
-  private itinerary: object | null = null;
+  private key: string | null = null;
   private prepared: PreparedTransitProgress | null = null;
+  private captures: TransitMobileSession["payload"]["startPackage"]["captures"] = [];
 
   preparedFor(session: TransitMobileSession): PreparedTransitProgress {
-    const itinerary = session.payload.startPackage.itinerary as object;
-    if (this.itinerary !== itinerary || !this.prepared) {
-      this.prepared = prepareTransitProgress(itinerary as never);
-      this.itinerary = itinerary;
+    const key = `${session.sessionId}:${session.payload.startPackage.itineraryFingerprint}:${session.payload.navigationDataRevision ?? 0}`;
+    if (this.key !== key || !this.prepared) {
+      this.prepared = prepareTransitProgress(session.payload.startPackage.itinerary as never);
+      this.captures = session.payload.startPackage.captures;
+      this.key = key;
     }
     return this.prepared;
   }
-
+  capturesFor(session: TransitMobileSession) {
+    this.preparedFor(session);
+    return this.captures;
+  }
   invalidate(): void {
-    this.itinerary = null;
+    this.key = null;
     this.prepared = null;
+    this.captures = [];
   }
 }
 
 export interface TransitBatchOutcome extends ProcessorMutation {
   arrived: boolean;
   needsReplan: boolean;
+  actionRejected?: boolean;
   events: TransitNavigationEvent[];
 }
 
@@ -68,6 +71,7 @@ export interface ProcessTransitBatchInput {
   fixes: readonly FixInput[];
   nowMs: number;
   cache: TransitItineraryCache;
+  action?: TransitRiderAction;
 }
 
 /** Events that must reach the rider even if the page is not there to show them. */
@@ -91,25 +95,31 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     itineraryFingerprint: startPackage.itineraryFingerprint,
   };
 
-  let tickState = session.payload.tickState;
+  let tickState = {
+    ...session.payload.tickState,
+    ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+  };
   let confidence = session.payload.confidence;
   let needsReplan = false;
+  let actionRejected = false;
   const allEvents: TransitNavigationEvent[] = [];
 
-  // A wake-up with no fix still ticks, so schedule fallback can advance.
+  // A wake-up with no fix still updates confidence.
   const ticks: Array<FixInput | undefined> = fixes.length > 0 ? [...fixes] : [undefined];
 
   for (const fix of ticks) {
     const result = processTransitFix({
       itinerary: startPackage.itinerary as never,
-      captures: startPackage.captures,
+      captures: cache.capturesFor(session),
       state: tickState as never,
+      action: input.action,
       ...(fix ? { fix } : {}),
       nowMs,
       options,
       prepared,
       ...(startPackage.stopAreas ? { stopAreas: startPackage.stopAreas } : {}),
     });
+    actionRejected ||= !!result.actionRejected;
     tickState = result.state as never;
     confidence = result.confidence;
     if (result.needsReplan) needsReplan = true;
@@ -147,11 +157,45 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     if (startPackage.settings.voiceEnabled) effects.push(cue.effect);
   }
 
+  if (tickState.phase === "walking" && tickState.progressConfidence === "gps") {
+    const leg = (startPackage.itinerary as unknown as TripItinerary).legs[
+      tickState.currentLegIndex
+    ];
+    const step = leg?.steps?.[tickState.currentWalkStepIndex + 1];
+    if (step) {
+      const t = createTranslator(session.locale, "navigation");
+      const text = composeWalkInstruction(walkStepInfo(step), t);
+      const prefix = `walk:${tickState.currentLegIndex}:${tickState.walkRevision ?? 0}:`;
+      const namespace = `${session.sessionId}:transit:${startPackage.itineraryFingerprint}:`;
+      const timing = transitWalkVoiceCue(
+        step,
+        tickState.currentWalkStepIndex,
+        tickState.distanceToNextStepMeters ?? Infinity,
+        tickState.lastAcceptedFix?.speed ?? 0,
+        text,
+        session.cueLedger.spoken
+          .filter((id) => id.startsWith(namespace + prefix))
+          .map((id) => id.slice((namespace + prefix).length)),
+      );
+      const cue = timing
+        ? transitWalkCueEffect(session, prefix + timing.key, text, undefined, timing)
+        : null;
+      if (cue && !session.cueLedger.spoken.includes(cue.cueId)) {
+        spokenCueIds.push(cue.cueId);
+        if (startPackage.settings.voiceEnabled) effects.push(cue.effect);
+      }
+    }
+  }
+
   const next: TransitMobileSession = {
     ...session,
     revision: session.revision + 1,
     updatedAtMs: nowMs,
-    status: arrived ? "arrived" : session.status,
+    status: arrived
+      ? "arrived"
+      : tickState.phase !== "arrived" && session.status === "arrived"
+        ? "active"
+        : session.status,
     cueLedger: {
       spoken: appendBounded(session.cueLedger.spoken, spokenCueIds),
       events: appendBounded(session.cueLedger.events, eventIds),
@@ -159,7 +203,10 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     ...(tickState.lastAcceptedFix ? { lastAcceptedFix: tickState.lastAcceptedFix } : {}),
     payload: {
       ...session.payload,
-      tickState,
+      tickState: (() => {
+        const { lastAcceptedFix: _fix, ...durable } = tickState;
+        return durable;
+      })(),
       confidence,
       progress: (progress as unknown as Record<string, unknown> | null) ?? session.payload.progress,
     },
@@ -173,6 +220,7 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     effects.push({ kind: "update-location-profile", profile });
   }
 
+  effects.push({ kind: "reconcile-alerts", sessionId: session.sessionId });
   effects.push({ kind: "publish-snapshot", immediate: arrived || enqueue.length > 0 });
 
   return {
@@ -181,6 +229,7 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     ...(enqueue.length > 0 ? { enqueue } : {}),
     arrived,
     needsReplan,
+    actionRejected,
     events: allEvents,
   };
 }
@@ -191,21 +240,11 @@ function appendBounded(existing: readonly string[], additions: readonly string[]
   return next.length > 512 ? next.slice(next.length - 512) : next;
 }
 
-/**
- * What the page shows for the engine's decision: the leg and phase, with the
- * last accepted fix placed on that leg. A leg the schedule advanced without any
- * fix is shown from its start, so the banner still moves on underground.
- */
+/** Shared rider progress; no placeholder coordinate is published as a location. */
 function followAlongProgress(
   state: TransitTickState,
   prepared: PreparedTransitProgress,
-  itinerary: { legs?: Array<{ geometry?: { coordinates?: [number, number][] } }> },
+  _itinerary: unknown,
 ) {
-  const fix = state.lastAcceptedFix?.coords as [number, number] | undefined;
-  if (fix) return transitProgressFromTick(state, prepared, fix);
-  const start = itinerary.legs?.[state.currentLegIndex]?.geometry?.coordinates?.[0];
-  if (!start) return null;
-  // The leg's start stands in for the rider's place on it, not for where they are.
-  const { position: _position, ...progress } = transitProgressFromTick(state, prepared, start);
-  return progress;
+  return transitProgressFromTick(state, prepared);
 }

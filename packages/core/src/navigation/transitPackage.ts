@@ -55,12 +55,9 @@ export function transitItineraryFingerprint(itinerary: TripItinerary): string {
       [
         index,
         leg.mode ?? "",
-        // `TripLeg.route` carries presentation fields; the trip id below is the
-        // stable identity, so the route contributes its short name only.
-        leg.route?.shortName ?? "",
         leg.tripId ?? "",
-        leg.from?.stopId ?? leg.from?.name ?? "",
-        leg.to?.stopId ?? leg.to?.name ?? "",
+        leg.from?.stopId ?? `${leg.from?.lng},${leg.from?.lat}`,
+        leg.to?.stopId ?? `${leg.to?.lng},${leg.to?.lat}`,
         // Scheduled times are part of the plan; live ones are what refresh moves.
         leg.scheduledStartTime ?? "",
         leg.scheduledEndTime ?? "",

@@ -941,3 +941,63 @@ describe("navigationStore browser starts under native authority", () => {
     expect(useNavigationStore.getState().status).toBe("navigating");
   });
 });
+
+it("uses the captured platform area for explicit browser alighting", () => {
+  const now = Date.now();
+  const trip = {
+    ...itinerary,
+    legs: [
+      {
+        mode: "rail",
+        tripId: "selected",
+        from: { name: "A", stopId: "a", lat: 0, lng: 0 },
+        to: { name: "B", stopId: "b", lat: 0, lng: 0.02 },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [0.02, 0],
+          ],
+        },
+      },
+    ],
+  } as TripItinerary;
+  useNavigationStore.getState().startTransitNavigation(trip);
+  useNavigationStore.getState().applyTransitAction({ type: "board", legIndex: 0 });
+  useNavigationStore.setState((s) => ({
+    transitTickState: {
+      ...(s.transitTickState ?? {
+        currentLegIndex: 0,
+        currentWalkStepIndex: 0,
+        phase: "riding" as const,
+        legEnteredAtMs: now,
+        spokenCueIds: [],
+        emittedEventIds: [],
+      }),
+      lastAcceptedFix: { coords: [0.017, 0], accuracy: 5, timestampMs: now },
+    },
+    transitStopAreas: {
+      "b|": {
+        stopId: "b",
+        platform: [
+          {
+            type: "line",
+            coordinates: [
+              [0.016, 0],
+              [0.02, 0],
+            ],
+            bufferMeters: 10,
+          },
+        ],
+        station: [],
+        source: "osm",
+      },
+    },
+  }));
+  expect(useNavigationStore.getState().applyTransitAction({ type: "alight", legIndex: 0 })).toBe(
+    true,
+  );
+  expect(useNavigationStore.getState().transitProgress?.phase).toBe("arrived");
+  expect(useNavigationStore.getState().transitProgress?.offPlan).toBe(false);
+  useNavigationStore.getState().stopNavigation();
+});

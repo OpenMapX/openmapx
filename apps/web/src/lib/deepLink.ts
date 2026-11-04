@@ -14,6 +14,8 @@ import {
   type WaypointSchedule,
 } from "@openmapx/core";
 
+/** An external request to read the URL; UPDATE writes the current stores to it. */
+export const DEEPLINK_OPEN_EVENT = "openmapx:deeplink:open";
 export const DEEPLINK_UPDATE_EVENT = "openmapx:deeplink:update";
 
 export const DEEPLINK_PARAMS = new Set([

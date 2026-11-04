@@ -65,6 +65,8 @@ export function parseDeepLinkIntent(
 
   const scheme = url.protocol.replace(/:$/, "").toLowerCase();
 
+  if (scheme === "geo") return parseGeoLink(url);
+
   if (scheme === config.scheme.toLowerCase()) return parseSchemeLink(url);
   if (scheme === "https") return parseHttpsLink(url, config);
   return null;
@@ -147,4 +149,45 @@ export function coldStartUrl(intent: DeepLinkIntent, config: DeepLinkConfig): st
   base.search = intent.kind === "map" ? intent.query : "";
   base.hash = "";
   return base.toString();
+}
+
+/** Android map intents carry location data, never an origin or a screen path. */
+function parseGeoLink(url: URL): DeepLinkIntent | null {
+  if (url.host || url.hash) return null;
+  const [point, ...attributes] = url.pathname.split(";");
+  if (attributes.some((part) => part.startsWith("crs=") && part !== "crs=wgs84")) return null;
+  const base = readGeoPoint(point);
+  if (!base) return null;
+  const params = new URLSearchParams();
+  const query = url.searchParams.get("q")?.trim();
+  const target = query ? readGeoPoint(query) : base;
+  if (query && !target) {
+    // A numeric-looking invalid coordinate must not become an address search.
+    if (/^[+-]?[\d.]+\s*,\s*[+-]?[\d.]+(?:\(.*\))?$/.test(query)) return null;
+    params.set("q", query);
+  } else if (target) {
+    const { lat, lng, label } = target;
+    const coords = `${lat},${lng}`;
+    const rawZoom = url.searchParams.get("z");
+    const zoom = rawZoom !== null && /^\d+(?:\.\d+)?$/.test(rawZoom) ? Number(rawZoom) : 16;
+    params.set("map", `${coords},${zoom >= 0 && zoom <= 21 ? zoom : 16},0,0`);
+    params.set("panel", "place");
+    params.set("place", `geo:${coords}`);
+    params.set("at", coords);
+    params.set("name", label || coords);
+  }
+  return mapIntent(params.toString());
+}
+
+function readGeoPoint(value: string): { lat: number; lng: number; label: string } | null {
+  const match =
+    /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)),\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:,[+-]?(?:\d+(?:\.\d*)?|\.\d+))?(?:\((.*)\))?$/.exec(
+      value,
+    );
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
+    return null;
+  return { lat, lng, label: match[3] ?? "" };
 }

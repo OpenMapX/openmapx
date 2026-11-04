@@ -29,12 +29,14 @@ function run(input: {
   fixes?: FixInput[];
   nowMs?: number;
   cache?: TransitItineraryCache;
+  action?: import("@openmapx/core/navigation").TransitRiderAction;
 }) {
   return processTransitBatch({
     session: input.session ?? session(),
     fixes: input.fixes ?? [],
     nowMs: input.nowMs ?? NOW,
     cache: input.cache ?? new TransitItineraryCache(),
+    action: input.action,
   });
 }
 
@@ -55,7 +57,9 @@ describe("processTransitBatch parity with the shared engine", () => {
     });
 
     const next = outcome.session as TransitMobileSession;
-    expect(next.payload.tickState).toEqual(direct.state);
+    const { lastAcceptedFix: _fix, ...durable } = direct.state;
+    expect(next.payload.tickState).toEqual(durable);
+    expect(next.lastAcceptedFix).toEqual(direct.state.lastAcceptedFix);
     expect(next.payload.confidence).toBe(direct.confidence);
     expect(outcome.needsReplan).toBe(direct.needsReplan);
     expect(outcome.events).toEqual(direct.events);
@@ -159,72 +163,26 @@ describe("processTransitBatch events", () => {
     } as TransitMobileSession;
   }
 
-  it("enqueues each new event durably", () => {
+  it("never advances or emits a transfer from elapsed schedule alone", () => {
     const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
-
-    expect(outcome.enqueue).toEqual([
-      {
-        eventId: `${FIXTURE_FINGERPRINT}:transfer:1:2`,
-        critical: true,
-        payload: { type: "transfer" },
-      },
-    ]);
-    expect(outcome.events).toEqual([
-      {
-        id: `${FIXTURE_FINGERPRINT}:transfer:1:2`,
-        type: "transfer",
-        fromLegIndex: 1,
-        toLegIndex: 2,
-      },
-    ]);
-    for (const entry of outcome.enqueue ?? []) {
-      expect(entry.eventId).toEqual(expect.any(String));
-      expect(typeof entry.critical).toBe("boolean");
-    }
+    expect((outcome.session as TransitMobileSession).payload.tickState.phase).toBe("riding");
+    expect(outcome.events).toEqual([]);
   });
-
-  it("puts no stop name or coordinate into an enqueued event", () => {
-    // The outbox outlives the leg; a stop name in it would outlive the trip.
-    const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
-
-    expect((outcome.enqueue ?? []).map((entry) => entry.eventId)).toEqual([
-      `${FIXTURE_FINGERPRINT}:transfer:1:2`,
-    ]);
-    const serialised = JSON.stringify(outcome.enqueue ?? []);
-    expect(serialised).not.toContain("Messe");
-    expect(serialised).not.toContain("50.11");
-  });
-
-  it("does not re-emit an event already in the ledger", () => {
-    const first = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
-    const ids = (first.enqueue ?? []).map((entry) => entry.eventId);
-    expect(ids).toEqual([`${FIXTURE_FINGERPRINT}:transfer:1:2`]);
+  it("durably enqueues explicit alighting and transfer, without location-bearing event data", () => {
+    const first = run({ session: riding(), action: { type: "alight", legIndex: 1 } });
+    expect(first.events.map((e) => e.type)).toEqual(["alight", "transfer"]);
+    const ids = (first.enqueue ?? []).map((e) => e.eventId);
     expect(first.session.cueLedger.events).toEqual(ids);
-
-    const afterRestart = {
-      ...riding(),
-      cueLedger: { spoken: [], events: ids },
-    } as TransitMobileSession;
-    const second = run({
-      session: afterRestart,
-      nowMs: new Date("2026-08-09T08:42:00Z").getTime(),
-    });
-
+    expect(JSON.stringify(first.enqueue)).not.toMatch(/Messe|50.11|8.68/);
+    const second = run({ session: first.session as TransitMobileSession });
     expect(second.enqueue ?? []).toEqual([]);
-    expect(second.session.cueLedger.events).toEqual(ids);
   });
-
-  it("emits no speech when voice is disabled, while still recording the event", () => {
+  it("records a confirmed action without speaking when voice is disabled", () => {
     const muted = riding();
     muted.payload.startPackage.settings.voiceEnabled = false;
-
-    const outcome = run({ session: muted, nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
-
+    const outcome = run({ session: muted, action: { type: "alight", legIndex: 1 } });
     expect((outcome.effects ?? []).filter((e) => e.kind === "speak")).toEqual([]);
-    expect((outcome.enqueue ?? []).map((entry) => entry.eventId)).toEqual([
-      `${FIXTURE_FINGERPRINT}:transfer:1:2`,
-    ]);
-    expect(outcome.session.cueLedger.events).toEqual([`${FIXTURE_FINGERPRINT}:transfer:1:2`]);
+    expect(outcome.session.cueLedger.events.length).toBeGreaterThan(0);
   });
 
   it("marks the session arrived when the engine says so", () => {
@@ -266,6 +224,7 @@ describe("processTransitBatch events", () => {
       session: current,
       fixes: [fixAt(alightAt, { coords: [8.64, 50.11] })],
       nowMs: alightAt,
+      action: { type: "alight", legIndex: 1 },
     });
 
     expect(alight.arrived).toBe(false);
@@ -273,6 +232,11 @@ describe("processTransitBatch events", () => {
     expect((alight.session as TransitMobileSession).payload.tickState.phase).toBe("walking");
     expect(alight.events.some((event) => event.type === "alight")).toBe(true);
 
+    (itinerary.legs[2] as unknown as { to: unknown }).to = {
+      name: "Office",
+      lng: 8.63,
+      lat: 50.11,
+    };
     const destinationAt = alightAt + 5 * 60_000;
     const destination = run({
       session: alight.session as TransitMobileSession,
@@ -288,8 +252,10 @@ describe("processTransitBatch location profile", () => {
   it("asks for a profile change only when the phase actually moved", () => {
     const outcome = run({ fixes: [fixAt(NOW)] });
 
-    // Still walking to the station: nothing about the cadence should change.
-    expect((outcome.effects ?? []).filter((e) => e.kind === "update-location-profile")).toEqual([]);
+    // At the boarding stop the cadence changes once to watch the departure.
+    expect((outcome.effects ?? []).filter((e) => e.kind === "update-location-profile")).toEqual([
+      { kind: "update-location-profile", profile: "transit-near-event" },
+    ]);
   });
 
   it("never asks to start a second stream", () => {
@@ -307,13 +273,14 @@ describe("TransitItineraryCache", () => {
     expect(cache.preparedFor(current)).toBe(cache.preparedFor(current));
   });
 
-  it("rebuilds for a session reloaded from storage", () => {
-    // A reload produces a new object with identical values, and a prepared index
-    // belongs to the one it was built from.
+  it("reuses geometry and stops after storage reload, invalidating only for changed navigation data", () => {
     const cache = new TransitItineraryCache();
     const first = cache.preparedFor(session());
 
-    expect(cache.preparedFor(session())).not.toBe(first);
+    const reloaded = session();
+    expect(cache.preparedFor(reloaded)).toBe(first);
+    reloaded.payload.navigationDataRevision = 1;
+    expect(cache.preparedFor(reloaded)).not.toBe(first);
   });
 
   it("rebuilds after being invalidated", () => {

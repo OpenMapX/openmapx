@@ -41,13 +41,15 @@ export function TransitTransferCard({
         gap: 1.5,
         px: 2,
         py: 1.25,
-        bgcolor: "warning.main",
-        color: "warning.contrastText",
+        bgcolor: "background.paper",
+        color: "text.primary",
+        borderLeft: 4,
+        borderColor: "primary.main",
         borderRadius: 2,
-        boxShadow: 2,
+        boxShadow: 1,
       }}
     >
-      <TransferWithinAStationIcon sx={{ fontSize: 28, flexShrink: 0 }} />
+      <TransferWithinAStationIcon sx={{ fontSize: 28, flexShrink: 0, color: "primary.main" }} />
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
           {t("changeAt", { stop: fromLeg.to.name })}
@@ -67,7 +69,7 @@ export function TransitTransferCard({
             </Typography>
           )}
           {boardPlatform && (
-            <PlatformBadge code={boardPlatform} tone="onBanner" changed={platformChanged} />
+            <PlatformBadge code={boardPlatform} tone="surface" changed={platformChanged} />
           )}
         </Box>
         {walkMinutes > 0 && (

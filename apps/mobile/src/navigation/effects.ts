@@ -26,7 +26,7 @@ const ORDER: Record<SessionEffect["kind"], number> = {
   speak: 6,
   "request-reroute": 7,
   "request-transit-refresh": 8,
-  "request-transit-replan": 9,
+  "reconcile-surface": 9,
   "publish-event": 10,
   "publish-snapshot": 11,
 };
@@ -56,7 +56,6 @@ export interface PublishPort {
 export interface RemoteWorkPort {
   reroute(requestId: string): Promise<void>;
   transitRefresh(requestId: string): Promise<void>;
-  transitReplan(requestId: string): Promise<void>;
 }
 
 export interface DiagnosticSink {
@@ -64,6 +63,7 @@ export interface DiagnosticSink {
 }
 
 export interface EffectPorts {
+  reconcileSurface?: () => Promise<void>;
   driver: LocationDriverPort;
   audio: AudioPort;
   alerts: AlertPort;
@@ -95,6 +95,8 @@ export class EffectRunner {
   private async execute(effect: SessionEffect): Promise<void> {
     const { driver, audio, alerts, publish, remote } = this.ports;
     switch (effect.kind) {
+      case "reconcile-surface":
+        return this.ports.reconcileSurface?.();
       case "start-location":
         return driver.start(effect.permissionMode);
       case "stop-location":
@@ -117,8 +119,6 @@ export class EffectRunner {
         return remote.reroute(effect.requestId);
       case "request-transit-refresh":
         return remote.transitRefresh(effect.requestId);
-      case "request-transit-replan":
-        return remote.transitReplan(effect.requestId);
     }
   }
 }

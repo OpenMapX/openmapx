@@ -13,6 +13,7 @@ import {
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
   processTransitFix,
+  type TransitRiderAction,
   type TransitTickResult,
   type TransitTickState,
 } from "./processTransitFix";
@@ -35,7 +36,8 @@ interface TransitFixture {
   itinerary: TripItinerary;
   captures: TransitLegCapture[];
   fixes: Array<
-    { coords: [number, number]; accuracy: number; offsetMs: number } | { offsetMs: number }
+    | { coords: [number, number]; accuracy: number; offsetMs: number; action?: TransitRiderAction }
+    | { offsetMs: number; action?: TransitRiderAction }
   >;
 }
 
@@ -68,7 +70,6 @@ function replayTransit(
     leg: number;
     phase: string;
     confidence: string;
-    fallback: string;
   }> = [];
 
   for (const entry of fixture.fixes) {
@@ -78,6 +79,7 @@ function replayTransit(
       captures: fixture.captures,
       state,
       fix,
+      action: entry.action,
       nowMs: NOW + entry.offsetMs,
       options: {
         ...DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -91,7 +93,6 @@ function replayTransit(
       leg: last.state.currentLegIndex,
       phase: last.state.phase,
       confidence: last.confidence,
-      fallback: last.state.scheduleFallback,
     });
     // Modelling process death: the only thing that survives is serialized state.
     state = options.serializeBetween
@@ -130,6 +131,7 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
             "transfer:2:3",
             "board:3",
             "approaching-alight:3",
+            "alight:3",
             "arrival:3",
           ]
         : [
@@ -191,6 +193,7 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
         captures: fixture.captures,
         state,
         fix,
+        action: entry.action,
         nowMs: NOW + entry.offsetMs,
         options: {
           ...DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -235,6 +238,7 @@ function replayTransitPartial(fixture: TransitFixture, from: number, to: number)
       captures: fixture.captures,
       state,
       fix,
+      action: entry.action,
       nowMs: NOW + entry.offsetMs,
       options: {
         ...DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -256,15 +260,14 @@ describe("tunnel behaviour", () => {
     expect(
       result.milestones.filter((tick) => tick.offsetMs >= 541_000 && tick.offsetMs <= 841_000),
     ).toEqual([
-      { offsetMs: 541_000, leg: 1, phase: "riding", confidence: "stale", fallback: "inactive" },
+      { offsetMs: 541_000, leg: 1, phase: "riding", confidence: "stale" },
       ...[601_000, 661_000, 721_000, 781_000].map((offsetMs) => ({
         offsetMs,
         leg: 1,
         phase: "riding",
-        confidence: "schedule",
-        fallback: "eligible",
+        confidence: "stale",
       })),
-      { offsetMs: 841_000, leg: 1, phase: "riding", confidence: "gps", fallback: "inactive" },
+      { offsetMs: 841_000, leg: 1, phase: "riding", confidence: "gps" },
     ]);
   });
 });

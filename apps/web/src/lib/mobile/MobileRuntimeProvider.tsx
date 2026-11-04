@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
+import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 import { BridgeClient, type HandshakeResult } from "./bridgeClient";
 import { isInstalledShell, shellFeatureBoundary } from "./mobileShellEnvironment";
 import { applyNativeDeepLink, readNativeDeepLink } from "./nativeDeepLink";
@@ -23,6 +23,7 @@ import {
   projectionOf,
   rememberEvent,
 } from "./nativeSnapshotReducer";
+import { applyNativeSurfaceStop } from "./nativeSurfaceStop";
 import { NativeNavigationCommands } from "./navigationCommands";
 
 /**
@@ -124,6 +125,11 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
     }
 
     const unsubscribe = client.subscribe((message) => {
+      if (message.type === "session.stopped") {
+        if (applyNativeSurfaceStop((message.payload as { sessionId?: unknown }).sessionId))
+          setReadModel(null);
+        return;
+      }
       if (message.type === "snapshot.update") {
         const incoming = envelopeOf((message.payload as { snapshot?: unknown }).snapshot);
         if (!incoming) return;
@@ -159,7 +165,7 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
             url.search = query;
             window.history.replaceState(window.history.state, "", url.toString());
           },
-          notify: () => window.dispatchEvent(new Event(DEEPLINK_UPDATE_EVENT)),
+          notify: () => window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT)),
           // The navigation view mounts itself off store state, so bringing the
           // trip to the front is exactly reconciling with native.
           showActiveNavigation: () => nativeCommands.requestSnapshot(),

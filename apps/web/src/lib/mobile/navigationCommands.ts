@@ -131,17 +131,52 @@ export class NativeNavigationCommands {
   }
 
   /** Swaps the followed route or itinerary on the running session. */
-  replace(startPackage: unknown): Promise<StartedSession> {
+  replace(startPackage: unknown, expectedItineraryFingerprint?: string): Promise<StartedSession> {
     return this.serialize(async () => {
       try {
         const replaced = await this.client.request(
           "session.replace",
-          { startPackage },
+          {
+            startPackage,
+            ...(expectedItineraryFingerprint ? { expectedItineraryFingerprint } : {}),
+          },
           { ...this.stamp(), timeoutMs: PREPARE_TIMEOUT_MS },
         );
         if (replaced.type !== "session.replaced") throw new CommandError("rejected");
         const payload = replaced.payload as { sessionId: string; revision: number };
         return { sessionId: payload.sessionId, revision: payload.revision };
+      } catch (error) {
+        throw asCommandError(error);
+      }
+    });
+  }
+
+  repairTransitWalk(itineraryFingerprint: string, legIndex: number, route: unknown): Promise<void> {
+    return this.serialize(async () => {
+      try {
+        await this.client.request(
+          "transit.walk-route",
+          { itineraryFingerprint, legIndex, route },
+          { sessionId: this.acknowledged().sessionId ?? undefined },
+        );
+      } catch (error) {
+        throw asCommandError(error);
+      }
+    });
+  }
+
+  transitAction(payload: {
+    actionId: string;
+    itineraryFingerprint: string;
+    expectedPhase: "walking" | "waiting-to-board" | "riding" | "transferring" | "arrived";
+    type: "board" | "alight" | "continue" | "undo";
+    legIndex: number;
+  }): Promise<void> {
+    return this.serialize(async () => {
+      try {
+        await this.client.request("transit.action", payload, {
+          sessionId: this.acknowledged().sessionId ?? undefined,
+        });
       } catch (error) {
         throw asCommandError(error);
       }

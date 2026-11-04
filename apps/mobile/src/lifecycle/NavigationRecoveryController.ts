@@ -35,6 +35,8 @@ export interface NavigationRecoveryDeps {
   driver: RecoveryDriver;
   stopAudio(): Promise<void>;
   clearAlerts(): Promise<void>;
+  clearSurface?(): Promise<void>;
+  reconcileSurface?(): Promise<void>;
   isAppActive(): boolean;
   now(): number;
   executor: SerialExecutor;
@@ -73,6 +75,7 @@ export class NavigationRecoveryController {
       }
 
       await this.deps.driver.start(profileForSession(inspected.session, this.deps.now()));
+      await this.deps.reconcileSurface?.().catch(() => undefined);
       return "session-started";
     });
   }
@@ -112,8 +115,11 @@ export class NavigationRecoveryController {
     const running = await this.deps.driver.running();
     if (session.permissionMode === "foreground-only" && visibility !== "active") {
       if (running) await this.deps.driver.stop();
+      await this.deps.clearSurface?.().catch(() => undefined);
       return "resume-required";
     }
+    if (running) await this.deps.reconcileSurface?.().catch(() => undefined);
+    else await this.deps.clearSurface?.().catch(() => undefined);
     return running ? "session-started" : "resume-required";
   }
 
@@ -124,6 +130,7 @@ export class NavigationRecoveryController {
       this.deps.driver.stop(),
       this.deps.stopAudio(),
       this.deps.clearAlerts(),
+      this.deps.clearSurface?.(),
     ]);
   }
 }

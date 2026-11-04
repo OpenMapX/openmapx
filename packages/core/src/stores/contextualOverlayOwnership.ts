@@ -1,5 +1,5 @@
 import type { OverlayId, OverlaySnapshotEntry } from "./overlayRegistry";
-import { restoreOverlaySnapshot, runOverlayTransaction } from "./overlayRegistry";
+import { getOverlayEntry, restoreOverlaySnapshot, runOverlayTransaction } from "./overlayRegistry";
 
 export interface ContextualOverlayOwnership {
   /**
@@ -30,8 +30,31 @@ export interface ContextualOverlayOwnership {
 }
 
 interface HeldOverlay {
+  overlayId: OverlayId;
   owners: Set<string>;
   snapshot: OverlaySnapshotEntry[];
+}
+
+/** Every overlay any tracker currently holds, across all tracker instances. */
+const heldByAnyTracker = new Set<HeldOverlay>();
+
+/**
+ * True while `overlayId` is open only because contextual automation opened it:
+ * a tracker holds it, it was closed before that tracker's claim, and nothing
+ * else (a user toggle, a deep link) has written to it since. This is exactly
+ * the state the tracker's release would undo, so it is not a choice anyone
+ * made and must not be persisted as one — a URL that carried it would bring it
+ * back after a reload as a user selection that no release ever closes.
+ */
+export function isOverlayOpenOnlyByContext(overlayId: OverlayId): boolean {
+  const state = getOverlayEntry(overlayId)?.getState();
+  if (!state?.panelOpen) return false;
+  for (const held of heldByAnyTracker) {
+    if (held.overlayId !== overlayId) continue;
+    const before = held.snapshot.find((entry) => entry.id === overlayId);
+    if (before && !before.panelOpen && before.userRevision === state.userRevision) return true;
+  }
+  return false;
 }
 
 /**
@@ -59,7 +82,9 @@ export function createContextualOverlayOwnership(sessionOwner: string): Contextu
       { kind: "automation", owner: sessionOwner },
     );
     if (!record) return;
-    held.set(overlayId, { owners: new Set([ownerKey]), snapshot: record.before });
+    const entry: HeldOverlay = { overlayId, owners: new Set([ownerKey]), snapshot: record.before };
+    held.set(overlayId, entry);
+    heldByAnyTracker.add(entry);
   }
 
   function release(overlayId: OverlayId, ownerKey: string): void {
@@ -68,13 +93,17 @@ export function createContextualOverlayOwnership(sessionOwner: string): Contextu
     existing.owners.delete(ownerKey);
     if (existing.owners.size > 0) return;
     held.delete(overlayId);
+    heldByAnyTracker.delete(existing);
     restoreOverlaySnapshot(existing.snapshot);
   }
 
   function releaseAll(): void {
     const snapshots = Array.from(held.values());
     held.clear();
-    for (const entry of snapshots) restoreOverlaySnapshot(entry.snapshot);
+    for (const entry of snapshots) {
+      heldByAnyTracker.delete(entry);
+      restoreOverlaySnapshot(entry.snapshot);
+    }
   }
 
   return { acquire, release, releaseAll };

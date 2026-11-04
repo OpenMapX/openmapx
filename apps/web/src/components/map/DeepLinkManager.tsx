@@ -40,6 +40,7 @@ import {
   getOverlayEntry,
   type IsochroneTravelMode,
   idsFromPrimaryOrCoords,
+  isOverlayOpenOnlyByContext,
   type LngLat,
   type MapLayer,
   OVERLAY_REGISTRY,
@@ -74,6 +75,7 @@ import {
 import { frameBoundsInstant, jumpToView } from "@/lib/cameraFraming";
 import { closePlaceSelection, closeSidebarPanel } from "@/lib/closeSurfaces";
 import {
+  DEEPLINK_OPEN_EVENT,
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
   formatCameraParam,
@@ -252,10 +254,13 @@ function closeOverlay(id: string): void {
   runOverlayTransaction(id, { panelOpen: false }, { kind: "user" });
 }
 
+// An overlay open only because the current trip context switched it on is not
+// part of the link. Written as `ov`, a reload mid-trip would read it back as a
+// user choice (openOverlay above), which the context's end never closes.
 function activeOverlayIds(): string[] {
   return overlayIds().filter((id) => {
     const state = getOverlayState(id);
-    return Boolean(state?.panelOpen && state.layerVisible);
+    return Boolean(state?.panelOpen && state.layerVisible) && !isOverlayOpenOnlyByContext(id);
   });
 }
 
@@ -937,6 +942,7 @@ export function DeepLinkManager() {
     const unsubscribeStores = APP_STATE_STORES.map((store) => store.subscribe(scheduleWrite));
     const unsubscribeHistory = subscribeHistoryRestore(onHistoryRestore);
     map?.on("moveend", scheduleWrite);
+    window.addEventListener(DEEPLINK_OPEN_EVENT, applyFromLocation);
     window.addEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
 
     return () => {
@@ -944,6 +950,7 @@ export function DeepLinkManager() {
       for (const unsubscribe of unsubscribeStores) unsubscribe();
       unsubscribeHistory();
       map?.off("moveend", scheduleWrite);
+      window.removeEventListener(DEEPLINK_OPEN_EVENT, applyFromLocation);
       window.removeEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
     };
   }, [mapReady, mapRef, writeUrl]);

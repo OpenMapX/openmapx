@@ -50,6 +50,11 @@ function invalidate(
 }
 
 describe.each(ADAPTERS)("%s raw-location adapter", (_name, sanitise) => {
+  it("normalizes fractional Core Location clocks before monotonic filtering", () => {
+    const result = sanitise([raw(NOW - 0.75), raw(NOW + 0.25), raw(NOW + 0.75)], NOW, NOW - 1);
+    expect(result.accepted.map((fix) => fix.timestampMs)).toEqual([NOW]);
+    expect(result.rejectedCount).toBe(0);
+  });
   it.each([
     ["zero timestamp", invalidate((location) => ({ ...location, timestamp: 0 }))],
     ["NaN timestamp", invalidate((location) => ({ ...location, timestamp: Number.NaN }))],

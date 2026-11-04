@@ -2,6 +2,10 @@ import { getNavigationAudio } from "../audio/navigationAudioModule";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { profileFor } from "../location/profiles";
 import { getSharedCoordinatorCore } from "../navigation/createCoordinator";
+import {
+  clearNavigationSurface,
+  reconcileNavigationSurface,
+} from "../navigation/surfaces/createSurfacePort";
 import { ExpoNotificationScheduler } from "../notifications/ExpoNotificationScheduler";
 import { NavigationRecoveryController } from "./NavigationRecoveryController";
 
@@ -33,6 +37,8 @@ export async function createNavigationRecoveryController(
       stop: () => driver.stop(),
     },
     stopAudio: () => audio.stop(),
+    clearSurface: clearNavigationSurface,
+    reconcileSurface: () => reconcileNavigationSurface(repository, environment.isAppActive()),
     // Reconciliation with an empty desired set cancels only identifiers owned
     // by OpenMapX, including alerts whose DB rows were removed transactionally.
     clearAlerts: async () => {

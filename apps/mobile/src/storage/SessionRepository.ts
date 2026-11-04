@@ -56,6 +56,7 @@ import {
  * process recreation these records exist to tolerate.
  */
 export type SessionEffect =
+  | { kind: "reconcile-surface" }
   | { kind: "start-location"; permissionMode: "background" | "foreground-only" }
   | { kind: "stop-location" }
   | { kind: "update-location-profile"; profile: string }
@@ -66,8 +67,7 @@ export type SessionEffect =
   | { kind: "publish-snapshot"; immediate: boolean }
   | { kind: "publish-event"; eventId: string }
   | { kind: "request-reroute"; requestId: string }
-  | { kind: "request-transit-refresh"; requestId: string }
-  | { kind: "request-transit-replan"; requestId: string };
+  | { kind: "request-transit-refresh"; requestId: string };
 
 export interface OutboxEvent {
   eventId: string;
@@ -314,6 +314,7 @@ export class SessionRepository {
             { kind: "stop-location" },
             { kind: "stop-audio" },
             { kind: "cancel-session-alerts", sessionId },
+            { kind: "reconcile-surface" },
           ]
         : [],
     };

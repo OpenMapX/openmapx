@@ -1,6 +1,11 @@
 import type { TransitStep } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { composeWalkInstruction, walkLegStepProgress, walkStepInfo } from "./transitWalk";
+import {
+  composeWalkInstruction,
+  transitWalkVoiceCue,
+  walkLegStepProgress,
+  walkStepInfo,
+} from "./transitWalk";
 
 // Minimal fake translator mirroring the ICU templates used in the catalog.
 const fakeT = (key: string, values?: Record<string, string | number>): string => {
@@ -106,4 +111,13 @@ describe("walkLegStepProgress", () => {
       distanceToNextStepMeters: 0,
     });
   });
+});
+
+it("keeps a distant walking turn quiet, then announces it at walking distances", () => {
+  const turn = step({ instruction: "LEFT", distanceMeters: 500 });
+  expect(transitWalkVoiceCue(turn, 0, 400, 1.4, "Turn left", [])).toBeNull();
+  const cue = transitWalkVoiceCue(turn, 0, 100, 1.4, "Turn left", []);
+  expect(cue?.tier).toBe("far");
+  if (!cue) throw Error("Expected a walking cue");
+  expect(transitWalkVoiceCue(turn, 0, 100, 1.4, "Turn left", [cue.key])).toBeNull();
 });

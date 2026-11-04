@@ -10,6 +10,7 @@ import { connectionRisk } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { liveArrivalDelayMs } from "./TransitNavBottomBar";
 
 /** Earliest alternative departure that leaves after `notBeforeMs`, or null. */
@@ -40,7 +41,8 @@ export function TransitConnectionRisk({
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
-  const { data: journey } = useVehicleJourney(leg.tripId ?? null);
+  const { browserAuthority } = useMobileRuntime();
+  const { data: journey } = useVehicleJourney(browserAuthority ? (leg.tripId ?? null) : null);
 
   const nextLeg = transfer.nextLeg;
   const arrivalMs =

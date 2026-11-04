@@ -95,7 +95,6 @@ describe("TransitNavigationProcessor.replace", () => {
     // describes.
     const busy = session();
     busy.payload.refresh = { status: "in-flight", generation: 4, requestId: "r1", attempts: 1 };
-    busy.payload.replan = { status: "in-flight", generation: 2, requestId: "p1", attempts: 1 };
 
     const next = (
       processor().replace(busy, replacement(), NOW) as {
@@ -104,9 +103,7 @@ describe("TransitNavigationProcessor.replace", () => {
     ).session;
 
     expect(next.payload.refresh.generation).toBe(5);
-    expect(next.payload.replan.generation).toBe(3);
     expect(next.payload.refresh.status).toBe("ready");
-    expect(next.payload.replan.status).toBe("idle");
   });
 
   it("cancels superseded alerts before scheduling anything new", () => {
@@ -171,18 +168,17 @@ describe("TransitNavigationProcessor.replace", () => {
 });
 
 describe("TransitNavigationProcessor.onConnectivityRestored", () => {
-  it("replans before refreshing, because the plan itself is wrong", () => {
+  it("refreshes live data without replanning a selected journey", () => {
     // Refreshing times on a trip the rider can no longer make would only make
     // the wrong plan look current.
     const stranded = session();
-    stranded.payload.replan = { status: "unavailable", generation: 1, attempts: 2 };
     stranded.payload.refresh = { status: "stale", generation: 3, attempts: 0 };
 
     return processor()
       .onConnectivityRestored(stranded, NOW)
       .then((mutation) => {
         expect(mutation?.effects).toEqual([
-          { kind: "request-transit-replan", requestId: expect.any(String) },
+          { kind: "request-transit-refresh", requestId: expect.any(String) },
         ]);
       });
   });
@@ -229,37 +225,21 @@ describe("TransitNavigationProcessor.onConnectivityRestored", () => {
 });
 
 describe("TransitNavigationProcessor.processFixes", () => {
-  it("records a replan intent rather than performing one", () => {
+  it("keeps the selected journey after a departure timeout", () => {
     const missed = session();
     missed.payload.tickState.currentLegIndex = 1;
     missed.payload.tickState.phase = "waiting-to-board";
-
-    // Long past the leg's departure, so the engine reports a missed connection.
     const mutation = processor().processFixes(
       missed,
       [],
       new Date("2026-08-09T09:30:00Z").getTime(),
     );
-    const next = mutation.session as TransitMobileSession;
-
-    if (next.payload.replan.status === "pending") {
-      expect(mutation.effects).toContainEqual({
-        kind: "request-transit-replan",
-        requestId: next.payload.replan.requestId,
-      });
-    } else {
-      expect((mutation.effects ?? []).some((e) => e.kind === "request-transit-replan")).toBe(false);
-    }
-  });
-
-  it("does not start a second replan while one is in flight", () => {
-    const busy = session();
-    busy.payload.replan = { status: "in-flight", generation: 1, requestId: "p1", attempts: 0 };
-    busy.payload.tickState.currentLegIndex = 1;
-    busy.payload.tickState.phase = "waiting-to-board";
-
-    const mutation = processor().processFixes(busy, [], new Date("2026-08-09T09:30:00Z").getTime());
-
-    expect((mutation.effects ?? []).some((e) => e.kind === "request-transit-replan")).toBe(false);
+    expect(
+      (mutation.session as TransitMobileSession).payload.startPackage.itineraryFingerprint,
+    ).toBe(missed.payload.startPackage.itineraryFingerprint);
+    expect((mutation.session as TransitMobileSession).payload.tickState.phase).toBe(
+      "waiting-to-board",
+    );
+    expect((mutation.effects ?? []).every((e) => e.kind !== "request-reroute")).toBe(true);
   });
 });

@@ -20,7 +20,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { NAV_CHROME_INSET, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import {
   useMobilePanelClearance,
@@ -217,9 +217,9 @@ export function GroundNavigationChrome({ coverage }: Props) {
               flexDirection: "column",
               gap: 1,
               p: 2,
-              // Match the 16px (`p: 2`) side inset below the safe-area top so the
-              // banner's gap to the top equals its gap to the sides.
-              pt: `calc(var(--omx-safe-top) + ${NAV_CHROME_INSET}px)`,
+              // The 16px (`p: 2`) side inset at the top of a browser tab; under
+              // a status bar the banner sits closer, as the search bar does.
+              pt: NAV_CHROME_TOP,
               // On wide screens keep the banner in a left-hand column instead of
               // stretching across the whole top edge (maxWidth adds back the 16px
               // horizontal padding so the card itself is LANDSCAPE_PANEL_WIDTH).

@@ -101,7 +101,7 @@ export function computeAlightAlert(
   if (session.status !== "active" && session.status !== "preparing") return null;
 
   const { tickState } = session.payload;
-  if (tickState.phase === "arrived") return null;
+  if (tickState.phase !== "riding") return null;
 
   const legIndex = tickState.currentLegIndex;
   const leg = legsOf(session)[legIndex];

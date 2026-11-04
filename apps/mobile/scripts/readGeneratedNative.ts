@@ -39,7 +39,16 @@ function iosAppDirectory(mobileRoot: string): string {
   }
   const candidates = readdirSync(iosRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.endsWith(".xcodeproj"))
-    .filter((entry) => existsSync(join(iosRoot, entry.name, "Info.plist")));
+    .filter((entry) => existsSync(join(iosRoot, entry.name, "Info.plist")))
+    // The generated WidgetKit extension has its own Info.plist but is not
+    // another containing application.
+    .filter((entry) => {
+      const info = plist.parse(readText(join(iosRoot, entry.name, "Info.plist"))) as Record<
+        string,
+        unknown
+      >;
+      return !("NSExtension" in info);
+    });
   if (candidates.length !== 1) {
     throw new MissingGeneratedProjectError(
       `expected exactly one generated iOS app directory, found ${candidates.length}`,
@@ -113,6 +122,9 @@ export async function readGeneratedNativeSurface(
   return {
     infoPlist,
     entitlements,
+    navigationExtension: plist.parse(
+      readText(join(mobileRoot, "ios/OpenMapXNavigationSurface/Info.plist")),
+    ) as Record<string, unknown>,
     pbxproj: readText(iosProjectFile(mobileRoot)),
     podfileProperties: JSON.parse(readText(join(mobileRoot, "ios/Podfile.properties.json"))),
     androidManifest,

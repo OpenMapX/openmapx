@@ -181,7 +181,6 @@ function buildHarness(
           );
         },
         transitRefresh: async () => undefined,
-        transitReplan: async () => undefined,
       },
       diagnostics: { record: () => undefined },
     }),

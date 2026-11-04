@@ -14,17 +14,22 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { useMapObstructionExtent } from "@/lib/mapObstructions";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
+import { useTransitFollowCamera } from "@/lib/navigation/useTransitFollowCamera";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
+import { useTransitWalkRepair } from "@/lib/navigation/useTransitWalkRepair";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { TransitAlertBanner } from "./TransitAlertBanner";
+import { TransitAlternativesDialog } from "./TransitAlternativesDialog";
 import { TransitArrivalCard } from "./TransitArrivalCard";
 import { TransitConnectionRisk } from "./TransitConnectionRisk";
+import { TransitJourneyControls } from "./TransitJourneyControls";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
@@ -55,6 +60,8 @@ export function TransitNavigationView() {
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const { browserAuthority } = useMobileRuntime();
   const { completeArrival } = useNavigationMutations();
+  const walkRepair = useTransitWalkRepair();
+  useTransitFollowCamera();
   const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
@@ -62,12 +69,14 @@ export function TransitNavigationView() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
+  const [alternativesOpen, setAlternativesOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // This view is mounted for the whole session and renders nothing until a
   // transit trip runs, so an idle mount must not reserve the column either.
+  const bannerClearance = useMapObstructionExtent("transit-nav-banner");
   const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
   useNavChromeObstructions("transit", { isMobile, arrived: !active || !itinerary, bannerEl });
 
@@ -147,6 +156,10 @@ export function TransitNavigationView() {
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
         >
           <TransitArrivalCard itinerary={itinerary} onClose={() => void completeArrival()} />
+          <TransitJourneyControls
+            walkRepair={walkRepair}
+            onAlternatives={() => setAlternativesOpen(true)}
+          />
         </Box>
       ) : (
         <>
@@ -158,9 +171,8 @@ export function TransitNavigationView() {
               flexDirection: "column",
               gap: 1,
               p: 2,
-              // Match the driving banner's inset below the safe-area top so the
-              // gap to the top equals the gap to the sides.
-              pt: "calc(var(--omx-safe-top) + 16px)",
+              // Same top as the driving banner.
+              pt: NAV_CHROME_TOP,
               // On wide screens keep the chrome in a left-hand column (like the
               // driving view) so the map stays clear on the right.
               ...(isMobile
@@ -187,7 +199,6 @@ export function TransitNavigationView() {
                   leg={currentLeg}
                   source={itinerary.source ?? itinerary.instance}
                   legIndex={currentLegIndex}
-                  totalLegs={legs.length}
                   transitProgress={transitProgress}
                   transfer={transfer}
                 />
@@ -214,9 +225,18 @@ export function TransitNavigationView() {
           >
             {isMobile ? (
               <NavSwipeSheet
+                topClearance={bannerClearance}
                 expanded={sheetOpen}
                 onExpandedChange={setSheetOpen}
-                header={<TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />}
+                header={
+                  <>
+                    <TransitJourneyControls
+                      walkRepair={walkRepair}
+                      onAlternatives={() => setAlternativesOpen(true)}
+                    />
+                    <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
+                  </>
+                }
               >
                 <TransitJourneySheet
                   itinerary={itinerary}
@@ -249,6 +269,10 @@ export function TransitNavigationView() {
                 }}
               >
                 <Box sx={{ flexShrink: 0 }}>
+                  <TransitJourneyControls
+                    walkRepair={walkRepair}
+                    onAlternatives={() => setAlternativesOpen(true)}
+                  />
                   <TransitNavBottomBar
                     itinerary={itinerary}
                     currentLeg={currentLeg}
@@ -273,6 +297,10 @@ export function TransitNavigationView() {
           </Box>
         </>
       )}
+      <TransitAlternativesDialog
+        open={alternativesOpen}
+        onClose={() => setAlternativesOpen(false)}
+      />
       <NavigationSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Box>
   );

@@ -20,8 +20,10 @@ import type {
   NavigationCoordinator,
 } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
+import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
 import { alightAlertCopy } from "./transit/alightAlertCopy";
 import { createAlertPort } from "./transit/createAlertPort";
+import { TransitRefreshService } from "./transit/TransitRefreshService";
 
 /**
  * Native navigation as the visible app runs it.
@@ -132,6 +134,9 @@ export async function createForegroundNavigation(
     // The page's one-shot requests ride the same command path.
     auxiliary: options.auxiliary,
     ports: {
+      reconcileSurface: async () => {
+        if (repositoryRef) await reconcileNavigationSurface(repositoryRef);
+      },
       driver: {
         start: async () => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
@@ -187,7 +192,6 @@ export async function createForegroundNavigation(
       remote: {
         reroute: async (requestId) => remote?.port.reroute(requestId),
         transitRefresh: async (requestId) => remote?.port.transitRefresh(requestId),
-        transitReplan: async (requestId) => remote?.port.transitReplan(requestId),
       },
       diagnostics: { record },
     },
@@ -199,6 +203,7 @@ export async function createForegroundNavigation(
   diagnosticsRef = new DiagnosticRepository(repository);
   const publish = createPublishPort({
     repository,
+    reconcileSurface: () => reconcileNavigationSurface(repository),
     send: (type, payload) => {
       const outcome = options.send(type, payload);
       return outcome === "sent" || outcome === "queued";
@@ -208,6 +213,8 @@ export async function createForegroundNavigation(
   remote = createRemoteWork({
     repository,
     reroute: rerouteService,
+    transitRefresh: new TransitRefreshService({ apiOrigin: options.apiOrigin, now }),
+    applyTransitRefresh: (outcome) => coordinator.applyTransitRefresh(outcome),
     applyReroute: (outcome) => coordinatorRef?.applyReroute(outcome) ?? Promise.resolve(),
     now,
     diagnostics: { record },
@@ -220,6 +227,7 @@ export async function createForegroundNavigation(
     capabilities: () => ({
       groundNavigation: true,
       transitNavigation: true,
+      transitActions: true,
       backgroundLocation: true,
       localNotifications: notificationsGranted,
       speech: isNavigationAudioAvailable(),

@@ -107,7 +107,6 @@ async function harness(
       remote: {
         reroute: fail("remote.reroute"),
         transitRefresh: fail("remote.transitRefresh"),
-        transitReplan: fail("remote.transitReplan"),
       },
       diagnostics: { record: () => undefined },
     }),
@@ -928,5 +927,71 @@ describe("NavigationCoordinator reroute answers", () => {
 
     expect(await context.repository.loadActive(NOW)).toBeNull();
     await context.close();
+  });
+});
+
+describe("native rider action authority", () => {
+  it.each(["walking", "waiting-to-board"] as const)(
+    "commits against journey identity despite intervening revisions/phase %s, and deduplicates retries",
+    async (phase) => {
+      const context = await harness();
+      const { TransitNavigationProcessor } = require("./transit/TransitNavigationProcessor");
+      const { transitSessionFixture } = require("./transit/testing/transitFixture");
+      context.deps.processors.register(new TransitNavigationProcessor());
+      const s = transitSessionFixture({ revision: 9 });
+      if (phase === "waiting-to-board") {
+        s.payload.tickState.currentLegIndex = 1;
+        s.payload.tickState.phase = phase;
+      }
+      await context.repository.createPreparing(s);
+      const payload = {
+        actionId: "board-1",
+        itineraryFingerprint: s.payload.startPackage.itineraryFingerprint,
+        expectedPhase: "walking",
+        type: "board",
+        legIndex: 1,
+      };
+      const response = await context.coordinator.dispatch(
+        cmd("transit.action", payload, { sessionId: s.sessionId, revision: 1 }),
+      );
+      expect(code(response)).toBe("snapshot.update");
+      const saved = await context.repository.loadActive(NOW);
+      expect(saved?.kind === "transit" && saved.payload.tickState.phase).toBe("riding");
+      expect(saved?.revision).toBe(10);
+      const duplicate = await context.coordinator.dispatch(
+        cmd("transit.action", payload, { sessionId: s.sessionId }),
+      );
+      expect(code(duplicate)).toBe("snapshot.update");
+      expect((await context.repository.loadActive(NOW))?.revision).toBe(10);
+      const wrong = await context.coordinator.dispatch(
+        cmd(
+          "transit.action",
+          { ...payload, actionId: "wrong", itineraryFingerprint: "other" },
+          { sessionId: s.sessionId },
+        ),
+      );
+      expect(code(wrong)).toBe("revision-conflict");
+      await context.close();
+    },
+  );
+});
+
+describe("native surface stop", () => {
+  it("uses durable teardown and emits an unsolicited matching stopped event", async () => {
+    const h = await harness();
+    try {
+      await h.repository.createPreparing(groundSessionFixture({ status: "active" }));
+      expect(await h.coordinator.stopFromSurface("old-session")).toBe(false);
+      expect((await h.repository.loadActive(NOW))?.sessionId).toBe("session-1");
+      expect(await h.coordinator.stopFromSurface("session-1")).toBe(true);
+      expect(await h.repository.loadActive(NOW)).toBeNull();
+      expect(
+        h.sent.some((m) => m.type === "session.stopped" && !("forMessageId" in m.options)),
+      ).toBe(true);
+      expect(h.effectLog).toContain("driver.stop");
+      expect(await h.coordinator.stopFromSurface("session-1")).toBe(false);
+    } finally {
+      await h.close();
+    }
   });
 });

@@ -338,6 +338,8 @@ export interface TransitPlace extends ContributingRecord {
 }
 
 export interface TransitStep extends ContributingRecord {
+  /** Localized instruction supplied by a repaired ground walking route. */
+  instructionText?: string;
   /** Stable MOTIS direction code; presentation layers localize it. */
   instruction: string;
   streetName?: string;

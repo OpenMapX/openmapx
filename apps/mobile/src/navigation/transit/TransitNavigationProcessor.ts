@@ -1,9 +1,16 @@
-import type {
-  FixInput,
-  TransitMobileSession,
-  TransitNavigationStartPackage,
+import {
+  type FixInput,
+  freshTransitTickState,
+  prepareTransitProgress,
+  type Route,
+  repairTransitWalk,
+  type TransitMobileSession,
+  type TransitNavigationStartPackage,
+  type TransitRiderAction,
+  transitProgressFromTick,
 } from "@openmapx/core/navigation";
 import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
+import { onRefreshRequested, shouldRefresh } from "./refreshState";
 import { processTransitBatch, TransitItineraryCache } from "./transitBatch";
 import { createTransitPreparingSession, validateTransitStartPackage } from "./transitSession";
 
@@ -22,7 +29,7 @@ import { createTransitPreparingSession, validateTransitStartPackage } from "./tr
  */
 export class TransitNavigationProcessor implements NavigationProcessor<"transit"> {
   readonly kind = "transit" as const;
-  // A timetable keeps the leg honest while the rider is underground.
+  // Wake-ups update freshness while retaining physical leg ownership.
   readonly needsScheduleTicks = true;
 
   private readonly cache = new TransitItineraryCache();
@@ -50,35 +57,94 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     nowMs: number,
   ): ProcessorMutation {
     const outcome = processTransitBatch({ session, fixes, nowMs, cache: this.cache });
-    const { arrived, needsReplan, events, ...mutation } = outcome;
+    const { arrived, needsReplan: _needsReplan, events, ...mutation } = outcome;
     void events;
 
-    if (!needsReplan || arrived) return mutation;
+    const next = mutation.session as TransitMobileSession;
+    const refresh = next.payload.refresh;
+    if (refresh.status === "in-flight" && nowMs >= (refresh.nextAttemptAtMs ?? Infinity)) {
+      next.payload.refresh = { ...refresh, status: "broken" };
+    } else if (
+      !arrived &&
+      shouldRefresh({
+        runtime: refresh,
+        hasToken: !!next.payload.refreshToken,
+        connectivity: next.connectivity,
+        status: next.status,
+        nowMs,
+      }).refresh
+    ) {
+      const requestId = `${next.sessionId}:refresh:${refresh.generation + 1}`;
+      next.payload.refresh = onRefreshRequested(refresh, requestId, nowMs);
+      mutation.effects = [
+        ...(mutation.effects ?? []),
+        { kind: "request-transit-refresh", requestId },
+      ];
+    }
+    return mutation;
+  }
 
-    // The engine wants a replacement itinerary. Recording the intent is all that
-    // happens here: the plan request is network work, and holding the
-    // coordinator's queue open for it would stall every later fix.
-    const advanced = mutation.session as TransitMobileSession;
-    if (advanced.payload.replan.status === "in-flight") return mutation;
-
-    const generation = advanced.payload.replan.generation + 1;
-    const requestId = `${session.sessionId}:replan:${generation}`;
+  repairTransitWalk(
+    session: TransitMobileSession,
+    legIndex: number,
+    route: Route,
+    nowMs: number,
+  ): ProcessorMutation | { ok: false; code: string } {
+    if (
+      session.payload.tickState.currentLegIndex !== legIndex ||
+      session.payload.tickState.phase !== "walking"
+    )
+      return { ok: false, code: "invalid-state" };
+    const itinerary = repairTransitWalk(
+      session.payload.startPackage.itinerary as never,
+      legIndex,
+      route,
+    );
+    if (!itinerary) return { ok: false, code: "invalid-route" };
+    const tickState = {
+      ...session.payload.tickState,
+      currentWalkStepIndex: 0,
+      walkRevision: (session.payload.tickState.walkRevision ?? 0) + 1,
+      reachedStepEnd: false,
+      distanceToNextStepMeters: route.steps[0]?.distance,
+      offPlan: false,
+    };
+    const progress = transitProgressFromTick(
+      {
+        ...tickState,
+        ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+      },
+      prepareTransitProgress(itinerary),
+    );
     return {
-      ...mutation,
       session: {
-        ...advanced,
+        ...session,
+        revision: session.revision + 1,
+        updatedAtMs: nowMs,
         payload: {
-          ...advanced.payload,
-          replan: {
-            status: "pending",
-            requestId,
-            generation,
-            attempts: advanced.payload.replan.attempts,
-          },
+          ...session.payload,
+          navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
+          startPackage: { ...session.payload.startPackage, itinerary: itinerary as never },
+          tickState,
+          progress: progress as unknown as Record<string, unknown>,
         },
       },
-      effects: [...(mutation.effects ?? []), { kind: "request-transit-replan", requestId }],
+      effects: [{ kind: "publish-snapshot", immediate: true }],
     };
+  }
+
+  transitAction(
+    session: TransitMobileSession,
+    action: TransitRiderAction,
+    nowMs: number,
+  ): ProcessorMutation | { ok: false; code: string } {
+    const mutation = processTransitBatch({ session, fixes: [], nowMs, cache: this.cache, action });
+    if (mutation.actionRejected) return { ok: false, code: "invalid-action" };
+    mutation.effects = [
+      ...(mutation.effects ?? []),
+      { kind: "reconcile-alerts", sessionId: session.sessionId },
+    ];
+    return mutation;
   }
 
   replace(
@@ -103,28 +169,7 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     session: TransitMobileSession,
     nowMs: number,
   ): Promise<ProcessorMutation | null> {
-    const { refresh, replan } = session.payload;
-
-    // A replan the network prevented outranks a refresh: the itinerary itself is
-    // wrong, and refreshing times on a trip the rider can no longer make would
-    // only make the wrong plan look current.
-    if (replan.status === "unavailable" || replan.status === "pending") {
-      const generation = replan.generation + 1;
-      const requestId = `${session.sessionId}:replan:${generation}`;
-      return {
-        session: {
-          ...session,
-          revision: session.revision + 1,
-          updatedAtMs: nowMs,
-          connectivity: "online",
-          payload: {
-            ...session.payload,
-            replan: { status: "pending", requestId, generation, attempts: replan.attempts },
-          },
-        },
-        effects: [{ kind: "request-transit-replan", requestId }],
-      };
-    }
+    const { refresh } = session.payload;
 
     if (refresh.status !== "stale" || !session.payload.refreshToken) return null;
 
@@ -138,7 +183,7 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
         connectivity: "online",
         payload: {
           ...session.payload,
-          refresh: { status: "ready", generation, requestId, attempts: refresh.attempts },
+          refresh: onRefreshRequested(refresh, requestId, nowMs),
         },
       },
       effects: [{ kind: "request-transit-refresh", requestId }],
@@ -167,15 +212,7 @@ export function applyTransitReplacement(
     updatedAtMs: nowMs,
     payload: {
       startPackage: structuredClone(startPackage),
-      tickState: {
-        currentLegIndex: 0,
-        currentWalkStepIndex: 0,
-        phase: "walking",
-        legEnteredAtMs: nowMs,
-        spokenCueIds: [],
-        emittedEventIds: [],
-        scheduleFallback: "inactive",
-      },
+      tickState: freshTransitTickState(nowMs, startPackage.itinerary as never),
       progress: null,
       confidence: "gps",
       refreshToken,
@@ -184,11 +221,6 @@ export function applyTransitReplacement(
       refresh: {
         status: refreshToken ? "ready" : "broken",
         generation: session.payload.refresh.generation + 1,
-        attempts: 0,
-      },
-      replan: {
-        status: "idle",
-        generation: session.payload.replan.generation + 1,
         attempts: 0,
       },
       scheduledAlerts: [],

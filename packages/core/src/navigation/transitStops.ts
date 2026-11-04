@@ -55,6 +55,8 @@ export function sliceJourneyToLeg<T extends { stopId: string }>(
 export interface CapturableLeg {
   /** Present only on transit legs; walking legs have none and are skipped. */
   tripId?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   from?: { stopId?: string };
   to?: { stopId?: string };
 }
@@ -120,11 +122,23 @@ export function captureTransitLegStops(
       return;
     }
 
-    const sliced = sliceJourneyToLeg(
-      journey.filter(hasUsableCoordinates).map((stop) => ({ ...stop })),
+    const valid = journey.filter(hasUsableCoordinates);
+    const from = matchingOccurrence(
+      valid,
       leg.from?.stopId,
+      0,
+      leg.scheduledStartTime,
+      "scheduledDeparture",
+    );
+    const to = matchingOccurrence(
+      valid,
       leg.to?.stopId,
-    ).slice(0, MAX_CAPTURED_STOPS);
+      from + 1,
+      leg.scheduledEndTime,
+      "scheduledArrival",
+    );
+    const sliced =
+      from >= 0 && to > from && to - from < MAX_CAPTURED_STOPS ? valid.slice(from, to + 1) : [];
 
     captures.push({
       legIndex,
@@ -135,4 +149,69 @@ export function captureTransitLegStops(
     });
   });
   return captures;
+}
+
+/** Refresh predictions without changing which stop occurrences the rider is following. */
+export function refreshTransitCaptures(
+  captures: readonly TransitLegCapture[],
+  legs: readonly CapturableLeg[],
+  journeys: Readonly<Record<string, readonly JourneyStopLike[] | undefined>>,
+  nowMs: number,
+): TransitLegCapture[] {
+  const updates = captureTransitLegStops(legs, journeys, nowMs);
+  return captures.map((capture) => {
+    const next = updates.find(
+      (c) =>
+        c.legIndex === capture.legIndex && c.tripId === capture.tripId && c.status === "captured",
+    );
+    if (capture.status === "missing" && next) return next;
+    if (
+      capture.status !== "captured" ||
+      !next ||
+      next.stops.length !== capture.stops.length ||
+      next.stops.some((stop, i) => stop.stopId !== capture.stops[i].stopId)
+    )
+      return capture;
+    return {
+      ...capture,
+      capturedAtMs: nowMs,
+      stops: capture.stops.map((stop, i) => {
+        const {
+          expectedArrival: _arrival,
+          expectedDeparture: _departure,
+          platform: _platform,
+          canceled: _cancelled,
+          departed: _departed,
+          ...stable
+        } = stop;
+        const fresh = next.stops[i];
+        return {
+          ...stable,
+          expectedArrival: fresh.expectedArrival,
+          expectedDeparture: fresh.expectedDeparture,
+          platform: fresh.platform ?? stop.scheduledPlatform,
+          scheduledPlatform: fresh.scheduledPlatform ?? stop.scheduledPlatform,
+          canceled: fresh.canceled,
+          departed: fresh.departed,
+        };
+      }),
+    };
+  });
+}
+
+/** Scheduled timestamps identify a particular visit on loop services; predictions never choose it. */
+function matchingOccurrence(
+  stops: JourneyStopLike[],
+  id: string | undefined,
+  start: number,
+  time: string | undefined,
+  field: "scheduledDeparture" | "scheduledArrival",
+): number {
+  const candidates = stops.flatMap((stop, i) => (i >= start && stop.stopId === id ? [i] : []));
+  if (candidates.length < 2 || !time || !Number.isFinite(Date.parse(time)))
+    return candidates[0] ?? -1;
+  const timestamp = Date.parse(time);
+  const exact = candidates.find((i) => Date.parse(stops[i][field] ?? "") === timestamp);
+  // Ambiguous occurrence identity is unavailable, rather than a different lap.
+  return exact ?? -1;
 }

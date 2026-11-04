@@ -25,7 +25,7 @@ import {
  *    tracking indefinitely.
  */
 
-export const MOBILE_NAVIGATION_SESSION_SCHEMA_VERSION = 1 as const;
+export const MOBILE_NAVIGATION_SESSION_SCHEMA_VERSION = 2 as const;
 export const MOBILE_NAVIGATION_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Cap on each cue/event ledger, trimmed oldest-first. */
 export const MOBILE_SESSION_LEDGER_LIMIT = 512;
@@ -115,21 +115,52 @@ const transitTickStateSchema = z
   .object({
     currentLegIndex: z.number().int().nonnegative().max(512),
     currentWalkStepIndex: z.number().int().nonnegative().max(10_000),
+    walkRevision: safeInteger.optional(),
     phase: z.enum(["walking", "waiting-to-board", "riding", "transferring", "arrived"]),
     lastAcceptedFix: fixSchema.optional(),
     lastProgressAtMs: safeInteger.optional(),
     legEnteredAtMs: safeInteger,
-    recoveryUntilMs: safeInteger.optional(),
+    stopCursor: z.number().int().min(0).max(2000).optional(),
+    alongMeters: z.number().finite().nonnegative().optional(),
+    stopTracking: z
+      .object({
+        alongTimestampMs: safeInteger.optional(),
+        candidateAlongMeters: z.number().finite().nonnegative().optional(),
+        candidateTimestampMs: safeInteger.optional(),
+      })
+      .strict()
+      .optional(),
+    reachedStepEnd: z.boolean().optional(),
+    distanceToNextStepMeters: z.number().finite().nonnegative().optional(),
+    progressConfidence: z.enum(["gps", "uncertain", "stale"]).optional(),
+    offPlan: z.boolean().optional(),
+    lastActionId: boundedId.optional(),
+    lastAction: z
+      .object({
+        type: z.enum(["board", "alight", "continue"]),
+        legIndex: safeInteger,
+        atMs: safeInteger,
+        previous: z
+          .object({
+            currentLegIndex: safeInteger,
+            phase: z.enum(["walking", "waiting-to-board", "riding", "transferring", "arrived"]),
+            currentWalkStepIndex: safeInteger,
+            stopCursor: z.number().int().min(0).max(2000),
+            alongMeters: z.number().finite().nonnegative(),
+          })
+          .strict(),
+      })
+      .strict()
+      .optional(),
     spokenCueIds: z.array(boundedId).max(MOBILE_SESSION_LEDGER_LIMIT),
     emittedEventIds: z.array(boundedId).max(MOBILE_SESSION_LEDGER_LIMIT),
-    scheduleFallback: z.enum(["inactive", "eligible", "active"]),
-    replanRequestedForLeg: z.number().int().nonnegative().max(512).optional(),
   })
   .strict();
 
 const transitPayloadSchema = z
   .object({
     startPackage: transitStartPackageSchema,
+    navigationDataRevision: safeInteger.optional(),
     tickState: transitTickStateSchema,
     progress: z.record(z.string(), z.unknown()).nullable(),
     confidence: z.enum(["gps", "schedule", "stale"]),
@@ -145,15 +176,6 @@ const transitPayloadSchema = z
         requestId: boundedId.optional(),
         nextAttemptAtMs: safeInteger.optional(),
         attempts: z.number().int().nonnegative().max(64).default(0),
-      })
-      .strict(),
-    replan: z
-      .object({
-        status: z.enum(["idle", "pending", "in-flight", "unavailable", "failed"]),
-        requestId: boundedId.optional(),
-        generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        attempts: z.number().int().nonnegative().max(64).default(0),
-        nextAttemptAtMs: safeInteger.optional(),
       })
       .strict(),
     scheduledAlerts: z

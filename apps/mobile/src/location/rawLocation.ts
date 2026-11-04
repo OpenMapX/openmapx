@@ -30,6 +30,10 @@ function toCanonicalFix(raw: RawLocation, nowMs: number): CanonicalLocationFix |
   if (!raw || typeof raw !== "object") return null;
   const { timestamp, coords } = raw;
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  // Core Location can supply fractional milliseconds. Durable session clocks
+  // are safe integer epoch milliseconds, including speed-estimator state.
+  const timestampMs = Math.trunc(timestamp);
+  if (!Number.isSafeInteger(timestampMs) || timestampMs <= 0) return null;
   if (timestamp < nowMs - MAX_FIX_AGE_MS) return null;
   if (timestamp > nowMs + MAX_FIX_SKEW_MS) return null;
   if (!coords || typeof coords !== "object") return null;
@@ -42,7 +46,7 @@ function toCanonicalFix(raw: RawLocation, nowMs: number): CanonicalLocationFix |
   return {
     coords: [longitude, latitude],
     accuracy,
-    timestampMs: timestamp,
+    timestampMs,
     ...(typeof speed === "number" && Number.isFinite(speed) && speed >= 0
       ? { speedMps: speed }
       : {}),

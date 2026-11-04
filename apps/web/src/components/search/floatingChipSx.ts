@@ -1,5 +1,6 @@
 import type { SxProps, Theme } from "@mui/material/styles";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET, topInset } from "@/lib/layout";
 
 /**
  * Shared "floating pill chip" styling used by the map-overlay chip rows
@@ -59,8 +60,9 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
 export const floatingToolbarSx = {
   position: "absolute",
   top: {
-    xs: "calc(72px + var(--omx-safe-top))",
-    sm: "calc(18px + var(--omx-safe-top))",
+    // Below the search bar on a phone; level with its centre beside it.
+    xs: topInset(SEARCH_BAR_INSET, SEARCH_BAR_HEIGHT + SEARCH_BAR_INSET),
+    sm: topInset(SEARCH_BAR_INSET, 6),
   },
   left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
   right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },

@@ -5,8 +5,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { type TransitProgress, useVehicleJourney } from "@openmapx/core";
-import { sliceJourneyToLeg } from "@openmapx/core/navigation";
+import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -48,15 +47,24 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
           <Box
             // biome-ignore lint/suspicious/noArrayIndexKey: stops are ordered by sequence
             key={i}
-            sx={{ display: "flex", gap: 1, alignItems: "stretch", opacity: passed ? 0.5 : 1 }}
+            sx={{ display: "flex", gap: 1, alignItems: "stretch" }}
           >
-            <Box sx={{ width: 52, textAlign: "right", flexShrink: 0, pt: "1px" }}>
+            <Box
+              sx={{
+                width: "5.5em",
+                fontSize: ".75rem",
+                textAlign: "right",
+                flexShrink: 0,
+                pt: "1px",
+              }}
+            >
               <Typography
                 variant="caption"
                 sx={{
                   fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
                   fontWeight: emphasized ? 700 : 400,
-                  color: delayMin > 0 ? "error.main" : "text.primary",
+                  color: delayMin > 0 ? "error.main" : passed ? "text.secondary" : "text.primary",
                 }}
               >
                 {time ? fmt.time(time) : ""}
@@ -110,18 +118,23 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
                 <Typography
                   variant="body2"
-                  noWrap
                   sx={{
+                    overflowWrap: "anywhere",
+                    lineHeight: 1.5,
                     fontWeight: emphasized ? 600 : 400,
                     textDecoration: stop.canceled ? "line-through" : "none",
-                    color: stop.canceled ? "error.main" : "text.primary",
+                    color: stop.canceled
+                      ? "error.main"
+                      : passed
+                        ? "text.secondary"
+                        : "text.primary",
                   }}
                 >
                   {stop.name}
                 </Typography>
                 {stop.alerts && stop.alerts.length > 0 && (
                   <Tooltip title={stop.alerts[0].title} placement="top" arrow>
-                    <WarningAmberIcon sx={{ fontSize: 15, color: "#E65100", flexShrink: 0 }} />
+                    <WarningAmberIcon sx={{ fontSize: 15, color: "warning.main", flexShrink: 0 }} />
                   </Tooltip>
                 )}
               </Box>
@@ -151,8 +164,11 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
-      <Box sx={{ width: 52, textAlign: "right", flexShrink: 0 }}>
-        <Typography variant="caption" sx={{ fontVariantNumeric: "tabular-nums" }}>
+      <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
+        <Typography
+          variant="caption"
+          sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
+        >
           {leg.startTime ? fmt.time(leg.startTime) : ""}
         </Typography>
       </Box>
@@ -201,7 +217,7 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
 export function TransitJourneySheet({
   itinerary,
   currentLegIndex,
-  transitProgress: _transitProgress,
+  transitProgress,
   scroll = true,
   showQueryNotice = true,
 }: {
@@ -227,13 +243,13 @@ export function TransitJourneySheet({
     browserAuthority && isTransitLeg ? (currentLeg?.tripId ?? null) : null,
   );
 
-  const { data: journey } = journeyQuery;
-  const legStops = journey?.stops
-    ? sliceJourneyToLeg(journey.stops, currentLeg?.from.stopId, currentLeg?.to.stopId)
-    : [];
-  // Next stop = first one the vehicle has not yet departed; clamp to the alight.
-  const firstUpcoming = legStops.findIndex((s) => !s.departed);
-  const nextIdx = firstUpcoming === -1 ? Math.max(0, legStops.length - 1) : firstUpcoming;
+  const captures = useNavigationStore((s) => s.transitCaptures);
+  const capture = captures.find(
+    (c) =>
+      c.legIndex === currentLegIndex && c.tripId === currentLeg?.tripId && c.status === "captured",
+  );
+  const legStops = (capture?.stops ?? []) as VehicleJourneyStop[];
+  const nextIdx = transitProgress?.phase === "riding" ? (transitProgress.stopCursor ?? 1) : 0;
 
   const upcomingLegs = legs.slice(currentLegIndex + 1);
 
@@ -277,6 +293,11 @@ export function TransitJourneySheet({
           }
           retrying={journeyQuery.isFetching}
         />
+      )}
+      {isTransitLeg && legStops.length === 0 && (
+        <Typography variant="body2" sx={{ px: 2, py: 1 }}>
+          {t("stopCountUnavailable")}
+        </Typography>
       )}
       {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} />}
       {upcomingLegs.length > 0 && (

@@ -1,6 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { BackHandler, Linking } from "react-native";
+import { Alert, AppState, BackHandler, Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
@@ -43,7 +43,7 @@ jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
 
 /** A composed foreground navigation graph, standing in for the native one. */
 const mockNavigation = {
-  coordinator: { dispatch: jest.fn() },
+  coordinator: { dispatch: jest.fn(), stopFromSurface: jest.fn() },
   capabilities: jest.fn(),
   activeSession: jest.fn(),
   dispose: jest.fn(),
@@ -93,6 +93,7 @@ beforeEach(async () => {
   mockWebViewProps = {};
   mockInjectedScripts = [];
   jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+  jest.spyOn(Linking, "getInitialURL").mockResolvedValue(null);
   mockRecoveryController.reconcile.mockResolvedValue("session-ended");
   mockRecoveryController.resume.mockResolvedValue("session-started");
   mockRecoveryController.end.mockResolvedValue("session-ended");
@@ -100,6 +101,8 @@ beforeEach(async () => {
   // graph fails to compose, as it would on a device missing one of them.
   mockCreateForegroundNavigation.mockReset();
   mockCreateForegroundNavigation.mockRejectedValue(new Error("no native modules"));
+  mockNavigation.coordinator.stopFromSurface.mockReset();
+  mockNavigation.coordinator.stopFromSurface.mockResolvedValue(true);
   mockNavigation.coordinator.dispatch.mockReset();
   mockNavigation.coordinator.dispatch.mockResolvedValue(undefined);
   mockNavigation.capabilities.mockReturnValue(NAVIGATION_CAPABILITIES);
@@ -112,6 +115,24 @@ describe("App WebView policy", () => {
     const view = await renderApp();
     expect(view.getByTestId("product-webview")).toBeTruthy();
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("forwards app visibility and reapplies it when a document finishes loading", async () => {
+    let change: ((status: "active" | "background" | "inactive") => void) | undefined;
+    jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
+      if (type === "change") change = handler;
+      return { remove: jest.fn() };
+    });
+    await renderApp();
+    mockInjectedScripts = [];
+    await act(async () => change?.("background"));
+    const hiddenScript = mockInjectedScripts.at(-1);
+    expect(hiddenScript).toContain('"hidden"');
+    mockInjectedScripts = [];
+    await act(async () => (mockWebViewProps.onLoadEnd as () => void)());
+    expect(mockInjectedScripts).toContain(hiddenScript);
+    await act(async () => change?.("active"));
+    expect(mockInjectedScripts.at(-1)).toContain('"visible"');
   });
 
   it("sends Android's Back button into the page's history while it has any", async () => {
@@ -199,6 +220,51 @@ describe("App bridge channel", () => {
       },
     });
   };
+
+  it("delivers an initial geo link only after a successful handshake", async () => {
+    let receiveUrl!: (event: { url: string }) => void;
+    jest.spyOn(Linking, "addEventListener").mockImplementation((_type, handler) => {
+      receiveUrl = handler;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof Linking.addEventListener>;
+    });
+    jest.spyOn(Linking, "getInitialURL").mockResolvedValue("geo:48.137,11.575");
+    await renderApp();
+    expect(decodedMessages().some((m) => m.type === "deep-link.open")).toBe(false);
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "test",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    const intent = decodedMessages().find((m) => m.type === "deep-link.open");
+    expect(intent?.payload?.kind).toBe("map");
+    expect(new URLSearchParams(intent?.payload?.query as string).get("at")).toBe("48.137,11.575");
+    await act(async () => receiveUrl({ url: "geo:52.52,13.405" }));
+    const warm = decodedMessages().filter((m) => m.type === "deep-link.open");
+    expect(warm).toHaveLength(2);
+    expect(new URLSearchParams(warm[1].payload?.query as string).get("at")).toBe("52.52,13.405");
+    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("does not deliver a pending link to an incompatible bridge", async () => {
+    jest.spyOn(Linking, "getInitialURL").mockResolvedValue("geo:48,11");
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "future",
+        minProtocolVersion: MOBILE_PROTOCOL_MAX + 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX + 1,
+      },
+    });
+    expect(decodedMessages().some((m) => m.type === "deep-link.open")).toBe(false);
+  });
 
   it("publishes a channel nonce to the main frame only", async () => {
     await renderApp();
@@ -604,4 +670,65 @@ describe("App WebView protected capabilities", () => {
     expect(mockWebViewProps.setSupportMultipleWindows).toBe(false);
     expect(mockWebViewProps.javaScriptCanOpenWindowsAutomatically).toBe(false);
   });
+});
+
+it("requires native confirmation before ending the exact cold-launch surface owner", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "session-1",
+    revision: 1,
+    kind: "ground",
+  });
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
+  await renderApp();
+  expect(alert).toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  const buttons = alert.mock.calls.at(-1)?.[2];
+  await act(async () => buttons?.find((b) => b.style === "destructive")?.onPress?.());
+  expect(mockNavigation.coordinator.stopFromSurface).toHaveBeenCalledWith("session-1");
+});
+it("does not offer an old End action against a newer session", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "new-session",
+    revision: 1,
+    kind: "ground",
+  });
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=old-session");
+  await renderApp();
+  expect(alert.mock.calls.at(-1)?.[0]).toContain("ended");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+});
+it("explains a surface End action when the navigation layer cannot load", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
+  await renderApp();
+  expect(alert.mock.calls.at(-1)?.[0]).toContain("unavailable");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+});
+it("confirms a warm surface End without waiting for the web bridge", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  let receiveUrl!: (event: { url: string }) => void;
+  jest.spyOn(Linking, "addEventListener").mockImplementation((_type, handler) => {
+    receiveUrl = handler;
+    return { remove: jest.fn() } as unknown as ReturnType<typeof Linking.addEventListener>;
+  });
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "session-1",
+    revision: 1,
+    kind: "ground",
+  });
+  await renderApp();
+  await act(async () => receiveUrl({ url: "openmapx:///navigation/end?sessionId=session-1" }));
+  expect(alert.mock.calls.at(-1)?.[1]).toContain("End this");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
 });

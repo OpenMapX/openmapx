@@ -1,598 +1,381 @@
 import { platformChanged } from "@openmapx/mobility-core/platform";
-import type { TransitStep, TripItinerary } from "@openmapx/mobility-core/transit";
+import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import type { TransitLegCapture } from "./mobileProtocol";
+import { navOptionsForMode } from "./options";
 import { snapPreparedRoute } from "./routeMatcher";
+import { advanceStepGate } from "./stepGate";
 import {
+  isApproachingTransitAlight,
   type PreparedTransitProgress,
   prepareTransitProgress,
-  stopsUntilAlight,
   type TransitPhase,
   type TransitProgress,
 } from "./transitProgress";
 import {
-  defaultStopAreaShape,
   isWithinStopArea,
   resolveTransitLegTargets,
-  stopAreaDistance,
-  stopAreaTolerance,
-  type TransitLegTargets,
   type TransitStopAreaIndex,
 } from "./transitStopAreas";
-import { walkLegStepProgress } from "./transitWalk";
+import { advanceTransitStopCursor, type TransitStopTracking } from "./transitStopCursor";
 import type { FixInput } from "./types";
-
-/**
- * Stateful transit navigation, shared by the browser and the app shell.
- *
- * Picking whichever leg is geometrically closest on every fix is wrong for
- * guidance: a bus that passes near the return leg of a loop would "advance" the
- * traveller two legs and then snap back, the alighting cue would fire in the
- * wrong place, and a rider standing at a stop stays on the walk that led there
- * until the ride's line happens to be nearer.
- *
- * This engine instead holds a position and defends it. It only ever considers
- * the current leg, the next one, and — inside a short recovery window — the
- * previous one. It advances at most one leg per call, and once riding progress
- * is established it never goes backwards. Stops are areas: a walk ends on
- * entering the platform it leads to, a ride on halting anywhere along its
- * arrival platform (see `transitStopAreas`).
- *
- * It is pure: one optional fix, the captured itinerary, prior state, and an
- * explicit `nowMs` in; new state and typed events out. No clock, no network, no
- * storage, no localisation.
- */
 
 export type { TransitPhase };
 export type TransitConfidence = "gps" | "schedule" | "stale";
-
+export type TransitRiderAction = {
+  type: "board" | "alight" | "continue" | "undo";
+  legIndex: number;
+};
 export interface TransitTickState {
   currentLegIndex: number;
   currentWalkStepIndex: number;
+  walkRevision?: number;
   phase: TransitPhase;
   lastAcceptedFix?: FixInput;
   lastProgressAtMs?: number;
   legEnteredAtMs: number;
-  recoveryUntilMs?: number;
   spokenCueIds: string[];
   emittedEventIds: string[];
-  scheduleFallback: "inactive" | "eligible" | "active";
-  replanRequestedForLeg?: number;
+  stopCursor?: number;
+  alongMeters?: number;
+  stopTracking?: TransitStopTracking;
+  reachedStepEnd?: boolean;
+  distanceToNextStepMeters?: number;
+  progressConfidence?: "gps" | "uncertain" | "stale";
+  offPlan?: boolean;
+  lastActionId?: string;
+  lastAction?: {
+    type: "board" | "alight" | "continue";
+    legIndex: number;
+    atMs: number;
+    previous: {
+      currentLegIndex: number;
+      phase: TransitPhase;
+      currentWalkStepIndex: number;
+      stopCursor: number;
+      alongMeters: number;
+    };
+  };
 }
-
 export type TransitNavigationEvent =
-  | { id: string; type: "board"; legIndex: number }
+  | { id: string; type: "board" | "alight" | "missed-connection" | "arrival"; legIndex: number }
   | { id: string; type: "platform-change"; legIndex: number; platform: string }
   | { id: string; type: "approaching-alight"; legIndex: number; stopsRemaining: number }
-  | { id: string; type: "alight"; legIndex: number }
-  | { id: string; type: "transfer"; fromLegIndex: number; toLegIndex: number }
-  | { id: string; type: "missed-connection"; legIndex: number }
-  | { id: string; type: "arrival"; legIndex: number };
-
+  | { id: string; type: "transfer"; fromLegIndex: number; toLegIndex: number };
 export interface TransitTickOptions {
-  /** Stable per-itinerary identity; cue and event ids hang off it. */
   itineraryFingerprint: string;
-  /** Reject fixes worse than this (metres). */
   accuracyCapMeters: number;
-  /** Seconds without an accepted fix before schedule fallback may engage. */
-  scheduleFallbackAfterSeconds: number;
-  /** Grace (seconds) past a leg's scheduled end before fallback advances it. */
-  scheduleFallbackGraceSeconds: number;
 }
-
 export const DEFAULT_TRANSIT_TICK_OPTIONS: Omit<TransitTickOptions, "itineraryFingerprint"> = {
   accuracyCapMeters: 100,
-  scheduleFallbackAfterSeconds: 120,
-  scheduleFallbackGraceSeconds: 120,
 };
-
 export interface TransitTickResult {
   state: TransitTickState;
   events: TransitNavigationEvent[];
   confidence: TransitConfidence;
-  /** True when the engine wants a replacement itinerary; emitted once per leg. */
   needsReplan: boolean;
-  /** Set when the fix was refused, so a caller can record why without guessing. */
-  rejectedReason?: "low-accuracy" | "out-of-order" | "invalid";
+  actionRejected?: boolean;
+  rejectedReason?: "low-accuracy" | "out-of-order" | "invalid" | "stale" | "future" | "coasted";
 }
-
-/* ---------------------------------------------------------------- tuning --- */
-
-/** Fraction of the current leg that counts as "essentially finished". */
-const ADVANCE_FRACTION = 0.85;
-/** Deviation (m) at which the next leg is a plausible match. */
-const NEXT_LEG_DEVIATION_METERS = 120;
-/** Distance (m) from the current leg's endpoint that also allows advancing. */
-const ENDPOINT_PROXIMITY_METERS = 80;
-/** Distance (m) from the board stop below which the traveller is waiting there. */
-const BOARD_STOP_PROXIMITY_METERS = 60;
-/**
- * How far (m) beyond the boarding area a fix must be before a passed departure
- * alone says the rider left on the vehicle — a late bus finds them nearby.
- */
-const DEPARTED_BEYOND_BOARD_AREA_METERS = 25;
-/** Share of a leg that must lie behind before its end area can end it. */
-const END_AREA_MIN_FRACTION = 0.5;
-/** How long after entering a leg a correction back to the previous one is allowed. */
-const RECOVERY_WINDOW_MS = 90_000;
-/** Progress on the new leg beyond which recovery is refused. */
-const RECOVERY_MAX_FRACTION = 0.1;
-/** How much better the previous leg must fit before recovery is accepted (m). */
-const RECOVERY_DEVIATION_MARGIN_METERS = 50;
-/** Stops remaining at which the alighting warning fires. */
-const APPROACHING_ALIGHT_STOPS = 1;
-
-/* --------------------------------------------------------------- helpers --- */
-
-type TransitLegTargetShapes = TransitLegTargets["end"];
-
-export function freshTransitTickState(nowMs: number): TransitTickState {
-  return {
-    currentLegIndex: 0,
-    currentWalkStepIndex: 0,
-    phase: "walking",
-    legEnteredAtMs: nowMs,
-    spokenCueIds: [],
-    emittedEventIds: [],
-    scheduleFallback: "inactive",
-  };
-}
-
-function eventId(
-  fingerprint: string,
-  type: string,
-  legIndex: number,
-  suffix?: string | number,
-): string {
-  // Identity is structural — never a stop name, which can change between
-  // refreshes and would silently re-fire a cue.
-  return suffix === undefined
-    ? `${fingerprint}:${type}:${legIndex}`
-    : `${fingerprint}:${type}:${legIndex}:${suffix}`;
-}
-
-function legAt(itinerary: TripItinerary, index: number) {
-  return (itinerary.legs ?? [])[index];
-}
-
-function isTransitLeg(leg: unknown): boolean {
-  return Boolean((leg as { tripId?: string } | undefined)?.tripId);
-}
-
-function legEndMs(leg: unknown): number {
-  const end = (leg as { endTime?: string } | undefined)?.endTime;
-  const parsed = end ? new Date(end).getTime() : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
-function legStartMs(leg: unknown): number {
-  const start = (leg as { startTime?: string } | undefined)?.startTime;
-  const parsed = start ? new Date(start).getTime() : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
-interface LegMatch {
-  fraction: number;
-  deviationMeters: number;
-  snapped: [number, number];
-}
-
-function matchLeg(
-  prepared: PreparedTransitProgress,
-  legIndex: number,
-  coords: [number, number],
-): LegMatch | null {
-  const leg = prepared.legs[legIndex];
-  if (!leg) return null;
-  const snap = snapPreparedRoute(leg.matcher, coords);
-  const fraction = leg.lengthMeters > 0 ? snap.alongMeters / leg.lengthMeters : 0;
-  return {
-    fraction: Math.max(0, Math.min(1, fraction)),
-    deviationMeters: snap.deviationMeters,
-    snapped: snap.snapped as [number, number],
-  };
-}
-
-function metresBetween(a: [number, number], b: [number, number]): number {
-  const R = 6_371_000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b[1] - a[1]);
-  const dLng = toRad(b[0] - a[0]);
-  const lat1 = toRad(a[1]);
-  const lat2 = toRad(b[1]);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function captureFor(captures: readonly TransitLegCapture[], legIndex: number) {
-  return captures.find((capture) => capture.legIndex === legIndex);
-}
-
-/** Stops still ahead on the ridden leg, from the captured slice. */
-function stopsRemainingOnLeg(
-  captures: readonly TransitLegCapture[],
-  legIndex: number,
-  snapped: [number, number],
-  prepared: PreparedTransitProgress,
-): number | null {
-  const capture = captureFor(captures, legIndex);
-  if (capture?.status !== "captured" || capture.stops.length === 0) return null;
-  const leg = prepared.legs[legIndex];
-  if (!leg) return null;
-  return stopsUntilAlight(leg.matcher, capture.stops, snapped).stopsRemaining;
-}
-
 export interface TransitTickInput {
   itinerary: TripItinerary;
   captures: readonly TransitLegCapture[];
   state: TransitTickState;
-  /** Omitted when the callback delivered no usable fix (tunnel, denied, gap). */
   fix?: FixInput;
+  action?: TransitRiderAction;
   nowMs: number;
   options: TransitTickOptions;
-  /** Reused across ticks; rebuilt transparently after process death. */
   prepared?: PreparedTransitProgress;
-  /** Known shapes of the trip's stops, by stop id; a stop without one is a circle. */
   stopAreas?: TransitStopAreaIndex;
 }
+export function isTransitRide(leg: TripLeg | undefined): boolean {
+  return !!leg && (!!leg.tripId || (!!leg.route && leg.mode !== "walking"));
+}
+export function freshTransitTickState(nowMs: number, itinerary?: TripItinerary): TransitTickState {
+  return {
+    currentLegIndex: 0,
+    currentWalkStepIndex: 0,
+    phase: isTransitRide(itinerary?.legs[0]) ? "waiting-to-board" : "walking",
+    legEnteredAtMs: nowMs,
+    spokenCueIds: [],
+    emittedEventIds: [],
+    stopCursor: 1,
+    alongMeters: 0,
+  };
+}
 
-/**
- * Advances transit navigation by one tick.
- *
- * Called for every accepted location batch *and* for legitimate wake-ups that
- * carried no fix, so schedule fallback can keep the banner honest without an
- * independent background timer.
- */
+/** Physical progress belongs to GPS and rider actions; a timetable never commits it. */
 export function processTransitFix(input: TransitTickInput): TransitTickResult {
-  const { itinerary, captures, nowMs, options } = input;
+  const { itinerary, nowMs, options } = input;
   const legs = itinerary.legs ?? [];
   const prepared = input.prepared ?? prepareTransitProgress(itinerary);
-
   const state: TransitTickState = {
     ...input.state,
     spokenCueIds: [...input.state.spokenCueIds],
     emittedEventIds: [...input.state.emittedEventIds],
   };
   const events: TransitNavigationEvent[] = [];
-  let needsReplan = false;
-
-  const emit = (event: TransitNavigationEvent) => {
-    if (state.emittedEventIds.includes(event.id)) return;
-    state.emittedEventIds.push(event.id);
-    events.push(event);
+  const result: TransitTickResult = { state, events, confidence: "stale", needsReplan: false };
+  const emit = (event: {
+    type: "board" | "alight" | "arrival" | "platform-change" | "approaching-alight";
+    legIndex: number;
+    platform?: string;
+    stopsRemaining?: number;
+  }) => {
+    let platformHash = 0;
+    if (event.type === "platform-change" && event.platform)
+      for (const c of event.platform)
+        platformHash = (Math.imul(platformHash, 31) + c.charCodeAt(0)) >>> 0;
+    const id = `${options.itineraryFingerprint}:${event.type}:${event.legIndex}${event.type === "platform-change" ? `:${platformHash.toString(36)}` : ""}`;
+    if (state.emittedEventIds.includes(id)) return;
+    state.emittedEventIds = [...state.emittedEventIds, id].slice(-512);
+    events.push({ ...event, id } as TransitNavigationEvent);
   };
-
-  if (state.phase === "arrived") {
-    return { state, events, confidence: "gps", needsReplan: false };
-  }
-
-  /* ------------------------------------------------------- fix admission --- */
-
+  const resetLeg = (index: number) => {
+    const from = state.currentLegIndex;
+    if (index !== from) {
+      const id = `${options.itineraryFingerprint}:transfer:${from}:${index}`;
+      if (!state.emittedEventIds.includes(id)) {
+        state.emittedEventIds = [...state.emittedEventIds, id].slice(-512);
+        events.push({ id, type: "transfer", fromLegIndex: from, toLegIndex: index });
+      }
+    }
+    state.currentLegIndex = index;
+    state.phase = isTransitRide(legs[index]) ? "waiting-to-board" : "walking";
+    state.currentWalkStepIndex = 0;
+    state.reachedStepEnd = false;
+    state.distanceToNextStepMeters = undefined;
+    state.stopCursor = 1;
+    state.alongMeters = 0;
+    state.stopTracking = undefined;
+    state.legEnteredAtMs = nowMs;
+  };
+  if (
+    state.phase !== "arrived" &&
+    isTransitRide(legs[state.currentLegIndex]) &&
+    state.phase === "walking"
+  )
+    state.phase = "waiting-to-board";
+  if (state.phase === "waiting-to-board" && !isTransitRide(legs[state.currentLegIndex]))
+    state.phase = "walking";
+  const targets = resolveTransitLegTargets(itinerary, input.stopAreas);
   const fix = input.fix;
-  let rejectedReason: TransitTickResult["rejectedReason"];
   let accepted: FixInput | undefined;
-
   if (fix) {
-    const validCoords =
-      Number.isFinite(fix.coords[0]) &&
-      Number.isFinite(fix.coords[1]) &&
-      Math.abs(fix.coords[0]) <= 180 &&
-      Math.abs(fix.coords[1]) <= 90;
-    if (!validCoords || !Number.isFinite(fix.accuracy) || fix.accuracy < 0) {
-      rejectedReason = "invalid";
-    } else if (state.lastAcceptedFix && fix.timestampMs <= state.lastAcceptedFix.timestampMs) {
-      rejectedReason = "out-of-order";
-    } else if (fix.accuracy > options.accuracyCapMeters) {
-      rejectedReason = "low-accuracy";
+    if (
+      !Number.isFinite(fix.coords[0]) ||
+      !Number.isFinite(fix.coords[1]) ||
+      Math.abs(fix.coords[0]) > 180 ||
+      Math.abs(fix.coords[1]) > 90 ||
+      !Number.isFinite(fix.accuracy) ||
+      fix.accuracy < 0 ||
+      !Number.isFinite(fix.timestampMs)
+    )
+      result.rejectedReason = "invalid";
+    else if (fix.coasted) result.rejectedReason = "coasted";
+    else if (fix.timestampMs < nowMs - 30000) result.rejectedReason = "stale";
+    else if (fix.timestampMs > nowMs + 5000) result.rejectedReason = "future";
+    else if (state.lastAcceptedFix && fix.timestampMs <= state.lastAcceptedFix.timestampMs)
+      result.rejectedReason = "out-of-order";
+    else if (fix.accuracy > options.accuracyCapMeters) result.rejectedReason = "low-accuracy";
+    else accepted = fix;
+  }
+  const action = input.action;
+  if (action) {
+    if (action.type === "undo") {
+      const previous = state.lastAction;
+      if (previous && previous.legIndex === action.legIndex && nowMs - previous.atMs <= 120000) {
+        Object.assign(state, previous.previous);
+        state.lastAction = undefined;
+        state.stopTracking = undefined;
+        state.offPlan = false;
+        state.legEnteredAtMs = nowMs;
+      } else result.actionRejected = true;
     } else {
-      accepted = fix;
+      const index = state.currentLegIndex;
+      // A board tap on an access walk skips only to the immediately selected ride.
+      const boardIndex =
+        action.type === "continue" ? index + 1 : isTransitRide(legs[index]) ? index : index + 1;
+      const valid =
+        action.type === "continue"
+          ? state.phase === "riding" &&
+            action.legIndex === index &&
+            !!legs[index + 1]?.interlineWithPrevious &&
+            isTransitRide(legs[index + 1])
+          : action.type === "board"
+            ? state.phase !== "riding" &&
+              state.phase !== "arrived" &&
+              action.legIndex === boardIndex &&
+              isTransitRide(legs[boardIndex]) &&
+              !legs[boardIndex]?.cancelled
+            : state.phase === "riding" && action.legIndex === index;
+      if (!valid) result.actionRejected = true;
+      else {
+        state.lastAction = {
+          type: action.type,
+          legIndex: action.legIndex,
+          atMs: nowMs,
+          previous: {
+            currentLegIndex: index,
+            phase: state.phase,
+            currentWalkStepIndex: state.currentWalkStepIndex,
+            stopCursor: state.stopCursor ?? 1,
+            alongMeters: state.alongMeters ?? 0,
+          },
+        };
+        if (action.type === "board" || action.type === "continue") {
+          resetLeg(boardIndex);
+          state.phase = "riding";
+          state.offPlan = false;
+          emit({ type: "board", legIndex: boardIndex });
+        } else {
+          emit({ type: "alight", legIndex: index });
+          const pos = accepted ?? state.lastAcceptedFix;
+          const end = targets[index]?.end;
+          state.offPlan =
+            !!pos &&
+            nowMs - pos.timestampMs <= 30000 &&
+            !!end &&
+            !isWithinStopArea(end, pos.coords, pos.accuracy);
+          if (index === legs.length - 1) {
+            state.phase = state.offPlan ? "transferring" : "arrived";
+            if (!state.offPlan) emit({ type: "arrival", legIndex: index });
+          } else resetLeg(index + 1);
+        }
+      }
     }
   }
-
-  /* --------------------------------------------------------- leg tracking --- */
-
   if (accepted) {
-    const coords = accepted.coords as [number, number];
-    const current = matchLeg(prepared, state.currentLegIndex, coords);
-    const next = matchLeg(prepared, state.currentLegIndex + 1, coords);
-    const targets = resolveTransitLegTargets(itinerary, input.stopAreas);
-    const inArea = (shapes: TransitLegTargetShapes) =>
-      shapes !== null && isWithinStopArea(shapes, coords, accepted.accuracy);
-
-    // A narrowly-scoped correction: only just after entering a leg, only before
-    // meaningful progress on it, and only when the previous leg fits clearly
-    // better. Beyond that the engine never goes backwards — and never while the
-    // rider stands at the stop the current leg boards from.
-    const withinRecovery =
-      nowMs - state.legEnteredAtMs <= RECOVERY_WINDOW_MS &&
-      (current?.fraction ?? 1) < RECOVERY_MAX_FRACTION &&
-      state.phase !== "riding" &&
-      !inArea(targets[state.currentLegIndex]?.board ?? null);
-    if (withinRecovery && state.currentLegIndex > 0) {
-      const previous = matchLeg(prepared, state.currentLegIndex - 1, coords);
+    const index = state.currentLegIndex;
+    const leg = legs[index];
+    const indexed = prepared.legs[index];
+    const snap = indexed ? snapPreparedRoute(indexed.matcher, accepted.coords) : null;
+    const corridor = 25 + Math.min(accepted.accuracy, 25);
+    state.progressConfidence = snap && snap.deviationMeters > corridor ? "uncertain" : "gps";
+    if (leg && state.phase !== "arrived") {
+      if (state.phase === "riding") {
+        const capture = input.captures.find(
+          (c) => c.legIndex === index && c.tripId === leg.tripId && c.status === "captured",
+        );
+        if (capture) {
+          const progress = advanceTransitStopCursor(
+            capture.stops,
+            indexed,
+            accepted,
+            state.lastAcceptedFix,
+            state.stopCursor ?? 1,
+            state.alongMeters ?? 0,
+            state.stopTracking,
+          );
+          state.stopTracking = progress.tracking;
+          state.stopCursor = progress.cursor;
+          state.alongMeters = progress.alongMeters;
+          state.progressConfidence = progress.trusted ? "gps" : "uncertain";
+          if (
+            progress.trusted &&
+            isApproachingTransitAlight(capture.stops, state.stopCursor ?? 1, accepted.coords)
+          )
+            emit({
+              type: "approaching-alight",
+              legIndex: index,
+              stopsRemaining: Math.max(1, capture.stops.length - (state.stopCursor ?? 1)),
+            });
+        }
+      } else if (!isTransitRide(leg)) {
+        if (snap && indexed && snap.deviationMeters <= corridor) {
+          const steps = leg.steps ?? [];
+          const total = steps.reduce((n, s) => n + s.distanceMeters, 0);
+          const along =
+            indexed.lengthMeters > 0 ? (snap.alongMeters / indexed.lengthMeters) * total : 0;
+          const opts = navOptionsForMode("walking");
+          const gate = advanceStepGate(
+            { steps: steps.map((s) => ({ distance: s.distanceMeters })) },
+            along,
+            {
+              committedStepIndex: state.currentWalkStepIndex,
+              reachedStepEnd: state.reachedStepEnd ?? false,
+            },
+            opts.stepGateEntryMeters,
+            opts.stepGateExitMeters,
+          );
+          state.currentWalkStepIndex = Math.min(
+            gate.committedStepIndex,
+            state.currentWalkStepIndex + 1,
+          );
+          state.reachedStepEnd = gate.reachedStepEnd;
+          state.distanceToNextStepMeters = Math.max(
+            0,
+            steps
+              .slice(0, state.currentWalkStepIndex + 1)
+              .reduce((n, s) => n + s.distanceMeters, 0) - along,
+          );
+        }
+        const shapes = targets[index]?.end;
+        const endpoint = leg.geometry?.coordinates?.at(-1);
+        const end =
+          shapes ??
+          (endpoint
+            ? [
+                {
+                  type: "point" as const,
+                  coordinates: endpoint as [number, number],
+                  bufferMeters: 20,
+                },
+              ]
+            : []);
+        if (end.length > 0 && isWithinStopArea(end, accepted.coords, accepted.accuracy)) {
+          state.offPlan = false;
+          if (index === legs.length - 1) {
+            state.phase = "arrived";
+            emit({ type: "arrival", legIndex: index });
+          } else resetLeg(index + 1);
+        }
+      }
+      const board = leg.from;
       if (
-        previous &&
-        current &&
-        previous.deviationMeters + RECOVERY_DEVIATION_MARGIN_METERS < current.deviationMeters
-      ) {
-        state.currentLegIndex -= 1;
-        state.currentWalkStepIndex = 0;
-        state.legEnteredAtMs = nowMs;
-        state.phase = isTransitLeg(legAt(itinerary, state.currentLegIndex))
-          ? "waiting-to-board"
-          : "walking";
-      }
+        isTransitRide(leg) &&
+        state.phase !== "riding" &&
+        platformChanged(board?.scheduledPlatformCode, board?.platformCode) &&
+        board.platformCode
+      )
+        emit({ type: "platform-change", legIndex: index, platform: board.platformCode });
     }
-
-    const match = matchLeg(prepared, state.currentLegIndex, coords);
-    const leg = legAt(itinerary, state.currentLegIndex);
-
-    if (match) {
-      const endpointDistance = (() => {
-        const legGeometry = (leg as { geometry?: { coordinates?: [number, number][] } } | undefined)
-          ?.geometry?.coordinates;
-        const endpoint = legGeometry?.at(-1);
-        return endpoint ? metresBetween(coords, endpoint) : Number.POSITIVE_INFINITY;
-      })();
-
-      const scheduledEnd = legEndMs(leg);
-      const plausibleByTime = !Number.isFinite(scheduledEnd) || nowMs >= scheduledEnd - 5 * 60_000;
-
-      const nextIsCloser = next !== null && next.deviationMeters <= NEXT_LEG_DEVIATION_METERS;
-      const alightProximity = stopsRemainingOnLeg(
-        captures,
-        state.currentLegIndex,
-        match.snapped,
-        prepared,
-      );
-      const legTargets = targets[state.currentLegIndex];
-      // An itinerary place without a position still has one in the captured
-      // journey, which knows where the vehicle stops.
-      const alightStop = captureFor(captures, state.currentLegIndex)?.stops.at(-1);
-      const endShapes =
-        legTargets?.end ??
-        (isTransitLeg(leg) && alightStop
-          ? [
-              defaultStopAreaShape(
-                [alightStop.lng, alightStop.lat],
-                (leg as { mode?: string }).mode,
-              ),
-            ]
-          : null);
-      const inEndArea = inArea(endShapes);
-      // Being at the stop is being at the stop, however early: no time guard.
-      const reachedBoardStop =
-        !isTransitLeg(leg) &&
-        isTransitLeg(legAt(itinerary, state.currentLegIndex + 1)) &&
-        inEndArea;
-      // The vehicle is in the alight stop with at most that stop still ahead,
-      // wherever along a long platform it halted.
-      const reachedAlightStop =
-        isTransitLeg(leg) &&
-        state.phase === "riding" &&
-        inEndArea &&
-        match.fraction >= END_AREA_MIN_FRACTION &&
-        (alightProximity === null || alightProximity <= 1);
-
-      const shouldAdvance =
-        state.currentLegIndex < legs.length - 1 &&
-        ((match.fraction >= ADVANCE_FRACTION && nextIsCloser) ||
-          // A stop without a known position still ends near its leg's last point.
-          (endShapes === null &&
-            endpointDistance <= ENDPOINT_PROXIMITY_METERS &&
-            plausibleByTime) ||
-          reachedBoardStop ||
-          reachedAlightStop);
-
-      // Phase within the leg, before any advance.
-      if (isTransitLeg(leg)) {
-        const board = legTargets?.board ?? null;
-        const inBoardArea = inArea(board);
-        const boardStop = captureFor(captures, state.currentLegIndex)?.stops[0];
-        const nearBoardStop =
-          board !== null
-            ? stopAreaDistance(board, coords) <=
-              stopAreaTolerance(accepted.accuracy) + DEPARTED_BEYOND_BOARD_AREA_METERS
-            : boardStop !== undefined &&
-              metresBetween(coords, [boardStop.lng, boardStop.lat]) <= BOARD_STOP_PROXIMITY_METERS;
-        const departed = Number.isFinite(legStartMs(leg)) && nowMs >= legStartMs(leg);
-
-        // Walking the length of a long platform is still waiting; only leaving
-        // the stop, along the line or after the departure, is riding.
-        if (
-          state.phase !== "riding" &&
-          !inBoardArea &&
-          (match.fraction > 0.05 || (departed && !nearBoardStop))
-        ) {
-          state.phase = "riding";
-          emit({
-            id: eventId(options.itineraryFingerprint, "board", state.currentLegIndex),
-            type: "board",
-            legIndex: state.currentLegIndex,
-          });
-        } else if (state.phase !== "riding") {
-          state.phase = "waiting-to-board";
-        }
-
-        const capture = captureFor(captures, state.currentLegIndex);
-        const changedPlatform = capture?.stops[0];
-        if (
-          changedPlatform?.platform &&
-          platformChanged(changedPlatform.scheduledPlatform, changedPlatform.platform)
-        ) {
-          emit({
-            id: eventId(
-              options.itineraryFingerprint,
-              "platform-change",
-              state.currentLegIndex,
-              changedPlatform.platform,
-            ),
-            type: "platform-change",
-            legIndex: state.currentLegIndex,
-            platform: changedPlatform.platform,
-          });
-        }
-
-        if (
-          state.phase === "riding" &&
-          alightProximity !== null &&
-          alightProximity <= APPROACHING_ALIGHT_STOPS
-        ) {
-          emit({
-            id: eventId(options.itineraryFingerprint, "approaching-alight", state.currentLegIndex),
-            type: "approaching-alight",
-            legIndex: state.currentLegIndex,
-            stopsRemaining: alightProximity,
-          });
-        }
-      } else {
-        state.phase = "walking";
-        const steps = ((leg as { steps?: { distanceMeters?: number }[] } | undefined)?.steps ??
-          []) as Pick<TransitStep, "distanceMeters">[];
-        if (steps.length > 0) {
-          const walk = walkLegStepProgress(steps, match.fraction);
-          // Walking steps only ever move forward within a leg.
-          state.currentWalkStepIndex = Math.max(state.currentWalkStepIndex, walk.currentStepIndex);
-        }
-      }
-
-      if (shouldAdvance) {
-        const from = state.currentLegIndex;
-        if (isTransitLeg(leg)) {
-          emit({
-            id: eventId(options.itineraryFingerprint, "alight", from),
-            type: "alight",
-            legIndex: from,
-          });
-        }
-        state.currentLegIndex = from + 1;
-        state.currentWalkStepIndex = 0;
-        state.legEnteredAtMs = nowMs;
-        state.phase = isTransitLeg(legAt(itinerary, state.currentLegIndex))
-          ? "waiting-to-board"
-          : "walking";
-        emit({
-          id: eventId(options.itineraryFingerprint, "transfer", from, state.currentLegIndex),
-          type: "transfer",
-          fromLegIndex: from,
-          toLegIndex: state.currentLegIndex,
-        });
-      }
-
-      // A transition still carries the previous leg's match. Evaluate arrival
-      // only when this fix was matched to the final leg itself.
-      if (
-        !shouldAdvance &&
-        state.currentLegIndex === legs.length - 1 &&
-        (match.fraction >= 0.98 || (inEndArea && match.fraction >= END_AREA_MIN_FRACTION)) &&
-        legs.length > 0
-      ) {
-        state.phase = "arrived";
-        emit({
-          id: eventId(options.itineraryFingerprint, "arrival", state.currentLegIndex),
-          type: "arrival",
-          legIndex: state.currentLegIndex,
-        });
-      }
-    }
-
     state.lastAcceptedFix = accepted;
     state.lastProgressAtMs = nowMs;
-    state.scheduleFallback = "inactive";
   }
-
-  /* ---------------------------------------------------- missed connection --- */
-  //
-  // Evaluated before schedule fallback: fallback advances the leg, and if it
-  // ran first it would step straight past the departure that was missed and
-  // the traveller would never be told.
-
-  // The ride being waited for, or — while still walking to its stop — the one
-  // that walk leads to: a departure that passed mid-walk is missed already.
-  const upcomingIndex = isTransitLeg(legAt(itinerary, state.currentLegIndex))
-    ? state.currentLegIndex
-    : state.currentLegIndex + 1;
-  const upcoming = legAt(itinerary, upcomingIndex);
-  if (state.phase !== "arrived" && isTransitLeg(upcoming)) {
-    const departure = legStartMs(upcoming);
-    const missed =
-      Number.isFinite(departure) && nowMs > departure + 120_000 && state.phase !== "riding";
-    if (missed && state.replanRequestedForLeg !== upcomingIndex) {
-      state.replanRequestedForLeg = upcomingIndex;
-      needsReplan = true;
-      emit({
-        id: eventId(options.itineraryFingerprint, "missed-connection", upcomingIndex),
-        type: "missed-connection",
-        legIndex: upcomingIndex,
-      });
-    }
-  }
-
-  /* ----------------------------------------------------- schedule fallback --- */
-
-  let confidence: TransitConfidence = accepted ? "gps" : "stale";
-
-  if (!accepted && state.phase !== "arrived") {
-    const sinceProgress = state.lastProgressAtMs ? nowMs - state.lastProgressAtMs : Infinity;
-    const eligible = sinceProgress >= options.scheduleFallbackAfterSeconds * 1_000;
-    if (eligible) {
-      state.scheduleFallback =
-        state.scheduleFallback === "inactive" ? "eligible" : state.scheduleFallback;
-      const leg = legAt(itinerary, state.currentLegIndex);
-      const end = legEndMs(leg);
-      const dueToAdvance =
-        Number.isFinite(end) &&
-        nowMs >= end + options.scheduleFallbackGraceSeconds * 1_000 &&
-        state.currentLegIndex < legs.length - 1;
-
-      if (dueToAdvance) {
-        // At most one leg per tick, and labelled: time alone never asserts that
-        // the traveller physically arrived anywhere.
-        const from = state.currentLegIndex;
-        state.currentLegIndex = from + 1;
-        state.currentWalkStepIndex = 0;
-        state.legEnteredAtMs = nowMs;
-        state.phase = isTransitLeg(legAt(itinerary, state.currentLegIndex))
-          ? "waiting-to-board"
-          : "walking";
-        state.scheduleFallback = "active";
-        emit({
-          id: eventId(options.itineraryFingerprint, "transfer", from, state.currentLegIndex),
-          type: "transfer",
-          fromLegIndex: from,
-          toLegIndex: state.currentLegIndex,
-        });
-      }
-      confidence = "schedule";
-    }
-  }
-
-  return {
-    state,
-    events,
-    confidence,
-    needsReplan,
-    ...(rejectedReason && { rejectedReason }),
-  };
+  if (!state.lastAcceptedFix || nowMs - state.lastAcceptedFix.timestampMs > 30000)
+    state.progressConfidence = "stale";
+  result.confidence = state.progressConfidence === "stale" ? "stale" : "gps";
+  return result;
 }
 
-/**
- * What the follow-along UI shows for a tick: the engine's leg and phase, with
- * the fix placed on that leg. Derived rather than stored, so the browser and
- * the shell present one engine's decisions the same way.
- */
+/** Never use the callback's rejected coordinates as the rider position. */
 export function transitProgressFromTick(
   state: TransitTickState,
   prepared: PreparedTransitProgress,
-  coords: [number, number],
+  _coords?: [number, number],
 ): TransitProgress {
-  const match = matchLeg(prepared, state.currentLegIndex, coords);
+  const coords = state.lastAcceptedFix?.coords;
+  const indexed = prepared.legs[state.currentLegIndex];
+  const match = coords && indexed ? snapPreparedRoute(indexed.matcher, coords) : null;
   return {
     currentLegIndex: state.currentLegIndex,
-    position: coords,
-    snapped: match?.snapped ?? coords,
-    fractionAlongLeg: match?.fraction ?? 0,
+    ...(coords
+      ? { position: coords, positionTimestampMs: state.lastAcceptedFix?.timestampMs }
+      : {}),
+    snapped: match?.snapped ?? coords ?? [0, 0],
+    fractionAlongLeg:
+      match && indexed && indexed.lengthMeters > 0 ? match.alongMeters / indexed.lengthMeters : 0,
     deviationMeters: match?.deviationMeters ?? 0,
     arrived: state.phase === "arrived",
     phase: state.phase,
+    confidence: state.progressConfidence ?? "stale",
+    stopCursor: state.stopCursor ?? 1,
+    currentWalkStepIndex: state.currentWalkStepIndex,
+    walkRevision: state.walkRevision ?? 0,
+    distanceToNextStepMeters: state.distanceToNextStepMeters,
+    offPlan: state.offPlan,
+    canUndo: !!state.lastAction,
+    lastActionLegIndex: state.lastAction?.legIndex,
+    lastActionAtMs: state.lastAction?.atMs,
   };
 }

@@ -21,7 +21,6 @@ import {
   buildTransitNavigationPackage,
   fetchTransitStopArea,
   fetchVehicleJourney,
-  isApiRequestAbortedError,
   type JourneyStopLike,
   type TransitStopAreaRequest,
 } from "@openmapx/core/navigation/api";
@@ -99,12 +98,12 @@ async function fetchJourneyStops(
     const envelope = await fetchVehicleJourney({ tripId }, client, { signal: controller.signal });
     const stops = (envelope.data as { stops?: readonly JourneyStopLike[] } | undefined)?.stops;
     return { stops, aborted: false };
-  } catch (error) {
+  } catch {
     // The caller aborting is different from the fetch failing: one means the
     // user moved on, the other means this leg degrades to schedule times.
     return {
       stops: undefined,
-      aborted: signal?.aborted === true || isApiRequestAbortedError(error),
+      aborted: signal?.aborted === true,
     };
   } finally {
     clearTimeout(timer);

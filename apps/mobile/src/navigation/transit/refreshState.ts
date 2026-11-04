@@ -78,7 +78,7 @@ export function onRefreshRequested(
     generation: runtime.generation + 1,
     requestId,
     attempts: runtime.attempts,
-    nextAttemptAtMs: nowMs + REQUEST_TIMEOUT_MS,
+    nextAttemptAtMs: nowMs + REQUEST_TIMEOUT_MS + 5_000,
   };
 }
 
