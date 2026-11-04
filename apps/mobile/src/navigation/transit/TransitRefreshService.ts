@@ -3,7 +3,6 @@ import {
   type ApiClient,
   type ApiRequestOptions,
   createApiClient,
-  isApiRequestAbortedError,
   refreshTransitItinerary,
 } from "@openmapx/core/navigation/api";
 import { fetchJourneyCaptures } from "./journeyCaptures";
@@ -123,7 +122,10 @@ export class TransitRefreshService {
     };
 
     try {
-      const envelope = await refreshTransitItinerary(token, this.client, options);
+      const [envelope, journeys] = await Promise.all([
+        refreshTransitItinerary(token, this.client, options),
+        fetchJourneyCaptures(journeysToRefetch(session).slice(0, 4), this.client, options),
+      ]);
       const itinerary = (envelope as { data?: { itinerary?: unknown } })?.data?.itinerary;
       if (!itinerary) {
         // The server answered and did not give us a replacement token. The old
@@ -131,20 +133,10 @@ export class TransitRefreshService {
         return { ...base, ok: false, failure: "rejected" };
       }
 
-      const journeys = await fetchJourneyCaptures(journeysToRefetch(session), this.client, options);
       return { ...base, ok: true, itinerary, journeys };
-    } catch (error) {
-      if (isApiRequestAbortedError(error)) {
-        // A timeout is genuinely ambiguous; a deliberate abort is not, because
-        // this process is the one that cancelled it.
-        return {
-          ...base,
-          ok: false,
-          failure: error.code === "timeout" ? "ambiguous" : "unreachable",
-        };
-      }
-      // Anything else reached the server or did not; without knowing which, the
-      // token has to be treated as spent.
+    } catch {
+      // Even our own cancellation can race server-side token consumption.
+      // Once dispatched, neither an abort nor a timeout proves the token unused.
       return { ...base, ok: false, failure: "ambiguous" };
     } finally {
       this.inFlight.delete(requestId);

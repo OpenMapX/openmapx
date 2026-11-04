@@ -26,7 +26,6 @@ const ORDER: Record<SessionEffect["kind"], number> = {
   speak: 6,
   "request-reroute": 7,
   "request-transit-refresh": 8,
-  "request-transit-replan": 9,
   "publish-event": 10,
   "publish-snapshot": 11,
 };
@@ -56,7 +55,6 @@ export interface PublishPort {
 export interface RemoteWorkPort {
   reroute(requestId: string): Promise<void>;
   transitRefresh(requestId: string): Promise<void>;
-  transitReplan(requestId: string): Promise<void>;
 }
 
 export interface DiagnosticSink {
@@ -117,8 +115,6 @@ export class EffectRunner {
         return remote.reroute(effect.requestId);
       case "request-transit-refresh":
         return remote.transitRefresh(effect.requestId);
-      case "request-transit-replan":
-        return remote.transitReplan(effect.requestId);
     }
   }
 }

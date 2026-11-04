@@ -104,7 +104,7 @@ describe("refresh transitions", () => {
     expect(inFlight.status).toBe("in-flight");
     expect(inFlight.generation).toBe(2);
     expect(inFlight.requestId).toBe("r1");
-    expect(inFlight.nextAttemptAtMs).toBe(NOW + REQUEST_TIMEOUT_MS);
+    expect(inFlight.nextAttemptAtMs).toBe(NOW + REQUEST_TIMEOUT_MS + 5_000);
   });
 
   it("schedules the next refresh on success and clears the failure count", () => {

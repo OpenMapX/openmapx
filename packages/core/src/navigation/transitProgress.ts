@@ -13,6 +13,16 @@ export type TransitPhase = "walking" | "waiting-to-board" | "riding" | "transfer
 
 export interface TransitProgress {
   currentLegIndex: number;
+  confidence?: "gps" | "uncertain" | "stale";
+  stopCursor?: number;
+  currentWalkStepIndex?: number;
+  walkRevision?: number;
+  distanceToNextStepMeters?: number;
+  positionTimestampMs?: number;
+  offPlan?: boolean;
+  canUndo?: boolean;
+  lastActionLegIndex?: number;
+  lastActionAtMs?: number;
   /** The fix itself, where the rider is; absent when no fix has been accepted yet. */
   position?: LngLat;
   snapped: LngLat;
@@ -24,7 +34,7 @@ export interface TransitProgress {
 }
 
 /** One usable leg's prepared index and its total polyline length in metres. */
-interface PreparedTransitLeg {
+export interface PreparedTransitLeg {
   readonly matcher: PreparedRouteMatcher;
   readonly lengthMeters: number;
 }
@@ -98,4 +108,20 @@ export function stopsUntilAlight(
 
   const stopsRemaining = stops.length - nextStopIndex;
   return { nextStopIndex, stopsRemaining, nextStopName: stops[nextStopIndex].name };
+}
+
+/** A nonstop ride can have one stop remaining for hours; counting alone is not an approach. */
+export function isApproachingTransitAlight(
+  stops: readonly { lat: number; lng: number }[],
+  cursor: number,
+  position: LngLat | undefined,
+): boolean {
+  const target = stops.at(-1);
+  return (
+    !!target &&
+    stops.length >= 2 &&
+    cursor >= stops.length - 1 &&
+    !!position &&
+    haversineDistance(position, [target.lng, target.lat]) <= 1000
+  );
 }

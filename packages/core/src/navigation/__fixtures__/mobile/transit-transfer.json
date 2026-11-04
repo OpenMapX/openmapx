@@ -342,7 +342,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 301000
+      "offsetMs": 301000,
+      "action": {
+        "type": "board",
+        "legIndex": 1
+      }
     },
     {
       "coords": [
@@ -382,7 +386,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 601000
+      "offsetMs": 601000,
+      "action": {
+        "type": "alight",
+        "legIndex": 1
+      }
     },
     {
       "coords": [
@@ -414,7 +422,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 841000
+      "offsetMs": 841000,
+      "action": {
+        "type": "board",
+        "legIndex": 3
+      }
     },
     {
       "coords": [
@@ -446,7 +458,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 1081000
+      "offsetMs": 1081000,
+      "action": {
+        "type": "alight",
+        "legIndex": 3
+      }
     }
   ]
 }

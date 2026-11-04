@@ -20,7 +20,7 @@ function line(index: number): [number, number] {
 
 function groundSession(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "ground",
     sessionId: "s-1",
     revision: 1,
@@ -66,7 +66,7 @@ function groundSession(overrides: Record<string, unknown> = {}): Record<string, 
 
 function transitSession(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "transit",
     sessionId: "s-2",
     revision: 3,
@@ -96,13 +96,11 @@ function transitSession(overrides: Record<string, unknown> = {}): Record<string,
         legEnteredAtMs: NOW,
         spokenCueIds: [],
         emittedEventIds: [],
-        scheduleFallback: "inactive",
       },
       progress: null,
       confidence: "gps",
       refreshToken: SECRET_TOKEN,
       refresh: { status: "ready", generation: 1, attempts: 0 },
-      replan: { status: "idle", generation: 1, attempts: 0 },
       scheduledAlerts: [],
     },
     ...overrides,
@@ -212,7 +210,7 @@ describe("expiry", () => {
 
 describe("corrupt and inconsistent records", () => {
   it("reports an unsupported schema version distinctly, so it can be quarantined", () => {
-    const result = parseMobileSession(groundSession({ schemaVersion: 2 }));
+    const result = parseMobileSession(groundSession({ schemaVersion: 3 }));
     expect(result).toEqual({ ok: false, code: "unsupported-schema" });
   });
 

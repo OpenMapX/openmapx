@@ -7,6 +7,7 @@ import type { ServiceAlert, TripItinerary } from "@openmapx/mobility-core/transi
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { AlertCard } from "@/components/panels/transit/AlertCard";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 
 /** Cap so a noisy feed can't push the banner over the map. */
@@ -27,6 +28,7 @@ export function TransitAlertBanner({
   currentLegIndex: number;
   transitProgress: TransitProgress | null;
 }) {
+  const { browserAuthority } = useMobileRuntime();
   const t = useTranslations("navigation");
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
@@ -84,7 +86,7 @@ export function TransitAlertBanner({
   const topId = topAlert?.id;
   // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per distinct alert.
   useEffect(() => {
-    if (topAlert && voiceEnabled) speak(topAlert.ttsTitle ?? topAlert.title);
+    if (browserAuthority && topAlert && voiceEnabled) speak(topAlert.ttsTitle ?? topAlert.title);
   }, [topId]);
 
   if (shown.length === 0) return null;

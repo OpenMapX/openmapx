@@ -277,7 +277,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 361000
+      "offsetMs": 361000,
+      "action": {
+        "type": "board",
+        "legIndex": 1
+      }
     },
     {
       "coords": [
@@ -325,7 +329,11 @@
         50.1
       ],
       "accuracy": 8,
-      "offsetMs": 721000
+      "offsetMs": 721000,
+      "action": {
+        "type": "alight",
+        "legIndex": 1
+      }
     },
     {
       "coords": [

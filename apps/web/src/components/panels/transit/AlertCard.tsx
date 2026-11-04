@@ -21,30 +21,30 @@ const SEVERITY_CONFIG: Record<
 > = {
   info: {
     icon: InfoOutlinedIcon,
-    bg: "var(--mui-palette-info-light, #E8F4FD)",
+    bg: "var(--mui-palette-Alert-infoStandardBg, #E8F4FD)",
     border: "var(--mui-palette-info-main, #90CAF9)",
-    color: "var(--mui-palette-info-dark, #1565C0)",
+    color: "var(--mui-palette-Alert-infoColor, #1565C0)",
     labelKey: "alertInfo",
   },
   warning: {
     icon: ReportProblemOutlinedIcon,
-    bg: "var(--mui-palette-warning-light, #FFF8E1)",
+    bg: "var(--mui-palette-Alert-warningStandardBg, #FFF8E1)",
     border: "var(--mui-palette-warning-main, #FFE082)",
-    color: "var(--mui-palette-warning-dark, #E65100)",
+    color: "var(--mui-palette-Alert-warningColor, #E65100)",
     labelKey: "alertWarning",
   },
   severe: {
     icon: ErrorOutlineIcon,
-    bg: "var(--mui-palette-error-light, #FBE9E7)",
+    bg: "var(--mui-palette-Alert-errorStandardBg, #FBE9E7)",
     border: "var(--mui-palette-error-main, #FFAB91)",
-    color: "var(--mui-palette-error-dark, #BF360C)",
+    color: "var(--mui-palette-Alert-errorColor, #BF360C)",
     labelKey: "alertSevere",
   },
   critical: {
     icon: ErrorOutlineIcon,
-    bg: "var(--mui-palette-error-light, #FFEBEE)",
+    bg: "var(--mui-palette-Alert-errorStandardBg, #FFEBEE)",
     border: "var(--mui-palette-error-main, #EF9A9A)",
-    color: "var(--mui-palette-error-dark, #B71C1C)",
+    color: "var(--mui-palette-Alert-errorColor, #B71C1C)",
     labelKey: "alertCritical",
   },
 };

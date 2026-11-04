@@ -12,7 +12,7 @@ export function groundSessionFixture(
 ): GroundMobileSession {
   const startedAtMs = 1_700_000_000_000;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId: "session-1",
     revision: 1,
     status: "preparing",

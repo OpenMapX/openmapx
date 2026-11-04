@@ -1,5 +1,3 @@
-import type { Route } from "../types/routing";
-
 export interface StepGateState {
   /** The step committed for display/announcement. Monotonic — never decreases. */
   committedStepIndex: number;
@@ -22,7 +20,7 @@ export interface StepGateState {
  * destination, not this gate.
  */
 export function advanceStepGate(
-  route: Route,
+  route: { steps: { distance: number }[] },
   alongMeters: number,
   prev: StepGateState,
   entryMeters: number,

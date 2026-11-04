@@ -1,13 +1,8 @@
 "use client";
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import CommuteIcon from "@mui/icons-material/Commute";
-import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
-import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
-import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -30,10 +25,10 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { LegBadge } from "@/components/panels/transit/LegBadge";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
-import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -59,31 +54,6 @@ function worstOccupancy(itinerary: TripItinerary): OccupancyLevel | null {
     }
   }
   return worst;
-}
-
-function LegBadge({ leg }: { leg: TripLeg }) {
-  if (leg.mode === "walking") {
-    return <DirectionsWalkIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
-  }
-  if (leg.mode === "cycling") {
-    return <DirectionsBikeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
-  }
-  if (leg.mode === "driving") {
-    return <DirectionsCarIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
-  }
-  if (leg.route) {
-    return (
-      <RouteBadge
-        shortName={leg.route.shortName}
-        color={leg.route.color}
-        textColor={leg.route.textColor}
-        mode={leg.mode}
-        size="small"
-      />
-    );
-  }
-  const ModeIcon = leg.mode === "other" ? CommuteIcon : DirectionsBusIcon;
-  return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
 }
 
 function BoardingSummary({ leg }: { leg: TripLeg }) {

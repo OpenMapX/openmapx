@@ -159,7 +159,12 @@ describe("transitProfileFor", () => {
       ...base,
       payload: {
         ...base.payload,
-        tickState: { ...base.payload.tickState, phase: "riding", currentLegIndex: 1 },
+        tickState: {
+          ...base.payload.tickState,
+          phase: "riding",
+          currentLegIndex: 1,
+          stopCursor: 2,
+        },
         startPackage: {
           ...base.payload.startPackage,
           captures: [
@@ -186,7 +191,12 @@ describe("transitProfileForTime", () => {
       ...base,
       payload: {
         ...base.payload,
-        tickState: { ...base.payload.tickState, phase: "riding", currentLegIndex: 1 },
+        tickState: {
+          ...base.payload.tickState,
+          phase: "riding",
+          currentLegIndex: 1,
+          stopCursor: 1,
+        },
       },
     } as TransitMobileSession;
   }

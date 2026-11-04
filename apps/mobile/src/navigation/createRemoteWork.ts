@@ -1,6 +1,7 @@
 import type { SessionRepository } from "../storage/SessionRepository";
 import type { RemoteWorkPort } from "./effects";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
+import type { RefreshOutcome, TransitRefreshService } from "./transit/TransitRefreshService";
 
 /**
  * Runs the network requests a session asks for, off the coordinator's queue.
@@ -26,6 +27,8 @@ export interface RemoteWorkDeps {
   repository: Pick<SessionRepository, "loadActive">;
   reroute: RerouteClient;
   applyReroute(outcome: RerouteOutcome): Promise<void>;
+  transitRefresh?: Pick<TransitRefreshService, "request" | "abortAll">;
+  applyTransitRefresh?(outcome: RefreshOutcome): Promise<void>;
   now(): number;
   diagnostics: { record(type: string, fields: Record<string, unknown>): void };
 }
@@ -67,10 +70,25 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
           }),
       );
     },
-    // Transit refresh and replan keep their captured itinerary until their
-    // answers can be applied; the session still runs on the schedule.
-    transitRefresh: async () => undefined,
-    transitReplan: async () => undefined,
+    // Live updates preserve the captured journey until their guarded result commits.
+    transitRefresh: async (requestId) => {
+      const session = await deps.repository.loadActive(deps.now());
+      if (
+        session?.kind !== "transit" ||
+        session.status !== "active" ||
+        session.payload.refresh.requestId !== requestId ||
+        !deps.transitRefresh
+      )
+        return;
+      track(
+        deps.transitRefresh
+          .request({ session, requestId, generation: session.payload.refresh.generation })
+          .then((outcome) => deps.applyTransitRefresh?.(outcome))
+          .catch(() => {
+            deps.diagnostics.record("typed.error", { scope: "transit-refresh" });
+          }),
+      );
+    },
   };
 
   return {
@@ -78,6 +96,9 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
     idle: async () => {
       while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
     },
-    abortAll: () => deps.reroute.abortAll(),
+    abortAll: () => {
+      deps.reroute.abortAll();
+      deps.transitRefresh?.abortAll();
+    },
   };
 }

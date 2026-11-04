@@ -92,7 +92,6 @@ function build(
       remote: {
         reroute: async () => undefined,
         transitRefresh: async () => undefined,
-        transitReplan: async () => undefined,
       },
       diagnostics: { record: () => undefined },
     }),

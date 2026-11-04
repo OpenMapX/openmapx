@@ -67,6 +67,8 @@ export const WEB_TO_NATIVE_TYPES = [
   "session.prepare",
   "session.start",
   "session.replace",
+  "transit.action",
+  "transit.walk-route",
   "settings.update",
   "snapshot.request",
   "session.stop",
@@ -322,6 +324,7 @@ export const nativeCapabilitiesSchema = z
   .object({
     groundNavigation: z.boolean(),
     transitNavigation: z.boolean(),
+    transitActions: z.boolean().optional(),
     backgroundLocation: z.boolean(),
     localNotifications: z.boolean(),
     speech: z.boolean(),
@@ -368,7 +371,37 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
   ),
   envelope("session.prepare", z.object({ startPackage: navigationStartPackageSchema }).strict()),
   envelope("session.start", z.object({}).strict()),
-  envelope("session.replace", z.object({ startPackage: navigationStartPackageSchema }).strict()),
+  envelope(
+    "transit.walk-route",
+    z
+      .object({
+        itineraryFingerprint: boundedId,
+        legIndex: z.number().int().min(0).max(511),
+        route: routeSchema,
+      })
+      .strict(),
+  ),
+  envelope(
+    "transit.action",
+    z
+      .object({
+        actionId: boundedId,
+        itineraryFingerprint: boundedId,
+        expectedPhase: z.enum(["walking", "waiting-to-board", "riding", "transferring", "arrived"]),
+        type: z.enum(["board", "alight", "continue", "undo"]),
+        legIndex: z.number().int().min(0).max(511),
+      })
+      .strict(),
+  ),
+  envelope(
+    "session.replace",
+    z
+      .object({
+        startPackage: navigationStartPackageSchema,
+        expectedItineraryFingerprint: boundedId.optional(),
+      })
+      .strict(),
+  ),
   envelope(
     "settings.update",
     z

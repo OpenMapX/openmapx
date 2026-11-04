@@ -5,6 +5,7 @@ import {
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
   type TransitProgress,
+  useNavigationStore,
 } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { render, screen } from "@testing-library/react";
@@ -65,9 +66,23 @@ const progressAt = (lng: number): TransitProgress => ({
   deviationMeters: 0,
   arrived: false,
   phase: "riding",
+  stopCursor: 1,
+  confidence: "gps",
 });
 
-describe("TransitLegBanner leg index ownership", () => {
+beforeEach(() =>
+  useNavigationStore.getState().setTransitCaptures([
+    {
+      legIndex: 0,
+      tripId: "t:1",
+      status: "captured",
+      capturedAtMs: Date.now(),
+      stops: journeyStops,
+    },
+  ]),
+);
+
+describe("TransitLegBanner shared cursor ownership", () => {
   beforeEach(() => {
     resetRouteMatcherCounters();
     setRouteMatcherCounting(true);
@@ -78,67 +93,38 @@ describe("TransitLegBanner leg index ownership", () => {
     resetRouteMatcherCounters();
   });
 
-  it("indexes the leg once across progress re-renders", () => {
+  it("does not rebuild or resnap geometry across progress re-renders", () => {
     const leg = freshLeg();
     const { rerender } = render(
-      <TransitLegBanner
-        leg={leg}
-        legIndex={0}
-        totalLegs={2}
-        transitProgress={progressAt(0.0002)}
-      />,
+      <TransitLegBanner leg={leg} legIndex={0} transitProgress={progressAt(0.0002)} />,
     );
-    expect(readRouteMatcherCounters().preparations).toBe(1);
+    expect(readRouteMatcherCounters().preparations).toBe(0);
 
     // Five progress updates as the rider moves along the leg.
     for (let i = 1; i <= 5; i++) {
       rerender(
-        <TransitLegBanner
-          leg={leg}
-          legIndex={0}
-          totalLegs={2}
-          transitProgress={progressAt(0.0002 * i)}
-        />,
+        <TransitLegBanner leg={leg} legIndex={0} transitProgress={progressAt(0.0002 * i)} />,
       );
     }
 
     const counters = readRouteMatcherCounters();
-    expect(counters.preparations).toBe(1);
+    expect(counters.preparations).toBe(0);
     // Each render snaps the rider plus every stop of the leg against that index.
-    expect(counters.snaps).toBe(6 * (1 + journeyStops.length));
+    expect(counters.snaps).toBe(0);
   });
 
-  it("indexes the next leg once when the banner moves on", () => {
+  it("does not rebuild geometry when the banner moves on", () => {
     const first = freshLeg();
     const { rerender } = render(
-      <TransitLegBanner
-        leg={first}
-        legIndex={0}
-        totalLegs={2}
-        transitProgress={progressAt(0.0002)}
-      />,
+      <TransitLegBanner leg={first} legIndex={0} transitProgress={progressAt(0.0002)} />,
     );
-    expect(readRouteMatcherCounters().preparations).toBe(1);
+    expect(readRouteMatcherCounters().preparations).toBe(0);
 
     const second = freshLeg();
-    rerender(
-      <TransitLegBanner
-        leg={second}
-        legIndex={1}
-        totalLegs={2}
-        transitProgress={progressAt(0.0002)}
-      />,
-    );
-    rerender(
-      <TransitLegBanner
-        leg={second}
-        legIndex={1}
-        totalLegs={2}
-        transitProgress={progressAt(0.0006)}
-      />,
-    );
+    rerender(<TransitLegBanner leg={second} legIndex={1} transitProgress={progressAt(0.0002)} />);
+    rerender(<TransitLegBanner leg={second} legIndex={1} transitProgress={progressAt(0.0006)} />);
 
-    expect(readRouteMatcherCounters().preparations).toBe(2);
+    expect(readRouteMatcherCounters().preparations).toBe(0);
   });
 });
 
@@ -151,39 +137,18 @@ describe("TransitLegBanner while waiting at the boarding stop", () => {
   });
 
   it("names where to get off rather than the stop the rider stands at", () => {
-    render(
-      <TransitLegBanner
-        leg={freshLeg()}
-        legIndex={0}
-        totalLegs={2}
-        transitProgress={waitingAt(0)}
-      />,
-    );
+    render(<TransitLegBanner leg={freshLeg()} legIndex={0} transitProgress={waitingAt(0)} />);
     expect(screen.getByText("alightAtCount")).toBeTruthy();
     expect(screen.queryByText("nextStop")).toBeNull();
   });
 
   it("shows the next stop once aboard", () => {
-    render(
-      <TransitLegBanner
-        leg={freshLeg()}
-        legIndex={0}
-        totalLegs={2}
-        transitProgress={progressAt(0.0005)}
-      />,
-    );
-    expect(screen.getByText("nextStop")).toBeTruthy();
+    render(<TransitLegBanner leg={freshLeg()} legIndex={0} transitProgress={progressAt(0.0005)} />);
+    expect(screen.getByText(/^nextStop/)).toBeTruthy();
   });
 
   it("never sounds the get-off alarm before boarding", () => {
-    render(
-      <TransitLegBanner
-        leg={freshLeg()}
-        legIndex={0}
-        totalLegs={2}
-        transitProgress={waitingAt(0.0035)}
-      />,
-    );
+    render(<TransitLegBanner leg={freshLeg()} legIndex={0} transitProgress={waitingAt(0.0035)} />);
     expect(playAlarmTone).not.toHaveBeenCalled();
     expect(notifyGetOff).not.toHaveBeenCalled();
   });
@@ -195,7 +160,6 @@ it("never sounds an alight alarm for a cancelled current service, even with ridi
     <TransitLegBanner
       leg={{ ...freshLeg(), cancelled: true }}
       legIndex={0}
-      totalLegs={2}
       transitProgress={progressAt(0.0035)}
     />,
   );

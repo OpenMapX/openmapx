@@ -1,7 +1,12 @@
 import {
   isMobileSessionExpired,
   type MobileNavigationSession,
+  mergeTransitRefresh,
   type NativeToWebMessage,
+  prepareTransitProgress,
+  refreshTransitCaptures,
+  transitProgressFromTick,
+  transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
@@ -13,6 +18,8 @@ import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } fro
 import { SerialExecutor } from "./serialExecutor";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
+import { onRefreshFailed, onRefreshSucceeded } from "./transit/refreshState";
+import type { RefreshOutcome } from "./transit/TransitRefreshService";
 
 /**
  * The single authority over an active navigation session.
@@ -84,6 +91,8 @@ const MUTATING = new Set<WebToNativeMessage["type"]>([
   "session.prepare",
   "session.start",
   "session.replace",
+  "transit.action",
+  "transit.walk-route",
   "settings.update",
   "session.stop",
   "session.complete",
@@ -97,6 +106,18 @@ function errorResponse(code: string, forMessageId?: string): CommandResponse {
 }
 
 export class NavigationCoordinator {
+  private readonly remoteTasks = new Set<Promise<void>>();
+  trackRemoteWork(work: Promise<void>): void {
+    this.remoteTasks.add(work);
+    void work.then(
+      () => this.remoteTasks.delete(work),
+      () => this.remoteTasks.delete(work),
+    );
+  }
+  async settleRemoteWork(): Promise<void> {
+    while (this.remoteTasks.size > 0) await Promise.allSettled([...this.remoteTasks]);
+  }
+
   constructor(
     private readonly deps: CoordinatorDeps,
     private readonly queue = new SerialExecutor(),
@@ -163,6 +184,10 @@ export class NavigationCoordinator {
         return this.start(command, now);
       case "session.replace":
         return this.replace(command, now);
+      case "transit.walk-route":
+        return this.repairTransitWalk(command, now);
+      case "transit.action":
+        return this.transitAction(command, now);
       case "settings.update":
         return this.updateSettings(command, now);
       case "snapshot.request":
@@ -297,7 +322,15 @@ export class NavigationCoordinator {
   ): Promise<CommandResponse> {
     const current = await this.deps.repository.loadActive(now);
     if (!current) return errorResponse("no-session", command.messageId);
-    if (!this.matches(command, current))
+    if (
+      !(
+        current.kind === "transit" &&
+        command.sessionId === current.sessionId &&
+        command.payload.expectedItineraryFingerprint ===
+          current.payload.startPackage.itineraryFingerprint
+      ) &&
+      !this.matches(command, current)
+    )
       return errorResponse("revision-conflict", command.messageId);
     if (current.status !== "active") return errorResponse("invalid-state", command.messageId);
 
@@ -318,6 +351,78 @@ export class NavigationCoordinator {
     return {
       type: "session.replaced",
       payload: { sessionId: committed.session.sessionId, revision: committed.session.revision },
+      sessionId: committed.session.sessionId,
+      revision: committed.session.revision,
+    };
+  }
+
+  private async repairTransitWalk(
+    command: Extract<WebToNativeMessage, { type: "transit.walk-route" }>,
+    now: number,
+  ): Promise<CommandResponse> {
+    const current = await this.deps.repository.loadActive(now);
+    if (
+      current?.kind !== "transit" ||
+      current.status !== "active" ||
+      current.sessionId !== command.sessionId ||
+      current.payload.startPackage.itineraryFingerprint !== command.payload.itineraryFingerprint
+    )
+      return errorResponse("revision-conflict", command.messageId);
+    const processor = this.deps.processors.get("transit");
+    if (!processor?.repairTransitWalk) return errorResponse("mode-unsupported", command.messageId);
+    const result = processor.repairTransitWalk(
+      current as never,
+      command.payload.legIndex,
+      command.payload.route as never,
+      now,
+    );
+    if ("ok" in result) return errorResponse(result.code, command.messageId);
+    const committed = await this.commit(current, result, now);
+    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    await this.deps.effects.run(committed.effects);
+    return this.snapshot(now);
+  }
+
+  private async transitAction(
+    command: Extract<WebToNativeMessage, { type: "transit.action" }>,
+    now: number,
+  ): Promise<CommandResponse> {
+    const current = await this.deps.repository.loadActive(now);
+    if (current?.kind !== "transit") return errorResponse("no-session", command.messageId);
+    const action = command.payload;
+    if (
+      current.sessionId !== command.sessionId ||
+      current.payload.startPackage.itineraryFingerprint !== action.itineraryFingerprint
+    )
+      return errorResponse("revision-conflict", command.messageId);
+    if (current.payload.tickState.lastActionId === action.actionId) return this.snapshot(now);
+    // Arriving at the selected platform may race the tap; the processor still
+    // validates that this board action targets the same immediately selected ride.
+    const boardPhaseRace =
+      action.type === "board" &&
+      ["walking", "waiting-to-board"].includes(action.expectedPhase) &&
+      ["walking", "waiting-to-board"].includes(current.payload.tickState.phase);
+    if (
+      (current.payload.tickState.phase !== action.expectedPhase && !boardPhaseRace) ||
+      (current.status !== "active" && !(current.status === "arrived" && action.type === "undo"))
+    )
+      return errorResponse("invalid-state", command.messageId);
+    const processor = this.deps.processors.get("transit");
+    if (!processor?.transitAction) return errorResponse("mode-unsupported", command.messageId);
+    const outcome = processor.transitAction(
+      current as never,
+      { type: action.type, legIndex: action.legIndex },
+      now,
+    );
+    if ("ok" in outcome) return errorResponse(outcome.code, command.messageId);
+    if (outcome.session.kind === "transit")
+      outcome.session.payload.tickState.lastActionId = action.actionId;
+    const committed = await this.commit(current, outcome, now);
+    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    await this.deps.effects.run(committed.effects);
+    return {
+      type: "snapshot.update",
+      payload: { snapshot: this.snapshotOf(committed.session) },
       sessionId: committed.session.sessionId,
       revision: committed.session.revision,
     };
@@ -487,8 +592,7 @@ export class NavigationCoordinator {
     });
     // A wake-up that carried no usable position is not always nothing to do. A
     // transit rider underground produces no fix for twenty minutes, and the
-    // engine still has to advance the leg from the schedule or the banner
-    // freezes on a stop the train left long ago. Ground has no such fallback, so
+    // engine still has to update freshness without inferring movement. Ground has no such tick, so
     // an empty batch there really is nothing.
     if (accepted.length === 0 && !processor.needsScheduleTicks) return;
 
@@ -576,6 +680,98 @@ export class NavigationCoordinator {
 
     const committed = await this.commit(session, mutation, now);
     if (committed.ok) await this.deps.effects.run(committed.effects);
+  }
+
+  async applyTransitRefresh(outcome: RefreshOutcome): Promise<void> {
+    await this.queue.run(async () => {
+      const now = this.deps.clock();
+      const session = await this.deps.repository.loadActive(now);
+      if (
+        session?.kind !== "transit" ||
+        session.status !== "active" ||
+        session.sessionId !== outcome.sessionId
+      )
+        return;
+      const refresh = session.payload.refresh;
+      if (
+        refresh.status !== "in-flight" ||
+        refresh.generation !== outcome.generation ||
+        refresh.requestId !== outcome.requestId
+      )
+        return;
+      const parsed = outcome.ok
+        ? transitStartPackageSchema.safeParse({
+            ...session.payload.startPackage,
+            itinerary: outcome.itinerary,
+          })
+        : null;
+      const merged = parsed?.success
+        ? mergeTransitRefresh(
+            session.payload.startPackage.itinerary as never,
+            parsed.data.itinerary as never,
+            session.payload.tickState.currentLegIndex,
+            session.payload.tickState.walkRevision ?? 0,
+          )
+        : null;
+      const same = !!merged;
+      if (merged && parsed?.success) parsed.data.itinerary = merged.itinerary as never;
+      const payload =
+        same && parsed?.success
+          ? {
+              ...session.payload,
+              startPackage: parsed.data,
+              navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
+              refreshToken:
+                typeof parsed.data.itinerary.refreshToken === "string"
+                  ? parsed.data.itinerary.refreshToken
+                  : null,
+              refresh: onRefreshSucceeded(refresh, now),
+            }
+          : { ...session.payload, refresh: onRefreshFailed(refresh, "ambiguous") };
+      if (same && outcome.ok) {
+        payload.startPackage = {
+          ...payload.startPackage,
+          captures: refreshTransitCaptures(
+            session.payload.startPackage.captures,
+            (
+              session.payload.startPackage.itinerary as unknown as {
+                legs: import("@openmapx/core/navigation/api").BuildTransitPackageInput["itinerary"]["legs"];
+              }
+            ).legs,
+            outcome.journeys as never,
+            now,
+          ),
+        };
+      }
+      if (merged?.resetWalk) {
+        payload.tickState = {
+          ...payload.tickState,
+          currentWalkStepIndex: 0,
+          reachedStepEnd: false,
+          distanceToNextStepMeters: undefined,
+          walkRevision: (payload.tickState.walkRevision ?? 0) + 1,
+        };
+        payload.progress = transitProgressFromTick(
+          {
+            ...payload.tickState,
+            ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+          },
+          prepareTransitProgress(merged.itinerary),
+        ) as unknown as Record<string, unknown>;
+      }
+      const committed = await this.commit(
+        session,
+        {
+          session: { ...session, revision: session.revision + 1, updatedAtMs: now, payload },
+          effects: [
+            { kind: "reconcile-alerts", sessionId: session.sessionId },
+            { kind: "publish-snapshot", immediate: true },
+          ],
+        },
+        now,
+      );
+      if (committed.ok) await this.deps.effects.run(committed.effects);
+    });
   }
 
   // Internals.

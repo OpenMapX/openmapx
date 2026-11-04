@@ -87,7 +87,7 @@ export function transitSessionFixture(
   overrides: Partial<TransitMobileSession> = {},
 ): TransitMobileSession {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId: "session-t1",
     revision: 1,
     status: "active",
@@ -109,13 +109,11 @@ export function transitSessionFixture(
         legEnteredAtMs: START,
         spokenCueIds: [],
         emittedEventIds: [],
-        scheduleFallback: "inactive",
       },
       progress: null,
       confidence: "gps",
       refreshToken: FIXTURE_TOKEN,
       refresh: { status: "ready", generation: 0, attempts: 0 },
-      replan: { status: "idle", generation: 0, attempts: 0 },
       scheduledAlerts: [],
     },
     ...overrides,

@@ -47,6 +47,7 @@ TaskManager.defineTask<LocationTaskPayload>(NAVIGATION_LOCATION_TASK, async ({ d
 
     const coordinator = foregroundCoordinator() ?? (await getHeadlessCoordinator());
     await coordinator.handleLocationBatch(batch);
+    await coordinator.settleRemoteWork?.();
   } catch {
     // Deliberately silent: logging here could not be redacted reliably, and the
     // failure is already observable in the local diagnostic ring.

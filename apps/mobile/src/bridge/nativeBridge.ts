@@ -50,6 +50,7 @@ export interface ShellDescription {
   capabilities: {
     groundNavigation: boolean;
     transitNavigation: boolean;
+    transitActions?: boolean;
     backgroundLocation: boolean;
     localNotifications: boolean;
     speech: boolean;

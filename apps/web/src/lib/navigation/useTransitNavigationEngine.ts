@@ -1,220 +1,120 @@
+"use client";
 import {
   type FixInput,
-  fetchTransitPlan,
-  type PreparedTransitProgress,
+  fetchVehicleJourney,
   prepareTransitProgress,
   useNavigationStore,
   useTransitStopAreas,
 } from "@openmapx/core";
 import {
+  captureTransitLegStops,
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
   processTransitFix,
-  type TransitStopAreaIndex,
-  type TransitTickState,
+  refreshTransitCaptures,
   transitItineraryFingerprint,
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
-import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { useCallback, useEffect, useRef } from "react";
-import { useMapOptional } from "@/integration-api/map/MapContext";
+import { useQueries } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
-
-/**
- * Transit follow-along engine for the browser. Feeds GPS fixes through the
- * same stateful `processTransitFix` the app shell runs — which holds the
- * current leg, treats stops as the areas a rider enters, and never jumps
- * backwards — and publishes what it decided as `transitProgress`. When the
- * engine reports a missed connection it performs an on-trip replan: it
- * re-queries MOTIS from the current position to the original destination and
- * swaps in the new itinerary.
- */
-/** Cooldown after a replan before another missed-connection retry may fire. */
-const REPLAN_RETRY_COOLDOWN_MS = 30_000;
-
+/** Browser owner of fixes; connection changes are exclusively rider decisions. */
 export function useTransitNavigationEngine(): void {
-  const map = useMapOptional()?.mapRef.current ?? null;
-  // Guards against firing overlapping replans while one is in flight.
-  const replanningRef = useRef<{ requestId: string; lifecycle: object } | null>(null);
-  const lifecycleRef = useRef<object | null>({});
-  useEffect(() => {
-    lifecycleRef.current = {};
-    return () => {
-      lifecycleRef.current = null;
-      const store = useNavigationStore.getState();
-      if (replanningRef.current?.requestId === store.transitRequestId) {
-        store.setTransitRerouteNeeded(false);
-      }
-    };
-  }, []);
-  // Earliest time a replan may retry after a failure, so a persistently failing
-  // replan (destination temporarily unreachable, offline) doesn't fire on every
-  // ~1Hz fix and storm the BFF.
-  const nextReplanAllowedAtRef = useRef({ requestId: null as string | null, until: 0 });
-  // The planned trip's per-leg snap indexes. They describe the itinerary, so
-  // they outlive every fix and are rebuilt only when a replan swaps the
-  // itinerary in. A ref, because the fix handler reads it from the store.
-  const preparedRef = useRef<PreparedTransitProgress | null>(null);
-  // The engine's state belongs to one trip. A realtime refresh swaps in a new
-  // itinerary object for the same trip and must keep it; a replan is a new
-  // trip and starts afresh — so it is keyed by the structural fingerprint.
-  const tickRef = useRef<{
-    itinerary: TripItinerary;
-    fingerprint: string;
-    state: TransitTickState;
-  } | null>(null);
-  // Stop shapes arrive after the trip starts; until then each stop is a circle.
   const itinerary = useNavigationStore((s) => s.itinerary);
-  const stopAreas = useTransitStopAreas(itinerary);
-  const stopAreasRef = useRef<TransitStopAreaIndex>(stopAreas);
-  stopAreasRef.current = stopAreas;
-
-  // The engine asks for a replan once per leg; after one that found nothing it
-  // must be allowed to ask again, once the cooldown has passed.
-  const rearmReplan = useCallback(() => {
-    const tick = tickRef.current;
-    if (tick) tick.state = { ...tick.state, replanRequestedForLeg: undefined };
-  }, []);
-
-  const replan = useCallback(
-    async (from: [number, number], to: [number, number]) => {
-      const initial = useNavigationStore.getState();
-      const requestId = initial.transitRequestId;
-      const lifecycle = lifecycleRef.current;
-      if (!requestId || !lifecycle || replanningRef.current?.requestId === requestId) return;
-      const flight = { requestId, lifecycle };
-      replanningRef.current = flight;
-      const ownsRequest = () => {
-        const current = useNavigationStore.getState();
-        return (
-          lifecycleRef.current === lifecycle &&
-          current.transitRequestId === requestId &&
-          current.status === "navigating" &&
-          current.kind === "transit"
-        );
-      };
-      initial.setTransitRerouteNeeded(true);
-      try {
-        // Reuse the user's original transit options, snapshotted into the
-        // navigation store when the trip started (modes, wheelchair, transfer
-        // limits and buffer, bicycle requirements, first/last-mile access and
-        // the Deutschlandticket filter). Reading the snapshot — not the live
-        // directions store, which close() resets to defaults — keeps the replan
-        // from silently routing onto excluded/inaccessible legs. The shared
-        // request builder serializes them, so this cannot drift from planning.
-        const env = await fetchTransitPlan({
-          ...initial.transitReplanOptions,
-          origin: from,
-          destination: to,
-          time: new Date().toISOString(),
-        });
-        const next = env.data?.itineraries?.[0];
-        const latest = useNavigationStore.getState();
-        if (!ownsRequest()) return;
-        if (next) {
-          haptics.warn();
-          // Back off after a successful replan too: the fresh itinerary's first
-          // transit leg may still read as "missed" when no better option exists,
-          // and replaceItinerary clears transitRerouteNeeded — without a cooldown
-          // the next fix would re-fire the replan every ~1Hz and storm the BFF.
-          nextReplanAllowedAtRef.current = {
-            requestId,
-            until: Date.now() + REPLAN_RETRY_COOLDOWN_MS,
-          };
-          latest.replaceItinerary(next);
-          nextReplanAllowedAtRef.current.requestId = useNavigationStore.getState().transitRequestId;
-        } else {
-          // No alternative: back off before the next missed-connection retry.
-          nextReplanAllowedAtRef.current = {
-            requestId,
-            until: Date.now() + REPLAN_RETRY_COOLDOWN_MS,
-          };
-          latest.setTransitRerouteNeeded(false);
-          rearmReplan();
-        }
-      } catch {
-        if (!ownsRequest()) return;
-        nextReplanAllowedAtRef.current = {
-          requestId,
-          until: Date.now() + REPLAN_RETRY_COOLDOWN_MS,
-        };
-        useNavigationStore.getState().setTransitRerouteNeeded(false);
-        rearmReplan();
-      } finally {
-        if (replanningRef.current === flight) replanningRef.current = null;
-      }
-    },
-    [rearmReplan],
+  const requestId = useNavigationStore((s) => s.transitRequestId);
+  const currentLegIndex = useNavigationStore((s) => s.transitProgress?.currentLegIndex ?? 0);
+  const captureVersion = useRef("");
+  const active = useNavigationStore((s) => s.kind === "transit" && s.status === "navigating");
+  const prepared = useMemo(
+    () => (itinerary ? prepareTransitProgress(itinerary) : null),
+    [itinerary],
   );
-
-  const onFix = useCallback(
-    (fix: FixInput) => {
+  const stopAreas = useTransitStopAreas(itinerary);
+  useEffect(() => {
+    const store = useNavigationStore.getState();
+    if (
+      store.navigationAuthority === "browser" &&
+      store.itinerary === itinerary &&
+      store.transitRequestId === requestId
+    )
+      useNavigationStore.setState({ transitStopAreas: stopAreas });
+  }, [itinerary, requestId, stopAreas]);
+  const trips = useMemo(
+    () =>
+      [
+        ...new Set(
+          (itinerary?.legs?.slice(currentLegIndex) ?? []).flatMap((l) =>
+            l.tripId ? [l.tripId] : [],
+          ),
+        ),
+      ].slice(0, 4),
+    [itinerary, currentLegIndex],
+  );
+  const journeys = useQueries({
+    queries: trips.map((tripId) => ({
+      queryKey: ["vehicle-journey", tripId, undefined],
+      queryFn: () => fetchVehicleJourney({ tripId }, undefined, { timeoutMs: 8000 }),
+      enabled: active,
+      staleTime: 30000,
+      retry: 1,
+    })),
+  });
+  const captured = useNavigationStore((s) => s.transitCaptures);
+  const ready = journeys.every((j) => j.isSuccess || j.isError);
+  useEffect(() => {
+    if (!itinerary || !active || !ready || trips.length === 0) return;
+    const version = `${requestId}:${trips.join(",")}:${journeys.map((j) => j.dataUpdatedAt).join(":")}`;
+    if (captureVersion.current === version) return;
+    captureVersion.current = version;
+    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i].data?.data?.stops]));
+    useNavigationStore
+      .getState()
+      .setTransitCaptures(
+        captured.length === 0
+          ? captureTransitLegStops(itinerary.legs, byTrip, Date.now())
+          : refreshTransitCaptures(captured, itinerary.legs, byTrip, Date.now()),
+      );
+  }, [itinerary, active, ready, captured, trips, journeys, requestId]);
+  const tick = useCallback(
+    (fix?: FixInput) => {
       const store = useNavigationStore.getState();
-      const { status, kind, itinerary } = store;
-      if (status !== "navigating" || kind !== "transit" || !itinerary) return;
-
-      const held = preparedRef.current;
-      // Dropping the reference releases the previous itinerary's indexes.
-      const prepared = held?.itinerary === itinerary ? held : prepareTransitProgress(itinerary);
-      preparedRef.current = prepared;
-
+      if (
+        store.kind !== "transit" ||
+        store.status !== "navigating" ||
+        store.itinerary !== itinerary ||
+        !itinerary ||
+        !prepared
+      )
+        return;
       const nowMs = Date.now();
-      const tick = tickRef.current;
-      const fingerprint =
-        tick?.itinerary === itinerary ? tick.fingerprint : transitItineraryFingerprint(itinerary);
-      const state = tick?.fingerprint === fingerprint ? tick.state : freshTransitTickState(nowMs);
       const result = processTransitFix({
         itinerary,
-        captures: [],
-        state,
+        captures: store.transitCaptures,
+        state: store.transitTickState ?? freshTransitTickState(nowMs, itinerary),
         fix,
         nowMs,
         options: {
           ...DEFAULT_TRANSIT_TICK_OPTIONS,
-          itineraryFingerprint: fingerprint,
+          itineraryFingerprint: transitItineraryFingerprint(itinerary),
         },
         prepared,
-        stopAreas: stopAreasRef.current,
+        stopAreas,
       });
-      tickRef.current = { itinerary, fingerprint, state: result.state };
-
-      const tp = transitProgressFromTick(result.state, prepared, fix.coords);
-      store.applyTransitProgress(tp);
-
-      // Follow the snapped position unless the user has released the camera
-      // (e.g. via "Overview"); the MapControls recenter compass sets it back.
-      if (map && store.cameraMode === "follow") {
-        map.easeTo(
-          { center: tp.snapped, zoom: Math.max(map.getZoom(), 15), duration: 350 },
-          { programmatic: true },
-        );
-      }
-
+      const tp = transitProgressFromTick(result.state, prepared);
+      useNavigationStore.setState({ transitTickState: result.state, transitProgress: tp });
       if (tp.arrived) {
         haptics.success();
         store.completeArrival();
-        return;
       }
-
-      // On-trip reroute: the engine reports a missed connection once per leg;
-      // replan from here to the original destination (the last leg's drop-off
-      // point). While a replan is in flight or backing off, let the engine ask
-      // again on a later fix, so a failed attempt is retried after the cooldown.
-      if (!result.needsReplan) return;
-      const mayReplan =
-        !store.transitRerouteNeeded &&
-        (nextReplanAllowedAtRef.current.requestId !== store.transitRequestId ||
-          nowMs >= nextReplanAllowedAtRef.current.until);
-      const dest = itinerary.legs?.at(-1)?.to;
-      if (mayReplan && dest) void replan(fix.coords, [dest.lng, dest.lat]);
-      else rearmReplan();
     },
-    [map, replan, rearmReplan],
+    [itinerary, prepared, stopAreas],
   );
-
-  const active = useNavigationStore(
-    (s) => s.status !== "idle" && s.status !== "arrived" && s.kind === "transit",
-  );
-  useWatchPosition(active, onFix);
+  useWatchPosition(active, tick);
+  useEffect(() => {
+    if (!active) return;
+    tick();
+    const timer = setInterval(() => tick(), 5000);
+    return () => clearInterval(timer);
+  }, [active, tick]);
 }

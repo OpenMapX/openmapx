@@ -155,7 +155,7 @@ describe("TransitRefreshService.request", () => {
       expect(outcome).toMatchObject({ ok: false, failure: "ambiguous" });
     });
 
-    it("treats a deliberate abort as unreachable, because we cancelled it", async () => {
+    it("treats cancellation after dispatch as ambiguous because the server may have consumed the token", async () => {
       const { client } = fakeClient({
         refresh: async () => {
           throw new ApiRequestAbortedError("aborted");
@@ -164,7 +164,7 @@ describe("TransitRefreshService.request", () => {
 
       const outcome = await service(client).request(request());
 
-      expect(outcome).toMatchObject({ ok: false, failure: "unreachable" });
+      expect(outcome).toMatchObject({ ok: false, failure: "ambiguous" });
     });
 
     it("treats an answer with no replacement token as a rejection", async () => {

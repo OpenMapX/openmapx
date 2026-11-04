@@ -2,6 +2,7 @@ import type { MobileNavigationSession } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
 import { createRemoteWork, type RemoteWorkDeps } from "./createRemoteWork";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
+import { transitSessionFixture } from "./transit/testing/transitFixture";
 
 const NOW = 1_700_000_100_000;
 
@@ -86,4 +87,29 @@ describe("createRemoteWork reroute", () => {
 
     expect(requests).toEqual([]);
   });
+});
+it("runs native transit refresh through the remote-work production port", async () => {
+  const session = transitSessionFixture();
+  session.payload.refresh = { status: "in-flight", generation: 2, requestId: "r1", attempts: 0 };
+  const request = jest.fn(async () => ({
+    ok: false as const,
+    sessionId: session.sessionId,
+    requestId: "r1",
+    generation: 2,
+    failure: "ambiguous" as const,
+  }));
+  const apply = jest.fn();
+  const work = createRemoteWork({
+    repository: { loadActive: async () => session },
+    reroute: { request: jest.fn(), abortAll: jest.fn() },
+    applyReroute: jest.fn(),
+    now: () => NOW,
+    diagnostics: { record: jest.fn() },
+    transitRefresh: { request, abortAll: jest.fn() },
+    applyTransitRefresh: apply,
+  });
+  await work.port.transitRefresh("r1");
+  await work.idle();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(apply).toHaveBeenCalledTimes(1);
 });

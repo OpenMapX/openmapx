@@ -24,11 +24,27 @@ vi.mock("@/lib/mobile/useMobileRuntime", () => ({
   useMobileRuntime: () => ({ browserAuthority: state.browser }),
 }));
 vi.mock("@/lib/navigation/useNavigationVoice", () => ({ useNavigationVoice: () => state.speak }));
+vi.mock("@/lib/navigation/transitCueLedger", () => ({ claimBrowserTransitCue: () => true }));
 vi.mock("@/lib/navigation/navNotify", () => ({ notifyGetOff: vi.fn(), playAlarmTone: vi.fn() }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useVehicleJourney: state.journey,
-  useNavigationStore: () => true,
+  useNavigationStore: (selector: (s: unknown) => unknown) =>
+    selector({
+      voiceEnabled: true,
+      transitCaptures: [
+        {
+          legIndex: 0,
+          tripId: "ms:trip-a",
+          status: "captured",
+          capturedAtMs: 0,
+          stops: [
+            { stopId: leg.from.stopId, name: leg.from.name, lat: leg.from.lat, lng: leg.from.lng },
+            { stopId: leg.to.stopId, name: leg.to.name, lat: leg.to.lat, lng: leg.to.lng },
+          ],
+        },
+      ],
+    }),
 }));
 const leg: TripLeg = {
   mode: "rail",
@@ -115,12 +131,11 @@ describe("journey and navigation use the same transit evidence", () => {
       <TransitLegBanner
         leg={{ ...leg, cancelled: true }}
         legIndex={0}
-        totalLegs={2}
         transitProgress={null}
         source="ms"
       />,
     );
-    expect(screen.getByText("transit.canceled")).toBeInTheDocument();
+    expect(screen.getByText("RE1 · transit.canceled")).toBeInTheDocument();
     expect(state.speak).not.toHaveBeenCalled();
   });
   it("keeps browser live queries disabled in the installed shell", () => {
@@ -128,7 +143,7 @@ describe("journey and navigation use the same transit evidence", () => {
     render(
       <>
         <TransitJourneySheet itinerary={itinerary} currentLegIndex={0} transitProgress={null} />
-        <TransitLegBanner leg={leg} legIndex={0} totalLegs={2} transitProgress={null} source="ms" />
+        <TransitLegBanner leg={leg} legIndex={0} transitProgress={null} source="ms" />
       </>,
     );
     expect(state.journey.mock.calls.map((call) => call[0])).toEqual([null, null]);
@@ -143,13 +158,15 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
     <TransitLegBanner
       leg={leg}
       legIndex={0}
-      totalLegs={2}
       source="ms"
       transitProgress={{
         currentLegIndex: 0,
         snapped: [13.3798, 52.5298],
+        position: [13.3798, 52.5298],
         fractionAlongLeg: 0.98,
         phase: "riding",
+        confidence: "gps",
+        stopCursor: 1,
         deviationMeters: 0,
         arrived: false,
       }}

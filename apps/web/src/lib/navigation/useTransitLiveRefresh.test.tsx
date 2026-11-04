@@ -95,7 +95,7 @@ describe("transit polling lifecycle", () => {
     },
   );
   it.each(["rejection", "missing data"])(
-    "retains the itinerary after %s and polls again",
+    "retains the itinerary after %s and does not reuse a possibly spent token",
     async (outcome) => {
       vi.useFakeTimers();
       const flight = deferred();
@@ -112,8 +112,8 @@ describe("transit polling lifecycle", () => {
       expect(useNavigationStore.getState().itinerary).toBe(initial);
       api.refresh.mockResolvedValue({ data: { itinerary: trip("recovered") } });
       await act(async () => vi.advanceTimersByTime(30_000));
-      expect(api.refresh.mock.calls.map((call) => call[0])).toEqual(["initial", "initial"]);
-      expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("recovered");
+      expect(api.refresh.mock.calls.map((call) => call[0])).toEqual(["initial"]);
+      expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
     },
   );
   it("suppresses ticks and response application while rerouting", async () => {
@@ -130,7 +130,7 @@ describe("transit polling lifecycle", () => {
     expect(api.refresh).toHaveBeenCalledTimes(1);
     expect(useNavigationStore.getState().itinerary).toBe(initial);
   });
-  it("invalidates a pending response on deactivation and starts a fresh interval", async () => {
+  it("does not reuse a potentially spent token after interrupted ownership", async () => {
     vi.useFakeTimers();
     const flight = deferred();
     api.refresh.mockImplementation(() => flight.promise);
@@ -150,7 +150,9 @@ describe("transit polling lifecycle", () => {
     act(() => vi.advanceTimersByTime(29_999));
     expect(api.refresh).toHaveBeenCalledTimes(1);
     await act(async () => vi.advanceTimersByTime(1));
-    expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("fresh");
+    expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("initial");
+    expect(api.refresh).toHaveBeenCalledTimes(1);
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
   });
   it("old flight settlement cannot clear a new trip's pending flight", async () => {
     vi.useFakeTimers();
@@ -174,4 +176,16 @@ describe("transit polling lifecycle", () => {
     await act(async () => current.resolve({ data: { itinerary: trip("latest") } }));
     expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("latest");
   });
+});
+
+it("starts a new token chain only after explicit journey replacement", async () => {
+  vi.useFakeTimers();
+  useNavigationStore.getState().startTransitNavigation(trip("broken"));
+  useNavigationStore.getState().setLiveDataUnavailable(true);
+  useNavigationStore.getState().replaceItinerary(trip("new"));
+  api.refresh.mockResolvedValue({ data: { itinerary: trip("rotated") } });
+  renderHook(() => useTransitLiveRefresh(true));
+  await act(async () => vi.advanceTimersByTime(30000));
+  expect(api.refresh).toHaveBeenCalledWith("new");
+  expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("rotated");
 });
