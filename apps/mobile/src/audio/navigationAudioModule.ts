@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from "expo";
+import { createAudioArbiter, type VoiceAudioLease } from "../voice/audioArbiter";
 import {
   createNavigationAudio,
   type NativeNavigationAudio,
@@ -24,11 +25,13 @@ const UNAVAILABLE: NativeNavigationAudio = {
   }),
 };
 
-let cached: NavigationAudio | null = null;
+let cached: (NavigationAudio & VoiceAudioLease) | null = null;
 
-export function getNavigationAudio(): NavigationAudio {
-  cached ??= createNavigationAudio(
-    requireOptionalNativeModule<NativeNavigationAudio>("OpenMapXNavigationAudio") ?? UNAVAILABLE,
+export function getNavigationAudio(): NavigationAudio & VoiceAudioLease {
+  cached ??= createAudioArbiter(
+    createNavigationAudio(
+      requireOptionalNativeModule<NativeNavigationAudio>("OpenMapXNavigationAudio") ?? UNAVAILABLE,
+    ),
   );
   return cached;
 }

@@ -10,6 +10,8 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# pnpm checks every patched dependency's file hash, installed here or not.
+COPY patches/ patches/
 # Only the workspace packages the agent and its fixed CLI reach. Manifests stay
 # separate from source, so a source edit keeps the dependency install cached.
 COPY --parents \

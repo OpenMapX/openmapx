@@ -362,6 +362,8 @@
     "clearHistory": "Clear history",
     "voiceSearchAriaLabel": "Search by voice",
     "voiceErrorNotAllowed": "Microphone access is blocked. Allow it in your browser's site settings, then try again.",
+    "voiceErrorNotAllowedApp": "Allow microphone access for OpenMapX in Android settings, then try again.",
+    "voiceErrorLanguageApp": "Offline speech for this language isn't installed on this device. The system download was started.",
     "voiceErrorNoMicrophone": "No microphone was found.",
     "voiceErrorNetwork": "Voice search needs an internet connection.",
     "voiceErrorLanguage": "Voice search isn't available for this language.",

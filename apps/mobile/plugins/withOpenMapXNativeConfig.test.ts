@@ -432,3 +432,35 @@ describe("Android release signing", () => {
     expect(() => applyAndroidReleaseSigning("android {}\n")).toThrow(/signing/);
   });
 });
+
+it("strips a speculative microphone foreground service permission but keeps merge denial", () => {
+  const result = applyAndroidPermissions({
+    manifest: {
+      $: {},
+      "uses-permission": [
+        { $: { "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE" } },
+        {
+          $: {
+            "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+            "tools:node": "remove",
+          },
+        },
+      ],
+    },
+  });
+  expect(
+    result.manifest["uses-permission"]?.filter(
+      (node) => node.$["android:name"] === "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+    ),
+  ).toEqual([
+    {
+      $: {
+        "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "tools:node": "remove",
+      },
+    },
+  ]);
+  expect(result.manifest["uses-permission"]).toContainEqual({
+    $: { "android:name": "android.permission.RECORD_AUDIO" },
+  });
+});

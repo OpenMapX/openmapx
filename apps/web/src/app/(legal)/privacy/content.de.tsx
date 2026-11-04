@@ -866,21 +866,34 @@ export default function PrivacyContentDe({
           Sprachsuche (Mikrofon)
         </Typography>
         <Typography>
-          Die Suchleiste bietet optional eine Spracheingabe. Sie ist erst aktiv, wenn Sie die
-          Schaltfläche drücken. Danach fragt Ihr Browser die Mikrofonberechtigung ab und wandelt
-          Ihre Spracheingabe mit der browsereigenen Spracherkennung (Web Speech API) in Suchtext um.
-          An unsere Server gelangt ausschließlich der resultierende Text als gewöhnliche Suchanfrage
-          — die Audiodaten erhalten und speichern wir nicht.
+          Auf der Website bietet die Suchleiste optional eine Spracheingabe. Sie ist erst aktiv,
+          wenn Sie die Schaltfläche drücken. Danach fragt Ihr Browser die Mikrofonberechtigung ab
+          und wandelt Ihre Spracheingabe mit der browsereigenen Spracherkennung (Web Speech API) in
+          Suchtext um. An unsere Server gelangt ausschließlich der resultierende Text als
+          gewöhnliche Suchanfrage — die Audiodaten erhalten und speichern wir nicht.
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          Wo die Spracherkennung stattfindet, entscheidet Ihr Browser, nicht OpenMapX.
-          Chromium-basierte Browser (Chrome, Edge und die meisten Abkömmlinge) übertragen die
-          aufgenommenen Audiodaten zur Transkription an den Cloud-Sprachdienst ihres Herstellers,
-          für den dessen eigene Datenschutzerklärung gilt; andere Browser erkennen die Sprache
-          gegebenenfalls lokal auf Ihrem Gerät oder bieten die Funktion nicht an — dann wird die
-          Schaltfläche nicht angezeigt. Wenn Sie eine Verarbeitung durch Ihren Browserhersteller
+          Auf der Website entscheidet Ihr Browser, wo die Spracherkennung stattfindet, nicht
+          OpenMapX. Chromium-basierte Browser (Chrome, Edge und die meisten Abkömmlinge) übertragen
+          die aufgenommenen Audiodaten zur Transkription an den Cloud-Sprachdienst ihres
+          Herstellers, für den dessen eigene Datenschutzerklärung gilt; andere Browser erkennen die
+          Sprache gegebenenfalls lokal auf Ihrem Gerät oder bieten die Funktion nicht an — dann wird
+          die Schaltfläche nicht angezeigt. Wenn Sie eine Verarbeitung durch Ihren Browserhersteller
           nicht wünschen, nutzen Sie die Sprachschaltfläche nicht; die Eingabe über die Tastatur
           verwendet kein Mikrofon.
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          In der installierten App nutzt die optionale Sprachsuche ab Android 13 die lokale
+          Spracherkennung des Betriebssystems, sofern ein lokaler Dienst und das Sprachmodell
+          verfügbar sind. Sie startet erst, wenn Sie die Mikrofontaste drücken und Android den
+          Mikrofonzugriff erlauben. Die Audiodaten werden auf Ihrem Gerät verarbeitet und von
+          OpenMapX weder übertragen noch gespeichert. Das Herunterladen eines fehlenden
+          Sprachmodells benötigt eine Netzwerkverbindung; die Erkennung selbst nicht. Unter iOS und
+          älteren Android-Versionen ist die Sprachsuche deaktiviert. Das Transkript wird als
+          gewöhnlicher Suchtext verwendet. Dafür gelten dieselben Regeln für Suchanfragen und den
+          Suchverlauf wie bei getipptem Text. Die Spracheingabefunktion protokolliert keine
+          Transkripte.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>

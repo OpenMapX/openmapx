@@ -799,20 +799,31 @@ export default function PrivacyContent({
           Voice Search (Microphone)
         </Typography>
         <Typography>
-          The search bar offers an optional voice input button. It is never active until you press
-          it. When you do, your browser asks for microphone permission and then uses your
-          browser&apos;s own built-in speech recognition (the Web Speech API) to turn what you say
-          into search text. Only the resulting text reaches our servers, as an ordinary search query
-          — the audio itself is never sent to us and is never stored by us.
+          On the website, the search bar offers an optional voice input button. It is never active
+          until you press it. When you do, your browser asks for microphone permission and then uses
+          your browser&apos;s own built-in speech recognition (the Web Speech API) to turn what you
+          say into search text. Only the resulting text reaches our servers, as an ordinary search
+          query — the audio itself is never sent to us and is never stored by us.
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          Where the speech recognition itself happens is decided by your browser, not by OpenMapX.
-          Chromium-based browsers (Chrome, Edge and most derivatives) transmit the captured audio to
-          their vendor&apos;s cloud speech service for transcription, under that vendor&apos;s own
-          privacy policy; other browsers may transcribe on your device or may not offer the feature
-          at all, in which case the button is hidden. If you do not want your audio processed by
-          your browser vendor, do not use the voice button — typing your query has no microphone
-          involvement.
+          On the website, where speech recognition happens is decided by your browser, not by
+          OpenMapX. Chromium-based browsers (Chrome, Edge and most derivatives) transmit the
+          captured audio to their vendor&apos;s cloud speech service for transcription, under that
+          vendor&apos;s own privacy policy; other browsers may transcribe on your device or may not
+          offer the feature at all, in which case the button is hidden. If you do not want your
+          audio processed by your browser vendor, do not use the voice button — typing your query
+          has no microphone involvement.
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          In the installed app, optional voice search uses the operating system&apos;s on-device
+          recogniser on Android 13 or later when an on-device service and the language model are
+          available. It starts only when you press the microphone button and grant Android
+          microphone permission. The audio is processed on your device and is not transmitted or
+          stored by OpenMapX. Downloading a missing language model requires a network connection;
+          recognition itself does not. Voice search is disabled on iOS and older Android versions.
+          The transcript is used as ordinary search text and follows the same search-request and
+          search-history rules as typed text. Transcripts are not logged by the voice-input feature.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>

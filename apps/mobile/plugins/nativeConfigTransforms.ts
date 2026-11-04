@@ -27,6 +27,7 @@ export const EXPO_LOCATION_SERVICE_NAMES = ["expo.modules.location.services.Loca
 export const REQUIRED_ANDROID_PERMISSIONS = [
   "androidx.car.app.NAVIGATION_TEMPLATES",
   "androidx.car.app.ACCESS_SURFACE",
+  "android.permission.RECORD_AUDIO",
   "android.permission.INTERNET",
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",
@@ -214,14 +215,19 @@ export interface AndroidManifestLike {
  * a duplicate `<uses-permission>` node.
  */
 export function applyAndroidPermissions(manifest: AndroidManifestLike): AndroidManifestLike {
-  const existing = manifest.manifest["uses-permission"] ?? [];
+  const existing = (manifest.manifest["uses-permission"] ?? []).filter(
+    (node) =>
+      node.$["android:name"] !== "android.permission.FOREGROUND_SERVICE_MICROPHONE" ||
+      node.$["tools:node"] === "remove",
+  );
   const present = new Set(existing.map((node) => node.$["android:name"]));
   const additions = REQUIRED_ANDROID_PERMISSIONS.filter((name) => !present.has(name)).map(
     (name) => ({
       $: { "android:name": name },
     }),
   );
-  if (additions.length === 0) return manifest;
+  if (additions.length === 0 && existing.length === manifest.manifest["uses-permission"]?.length)
+    return manifest;
   return {
     ...manifest,
     manifest: { ...manifest.manifest, "uses-permission": [...existing, ...additions] },

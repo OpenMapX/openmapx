@@ -34,6 +34,22 @@ also be reviewed; their absence does not establish that data is not collected.
 | App activity | Review text, rating, nickname, photos and public signing identity the user chooses to publish | Shared | Retained | Optional | App functionality |
 | Location | Tile and imagery requests revealing the viewed area, with network metadata such as IP address | Shared | Processed ephemerally | Required | App functionality |
 
+## On-device voice-search audio
+
+Convert one user-initiated utterance into search text using the OS on-device recogniser on Android 13+; no network recogniser fallback is permitted.
+
+Audio is processed during the utterance only and is not retained by OpenMapX. Recording persistence is disabled. Transcripts are not logged by voice input; resulting search text follows normal search-request and search-history rules.
+
+User control: Tap the microphone to start and grant Android microphone permission; tap again to stop. Backgrounding or leaving the page cancels. Revoke microphone permission in Android settings.
+
+Proposed collection: Apple No; Google No.
+Proposed Google sharing: No.
+Purpose: App functionality.
+
+Design classification pending candidate device/privacy qualification. iOS and Android below API 33 are disabled. Model downloads require a network; recognition does not. Only transcript text crosses the bridge, then ordinary search may transmit it.
+
+These are design classifications, pending candidate device/privacy qualification.
+
 ## Security practices to verify
 
 - Verify HTTPS for the binary, served web code and every configured provider path.

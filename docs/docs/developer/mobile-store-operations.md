@@ -116,6 +116,23 @@ capabilities, including push, iCloud, Sign in with Apple, App Groups, HealthKit
 and CarPlay, disabled. Compare generated entitlements and the final archive with
 `compliance/permissions.ts`; do not infer them from a console checkbox alone.
 
+## Voice-search disclosure and qualification
+
+Native voice search is designed for Android 13+ on-device recognition only.
+It requests `RECORD_AUDIO` on a microphone tap; the WebView still cannot capture
+audio or video. iOS voice input remains disabled despite the linked package
+requiring microphone and speech-recognition purpose strings.
+
+Review the `voice-search-audio` practice and regenerated store worksheets with
+the candidate. Audio is processed locally without OpenMapX transmission or
+retention; the transcript follows normal search and search-history rules.
+Model downloads require a network connection.
+
+Qualify airplane-mode recognition, German and English place names, permission
+states, microphone release and guidance-audio coordination before making store
+claims. Accuracy and latency measurements require a consented recording set.
+See [On-device voice input](./voice-input.md) for the design and remaining checks.
+
 ## What no script here does
 
 The scripts do not enroll an account, accept agreements, upload a build, submit

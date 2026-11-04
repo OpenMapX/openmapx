@@ -96,6 +96,7 @@ type RequestOptions = {
 
 const EXPECTED_REPLY: Partial<Record<WebToNativeMessage["type"], NativeToWebMessage["type"]>> = {
   "web.hello": "native.hello",
+  "voice.probe": "voice.availability",
   "session.prepare": "session.prepared",
   "session.start": "session.started",
   "session.replace": "session.replaced",

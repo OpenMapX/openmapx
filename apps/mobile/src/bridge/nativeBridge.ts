@@ -260,6 +260,7 @@ export class NativeBridge {
     const validated = nativeToWebSchema.safeParse(candidate);
     if (!validated.success) return "invalid";
 
+    if (draft.type === "voice.event" && !handshake) return "dropped";
     if (!options.immediate && !handshake) return this.enqueue(validated.data);
 
     this.deps.inject(buildOutboundScript(validated.data));

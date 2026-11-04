@@ -37,8 +37,10 @@ describe("every permission is justified", () => {
 });
 
 describe("the permitted surface is minimal", () => {
-  it("asks for exactly two iOS usage descriptions", () => {
+  it("asks for exactly four iOS usage descriptions", () => {
     expect(expectedPermissionSurface().iosUsageDescriptionKeys).toEqual([
+      "NSMicrophoneUsageDescription",
+      "NSSpeechRecognitionUsageDescription",
       "NSLocationWhenInUseUsageDescription",
       "NSLocationAlwaysAndWhenInUseUsageDescription",
     ]);
@@ -50,10 +52,11 @@ describe("the permitted surface is minimal", () => {
     expect(expectedPermissionSurface().iosBackgroundModes).toEqual(["location"]);
   });
 
-  it("asks for twelve Android permissions and no more", () => {
+  it("asks for thirteen Android permissions and no more", () => {
     expect(expectedPermissionSurface().androidPermissions).toEqual([
       "androidx.car.app.NAVIGATION_TEMPLATES",
       "androidx.car.app.ACCESS_SURFACE",
+      "android.permission.RECORD_AUDIO",
       "android.permission.INTERNET",
       "android.permission.ACCESS_COARSE_LOCATION",
       "android.permission.ACCESS_FINE_LOCATION",
@@ -91,7 +94,7 @@ describe("the app config matches the permitted surface", () => {
   it("blocks the capabilities that would otherwise arrive by default", () => {
     for (const id of [
       "com.google.android.c2dm.permission.RECEIVE",
-      "android.permission.RECORD_AUDIO",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
       "android.permission.CAMERA",
       "android.permission.QUERY_ALL_PACKAGES",
     ]) {

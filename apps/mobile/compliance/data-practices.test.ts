@@ -63,6 +63,7 @@ const byId = new Map(practices.map((practice) => [practice.id, practice]));
 
 /** Every behaviour a reviewer would look for. A missing row is a missing answer. */
 const REQUIRED_PRACTICES = [
+  "voice-search-audio",
   "precise-location-active-navigation",
   "background-location-active-navigation",
   "route-request-coordinates",

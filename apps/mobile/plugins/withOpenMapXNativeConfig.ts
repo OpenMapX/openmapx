@@ -104,6 +104,19 @@ export const withOpenMapXNativeConfig: ConfigPlugin = (config) => {
       ),
       input,
     );
+    // Service intent visibility is sufficient for the on-device recognizer;
+    // the speech plugin's default Google-app package query is unnecessary.
+    for (const query of manifestConfig.modResults.manifest.queries ?? []) {
+      if (
+        query.intent?.some((intent) =>
+          intent.action?.some(
+            (action) => action.$["android:name"] === "android.speech.RecognitionService",
+          ),
+        )
+      ) {
+        delete query.package;
+      }
+    }
     manifestConfig.modResults = updated as unknown as typeof manifestConfig.modResults;
     return manifestConfig;
   });

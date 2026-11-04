@@ -10,7 +10,12 @@ function androidManifest(): AndroidManifestLike {
       "uses-permission": [
         { $: { "android:name": "android.permission.ACCESS_FINE_LOCATION" } },
         { $: { "android:name": "android.permission.INTERNET" } },
-        { $: { "android:name": "android.permission.RECORD_AUDIO", "tools:node": "remove" } },
+        {
+          $: {
+            "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+            "tools:node": "remove",
+          },
+        },
       ],
       application: [
         {

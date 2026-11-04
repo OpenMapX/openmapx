@@ -573,3 +573,17 @@ describe("NativeBridge.send", () => {
     expect(bridge.queuedCount).toBe(0);
   });
 });
+
+it("never queues or replays voice events before a document handshake", async () => {
+  const f = harness();
+  f.registry.beginDocumentLoad(NOW);
+  expect(f.bridge.send("voice.event", { requestId: "r", state: "listening" })).toBe("dropped");
+  expect(f.bridge.queuedCount).toBe(0);
+  const next = f.registry.beginDocumentLoad(NOW);
+  await f.bridge.receive({ url: `${WEB_ORIGIN}/`, data: hello(next.nonce) });
+  expect(f.injected.join("")).not.toContain("voice.event");
+  expect(f.bridge.send("voice.event", { requestId: "s", state: "listening" })).toBe("sent");
+  f.registry.invalidate();
+  expect(f.bridge.send("voice.event", { requestId: "s", state: "ended" })).toBe("dropped");
+  expect(f.bridge.queuedCount).toBe(0);
+});

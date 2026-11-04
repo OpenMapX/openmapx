@@ -12,6 +12,8 @@ RUN corepack enable && \
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# pnpm checks every patched dependency's file hash, installed here or not.
+COPY patches/ patches/
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
 COPY packages/extension-contracts/package.json packages/extension-contracts/

@@ -1,4 +1,5 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import {
   type ReactElement,
   useCallback,
@@ -8,8 +9,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Alert, Linking, StatusBar, StyleSheet, View } from "react-native";
+import { Alert, Linking, Platform, StatusBar, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
+import { getNavigationAudio } from "./audio/navigationAudioModule";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
@@ -36,6 +38,7 @@ import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
 import { answerCommand, createShellServices } from "./shell/shellServices";
 import { useHardwareBack } from "./shell/useHardwareBack";
+import { VoiceInputController } from "./voice/VoiceInputController";
 
 /**
  * The entire visible product is the web UI inside one WebView pointed at the
@@ -114,15 +117,45 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     navigatingRef.current = navigating;
     dispatchShell({ type: navigating ? "session-started" : "session-ended" });
   }, []);
-  const { shell, navigation } = useMemo(() => {
+  const { shell, navigation, voice } = useMemo(() => {
     let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
+    const voice = new VoiceInputController({
+      module: ExpoSpeechRecognitionModule,
+      platform: Platform.OS,
+      api: Number(Platform.Version),
+      audio: getNavigationAudio(),
+      active: () => visibilityRef.current === "active",
+      channel: () =>
+        composed.registry.handshake() ? (composed.registry.current()?.nonce ?? null) : null,
+      emit: (event) => composed.bridge.send("voice.event", event),
+    });
     const composed: ShellBridge = createShellBridge({
       webOrigin: config.webOrigin,
       inject: (script) => webViewRef.current?.injectJavaScript(script),
-      // Every command goes through the navigation coordinator, which also
+      // Navigation commands go through the coordinator, which also
       // answers the one-shot location, settings and sign-in requests. A build
       // without it (the feasibility probe) answers only those.
       dispatch: async (message) => {
+        if (message.type === "voice.probe") {
+          composed.bridge.send(
+            "voice.availability",
+            { available: voice.isAvailable() },
+            { forMessageId: message.messageId },
+          );
+          return;
+        }
+        if (message.type === "voice.start") {
+          void voice.start(message.payload.requestId, message.payload.locale);
+          return;
+        }
+        if (message.type === "voice.stop") {
+          voice.stop(message.payload.requestId);
+          return;
+        }
+        if (message.type === "voice.cancel") {
+          voice.cancel(message.payload.requestId);
+          return;
+        }
         const composedNavigation = await navigation;
         if (composedNavigation) {
           await composedNavigation.coordinator.dispatch(message);
@@ -147,8 +180,11 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onNavigatingChanged: setNavigating,
       }).catch(() => null);
     }
-    return { shell: composed, navigation };
+    return { shell: composed, navigation, voice };
   }, [config, locale, prompter, services, setNavigating]);
+  useEffect(() => {
+    if (visibility !== "active") voice.suspend();
+  }, [visibility, voice]);
   const deliverLink = useCallback(
     (intent: DeepLinkIntent) => {
       shell.bridge.send("deep-link.open", intent);
@@ -191,9 +227,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const incomingLinks = useIncomingLinks(config, deliverLink, requestNativeEnd);
   useEffect(
     () => () => {
+      voice.cancel();
       void navigation.then((composed) => composed?.dispose());
     },
-    [navigation],
+    [navigation, voice],
   );
   const recovery = useMemo(
     () =>
@@ -224,14 +261,15 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       if (event?.nativeEvent?.loading === false) return;
       // A real top-level navigation or reload.
       //
-      // A reload resets the bridge and nothing else: the native session and the
-      // location driver are unaffected, because the page is not their authority.
+      // Navigation and its location driver survive a reload. Voice input is
+      // owned by this document and must be cancelled before channel replacement.
+      voice.cancel();
       incomingLinks.documentStarted();
       shell.registry.adoptDocument(publishedNonce, Date.now());
       shell.bridge.discardQueue();
       dispatchShell({ type: "document-load-started" });
     },
-    [publishedNonce, shell, incomingLinks],
+    [publishedNonce, shell, incomingLinks, voice],
   );
 
   const handleLoadEnd = useCallback(() => {
@@ -244,11 +282,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   }, [shell]);
 
   const handleLoadFailure = useCallback(() => {
+    voice.cancel();
     dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
     incomingLinks.documentStarted();
     shell.registry.invalidate();
     shell.bridge.discardQueue();
-  }, [shell, connectivity.displayed, incomingLinks]);
+  }, [shell, connectivity.displayed, incomingLinks, voice]);
 
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
@@ -378,9 +417,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
         allowsInlineMediaPlayback={false}
-        // The page never gets camera or microphone. The shell declares neither
-        // permission, and a store build that prompts for a capability it never
-        // declared is a rejection rather than a feature.
+        // Native voice input owns the microphone; WebView capture remains denied.
         mediaCapturePermissionGrantType="deny"
         // Geolocation is native's, exclusively. A page that could ask the
         // WebView for it would be a second location producer racing the one

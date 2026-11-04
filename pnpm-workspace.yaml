@@ -182,3 +182,6 @@ peerDependencyRules:
   # React 19 and is covered by the web build/tests.
   allowedVersions:
     react: "^19"
+patchedDependencies:
+  expo-speech-recognition@57.1.1: patches/expo-speech-recognition@57.1.1.patch
+  react-native-webview@13.16.1: patches/react-native-webview@13.16.1.patch

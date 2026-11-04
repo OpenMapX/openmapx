@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Fails when the shell could execute code a reviewer never saw.
  *
@@ -14,7 +15,9 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
+import { hasWebViewCaptureDenial } from "./webViewCapturePolicy.ts";
 
 const repoRoot = resolve(import.meta.dirname, "../../..");
 
@@ -142,6 +145,27 @@ if (app) {
   if (/injectedJavaScript=\{/.test(app)) {
     findings.push({ file: APP, problem: "injects arbitrary JavaScript into the page" });
   }
+}
+
+const require = createRequire(import.meta.url);
+const webViewSource = join(
+  dirname(require.resolve("react-native-webview/package.json")),
+  "android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java",
+);
+if (!hasWebViewCaptureDenial(readFileSync(webViewSource, "utf8"))) {
+  findings.push({
+    file: webViewSource,
+    problem: "installed WebView capture-denial patch is missing",
+  });
+}
+
+const speechSource = join(
+  dirname(require.resolve("expo-speech-recognition/package.json")),
+  "android/src/main/java/expo/modules/speechrecognition/ExpoSpeechService.kt",
+);
+const speechCode = readFileSync(speechSource, "utf8");
+if (/log\([^\n]*(?:\$resultsList|\$nonEmptyStrings)/.test(speechCode)) {
+  findings.push({ file: speechSource, problem: "installed speech module logs transcripts" });
 }
 
 if (findings.length > 0) {
