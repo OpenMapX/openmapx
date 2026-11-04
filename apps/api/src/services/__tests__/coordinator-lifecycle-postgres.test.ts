@@ -3475,10 +3475,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         `sha256:${"b".repeat(64)}`,
       );
       expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
+        (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
           (s) => s.serviceId === "data-manager",
-        ),
-      ).toBe(false);
+        )?.provenance.imageId,
+      ).toBe(`sha256:${"b".repeat(64)}`);
       expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
       expect(row.error ?? "").not.toContain('update "admin_job"');
       expect(row.error ?? "").not.toContain(host.root);
