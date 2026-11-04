@@ -1,5 +1,6 @@
 "use client";
 import { TrafficFlowLayer } from "@integrations/overlay-traffic-flow/map-layer";
+import { RoadConditionsLayer } from "@integrations/road-conditions/map-layer";
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
 import { isOverSpeed, useNavigationStore } from "@openmapx/core";
@@ -17,7 +18,6 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
-import { CarConditionsLayer } from "./CarConditionsLayer";
 import {
   boundsOf,
   carLabelSize,
@@ -210,7 +210,8 @@ export function CarMap({
       <MapCanvas carSurface onSurfaceError={error} />
       <BaseAttributions />
       <NavigationRouteLayer />
-      <CarConditionsLayer />
+      {/* The phone's layer: on while driving via ContextualOverlays, or when the user enabled it. */}
+      <RoadConditionsLayer />
       <RouteTrafficLayer navigationOnly />
       <TrafficFlowLayer />
       <ContextualOverlays />
