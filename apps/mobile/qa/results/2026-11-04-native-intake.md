@@ -9,21 +9,21 @@ It is not store-release acceptance.
 - Full repository verification passed: 2,023 test files passed, 58 skipped;
   24,916 tests passed, 277 skipped. This includes lint, types, policy and OpenAPI
   gates. Later focused checks cover the final intake changes.
-- Mobile Jest: 70 suites / 1,312 tests passed; later focused shell/intake/link
-  checks: 4 suites / 110 tests passed.
-- Focused web bridge/PWA/parser checks: 21 suites / 258 tests passed. The final
-  intake/transfer/parser run passed 29 tests, including navigation-start races,
-  settings-page routing, exact chunks and the transfer deadline.
-- SwiftPM inbox and share selection: 12 tests passed, covering restart, explicit completion, limits,
-  expiry, document authority, staging age, concurrent writers, malformed metadata,
+- Final mobile Jest: 70 suites / 1,314 tests passed.
+- Earlier web bridge/PWA/parser checks: 21 suites / 258 tests passed. After review,
+  3 focused preview/transfer/parser suites passed 24 tests, including refresh-stable
+  drafts, navigation-start races, settings routing, chunks and the deadline.
+- Final classifier/generated-native policy checks: 3 suites / 72 tests passed.
+- SwiftPM inbox and share selection: 12 tests passed, covering restart, explicit
+  completion, limits, expiry, document authority, staging age, concurrent writers, malformed metadata,
   actual file size, cancellation, chunk alignment, combined text/URL selection,
   mixed-file rejection and Apple’s GeoJSON type. The UTI test runs on the macOS
   host; it does not qualify registration on older iOS installations.
 - Android inbox/policy/reader/receiver tests: 18 tests passed. The receiver tests
   cover Expo’s null-bundle path, neutral host intents, read-only grant forwarding,
   explicit repeated shares, clean root intents before grant forwarding and preview
-  thumbnails on both text and single-file sharing. Robolectric uses temporary files for
-  `createPipe` and does not implement `Os.poll/read`: the IO adapter tests verify
+  thumbnails on both text and single-file sharing. Robolectric uses temporary
+  files for `createPipe` and does not implement `Os.poll/read`: the IO adapter tests verify
   descriptor ownership and deadlines; they do **not** qualify a real provider pipe.
 - Android debug APK and iOS Simulator host + navigation/share extension builds
   passed. Generated CNG policy, dependency inventory, headless bundle boundary and
@@ -74,5 +74,5 @@ provisioning profile or App Store validation. The navigation widget has no group
 
 Local HTTP was used only for development QA. A release-permissions check correctly
 rejected that cleartext development surface. The final HTTPS development surface
-passed generated and reviewed-permission checks. Production signing and the final release binary still require their
-release gates; local QA is not release transport-policy evidence.
+passed generated and reviewed-permission checks. Production signing and the
+final release binary still require their release gates; local QA is not release transport-policy evidence.
