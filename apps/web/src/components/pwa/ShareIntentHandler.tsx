@@ -2,7 +2,8 @@
 
 import { PANEL, useDirectionsStore, useSearchStore, useSidebarStore } from "@openmapx/core";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 
 // SearchBar isn't a panel — it's a floating bar driven by useSearchStore.
 // Setting `isFocused: true` makes the dropdown open as if the user tapped it.
@@ -19,53 +20,44 @@ import { useEffect, useRef } from "react";
  */
 export function ShareIntentHandler() {
   const params = useSearchParams();
-  // Track the last param signature we already consumed so a re-share while the
-  // app is open (subsequent /share redirect, geo: protocol launch, or shortcut)
-  // is processed instead of being ignored. A boolean would lock the handler
-  // out permanently after the first effect run.
-  const lastHandledRef = useRef<string | null>(null);
-
   useEffect(() => {
-    const q = params.get("q");
-    const geo = params.get("geo");
-    const action = params.get("action");
+    const consume = () => {
+      // Native warm links use replaceState plus this app's update event;
+      // Next's search-param hook alone does not observe that delivery.
+      const current = new URLSearchParams(window.location.search);
+      const q = current.get("q");
+      const geo = current.get("geo");
+      const action = current.get("action");
+      if (!q && !geo && !action) return;
 
-    if (!q && !geo && !action) {
-      // After we strip params, the effect re-fires with an empty query. Clear
-      // the dedup signature here so a future re-share of the *same* values is
-      // processed instead of being silently dropped.
-      lastHandledRef.current = null;
-      return;
-    }
+      let query: string | null = null;
+      if (q) query = q;
+      else if (geo) query = parseGeoUri(geo);
 
-    const signature = `q=${q ?? ""}|geo=${geo ?? ""}|action=${action ?? ""}`;
-    if (lastHandledRef.current === signature) return;
-    lastHandledRef.current = signature;
+      if (query) {
+        useSearchStore.getState().setQuery(query);
+        useSearchStore.getState().setIsFocused(true);
+      }
 
-    let query: string | null = null;
-    if (q) query = q;
-    else if (geo) query = parseGeoUri(geo);
+      if (action === "directions" || (geo && !query)) {
+        useDirectionsStore.getState().open();
+        useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+      } else if (action === "search" && !query) {
+        useSearchStore.getState().setIsFocused(true);
+      }
 
-    if (query) {
-      useSearchStore.getState().setQuery(query);
-      useSearchStore.getState().setIsFocused(true);
-    }
-
-    if (action === "directions" || (geo && !query)) {
-      useDirectionsStore.getState().open();
-      useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
-    } else if (action === "search" && !query) {
-      useSearchStore.getState().setIsFocused(true);
-    }
-
-    // Strip the consumed params from the URL.
-    const url = new URL(window.location.href);
-    for (const key of ["q", "geo", "action"]) url.searchParams.delete(key);
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${url.pathname}${url.search}${url.hash}`,
-    );
+      // Strip the consumed params from the URL.
+      const url = new URL(window.location.href);
+      for (const key of ["q", "geo", "action"]) url.searchParams.delete(key);
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    };
+    if (params.has("q") || params.has("geo") || params.has("action")) consume();
+    window.addEventListener(DEEPLINK_OPEN_EVENT, consume);
+    return () => window.removeEventListener(DEEPLINK_OPEN_EVENT, consume);
   }, [params]);
 
   return null;

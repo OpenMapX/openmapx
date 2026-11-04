@@ -75,7 +75,9 @@ export default function manifest(): MetadataRoute.Manifest {
         url: "url",
       },
     },
-    // Handle geo: URIs (RFC 5870) — clicking a geo: link opens OpenMapX.
+    // Supported desktop browsers can register geo: URIs (RFC 5870).
+    // Android Chrome does not register PWA protocol handlers; the native app
+    // supplies the Android map chooser entry.
     protocol_handlers: [
       {
         protocol: "geo",

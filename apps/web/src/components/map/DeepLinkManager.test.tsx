@@ -27,7 +27,7 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 }));
 
 import { resetBackNavigationForTests } from "@/lib/backNavigation";
-import { DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
+import { DEEPLINK_OPEN_EVENT, DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
 import { settleHistory } from "@/test/history";
 import { DeepLinkManager } from "./DeepLinkManager";
 
@@ -69,6 +69,21 @@ afterEach(() => {
 const grotesquePlace = "place=stylePoi%3A1&at=50.78%2C6.08&name=Grotesque";
 
 describe("DeepLinkManager place shells", () => {
+  it("applies a native incoming location instead of overwriting it from the current stores", () => {
+    render(<DeepLinkManager />);
+    act(() => {
+      window.history.replaceState(
+        null,
+        "",
+        "/?panel=place&place=geo%3A48.137%2C11.575&at=48.137%2C11.575&name=Marienplatz",
+      );
+      window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
+    });
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Marienplatz");
+    expect(usePlaceStore.getState().selectedPlace?.coordinates).toEqual([11.575, 48.137]);
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+  });
+
   it("docks a legacy standalone place-card URL", () => {
     window.history.replaceState(null, "", `/?panel=place-card&${grotesquePlace}`);
     render(<DeepLinkManager />);
