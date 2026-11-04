@@ -140,6 +140,11 @@ function generatedConsumerDiagnostics(files: { filename: string; content: string
       setAdminServiceSelection({}, {"idempotency-key":"synthetic-intent-0001"});
       // @ts-expect-error Build-only fields cannot enter lifecycle actions.
       runAdminServicesBulkAction({action: "start", serviceIds: ["sample"], all: true});
+      restoreAdminServiceBackup("sample", {"idempotency-key":"synthetic-intent-0001"}, {serviceIds: [], stopRunning: true});
+      restoreAdminServiceBackup("sample", {"idempotency-key":"synthetic-intent-0001"});
+      // @ts-expect-error Restore admission requires an explicit idempotency key even with no body.
+      restoreAdminServiceBackup("sample");
+      // @ts-expect-error An optional restore body cannot occupy the required header argument.
       restoreAdminServiceBackup("sample", {serviceIds: [], stopRunning: true});
     `,
     );

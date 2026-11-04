@@ -15,6 +15,13 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));
 
+// These editor fixtures own settings responses, not a live browser session.
+// Keep BetterAuth's delayed session cleanup outside their jsdom lifecycle.
+vi.mock("@openmapx/core", async () => ({
+  ...(await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core")),
+  authClient: { useSession: () => ({ data: null }), admin: {} },
+}));
+
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
