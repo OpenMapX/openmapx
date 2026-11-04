@@ -16,6 +16,7 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
 import type { DeepLinkIntent } from "./links/deepLinkIntent";
 import { useIncomingLinks } from "./links/useIncomingLinks";
 import { createLocationDriver } from "./location/createLocationDriver";
@@ -85,6 +86,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
 
   const webViewRef = useRef<WebView>(null);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
+  }, [visibility]);
   const services = useMemo(
     () =>
       createShellServices({
@@ -197,6 +201,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   const handleLoadEnd = useCallback(() => {
+    // A load can finish while backgrounded; lifecycle delivery to the previous
+    // document must not leave this document thinking the app is visible.
+    webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibilityRef.current));
     dispatchShell({ type: "document-load-succeeded" });
     // Prepare a different nonce for whatever document loads next.
     setPublishedNonce(shell.registry.mintNonce());

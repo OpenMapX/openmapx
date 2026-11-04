@@ -8,6 +8,7 @@ import type { Serwist } from "@serwist/window";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
 import {
   hasActivePackageDownload,
   hasUnsavedTextEntry,
@@ -29,6 +30,9 @@ export function SwUpdateNotice() {
   const [graceElapsed, setGraceElapsed] = useState(false);
   const swRef = useRef<Serwist | null>(null);
   const updateReadyRef = useRef(false);
+  const mobileRuntime = useMobileRuntimeContext();
+  const mobileRuntimeRef = useRef(mobileRuntime);
+  mobileRuntimeRef.current = mobileRuntime;
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
@@ -50,6 +54,14 @@ export function SwUpdateNotice() {
     const attemptAutoApply = () => {
       if (!updateReadyRef.current) return;
       if (document.visibilityState !== "hidden") return;
+      const runtime = mobileRuntimeRef.current;
+      // The store can still say idle before the shell has restored its session.
+      if (
+        runtime.isInstalledShell &&
+        (runtime.state !== "native-compatible" ||
+          (runtime.handshake?.activeSession && !runtime.readModel))
+      )
+        return;
       const safe = isSafeToAutoReload({
         online: navigator.onLine,
         navStatus: useNavigationStore.getState().status,

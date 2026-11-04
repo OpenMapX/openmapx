@@ -1,6 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { BackHandler, Linking } from "react-native";
+import { AppState, BackHandler, Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
@@ -113,6 +113,24 @@ describe("App WebView policy", () => {
     const view = await renderApp();
     expect(view.getByTestId("product-webview")).toBeTruthy();
     expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+  });
+
+  it("forwards app visibility and reapplies it when a document finishes loading", async () => {
+    let change: ((status: "active" | "background" | "inactive") => void) | undefined;
+    jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
+      if (type === "change") change = handler;
+      return { remove: jest.fn() };
+    });
+    await renderApp();
+    mockInjectedScripts = [];
+    await act(async () => change?.("background"));
+    const hiddenScript = mockInjectedScripts.at(-1);
+    expect(hiddenScript).toContain('"hidden"');
+    mockInjectedScripts = [];
+    await act(async () => (mockWebViewProps.onLoadEnd as () => void)());
+    expect(mockInjectedScripts).toContain(hiddenScript);
+    await act(async () => change?.("active"));
+    expect(mockInjectedScripts.at(-1)).toContain('"visible"');
   });
 
   it("sends Android's Back button into the page's history while it has any", async () => {
