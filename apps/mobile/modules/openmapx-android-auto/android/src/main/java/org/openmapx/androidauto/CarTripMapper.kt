@@ -34,30 +34,37 @@ object CarTripMapper {
     }
   }
 
+  /**
+   * The host's turn type, for the cluster and HUD, from the shared glyph the phone draws
+   * (`maneuverIconName`); only a roundabout's circling direction comes separately.
+   */
+  fun maneuverType(p: JSONObject): Int {
+    p.optJSONObject("roundabout")?.let {
+      return if (it.optBoolean("clockwise")) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
+      else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW
+    }
+    return when (p.optString("maneuverIcon")) {
+      "TurnLeft" -> Maneuver.TYPE_TURN_NORMAL_LEFT
+      "TurnRight" -> Maneuver.TYPE_TURN_NORMAL_RIGHT
+      "TurnSlightLeft" -> Maneuver.TYPE_TURN_SLIGHT_LEFT
+      "TurnSlightRight" -> Maneuver.TYPE_TURN_SLIGHT_RIGHT
+      "TurnSharpLeft" -> Maneuver.TYPE_TURN_SHARP_LEFT
+      "TurnSharpRight" -> Maneuver.TYPE_TURN_SHARP_RIGHT
+      "UTurnLeft" -> Maneuver.TYPE_U_TURN_LEFT
+      "MergeType" -> Maneuver.TYPE_MERGE_SIDE_UNSPECIFIED
+      "Flag" -> Maneuver.TYPE_DESTINATION
+      else -> Maneuver.TYPE_STRAIGHT
+    }
+  }
+
   fun step(context: Context, p: JSONObject): Step =
     Step.Builder(p.getString("instruction"))
       .setManeuver(
-        Maneuver.Builder(
-            when (p.optString("maneuver")) {
-              "left" -> Maneuver.TYPE_TURN_NORMAL_LEFT
-              "right" -> Maneuver.TYPE_TURN_NORMAL_RIGHT
-              "slight-left" -> Maneuver.TYPE_TURN_SLIGHT_LEFT
-              "slight-right" -> Maneuver.TYPE_TURN_SLIGHT_RIGHT
-              "keep-left" -> Maneuver.TYPE_KEEP_LEFT
-              "keep-right" -> Maneuver.TYPE_KEEP_RIGHT
-              "sharp-left" -> Maneuver.TYPE_TURN_SHARP_LEFT
-              "sharp-right" -> Maneuver.TYPE_TURN_SHARP_RIGHT
-              "uturn-left" -> Maneuver.TYPE_U_TURN_LEFT
-              "uturn-right" -> Maneuver.TYPE_U_TURN_RIGHT
-              "arrive" -> Maneuver.TYPE_DESTINATION
-              "roundabout-cw" -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW
-              "roundabout" -> Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW
-              else -> Maneuver.TYPE_STRAIGHT
-            }
-          )
+        Maneuver.Builder(maneuverType(p))
           .apply {
-            if (p.optString("maneuver").startsWith("roundabout"))
-              setRoundaboutExitNumber(p.optInt("exit", 1).coerceIn(1, 99))
+            p.optJSONObject("roundabout")?.let {
+              setRoundaboutExitNumber(it.optInt("exit", 1).coerceIn(1, 99))
+            }
             setIcon(
               CarIcon.Builder(
                   IconCompat.createWithBitmap(ManeuverIcons.bitmap(context, p.optString("maneuverIcon")))

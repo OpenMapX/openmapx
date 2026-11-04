@@ -24,7 +24,6 @@ const snapshot = {
 it("projects upcoming maneuver and active rerouting with ETA", () => {
   expect(buildCarTripProjection(snapshot, 1000)).toMatchObject({
     instruction: "Turn right",
-    maneuver: "right",
     rerouting: true,
     etaMs: 61000,
     maneuverIcon: "TurnRight",

@@ -20,39 +20,43 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CarMappingTest {
-  @Test
-  fun maneuverTable() {
-    val cases =
-      mapOf(
-        "straight" to Maneuver.TYPE_STRAIGHT,
-        "left" to Maneuver.TYPE_TURN_NORMAL_LEFT,
-        "right" to Maneuver.TYPE_TURN_NORMAL_RIGHT,
-        "slight-left" to Maneuver.TYPE_TURN_SLIGHT_LEFT,
-        "slight-right" to Maneuver.TYPE_TURN_SLIGHT_RIGHT,
-        "keep-left" to Maneuver.TYPE_KEEP_LEFT,
-        "keep-right" to Maneuver.TYPE_KEEP_RIGHT,
-        "sharp-left" to Maneuver.TYPE_TURN_SHARP_LEFT,
-        "sharp-right" to Maneuver.TYPE_TURN_SHARP_RIGHT,
-        "uturn-left" to Maneuver.TYPE_U_TURN_LEFT,
-        "uturn-right" to Maneuver.TYPE_U_TURN_RIGHT,
-        "arrive" to Maneuver.TYPE_DESTINATION,
-        "roundabout" to Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW,
-        "roundabout-cw" to Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW,
-        "unknown" to Maneuver.TYPE_STRAIGHT,
-      )
-    for ((name, type) in cases) {
-      val step =
-        CarTripMapper.step(RuntimeEnvironment.getApplication(), 
-          JSONObject().put("instruction", "Continue").put("maneuver", name).put("exit", 3)
-        )
-      assertEquals(name, type, step.maneuver!!.type)
-      assertNotNull("$name has a routing-card icon", step.maneuver!!.icon)
-      if (name.startsWith("roundabout")) assertEquals(3, step.maneuver!!.roundaboutExitNumber)
-    }
-  }
-
   private fun parts(value: Double, unit: String, decimals: Int) =
     JSONObject().put("value", value).put("unit", unit).put("decimals", decimals)
+
+  @Test
+  fun hostTurnTypesFollowThePhoneGlyph() {
+    val cases =
+      mapOf(
+        "Straight" to Maneuver.TYPE_STRAIGHT,
+        "TurnLeft" to Maneuver.TYPE_TURN_NORMAL_LEFT,
+        "TurnRight" to Maneuver.TYPE_TURN_NORMAL_RIGHT,
+        "TurnSlightLeft" to Maneuver.TYPE_TURN_SLIGHT_LEFT,
+        "TurnSlightRight" to Maneuver.TYPE_TURN_SLIGHT_RIGHT,
+        "TurnSharpLeft" to Maneuver.TYPE_TURN_SHARP_LEFT,
+        "TurnSharpRight" to Maneuver.TYPE_TURN_SHARP_RIGHT,
+        "UTurnLeft" to Maneuver.TYPE_U_TURN_LEFT,
+        "MergeType" to Maneuver.TYPE_MERGE_SIDE_UNSPECIFIED,
+        "Flag" to Maneuver.TYPE_DESTINATION,
+        "unknown" to Maneuver.TYPE_STRAIGHT,
+      )
+    val context = RuntimeEnvironment.getApplication()
+    for ((icon, type) in cases) {
+      val step =
+        CarTripMapper.step(context, JSONObject().put("instruction", "Continue").put("maneuverIcon", icon))
+      assertEquals(icon, type, step.maneuver!!.type)
+      assertNotNull("$icon has a routing-card icon", step.maneuver!!.icon)
+    }
+    val roundabout =
+      CarTripMapper.step(
+        context,
+        JSONObject()
+          .put("instruction", "Take the 3rd exit")
+          .put("maneuverIcon", "RoundaboutRight")
+          .put("roundabout", JSONObject().put("exit", 3).put("clockwise", false)),
+      )
+    assertEquals(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW, roundabout.maneuver!!.type)
+    assertEquals(3, roundabout.maneuver!!.roundaboutExitNumber)
+  }
 
   @Test
   fun sharedDistancesMapToHostUnits() {
@@ -211,7 +215,7 @@ class CarMappingTest {
     val p =
       JSONObject()
         .put("instruction", "Turn right")
-        .put("maneuver", "right")
+        .put("maneuverIcon", "TurnRight")
         .put("remainingDistance", 1000)
         .put("remainingSeconds", 60)
         .put("etaMs", 1700000000000)
@@ -252,7 +256,7 @@ class CarMappingTest {
       JSONObject()
         .put("sessionId", "s")
         .put("instruction", "Keep left")
-        .put("maneuver", "keep-left")
+        .put("maneuverIcon", "TurnSlightLeft")
         .put("distanceToManeuver", 3312)
         .put("remainingDistance", 572000)
         .put("remainingSeconds", 21180)

@@ -22,22 +22,6 @@ export const carTripProjectionSchema = z.object({
   revision: z.number().int().nonnegative(),
   maneuverId: z.string().max(256),
   instruction: z.string().min(1).max(1024),
-  maneuver: z.enum([
-    "straight",
-    "left",
-    "right",
-    "slight-left",
-    "slight-right",
-    "keep-left",
-    "keep-right",
-    "sharp-left",
-    "sharp-right",
-    "uturn-left",
-    "uturn-right",
-    "roundabout",
-    "roundabout-cw",
-    "arrive",
-  ]),
   /** The phone's arrow glyph for this maneuver (shared `maneuverIconName`). */
   maneuverIcon: z.string().max(32),
   /** Lane cells exactly as the phone draws them, once the maneuver is near. */
@@ -58,7 +42,10 @@ export const carTripProjectionSchema = z.object({
     )
     .max(12)
     .optional(),
-  exit: z.number().int().min(1).max(99).optional(),
+  /** A roundabout's exit number and circling direction; the turn type follows the glyph. */
+  roundabout: z
+    .object({ exit: z.number().int().min(1).max(99), clockwise: z.boolean() })
+    .optional(),
   distanceToManeuver: nonnegative,
   maneuverDistance: displayDistance,
   remainingDistanceDisplay: displayDistance,
@@ -130,33 +117,7 @@ export function buildCarTripProjection(
       };
   const step = route.data.steps[upcomingManeuverIndex(p.currentStepIndex, route.data.steps.length)];
   const m = step?.maneuver;
-  let maneuver: CarTripProjection["maneuver"] = "straight";
-  if (m?.type === "arrive") maneuver = "arrive";
-  else if (m?.type === "roundabout" || m?.type === "rotary")
-    maneuver = step?.drivingSide === "left" ? "roundabout-cw" : "roundabout";
-  else if (m?.modifier) {
-    const mapped: Record<string, CarTripProjection["maneuver"]> = {
-      left: "left",
-      right: "right",
-      "slight left": "slight-left",
-      "slight right": "slight-right",
-      "sharp left": "sharp-left",
-      "sharp right": "sharp-right",
-      uturn: "uturn-left",
-    };
-    maneuver = mapped[m.modifier] ?? "straight";
-    // Keeping, forking, ramping or merging to one side is "keep left/right", not a turn.
-    if (
-      ["keep", "fork", "on ramp", "off ramp", "merge"].includes(m.type) &&
-      (maneuver === "left" || maneuver === "slight-left")
-    )
-      maneuver = "keep-left";
-    if (
-      ["keep", "fork", "on ramp", "off ramp", "merge"].includes(m.type) &&
-      (maneuver === "right" || maneuver === "slight-right")
-    )
-      maneuver = "keep-right";
-  }
+  const roundabout = m?.type === "roundabout" || m?.type === "rotary";
   const reroute = z.object({ status: z.string() }).safeParse(snapshot.reroute);
   const currentStep = route.data.steps[Math.max(0, p.currentStepIndex)];
   const secondsToManeuver =
@@ -171,7 +132,6 @@ export function buildCarTripProjection(
     instruction: (
       step?.instruction || (snapshot.locale === "de" ? "Weiterfahren" : "Continue")
     ).slice(0, 1024),
-    maneuver,
     maneuverIcon: maneuverIconName(m) satisfies GuidanceIconName,
     // Like the phone's banner: lanes appear once the maneuver is close enough to act on.
     lanes:
@@ -186,8 +146,14 @@ export function buildCarTripProjection(
             arrows: cell.arrows.map(({ icon, active, stemShift }) => ({ icon, active, stemShift })),
           }))
         : undefined,
-    ...(maneuver.startsWith("roundabout")
-      ? { exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))) }
+    ...(roundabout
+      ? {
+          roundabout: {
+            exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))),
+            // Left-hand traffic circles clockwise.
+            clockwise: step?.drivingSide === "left",
+          },
+        }
       : {}),
     distanceToManeuver: p.distanceToNextManeuver,
     maneuverDistance: measurementDistanceParts(p.distanceToNextManeuver, snapshot.units),

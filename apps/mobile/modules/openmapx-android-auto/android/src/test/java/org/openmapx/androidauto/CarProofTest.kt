@@ -24,7 +24,7 @@ class CarProofTest {
     val p =
       JSONObject()
         .put("instruction", "Turn right")
-        .put("maneuver", "right")
+        .put("maneuverIcon", "TurnRight")
         .put("remainingDistance", 200)
         .put("remainingSeconds", 20)
         .put("etaMs", 1700000000000)
@@ -61,7 +61,7 @@ class CarProofTest {
     val p =
       JSONObject()
         .put("instruction", "Continue")
-        .put("maneuver", "unknown")
+        .put("maneuverIcon", "unknown")
         .put("remainingDistance", 200)
         .put("remainingSeconds", 20)
         .put("etaMs", 1700000000000)
