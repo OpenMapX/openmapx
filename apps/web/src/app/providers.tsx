@@ -103,6 +103,44 @@ const theme = createTheme({
         },
       },
     },
+    // The installed app draws the page under the status and navigation bars
+    // (`viewport-fit=cover`), so every dialog and drawer keeps its content out
+    // of them. In a plain browser tab the insets are 0.
+    MuiDialog: {
+      styleOverrides: {
+        // A floating dialog is centred and sized within the safe area.
+        container: ({ ownerState }) =>
+          ownerState.fullScreen
+            ? {}
+            : {
+                boxSizing: "border-box",
+                paddingTop: "var(--omx-safe-top)",
+                paddingBottom: "var(--omx-safe-bottom)",
+                paddingLeft: "var(--omx-safe-left)",
+                paddingRight: "var(--omx-safe-right)",
+              },
+        // A full-screen dialog still covers the bars, with its content inset.
+        paperFullScreen: {
+          boxSizing: "border-box",
+          paddingTop: "var(--omx-safe-top)",
+          paddingBottom: "var(--omx-safe-bottom)",
+          paddingLeft: "var(--omx-safe-left)",
+          paddingRight: "var(--omx-safe-right)",
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        // The screen edge the drawer is attached to and the two beside it;
+        // its open side faces the page, not a system bar.
+        paper: ({ ownerState }) => ({
+          ...(ownerState.anchor !== "bottom" && { paddingTop: "var(--omx-safe-top)" }),
+          ...(ownerState.anchor !== "top" && { paddingBottom: "var(--omx-safe-bottom)" }),
+          ...(ownerState.anchor !== "right" && { paddingLeft: "var(--omx-safe-left)" }),
+          ...(ownerState.anchor !== "left" && { paddingRight: "var(--omx-safe-right)" }),
+        }),
+      },
+    },
   },
 });
 

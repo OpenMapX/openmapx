@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { AttributionText } from "@/components/ui/AttributionText";
 import { useMap } from "@/integration-api/map/MapContext";
+import { SEARCH_BAR_CLEARANCE } from "@/lib/layout";
 
 /** Capture month and year in the active locale, or null when unknown. */
 export function formatCaptureDate(capturedAt: string | undefined, locale: string): string | null {
@@ -98,14 +99,20 @@ export function StreetLevelInfoCard({
     <Box
       sx={{
         position: "absolute",
-        top: 80,
-        left: 12,
+        // Below the viewer's search bar, which already clears the status bar.
+        top: SEARCH_BAR_CLEARANCE,
+        left: "calc(12px + var(--omx-safe-left))",
         zIndex: 10,
         bgcolor: "rgba(30,30,30,0.9)",
         borderRadius: "12px",
         p: "12px 14px",
         minWidth: 260,
-        maxWidth: 340,
+        // On a phone the search bar spans the width, so the viewer's close
+        // button sits beside this card and needs its room.
+        maxWidth: {
+          xs: "calc(100% - 92px - var(--omx-safe-left) - var(--omx-safe-right))",
+          sm: 340,
+        },
         color: "#fff",
         backdropFilter: "blur(4px)",
       }}

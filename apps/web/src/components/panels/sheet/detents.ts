@@ -31,7 +31,9 @@ export interface SnapSlot {
   detent: "top" | Detent;
 }
 
-const MAX_HEIGHT = "94dvh";
+// Never under the status bar, whose height `dvh` does not know about when the
+// page is drawn beneath it.
+const MAX_HEIGHT = "min(94dvh, calc(100dvh - var(--omx-safe-top) - 8px))";
 
 export const PLACE_DETENTS: DetentConfig = {
   peek: "180px",

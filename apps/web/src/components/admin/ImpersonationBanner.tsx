@@ -37,7 +37,9 @@ export function ImpersonationBanner() {
           left: 0,
           right: 0,
           zIndex: 9999,
-          height: 48,
+          boxSizing: "border-box",
+          height: "calc(48px + var(--omx-safe-top))",
+          pt: "calc(6px + var(--omx-safe-top))",
           "& .MuiAlert-message": {
             display: "flex",
             alignItems: "center",
@@ -61,7 +63,7 @@ export function ImpersonationBanner() {
         Impersonating <strong>{session.user.name}</strong> ({session.user.email})
       </Alert>
       {/* Spacer to push page content below the fixed banner */}
-      <div style={{ height: 48 }} />
+      <div style={{ height: "calc(48px + var(--omx-safe-top))" }} />
     </>
   );
 }

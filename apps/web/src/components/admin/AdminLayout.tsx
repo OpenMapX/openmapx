@@ -57,7 +57,7 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
               <Box
                 sx={{
                   flexGrow: 1,
-                  mt: `${TOPBAR_HEIGHT}px`,
+                  mt: `calc(${TOPBAR_HEIGHT}px + var(--omx-safe-top))`,
                   overflowY: "auto",
                 }}
               >
