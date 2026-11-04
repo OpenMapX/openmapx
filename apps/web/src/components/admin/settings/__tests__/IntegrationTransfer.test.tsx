@@ -15,6 +15,11 @@ import { SystemSettings } from "../SystemSettings";
 
 let apiUrl = "http://admin.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
+// Transfer transport tests do not own the auth client's delayed session observers.
+vi.mock("@openmapx/core", async () => ({
+  ...(await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core")),
+  authClient: { useSession: () => ({ data: null }), admin: {} },
+}));
 const exported = {
   integrations: [
     { integrationId: "demo", config: { enabled: false, endpoint: "https://provider.test" } },
