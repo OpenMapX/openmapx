@@ -12,6 +12,7 @@ describe("navigation widget generated target", () => {
     expect(s.MARKETING_VERSION).toBe("2.0");
     expect(s.DEVELOPMENT_TEAM).toBe("ABCDEFGHIJ");
     expect(s.APPLICATION_EXTENSION_API_ONLY).toBe("YES");
+    expect(s).not.toHaveProperty("SWIFT_OPTIMIZATION_LEVEL");
     expect(s).not.toHaveProperty("CODE_SIGN_ENTITLEMENTS");
     expect(widgetInfoPlist()).toContain("com.apple.widgetkit-extension");
   });

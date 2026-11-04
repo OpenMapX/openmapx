@@ -705,3 +705,30 @@ it("does not offer an old End action against a newer session", async () => {
   expect(alert.mock.calls.at(-1)?.[0]).toContain("ended");
   expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
 });
+it("explains a surface End action when the navigation layer cannot load", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  jest
+    .spyOn(Linking, "getInitialURL")
+    .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
+  await renderApp();
+  expect(alert.mock.calls.at(-1)?.[0]).toContain("unavailable");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+});
+it("confirms a warm surface End without waiting for the web bridge", async () => {
+  const alert = jest.spyOn(Alert, "alert");
+  let receiveUrl!: (event: { url: string }) => void;
+  jest.spyOn(Linking, "addEventListener").mockImplementation((_type, handler) => {
+    receiveUrl = handler;
+    return { remove: jest.fn() } as unknown as ReturnType<typeof Linking.addEventListener>;
+  });
+  mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+  mockNavigation.activeSession.mockResolvedValue({
+    sessionId: "session-1",
+    revision: 1,
+    kind: "ground",
+  });
+  await renderApp();
+  await act(async () => receiveUrl({ url: "openmapx:///navigation/end?sessionId=session-1" }));
+  expect(alert.mock.calls.at(-1)?.[1]).toContain("End this");
+  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+});

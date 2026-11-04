@@ -6,12 +6,13 @@ const record = (v: unknown): Record<string, unknown> =>
 const finite = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 const index = (v: unknown): number => (Number.isSafeInteger(v) && Number(v) >= 0 ? Number(v) : -1);
-function distance(v: unknown, imperial: boolean): string {
+function distance(v: unknown, imperial: boolean, locale: "en" | "de"): string {
   const n = finite(v);
   if (n === null) return "";
-  if (imperial)
-    return n < 160.934 ? `${Math.round(n / 0.3048)} ft` : `${(n / 1609.344).toFixed(1)} mi`;
-  return n < 1000 ? `${Math.round(n)} m` : `${(n / 1000).toFixed(1)} km`;
+  const decimal = (value: number) =>
+    value.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (imperial) return n < 160.934 ? `${Math.round(n / 0.3048)} ft` : `${decimal(n / 1609.344)} mi`;
+  return n < 1000 ? `${Math.round(n)} m` : `${decimal(n / 1000)} km`;
 }
 /** Read only the fields the OS surface needs from the committed durable session. */
 export function projectSurface(
@@ -23,6 +24,7 @@ export function projectSurface(
   const fix = s.lastAcceptedFix;
   const realFix = fix && !fix.coasted && fix.timestampMs <= now ? fix.timestampMs : 0;
   const observed = realFix;
+  let freshnessAt = observed || s.startedAtMs;
   const fresh = observed > 0 && now - observed < SURFACE_FRESH_MS;
   let status: SurfaceModel["status"] =
     s.status === "arrived" ? "arrived" : fresh ? "active" : observed ? "stale" : "waiting";
@@ -42,13 +44,14 @@ export function projectSurface(
         )
       : {};
     instruction = surfaceText(step.instruction) || copy.navigation;
-    compactText = distance(progress.distanceToNextManeuver, s.units === "imperial") || title;
-    const remaining = distance(progress.distanceRemaining, s.units === "imperial");
+    compactText =
+      distance(progress.distanceToNextManeuver, s.units === "imperial", s.locale) || title;
+    const remaining = distance(progress.distanceRemaining, s.units === "imperial", s.locale);
     const seconds = finite(progress.durationRemaining);
     detail = [
       compactText === title ? "" : compactText,
       remaining,
-      seconds === null ? "" : `${Math.ceil(seconds / 60)} min`,
+      seconds === null ? "" : `${Math.ceil(seconds / 60)} ${copy.minutes}`,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -62,7 +65,7 @@ export function projectSurface(
     } else if (s.payload.weakGps) {
       instruction = copy.gps;
       detail = "";
-      compactText = "GPS?";
+      compactText = copy.gpsCompact;
     }
   } else {
     const tick = s.payload.tickState;
@@ -94,16 +97,21 @@ export function projectSurface(
     const cursor = index(record(s.payload.progress).stopCursor ?? tick.stopCursor);
     if (stops.length && cursor >= 0 && cursor < stops.length)
       detail = `${stops.length - 1 - cursor} ${copy.stops}`;
-    if (s.payload.confidence !== "gps") {
+    if (s.payload.confidence === "schedule") {
+      // Schedule progress is useful underground, but is never a fresh GPS fix.
+      const progressAt = finite(tick.lastProgressAtMs) ?? 0;
+      freshnessAt = progressAt <= now ? progressAt : 0;
+      status = freshnessAt > 0 && now - freshnessAt < SURFACE_FRESH_MS ? "active" : "stale";
+      detail = [detail, copy.schedule].filter(Boolean).join(" · ");
+    } else if (s.payload.confidence === "stale") {
       status = "stale";
-      detail = copy.schedule;
     }
     compactText = line || copy.transit;
   }
   if (status === "stale") {
     instruction = copy.stale;
     detail = s.kind === "transit" && s.payload.confidence === "schedule" ? copy.schedule : "";
-    compactText = "GPS?";
+    compactText = copy.gpsCompact;
   }
   if (status === "waiting") {
     instruction = copy.waiting;
@@ -116,11 +124,7 @@ export function projectSurface(
     compactText = "✓";
   }
   if (status !== "active") eventAtMs = null;
-  const staleAtMs = Math.min(
-    s.expiresAtMs,
-    (observed || s.startedAtMs) + SURFACE_FRESH_MS,
-    eventAtMs ?? Infinity,
-  );
+  const staleAtMs = Math.min(s.expiresAtMs, freshnessAt + SURFACE_FRESH_MS, eventAtMs ?? Infinity);
   return {
     version: 1,
     sessionId: s.sessionId,

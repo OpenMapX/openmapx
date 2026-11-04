@@ -159,8 +159,11 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     (sessionId: string) => {
       void navigation
         .then(async (composed) => {
-          if (!composed) return;
           const copy = surfaceCopy[locale];
+          if (!composed) {
+            Alert.alert(copy.unavailable);
+            return;
+          }
           if ((await composed.activeSession())?.sessionId !== sessionId) {
             Alert.alert(copy.ended);
             return;
@@ -181,7 +184,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
             },
           ]);
         })
-        .catch(() => undefined);
+        .catch(() => Alert.alert(surfaceCopy[locale].unavailable));
     },
     [navigation, locale, setNavigating],
   );

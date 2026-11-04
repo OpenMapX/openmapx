@@ -9,4 +9,7 @@ android {
   defaultConfig { versionCode 1; versionName "1.0.0" }
   testOptions { unitTests { returnDefaultValues = false } }
 }
-dependencies { testImplementation 'junit:junit:4.13.2' }
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.16.1'
+}

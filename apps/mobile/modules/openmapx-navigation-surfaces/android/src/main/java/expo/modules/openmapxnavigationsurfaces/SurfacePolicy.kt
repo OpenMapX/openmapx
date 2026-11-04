@@ -10,4 +10,9 @@ object SurfacePolicy {
       (owner != incomingOwner || incomingRevision >= revision)
   fun canClear(owner: String?, expected: String?): Boolean = expected == null || owner == expected
   fun userDismissedBeforeExpiry(now: Long, staleAt: Long): Boolean = now < staleAt
+  fun boundedText(text: String, maxUnits: Int): String {
+    var end = minOf(text.length, maxUnits)
+    if (end > 0 && end < text.length && Character.isHighSurrogate(text[end - 1]) && Character.isLowSurrogate(text[end])) end--
+    return text.substring(0, end)
+  }
 }

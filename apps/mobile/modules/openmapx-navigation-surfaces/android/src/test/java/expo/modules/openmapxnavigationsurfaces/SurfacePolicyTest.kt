@@ -13,4 +13,9 @@ class SurfacePolicyTest {
     assertTrue(SurfacePolicy.userDismissedBeforeExpiry(100, 200))
     assertFalse(SurfacePolicy.userDismissedBeforeExpiry(200, 200))
   }
+  @Test fun keepsCriticalTextInsideUtf16LimitWithoutSplittingEmoji() {
+    assertEquals("😀😀😀", SurfacePolicy.boundedText("😀".repeat(160), 7))
+    assertEquals("a😀😀😀", SurfacePolicy.boundedText("a" + "😀".repeat(160), 7))
+    assertEquals("a".repeat(159), SurfacePolicy.boundedText("a".repeat(159) + "😀", 160))
+  }
 }

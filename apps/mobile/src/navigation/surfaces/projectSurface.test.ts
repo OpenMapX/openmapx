@@ -1,6 +1,11 @@
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
-import { FIXTURE_TOKEN, transitSessionFixture } from "../transit/testing/transitFixture";
+import {
+  FIXTURE_TOKEN,
+  transitItineraryFixture,
+  transitSessionFixture,
+} from "../transit/testing/transitFixture";
 import { projectSurface } from "./projectSurface";
+import { surfaceText } from "./surfaceModel";
 
 const now = 1_700_000_100_000;
 function requireProjection(s: Parameters<typeof projectSurface>[0]) {
@@ -33,6 +38,53 @@ it("honors imperial units and German copy", () => {
   expect(projectSurface(s, now)?.detail).toContain("mi");
   s.payload.weakGps = true;
   expect(projectSurface(s, now)?.instruction).toMatch(/GPS/);
+});
+it("formats German distance decimals and duration units", () => {
+  const s = ground();
+  s.locale = "de";
+  expect(projectSurface(s, now)?.detail).toContain("1,2 km");
+  expect(projectSurface(s, now)?.detail).toContain("5 Min.");
+});
+it.each([
+  ["walking", 0, "Walk to Hauptbahnhof"],
+  ["waiting-to-board", 1, "Board at Hauptbahnhof"],
+  ["riding", 1, "Get off at Messe"],
+] as const)(
+  "keeps explicitly scheduled %s guidance until progress becomes stale",
+  (phase, legIndex, instruction) => {
+    const s = transitSessionFixture();
+    s.payload.confidence = "schedule";
+    s.payload.tickState.phase = phase;
+    s.payload.tickState.currentLegIndex = legIndex;
+    s.payload.tickState.lastProgressAtMs = now - 10_000;
+    s.lastAcceptedFix = { coords: [1, 2], accuracy: 5, timestampMs: now - 120_000 };
+    const itinerary = transitItineraryFixture();
+    s.payload.startPackage.itinerary = itinerary;
+    const leg = itinerary.legs[legIndex];
+    const eventAt = now + 40_000;
+    if (phase === "waiting-to-board") leg.startTime = new Date(eventAt).toISOString();
+    else leg.endTime = new Date(eventAt).toISOString();
+    const p = requireProjection(s);
+    expect(p.status).toBe("active");
+    expect(p.instruction).toBe(instruction);
+    expect(p.detail).toContain("Scheduled");
+    expect(p.eventAtMs).toBe(eventAt);
+    expect(p.staleAtMs).toBe(eventAt);
+    // A schedule tick must not masquerade as a fresh GPS fix.
+    expect(p.observedAtMs).toBe(now - 120_000);
+    leg.endTime = leg.startTime = new Date(now + 90_000).toISOString();
+    expect(projectSurface(s, now)?.staleAtMs).toBe(now + 50_000);
+    s.payload.tickState.lastProgressAtMs = now - 60_001;
+    expect(projectSurface(s, now)?.status).toBe("stale");
+    expect(projectSurface(s, now)?.eventAtMs).toBeNull();
+    s.payload.confidence = "stale";
+    s.payload.tickState.lastProgressAtMs = now;
+    expect(projectSurface(s, now)?.instruction).toContain("outdated");
+  },
+);
+it("bounds feed text in UTF-16 without splitting an astral character", () => {
+  expect(surfaceText("😀".repeat(160))).toBe("😀".repeat(80));
+  expect(surfaceText(`${"a".repeat(159)}😀`)).toBe("a".repeat(159));
 });
 it("does not renew freshness from a coasted fix or a new publication timestamp", () => {
   const s = ground();

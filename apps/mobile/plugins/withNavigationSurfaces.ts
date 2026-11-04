@@ -22,7 +22,6 @@ export function widgetBuildSettings(
     ...(host.DEVELOPMENT_TEAM ? { DEVELOPMENT_TEAM: host.DEVELOPMENT_TEAM } : {}),
     CODE_SIGN_STYLE: "Automatic",
     SWIFT_VERSION: "5.0",
-    SWIFT_OPTIMIZATION_LEVEL: '"-Onone"',
     APPLICATION_EXTENSION_API_ONLY: "YES",
     SKIP_INSTALL: "YES",
     TARGETED_DEVICE_FAMILY: '"1"',

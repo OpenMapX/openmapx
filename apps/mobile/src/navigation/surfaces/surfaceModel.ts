@@ -25,6 +25,8 @@ export const surfaceCopy = {
     waiting: "Acquiring location",
     stale: "Location outdated — open OpenMapX",
     gps: "Weak GPS — follow road signs",
+    gpsCompact: "No GPS",
+    minutes: "min",
     reroute: "Rerouting",
     arrived: "You have arrived",
     walk: "Walk to",
@@ -38,6 +40,7 @@ export const surfaceCopy = {
     confirm: "End this navigation session?",
     cancel: "Cancel",
     ended: "This trip has already ended",
+    unavailable: "Navigation unavailable — reopen OpenMapX to manage this trip",
   },
   de: {
     navigation: "Navigation",
@@ -45,6 +48,8 @@ export const surfaceCopy = {
     waiting: "Standort wird ermittelt",
     stale: "Standort veraltet — OpenMapX öffnen",
     gps: "GPS schwach — Beschilderung beachten",
+    gpsCompact: "Kein GPS",
+    minutes: "Min.",
     reroute: "Route wird neu berechnet",
     arrived: "Ziel erreicht",
     walk: "Zu Fuß nach",
@@ -58,11 +63,12 @@ export const surfaceCopy = {
     confirm: "Diese Navigation beenden?",
     cancel: "Abbrechen",
     ended: "Diese Fahrt ist bereits beendet",
+    unavailable: "Navigation nicht verfügbar — OpenMapX erneut öffnen, um die Fahrt zu verwalten",
   },
 } as const;
 export function surfaceText(value: unknown): string {
   if (typeof value !== "string") return "";
-  return Array.from(value)
+  const clean = Array.from(value)
     .map((c) => {
       const n = c.codePointAt(0) ?? 0;
       return n < 32 ||
@@ -74,6 +80,11 @@ export function surfaceText(value: unknown): string {
     })
     .join("")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160);
+    .trim();
+  let result = "";
+  for (const character of clean) {
+    if (result.length + character.length > 160) break;
+    result += character;
+  }
+  return result;
 }

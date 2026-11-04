@@ -305,7 +305,10 @@ lifetime can require recreation on a later foreground opportunity.
 Both surfaces show bounded English/German instructions and session-selected units.
 Ground progress uses the upcoming maneuver, not the step already performed.
 Transit countdowns use captured departure/arrival times, expire at their target,
-and never turn schedule-only confidence into a live position. Coasted fixes do
+and never turn schedule-only confidence into a live position. Schedule-based
+walk, wait and ride progress keeps its phase and stop guidance with an explicit
+schedule label; it expires 60 seconds after the last progress observation or at
+the captured event time, whichever comes first. Coasted fixes do
 not renew GPS freshness. The ordinary update cadence is at most one per five
 seconds; maneuver, session and health changes bypass the throttle. No geometry,
 raw fix, refresh token or credential crosses into the surface payload.

@@ -78,9 +78,8 @@ class OpenMapXNavigationSurfacesModule : Module() {
       manager.createNotificationChannel(NotificationChannel(CHANNEL, if (de) "Navigationsfortschritt" else "Navigation progress", NotificationManager.IMPORTANCE_LOW))
     }
     fun action(path: String, request: Int): PendingIntent? {
-      val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-      launch.data = Uri.parse("$scheme:///navigation/$path")
-      launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      val component = context.packageManager.getLaunchIntentForPackage(context.packageName)?.component ?: return null
+      val launch = surfaceActivityIntent(component, Uri.parse("$scheme:///navigation/$path"))
       return PendingIntent.getActivity(context, request, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
     val open = action("active", 701) ?: return false
@@ -107,7 +106,7 @@ class OpenMapXNavigationSurfacesModule : Module() {
     if (Build.VERSION.SDK_INT < 26) builder.setContentTitle("OpenMapX").setContentText(if (de) "Navigation aktiv — App öffnen" else "Navigation active — open app").setStyle(null)
     // AndroidX uses this public compatibility extra; the framework setter is
     // only in SDK36.1, while this project deliberately compiles against36.
-    if (Build.VERSION.SDK_INT >= 36 && data.optString("status") != "arrived") builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }).setShortCriticalText(data.getString("compactText").take(7))
+    if (Build.VERSION.SDK_INT >= 36 && data.optString("status") != "arrived") builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }).setShortCriticalText(SurfacePolicy.boundedText(data.getString("compactText"), 7))
     manager.notify(SurfacePolicy.TAG, SurfacePolicy.ID, builder.build())
     prefs.edit().putString("owner", owner).putLong("revision", revision).apply()
     return true
