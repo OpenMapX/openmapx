@@ -1,6 +1,6 @@
 ---
-"@openmapx/core": minor
+"@openmapx/extension-cli": patch
 ---
 
-Add bounded native sharing/file-intake contracts and text classification. Extend
-the mobile bridge to protocol 4 while preserving protocol-3 navigation overlap.
+Rebuild the public CLI bundle after shared core native-intake contracts and bridge
+version updates. Extension commands retain their existing behavior.
