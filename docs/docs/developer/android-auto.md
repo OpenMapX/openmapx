@@ -31,7 +31,9 @@ obstructions in the safe map area. OpenMapX follows that split:
   guidance and remaining distance/time/ETA. Rerouting uses loading metadata
   without ending navigation. `NavigationManager.updateTrip` supplies next-turn
   metadata for cluster/HUD consumers; this is not a separately rendered cluster map.
-- The map surface draws the map, route, puck, traffic and road-condition overlays,
+- The map surface draws the map, route, puck, traffic and road-condition overlays
+  (the phone's layers; during a trip road conditions are limited to a corridor
+  around the route by the shared `isNearRoute`),
   current speed, speed limit and attribution. It reuses `MapCanvas`, navigation
   route layers and `useNavCamera`. It does not mount the phone's maneuver banner,
   lanes, ETA panel, bottom bar, search, dialogs or sheets.

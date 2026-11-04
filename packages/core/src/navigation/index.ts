@@ -223,6 +223,7 @@ export {
   updateOffRouteScore,
 } from "./reroute";
 export { type AlongRange, projectRoadAlertsOntoRoute } from "./roadAlertProjection";
+export { isNearRoute, ROUTE_CORRIDOR_METERS } from "./routeCorridor";
 export {
   appendCountrySpans,
   countryAtMeters,

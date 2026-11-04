@@ -142,6 +142,10 @@ The incident filters show only while the incidents are on. These layers are the
 same [mobility data sources](./mobility-data.md) the search finds, drawn for the
 area in view and refreshed as the map moves. The browser remembers which layers
 are on and how incidents are filtered, so they come back on the next visit.
+While you navigate a car, bike or walking route, the incidents shown are those
+along the route and up to about 1 km beside it, so the map stays readable; the
+phone and Android Auto show the same. Outside navigation the overlay shows
+everything in view.
 Without a road-conditions source, such as an OpenConditions instance at
 `OPENCONDITIONS_URL`, **Road conditions** stays in the layer list and its legend
 says traffic incidents are unavailable instead of showing a clear road.
