@@ -37,7 +37,12 @@ function Caller() {
     retry: false,
     mutationFn: async () => {
       const result = await serviceOrThrow(
-        runAdminServiceAction("demo", { action: "start" }, { client }),
+        runAdminServiceAction(
+          "demo",
+          { action: "start" },
+          { "idempotency-key": "service-job-observer-fixture" },
+          { client },
+        ),
       );
       register({
         client,

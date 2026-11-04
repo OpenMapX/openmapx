@@ -92,6 +92,7 @@ const composeStart = vi.fn();
 vi.mock("../../services/job-runner", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => enqueue(...args),
+    enqueueMaintenance: (...args: unknown[]) => enqueue(...args),
     cancel: (...args: unknown[]) => cancelJob(...args),
     startImmediateCompose: (...args: unknown[]) => composeStart(...args),
   },
@@ -711,12 +712,39 @@ describe("actual service producers through final exported SDK", () => {
             undefined,
             options,
           ),
-        () => sdk.runAdminServiceAction("motis", { action: "restart" }, options),
-        () => sdk.runAdminServicesBulkAction({ action: "build", all: true }, options),
-        () => sdk.createAdminServiceBackup(undefined, options),
         () =>
-          sdk.restoreAdminServiceBackup("nightly", { serviceIds: [], stopRunning: true }, options),
-        () => sdk.deleteAdminServiceBackup("nightly", undefined, options),
+          sdk.runAdminServiceAction(
+            "motis",
+            { action: "restart" },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          ),
+        () =>
+          sdk.runAdminServicesBulkAction(
+            { action: "build", all: true },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          ),
+        () =>
+          sdk.createAdminServiceBackup(
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            undefined,
+            options,
+          ),
+        () =>
+          sdk.restoreAdminServiceBackup(
+            "nightly",
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            { serviceIds: [], stopRunning: true },
+            options,
+          ),
+        () =>
+          sdk.deleteAdminServiceBackup(
+            "nightly",
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            undefined,
+            options,
+          ),
         () => sdk.startAdminCompose(key, undefined, options),
         () => sdk.listAdminOperations(options),
         () => sdk.previewAdminOperation("download-fonts", null, options),
@@ -828,10 +856,18 @@ describe("actual service producers through final exported SDK", () => {
   it("retains action limiter, managed credential, bundle and unknown-ID-first gates", async () => {
     const { app, options, close } = await wire();
     try {
-      expect((await sdk.runAdminServiceAction("motis", { action: "start" }, options)).status).toBe(
-        200,
-      );
+      expect(
+        (
+          await sdk.runAdminServiceAction(
+            "motis",
+            { action: "start" },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          )
+        ).status,
+      ).toBe(200);
       const limited = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
         method: "POST",
         url: "/api/admin/services/motis/action",
         remoteAddress: "198.51.100.8",
@@ -853,6 +889,7 @@ describe("actual service producers through final exported SDK", () => {
       expect(
         (
           await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
             method: "POST",
             url: "/api/admin/dawarich/provision",
             payload: { publicHost: 9 },
@@ -860,6 +897,7 @@ describe("actual service producers through final exported SDK", () => {
         ).statusCode,
       ).toBe(409);
       const unknown = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
         method: "POST",
         url: "/api/admin/operations/missing/run",
         payload: [1],
@@ -904,6 +942,7 @@ it("rejects malformed mutation envelopes and members before persistence or host 
       expect(
         (
           await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
             method: "POST",
             url: "/api/admin/services/backups/nightly/restore",
             payload,
@@ -916,8 +955,14 @@ it("rejects malformed mutation envelopes and members before persistence or host 
       { action: "start", serviceIds: ["motis"], all: true },
     ])
       expect(
-        (await app.inject({ method: "POST", url: "/api/admin/services/bulk-action", payload }))
-          .statusCode,
+        (
+          await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+            method: "POST",
+            url: "/api/admin/services/bulk-action",
+            payload,
+          })
+        ).statusCode,
       ).toBe(400);
     for (const payload of [{ value: 7 }, { value: " " }, { value: "synthetic", extra: true }])
       expect(
@@ -1235,6 +1280,7 @@ it("retains registry-first selection failure and redacts pre-validation domain e
       throw Error("synthetic-secret");
     });
     const failed = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/api/admin/services/motis/config",
       payload: {},
@@ -1366,7 +1412,10 @@ it("leaves accepted mutation jobs running after the HTTP observer disconnects", 
     const controller = new AbortController();
     const pending = loopbackFetch(`${baseUrl}/api/admin/services/motis/action`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "observer-disconnect-action-0001",
+      },
       body: JSON.stringify({ action: "start" }),
       signal: controller.signal,
     });
@@ -1489,22 +1538,59 @@ it("retains public corrupt backup metadata, admission failures and intentional r
       kind: "backup.list",
       value: { backups: [corrupt], warningCount: 1 },
     });
-    expect(await sdk.restoreAdminServiceBackup("broken", undefined, options)).toMatchObject({
+    expect(
+      await sdk.restoreAdminServiceBackup(
+        "broken",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 409,
       data: { error: expect.stringContaining("invalid_manifest") },
     });
-    expect(await sdk.restoreAdminServiceBackup("missing", undefined, options)).toMatchObject({
+    expect(
+      await sdk.restoreAdminServiceBackup(
+        "missing",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 404,
       data: { error: "Backup not found: missing" },
     });
-    expect(await sdk.deleteAdminServiceBackup("missing", undefined, options)).toMatchObject({
+    expect(
+      await sdk.deleteAdminServiceBackup(
+        "missing",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 404,
       data: { error: "Backup not found: missing" },
     });
     expect(enqueue).not.toHaveBeenCalled();
-    expect((await sdk.restoreAdminServiceBackup("nightly", undefined, options)).status).toBe(200);
     expect(
-      (await sdk.restoreAdminServiceBackup("nightly", { serviceIds: [] }, options)).status,
+      (
+        await sdk.restoreAdminServiceBackup(
+          "nightly",
+          { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+          undefined,
+          options,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await sdk.restoreAdminServiceBackup(
+          "nightly",
+          { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+          { serviceIds: [] },
+          options,
+        )
+      ).status,
     ).toBe(200);
     expect(enqueue).toHaveBeenCalledTimes(2);
     for (const [, payload] of enqueue.mock.calls)
@@ -1518,3 +1604,8 @@ it("retains public corrupt backup metadata, admission failures and intentional r
     await close();
   }
 });
+
+vi.mock("../../services/retained-maintenance-job", async (actual) => ({
+  ...(await actual<typeof import("../../services/retained-maintenance-job")>()),
+  lookupMaintenanceJob: vi.fn(async () => null),
+}));

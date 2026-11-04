@@ -231,10 +231,15 @@ export const serviceAdminOperations = {
     method: "POST",
     path: "/api/admin/services/:id/action",
     auth: "admin",
-    request: { params: adminServiceParamsSchema, body: adminServiceActionSchema },
+    request: {
+      headers: adminServiceIdempotencyHeadersSchema,
+      params: adminServiceParamsSchema,
+      body: adminServiceActionSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
       404: adminJson(httpErrorSchema),
       503: adminJson(httpErrorSchema),
     },
@@ -243,8 +248,12 @@ export const serviceAdminOperations = {
     method: "POST",
     path: "/api/admin/services/bulk-action",
     auth: "admin",
-    request: { body: adminServicesBulkActionSchema },
-    responses: { ...adminCommonResponses, 200: adminJson(adminServiceAcceptedSchema) },
+    request: { headers: adminServiceIdempotencyHeadersSchema, body: adminServicesBulkActionSchema },
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
+    },
   },
   checkAdminServices: {
     method: "POST",
@@ -295,14 +304,25 @@ export const serviceAdminOperations = {
     method: "POST",
     path: "/api/admin/services/backups",
     auth: "admin",
-    request: { body: adminServiceBackupCreateSchema },
-    responses: { ...adminCommonResponses, 200: adminJson(adminServiceAcceptedSchema) },
+    request: {
+      headers: adminServiceIdempotencyHeadersSchema,
+      body: adminServiceBackupCreateSchema,
+    },
+    responses: {
+      ...adminCommonResponses,
+      200: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
+    },
   },
   restoreAdminServiceBackup: {
     method: "POST",
     path: "/api/admin/services/backups/:name/restore",
     auth: "admin",
-    request: { params: adminServiceBackupParamsSchema, body: adminServiceBackupRestoreSchema },
+    request: {
+      headers: adminServiceIdempotencyHeadersSchema,
+      params: adminServiceBackupParamsSchema,
+      body: adminServiceBackupRestoreSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceAcceptedSchema),
@@ -314,10 +334,15 @@ export const serviceAdminOperations = {
     method: "DELETE",
     path: "/api/admin/services/backups/:name",
     auth: "admin",
-    request: { params: adminServiceBackupParamsSchema, body: adminServiceEmptyMutationSchema },
+    request: {
+      headers: adminServiceIdempotencyHeadersSchema,
+      params: adminServiceBackupParamsSchema,
+      body: adminServiceEmptyMutationSchema,
+    },
     responses: {
       ...adminCommonResponses,
       200: adminJson(adminServiceAcceptedSchema),
+      409: adminJson(httpErrorSchema),
       404: adminJson(httpErrorSchema),
     },
   },

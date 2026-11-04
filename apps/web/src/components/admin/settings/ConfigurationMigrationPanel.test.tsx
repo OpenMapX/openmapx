@@ -44,3 +44,68 @@ it("checks file size before reading and never admits an oversized migration", as
   expect(mocks.apply).not.toHaveBeenCalled();
   cache.clear();
 });
+
+it("shows a valid server preview when browser metadata storage is blocked", async () => {
+  mocks.inventory.mockResolvedValue({
+    status: 200,
+    data: { document: { prerequisites: [] }, fields: [] },
+  });
+  mocks.preview.mockResolvedValue({
+    status: 200,
+    data: {
+      previewId: "00000000-0000-4000-8000-000000000001",
+      fingerprint: "a".repeat(64),
+      expectedCurrentRevisionId: null,
+      changes: [],
+      prerequisites: [],
+      denials: [],
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw Error("storage denied");
+    }),
+    remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw Error("storage denied");
+    }),
+    set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw Error("quota exceeded");
+    }),
+    cache = createTestQueryClient();
+  try {
+    render(
+      <QueryClientProvider client={cache}>
+        <ConfigurationMigrationPanel />
+      </QueryClientProvider>,
+    );
+    const input = screen.getByText("Review configuration file").querySelector("input")!;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          {
+            size: 100,
+            text: async () =>
+              JSON.stringify({
+                format: "openmapx-configuration",
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                settings: {},
+                integrations: [],
+                serviceConfigs: [],
+                bindings: [],
+                installations: [],
+                prerequisites: [],
+              }),
+          },
+        ],
+      },
+    });
+    expect(await screen.findByText(/0 selected changes/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Apply reviewed configuration" })).not.toBeDisabled();
+  } finally {
+    get.mockRestore();
+    remove.mockRestore();
+    set.mockRestore();
+    cache.clear();
+  }
+});

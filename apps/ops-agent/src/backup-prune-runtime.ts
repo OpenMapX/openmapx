@@ -48,6 +48,7 @@ export function installBackupPruneRuntime(
 ): void {
   const policy = () => {
     const resolved = services.resolvePlatformConfiguration({
+      env: process.env,
       saved: services.readAppliedPlatformConfiguration(options.infraDir),
     });
     const retentionDays = resolved.values.backupRetentionDays,

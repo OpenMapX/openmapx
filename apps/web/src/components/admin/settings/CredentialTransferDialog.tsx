@@ -32,6 +32,7 @@ import { useActivityClient } from "../activity/activityQueries";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
 import {
   credentialPreviewStorageKey,
+  discardStoredPreview,
   readCredentialPreview,
   retainCredentialPreview,
 } from "./credential-preview-storage";
@@ -105,7 +106,7 @@ export function CredentialTransferDialog({
     };
   }, [apiUrl, actorId, clear, storageKey]);
   const close = () => {
-    sessionStorage.removeItem(storageKey);
+    discardStoredPreview(storageKey);
     clear();
     onClose();
   };
@@ -222,7 +223,7 @@ export function CredentialTransferDialog({
             `${value.outcome}: ${value.steps.map((s) => `${s.scope}/${s.id} ${s.status}`).join("; ")}`,
           );
           setPreview(null);
-          sessionStorage.removeItem(storageKey);
+          discardStoredPreview(storageKey);
         }
       }
     });

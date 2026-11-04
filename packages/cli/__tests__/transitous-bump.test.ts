@@ -1,23 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  combinedPinsAreCurrent,
-  diffFeedFiles,
-  resolveGbfsCandidate,
-  writeCombinedCatalogLockProposal,
-  writeCombinedCatalogLocks,
-} from "../src/commands/transitous-bump.js";
-
-let temporaryRoot: string | undefined;
-
-afterEach(() => {
-  if (temporaryRoot) rmSync(temporaryRoot, { recursive: true, force: true });
-  temporaryRoot = undefined;
-});
+import { resolveGbfsCatalogCandidate } from "@openmapx/transitous-core";
+import { describe, expect, it } from "vitest";
+import { combinedPinsAreCurrent, diffFeedFiles } from "../src/commands/transitous-bump.js";
 
 const TRANSITOUS = {
   ref: `main@${"a".repeat(40)}`,
@@ -45,7 +30,7 @@ describe("Transitous combined catalog bump", () => {
       String(input).includes("api.github.com")
         ? new Response(JSON.stringify({ sha }))
         : new Response(csv);
-    const result = await resolveGbfsCandidate(
+    const result = await resolveGbfsCatalogCandidate(
       "tester",
       fetchStub as typeof fetch,
       () => new Date("2026-07-15T12:00:00.000Z"),
@@ -94,7 +79,7 @@ describe("Transitous combined catalog bump", () => {
         : new Response(
             "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n",
           );
-    await expect(resolveGbfsCandidate("fixture", fetchStub as typeof fetch)).rejects.toThrow(
+    await expect(resolveGbfsCatalogCandidate("fixture", fetchStub as typeof fetch)).rejects.toThrow(
       /byte limit/,
     );
   });
@@ -102,29 +87,6 @@ describe("Transitous combined catalog bump", () => {
   it("detects a no-op only when both compatible pins match", () => {
     expect(combinedPinsAreCurrent(TRANSITOUS, GBFS, "a".repeat(40), "c".repeat(40))).toBe(true);
     expect(combinedPinsAreCurrent(TRANSITOUS, GBFS, "a".repeat(40), "f".repeat(40))).toBe(false);
-  });
-
-  it("refuses unvalidated direct activation before replacing either compatibility file", () => {
-    temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-lockset-"));
-    const directory = join(temporaryRoot, "infra", "docker");
-    mkdirSync(directory, { recursive: true });
-    const transitousPath = join(directory, "transitous.lock.json");
-    const gbfsPath = join(directory, "gbfs-catalog.lock.json");
-    writeFileSync(transitousPath, "old-transitous\n");
-    writeFileSync(gbfsPath, "old-gbfs\n");
-    let renameCalls = 0;
-    expect(() =>
-      writeCombinedCatalogLocks(temporaryRoot as string, TRANSITOUS, GBFS, {
-        rename: (from, to) => {
-          renameCalls++;
-          if (renameCalls === 2) throw new Error("injected rename failure");
-          return renameSync(from, to);
-        },
-      }),
-    ).toThrow(/validated paired approval/);
-    expect(renameCalls).toBe(0);
-    expect(readFileSync(transitousPath, "utf-8")).toBe("old-transitous\n");
-    expect(readFileSync(gbfsPath, "utf-8")).toBe("old-gbfs\n");
   });
 
   it("reports removed feeds and license changes for compatibility review", () => {
@@ -144,21 +106,6 @@ describe("Transitous combined catalog bump", () => {
     );
     expect(summary.removedSources).toBe(1);
     expect(summary.licenseChanges).toEqual([{ region: "de", source: "BVG" }]);
-  });
-
-  it("refuses obsolete unsigned proposal file writes", () => {
-    temporaryRoot = mkdtempSync(join(tmpdir(), "openmapx-bump-proposal-"));
-    const directory = join(temporaryRoot, "infra", "docker");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "transitous.lock.json"), "active-transitous\n");
-    writeFileSync(join(directory, "gbfs-catalog.lock.json"), "active-gbfs\n");
-    expect(() => writeCombinedCatalogLockProposal(temporaryRoot!, TRANSITOUS, GBFS)).toThrow(
-      /installed paired review/,
-    );
-    expect(readFileSync(join(directory, "transitous.lock.json"), "utf-8")).toBe(
-      "active-transitous\n",
-    );
-    expect(readFileSync(join(directory, "gbfs-catalog.lock.json"), "utf-8")).toBe("active-gbfs\n");
   });
 });
 

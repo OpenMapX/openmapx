@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApiClient } from "@openmapx/core";
@@ -21,6 +21,8 @@ import {
 import { privacyAdminRoute } from "../routes/privacy-admin";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
 import { EncryptedBlobStore } from "./artifact-storage";
+import { mutateCaseAttachment } from "./attachment-review";
+import { createEncryptedAttachment } from "./attachments";
 import { collectApprovedAttachments } from "./collectors/attachments";
 
 const authFixture = vi.hoisted(() => ({ sessionId: "synthetic-session" }));
@@ -617,6 +619,123 @@ suite("owned privacy case transaction boundaries", () => {
       } finally {
         authFixture.sessionId = "synthetic-session";
         await app.close();
+      }
+    },
+  );
+  it.each(["committed", "rolled_back", "unavailable"] as const)(
+    "retains attachment bytes unless a rejected transaction is proven rolled back (%s)",
+    async (outcome) => {
+      const r = await request(),
+        body = {
+          version: r.version,
+          purpose: "identity_evidence",
+          filename: "proof.txt",
+          mediaType: "text/plain",
+          contentBase64: Buffer.from("synthetic evidence").toString("base64"),
+        },
+        input = {
+          kind: "upload" as const,
+          requestId: r.id,
+          body,
+          actorId,
+          idempotencyKey: randomUUID(),
+          database: fixture.db,
+          store,
+        },
+        original = fixture.db.transaction.bind(fixture.db),
+        write = vi.spyOn(store, "write"),
+        failure = Error("database outcome acknowledgement unavailable");
+      const transaction = vi
+        .spyOn(fixture.db, "transaction")
+        .mockImplementationOnce(async (callback, options) => {
+          if (outcome === "committed") {
+            await original(callback, options);
+            throw failure;
+          }
+          return original(async (tx) => {
+            await callback(tx);
+            throw failure;
+          }, options);
+        });
+      if (outcome === "unavailable")
+        transaction.mockRejectedValueOnce(Error("reconciliation connection unavailable"));
+      try {
+        await expect(mutateCaseAttachment(input)).rejects.toThrow(failure.message);
+        const stored = await write.mock.results[0]!.value,
+          [attachment] = await fixture.db
+            .select()
+            .from(dataSubjectRequestAttachment)
+            .where(eq(dataSubjectRequestAttachment.requestId, r.id));
+        expect(!!attachment).toBe(outcome === "committed");
+        if (outcome === "rolled_back")
+          await expect(access(stored.path)).rejects.toMatchObject({ code: "ENOENT" });
+        else {
+          const chunks: Buffer[] = [];
+          await store.decryptTo(stored, (chunk) => {
+            chunks.push(Buffer.from(chunk));
+          });
+          expect(Buffer.concat(chunks).toString()).toBe("synthetic evidence");
+        }
+        transaction.mockRestore();
+        if (outcome === "committed") {
+          const replay = await mutateCaseAttachment(input);
+          expect(replay?.attachment.id).toBe(attachment!.id);
+          expect(write).toHaveBeenCalledOnce();
+          expect(
+            (
+              await fixture.db
+                .select()
+                .from(dataSubjectRequestEvent)
+                .where(eq(dataSubjectRequestEvent.requestId, r.id))
+            ).filter((event) => event.eventType === "attachment_created"),
+          ).toHaveLength(1);
+        }
+      } finally {
+        transaction.mockRestore();
+        write.mockRestore();
+      }
+    },
+  );
+
+  it.each(["committed", "rejected_insert"] as const)(
+    "owns standalone attachment persistence before cleanup (%s)",
+    async (outcome) => {
+      const r = await request(),
+        original = fixture.db.transaction.bind(fixture.db),
+        write = vi.spyOn(store, "write");
+      const transaction = vi.spyOn(fixture.db, "transaction");
+      if (outcome === "committed")
+        transaction.mockImplementationOnce(async (callback, options) => {
+          await original(callback, options);
+          throw Error("standalone COMMIT acknowledgement lost");
+        });
+      try {
+        await expect(
+          createEncryptedAttachment(
+            {
+              requestId: outcome === "committed" ? r.id : randomUUID(),
+              ownerId: actorId,
+              purpose: "identity_evidence",
+              filename: "evidence.txt",
+              mediaType: "text/plain",
+              source: Buffer.from("standalone evidence"),
+              expiresAt: new Date(Date.now() + 60000),
+            },
+            { store, database: fixture.db },
+          ),
+        ).rejects.toThrow();
+        const stored = await write.mock.results[0]!.value;
+        if (outcome === "committed") {
+          const [row] = await fixture.db
+            .select()
+            .from(dataSubjectRequestAttachment)
+            .where(eq(dataSubjectRequestAttachment.requestId, r.id));
+          expect(row?.storageKey).toBe(stored.storageKey);
+          await store.verify(stored);
+        } else await expect(access(stored.path)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        transaction.mockRestore();
+        write.mockRestore();
       }
     },
   );

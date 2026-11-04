@@ -100,15 +100,16 @@ account-session confirmation required by assisted recovery.
 
 :::
 
-Keep another working administrator before using `demote`: browser self/last-admin
-protections do not protect the host recovery commands.
+Keep another working administrator before using `demote`. The database rejects
+removing, banning or demoting the last active administrator, including through
+the host commands. Browser self-action protections do not apply to host access.
 
 ### Promoting and demoting from the UI
 
 Open **Users**, then change the role in the list or the user's **Profile** tab.
-The list disables self-role changes and protects the last full administrator.
-Treat those controls as browser safeguards, not a guarantee for direct database
-or every authentication API operation.
+The list disables self-role changes. The database also serializes changes to
+active administrator capacity, so competing requests cannot remove the last
+active administrator.
 
 Select **Privacy admin** to grant casework access without general deployment
 permissions. Granting or revoking this role uses a dedicated full-admin endpoint
@@ -124,11 +125,12 @@ account identity before acting.
 
 ### Create a user
 
-Use **Create User** and enter the name, email, password and starting role. The
-form requires at least eight password characters. Its Send welcome email
-checkbox forwards a flag, but the current API has no sender that consumes it.
-Arrange onboarding separately and verify recovery-email delivery; creating an
-account does not notify the recipient by itself.
+Use **Create User** and enter the name, email and starting role. You may supply
+an initial password or leave it empty to send a one-use setup link. Passwords
+must satisfy the active authentication policy. The welcome checkbox requests
+separate verification and password-setup emails; setup is required when no
+initial password was supplied. Passwords are never included in the message.
+Creating an account does not mark its email verified.
 
 ### Edit a profile
 
@@ -137,13 +139,7 @@ email read-only. The account owner changes their address through the verified
 email-change flow. Account ID, timestamps, verification, two-factor state and
 ban reason help distinguish accounts with similar names.
 
-### Reset a password
-
-Open **Users → Create User** to provision an account. You may supply an initial
-password or leave it empty to send a one-use setup link. The welcome checkbox
-requests separate verification and password-setup emails; setup is required if
-no initial password was supplied. Passwords are never included in the message.
-Creating or resetting an account does not mark its email verified.
+### Account recovery
 
 The created account remains visible if mail fails. **Latest administrative mail
 request** distinguishes queued, accepted by the mail service, failed and unknown
@@ -163,8 +159,9 @@ identity outside this flow. Password replacement revokes existing sessions and
 reset links while preserving the verification flag. Mail actions are limited
 to three per target and twenty per administrator per hour.
 
-Setup links expire, are one-use, and are replaced by an explicit new setup
-invitation. A separate verification email proves ownership of the email address.
+Setup and password-reset links expire one hour after issuance, are one-use,
+and are replaced by an explicit new invitation or reset request. Delayed mail
+delivery does not extend their lifetime. A separate verification email proves ownership of the email address.
 A working email provider is required for both; see **Settings → Email**.
 
 ### Sessions
@@ -210,9 +207,9 @@ logged but generally do not block the action. See [Monitoring](./monitoring.md).
 
 The current runtime configuration enables email/password with email verification,
 passkeys, the configured OAuth providers, TOTP/backup codes and email OTP
-support. The saved Authentication settings are not read by `auth.ts`: changing
-Require Email Verification, Session Duration, Enable Two-Factor Authentication
-or Minimum Password Length does not currently change Better Auth enforcement.
+support. The active authentication policy controls email verification, absolute
+session lifetime, new second-factor enrollment and minimum password length.
+Review and activate changes through **Settings → Authentication policy**.
 
 ### Email and password
 

@@ -45,6 +45,9 @@ export function coordinatorLifecycleOperationKey(jobId: string, ordinal: number 
     `${jobId}:${ordinal ?? "apply"}`,
   );
 }
+// Bind the entire original row, including retained admission bookkeeping.
+// The business-field allowlists below exclude only that reserved envelope;
+// it never selects an operation, target, decision or recovery capability.
 function provenance(row: typeof adminJob.$inferSelect) {
   return canonicalJson({
     id: row.id,
@@ -78,7 +81,7 @@ export async function prepareCoordinatorLifecycleIntent(
     if (
       row.type !== "service.apply" ||
       payload.service !== "data-manager" ||
-      Object.keys(payload).some((k) => k !== "service")
+      Object.keys(payload).some((k) => k !== "service" && k !== "_maintenanceRequest")
     )
       throw refuse();
     action = "apply";
@@ -94,7 +97,16 @@ export async function prepareCoordinatorLifecycleIntent(
       payload.serviceIds.filter((id) => id === "data-manager").length !== 1 ||
       (payload.noDeps !== undefined && typeof payload.noDeps !== "boolean") ||
       Object.keys(payload).some(
-        (k) => !["action", "serviceIds", "all", "region", "continueOnError", "noDeps"].includes(k),
+        (k) =>
+          ![
+            "action",
+            "serviceIds",
+            "all",
+            "region",
+            "continueOnError",
+            "noDeps",
+            "_maintenanceRequest",
+          ].includes(k),
       )
     )
       throw refuse();
@@ -163,7 +175,7 @@ export function assertRetainedCoordinatorLifecycleProvenance(
     (fixed.action === "apply"
       ? row.type !== "service.apply" ||
         payload.service !== "data-manager" ||
-        Object.keys(payload).some((k) => k !== "service")
+        Object.keys(payload).some((k) => k !== "service" && k !== "_maintenanceRequest")
       : row.type !== "service.bulk" ||
         payload.action !== "update" ||
         !Array.isArray(payload.serviceIds) ||

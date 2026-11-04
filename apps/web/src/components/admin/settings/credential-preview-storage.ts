@@ -11,15 +11,29 @@ export function readCredentialPreview(key: string): CredentialImportPreview | nu
     if (!raw) return null;
     const value = credentialImportPreviewSchema.parse(JSON.parse(raw));
     if (Date.parse(value.expiresAt) <= Date.now()) {
-      sessionStorage.removeItem(key);
+      discardStoredPreview(key);
       return null;
     }
     return value;
   } catch {
-    sessionStorage.removeItem(key);
+    discardStoredPreview(key);
     return null;
   }
 }
 export function retainCredentialPreview(key: string, value: CredentialImportPreview) {
-  sessionStorage.setItem(key, JSON.stringify(credentialImportPreviewSchema.parse(value)));
+  const metadata = credentialImportPreviewSchema.parse(value);
+  try {
+    sessionStorage.setItem(key, JSON.stringify(metadata));
+  } catch {
+    /* Optional navigation cache. */
+  }
+}
+
+/** Optional browser metadata must never prevent showing/clearing an in-memory preview. */
+export function discardStoredPreview(key: string) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    /* Storage can be unavailable. */
+  }
 }

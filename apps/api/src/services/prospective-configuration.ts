@@ -417,16 +417,14 @@ export function assertCommittedConfigurationCandidate(
   if (candidateStages.get(candidate) !== "committed")
     throw Error("Committed configuration candidate required");
 }
-export function assertKnownRolledBackConfigurationCandidate(
+function assertKnownRolledBackConfigurationCandidate(
   candidate: ValidatedConfigurationCandidate,
 ): void {
   const state = validatedConfigurationCandidateState(candidate);
   if (state.persisted || candidateStages.get(candidate) !== "rolled_back")
     throw Error("Actual original rolled-back candidate required");
 }
-export function assertUnadmittedConfigurationCandidate(
-  candidate: ValidatedConfigurationCandidate,
-): void {
+function assertUnadmittedConfigurationCandidate(candidate: ValidatedConfigurationCandidate): void {
   const state = validatedConfigurationCandidateState(candidate);
   const stage = candidateStages.get(candidate);
   if (
@@ -1369,7 +1367,7 @@ const retirements = new WeakMap<
   }
 >();
 /** Only the actual locked completion verifier below creates these handles. */
-export function retainedConfigurationRetirementState(handle: RetainedConfigurationRetirement) {
+function retainedConfigurationRetirementState(handle: RetainedConfigurationRetirement) {
   const state = retirements.get(handle);
   if (!state || currentAdministrativeConfigurationWriter() !== state.writer)
     throw new JobObservationPending("recovery_required");
@@ -1399,7 +1397,9 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
       writer.actorId === job.jobId &&
       ((row.type === "service.apply" &&
         job.payload.service === "data-manager" &&
-        Object.keys(job.payload).length === 1 &&
+        Object.keys(job.payload).every(
+          (key) => key === "service" || key === "_maintenanceRequest",
+        ) &&
         writer.operationKey === coordinatorLifecycleOperationKey(job.jobId, null)) ||
         (row.type === "service.bulk" &&
           job.payload.action === "update" &&
@@ -1489,7 +1489,7 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
   return completion.result;
 }
 /** Reload from this exact committed candidate, while its captured read scope is live. */
-export async function withProspectiveConfigurationRead<T>(
+async function withProspectiveConfigurationRead<T>(
   candidate: ValidatedConfigurationCandidate,
   run: (context: AdministrativeConfigurationReadContext) => Promise<T>,
 ): Promise<T> {

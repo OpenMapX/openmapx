@@ -126,11 +126,13 @@ import type {
   CreateAdminServiceBackup400,
   CreateAdminServiceBackup401,
   CreateAdminServiceBackup403,
+  CreateAdminServiceBackup409,
   CreateAdminServiceBackup413,
   CreateAdminServiceBackup415,
   CreateAdminServiceBackup429,
   CreateAdminServiceBackup500,
   CreateAdminServiceBackupBody,
+  CreateAdminServiceBackupHeaders,
   DeleteAdminArtifactTransfer200,
   DeleteAdminArtifactTransfer400,
   DeleteAdminArtifactTransfer401,
@@ -150,11 +152,13 @@ import type {
   DeleteAdminServiceBackup401,
   DeleteAdminServiceBackup403,
   DeleteAdminServiceBackup404,
+  DeleteAdminServiceBackup409,
   DeleteAdminServiceBackup413,
   DeleteAdminServiceBackup415,
   DeleteAdminServiceBackup429,
   DeleteAdminServiceBackup500,
   DeleteAdminServiceBackupBody,
+  DeleteAdminServiceBackupHeaders,
   DeleteAdminServiceCredential200,
   DeleteAdminServiceCredential400,
   DeleteAdminServiceCredential401,
@@ -490,6 +494,7 @@ import type {
   RestoreAdminServiceBackup429,
   RestoreAdminServiceBackup500,
   RestoreAdminServiceBackupBody,
+  RestoreAdminServiceBackupHeaders,
   RollbackAdminSharedMobility200,
   RollbackAdminSharedMobility400,
   RollbackAdminSharedMobility401,
@@ -526,21 +531,25 @@ import type {
   RunAdminServiceAction401,
   RunAdminServiceAction403,
   RunAdminServiceAction404,
+  RunAdminServiceAction409,
   RunAdminServiceAction413,
   RunAdminServiceAction415,
   RunAdminServiceAction429,
   RunAdminServiceAction500,
   RunAdminServiceAction503,
   RunAdminServiceActionBody,
+  RunAdminServiceActionHeaders,
   RunAdminServicesBulkAction200,
   RunAdminServicesBulkAction400,
   RunAdminServicesBulkAction401,
   RunAdminServicesBulkAction403,
+  RunAdminServicesBulkAction409,
   RunAdminServicesBulkAction413,
   RunAdminServicesBulkAction415,
   RunAdminServicesBulkAction429,
   RunAdminServicesBulkAction500,
   RunAdminServicesBulkActionBody,
+  RunAdminServicesBulkActionHeaders,
   SetAdminServiceCredential200,
   SetAdminServiceCredential400,
   SetAdminServiceCredential401,
@@ -3725,6 +3734,11 @@ export type createAdminServiceBackupResponse403 = {
   status: 403;
 };
 
+export type createAdminServiceBackupResponse409 = {
+  data: CreateAdminServiceBackup409;
+  status: 409;
+};
+
 export type createAdminServiceBackupResponse413 = {
   data: CreateAdminServiceBackup413;
   status: 413;
@@ -3752,6 +3766,7 @@ export type createAdminServiceBackupResponseError = (
   | createAdminServiceBackupResponse400
   | createAdminServiceBackupResponse401
   | createAdminServiceBackupResponse403
+  | createAdminServiceBackupResponse409
   | createAdminServiceBackupResponse413
   | createAdminServiceBackupResponse415
   | createAdminServiceBackupResponse429
@@ -3769,6 +3784,7 @@ export const getCreateAdminServiceBackupUrl = () => {
 };
 
 export const createAdminServiceBackup = async (
+  headers: CreateAdminServiceBackupHeaders,
   createAdminServiceBackupBody?: CreateAdminServiceBackupBody,
   options?: Parameters<typeof createAdminServiceBackupRequest>[1],
 ): Promise<createAdminServiceBackupResponse> => {
@@ -3796,7 +3812,7 @@ export const createAdminServiceBackup = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(createAdminServiceBackupBody),
     },
   );
@@ -4018,6 +4034,11 @@ export type deleteAdminServiceBackupResponse404 = {
   status: 404;
 };
 
+export type deleteAdminServiceBackupResponse409 = {
+  data: DeleteAdminServiceBackup409;
+  status: 409;
+};
+
 export type deleteAdminServiceBackupResponse413 = {
   data: DeleteAdminServiceBackup413;
   status: 413;
@@ -4046,6 +4067,7 @@ export type deleteAdminServiceBackupResponseError = (
   | deleteAdminServiceBackupResponse401
   | deleteAdminServiceBackupResponse403
   | deleteAdminServiceBackupResponse404
+  | deleteAdminServiceBackupResponse409
   | deleteAdminServiceBackupResponse413
   | deleteAdminServiceBackupResponse415
   | deleteAdminServiceBackupResponse429
@@ -4064,6 +4086,7 @@ export const getDeleteAdminServiceBackupUrl = (name: string) => {
 
 export const deleteAdminServiceBackup = async (
   name: string,
+  headers: DeleteAdminServiceBackupHeaders,
   deleteAdminServiceBackupBody?: DeleteAdminServiceBackupBody,
   options?: Parameters<typeof deleteAdminServiceBackupRequest>[1],
 ): Promise<deleteAdminServiceBackupResponse> => {
@@ -4091,7 +4114,7 @@ export const deleteAdminServiceBackup = async (
     {
       ...options,
       method: "DELETE",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(deleteAdminServiceBackupBody),
     },
   );
@@ -4174,6 +4197,7 @@ export const getRestoreAdminServiceBackupUrl = (name: string) => {
 
 export const restoreAdminServiceBackup = async (
   name: string,
+  headers: RestoreAdminServiceBackupHeaders,
   restoreAdminServiceBackupBody?: RestoreAdminServiceBackupBody,
   options?: Parameters<typeof restoreAdminServiceBackupRequest>[1],
 ): Promise<restoreAdminServiceBackupResponse> => {
@@ -4201,7 +4225,7 @@ export const restoreAdminServiceBackup = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(restoreAdminServiceBackupBody),
     },
   );
@@ -4225,6 +4249,11 @@ export type runAdminServicesBulkActionResponse401 = {
 export type runAdminServicesBulkActionResponse403 = {
   data: RunAdminServicesBulkAction403;
   status: 403;
+};
+
+export type runAdminServicesBulkActionResponse409 = {
+  data: RunAdminServicesBulkAction409;
+  status: 409;
 };
 
 export type runAdminServicesBulkActionResponse413 = {
@@ -4254,6 +4283,7 @@ export type runAdminServicesBulkActionResponseError = (
   | runAdminServicesBulkActionResponse400
   | runAdminServicesBulkActionResponse401
   | runAdminServicesBulkActionResponse403
+  | runAdminServicesBulkActionResponse409
   | runAdminServicesBulkActionResponse413
   | runAdminServicesBulkActionResponse415
   | runAdminServicesBulkActionResponse429
@@ -4272,6 +4302,7 @@ export const getRunAdminServicesBulkActionUrl = () => {
 
 export const runAdminServicesBulkAction = async (
   runAdminServicesBulkActionBody: RunAdminServicesBulkActionBody,
+  headers: RunAdminServicesBulkActionHeaders,
   options?: Parameters<typeof runAdminServicesBulkActionRequest>[1],
 ): Promise<runAdminServicesBulkActionResponse> => {
   const getHeaders = (
@@ -4298,7 +4329,7 @@ export const runAdminServicesBulkAction = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(runAdminServicesBulkActionBody),
     },
   );
@@ -4976,6 +5007,11 @@ export type runAdminServiceActionResponse404 = {
   status: 404;
 };
 
+export type runAdminServiceActionResponse409 = {
+  data: RunAdminServiceAction409;
+  status: 409;
+};
+
 export type runAdminServiceActionResponse413 = {
   data: RunAdminServiceAction413;
   status: 413;
@@ -5009,6 +5045,7 @@ export type runAdminServiceActionResponseError = (
   | runAdminServiceActionResponse401
   | runAdminServiceActionResponse403
   | runAdminServiceActionResponse404
+  | runAdminServiceActionResponse409
   | runAdminServiceActionResponse413
   | runAdminServiceActionResponse415
   | runAdminServiceActionResponse429
@@ -5029,6 +5066,7 @@ export const getRunAdminServiceActionUrl = (id: string) => {
 export const runAdminServiceAction = async (
   id: string,
   runAdminServiceActionBody: RunAdminServiceActionBody,
+  headers: RunAdminServiceActionHeaders,
   options?: Parameters<typeof runAdminServiceActionRequest>[1],
 ): Promise<runAdminServiceActionResponse> => {
   const getHeaders = (
@@ -5055,7 +5093,7 @@ export const runAdminServiceAction = async (
     {
       ...options,
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
       body: JSON.stringify(runAdminServiceActionBody),
     },
   );

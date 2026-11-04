@@ -4,6 +4,7 @@ import {
   ConfigurationSourceOwned,
   IntegrationConfigurationConflict,
 } from "../services/configuration-ownership-view";
+import { MaintenanceRequestConflict } from "../services/retained-maintenance-job";
 import { TrustedConfigurationApplyError } from "../services/trusted-config-outcome";
 import { createAdminRouteRegistrar } from "./admin-contract";
 
@@ -26,6 +27,8 @@ export const registerServiceAdminRoute: typeof register = (app, operation, handl
       try {
         return await handler(request, reply);
       } catch (error) {
+        if (error instanceof MaintenanceRequestConflict)
+          return reply.code(409).send({ error: "Idempotency-Key belongs to another request" });
         if (error instanceof IntegrationConfigurationConflict)
           return reply.code(409).send({ code: error.code, error: error.message });
         if (error instanceof ConfigurationSourceOwned)

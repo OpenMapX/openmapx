@@ -1,21 +1,14 @@
-import type { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import type { GbfsCatalogLock, TransitousLock } from "@openmapx/core/catalog-pins/types";
 import { transitBumpResultSchema } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
-import {
-  diffCatalogFeeds,
-  parseRefShaPair,
-  resolveGbfsCatalogCandidate,
-} from "@openmapx/transitous-core";
+import { diffCatalogFeeds, parseRefShaPair } from "@openmapx/transitous-core";
 import type { Command } from "commander";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
-
-export const resolveGbfsCandidate = resolveGbfsCatalogCandidate;
 
 export function combinedPinsAreCurrent(
   transitous: TransitousLock | null,
@@ -27,36 +20,6 @@ export function combinedPinsAreCurrent(
     (transitous ? parseRefShaPair(transitous.ref).sha : null) === transitousSha &&
     gbfs?.commit === gbfsCommit
   );
-}
-
-/** Stage and replace the compatible Transitous/MobilityData pin set together. */
-export function writeCombinedCatalogLocks(
-  repoRoot: string,
-  transitous: TransitousLock,
-  gbfs: GbfsCatalogLock,
-  operations: {
-    write?: typeof writeFileSync;
-    rename?: typeof renameSync;
-    remove?: typeof unlinkSync;
-  } = {},
-): void {
-  void repoRoot;
-  void transitous;
-  void gbfs;
-  void operations;
-  throw new Error("Catalog pin activation requires validated paired approval");
-}
-
-/** Write a reviewable pin-set proposal without mutating active lockfiles. */
-export function writeCombinedCatalogLockProposal(
-  repoRoot: string,
-  transitous: TransitousLock,
-  gbfs: GbfsCatalogLock,
-): void {
-  void repoRoot;
-  void transitous;
-  void gbfs;
-  throw new Error("Catalog proposals require the installed paired review workflow");
 }
 
 export interface FeedFile {

@@ -766,3 +766,14 @@ response, schema issues or private history are attached to errors or persisted.
 Existing HTTP failure sanitization, owner isolation and partial-track warnings
 are preserved. Valid track positions can include elevation dimensions; no
 8 MiB generated-client limit is imposed on these larger normalized day replies.
+
+## Retrying service and backup mutations
+
+Single-service actions, bulk actions and backup create/restore/delete require an
+`Idempotency-Key` header: one caller-retained16–128-character intent identifier.
+An exact retry by the same administrator returns the original job, even when
+capabilities or backup inventory have changed since admission. Reusing the key
+for another payload or action returns409. Bulk presets resolve once at admission;
+replay keeps the original expanded service set. A deliberately new operation
+needs a new key. The panel retains the pending key after transport failure and
+rotates it after acceptance; this does not change backend cancellation ownership.

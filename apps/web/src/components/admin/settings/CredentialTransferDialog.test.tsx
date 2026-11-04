@@ -1,7 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@/test";
 import { CredentialTransferDialog } from "./CredentialTransferDialog";
-import { credentialPreviewStorageKey, retainCredentialPreview } from "./credential-preview-storage";
+import {
+  credentialPreviewStorageKey,
+  readCredentialPreview,
+  retainCredentialPreview,
+} from "./credential-preview-storage";
 
 vi.mock("@/lib/admin/accountAdmin", () => ({
   useAccountAdmin: () => ({ actorId: "synthetic-admin" }),
@@ -52,4 +56,28 @@ it("rejects a large encrypted file before reading and requires explicit selectio
     target: { value: "synthetic passphrase" },
   });
   expect(screen.getByRole("button", { name: "Confirm encrypted export" })).not.toBeDisabled();
+});
+it("keeps browser-storage failures out of preview reads and writes", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    get() {
+      throw new DOMException("Denied", "SecurityError");
+    },
+  });
+  try {
+    expect(readCredentialPreview("blocked")).toBeNull();
+    expect(() =>
+      retainCredentialPreview("blocked", {
+        previewId: "00000000-0000-4000-8000-000000000001",
+        intentFingerprint: "a".repeat(64),
+        expectedCurrentRevisionId: null,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        entries: [],
+        applyable: true,
+      }),
+    ).not.toThrow();
+  } finally {
+    if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+  }
 });

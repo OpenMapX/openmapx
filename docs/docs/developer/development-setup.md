@@ -330,3 +330,13 @@ for full local verification and checks that run separately.
   to building your own feature.
 - [CLI reference](./cli-reference.md): every `pnpm openmapx` command,
   including the data and service-lifecycle ones this page only touched on.
+
+## API migration ordering
+
+The committed `apps/api/src/db/migrations/meta/_journal.json` defines migration
+order. Historical filenames retain their original names after branch merges:
+for example, journal entry45 is `0042_admin_data_execution`, after the earlier
+entries42–44 from main. The numeric filename prefix is not the journal index.
+Use the normal migrator; do not sort SQL filenames or rename/rewrite an applied
+migration to make its prefix match the current index. Generate subsequent
+schema changes as new migrations with the standard Drizzle tooling.

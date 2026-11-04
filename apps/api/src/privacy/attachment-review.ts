@@ -185,8 +185,34 @@ export async function mutateCaseAttachment(input: {
     }
     return result;
   } catch (error) {
-    if (createdStorage && input.store)
-      await input.store.delete(createdStorage).catch(() => undefined);
+    if (createdStorage && input.store) {
+      const storageKey = createdStorage;
+      try {
+        // A rejected COMMIT can already be durable. A fresh case lock waits
+        // behind the original writer before deciding that its blob is orphaned.
+        await input.database.transaction(async (tx) => {
+          await tx.execute(sql`set local statement_timeout = '5s'`);
+          await tx
+            .select({ id: dataSubjectRequest.id })
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.id, input.requestId))
+            .for("update");
+          const [retained] = await tx
+            .select({ id: dataSubjectRequestAttachment.id })
+            .from(dataSubjectRequestAttachment)
+            .where(
+              and(
+                eq(dataSubjectRequestAttachment.requestId, input.requestId),
+                eq(dataSubjectRequestAttachment.storageKey, storageKey),
+              ),
+            )
+            .limit(1);
+          if (!retained) await input.store!.delete(storageKey);
+        });
+      } catch {
+        // Database uncertainty must never destroy potentially committed evidence.
+      }
+    }
     throw error;
   }
 }

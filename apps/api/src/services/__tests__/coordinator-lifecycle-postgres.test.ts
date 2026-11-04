@@ -728,7 +728,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const first = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds },
           }),
           id = first.json().jobId;
@@ -961,7 +964,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const next = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           row = await finished(next.json().jobId);
@@ -985,7 +991,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const reply = await api.inject({
               method: "POST",
               url: "/api/admin/services/bulk-action",
-              headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
               payload: { action: "update", serviceIds: ["data-manager"] },
             }),
             row = await finished(reply.json().jobId),
@@ -1036,7 +1045,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const reply = await api.inject({
               method: "POST",
               url: "/api/admin/services/bulk-action",
-              headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
               payload: { action: "update", serviceIds: ["data-manager"] },
             }),
             row = await finished(reply.json().jobId);
@@ -1068,7 +1080,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
         method: "POST",
         url: "/api/admin/services/data-manager/action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "apply" },
       });
       const row = await finished(next.json().jobId);
@@ -1241,7 +1256,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const repair = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repair.json().jobId)).status).toBe("success");
@@ -1317,7 +1335,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const repair = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repair.json().jobId)).status).toBe("success");
@@ -1411,7 +1432,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
         method: "POST",
         url: "/api/admin/services/data-manager/action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "apply" },
       });
       expect((await finished(next.json().jobId)).status).toBe("success");
@@ -1448,7 +1472,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const started = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "start", serviceIds: ["motis"] },
         }),
         startId = started.json().jobId;
@@ -1487,7 +1514,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const request = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           stopped = await finished(request.json().jobId);
@@ -1505,7 +1535,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const repaired = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repaired.json().jobId)).status).toBe("success");
@@ -1636,7 +1669,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const next = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           row = await finished(next.json().jobId);
@@ -1802,7 +1838,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(next.json().jobId)).status).toBe("success");
@@ -1951,7 +1990,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const repaired = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repaired.json().jobId)).status).toBe("success");
@@ -1979,7 +2021,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const response = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
         const jobId: unknown = response.json().jobId;
@@ -2061,7 +2106,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           response = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds },
           }),
           originalId = response.json().jobId,
@@ -2097,14 +2145,20 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const repair = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           });
           expect((await finished(repair.json().jobId)).status).toBe("success");
           const retry = await api.inject({
               method: "POST",
               url: "/api/admin/services/bulk-action",
-              headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
               payload: { action: "update", serviceIds },
             }),
             retried = await finished(retry.json().jobId);
@@ -2246,7 +2300,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const repaired = await api.inject({
               method: "POST",
               url: "/api/admin/services/bulk-action",
-              headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
               payload: { action: "update", serviceIds: ["data-manager"] },
             });
             expect((await finished(repaired.json().jobId)).status).toBe("success");
@@ -2294,7 +2351,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds: ["data-manager"] },
         }),
         row = await finished(next.json().jobId);
@@ -2409,7 +2469,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(next.json().jobId)).status).toBe("success");
@@ -2710,7 +2773,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const response = await api.inject({
         method: "POST",
         url: "/api/admin/services/data-manager/action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "apply" },
       });
       expect(response.statusCode).toBe(200);
@@ -2732,7 +2798,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const response = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect(response.statusCode).toBe(200);
@@ -2946,7 +3015,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const next = await api.inject({
               method: "POST",
               url: "/api/admin/services/data-manager/action",
-              headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+              headers: {
+                "idempotency-key": randomUUID(),
+                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              },
               payload: { action: "apply" },
             });
             expect((await finished(next.json().jobId)).status).toBe("success");
@@ -3219,7 +3291,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const response = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect(response.statusCode).toBe(200);
@@ -3239,7 +3314,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const reply = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
         expect(reply.statusCode).toBe(200);
@@ -3257,7 +3335,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const row = await finished(reply.json().jobId);
@@ -3289,7 +3370,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const reply = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
         expect(reply.statusCode).toBe(200);
@@ -3323,7 +3407,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const status = await observed;
@@ -3348,7 +3435,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const row = await finished(reply.json().jobId);
@@ -3372,7 +3462,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const id = reply.json().jobId,
@@ -3415,7 +3508,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const next = await api.inject({
         method: "POST",
         url: "/api/admin/services/data-manager/action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "apply" },
       });
       expect(next.statusCode).toBe(200);
@@ -3431,7 +3527,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const row = await finished(reply.json().jobId);
@@ -3490,7 +3589,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
-        headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+        headers: {
+          "idempotency-key": randomUUID(),
+          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+        },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       const id = reply.json().jobId,
@@ -3553,7 +3655,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const response = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           id = response.json().jobId;
@@ -3630,7 +3735,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const reply = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds: ["data-manager"] },
           });
           const id = reply.json().jobId,
@@ -3705,7 +3813,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               const next = await api.inject({
                   method: "POST",
                   url: "/api/admin/services/bulk-action",
-                  headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+                  headers: {
+                    "idempotency-key": randomUUID(),
+                    "x-openmapx-local-admin": "task012-coordinator-local-admin",
+                  },
                   payload: { action: "update", serviceIds: ["data-manager"] },
                 }),
                 nextRow = await finished(next.json().jobId);
@@ -3741,7 +3852,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           reply = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
-            headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+            headers: {
+              "idempotency-key": randomUUID(),
+              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            },
             payload: { action: "update", serviceIds, noDeps },
           }),
           row = await finished(reply.json().jobId);
@@ -3777,7 +3891,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const reply = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds: ["motis", "data-manager", "valhalla"] },
         }),
         id = reply.json().jobId,
@@ -3835,7 +3952,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const reply = await api.inject({
           method: "POST",
           url: "/api/admin/services/bulk-action",
-          headers: { "x-openmapx-local-admin": "task012-coordinator-local-admin" },
+          headers: {
+            "idempotency-key": randomUUID(),
+            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          },
           payload: { action: "update", serviceIds },
         });
         expect(reply.statusCode).toBe(200);

@@ -486,6 +486,20 @@ dbDescribe("retained finite maintenance requests", () => {
         expect(
           journal.records().filter((job) => job.operation.kind === "artifactTransfer.validate"),
         ).toHaveLength(1);
+        if (loseImportResult === false) {
+          await store.deleteStage({ stageId: created.data.stageId, ownerId: actor });
+          expect(
+            await store.getStage({
+              stageId: created.data.stageId,
+              ownerId: actor,
+              purpose: "prepared-artifact",
+            }),
+          ).toMatchObject({ state: "expired" });
+          const replay = await validateAdminArtifactTransfer(created.data.stageId, key, options);
+          expect(replay.status).toBe(202);
+          expect(replay.data).toEqual(accepted.data);
+        }
+
         expect(
           host.calls.some(
             (args) => args.includes("up") || args.includes("stop") || args.includes("pull"),
@@ -708,10 +722,65 @@ dbDescribe("retained finite maintenance requests", () => {
       vi.stubEnv("OPS_AGENT_TOKEN_FILE", join(root, "token"));
     }
   }, 60000);
-  it("serializes competing requests and preserves terminal duplicates across a new call", async () => {
-    const key = "same-release-intent-001",
+  it("reuses service admission after lost audit acknowledgement before mutable capability checks", async () => {
+    const host = await ownedServiceHost();
+    state.services = host.loaded;
+    const { adminServicesRoute } = await import("../../routes/admin-services"),
+      api = await createAdminTestApp(adminServicesRoute, { prefix: "/api" }),
+      key = "retained-service-apply-lost-audit-001",
+      request = {
+        method: "POST" as const,
+        url: "/api/admin/services/motis/action",
+        headers: { "idempotency-key": key },
+        payload: { action: "apply" },
+      };
+    try {
+      adminMocks.writeAuditLog.mockRejectedValueOnce(Error("audit acknowledgement lost"));
+      expect((await api.inject(request)).statusCode).toBe(500);
+      const [original] = await state.fixture.db
+        .select()
+        .from(adminJob)
+        .where(eq(adminJob.type, "service.apply"));
+      expect(original).toBeDefined();
+      (await import("../../utils/rate-limit")).serviceActionLimit.reset();
+      const duplicate = await api.inject(request);
+      expect(duplicate.statusCode).toBe(200);
+      expect(duplicate.json().jobId).toBe(original!.id);
+      expect(
+        await state.fixture.db.select().from(adminJob).where(eq(adminJob.type, "service.apply")),
+      ).toHaveLength(1);
+      state.services = [];
+      (await import("../../utils/rate-limit")).serviceActionLimit.reset();
+      expect((await api.inject(request)).json().jobId).toBe(original!.id);
+      (await import("../../utils/rate-limit")).serviceActionLimit.reset();
+      expect((await api.inject({ ...request, payload: { action: "restart" } })).statusCode).toBe(
+        409,
+      );
+    } finally {
+      await api.close();
+      const { jobRunner } = await import("../job-runner"),
+        runner = jobRunner as unknown as { active: Map<string, unknown>; pumping: boolean };
+      await vi.waitFor(() => {
+        expect(runner.active.size).toBe(0);
+        expect(runner.pumping).toBe(false);
+      });
+      state.services = [];
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+    }
+  }, 60000);
+  it.each([
+    "release.clear",
+    "service.start",
+    "service.stop",
+    "service.restart",
+    "service.core-restart",
+    "service.apply",
+    "service.bulk",
+    "backup.operation",
+  ] as const)("serializes %s requests and preserves terminal duplicates", async (type) => {
+    const key = `same-retained-intent-${type}`,
       ids = await Promise.all(
-        Array.from({ length: 3 }, () => retainMaintenanceJob("release.clear", body, actor, key)),
+        Array.from({ length: 3 }, () => retainMaintenanceJob(type, body, actor, key)),
       );
     expect(new Set(ids).size).toBe(1);
     const id = ids[0]!;
@@ -720,17 +789,12 @@ dbDescribe("retained finite maintenance requests", () => {
       .update(adminJob)
       .set({ status: "success", result: { cleared: true }, finishedAt: new Date() })
       .where(eq(adminJob.id, id));
-    expect(await retainMaintenanceJob("release.clear", body, actor, key)).toBe(id);
+    expect(await retainMaintenanceJob(type, body, actor, key)).toBe(id);
     const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
     expect(row?.status).toBe("success");
     expect(row?.result).toEqual({ cleared: true });
     await expect(
-      retainMaintenanceJob(
-        "release.clear",
-        { ...body, expectedReleaseId: "changed-pin" },
-        actor,
-        key,
-      ),
+      retainMaintenanceJob(type, { ...body, expectedReleaseId: "changed-pin" }, actor, key),
     ).rejects.toBeInstanceOf(MaintenanceRequestConflict);
   });
   it("allows only one changed-intent winner and scopes equal keys to the original actor", async () => {

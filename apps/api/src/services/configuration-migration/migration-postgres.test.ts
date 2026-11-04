@@ -282,11 +282,29 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             },
           })
           .where(eq(adminJob.id, row.id));
-        const result = await jobRunner.runImmediateConfigurationMigration(input);
-        expect(result).toEqual(
-          (retained._completion as { result: { migration: unknown } }).result.migration,
+        // A replacement runner must discover the original row without an HTTP
+        // retry carrying its private key, then use the original completion.
+        await jobRunner.initialize();
+        await jobRunner.reconcile();
+        await vi.waitFor(
+          async () => {
+            const [recovered] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, row.id));
+            expect(recovered?.status).toBe("success");
+          },
+          { timeout: 30000 },
         );
+        const result = (retained._completion as { result: { migration: unknown } }).result
+          .migration;
         expect(await jobRunner.runImmediateConfigurationMigration(input)).toEqual(result);
+        const next = await jobRunner.runImmediateConfigurationMigrationPreview({
+          actorId: "migration-admin",
+          operationKey: createDurableOpsKey("migration.test.next-writer", randomUUID()),
+          document: document("next-writer"),
+        });
+        expect(next.denials).toEqual([]);
       } finally {
         vi.mocked(fsPromises.unlink).mockImplementation(originalUnlink);
       }
@@ -487,19 +505,85 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           credentialPreview.previewId,
           credentialPreview.intentFingerprint,
         ),
-        imported = unwrapAdminResponse(
-          await applyAdminCredentialTransfer(
-            {
-              previewId: credentialPreview.previewId,
-              intentFingerprint: credentialPreview.intentFingerprint,
-              expectedCurrentRevisionId: credentialPreview.expectedCurrentRevisionId,
-              importProofToken: importProof,
+        importKey = randomUUID(),
+        importBody = {
+          previewId: credentialPreview.previewId,
+          intentFingerprint: credentialPreview.intentFingerprint,
+          expectedCurrentRevisionId: credentialPreview.expectedCurrentRevisionId,
+          importProofToken: importProof,
+        },
+        originalUnlink = (
+          await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+        ).unlink;
+      let interrupted = false;
+      vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
+        await originalUnlink(path);
+        if (!interrupted && String(path).includes("/.candidates/")) {
+          interrupted = true;
+          throw Error("credential import acknowledgement lost after packet retirement");
+        }
+      });
+      try {
+        const first = await applyAdminCredentialTransfer(
+          importBody,
+          { "idempotency-key": importKey },
+          { client },
+        );
+        expect(first.status).toBe(503);
+        expect(interrupted).toBe(true);
+        const [row] = await state.fixture.db
+          .select()
+          .from(adminJob)
+          .where(eq(adminJob.type, "credential.import"));
+        expect(row?.status).toBe("running");
+        await state.fixture.db
+          .update(adminJob)
+          .set({
+            result: {
+              ...(row!.result as Record<string, unknown>),
+              _observationLeaseUntil: new Date(0).toISOString(),
+              observation: {
+                state: "unknown",
+                reason: "recovery_required",
+                nextCheckAt: new Date(0).toISOString(),
+              },
             },
-            { "idempotency-key": randomUUID() },
-            { client, maxJsonBytes: 1048576, maxErrorBytes: 65536 },
+          })
+          .where(eq(adminJob.id, row!.id));
+        const { jobRunner } = await import("../job-runner");
+        await jobRunner.initialize();
+        await jobRunner.reconcile();
+        await vi.waitFor(
+          async () => {
+            const [recovered] = await state.fixture.db
+              .select()
+              .from(adminJob)
+              .where(eq(adminJob.id, row!.id));
+            expect(recovered?.status).toBe("success");
+          },
+          { timeout: 30000 },
+        );
+        const imported = unwrapAdminResponse(
+          await applyAdminCredentialTransfer(
+            importBody,
+            { "idempotency-key": importKey },
+            { client },
           ),
         );
-      expect(imported.outcome).toBe("applied");
+        expect(imported.outcome).toBe("applied");
+        expect(
+          await jobRunner.runImmediateConfigurationMigrationPreview({
+            actorId: "migration-admin",
+            operationKey: createDurableOpsKey(
+              "migration.test.after-credential-recovery",
+              randomUUID(),
+            ),
+            document: document("after-recovery"),
+          }),
+        ).toMatchObject({ denials: [] });
+      } finally {
+        vi.mocked(fsPromises.unlink).mockImplementation(originalUnlink);
+      }
       expect(
         (await state.fixture.db.select().from(schema.adminActionReauthentication))
           .filter((p) => [exportProof, previewProof, importProof].includes(p.id))

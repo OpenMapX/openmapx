@@ -2359,27 +2359,6 @@ export function configurationMaintenanceTargetOwner(lease: ArtifactTargetLease) 
     });
   });
 }
-/** Fixed owner-store publication order: target journal, original ancestry and
- * execution publication guard, then its role-private writer. */
-export function withConfigurationMaintenanceOwnerPublication<T>(
-  lease: ArtifactTargetLease,
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const s = stateOf(lease);
-  if (
-    s.node !== null ||
-    s.verifiedAuthority !== authority ||
-    s.authority?.kind !== "configurationMaintenance.prepare" ||
-    s.settlementOnly
-  )
-    throw Error("Original live configuration maintenance owner required");
-  return guarded(s, () =>
-    withControlDelegationPublication(authority, "configuration-commit", () =>
-      withPrivateEffectWriter(executionAuthorityState(authority), run),
-    ),
-  );
-}
 export function withConfigurationMaintenanceOwnerInitialization<T>(
   lease: ArtifactTargetLease,
   authority: VerifiedExecutionAuthority,

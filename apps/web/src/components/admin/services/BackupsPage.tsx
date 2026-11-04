@@ -36,7 +36,7 @@ import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
-import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useAdminMutationKey, useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -63,6 +63,9 @@ function BackupsView() {
   const { client, apiUrl } = useActivityClient();
   const register = useServiceJobRegistration();
   const showToast = useAdminToast();
+  const createIntent = useAdminMutationKey(client),
+    restoreIntent = useAdminMutationKey(client),
+    deleteIntent = useAdminMutationKey(client);
 
   const [createName, setCreateName] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<AdminServiceBackup | null>(null);
@@ -92,15 +95,21 @@ function BackupsView() {
     mutationFn: async (name: string) => {
       const execution = createOwner;
       const effect = { kind: "backups" } as const;
+      const key = createIntent.forIntent(name.trim());
       try {
         const result = await serviceOrThrow(
-          sdk.createAdminServiceBackup({ name: name.trim() || undefined }, { client }),
+          sdk.createAdminServiceBackup(
+            { "idempotency-key": key },
+            { name: name.trim() || undefined },
+            { client },
+          ),
         );
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) {
           showToast(`Backup create queued (${result.jobId})`);
           setCreateName("");
         }
+        createIntent.complete(key);
       } catch (error) {
         if (execution.active)
           showToast(error instanceof Error ? error.message : "Backup create failed", "error");
@@ -113,10 +122,12 @@ function BackupsView() {
     mutationFn: async (payload: { name: string; serviceIds: string[]; stopRunning: boolean }) => {
       const execution = dialogOwner;
       const effect = { kind: "backups" } as const;
+      const key = restoreIntent.forIntent(JSON.stringify([dialogGeneration, payload]));
       try {
         const result = await serviceOrThrow(
           sdk.restoreAdminServiceBackup(
             payload.name,
+            { "idempotency-key": key },
             { serviceIds: payload.serviceIds, stopRunning: payload.stopRunning },
             { client },
           ),
@@ -128,6 +139,7 @@ function BackupsView() {
           setRestoreServiceIds("");
           setRestoreStopRunning(false);
         }
+        restoreIntent.complete(key);
       } catch (error) {
         if (execution.active)
           showToast(error instanceof Error ? error.message : "Restore failed", "error");
@@ -140,15 +152,17 @@ function BackupsView() {
     mutationFn: async (name: string) => {
       const execution = dialogOwner;
       const effect = { kind: "backups" } as const;
+      const key = deleteIntent.forIntent(JSON.stringify([dialogGeneration, name]));
       try {
         const result = await serviceOrThrow(
-          sdk.deleteAdminServiceBackup(name, undefined, { client }),
+          sdk.deleteAdminServiceBackup(name, { "idempotency-key": key }, undefined, { client }),
         );
         register({ client, apiUrl, jobId: result.jobId, effect });
         if (execution.active) {
           showToast(`Delete queued for ${name} (${result.jobId})`);
           setDeleteTarget(null);
         }
+        deleteIntent.complete(key);
       } catch (error) {
         if (execution.active)
           showToast(error instanceof Error ? error.message : "Delete failed", "error");

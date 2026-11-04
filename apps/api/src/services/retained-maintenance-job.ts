@@ -7,6 +7,9 @@ import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
 import { maintenanceJobAuthorization } from "./retained-maintenance-authorization";
+// Service/backup additions share admission identity only. Their existing
+// operation observers and coordinator recovery remain unchanged; they are not
+// added to the finite retainedMaintenanceJob handler-replay routing list.
 export type RetainedMaintenanceJobType =
   | "release.clear"
   | "service.images.pull"
@@ -14,20 +17,28 @@ export type RetainedMaintenanceJobType =
   | "compose.render"
   | "artifact.validate"
   | "artifact.import"
-  | "artifact.export";
+  | "artifact.export"
+  | "service.start"
+  | "service.stop"
+  | "service.restart"
+  | "service.core-restart"
+  | "service.apply"
+  | "service.bulk"
+  | "backup.operation";
 export class MaintenanceRequestConflict extends Error {}
 export async function retainMaintenanceJob(
   type: RetainedMaintenanceJobType,
   payload: Record<string, unknown>,
   actorId: string,
   key: string,
+  intent: Record<string, unknown> = payload,
 ): Promise<string> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/.test(key))
     throw new MaintenanceRequestConflict("Invalid mutation key");
   const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", ""));
   const digest = createHmac("sha256", token)
     .update("openmapx-maintenance-request-v1\0")
-    .update(canonicalJson({ type, payload, actorId }))
+    .update(canonicalJson({ type, payload: intent, actorId }))
     .digest("hex");
   return db.transaction(async (tx) => {
     await tx.execute(

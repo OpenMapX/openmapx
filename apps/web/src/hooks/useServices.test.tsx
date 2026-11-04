@@ -147,3 +147,40 @@ describe("service feature hooks use the generated SDK", () => {
     expect(qc.getQueryState(second)?.isInvalidated).toBe(false);
   });
 });
+it.each(["action", "bulk"] as const)(
+  "retains %s intent through lost response and rotates after acceptance",
+  async (kind) => {
+    const keys: string[] = [];
+    const fetch = vi.fn(async (...args: unknown[]) => {
+      const init = args[1] as RequestInit | undefined;
+      if (init?.method === "POST") {
+        keys.push(new Headers(init.headers).get("idempotency-key")!);
+        if (keys.length === 1) throw new TypeError("response lost");
+        return Response.json({ ok: true, jobId: "accepted-job" });
+      }
+      return Response.json({ error: "No activity fixture" }, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { result } = mount(() => ({
+      action: useServiceAction("demo"),
+      bulk: useServicesBulkAction(),
+    }));
+    const submit = () =>
+      kind === "action"
+        ? result.current.action.mutateAsync("apply")
+        : result.current.bulk.mutateAsync({ action: "update", serviceIds: ["demo"] });
+    await act(async () => {
+      await expect(submit()).rejects.toThrow();
+    });
+    await act(async () => {
+      await submit();
+    });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^[a-f0-9-]{36}$/);
+    expect(keys[1]).toBe(keys[0]);
+    await act(async () => {
+      await submit();
+    });
+    expect(keys[2]).not.toBe(keys[0]);
+  },
+);

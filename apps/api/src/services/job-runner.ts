@@ -140,6 +140,16 @@ function sanitizeExtensionRecord(value: Record<string, unknown>): Record<string,
   }
 }
 
+const IMMEDIATE_CONFIGURATION_JOB_TYPES = [
+  "service.apply",
+  "configuration.apply",
+  "platform.apply",
+  "integration.config.import",
+  "integration.binding.apply",
+  "configuration.migration.apply",
+  "credential.import",
+] as const;
+
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "extension.install",
   "extension.remove",
@@ -154,13 +164,9 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "service.stop",
   "service.restart",
   "service.core-restart",
-  "service.apply",
+  ...IMMEDIATE_CONFIGURATION_JOB_TYPES,
   "compose.render",
-  "configuration.apply",
-  "platform.apply",
   "compose.start",
-  "integration.config.import",
-  "integration.binding.apply",
   "system.diagnostics",
   "system.update",
   "release.clear",
@@ -183,15 +189,7 @@ function hasRetainedImmediateConfiguration(job: {
   const result = job.result as Record<string, unknown> | null,
     payload = job.payload as Record<string, unknown> | null;
   return (
-    [
-      "service.apply",
-      "configuration.apply",
-      "platform.apply",
-      "integration.config.import",
-      "integration.binding.apply",
-      "configuration.migration.apply",
-      "credential.import",
-    ].includes(job.type) &&
+    IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === job.type) &&
     result?._immediateJobId === job.id &&
     typeof result._immediateActorId === "string" &&
     typeof result._immediateIntentDigest === "string" &&
@@ -305,8 +303,9 @@ class AdminJobRunner {
     payload: Record<string, unknown>,
     actorId: string,
     key: string,
+    intent?: Record<string, unknown>,
   ): Promise<string> {
-    const id = await retainMaintenanceJob(type, payload, actorId, key);
+    const id = await retainMaintenanceJob(type, payload, actorId, key, intent);
     setTimeout(() => void this.pump(), 0);
     return id;
   }

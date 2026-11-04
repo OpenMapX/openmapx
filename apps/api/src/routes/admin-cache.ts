@@ -1,4 +1,4 @@
-import { resolveCachePattern } from "@openmapx/core/cache-namespaces";
+import { cacheNamespaceForKey, resolveCachePattern } from "@openmapx/core/cache-namespaces";
 import type { FastifyInstance } from "fastify";
 import { redis } from "../redis";
 import { cacheInvalidation } from "../services/cache-invalidation";
@@ -39,8 +39,7 @@ export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
         for await (const page of stream as AsyncIterable<string[]>)
           for (const key of page) {
             if (!APP_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
-            const separator = key.lastIndexOf(":"),
-              namespace = separator === -1 ? key : key.slice(0, separator);
+            const namespace = cacheNamespaceForKey(key);
             counts.set(namespace, (counts.get(namespace) ?? 0) + 1);
           }
       }

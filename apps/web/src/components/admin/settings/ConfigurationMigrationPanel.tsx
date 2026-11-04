@@ -24,6 +24,7 @@ import { useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useActivityClient } from "../activity/activityQueries";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
 import { CredentialTransferDialog } from "./CredentialTransferDialog";
+import { discardStoredPreview } from "./credential-preview-storage";
 
 import { downloadMigrationJson } from "./migration-json-download";
 export function ConfigurationMigrationPanel() {
@@ -49,11 +50,13 @@ export function ConfigurationMigrationPanel() {
     epoch = useRef(0);
   const storageKey = `openmapx-configuration-migration-preview:${JSON.stringify([apiUrl, actorId])}`;
   const remember = (value: ConfigurationMigrationPreview) => {
-    sessionStorage.setItem(
-      storageKey,
-      JSON.stringify(configurationMigrationPreviewSchema.parse(value)),
-    );
-    setPreview(value);
+    const metadata = configurationMigrationPreviewSchema.parse(value);
+    setPreview(metadata);
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(metadata));
+    } catch {
+      /* Optional navigation cache. */
+    }
   };
   useEffect(() => {
     epoch.current++;
@@ -64,10 +67,10 @@ export function ConfigurationMigrationPanel() {
       if (raw) {
         const value = configurationMigrationPreviewSchema.parse(JSON.parse(raw));
         if (Date.parse(value.expiresAt) > Date.now()) setPreview(value);
-        else sessionStorage.removeItem(storageKey);
+        else discardStoredPreview(storageKey);
       }
     } catch {
-      sessionStorage.removeItem(storageKey);
+      discardStoredPreview(storageKey);
     }
     setResult(null);
     if (!apiUrl || !actorId) setError("Administrator session unavailable");
@@ -131,7 +134,7 @@ export function ConfigurationMigrationPanel() {
       if (!signal.aborted) {
         setResult(value);
         setPreview(null);
-        sessionStorage.removeItem(storageKey);
+        discardStoredPreview(storageKey);
         void inventory.refetch();
       }
     });

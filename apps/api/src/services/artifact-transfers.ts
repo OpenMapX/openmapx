@@ -64,6 +64,21 @@ export class AdminArtifactTransfers {
     }
   }
   async validate(ownerId: string, stageId: string, key: string) {
+    const { lookupMaintenanceJob, MaintenanceRequestConflict } = await import(
+      "./retained-maintenance-job"
+    );
+    try {
+      const retained = await lookupMaintenanceJob(
+        "artifact.validate",
+        { stageId, ownerId },
+        ownerId,
+        key,
+      );
+      if (retained) return { ok: true as const, jobId: retained };
+    } catch (error) {
+      if (error instanceof MaintenanceRequestConflict) throw new AdminArtifactTransferError(409);
+      throw error;
+    }
     const stage = await this.inspect(ownerId, stageId);
     if (
       stage.purpose !== "prepared-artifact" ||
@@ -71,8 +86,7 @@ export class AdminArtifactTransfers {
       !["uploaded", "ready", "validating"].includes(stage.state)
     )
       throw new AdminArtifactTransferError(409);
-    const { jobRunner } = await import("./job-runner"),
-      { MaintenanceRequestConflict } = await import("./retained-maintenance-job");
+    const { jobRunner } = await import("./job-runner");
     try {
       const jobId = await jobRunner.enqueueMaintenance(
         "artifact.validate",

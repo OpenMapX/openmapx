@@ -105,34 +105,40 @@ export async function createEncryptedAttachment(
     maxBytes: ATTACHMENT_MAX_BYTES,
   });
   const database = options.database ?? defaultDb;
+  let insertCompleted = false;
   try {
-    const [row] = await database
-      .insert(dataSubjectRequestAttachment)
-      .values({
-        id,
-        requestId: input.requestId,
-        purpose,
-        storageKey,
-        filename,
-        mediaType,
-        encryptedBytes: stored.ciphertextBytes,
-        plaintextBytes: stored.plaintextBytes,
-        plaintextSha256: stored.plaintextSha256,
-        ciphertextSha256: stored.ciphertextSha256,
-        iv: stored.iv,
-        tag: stored.tag,
-        wrappedDek: JSON.stringify(stored.wrappedDek),
-        masterKeyVersion: stored.masterKeyVersion,
-        ownerId: input.ownerId,
-        expiresAt: input.expiresAt,
-        rightsReviewState: input.rightsReviewState ?? "pending",
-        metadata,
-      })
-      .returning();
-    if (!row) throw new Error("attachment metadata insert failed");
-    return { row, storage: stored };
+    // Own this commit/savepoint even for standalone callers. A callback failure
+    // cannot have issued COMMIT, whereas a rejected commit may already be durable.
+    return await database.transaction(async (transaction) => {
+      const [row] = await transaction
+        .insert(dataSubjectRequestAttachment)
+        .values({
+          id,
+          requestId: input.requestId,
+          purpose,
+          storageKey,
+          filename,
+          mediaType,
+          encryptedBytes: stored.ciphertextBytes,
+          plaintextBytes: stored.plaintextBytes,
+          plaintextSha256: stored.plaintextSha256,
+          ciphertextSha256: stored.ciphertextSha256,
+          iv: stored.iv,
+          tag: stored.tag,
+          wrappedDek: JSON.stringify(stored.wrappedDek),
+          masterKeyVersion: stored.masterKeyVersion,
+          ownerId: input.ownerId,
+          expiresAt: input.expiresAt,
+          rightsReviewState: input.rightsReviewState ?? "pending",
+          metadata,
+        })
+        .returning();
+      if (!row) throw new Error("attachment metadata insert failed");
+      insertCompleted = true;
+      return { row, storage: stored };
+    });
   } catch (error) {
-    await options.store.delete(storageKey).catch(() => undefined);
+    if (!insertCompleted) await options.store.delete(storageKey).catch(() => undefined);
     throw error;
   }
 }

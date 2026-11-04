@@ -14,6 +14,11 @@ The API migrations add account-policy, integration ownership, artifact-transfer
 and privacy-workflow storage alongside durable execution records. Existing auth
 settings are activated explicitly through the account-policy workflow.
 
+New web and mobile sessions have a fixed maximum lifetime (168 hours by default,
+or the active policy value). Activity no longer refreshes that deadline. Users
+must sign in again after expiry; existing sessions keep their original expiry.
+Account setup and password-reset links expire one hour after issuance.
+
 ## Who is affected
 
 Self-hosted installations upgrading the API, web application, CLI, Data Manager

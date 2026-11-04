@@ -12,6 +12,7 @@ import {
   serviceOrThrow,
 } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationKey } from "@/lib/admin/useAdminMutationOwner";
 
 export function useServicesList() {
   const { client, apiUrl } = useActivityClient();
@@ -39,19 +40,25 @@ export function useServiceSelection() {
  */
 function useServiceWrite<T extends object, V = void>(
   effect: ServiceAdministrationEffect,
-  run: (client: ApiClient, values: V) => Promise<T>,
+  run: (client: ApiClient, values: V, idempotencyKey: string) => Promise<T>,
+  retainIntent = false,
 ) {
   const { client, apiUrl } = useActivityClient();
   const qc = useQueryClient();
   const register = useServiceJobRegistration();
+  const intent = useAdminMutationKey(client);
   return useMutation({
     mutationKey: ["service-write", apiUrl, effect],
     retry: false,
     mutationFn: async (values: V) => {
-      const result = await run(client, values);
+      const key = retainIntent
+        ? intent.forIntent(JSON.stringify([apiUrl, effect, values]))
+        : crypto.randomUUID();
+      const result = await run(client, values, key);
       if ("jobId" in result && typeof result.jobId === "string")
         register({ client, apiUrl, jobId: result.jobId, effect });
       else void invalidateServiceAdministration(qc, apiUrl, effect);
+      intent.complete(key);
       return result;
     },
   });
@@ -76,8 +83,11 @@ export function useServiceConfigSave(id: string) {
 export function useServiceAction(id: string) {
   return useServiceWrite(
     { kind: "service", serviceId: id },
-    (client, action: AdminServiceAction["action"]) =>
-      serviceOrThrow(sdk.runAdminServiceAction(id, { action }, { client })),
+    (client, action: AdminServiceAction["action"], key) =>
+      serviceOrThrow(
+        sdk.runAdminServiceAction(id, { action }, { "idempotency-key": key }, { client }),
+      ),
+    true,
   );
 }
 export function useSetServiceCredential(id: string) {
@@ -125,8 +135,11 @@ export function useServiceSelectionSave() {
   );
 }
 export function useServicesBulkAction() {
-  return useServiceWrite({ kind: "catalog" }, (client, body: AdminServicesBulkAction) =>
-    serviceOrThrow(sdk.runAdminServicesBulkAction(body, { client })),
+  return useServiceWrite(
+    { kind: "catalog" },
+    (client, body: AdminServicesBulkAction, key) =>
+      serviceOrThrow(sdk.runAdminServicesBulkAction(body, { "idempotency-key": key }, { client })),
+    true,
   );
 }
 export function useServiceImageStage() {

@@ -37,7 +37,10 @@ vi.mock("../../services/service-registry.js", () => ({
 // Job runner
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-123");
 vi.mock("../../services/job-runner.js", () => ({
-  jobRunner: { enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args) },
+  jobRunner: {
+    enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
+    enqueueMaintenance: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
+  },
 }));
 
 const mockExecuteAndWait = vi.fn().mockResolvedValue({ backups: [], warningCount: 0 });
@@ -285,7 +288,12 @@ describe("strict administrative effect bodies", () => {
     ["/admin/services/bulk-action", { action: "build", all: true, argv: ["--privileged"] }],
     ["/admin/services/backups", { name: "nightly", output: "/etc/passwd" }],
   ])("rejects forbidden control fields on %s", async (url, payload) => {
-    const response = await app.inject({ method: "POST", url, payload });
+    const response = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+      method: "POST",
+      url,
+      payload,
+    });
     expect(response.statusCode).toBe(400);
     expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).not.toHaveBeenCalled();
@@ -367,6 +375,7 @@ describe("backup administration", () => {
       warningCount: 0,
     });
     const response = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/backups/nightly/restore",
       payload: { serviceIds: ["valhalla"], stopRunning: true },
@@ -381,6 +390,7 @@ describe("backup administration", () => {
         stopRunning: true,
       },
       fakeSession.user.id,
+      expect.any(String),
     );
     expect(mockListBackupSummaries).not.toHaveBeenCalled();
   });
@@ -507,6 +517,7 @@ describe("POST /admin/services/:id/action", () => {
       ],
     });
     const response = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: `/admin/services/${id}/action`,
       payload: { action: "restart" },
@@ -516,6 +527,7 @@ describe("POST /admin/services/:id/action", () => {
       "service.core-restart",
       { service: id },
       fakeSession.user.id,
+      expect.any(String),
     );
   });
 
@@ -523,6 +535,7 @@ describe("POST /admin/services/:id/action", () => {
     mockRegistryGet.mockReturnValueOnce({ ...MOCK_SERVICE_RUNNING, id: "app-api" });
     mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
     const response = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/app-api/action",
       payload: { action: "restart" },
@@ -537,6 +550,7 @@ describe("POST /admin/services/:id/action", () => {
     mockJobRunnerEnqueue.mockResolvedValueOnce("job-abc");
 
     const res = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/motis/action",
       payload: { action: "restart" },
@@ -548,6 +562,7 @@ describe("POST /admin/services/:id/action", () => {
       "service.restart",
       { service: "motis" },
       fakeSession.user.id,
+      expect.any(String),
     );
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -562,6 +577,7 @@ describe("POST /admin/services/:id/action", () => {
     mockRegistryGet.mockReturnValueOnce(null);
 
     const res = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/unknown-svc/action",
       payload: { action: "start" },
@@ -575,6 +591,7 @@ describe("POST /admin/services/:id/action", () => {
     mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
 
     const res = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/motis/action",
       payload: { action: "explode" },
@@ -621,7 +638,11 @@ describe("POST /admin/services/check", () => {
     });
     mockGetAdminSession.mockReturnValue(fakeSession);
 
-    const res = await app.inject({ method: "POST", url: "/admin/services/check" });
+    const res = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+      method: "POST",
+      url: "/admin/services/check",
+    });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -877,6 +898,7 @@ describe("service credentials", () => {
         payload: { value: "must-not-be-written" },
       }),
       app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
         method: "DELETE",
         url: `/admin/services/${serviceId}/credentials/${key}`,
       }),
@@ -1168,6 +1190,7 @@ describe("service presets and option boundaries", () => {
       ["osrm", "valhalla"].includes(id) ? MOCK_SERVICE_STOPPED : null,
     );
     const result = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/bulk-action",
       payload: { action: "update", serviceIds: ["osrm"], presetIds: ["routing"], noDeps: true },
@@ -1177,10 +1200,13 @@ describe("service presets and option boundaries", () => {
       "service.bulk",
       expect.objectContaining({ action: "update", serviceIds: ["osrm", "valhalla"], noDeps: true }),
       expect.any(String),
+      expect.any(String),
+      expect.any(Object),
     );
   });
   it.each(["unknown", "__proto__"])("rejects unknown preset %s before enqueue", async (id) => {
     const result = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/bulk-action",
       payload: { action: "start", presetIds: [id] },
@@ -1191,6 +1217,7 @@ describe("service presets and option boundaries", () => {
   it("rejects MOTIS import without a MOTIS build before enqueue", async () => {
     mockRegistryGet.mockReturnValue(MOCK_SERVICE_STOPPED);
     const result = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/admin/services/bulk-action",
       payload: { action: "build", serviceIds: ["valhalla"], motisImport: true },
@@ -1236,3 +1263,8 @@ it("forwards exact snapshot and duration options through the registered log rout
     }),
   );
 });
+
+vi.mock("../../services/retained-maintenance-job", async (actual) => ({
+  ...(await actual<typeof import("../../services/retained-maintenance-job")>()),
+  lookupMaintenanceJob: vi.fn(async () => null),
+}));

@@ -34,6 +34,7 @@ import {
 } from "../services/managed-service-credentials";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { osmExtractFor, readDataManagerDatasets } from "../services/osm-extract";
+import { lookupMaintenanceJob } from "../services/retained-maintenance-job";
 import { isSecretsConfigured } from "../services/secrets";
 import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
@@ -187,6 +188,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid action — must be start | stop | restart | apply" };
       }
+      const adminSession = getAdminSession(req),
+        coreRestart = action === "restart" && (id === "app-api" || id === "traefik"),
+        type = coreRestart ? "service.core-restart" : (`service.${action}` as const),
+        payload = { service: id },
+        key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        retained = await lookupMaintenanceJob(type, payload, adminSession.user.id, key);
+      if (retained) return { ok: true, jobId: retained };
       // Verify the id is a known service before enqueueing — prevents the job
       // runner from spawning a `docker compose start <unknown>` call (or worse,
       // a flag-shaped id bleeding into the docker-compose argv).
@@ -201,8 +209,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(404);
         return { error: `Service "${id}" not found` };
       }
-      const adminSession = getAdminSession(req);
-      const coreRestart = action === "restart" && (id === "app-api" || id === "traefik");
       if (coreRestart) {
         try {
           const inventory = await executeAndWait(
@@ -221,11 +227,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           return { error: "Core service restart is not available" };
         }
       }
-      const jobId = await jobRunner.enqueue(
-        coreRestart ? "service.core-restart" : `service.${action}`,
-        { service: id },
-        adminSession.user.id,
-      );
+      const jobId = await jobRunner.enqueueMaintenance(type, payload, adminSession.user.id, key);
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: id,
@@ -311,6 +313,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // POST /admin/services/bulk-action — enqueue CLI-backed bulk service actions
   registerServiceAdminRoute(app, "runAdminServicesBulkAction", async (req, reply) => {
+    const adminSession = getAdminSession(req),
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("service.bulk", req.body, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
     const action = req.body?.action;
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
       reply.status(400);
@@ -379,8 +385,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const region = "region" in req.body ? req.body.region?.trim() || undefined : undefined;
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "service.bulk",
       {
         action,
@@ -392,6 +397,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         ...("motisImport" in req.body ? { motisImport: req.body.motisImport } : {}),
       },
       adminSession.user.id,
+      key,
+      req.body,
     );
 
     await writeAuditLog({
@@ -892,10 +899,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
       { operation: "create", name: name || undefined },
       adminSession.user.id,
+      parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -922,6 +930,18 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
+    const serviceIds = [...new Set(req.body?.serviceIds ?? [])],
+      adminSession = getAdminSession(req),
+      payload = {
+        operation: "restore",
+        name,
+        serviceIds,
+        stopRunning: req.body?.stopRunning === true,
+      },
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
+
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
     const target = inventory.backups.find((backup) => backup.backupId === name);
     if (!target) {
@@ -935,17 +955,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
-      {
-        operation: "restore",
-        name,
-        serviceIds,
-        stopRunning: req.body?.stopRunning === true,
-      },
+      payload,
       adminSession.user.id,
+      key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -972,17 +986,23 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
+    const adminSession = getAdminSession(req),
+      payload = { operation: "delete", name },
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
+
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
     if (!inventory.backups.some((backup) => backup.backupId === name)) {
       reply.status(404);
       return { error: `Backup not found: ${name}` };
     }
 
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
-      { operation: "delete", name },
+      payload,
       adminSession.user.id,
+      key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,

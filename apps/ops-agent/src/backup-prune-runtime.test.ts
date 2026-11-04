@@ -27,90 +27,120 @@ vi.mock("node:fs/promises", async (original) => {
 });
 
 afterEach(() => vi.unstubAllEnvs());
-it("awaits the actual held filesystem deletion before settling cancellation and preserves its completed result", async () => {
-  vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
-  const host = await ownedServiceHost(),
-    old = join(host.infraDir, "backups", "old");
-  mkdirSync(old, { recursive: true, mode: 0o700 });
-  writeFileSync(
-    join(old, "manifest.json"),
-    JSON.stringify({
-      name: "old",
-      formatVersion: 2,
-      createdAt: new Date(Date.now() - 40 * 86400000).toISOString(),
-      services: [],
-    }),
-    { mode: 0o600 },
-  );
-  const installation = openControlInstallation({
-      infraDir: host.infraDir,
-      role: "ops-agent",
-      serviceIds: ["motis"],
-    }),
-    journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
-    app = buildOpsAgentServer({
-      runtime: host.runtime,
-      journal,
-      resourceClaimer: host.claimer,
-      controlInstallation: installation,
-      tokens: { api: host.token, "data-manager": "d".repeat(43) },
-    });
-  const tokenFile = join(host.root, "api-token");
-  writeFileSync(tokenFile, host.token, { mode: 0o600 });
-  const client = new OpsClient({
-    baseUrl: await app.listen({ host: "127.0.0.1", port: 0 }),
-    tokenFile,
-  });
-  let release = () => {};
-  const entered = new Promise<void>((resolve) => {
-    removal.entered = resolve;
-  });
-  removal.held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  try {
-    const preview = await client.execute({ kind: "backup.prune.preview" });
-    if (preview.execution !== "sync") throw Error("Preview missing");
-    removal.active = true;
-    const deadline = Date.now() + 30000,
-      admitted = await client.execute(
-        { kind: "backup.prune", proof: preview.value.proof },
-        {
-          operationKey: createControlRootOperationKey({
-            notAfter: deadline,
-            nonce: randomBytes(16),
-          }),
-          execution: { requestedDeadlineAt: deadline },
-        },
-      );
-    if (admitted.execution !== "async") throw Error("Prune execution missing");
-    await entered;
-    const running = await client.status("backup.prune", admitted.operationId);
-    await client.cancel(admitted.operationId, { fingerprint: running.fingerprint });
-    const pending = await client.status("backup.prune", admitted.operationId);
-    expect(pending.state).toBe("termination_pending");
-    expect(
-      journal.records().find((job) => job.operationId === admitted.operationId)?.terminalAt,
-    ).toBeUndefined();
-    expect(existsSync(old)).toBe(true);
-    release();
-    await vi.waitFor(
-      async () => {
-        const terminal = await client.status("backup.prune", admitted.operationId);
-        expect(terminal.state).toBe("succeeded");
-        expect(terminal.result).toMatchObject({ deleted: ["old"] });
-      },
-      { timeout: 10000 },
+it.each([7, 30, 365])(
+  "uses host retention %i while awaiting held deletion and preserving completed cancellation",
+  async (retentionDays) => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", String(retentionDays));
+    const host = await ownedServiceHost(),
+      old = join(host.infraDir, "backups", "old");
+    mkdirSync(old, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(old, "manifest.json"),
+      JSON.stringify({
+        name: "old",
+        formatVersion: 2,
+        createdAt: new Date(Date.now() - (retentionDays + 10) * 86400000).toISOString(),
+        services: [],
+      }),
+      { mode: 0o600 },
     );
-    expect(existsSync(old)).toBe(false);
-  } finally {
-    release();
-    removal.active = false;
-    await app.close();
-    closeControlInstallation(installation);
-    rmSync(host.cleanupRoot, { recursive: true, force: true });
-  }
-}, 30000);
+    const kept = ["legacy-kept", "stamped-kept"].map((name) => {
+      const directory = join(host.infraDir, "backups", name),
+        created = Date.now() - Math.min(retentionDays - 1, 40) * 86400000;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          name,
+          formatVersion: 2,
+          createdAt: new Date(created).toISOString(),
+          services: [],
+          ...(name === "stamped-kept"
+            ? { expiresAt: new Date(created + 365 * 86400000).toISOString() }
+            : {}),
+        }),
+        { mode: 0o600 },
+      );
+      return directory;
+    });
+    const installation = openControlInstallation({
+        infraDir: host.infraDir,
+        role: "ops-agent",
+        serviceIds: ["motis"],
+      }),
+      journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
+      app = buildOpsAgentServer({
+        runtime: host.runtime,
+        journal,
+        resourceClaimer: host.claimer,
+        controlInstallation: installation,
+        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      });
+    const tokenFile = join(host.root, "api-token");
+    writeFileSync(tokenFile, host.token, { mode: 0o600 });
+    const client = new OpsClient({
+      baseUrl: await app.listen({ host: "127.0.0.1", port: 0 }),
+      tokenFile,
+    });
+    let release = () => {};
+    const entered = new Promise<void>((resolve) => {
+      removal.entered = resolve;
+    });
+    removal.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const preview = await client.execute({ kind: "backup.prune.preview" });
+      if (preview.execution !== "sync") throw Error("Preview missing");
+      expect(preview.value).toMatchObject({
+        retentionDays,
+        policySource: "host",
+        retainedCount: 2,
+      });
+      expect(preview.value.candidates.map((entry) => entry.backupId)).toEqual(["old"]);
+      removal.active = true;
+      const deadline = Date.now() + 30000,
+        admitted = await client.execute(
+          { kind: "backup.prune", proof: preview.value.proof },
+          {
+            operationKey: createControlRootOperationKey({
+              notAfter: deadline,
+              nonce: randomBytes(16),
+            }),
+            execution: { requestedDeadlineAt: deadline },
+          },
+        );
+      if (admitted.execution !== "async") throw Error("Prune execution missing");
+      await entered;
+      const running = await client.status("backup.prune", admitted.operationId);
+      await client.cancel(admitted.operationId, { fingerprint: running.fingerprint });
+      const pending = await client.status("backup.prune", admitted.operationId);
+      expect(pending.state).toBe("termination_pending");
+      expect(
+        journal.records().find((job) => job.operationId === admitted.operationId)?.terminalAt,
+      ).toBeUndefined();
+      expect(existsSync(old)).toBe(true);
+      release();
+      await vi.waitFor(
+        async () => {
+          const terminal = await client.status("backup.prune", admitted.operationId);
+          expect(terminal.state).toBe("succeeded");
+          expect(terminal.result).toMatchObject({ deleted: ["old"] });
+        },
+        { timeout: 10000 },
+      );
+      expect(existsSync(old)).toBe(false);
+      for (const directory of kept) expect(existsSync(directory)).toBe(true);
+    } finally {
+      release();
+      removal.active = false;
+      await app.close();
+      closeControlInstallation(installation);
+      rmSync(host.cleanupRoot, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
 it("previews and prunes only the unchanged original eligible set through the production agent", async () => {
   vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
   const host = await ownedServiceHost(),
@@ -209,6 +239,7 @@ it("previews and prunes only the unchanged original eligible set through the pro
     expect((await prune(priorPolicy.proof)).state).toBe("failed");
     expect(existsSync(old)).toBe(true);
     const current = await preview();
+    expect(current).toMatchObject({ retentionDays: 60, policySource: "database" });
     expect((await prune({ ...current.proof, authenticator: "0".repeat(64) })).state).toBe("failed");
     const completed = await prune(current.proof);
     expect(completed.state).toBe("succeeded");
