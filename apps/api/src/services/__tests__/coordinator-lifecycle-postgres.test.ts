@@ -644,6 +644,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await api.ready();
     }, 60000);
     afterEach(async () => {
+      // The process-wide host outlives Fastify; retire providers before
+      // deleting this fixture's manifests and replacing its database.
+      const { shutdownIntegrations } = await import("../../integration-host");
+      await shutdownIntegrations();
       await api?.close();
       // Observe the actual runner's scheduled pump/active work before closing
       // its owned SQL transport. This changes no scheduler or handler result.
@@ -712,9 +716,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       beforeAcknowledgement?: () => Promise<void>,
       serviceIds = ["data-manager"],
     ) {
-      const reached = Promise.withResolvers<void>(),
-        release = Promise.withResolvers<void>();
-      pullTerminalReplyGate = { reached: () => reached.resolve(), release: release.promise };
+      let reachedTerminalReply = false;
+      const release = Promise.withResolvers<void>();
+      pullTerminalReplyGate = {
+        reached: () => {
+          reachedTerminalReply = true;
+        },
+        release: release.promise,
+      };
       try {
         const first = await api.inject({
             method: "POST",
@@ -723,7 +732,22 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             payload: { action: "update", serviceIds },
           }),
           id = first.json().jobId;
-        await reached.promise;
+        expect(first.statusCode, first.body).toBe(200);
+        const terminalUntil = performance.now() + 45000;
+        while (!reachedTerminalReply) {
+          const [row] = await fixture.db
+            .select()
+            .from(schema.adminJob)
+            .where(eq(schema.adminJob.id, id));
+          if (
+            (row && ["success", "failed", "canceled"].includes(row.status)) ||
+            performance.now() >= terminalUntil
+          )
+            throw Error(
+              `Actual pull terminal reply unavailable: ${row?.status}; ${row?.error}; ${JSON.stringify([...arrivals])}`,
+            );
+          await delay(25);
+        }
         await beforeAcknowledgement?.();
         const { jobRunner } = await import("../job-runner"),
           cancellation = jobRunner.cancel(id);
@@ -1245,7 +1269,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { productionReleaseEffects } = await import(
           "../../../../ops-agent/src/production-runtime"
         ),
-        directory = join(host.infraDir, ".ops-agent-releases"),
+        directory = services.releaseStatePaths(host.infraDir).store,
         manifest = services.parseReleaseManifest(
           JSON.stringify({
             schemaVersion: 1,

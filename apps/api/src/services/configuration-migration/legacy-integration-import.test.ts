@@ -187,11 +187,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         payload: { integrations },
       });
     }
-    it.each(["saved", "applied", "before-retirement", "after-retirement"])(
+    it.each(["saved", "applied", "before-retirement", "after-retirement", "saved-source-drift"])(
       "recovers the original ordinary import through native API death and actual HTTP (mode=%s)",
       async (mode) => {
         const retirement = mode.includes("retirement"),
-          retired = mode === "after-retirement";
+          retired = mode === "after-retirement",
+          sourceDrift = mode === "saved-source-drift";
         const idempotencyKey = `ordinary-native-${randomUUID()}`,
           database = new URL(process.env.OPENMAPX_ADMIN_JOB_TEST_DATABASE_URL!);
         database.searchParams.set("search_path", fixture.schema);
@@ -337,8 +338,48 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           while (Date.now() <= lease + 100)
             await nativeDelay(Math.min(1000, lease + 101 - Date.now()));
           expect(retired ? !existsSync(path) : readFileSync(path).equals(bytes!)).toBe(true);
-          const replacement = start(!retirement);
-          expect((await replacement.exited).code).toBe(0);
+          // Current host overrides still own their fields during recovery.
+          // Stable-source cases resume; the separate drift case must remain
+          // fenced instead of activating captured values over a new winner.
+          const replacement = start(sourceDrift);
+          const replacementExit = await replacement.exited,
+            [observed] = await fixture.db.select().from(schema.adminJob),
+            observation = observed?.result as {
+              _configurationCandidate?: { phase?: string };
+              integrationReload?: { state?: string };
+              opsProjection?: {
+                operations?: Record<string, { kind?: string; phase?: string; errorClass?: string }>;
+              };
+            };
+          if (sourceDrift) {
+            expect(replacementExit.code).toBe(2);
+            expect(replacement.result()).toMatchObject({
+              state: "refused",
+              status: 500,
+              capturedOrdinaryValueMatches: false,
+            });
+            expect(observed?.status).toBe("running");
+            expect(observation._configurationCandidate?.phase).toBe("follow_up_pending");
+            expect(observation.integrationReload?.state).toBe("attempted");
+            expect(readFileSync(path).equals(bytes!)).toBe(true);
+            expect(
+              await fixture.sql`SELECT integration_id,xmin::text AS version FROM integration_config ORDER BY integration_id`,
+            ).toEqual(versions);
+            expect(renderPosts).toBe(1);
+            return;
+          }
+          expect(
+            replacementExit.code,
+            JSON.stringify({
+              response: replacement.result(),
+              status: observed?.status,
+              error: observed?.error,
+              candidatePhase: observation?._configurationCandidate?.phase,
+              operations: Object.values(observation?.opsProjection?.operations ?? {}).map(
+                ({ kind, phase, errorClass }) => ({ kind, phase, errorClass }),
+              ),
+            }),
+          ).toBe(0);
           expect(replacement.result()).toMatchObject({
             capturedOrdinaryValueMatches: true,
             betaDisabled: true,
