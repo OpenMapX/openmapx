@@ -57,9 +57,9 @@ fixtures.
 
 ## Voice input qualification
 
-The [native voice-input design](./voice-input.md) uses Android 13+ on-device
+The [native voice-input design](./voice-input.md) uses iOS and Android 13+ on-device
 recognition behind the post-handshake `voice.probe` availability check. WebView microphone
-capture remains denied. iOS and older Android versions keep voice input off.
+capture remains denied. Older Android versions keep voice input off. iOS requires locale-specific on-device support and our fail-closed package patch.
 Historical launch reports do not qualify this feature.
 
 On the candidate binary, test airplane-mode recognition with installed German

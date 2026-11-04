@@ -884,16 +884,17 @@ export default function PrivacyContentDe({
         </Typography>
 
         <Typography sx={{ mt: 1 }}>
-          In der installierten App nutzt die optionale Sprachsuche ab Android 13 die lokale
-          Spracherkennung des Betriebssystems, sofern ein lokaler Dienst und das Sprachmodell
-          verfügbar sind. Sie startet erst, wenn Sie die Mikrofontaste drücken und Android den
-          Mikrofonzugriff erlauben. Die Audiodaten werden auf Ihrem Gerät verarbeitet und von
-          OpenMapX weder übertragen noch gespeichert. Das Herunterladen eines fehlenden
-          Sprachmodells benötigt eine Netzwerkverbindung; die Erkennung selbst nicht. Unter iOS und
-          älteren Android-Versionen ist die Sprachsuche deaktiviert. Das Transkript wird als
-          gewöhnlicher Suchtext verwendet. Dafür gelten dieselben Regeln für Suchanfragen und den
-          Suchverlauf wie bei getipptem Text. Die Spracheingabefunktion protokolliert keine
-          Transkripte.
+          In der installierten App nutzt die optionale Sprachsuche unter iOS und ab Android 13 die
+          lokale Spracherkennung des Betriebssystems, sofern ein lokaler Dienst und das Sprachmodell
+          verfügbar sind. Sie startet erst, wenn Sie die Mikrofontaste drücken und den
+          Mikrofonzugriff und unter iOS die Spracherkennung erlauben. Die Audiodaten werden auf
+          Ihrem Gerät verarbeitet und von OpenMapX weder übertragen noch gespeichert. Das
+          Herunterladen eines fehlenden Sprachmodells benötigt eine Netzwerkverbindung; die
+          Erkennung selbst nicht. Unter älteren Android-Versionen ist die Sprachsuche deaktiviert.
+          Unter iOS muss die angeforderte Sprache offline unterstützt werden; es gibt keinen
+          Server-Fallback. Das Transkript wird als gewöhnlicher Suchtext verwendet. Dafür gelten
+          dieselben Regeln für Suchanfragen und den Suchverlauf wie bei getipptem Text. Die
+          Spracheingabefunktion protokolliert keine Transkripte.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>

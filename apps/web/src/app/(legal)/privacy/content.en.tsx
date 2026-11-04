@@ -817,13 +817,15 @@ export default function PrivacyContent({
 
         <Typography sx={{ mt: 1 }}>
           In the installed app, optional voice search uses the operating system&apos;s on-device
-          recogniser on Android 13 or later when an on-device service and the language model are
-          available. It starts only when you press the microphone button and grant Android
-          microphone permission. The audio is processed on your device and is not transmitted or
-          stored by OpenMapX. Downloading a missing language model requires a network connection;
-          recognition itself does not. Voice search is disabled on iOS and older Android versions.
-          The transcript is used as ordinary search text and follows the same search-request and
-          search-history rules as typed text. Transcripts are not logged by the voice-input feature.
+          recogniser on iOS and Android 13 or later when an on-device service and the language model
+          are available. It starts only when you press the microphone button and grant microphone
+          permission (plus speech-recognition authorization on iOS). The audio is processed on your
+          device and is not transmitted or stored by OpenMapX. Downloading a missing language model
+          requires a network connection; recognition itself does not. Voice search is disabled on
+          older Android versions. On iOS, each requested language must support offline recognition;
+          there is no server fallback. The transcript is used as ordinary search text and follows
+          the same search-request and search-history rules as typed text. Transcripts are not logged
+          by the voice-input feature.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>

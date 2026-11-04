@@ -36,8 +36,8 @@ there is no runtime server selector.
 
 The installed WebView is restricted to the compiled origin. WebView camera,
 microphone and geolocation access are disabled. Native on-device voice search
-is designed for Android 13+ with an available on-device service; it does not
-grant microphone access to the page. iOS voice input stays disabled.
+is designed for iOS and Android 13+ with available on-device language support; it does not
+grant microphone access to the page. iOS uses our fail-closed recognizer patch; candidate device qualification is still required.
 See [On-device voice input](./voice-input.md) for the recognition boundary and
 open device checks. Community frontend runtime code is disabled
 in the app, ordinary web app and PWA. Declarative metadata and permitted static

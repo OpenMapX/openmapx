@@ -118,10 +118,11 @@ and CarPlay, disabled. Compare generated entitlements and the final archive with
 
 ## Voice-search disclosure and qualification
 
-Native voice search is designed for Android 13+ on-device recognition only.
-It requests `RECORD_AUDIO` on a microphone tap; the WebView still cannot capture
-audio or video. iOS voice input remains disabled despite the linked package
-requiring microphone and speech-recognition purpose strings.
+Native voice search uses on-device recognition on iOS and Android 13+.
+It requests microphone permission on a microphone tap and speech-recognition
+authorization on iOS; the WebView still cannot capture audio or video. iOS requires
+the fail-closed package patch and locale-specific on-device support. Both iOS
+purpose strings describe the enabled local recognition path.
 
 Review the `voice-search-audio` practice and regenerated store worksheets with
 the candidate. Audio is processed locally without OpenMapX transmission or

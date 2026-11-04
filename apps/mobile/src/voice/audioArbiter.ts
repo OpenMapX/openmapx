@@ -6,7 +6,7 @@ import {
 
 export interface VoiceAudioLease {
   acquire(isCurrent: () => boolean): Promise<void>;
-  release(): void;
+  release(beforeRelease?: () => void): void | Promise<void>;
 }
 
 /** One runtime-wide gate, including callers outside the foreground shell. */
@@ -59,17 +59,32 @@ export function createAudioArbiter(
         throw new Error("guidance-still-speaking");
       }
     },
-    release() {
-      held = false;
-      const cue = latest;
-      latest = null;
-      if (!cue) return;
-      if (now() - cue.at > 10000) {
-        outcome = "voice-guidance-stale";
-        return;
+    release(beforeRelease) {
+      if (beforeRelease) {
+        return (async () => {
+          try {
+            if (!(await audio.getStatus()).speaking && pendingSpeech === 0) beforeRelease();
+          } catch {
+            // Native session may already have been deactivated by an interruption.
+          } finally {
+            releaseHeldCue();
+          }
+        })();
       }
-      outcome = "voice-guidance-released";
-      void speak(cue.request);
+      releaseHeldCue();
+      return undefined;
     },
   };
+  function releaseHeldCue() {
+    held = false;
+    const cue = latest;
+    latest = null;
+    if (!cue) return;
+    if (now() - cue.at > 10000) {
+      outcome = "voice-guidance-stale";
+      return;
+    }
+    outcome = "voice-guidance-released";
+    void speak(cue.request);
+  }
 }

@@ -37,17 +37,17 @@ records.
 
 ## The authority matrix
 
-| Concern                                                               | Browser or PWA                            | Installed shell                                                                                         |
-| --------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                                  |
-| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                                        |
-| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                                  |
-| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                                              |
-| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                                         |
-| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                                          |
-| Deep-link delivery                                                    | Browser flows                             | OS URLs validated, queued through document loading, delivered after bridge negotiation                  |
-| Community frontend bundles                                            | Disabled                                  | Disabled                                                                                                |
-| Microphone input                                                      | Subject to browser support and permission | Native on-device search on Android 13+ when the voice probe answers available; WebView capture disabled |
+| Concern                                                               | Browser or PWA                            | Installed shell                                                                                                 |
+| --------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                                          |
+| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                                                |
+| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                                          |
+| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                                                      |
+| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                                                 |
+| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                                                  |
+| Deep-link delivery                                                    | Browser flows                             | OS URLs validated, queued through document loading, delivered after bridge negotiation                          |
+| Community frontend bundles                                            | Disabled                                  | Disabled                                                                                                        |
+| Microphone input                                                      | Subject to browser support and permission | Native on-device search on iOS and Android 13+ when the voice probe answers available; WebView capture disabled |
 
 The immutable descriptor is injected before page scripts run. Shell restrictions
 use that descriptor, so they apply during negotiation, incompatibility and errors.

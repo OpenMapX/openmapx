@@ -36,17 +36,17 @@ also be reviewed; their absence does not establish that data is not collected.
 
 ## On-device voice-search audio
 
-Convert one user-initiated utterance into search text using the OS on-device recogniser on Android 13+; no network recogniser fallback is permitted.
+Convert one user-initiated utterance into search text using the OS on-device recogniser on iOS and Android 13+; no network recogniser fallback is permitted.
 
 Audio is processed during the utterance only and is not retained by OpenMapX. Recording persistence is disabled. Transcripts are not logged by voice input; resulting search text follows normal search-request and search-history rules.
 
-User control: Tap the microphone to start and grant Android microphone permission; tap again to stop. Backgrounding or leaving the page cancels. Revoke microphone permission in Android settings.
+User control: Tap the microphone to start and grant microphone permission and, on iOS, speech-recognition authorization; tap again to stop. Backgrounding or leaving the page cancels. Revoke permissions in platform settings.
 
 Proposed collection: Apple No; Google No.
 Proposed Google sharing: No.
 Purpose: App functionality.
 
-Design classification pending candidate device/privacy qualification. iOS and Android below API 33 are disabled. Model downloads require a network; recognition does not. Only transcript text crosses the bridge, then ordinary search may transmit it.
+Design classification pending candidate device/privacy qualification. Android below API 33 is disabled. iOS requires locale-specific offline support and the fail-closed package patch; no app-triggered iOS model download is used. Model downloads require a network; recognition does not. Only transcript text crosses the bridge, then ordinary search may transmit it.
 
 These are design classifications, pending candidate device/privacy qualification.
 

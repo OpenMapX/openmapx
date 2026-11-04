@@ -35,7 +35,7 @@ export const IOS_USAGE_DESCRIPTIONS: Record<MobileLocale, IosUsageDescriptions> 
     NSMicrophoneUsageDescription:
       "OpenMapX uses the microphone for voice search when you tap the microphone button.",
     NSSpeechRecognitionUsageDescription:
-      "OpenMapX links speech recognition for voice search. Voice search is currently available only on Android.",
+      "OpenMapX uses on-device speech recognition to turn your voice into search text when you tap the microphone.",
 
     NSLocationWhenInUseUsageDescription:
       "OpenMapX uses your location to show where you are on the map and to guide you along a route you start.",
@@ -46,7 +46,7 @@ export const IOS_USAGE_DESCRIPTIONS: Record<MobileLocale, IosUsageDescriptions> 
     NSMicrophoneUsageDescription:
       "OpenMapX verwendet das Mikrofon für die Sprachsuche, wenn du auf die Mikrofontaste tippst.",
     NSSpeechRecognitionUsageDescription:
-      "OpenMapX bindet die Spracherkennung für die Sprachsuche ein. Die Sprachsuche ist derzeit nur unter Android verfügbar.",
+      "OpenMapX verwendet die Spracherkennung auf dem Gerät, um deine Stimme beim Tippen auf die Mikrofontaste in Suchtext umzuwandeln.",
 
     NSLocationWhenInUseUsageDescription:
       "OpenMapX verwendet deinen Standort, um deine Position auf der Karte anzuzeigen und dich entlang einer von dir gestarteten Route zu führen.",

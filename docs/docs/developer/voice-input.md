@@ -15,7 +15,7 @@ The website continues to use browser speech recognition, whose processing may us
 
 The native dependency is `expo-speech-recognition` **57.1.1**, licensed under MIT and maintained by jamsch.
 It is a community package, not an official Expo package.
-It wraps Android's `SpeechRecognizer` rather than bundling a separate recognition engine.
+It wraps Android's `SpeechRecognizer` and Apple's `SFSpeechRecognizer` rather than bundling a separate engine.
 
 | Alternative                      | Reason for rejection                                                                                |
 | -------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,7 @@ A mobile distribution notice for this MIT dependency remains a release gap; no n
 
 ## Android guarantee and language readiness
 
-Voice input is enabled only on Android 13 or later (API 33+) with an available on-device service.
+On Android, voice input is enabled only on Android 13 or later (API 33+) with an available on-device service.
 Every recognition request sets `requiresOnDeviceRecognition: true`.
 On this path the pinned package calls `SpeechRecognizer.createOnDeviceSpeechRecognizer`, with no network recogniser fallback.
 OpenMapX never sets `androidRecognitionServicePackage`.
@@ -45,12 +45,73 @@ It triggers Android's model download once per requested locale per app run.
 Android owns the download dialog on API 33 and the background download on API 34+.
 A download request is not proof that installation succeeded; the next start checks again.
 
-## iOS remains disabled
+## iOS on-device guarantee
 
-The package's iOS path sets `requiresOnDeviceRecognition` only when supported and otherwise proceeds with server recognition.
-The gap is tracked in upstream issue `jamsch/expo-speech-recognition#169`.
-The app therefore reports `voice.availability` with `available: false` on iOS until upstream fails closed.
-The linked package requires microphone and speech-recognition purpose strings in the iOS binary even while the feature is disabled.
+Our committed pnpm patch for `expo-speech-recognition@57.1.1` closes upstream
+[jamsch/expo-speech-recognition#169](https://github.com/jamsch/expo-speech-recognition/issues/169).
+Before constructing the native recognizer, start checks the requested locale's
+recognizer for existence, availability and on-device support. The recognizer
+rechecks these conditions before preparing a request or activating the audio session.
+Failure emits `language-not-supported` and `end`, without capture. Every request
+unconditionally sets `requiresOnDeviceRecognition` before `recognitionTask`;
+contextual strings, task hints and punctuation never change that flag.
+Apple warns that the flag is honored only when
+[`supportsOnDeviceRecognition` is true](https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition).
+There is no server fallback or iOS model-download trigger.
+
+The patched synchronous availability API accepts an optional locale. Its JS wrapper
+passes this argument only on iOS, preserving Android's zero-argument API.
+The voice probe checks `de-DE`, `en-US` and `en-GB`; one supported locale enables it.
+Start checks the requested locale first, then candidates with the same primary language.
+iOS `getSupportedLocales` is not an installed-model inventory and is not used.
+Readiness can still change after probing; the native guards enforce the boundary again.
+
+OpenMapX conservatively checks and, when askable, requests both microphone and
+speech-recognition authorization, mapping either denial to `not-allowed`.
+The package skips its speech-authorization guard for on-device requests, while
+[Apple's authorization guidance](https://developer.apple.com/documentation/speech/asking-permission-to-use-speech-recognition)
+does not explicitly exempt this path. We therefore do not rely on that omission.
+System permission alerts can make the app inactive; `suspend()` exempts prompts
+and start waits for active state before capture. Both usage strings are localized.
+
+iOS words the Speech Recognition alert itself: "Speech data from this app will be
+sent to Apple to process your requests. This will also help Apple improve its speech
+recognition technology." Our usage string follows it. That system text is the same
+for every app and does not reflect `requiresOnDeviceRecognition`, so it contradicts
+the on-device guarantee. If a real iPhone shows that on-device recognition works
+without speech-recognition authorization, the controller should stop requesting it
+so this alert never appears; until then it is requested.
+
+The existing warning points to iPhone Privacy & Security settings for permissions.
+For missing offline language support it suggests Settings > General > Keyboard,
+adding the language's keyboard and enabling Dictation, following Apple's
+[Dictation](https://support.apple.com/guide/iphone/iph2c0651d2/ios) and
+[keyboard](https://support.apple.com/guide/iphone/iph73b71eb/ios) guides.
+This is setup guidance, not a promise that a model becomes available on every iPhone.
+
+Recognition explicitly uses `playAndRecord` / `measurement` with `defaultToSpeaker`
+and `allowBluetooth`, matching package defaults without ducking options.
+After native end (or bounded abort settlement), the arbiter checks guidance status
+and deactivates with `notifyOthersOnDeactivation` unless guidance is speaking.
+Only then does it release a held cue, whose native module configures `playback` /
+`voicePrompt` itself. The lease stays owned until hand-back completes.
+
+Installed-source mutation tests and the release gate verify the two guards and
+unconditional request flag. Controller/arbiter tests cover locale selection,
+permissions, prompt inactivity and hand-back ordering. The existing SwiftPM runner
+compiles navigation audio policy only; duplicating recognizer policy in that module
+would not exercise the patched dependency. No native recognizer execution or iPhone
+privacy/device qualification is claimed by these structural and JavaScript checks.
+
+On an iOS 26.4 simulator, a debug build of this design showed the voice button
+(the simulator reports on-device support for `en-US` only), the microphone and
+Speech Recognition alerts with our usage strings, the iPhone wording for a refused
+permission, and the iPhone wording for German without recording or a prompt.
+Recording itself was not exercised: without host microphone access the simulator's
+audio input times out and the package aborts the app while opening the input node,
+which does not occur on a device with a microphone. The app does not start on the
+iOS 27 simulator at all, independent of voice input: apps built with the iOS 27 SDK
+must adopt the scene-based life cycle, which the generated `AppDelegate` does not yet.
 
 ## Permission and lifecycle
 

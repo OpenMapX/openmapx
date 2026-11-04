@@ -333,17 +333,24 @@ describe("VoiceSearchButton inside the installed shell", () => {
     }
   });
 
-  it.each([
-    ["not-allowed", "voiceErrorNotAllowedApp"],
-    ["language-not-supported", "voiceErrorLanguageApp"],
-    ["audio-capture", "voiceErrorNoMicrophone"],
-    ["no-speech", "voiceErrorNoSpeech"],
-    ["busy", "voiceErrorGeneric"],
-    ["unavailable", "voiceErrorGeneric"],
-    ["aborted", "voiceErrorGeneric"],
-    ["generic", "voiceErrorGeneric"],
-  ])("maps native %s to %s", async (error, key) => {
+  it.each(
+    [
+      ["not-allowed", "voiceErrorNotAllowedApp"],
+      ["language-not-supported", "voiceErrorLanguageApp"],
+      ["audio-capture", "voiceErrorNoMicrophone"],
+      ["no-speech", "voiceErrorNoSpeech"],
+      ["busy", "voiceErrorGeneric"],
+      ["unavailable", "voiceErrorGeneric"],
+      ["aborted", "voiceErrorGeneric"],
+      ["generic", "voiceErrorGeneric"],
+    ].flatMap(([error, key]) => [
+      [error, key, "android"],
+      [error, key.endsWith("App") ? `${key}Ios` : key, "ios"],
+    ]),
+  )("maps native %s to %s on %s", async (error, key, platform) => {
     const h = nativeRuntime();
+    if (runtime.current?.handshake)
+      runtime.current.handshake.platform = platform as "ios" | "android";
     try {
       render(<VoiceSearchButton onResult={vi.fn()} />);
       fireEvent.click(await screen.findByLabelText("search.voiceSearchAriaLabel"));

@@ -6,6 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
 import { isInstalledShell, shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
 import { useNativeVoiceInput } from "@/lib/mobile/useNativeVoiceInput";
 import { useHydrated } from "@/lib/useHydrated";
@@ -123,6 +124,7 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
   const voiceSessionRef = useRef(0);
   // Surfaced when dictation fails (permission blocked, no network, etc.) so the
   // mic button reports the reason instead of silently doing nothing.
+  const platform = useMobileRuntimeContext().handshake?.platform;
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
   // Keep the latest onResult without re-creating startVoiceSearch each render.
@@ -144,9 +146,13 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
           setListening(false);
           const key =
             error === "not-allowed"
-              ? "voiceErrorNotAllowedApp"
+              ? platform === "ios"
+                ? "voiceErrorNotAllowedAppIos"
+                : "voiceErrorNotAllowedApp"
               : error === "language-not-supported"
-                ? "voiceErrorLanguageApp"
+                ? platform === "ios"
+                  ? "voiceErrorLanguageAppIos"
+                  : "voiceErrorLanguageApp"
                 : voiceErrorKey(error);
           setVoiceError(t(key));
         },
@@ -232,7 +238,7 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
         if (voiceSessionRef.current !== session) return; // cancelled meanwhile
         beginRecognition();
       });
-  }, [speechCtor, locale, t, inShell, nativeInput]);
+  }, [speechCtor, locale, t, inShell, nativeInput, platform]);
 
   const toggleVoiceSearch = useCallback(() => {
     if (listening) {

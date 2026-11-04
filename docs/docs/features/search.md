@@ -68,12 +68,14 @@ is hidden on unsupported browsers. Browser recognition may send audio to the
 browser vendor's speech service; check its privacy settings before speaking.
 
 The installed app uses the same button and warning snackbar with native
-on-device recognition on Android 13+ when the service is available. The first
-tap requests Android microphone permission. If denied, the warning points to
-Android settings. There is no additional settings button or custom dialog.
+on-device recognition on iOS and Android 13+ when offline support is available. The first
+tap requests microphone permission and, on iOS, speech-recognition permission. If denied, the warning points to
+platform settings. There is no additional settings button or custom dialog.
 If the language model is missing, the warning explains this and Android's own
 model download is requested. Downloads need a network connection; recognition
-does not. iOS and older Android versions do not offer app voice search.
+does not. iOS checks each requested language without an app-triggered model download;
+its warning suggests adding a keyboard and enabling Dictation in iPhone settings.
+Older Android versions do not offer app voice search.
 
 Tap again to finish an utterance. Leaving the page or backgrounding the app
 cancels listening. OpenMapX does not transmit or store app microphone audio.

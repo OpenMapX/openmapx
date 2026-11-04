@@ -34,7 +34,7 @@ it("holds only the latest cue and releases it", async () => {
   await f.arbiter.speak(cue("a"));
   await f.arbiter.speak(cue("b"));
   expect(f.audio.speak).not.toHaveBeenCalled();
-  f.arbiter.release();
+  await f.arbiter.release();
   expect(f.audio.speak).toHaveBeenCalledWith(cue("b"));
 });
 it("drops stale guidance with stable status", async () => {
@@ -42,7 +42,7 @@ it("drops stale guidance with stable status", async () => {
   await f.arbiter.acquire(() => true);
   await f.arbiter.speak(cue("a"));
   f.age(10001);
-  f.arbiter.release();
+  await f.arbiter.release();
   expect(f.audio.speak).not.toHaveBeenCalled();
   expect((await f.arbiter.getStatus()).lastResultCode).toBe("voice-guidance-stale");
 });

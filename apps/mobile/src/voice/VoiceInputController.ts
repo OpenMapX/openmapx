@@ -11,6 +11,9 @@ type SpeechModule = Pick<
   | "supportsOnDeviceRecognition"
   | "getMicrophonePermissionsAsync"
   | "requestMicrophonePermissionsAsync"
+  | "getSpeechRecognizerPermissionsAsync"
+  | "requestSpeechRecognizerPermissionsAsync"
+  | "setAudioSessionActiveIOS"
   | "getSupportedLocales"
   | "androidTriggerOfflineModelDownload"
 >;
@@ -85,6 +88,10 @@ export class VoiceInputController {
   ) {}
   isAvailable(): boolean {
     try {
+      if (this.deps.platform === "ios")
+        return ["de-DE", "en-US", "en-GB"].some((locale) =>
+          this.deps.module.supportsOnDeviceRecognition(locale),
+        );
       return (
         this.deps.platform === "android" &&
         this.deps.api >= 33 &&
@@ -111,9 +118,8 @@ export class VoiceInputController {
     if (terminal ? owned : this.current(s)) this.deps.emit({ requestId: s.id, ...event });
   }
   /**
-   * Android shows the permission prompt as another activity, so the app reads
-   * as backgrounded until the prompt closes and the activity resumes, which
-   * happens after the permission result arrives. Wait (bounded) for that.
+   * Android permission activities and iOS system alerts pause the app. The
+   * permission result can arrive before active state does; wait (bounded) for it.
    */
   private async resumed(s: Session): Promise<boolean> {
     for (let waited = 0; waited < RESUME_MS; waited += RESUME_POLL_MS) {
@@ -133,12 +139,25 @@ export class VoiceInputController {
     for (const remove of s.remove) remove();
     s.remove = [];
     if (this.session === s) this.session = null;
+    let released: Promise<void> | undefined;
     if (this.lease === s) {
-      this.lease = null;
-      this.deps.audio.release();
+      if (this.deps.platform === "ios") {
+        const release = this.deps.audio.release(() => {
+          this.deps.module.setAudioSessionActiveIOS(false, { notifyOthersOnDeactivation: true });
+        });
+        released = Promise.resolve(release)
+          .catch(() => {})
+          .then(() => {
+            if (this.lease === s) this.lease = null;
+          });
+      } else {
+        this.lease = null;
+        void this.deps.audio.release();
+      }
     }
     if (confirmed || s.nativeStopped) {
-      s.drain();
+      if (released) void released.then(s.drain);
+      else s.drain();
       return;
     }
     // Wait for the recogniser's own end or error before any later session.
@@ -148,7 +167,8 @@ export class VoiceInputController {
     const confirm = () => {
       for (const watcher of watchers) watcher.remove();
       if (this.unconfirmed === s) this.unconfirmed = null;
-      s.drain();
+      if (released) void released.then(s.drain);
+      else s.drain();
     };
     watchers.push(on("end", confirm), on("error", confirm));
   }
@@ -249,44 +269,73 @@ export class VoiceInputController {
         this.fail(s, "busy");
         return;
       }
-      if (!this.isAvailable()) {
+      if (this.deps.platform !== "ios" && !this.isAvailable()) {
         this.fail(s, "unavailable");
         return;
       }
-      let permission = await this.deps.module.getMicrophonePermissionsAsync();
-      if (!this.current(s)) return;
-      if (!permission.granted && permission.canAskAgain) {
-        s.prompting = true;
-        try {
-          permission = await this.deps.module.requestMicrophonePermissionsAsync();
-        } finally {
-          s.prompting = false;
-        }
-        if (!(await this.resumed(s))) {
-          // The user left the app while (or right after) the prompt was open.
-          if (this.session === s && !s.cancelled) this.abortQuietly(s);
+      let lang: string | undefined;
+      if (this.deps.platform === "ios") {
+        const primary = locale.split("-")[0].toLowerCase();
+        lang = [locale, "de-DE", "en-US", "en-GB"]
+          .filter((candidate) => candidate.split("-")[0].toLowerCase() === primary)
+          .find((candidate) => this.deps.module.supportsOnDeviceRecognition(candidate));
+        if (!lang) {
+          this.fail(s, "language-not-supported");
           return;
         }
       }
-      if (!this.current(s)) return;
-      if (!permission.granted) {
-        this.fail(s, "not-allowed");
-        return;
-      }
-      const { installedLocales } = await this.deps.module.getSupportedLocales({});
-      if (!this.current(s)) return;
-      const lang = selectInstalledLocale(locale, installedLocales);
-      if (!lang) {
-        const attempted = this.deps.downloads ?? downloads;
-        const key = locale.toLowerCase();
-        if (!attempted.has(key)) {
-          attempted.add(key);
-          void this.deps.module
-            .androidTriggerOfflineModelDownload({ locale })
-            .catch(() => undefined);
+      const permissions = [
+        [
+          this.deps.module.getMicrophonePermissionsAsync.bind(this.deps.module),
+          this.deps.module.requestMicrophonePermissionsAsync.bind(this.deps.module),
+        ],
+        ...(this.deps.platform === "ios"
+          ? [
+              [
+                this.deps.module.getSpeechRecognizerPermissionsAsync.bind(this.deps.module),
+                this.deps.module.requestSpeechRecognizerPermissionsAsync.bind(this.deps.module),
+              ],
+            ]
+          : []),
+      ];
+      for (const [getPermission, requestPermission] of permissions) {
+        let permission = await getPermission();
+        if (!this.current(s)) return;
+        if (!permission.granted && permission.canAskAgain) {
+          s.prompting = true;
+          try {
+            permission = await requestPermission();
+          } finally {
+            s.prompting = false;
+          }
+          if (!(await this.resumed(s))) {
+            // The user left the app while (or right after) the prompt was open.
+            if (this.session === s && !s.cancelled) this.abortQuietly(s);
+            return;
+          }
         }
-        this.fail(s, "language-not-supported");
-        return;
+        if (!this.current(s)) return;
+        if (!permission.granted) {
+          this.fail(s, "not-allowed");
+          return;
+        }
+      }
+      if (this.deps.platform !== "ios") {
+        const { installedLocales } = await this.deps.module.getSupportedLocales({});
+        if (!this.current(s)) return;
+        lang = selectInstalledLocale(locale, installedLocales);
+        if (!lang) {
+          const attempted = this.deps.downloads ?? downloads;
+          const key = locale.toLowerCase();
+          if (!attempted.has(key)) {
+            attempted.add(key);
+            void this.deps.module
+              .androidTriggerOfflineModelDownload({ locale })
+              .catch(() => undefined);
+          }
+          this.fail(s, "language-not-supported");
+          return;
+        }
       }
       this.lease = s;
       await this.deps.audio.acquire(() => this.current(s));
@@ -320,6 +369,15 @@ export class VoiceInputController {
       s.started = true;
       this.deps.module.start({
         lang,
+        ...(this.deps.platform === "ios"
+          ? {
+              iosCategory: {
+                category: "playAndRecord" as const,
+                mode: "measurement" as const,
+                categoryOptions: ["defaultToSpeaker" as const, "allowBluetooth" as const],
+              },
+            }
+          : {}),
         requiresOnDeviceRecognition: true,
         interimResults: true,
         continuous: false,

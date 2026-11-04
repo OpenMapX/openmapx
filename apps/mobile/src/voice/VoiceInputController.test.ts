@@ -1,14 +1,29 @@
+import { createAudioArbiter } from "./audioArbiter";
 import { mapVoiceError, selectInstalledLocale, VoiceInputController } from "./VoiceInputController";
 
-function fixture(platform = "android", api = 33, supported = true) {
+function fixture(
+  platform = "android",
+  api = 33,
+  supported = true,
+  audioOverride?: ConstructorParameters<typeof VoiceInputController>[0]["audio"],
+) {
   const handlers = new Map<string, Set<(event: never) => void>>();
   const fire = (name: string, event: unknown = {}) => {
     for (const handler of [...(handlers.get(name) ?? [])]) handler(event as never);
   };
   const module = {
-    supportsOnDeviceRecognition: jest.fn(() => supported),
+    supportsOnDeviceRecognition: jest.fn((_locale?: string) => supported),
     getMicrophonePermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
     requestMicrophonePermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+    getSpeechRecognizerPermissionsAsync: jest.fn(async () => ({
+      granted: true,
+      canAskAgain: true,
+    })),
+    requestSpeechRecognizerPermissionsAsync: jest.fn(async () => ({
+      granted: true,
+      canAskAgain: true,
+    })),
+    setAudioSessionActiveIOS: jest.fn(),
     getSupportedLocales: jest.fn(async () => ({
       installedLocales: ["de-DE", "en-US"],
       locales: ["fr-FR"],
@@ -32,7 +47,7 @@ function fixture(platform = "android", api = 33, supported = true) {
     module: module as unknown as ConstructorParameters<typeof VoiceInputController>[0]["module"],
     platform,
     api,
-    audio,
+    audio: audioOverride ?? audio,
     emit,
     channel: () => channel,
     active: () => active,
@@ -61,7 +76,7 @@ describe("native voice input", () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
   it.each([
-    ["ios", 35, true],
+    ["ios", 35, false],
     ["android", 32, true],
     ["android", 35, false],
   ])("fails closed on %s API %s supported %s", (os, api, supported) => {
@@ -98,8 +113,13 @@ describe("native voice input", () => {
     expect(f.emit.mock.calls[2][0].text).toHaveLength(512);
     expect(f.audio.release).toHaveBeenCalledTimes(1);
   });
-  it.each([true, false])("denial canAskAgain=%s", async (canAskAgain) => {
-    const f = fixture();
+  it.each([
+    [true, "android"],
+    [false, "android"],
+    [true, "ios"],
+    [false, "ios"],
+  ] as const)("denial canAskAgain=%s platform=%s", async (canAskAgain, platform) => {
+    const f = fixture(platform);
     f.module.getMicrophonePermissionsAsync.mockResolvedValue({ granted: false, canAskAgain });
     f.module.requestMicrophonePermissionsAsync.mockResolvedValue({
       granted: false,
@@ -325,4 +345,140 @@ describe("native voice input", () => {
     f.fire("end");
     expect(f.audio.release).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("iOS on-device voice input", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  it("probes app languages individually and stays hidden when none works", () => {
+    const f = fixture("ios");
+    f.module.supportsOnDeviceRecognition.mockImplementation(
+      (locale?: string) => locale === "en-GB",
+    );
+    expect(f.controller.isAvailable()).toBe(true);
+    expect(f.module.supportsOnDeviceRecognition.mock.calls).toEqual([
+      ["de-DE"],
+      ["en-US"],
+      ["en-GB"],
+    ]);
+    f.module.supportsOnDeviceRecognition.mockReturnValue(false);
+    expect(f.controller.isAvailable()).toBe(false);
+  });
+  it("fails before recording or prompts for a missing language, never downloading", async () => {
+    const f = fixture("ios");
+    f.module.supportsOnDeviceRecognition.mockImplementation(
+      (locale?: string) => locale === "de-DE",
+    );
+    await f.controller.start("r", "en-AU");
+    expect(f.emit).toHaveBeenLastCalledWith({
+      requestId: "r",
+      state: "error",
+      error: "language-not-supported",
+    });
+    expect(f.module.start).not.toHaveBeenCalled();
+    expect(f.audio.acquire).not.toHaveBeenCalled();
+    expect(f.module.getMicrophonePermissionsAsync).not.toHaveBeenCalled();
+    expect(f.module.androidTriggerOfflineModelDownload).not.toHaveBeenCalled();
+  });
+  it.each(["en-AU", "en-GB"])("selects same-language offline locale for %s", async (locale) => {
+    const f = fixture("ios");
+    f.module.supportsOnDeviceRecognition.mockImplementation((tag?: string) => tag === "en-GB");
+    await f.controller.start("r", locale);
+    expect(f.module.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lang: "en-GB",
+        requiresOnDeviceRecognition: true,
+        iosCategory: {
+          category: "playAndRecord",
+          mode: "measurement",
+          categoryOptions: ["defaultToSpeaker", "allowBluetooth"],
+        },
+      }),
+    );
+    expect(f.module.getSupportedLocales).not.toHaveBeenCalled();
+    expect(f.module.androidTriggerOfflineModelDownload).not.toHaveBeenCalled();
+    f.fire("error", { error: "language-not-supported" });
+    expect(f.emit).toHaveBeenLastCalledWith({
+      requestId: "r",
+      state: "error",
+      error: "language-not-supported",
+    });
+    f.fire("end");
+  });
+  it.each([true, false])("speech permission denial canAskAgain=%s", async (canAskAgain) => {
+    const f = fixture("ios");
+    f.module.getSpeechRecognizerPermissionsAsync.mockResolvedValue({ granted: false, canAskAgain });
+    f.module.requestSpeechRecognizerPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: false,
+    });
+    await f.controller.start("r", "en-US");
+    expect(f.module.requestSpeechRecognizerPermissionsAsync).toHaveBeenCalledTimes(
+      canAskAgain ? 1 : 0,
+    );
+    expect(f.emit).toHaveBeenLastCalledWith({
+      requestId: "r",
+      state: "error",
+      error: "not-allowed",
+    });
+    expect(f.module.start).not.toHaveBeenCalled();
+  });
+  it("requests both permissions, survives inactive alerts and waits for active", async () => {
+    const f = fixture("ios");
+    f.module.getMicrophonePermissionsAsync.mockResolvedValue({ granted: false, canAskAgain: true });
+    f.module.getSpeechRecognizerPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: true,
+    });
+    f.module.requestSpeechRecognizerPermissionsAsync.mockImplementation(async () => {
+      f.setActive(false);
+      f.controller.suspend();
+      return { granted: true, canAskAgain: true };
+    });
+    const start = f.controller.start("r", "en-US");
+    await jest.advanceTimersByTimeAsync(100);
+    expect(f.module.start).not.toHaveBeenCalled();
+    f.setActive(true);
+    await jest.advanceTimersByTimeAsync(100);
+    await start;
+    expect(f.module.requestMicrophonePermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(f.module.requestSpeechRecognizerPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(f.module.start).toHaveBeenCalledTimes(1);
+    f.fire("end");
+  });
+  it.each([false, true])(
+    "hands back before held guidance, except when speaking=%s",
+    async (speaking) => {
+      const order: string[] = [];
+      let guidanceSpeaking = false;
+      const arbiter = createAudioArbiter({
+        speak: jest.fn(async () => {
+          order.push("cue");
+          return "spoken" as const;
+        }),
+        stop: jest.fn(async () => {}),
+        getStatus: jest.fn(async () => ({
+          initialized: true,
+          speaking: guidanceSpeaking,
+          localeAvailable: true,
+          lastResultCode: null,
+        })),
+      });
+      const f = fixture("ios", 35, true, arbiter);
+      f.module.setAudioSessionActiveIOS.mockImplementation(() => {
+        order.push("deactivate");
+      });
+      await f.controller.start("r", "en-US");
+      await arbiter.speak({ cueId: "held", text: "Turn left", locale: "en" });
+      guidanceSpeaking = speaking;
+      order.push("end");
+      f.fire("end");
+      await jest.advanceTimersByTimeAsync(0);
+      expect(order).toEqual(speaking ? ["end", "cue"] : ["end", "deactivate", "cue"]);
+      if (!speaking)
+        expect(f.module.setAudioSessionActiveIOS).toHaveBeenCalledWith(false, {
+          notifyOthersOnDeactivation: true,
+        });
+    },
+  );
 });
