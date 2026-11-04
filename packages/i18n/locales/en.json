@@ -2657,7 +2657,8 @@
       "replaceAction": "Replace overlay",
       "import": "Import",
       "open": "Open",
-      "partial": "Some shared items could not be added. Select an error entry to review it; successfully saved items remain available."
+      "partial": "Some shared items could not be added. Select an error entry to review it; successfully saved items remain available.",
+      "sharedLocation": "Shared location"
     }
   },
   "offline": {

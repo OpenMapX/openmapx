@@ -1,3 +1,4 @@
+import { INTAKE_RECEIVER } from "../config/nativeIntakeConfig.ts";
 /**
  * Policy checks over the *generated* native projects.
  *
@@ -352,6 +353,25 @@ function checkAndroid(
       $: Record<string, string>;
       "intent-filter"?: unknown[];
     }>;
+    const intake = activities.filter((a) => a.$["android:name"] === INTAKE_RECEIVER);
+    if (
+      intake.length !== 1 ||
+      intake[0].$["android:noHistory"] !== "true" ||
+      intake[0].$["android:excludeFromRecents"] !== "true" ||
+      intake[0].$["android:taskAffinity"] !== "" ||
+      intake[0].$["android:launchMode"] !== "standard"
+    )
+      fail("intake receiver must be exactly one nonhistorical activity with no task affinity");
+    for (const activity of activities.filter((a) => a.$["android:name"] !== INTAKE_RECEIVER)) {
+      if (
+        (activity["intent-filter"] ?? []).some((filter) =>
+          /android.intent.action.SEND|"android:scheme":"content"/.test(JSON.stringify(filter)),
+        )
+      )
+        fail(
+          "share and content intents must target only the intake receiver, never the React task",
+        );
+    }
     for (const activity of activities) {
       if (
         activity.$["android:exported"] === "true" &&

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AndroidManifestLike } from "../plugins/nativeConfigTransforms";
 import { REQUIRED_ANDROID_PERMISSIONS } from "../plugins/nativeConfigTransforms";
-import { intakeDocumentTypes, intakeShareInfo } from "../plugins/withNativeIntake";
+import {
+  intakeDocumentTypes,
+  intakeReceiverDeclaration,
+  intakeShareInfo,
+} from "../plugins/withNativeIntake";
 import {
   checkGeneratedNativeSurface,
   type ExpectedNativeSurface,
@@ -46,6 +50,7 @@ function androidManifest(): AndroidManifestLike {
             "android:allowBackup": "false",
             "android:networkSecurityConfig": "@xml/network_security_config",
           },
+          activity: [intakeReceiverDeclaration()],
           "meta-data": [
             { $: { "android:name": "expo.modules.updates.ENABLED", "android:value": "false" } },
           ],
@@ -429,6 +434,7 @@ describe("storage and component exposure", () => {
           activity?: Array<{ $: Record<string, string>; "intent-filter"?: unknown[] }>;
         };
         application.activity = [
+          ...(application.activity ?? []),
           {
             $: { "android:name": ".MainActivity", "android:exported": "true" },
             "intent-filter": [{}],
@@ -484,5 +490,26 @@ it("rejects broad share activation rules", () => {
   };
   expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
     expect.stringContaining("bounded geographic activation"),
+  );
+});
+
+it("keeps intake out of the React task and receiver out of history", () => {
+  const value = surface();
+  const app = value.androidManifest.manifest.application?.[0];
+  if (!app) throw new Error("missing fixture");
+  const activities = app.activity as Array<{
+    $: Record<string, string>;
+    "intent-filter"?: unknown[];
+  }>;
+  activities[0].$["android:noHistory"] = "false";
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("nonhistorical activity"),
+  );
+  activities.push({
+    $: { "android:name": ".MainActivity", "android:exported": "true" },
+    "intent-filter": [{ action: [{ $: { "android:name": "android.intent.action.SEND" } }] }],
+  });
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("never the React task"),
   );
 });

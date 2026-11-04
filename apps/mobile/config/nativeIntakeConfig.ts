@@ -48,7 +48,7 @@ export function intakeShareInfo(appId: string) {
   ).join(" OR ");
   const text =
     '((ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text") AND NOT ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.file-url")';
-  const rule = `extensionItems.@count == 1 AND SUBQUERY(extensionItems, $item, $item.attachments.@count >= 1 AND $item.attachments.@count <= 5 AND SUBQUERY($item.attachments, $attachment, (${geo}) OR ${text}).@count == $item.attachments.@count).@count == 1`;
+  const rule = `extensionItems.@count == 1 AND SUBQUERY(extensionItems, $item, $item.attachments.@count >= 1 AND $item.attachments.@count <= 5 AND (SUBQUERY($item.attachments, $attachment, (${geo})).@count == $item.attachments.@count OR (SUBQUERY($item.attachments, $attachment, (${geo})).@count == 0 AND SUBQUERY($item.attachments, $attachment, ${text}).@count >= 1))).@count == 1`;
   return {
     CFBundleDisplayName: "OpenMapX",
     CFBundleExecutable: "$(EXECUTABLE_NAME)",
@@ -87,5 +87,27 @@ export function shareBuildSettings(
     LD_RUNPATH_SEARCH_PATHS:
       '"$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"',
     GENERATE_INFOPLIST_FILE: "NO",
+  };
+}
+
+export const INTAKE_RECEIVER = "expo.modules.openmapxintake.IntakeReceiverActivity";
+export function intakeReceiverDeclaration() {
+  return {
+    $: {
+      "android:name": INTAKE_RECEIVER,
+      "android:exported": "true" as const,
+      "android:noHistory": "true",
+      "android:excludeFromRecents": "true",
+      "android:taskAffinity": "",
+      "android:launchMode": "standard",
+      "android:theme": "@android:style/Theme.Translucent.NoTitleBar",
+    },
+    "intent-filter": intakeAndroidFilters().map((f) => ({
+      action: [{ $: { "android:name": `android.intent.action.${f.action}` } }],
+      category: f.category.map((c) => ({ $: { "android:name": `android.intent.category.${c}` } })),
+      data: f.data.map((d) => ({
+        $: { "android:mimeType": d.mimeType, ...(d.scheme ? { "android:scheme": d.scheme } : {}) },
+      })),
+    })),
   };
 }

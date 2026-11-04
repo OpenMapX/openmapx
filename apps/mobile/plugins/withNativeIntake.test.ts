@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { intakeReceiverDeclaration } from "../config/nativeIntakeConfig";
 import {
   intakeAndroidFilters,
   intakeDocumentTypes,
@@ -49,4 +50,12 @@ describe("native intake CNG", () => {
     expect(JSON.stringify(filters)).not.toContain('"*/*"');
     expect(filters.map((f) => f.action)).toContain("SEND_MULTIPLE");
   });
+});
+
+it("routes external content through a nonhistorical receiver instead of Expo lifecycle hooks", () => {
+  const receiver = intakeReceiverDeclaration();
+  expect(receiver.$["android:noHistory"]).toBe("true");
+  expect(receiver.$["android:taskAffinity"]).toBe("");
+  expect(receiver.$["android:excludeFromRecents"]).toBe("true");
+  expect(JSON.stringify(receiver["intent-filter"])).toContain("android.intent.action.SEND");
 });

@@ -5,7 +5,6 @@ import type { ExpoConfig } from "expo/config";
 // apply type stripping.
 import { readMobileConfig } from "./config/mobileConfig.ts";
 import { IOS_USAGE_DESCRIPTIONS } from "./config/nativeCopy.ts";
-import { intakeAndroidFilters } from "./config/nativeIntakeConfig.ts";
 
 /**
  * Continuous Native Generation input.
@@ -65,7 +64,6 @@ const config: ExpoConfig = {
     package: mobile.appId,
     // A map chooser uses an implicit VIEW intent, independently of App Links.
     intentFilters: [
-      ...intakeAndroidFilters(),
       {
         action: "VIEW",
         category: ["DEFAULT", "BROWSABLE"],

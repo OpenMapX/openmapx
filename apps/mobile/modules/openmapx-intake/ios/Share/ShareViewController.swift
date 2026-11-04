@@ -43,13 +43,14 @@ final class ShareViewController: UIViewController {
     DispatchQueue.global(qos: .userInitiated).async { [self] in
       do {
         let store = try IntakeContainer.store(writer: "extension")
-        let types = ["com.topografix.gpx", "public.geojson", "com.google.earth.kml", UTType.url.identifier, UTType.plainText.identifier]
-        // All providers must have a supported representation before saving the first one.
-        let selections = try items.map { provider -> (NSItemProvider, String) in
-          guard let type = types.first(where: { provider.hasItemConformingToTypeIdentifier($0) }) else { throw IntakeFailure.unsupported }
-          if items.count > 1 && [UTType.url.identifier, UTType.plainText.identifier].contains(type) { throw IntakeFailure.unsupported }
-          return (provider, type)
+        let rows = items.map { provider in ShareSelection.supportedTypes.filter { provider.hasItemConformingToTypeIdentifier($0) } }
+        let plan = try ShareSelection.select(rows)
+        let selections: [(NSItemProvider, String)]
+        switch plan {
+          case .files(let files): selections = files.map { (items[$0.index], $0.type) }
+          case .text(let indices): selections = indices.map { (items[$0], rows[$0].contains("public.url") ? "public.url" : "public.plain-text") }
         }
+        var textValues: [String] = []
         for (provider, type) in selections {
           if operation.cancelled { return }
           let state = TransferState(), semaphore = DispatchSemaphore(value: 0)
@@ -64,8 +65,8 @@ final class ShareViewController: UIViewController {
               do {
                 if let error { throw error }
                 if let url = item as? URL, url.isFileURL { throw IntakeFailure.unsupported }
-                else if let url = item as? URL { _ = try store.putText(url.absoluteString, cancelled: { state.cancelled || self.operation.cancelled }) }
-                else if let text = item as? String { _ = try store.putText(text, cancelled: { state.cancelled || self.operation.cancelled }) }
+                else if let url = item as? URL { textValues.append(url.absoluteString); _ = try ShareSelection.text(textValues) }
+                else if let text = item as? String { textValues.append(text); _ = try ShareSelection.text(textValues) }
                 else { throw IntakeFailure.unsupported }
                 completed(nil)
               } catch { completed(error) }
@@ -84,6 +85,7 @@ final class ShareViewController: UIViewController {
           if semaphore.wait(timeout: .now() + 10) == .timedOut { state.cancel(); transfer.cancel(); throw IntakeFailure.unreadable }
           if let failure { throw failure }
         }
+        if case .text = plan { _ = try store.putText(ShareSelection.text(textValues), cancelled: { self.operation.cancelled }) }
       } catch {
         if operation.cancelled { return }
         try? IntakeContainer.store(writer: "extension").recordError((error as? IntakeFailure)?.rawValue ?? "unreadable")

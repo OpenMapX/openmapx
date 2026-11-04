@@ -2657,7 +2657,8 @@
       "replaceAction": "Ebene ersetzen",
       "import": "Importieren",
       "open": "Öffnen",
-      "partial": "Einige geteilte Inhalte konnten nicht hinzugefügt werden. Den Fehlereintrag zur Prüfung auswählen. Erfolgreich gespeicherte Inhalte bleiben verfügbar."
+      "partial": "Einige geteilte Inhalte konnten nicht hinzugefügt werden. Den Fehlereintrag zur Prüfung auswählen. Erfolgreich gespeicherte Inhalte bleiben verfügbar.",
+      "sharedLocation": "Geteilter Ort"
     }
   },
   "offline": {

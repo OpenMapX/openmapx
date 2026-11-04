@@ -343,10 +343,14 @@ physical-device background/force-quit behavior or App Store signing acceptance.
 ## Native sharing and geographic files
 
 Android receives text/URI sharing and typed GPX, GeoJSON and KML attachments
-through the main activity. Document VIEW handles `content:` grants, without
-BROWSABLE or storage/media permissions. Pre-JS lifecycle capture handles cold and
-warm delivery; restored activities and history launches are ignored to prevent
-Recents replay. The ordinary map/End Linking path ignores document URLs.
+through a dedicated, nonhistorical receiver activity. Document VIEW handles
+`content:` grants, without BROWSABLE or storage/media permissions. The receiver
+opens the React task with a neutral MAIN intent and forwards only read grants
+while background copying finishes. The task never retains the original share
+intent, avoiding process-death replay even when Expo discards saved state.
+Restored receiver activities and history launches are ignored. Cold and warm
+intake does not depend on Expo or JavaScript startup; ordinary map/End Linking
+ignores document URLs.
 
 Android copies foreign providers into `noBackupFilesDir` while grants are valid.
 It rejects `file:` URLs and positively identified own providers; package-visibility
@@ -375,10 +379,17 @@ background-task assertion. The host module and extension include file-access
 privacy manifests. The extension imports GPX `com.topografix.gpx`, KML
 `com.google.earth.kml`, and Apple's `public.geojson` (also declared for older OS
 versions). Its bounded SUBQUERY activation predicate excludes arbitrary file URLs.
+URL and text attachments are combined into one editable location, retaining
+labels and the first link; irrelevant preview attachments are ignored in this
+mode. Geographic files must all be supported. Apple declares `public.geojson`
+on iOS 18 and later; its imported declaration supports older OS versions, whose
+installation and Files registration still require device qualification.
 
 Limits are 4,096 UTF-16 units/8 KiB for text, 5 MiB per file, five files per share,
 and eight content items/20 MiB for the owned inbox. Two bounded error descriptors
-remain available when content is full. Items expire after 24 hours. Names are
+remain available when content is full. Multi-file copies commit individually: if
+a later attachment fails, earlier successful entries remain alongside an error
+notice. Items expire after 24 hours. Names are
 bounded display labels; only opaque UUIDs address immutable entries. Protocol-4
 list/read/complete commands transfer stateless 24 KiB chunks through the existing
 origin/nonce-authenticated bridge. No native path, sender URI or server authority
@@ -410,3 +421,5 @@ documents App Groups and activation predicates; the
 [Android receiver guide](https://developer.android.com/develop/ui/compose/sharing/receive)
 and [ContentResolver security guidance](https://developer.android.com/privacy-and-security/risks/content-resolver)
 define the Android receiving and provider authority boundaries.
+[Apple’s GeoJSON type](https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/geojson)
+confirms the `public.geojson` identifier.

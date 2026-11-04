@@ -3,7 +3,6 @@ package expo.modules.openmapxintake
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
@@ -29,12 +28,14 @@ object IntakeIngress {
     val app = context.applicationContext
     // Copy while grants are attached to the receiving Activity. The queue is deliberately bounded.
     try { workers.execute { try { ingest(app, intent) } catch (_: Exception) { changed() } } }
-    catch (_: Exception) {
-      // Rejection runs on the Activity thread; never perform quota/error filesystem work there.
-      if (overflowPending.compareAndSet(false, true)) overflowWorker.execute {
-        try { inbox(app).recordError("inbox-full") } catch (_: Exception) {}
-        finally { overflowPending.set(false); changed() }
-      }
+    catch (_: Exception) { reportError(app, "inbox-full") }
+  }
+  internal fun reportError(context: Context, code: String) {
+    // The Activity thread can report an error but never does quota/filesystem work.
+    val app = context.applicationContext
+    if (overflowPending.compareAndSet(false, true)) overflowWorker.execute {
+      try { inbox(app).recordError(code) } catch (_: Exception) {}
+      finally { overflowPending.set(false); changed() }
     }
   }
   @Suppress("DEPRECATION")
@@ -46,18 +47,7 @@ object IntakeIngress {
     val started = System.nanoTime()
     val deadline = deadlines.schedule({ cancelled.set(true); try { descriptor.get()?.close() } catch (_: Exception) {}; try { signal.cancel() } catch (_: Exception) {} }, IntakePolicy.COPY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     try {
-      val uris = mutableListOf<Uri>()
-      if (intent.action == Intent.ACTION_VIEW) intent.data?.let { uris += it }
-      else if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
-        val streams = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
-        if (streams.size > 5) throw IntakeFailure("too-many")
-        uris += streams
-      } else intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
-      intent.clipData?.let { clip ->
-        if (clip.itemCount > 5) throw IntakeFailure("too-many")
-        for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { if (it !in uris) uris += it }
-      }
-      if (uris.size > 5) throw IntakeFailure("too-many")
+      val uris = IncomingIntent.attachments(intent)
       if (uris.isEmpty()) {
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT) ?: throw IntakeFailure("unsupported")
         if (text.length > IntakePolicy.TEXT_LENGTH) throw IntakeFailure("too-large")

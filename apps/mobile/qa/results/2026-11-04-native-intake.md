@@ -14,10 +14,14 @@ It is not store-release acceptance.
 - Focused web bridge/PWA/parser checks: 21 suites / 258 tests passed. The final
   intake/transfer/parser run passed 29 tests, including navigation-start races,
   settings-page routing, exact chunks and the transfer deadline.
-- SwiftPM inbox: 7 tests passed, covering restart, explicit completion, limits,
+- SwiftPM inbox and share selection: 11 tests passed, covering restart, explicit completion, limits,
   expiry, document authority, staging age, concurrent writers, malformed metadata,
-  actual file size, cancellation and chunk alignment.
-- Android inbox/policy/reader tests passed. Robolectric uses temporary files for
+  actual file size, cancellation, chunk alignment, combined text/URL selection,
+  mixed-file rejection and Apple’s GeoJSON type. The UTI test runs on the macOS
+  host; it does not qualify registration on older iOS installations.
+- Android inbox/policy/reader/receiver tests: 17 tests passed. The receiver tests
+  cover Expo’s null-bundle path, neutral host intents, read-only grant forwarding,
+  explicit repeated shares and thumbnail-only ClipData on text sharing. Robolectric uses temporary files for
   `createPipe` and does not implement `Os.poll/read`: the IO adapter tests verify
   descriptor ownership and deadlines; they do **not** qualify a real provider pipe.
 - Android debug APK and iOS Simulator host + navigation/share extension builds
@@ -26,13 +30,15 @@ It is not store-release acceptance.
 
 ## Observed runtime behavior
 
-| Surface                   | Evidence                                                                                                                                                                                                                             | Limit                                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Android API 36.1 emulator | OpenMapX appears in the real OS text share sheet. Selecting it copied the owned QA sender's address into the private inbox.                                                                                                          | Preview/application, cold receiving, file VIEW, real pipe delivery, Recents and overflow with old web remain unqualified. |
-| iOS 27 Simulator          | Host and external QA sender installed and launched.                                                                                                                                                                                  | Share Extension Add/manual handoff and cold Files Open In remain unqualified.                                             |
-| Browser, 390 × 844        | Actual application preview rendered over the map using a temporary protocol-4 transport fixture. Explicit Import produced the overlay and a completion request. A busy-native fixture disabled Import with the deferred explanation. | This proves web rendering/flow, **not** native receiving or an actual active trip.                                        |
+| Surface                   | Evidence                                                                                                                                                                                                                             | Limit                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Android API 36.1 emulator | OpenMapX appears in the real OS text share sheet. Selecting it copied the owned QA sender's address into the private inbox before the review-driven receiver replacement.                                                            | Final dedicated receiver delivery, preview/application, cold receiving, file VIEW, real pipes, Recents and old-web overflow remain unqualified. |
+| iOS 27 Simulator          | Host and external QA sender installed and launched.                                                                                                                                                                                  | Share Extension Add/manual handoff and cold Files Open In remain unqualified.                                                                   |
+| Browser, 390 × 844        | Actual application preview rendered over the map using a temporary protocol-4 transport fixture. Explicit Import produced the overlay and a completion request. A busy-native fixture disabled Import with the deferred explanation. | This proves web rendering/flow, **not** native receiving or an actual active trip.                                                              |
 
-The Android screenshot in the PR is a real OS share sheet. Preview, imported
+The Android screenshot in the PR is a real OS share sheet from the pre-review
+lifecycle-based receiver. The final dedicated receiver preserves registration,
+but its delivery has not been visually requalified. Preview, imported
 geometry and deferred-state screenshots are explicitly labeled browser fixtures.
 No image was synthesized or edited. QA senders and the browser transport/proxy
 lived outside the repository; there are no shipped test entry points.
@@ -66,6 +72,6 @@ ad-hoc signing for the group entitlement; this establishes no Apple team,
 provisioning profile or App Store validation. The navigation widget has no group.
 
 Local HTTP was used only for development QA. A release-permissions check correctly
-rejected that cleartext development surface. The final HTTPS development surface passed generated and reviewed-permission
-checks. Production signing and the final release binary still require their
+rejected that cleartext development surface. The final HTTPS development surface
+passed generated and reviewed-permission checks. Production signing and the final release binary still require their
 release gates; local QA is not release transport-policy evidence.

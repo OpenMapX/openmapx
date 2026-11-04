@@ -65,6 +65,10 @@ export function NativeIntakeHandler() {
     generation = useRef(0),
     refreshVersion = useRef(0);
   const selectedItem = items.find((item) => item.id === selected) ?? items[0];
+  const selectedId = selectedItem?.id;
+  const selectedKind = selectedItem?.kind;
+  const selectedItemRef = useRef(selectedItem);
+  selectedItemRef.current = selectedItem;
   const refresh = useCallback(async () => {
     if (!client) return;
     const version = ++refreshVersion.current;
@@ -96,7 +100,10 @@ export function NativeIntakeHandler() {
       if (message.type === "intake.changed" || message.type === "session.stopped") void refresh();
     });
     const foreground = () => {
-      if (document.visibilityState !== "hidden") void refresh();
+      if (document.visibilityState !== "hidden") {
+        later.current.clear();
+        void refresh();
+      }
     };
     document.addEventListener("visibilitychange", foreground);
     return () => {
@@ -109,7 +116,15 @@ export function NativeIntakeHandler() {
     if (navStatus === "idle" && nativeSessionId === null) void refresh();
   }, [navStatus, nativeSessionId, refresh]);
   useEffect(() => {
-    if (!visible || !selectedItem || !client) return;
+    const selectedItem = selectedItemRef.current;
+    if (
+      !visible ||
+      !selectedItem ||
+      selectedItem.id !== selectedId ||
+      selectedItem.kind !== selectedKind ||
+      !client
+    )
+      return;
     const abort = new AbortController();
     setDraft("");
     setGeometry(null);
@@ -138,7 +153,7 @@ export function NativeIntakeHandler() {
         if (!abort.signal.aborted) setLoading(false);
       });
     return () => abort.abort();
-  }, [visible, selectedItem, client]);
+  }, [visible, selectedId, selectedKind, client]);
   function postpone() {
     for (const item of items) later.current.add(item.id);
     setVisible(false);
@@ -254,12 +269,14 @@ export function NativeIntakeHandler() {
               >
                 {items.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.name}
+                    {item.kind === "text" ? t("sharedLocation") : item.name}
                   </MenuItem>
                 ))}
               </TextField>
             )}
-            <Typography sx={{ overflowWrap: "anywhere" }}>{selectedItem?.name}</Typography>
+            <Typography sx={{ overflowWrap: "anywhere" }}>
+              {selectedItem?.kind === "text" ? t("sharedLocation") : selectedItem?.name}
+            </Typography>
             {waiting && <Alert severity="info">{t("deferred")}</Alert>}
             {items.some((item) => item.kind === "error") && selectedItem?.kind !== "error" && (
               <Alert severity="warning">{t("partial")}</Alert>

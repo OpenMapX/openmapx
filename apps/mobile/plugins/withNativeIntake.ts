@@ -2,14 +2,18 @@ import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import plistModule from "@expo/plist";
 import {
+  AndroidConfig,
   type ConfigPlugin,
+  withAndroidManifest,
   withEntitlementsPlist,
   withInfoPlist,
   withXcodeProject,
 } from "expo/config-plugins";
 import {
+  INTAKE_RECEIVER,
   intakeDocumentTypes,
   intakeImportedTypes,
+  intakeReceiverDeclaration,
   intakeShareInfo,
   shareBuildSettings,
   TARGET,
@@ -19,6 +23,7 @@ export {
   intakeAndroidFilters,
   intakeDocumentTypes,
   intakeImportedTypes,
+  intakeReceiverDeclaration,
   intakeShareInfo,
   shareBuildSettings,
 } from "../config/nativeIntakeConfig.ts";
@@ -52,6 +57,7 @@ const withNativeIntake: ConfigPlugin = (config) => {
       "IntakePolicy.swift",
       "IntakeInbox.swift",
       "IntakeContainer.swift",
+      "ShareSelection.swift",
       "ShareViewController.swift",
     ];
     for (const source of sources)
@@ -117,6 +123,25 @@ const withNativeIntake: ConfigPlugin = (config) => {
         appId,
       );
     }
+    return mod;
+  });
+  next = withAndroidManifest(next, (mod) => {
+    const app = AndroidConfig.Manifest.getMainApplicationOrThrow(mod.modResults);
+    for (const activity of app.activity ?? []) {
+      if (activity.$["android:name"] === INTAKE_RECEIVER) continue;
+      activity["intent-filter"] = activity["intent-filter"]?.filter(
+        (filter) =>
+          !filter.action?.some((a) =>
+            ["android.intent.action.SEND", "android.intent.action.SEND_MULTIPLE"].includes(
+              a.$["android:name"],
+            ),
+          ) && !filter.data?.some((d) => d.$["android:scheme"] === "content"),
+      );
+    }
+    app.activity = [
+      ...(app.activity ?? []).filter((a) => a.$["android:name"] !== INTAKE_RECEIVER),
+      intakeReceiverDeclaration(),
+    ];
     return mod;
   });
   return next;

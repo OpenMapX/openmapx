@@ -1,5 +1,5 @@
 import { useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NativeIntakeHandler } from "./NativeIntakeHandler";
 
@@ -31,7 +31,15 @@ vi.mock("@/lib/mobile/nativeIntake", () => ({
     complete = f.complete;
   },
 }));
-const client = { subscribe: () => () => undefined };
+const listeners = new Set<(message: never) => void>();
+const client = {
+  subscribe: (listener: (message: never) => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+};
 const commands = {
   get isMutating() {
     return f.mutating;
@@ -100,4 +108,68 @@ it("offers a route back to the map before previewing content on settings pages",
   fireEvent.click(screen.getByText("pending"));
   expect(f.push).toHaveBeenCalledWith("/");
   expect(f.complete).not.toHaveBeenCalled();
+});
+
+it("keeps an edited text draft across a fresh listing of the same immutable item", async () => {
+  const textItem = {
+    id: item.id,
+    kind: "text",
+    name: "Shared location",
+    createdAtMs: 1,
+    byteLength: 6,
+  };
+  f.list.mockImplementation(async () => ({
+    items: [{ ...textItem }],
+    canApply: true,
+    scheme: "openmapx",
+  }));
+  f.text.mockResolvedValue("Berlin");
+  render(<NativeIntakeHandler />);
+  const field = await screen.findByLabelText("search");
+  await waitFor(() => expect(field).toHaveValue("Berlin"));
+  fireEvent.change(field, { target: { value: "Edited destination" } });
+  const before = f.list.mock.calls.length;
+  await act(async () => {
+    for (const listener of listeners) listener({ type: "intake.changed" } as never);
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(f.list.mock.calls.length).toBeGreaterThan(before));
+  expect(field).toHaveValue("Edited destination");
+  expect(f.text).toHaveBeenCalledTimes(1);
+});
+it("does not restart a file read on a metadata refresh", async () => {
+  f.list.mockImplementation(async () => ({
+    items: [{ ...item }],
+    canApply: true,
+    scheme: "openmapx",
+  }));
+  render(<NativeIntakeHandler />);
+  await screen.findByText("features");
+  const before = f.list.mock.calls.length;
+  await act(async () => {
+    for (const listener of listeners) listener({ type: "intake.changed" } as never);
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(f.list.mock.calls.length).toBeGreaterThan(before));
+  expect(f.text).toHaveBeenCalledTimes(1);
+});
+
+it("offers postponed items again on a later foreground", async () => {
+  render(<NativeIntakeHandler />);
+  await screen.findByText("features");
+  fireEvent.click(screen.getByText("later"));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  const previous = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  try {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    await screen.findByRole("dialog");
+    expect(f.complete).not.toHaveBeenCalled();
+  } finally {
+    if (previous) Object.defineProperty(document, "visibilityState", previous);
+    else Reflect.deleteProperty(document, "visibilityState");
+  }
 });

@@ -74,3 +74,12 @@ describe("classifySharedText", () => {
     expect(classifySharedText(value, config).kind).toBe("unsupported"),
   );
 });
+
+it("retains explicit geo coordinates when a sender also provides a location label", () => {
+  expect(
+    classifySharedText("Station\ngeo:50,8", {
+      webOrigin: "https://openmapx.com",
+      scheme: "openmapx",
+    }),
+  ).toMatchObject({ kind: "map" });
+});
