@@ -67,7 +67,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: October 28, 2026
+        Last updated: November 4, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
