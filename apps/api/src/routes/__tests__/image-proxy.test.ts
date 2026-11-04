@@ -654,6 +654,79 @@ describe("image-proxy route", () => {
     expect(opts.validateRedirectUrl(new URL("https://evil.attacker.com/next"))).toBe(false);
   });
 
+  describe("Panoramax federation", () => {
+    const ID = "7462790e-3e1c-4ee5-b6b3-b544421afd84";
+    const CATALOGUE_PICTURE = `https://api.panoramax.xyz/api/pictures/${ID}/sd.jpg`;
+
+    async function validatorFor(url: string) {
+      mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
+      await inject({ referer: ALLOWED_REFERER, url });
+      return (
+        mockFetchWithRedirects.mock.calls[0]?.[1] as {
+          validateRedirectUrl: (next: URL, previous?: URL) => boolean;
+        }
+      ).validateRedirectUrl;
+    }
+
+    it("follows the catalogue's picture redirects to the instance and bucket that hold it", async () => {
+      const validate = await validatorFor(CATALOGUE_PICTURE);
+      // Catalogue → an instance's file.
+      expect(
+        validate(
+          new URL(`https://panoramax.mapcomplete.org/derivatives/74/62/79/0e/x/sd.jpg`),
+          new URL(CATALOGUE_PICTURE),
+        ),
+      ).toBe(true);
+      // Catalogue → an instance's own per-picture endpoint → its storage bucket.
+      const instancePicture = new URL(`https://panoramax.ign.fr/api/pictures/${ID}/sd.jpg`);
+      expect(validate(instancePicture, new URL(CATALOGUE_PICTURE))).toBe(true);
+      expect(
+        validate(
+          new URL(
+            "https://panoramax-storage-public-fast.s3.gra.perf.cloud.ovh.net/derivates/x/sd.jpg",
+          ),
+          instancePicture,
+        ),
+      ).toBe(true);
+    });
+
+    it("lets only a per-picture endpoint hand the request on, and only over HTTPS", async () => {
+      const validate = await validatorFor(CATALOGUE_PICTURE);
+      // A file may not redirect onward to a host the allowlist does not know.
+      expect(
+        validate(
+          new URL("https://evil.attacker.com/next.jpg"),
+          new URL("https://panoramax.mapcomplete.org/derivatives/x/sd.jpg"),
+        ),
+      ).toBe(false);
+      expect(
+        validate(new URL("http://panoramax.mapcomplete.org/x.jpg"), new URL(CATALOGUE_PICTURE)),
+      ).toBe(false);
+      expect(
+        validate(
+          new URL("https://panoramax.mapcomplete.org:8443/x.jpg"),
+          new URL(CATALOGUE_PICTURE),
+        ),
+      ).toBe(false);
+      expect(validate(new URL("https://evil.attacker.com/next.jpg"))).toBe(false);
+    });
+
+    it.each([
+      // Not a picture endpoint on the catalogue.
+      "https://api.panoramax.xyz/api/search?bbox=0,0,1,1",
+      // A picture-shaped path on a host that is no Panoramax catalogue.
+      `https://upload.wikimedia.org/api/pictures/${ID}/sd.jpg`,
+    ])("follows no federated redirect for %s", async (url) => {
+      const validate = await validatorFor(url);
+      expect(
+        validate(
+          new URL("https://panoramax.mapcomplete.org/x.jpg"),
+          new URL(`https://panoramax.ign.fr/api/pictures/${ID}/sd.jpg`),
+        ),
+      ).toBe(false);
+    });
+  });
+
   it.each([
     "https://evil.attacker.com/stolen.png",
     "http://lh3.googleusercontent.com/downgraded.png",

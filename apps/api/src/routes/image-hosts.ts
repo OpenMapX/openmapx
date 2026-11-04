@@ -147,3 +147,44 @@ export function isCameraHost(url: URL): boolean {
 export function isAllowedHost(url: URL): boolean {
   return isStaticImageHost(url.hostname) || matchesAdmittedCameraSource(url);
 }
+
+/**
+ * Panoramax catalogues whose per-picture image endpoint may send the proxy on
+ * to the federated instance, or that instance's storage bucket, holding the
+ * file. The federation adds instances and buckets without notice, so they
+ * cannot be listed here; the catalogue decides where a picture lives.
+ */
+const PANORAMAX_CATALOGUE_HOSTS: ReadonlySet<string> = new Set([
+  "api.panoramax.xyz",
+  "panoramax.openstreetmap.fr",
+]);
+
+/** `/api/pictures/<uuid>/<size>.jpg`, the endpoint every Panoramax instance serves. */
+const PANORAMAX_PICTURE_PATH =
+  /^\/api\/pictures\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(?:thumb|sd|hd)\.jpg$/i;
+
+/** True for a request to an allowlisted Panoramax catalogue's per-picture endpoint. */
+export function isPanoramaxPictureRequest(url: URL): boolean {
+  return (
+    url.protocol === "https:" &&
+    PANORAMAX_CATALOGUE_HOSTS.has(url.hostname) &&
+    PANORAMAX_PICTURE_PATH.test(url.pathname)
+  );
+}
+
+/**
+ * Within a request that started at a catalogue's per-picture endpoint, a
+ * redirect from a per-picture endpoint (the catalogue's, or the instance's it
+ * handed on to) may go to any HTTPS host on the default port. A plain file
+ * cannot hand the request on. Every hop still connects only to public
+ * addresses, and the response must still be a bounded image.
+ */
+export function isPanoramaxPictureRedirect(next: URL, previous: URL | undefined): boolean {
+  return (
+    previous !== undefined &&
+    previous.protocol === "https:" &&
+    PANORAMAX_PICTURE_PATH.test(previous.pathname) &&
+    next.protocol === "https:" &&
+    next.port === ""
+  );
+}

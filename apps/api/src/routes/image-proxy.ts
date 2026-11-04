@@ -9,7 +9,12 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { requestNetworkKey } from "../utils/rate-limit.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
-import { isAllowedHost, isCameraHost } from "./image-hosts.js";
+import {
+  isAllowedHost,
+  isCameraHost,
+  isPanoramaxPictureRedirect,
+  isPanoramaxPictureRequest,
+} from "./image-hosts.js";
 import { createImageProxyBudgetFromEnv } from "./image-proxy-budget.js";
 
 /**
@@ -175,6 +180,9 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         // Google Photos share links are not direct images — resolve to actual image URL
         let imageUrl = url;
         let resolvedGooglePhotos = false;
+        // A Panoramax catalogue's picture endpoint redirects to the federated
+        // instance or bucket that holds the file, which no allowlist can know.
+        const panoramaxPicture = isPanoramaxPictureRequest(parsed);
         if (parsed.hostname === "photos.app.goo.gl" || parsed.hostname === "photos.google.com") {
           const resolved = await resolveGooglePhotosLink(url);
           if (resolved.length === 0) {
@@ -198,10 +206,12 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
             signal: clientAbort.signal,
             headers: { "User-Agent": USER_AGENT },
             maxRedirects: 5,
-            validateRedirectUrl: (next) =>
+            validateRedirectUrl: (next, previous) =>
               resolvedGooglePhotos
                 ? isGooglePhotosImageUrl(next)
-                : (next.protocol === "https:" || next.protocol === "http:") && isAllowedHost(next),
+                : ((next.protocol === "https:" || next.protocol === "http:") &&
+                    isAllowedHost(next)) ||
+                  (panoramaxPicture && isPanoramaxPictureRedirect(next, previous)),
             resolveConnectionAddresses: resolvePublicConnectionAddresses,
             pinnedFetchImplementation: withPublisherHeaders(transport.fetch),
             releaseResponse: transport.releaseResponse,

@@ -3,6 +3,7 @@ import {
   type LngLat,
   type PanoramaxCreatorMetadata,
   panoramaxAuthor,
+  panoramaxPictureAssetUrl,
   type StreetLevelImage,
   type StreetLevelLink,
   type StreetLevelSearchQuery,
@@ -126,7 +127,28 @@ function fieldOfView(
   return PHONE_MAKERS.has(maker) && !panoramaShape ? PHONE_FOV_DEG : undefined;
 }
 
-export function stacItemToImage(item: StacItem, providerId: string): StreetLevelImage {
+/**
+ * A picture's image through the catalogue's per-picture endpoint, which
+ * redirects to the instance or bucket holding the file. The item's own asset
+ * link is the fallback, for an item without a picture UUID or a mapping made
+ * without a catalogue.
+ */
+function assetUrl(
+  item: StacItem,
+  size: "thumb" | "sd" | "hd",
+  catalogue: string | undefined,
+): string | undefined {
+  const href = item.assets?.[size]?.href;
+  if (!href) return undefined;
+  return (catalogue && panoramaxPictureAssetUrl(catalogue, item.id, size)) || href;
+}
+
+export function stacItemToImage(
+  item: StacItem,
+  providerId: string,
+  /** The catalogue's API root, to load images through its per-picture endpoint. */
+  catalogue?: string,
+): StreetLevelImage {
   const properties = item.properties ?? {};
   const orientation = properties["pers:interior_orientation"];
   const spdx = properties.license;
@@ -149,9 +171,9 @@ export function stacItemToImage(item: StacItem, providerId: string): StreetLevel
     ...(aspectRatio ? { aspectRatio } : {}),
     sequenceId: item.collection,
     assets: {
-      thumb: item.assets?.thumb?.href,
-      sd: item.assets?.sd?.href,
-      hd: item.assets?.hd?.href,
+      thumb: assetUrl(item, "thumb", catalogue),
+      sd: assetUrl(item, "sd", catalogue),
+      hd: assetUrl(item, "hd", catalogue),
     },
     ...(author ? { author } : {}),
     licensing: licensingFromDeclaration(
@@ -216,7 +238,7 @@ export function createPanoramaxProvider(options: {
         label: "Panoramax search",
       });
       const feature = data?.features?.[0];
-      return feature ? stacItemToImage(feature, id) : null;
+      return feature ? stacItemToImage(feature, id, base) : null;
     },
 
     capabilities(): StreetLevelCapabilities {
@@ -261,7 +283,7 @@ export function createPanoramaxProvider(options: {
       const item = await fetchJson<StacItem>(`${base}/pictures/${encodeURIComponent(imageId)}`, {
         label: "Panoramax picture",
       });
-      return item ? stacItemToImage(item, id) : null;
+      return item ? stacItemToImage(item, id, base) : null;
     },
 
     async getLinks(imageId: string): Promise<StreetLevelLink[]> {
@@ -292,7 +314,7 @@ export function createPanoramaxProvider(options: {
           label: "Panoramax search",
         });
       }
-      return (data?.features ?? []).map((feature) => stacItemToImage(feature, id));
+      return (data?.features ?? []).map((feature) => stacItemToImage(feature, id, base));
     },
   };
 }
