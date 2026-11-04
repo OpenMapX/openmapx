@@ -432,6 +432,15 @@ This documentation work does not qualify real head units, wired/wireless hosts,
 vehicle audio/focus, physical GPS, OEM process survival, notification/FGS delivery,
 Play review or store publication. There is no guaranteed offline cold start of
 the remotely served map page. Car-only cold-start eligibility remains bounded as
-above. Retain separate DHU, physical-device/head-unit and Play review evidence;
+above. Two template-level checks also need a real car: ending a trip relies on
+the host's end-trip button on the arrival card (Google's guidelines recommend an
+end-navigation control), which was confirmed only on Android Auto 18.1 with a
+touchscreen; reaching it with a rotary controller, and its presence on the oldest
+hosts that support car API level 7, are unverified (the DHU console's controller
+moves focus but does not activate items). On the DHU, restarting the head unit,
+killing the app process and force-stopping it while connected all restored a live
+map; an earlier black surface followed repeated template-build crashes and
+cleared only after restarting Android Auto.
+Retain separate DHU, physical-device/head-unit and Play review evidence;
 store copy stays restricted until the latter qualification gates pass. See
 [Mobile feasibility](./mobile-feasibility.md) and [Mobile release](./mobile-release.md).
