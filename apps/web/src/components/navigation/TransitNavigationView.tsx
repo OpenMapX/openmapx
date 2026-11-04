@@ -14,7 +14,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
-import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
@@ -158,9 +158,8 @@ export function TransitNavigationView() {
               flexDirection: "column",
               gap: 1,
               p: 2,
-              // Match the driving banner's inset below the safe-area top so the
-              // gap to the top equals the gap to the sides.
-              pt: "calc(var(--omx-safe-top) + 16px)",
+              // Same top as the driving banner.
+              pt: NAV_CHROME_TOP,
               // On wide screens keep the chrome in a left-hand column (like the
               // driving view) so the map stays clear on the right.
               ...(isMobile

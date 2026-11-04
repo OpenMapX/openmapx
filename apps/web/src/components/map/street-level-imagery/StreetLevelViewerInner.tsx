@@ -20,7 +20,7 @@ import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { SEARCH_BAR_CLEARANCE } from "@/lib/layout";
+import { SEARCH_BAR_CLEARANCE, topInset } from "@/lib/layout";
 import { StreetLevelFlatImage } from "./StreetLevelFlatImage";
 import { StreetLevelInfoCard } from "./StreetLevelInfoCard";
 import { fetchStreetLevelNode, pickPanoramaUrl, type StreetLevelNode } from "./useStreetLevelNode";
@@ -352,7 +352,7 @@ export default function StreetLevelViewerInner() {
           position: "absolute",
           // On a phone the search bar spans the top, so the button goes below
           // it; beside it on wider screens. Both clear the status bar.
-          top: { xs: SEARCH_BAR_CLEARANCE, sm: "calc(8px + var(--omx-safe-top))" },
+          top: { xs: SEARCH_BAR_CLEARANCE, sm: topInset(8) },
           right: "calc(8px + var(--omx-safe-right))",
           bgcolor: "rgba(0,0,0,0.5)",
           color: "#fff",
