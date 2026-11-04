@@ -31,7 +31,8 @@ export type BridgeRejectionCode =
   | "not-a-command"
   | "duplicate-message"
   | "handshake-required"
-  | "protocol-mismatch";
+  | "protocol-mismatch"
+  | "unsupported-capability";
 
 export type ReceiveOutcome =
   | { status: "handled"; type: WebToNativeMessage["type"] }
@@ -54,6 +55,7 @@ export interface ShellDescription {
     backgroundLocation: boolean;
     localNotifications: boolean;
     speech: boolean;
+    nativeIntake?: boolean;
   };
   permission: "not-determined" | "foreground" | "background" | "denied" | "limited";
   locationDriver: "expo" | "native";
@@ -89,7 +91,7 @@ interface SendOptions {
 }
 
 export class NativeBridge {
-  private queue: NativeToWebMessage[] = [];
+  private queue: OutboundDraft[] = [];
 
   constructor(private readonly deps: NativeBridgeDeps) {}
 
@@ -141,6 +143,15 @@ export class NativeBridge {
     if (!handshake) return { status: "rejected", code: "handshake-required" };
     if (command.protocolVersion !== handshake.protocolVersion) {
       return { status: "rejected", code: "protocol-mismatch" };
+    }
+
+    if (command.type.startsWith("intake.") && handshake.protocolVersion < 4) {
+      this.send(
+        "native.error",
+        { code: "unsupported-capability" },
+        { forMessageId: command.messageId },
+      );
+      return { status: "rejected", code: "unsupported-capability" };
     }
 
     try {
@@ -196,11 +207,14 @@ export class NativeBridge {
         protocolVersion: selected,
       });
     }
+    const { nativeIntake: _intake, ...legacyCapabilities } = shell.capabilities;
     this.emit(
       {
         type: "native.hello",
         payload: {
           ...shell,
+          capabilities:
+            selected !== null && selected >= 4 ? shell.capabilities : legacyCapabilities,
           selectedProtocolVersion: selected,
           minProtocolVersion: MOBILE_PROTOCOL_MIN,
           maxProtocolVersion: MOBILE_PROTOCOL_MAX,
@@ -234,6 +248,7 @@ export class NativeBridge {
     const handshake = registry.handshake();
     const protocolVersion =
       options.protocolVersion ?? handshake?.protocolVersion ?? MOBILE_PROTOCOL_MAX;
+    if (handshake && protocolVersion < 4 && draft.type.startsWith("intake.")) return "dropped";
     const correlatedPayload =
       forMessageId &&
       draft.payload !== null &&
@@ -259,7 +274,13 @@ export class NativeBridge {
     const validated = nativeToWebSchema.safeParse(candidate);
     if (!validated.success) return "invalid";
 
-    if (!options.immediate && !handshake) return this.enqueue(validated.data);
+    if (!options.immediate && !handshake)
+      return this.enqueue({
+        type: validated.data.type,
+        payload: validated.data.payload,
+        ...(draft.sessionId === undefined ? {} : { sessionId: draft.sessionId }),
+        ...(draft.revision === undefined ? {} : { revision: draft.revision }),
+      });
 
     this.deps.inject(buildOutboundScript(validated.data));
     return "sent";
@@ -275,7 +296,7 @@ export class NativeBridge {
    * queue of nothing but critical messages refuses new work rather than
    * discarding any of it.
    */
-  private enqueue(message: NativeToWebMessage): SendOutcome {
+  private enqueue(message: OutboundDraft): SendOutcome {
     if (message.type === "snapshot.update") {
       this.queue = this.queue.filter((entry) => entry.type !== "snapshot.update");
     }
@@ -290,10 +311,15 @@ export class NativeBridge {
 
   /** Delivers everything held while the page was not ready. */
   flush(): number {
+    const handshake = this.deps.registry.handshake();
+    if (!handshake) return 0;
     const pending = this.queue;
     this.queue = [];
-    for (const message of pending) this.deps.inject(buildOutboundScript(message));
-    return pending.length;
+    let sent = 0;
+    for (const draft of pending) {
+      if (this.emit(draft, { protocolVersion: handshake.protocolVersion }) === "sent") sent++;
+    }
+    return sent;
   }
 
   /** Drops queued output, e.g. when the document that would receive it is gone. */

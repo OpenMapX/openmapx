@@ -995,3 +995,25 @@ describe("native surface stop", () => {
     }
   });
 });
+
+it("refuses intake routed to an uncomposed navigation coordinator without changing a trip", async () => {
+  const h = await harness();
+  try {
+    const response = await h.coordinator.dispatch({
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      type: "intake.list",
+      messageId: "intake-uncomposed",
+      channelNonce: "nonce",
+      sentAtMs: NOW,
+      payload: {},
+    });
+    expect(response).toMatchObject({
+      type: "native.error",
+      payload: { code: "unsupported-capability" },
+    });
+    expect(await h.repository.loadActive(NOW)).toBeNull();
+    expect(h.effectLog).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});

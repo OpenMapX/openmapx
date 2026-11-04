@@ -201,12 +201,17 @@ export class BridgeClient {
     if (reply.type !== "native.hello") throw new BridgeError("invalid-response");
 
     const hello = reply.payload;
+    const selected = hello.selectedProtocolVersion;
     if (
-      reply.protocolVersion !== MOBILE_PROTOCOL_MAX ||
-      (hello.selectedProtocolVersion !== null &&
-        (hello.selectedProtocolVersion !== MOBILE_PROTOCOL_MAX ||
-          hello.selectedProtocolVersion < hello.minProtocolVersion ||
-          hello.selectedProtocolVersion > hello.maxProtocolVersion))
+      hello.minProtocolVersion > hello.maxProtocolVersion ||
+      (selected === null
+        ? reply.protocolVersion < hello.minProtocolVersion ||
+          reply.protocolVersion > hello.maxProtocolVersion
+        : reply.protocolVersion !== selected ||
+          selected < MOBILE_PROTOCOL_MIN ||
+          selected > MOBILE_PROTOCOL_MAX ||
+          selected < hello.minProtocolVersion ||
+          selected > hello.maxProtocolVersion)
     ) {
       throw new BridgeError("invalid-response");
     }

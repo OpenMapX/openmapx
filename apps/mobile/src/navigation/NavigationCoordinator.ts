@@ -193,6 +193,11 @@ export class NavigationCoordinator {
       case "web.hello":
         // Answered by the bridge during the handshake; nothing to coordinate.
         return null;
+      case "intake.list":
+      case "intake.read":
+      case "intake.complete":
+        // Intake is composed by the visible shell, never the headless navigator.
+        return errorResponse("unsupported-capability", command.messageId);
       case "session.prepare":
         return this.prepare(command, now);
       case "session.start":
