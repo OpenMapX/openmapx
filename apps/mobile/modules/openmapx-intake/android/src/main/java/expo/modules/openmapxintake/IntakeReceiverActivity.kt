@@ -24,9 +24,13 @@ open class IntakeReceiverActivity : Activity() {
       if (!IncomingIntent.shouldCapture(source, savedState)) return
       val component = mainComponent() ?: return
       val grants = try { IncomingIntent.attachments(source).filter { it.scheme == "content" } } catch (_: Exception) { emptyList() }
-      // Keep the read grants attached to the host task while its background worker copies.
-      // Never forward the source action, extras, data URI, write or persistable authority.
-      startActivity(neutralMainIntent(component, grants, source.flags))
+      // Create/restore the singleTask host with a clean task root, even on a cold share.
+      // Deliver grants separately through onNewIntent so Recents never replays them.
+      // Never forward source actions, extras, data, write or persistable authority.
+      startActivity(neutralMainIntent(component, emptyList(), 0))
+      if (grants.isNotEmpty() && source.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+        startActivity(neutralMainIntent(component, grants, source.flags))
+      }
       enqueue(Intent(source))
     } catch (_: Exception) {
       IntakeIngress.reportError(this, "unreadable")

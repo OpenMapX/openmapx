@@ -345,8 +345,10 @@ physical-device background/force-quit behavior or App Store signing acceptance.
 Android receives text/URI sharing and typed GPX, GeoJSON and KML attachments
 through a dedicated, nonhistorical receiver activity. Document VIEW handles
 `content:` grants, without BROWSABLE or storage/media permissions. The receiver
-opens the React task with a neutral MAIN intent and forwards only read grants
-while background copying finishes. The task never retains the original share
+opens the React task first with a neutral MAIN intent without grants or URIs.
+A separate MAIN delivery to the existing singleTask activity forwards only read
+grants while background copying finishes; those grants do not enter the task’s
+root intent. The task never retains the original share
 intent, avoiding process-death replay even when Expo discards saved state.
 Restored receiver activities and history launches are ignored. Cold and warm
 intake does not depend on Expo or JavaScript startup; ordinary map/End Linking

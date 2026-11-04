@@ -83,3 +83,12 @@ it("retains explicit geo coordinates when a sender also provides a location labe
     }),
   ).toMatchObject({ kind: "map" });
 });
+
+it.each([
+  "tel:+493012345",
+  "Tel:+493012345",
+  "mailto:cafe@example.com",
+  "https://example.com/menu",
+])("does not let %s hide a later map link", (line) => {
+  expect(params(`Café\n${line}\nhttps://maps.google.com/?q=52.5,13.4`).get("at")).toBe("52.5,13.4");
+});

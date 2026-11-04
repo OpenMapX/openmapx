@@ -126,11 +126,12 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     .filter(Boolean);
   if (lines.length > 1) {
     const labels = lines.filter((s) => !/^[a-z][a-z\d+.-]*:/i.test(s));
-    const link = lines.find((s) => /^[a-z][a-z\d+.-]*:/i.test(s));
-    if (link && labels.length) {
+    const links = lines.filter((s) => /^[a-z][a-z\d+.-]*:/i.test(s));
+    for (const link of links) {
       const parsed = classifySharedText(link, config);
-      return parsed.kind === "map" ? parsed : search(labels.join(" "));
+      if (parsed.kind === "map") return parsed;
     }
+    if (links.length && labels.length) return search(labels.join(" "));
   }
   if (!/^[a-z][a-z\d+.-]*:/i.test(text)) return search(text);
   let url: URL;

@@ -65,8 +65,8 @@ final class ShareViewController: UIViewController {
               do {
                 if let error { throw error }
                 if let url = item as? URL, url.isFileURL { throw IntakeFailure.unsupported }
-                else if let url = item as? URL { textValues.append(url.absoluteString); _ = try ShareSelection.text(textValues) }
-                else if let text = item as? String { textValues.append(text); _ = try ShareSelection.text(textValues) }
+                else if let url = item as? URL { textValues.append(url.absoluteString); _ = try ShareSelection.text(textValues, allowEmpty: true) }
+                else if let text = item as? String { textValues.append(text); _ = try ShareSelection.text(textValues, allowEmpty: true) }
                 else { throw IntakeFailure.unsupported }
                 completed(nil)
               } catch { completed(error) }

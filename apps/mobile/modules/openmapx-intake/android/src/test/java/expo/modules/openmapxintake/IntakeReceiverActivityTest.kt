@@ -17,6 +17,8 @@ import org.robolectric.annotation.Config
 class IntakeReceiverActivityTest {
   class Receiver : IntakeReceiverActivity() {
     val received = mutableListOf<Intent>()
+    val launches = mutableListOf<Intent>()
+    override fun startActivity(intent: Intent) { launches += Intent(intent); super.startActivity(intent) }
     override fun mainComponent() = ComponentName("test.app", "test.app.MainActivity")
     override fun enqueue(source: Intent) { received += source; assertNotNull(shadowOf(this).peekNextStartedActivity()) }
   }
@@ -33,7 +35,12 @@ class IntakeReceiverActivityTest {
     val uri = Uri.parse("content://foreign/route.gpx")
     val share = Intent(Intent.ACTION_SEND).setType("application/gpx+xml").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
     val receiver = Robolectric.buildActivity(Receiver::class.java, share).create().get()
-    val main = shadowOf(receiver).nextStartedActivity
+    assertEquals(2, receiver.launches.size)
+    val root = receiver.launches[0]
+    assertEquals(Intent.ACTION_MAIN, root.action)
+    assertNull(root.clipData)
+    assertEquals(0, root.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))
+    val main = receiver.launches[1]
     assertEquals(uri, main.clipData!!.getItemAt(0).uri)
     assertTrue(main.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     assertEquals(0, main.flags and (Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))

@@ -11,6 +11,11 @@ final class ShareSelectionTests: XCTestCase {
     XCTAssertThrowsError(try ShareSelection.select([["com.topografix.gpx"], ["public.pdf"]]))
     XCTAssertThrowsError(try ShareSelection.select([["public.file-url", "public.plain-text"]]))
   }
+  func testAnEmptyFirstProviderDoesNotRejectTheFollowingLocation() throws {
+    XCTAssertEqual(try ShareSelection.text(["  "], allowEmpty: true), "")
+    XCTAssertEqual(try ShareSelection.text(["  ", "Station", "https://maps.apple.com/?q=Station"]), "Station\nhttps://maps.apple.com/?q=Station")
+    XCTAssertThrowsError(try ShareSelection.text(["  "]))
+  }
   func testCombinedTextIsBoundedBeforeItCanBeCommitted() throws {
     XCTAssertThrowsError(try ShareSelection.text([String(repeating: "x", count: 3000), String(repeating: "y", count: 3000)]))
     XCTAssertThrowsError(try ShareSelection.select(Array(repeating: ["public.url"], count: 6)))

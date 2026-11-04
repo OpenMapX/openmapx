@@ -14,14 +14,15 @@ It is not store-release acceptance.
 - Focused web bridge/PWA/parser checks: 21 suites / 258 tests passed. The final
   intake/transfer/parser run passed 29 tests, including navigation-start races,
   settings-page routing, exact chunks and the transfer deadline.
-- SwiftPM inbox and share selection: 11 tests passed, covering restart, explicit completion, limits,
+- SwiftPM inbox and share selection: 12 tests passed, covering restart, explicit completion, limits,
   expiry, document authority, staging age, concurrent writers, malformed metadata,
   actual file size, cancellation, chunk alignment, combined text/URL selection,
   mixed-file rejection and Apple’s GeoJSON type. The UTI test runs on the macOS
   host; it does not qualify registration on older iOS installations.
-- Android inbox/policy/reader/receiver tests: 17 tests passed. The receiver tests
+- Android inbox/policy/reader/receiver tests: 18 tests passed. The receiver tests
   cover Expo’s null-bundle path, neutral host intents, read-only grant forwarding,
-  explicit repeated shares and thumbnail-only ClipData on text sharing. Robolectric uses temporary files for
+  explicit repeated shares, clean root intents before grant forwarding and preview
+  thumbnails on both text and single-file sharing. Robolectric uses temporary files for
   `createPipe` and does not implement `Os.poll/read`: the IO adapter tests verify
   descriptor ownership and deadlines; they do **not** qualify a real provider pipe.
 - Android debug APK and iOS Simulator host + navigation/share extension builds

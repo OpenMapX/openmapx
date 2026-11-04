@@ -22,6 +22,13 @@ class IncomingIntentTest {
     assertFalse(IncomingIntent.shouldCapture(Intent(Intent.ACTION_VIEW, Uri.parse("geo:50,8")), null))
     assertFalse(IncomingIntent.shouldCapture(Intent(Intent.ACTION_VIEW, Uri.parse("openmapx:///navigation/end?sessionId=old")), null))
   }
+  @Test fun singleFileSharingIgnoresAnAdditionalPreviewThumbnail() {
+    val uri = Uri.parse("content://foreign.provider/route.gpx")
+    val share = Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uri).apply {
+      clipData = android.content.ClipData.newRawUri("preview", Uri.parse("content://foreign.provider/preview.png"))
+    }
+    assertEquals(listOf(uri), IncomingIntent.attachments(share))
+  }
   @Test fun fileInputMustBeForeignContentAndVisibilityNullDoesNotRefuseIt() {
     assertTrue(IncomingIntent.isForeignContent(Uri.parse("content://foreign.provider/file"), setOf("our.provider"), null, 123))
     assertFalse(IncomingIntent.isForeignContent(Uri.parse("content://our.provider/file"), setOf("our.provider"), null, 123))

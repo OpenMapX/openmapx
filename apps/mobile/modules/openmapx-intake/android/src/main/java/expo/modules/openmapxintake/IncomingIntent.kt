@@ -25,7 +25,7 @@ object IncomingIntent {
     if (intent.action == Intent.ACTION_SEND && streams.isEmpty()) return emptyList()
     if (streams.size > 5) throw IntakeFailure("too-many")
     val uris = streams.toMutableList()
-    if (streams.isNotEmpty() && intent.action != Intent.ACTION_VIEW) intent.clipData?.let { clip ->
+    if (streams.isNotEmpty() && intent.action == Intent.ACTION_SEND_MULTIPLE) intent.clipData?.let { clip ->
       if (clip.itemCount > 5) throw IntakeFailure("too-many")
       for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { if (it !in uris) uris += it }
     }
