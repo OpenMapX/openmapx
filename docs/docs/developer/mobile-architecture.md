@@ -35,17 +35,17 @@ records.
 
 ## The authority matrix
 
-| Concern                                                               | Browser or PWA                            | Installed shell                                                   |
-| --------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
-| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                            |
-| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                  |
-| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                            |
-| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                        |
-| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                   |
-| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                    |
-| Deep-link delivery                                                    | Browser flows                             | Protocol vocabulary and parser exist; OS delivery is not composed |
-| Community frontend bundles                                            | Disabled                                  | Disabled                                                          |
-| Microphone input                                                      | Subject to browser support and permission | Disabled                                                          |
+| Concern                                                               | Browser or PWA                            | Installed shell                                                                        |
+| --------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                 |
+| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                       |
+| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                 |
+| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                             |
+| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                        |
+| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                         |
+| Deep-link delivery                                                    | Browser flows                             | OS URLs validated, queued through document loading, delivered after bridge negotiation |
+| Community frontend bundles                                            | Disabled                                  | Disabled                                                                               |
+| Microphone input                                                      | Subject to browser support and permission | Disabled                                                                               |
 
 The immutable descriptor is injected before page scripts run. Shell restrictions
 use that descriptor, so they apply during negotiation, incompatibility and errors.
@@ -248,3 +248,28 @@ update channel in the release design. `ios/` and `android/` are ignored generate
 projects. Change committed configuration, plugins or local modules, then
 regenerate them. See [Mobile feasibility](./mobile-feasibility.md) for evidence
 limits and [Mobile release](./mobile-release.md) for release blockers.
+
+## Opening locations from other apps
+
+Android registers `ACTION_VIEW` for the standard `geo:` scheme with `DEFAULT`
+and `BROWSABLE` categories. After installing a rebuilt binary, OpenMapX is eligible
+for the map app chooser when another app sends an implicit geo intent. A sender
+that explicitly targets Google Maps bypasses the chooser; HTTPS links on Google's
+domains remain Google's links.
+
+The shell accepts coordinates (`geo:48.137,11.575?z=13`), labeled coordinate
+queries (`geo:0,0?q=48.137,11.575(Marienplatz)`) and address searches
+(`geo:0,0?q=Marienplatz+Munich`). Coordinates open a map pin without geocoding;
+addresses open the search box for the user to choose a result. Links do not start
+guidance or replace the compiled server origin. The latest request received while
+a document loads is retained until that document completes bridge negotiation.
+Both initial launch URLs and URLs received while the app is running are handled.
+
+The PWA retains its `geo` and `web+maps` manifest protocol handlers for supporting
+desktop browsers. Android Chrome does not register installed PWA protocol handlers
+in the OS chooser. Its existing Web Share Target is an alternative for sharing text
+or URLs, not a map chooser registration. See [Chrome's protocol handler documentation](https://developer.chrome.com/docs/web-platform/best-practices/url-protocol-handler)
+and the [Android compatibility correction](https://github.com/mdn/browser-compat-data/issues/26107).
+The native registration follows [Android's map intent contract](https://developer.android.com/guide/components/intents-common#Maps).
+This change does not claim iOS default navigation app support or vendor-specific
+navigation URI schemes.

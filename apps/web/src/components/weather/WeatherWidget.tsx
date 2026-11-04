@@ -17,6 +17,7 @@ import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { SEARCH_BAR_INSET, topInset } from "@/lib/layout";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
@@ -80,8 +81,8 @@ export function WeatherWidget() {
       sx={{
         position: "absolute",
         top: {
-          xs: "calc(118px + var(--omx-safe-top))",
-          sm: "calc(74px + var(--omx-safe-top))",
+          xs: topInset(SEARCH_BAR_INSET, 106),
+          sm: topInset(SEARCH_BAR_INSET, 62),
         },
         left: "calc(12px + var(--omx-safe-left))",
         zIndex: 9,

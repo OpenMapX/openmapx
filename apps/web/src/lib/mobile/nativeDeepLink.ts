@@ -56,7 +56,7 @@ export interface ApplyNativeDeepLinkDeps {
 /**
  * Applies the intent using the machinery the browser already uses.
  *
- * Deliberately goes through the location and the existing update event rather
+ * Deliberately goes through the location and the incoming URL event rather
  * than calling deep-link appliers directly: the browser path is the one that is
  * exercised constantly, and having the native path reuse it means there is one
  * behaviour to get right rather than two that drift.

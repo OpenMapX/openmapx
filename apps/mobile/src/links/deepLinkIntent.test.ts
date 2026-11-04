@@ -129,3 +129,46 @@ describe("coldStartUrl", () => {
     expect(coldStartUrl(intent as never, CONFIG).startsWith("https://openmapx.com/")).toBe(true);
   });
 });
+
+describe("Android geo map intents", () => {
+  const params = (raw: string) => {
+    const intent = parse(raw);
+    expect(intent?.kind).toBe("map");
+    return new URLSearchParams(intent?.kind === "map" ? intent.query : "");
+  };
+  it("opens coordinates directly, preserving coordinate order and zoom", () => {
+    const p = params("geo:48.137,11.575?z=13");
+    expect(p.get("map")).toBe("48.137,11.575,13,0,0");
+    expect(p.get("at")).toBe("48.137,11.575");
+    expect(p.get("panel")).toBe("place");
+  });
+  it("uses coordinate queries rather than the 0,0 placeholder", () => {
+    const p = params("geo:0,0?q=48.137,11.575(Marienplatz)");
+    expect(p.get("at")).toBe("48.137,11.575");
+    expect(p.get("name")).toBe("Marienplatz");
+  });
+  it("encodes address text as a single query without granting it URL authority", () => {
+    const p = params("geo:0,0?q=Main+Street%26panel%3Dadmin%23fragment");
+    expect(p.get("q")).toBe("Main Street&panel=admin#fragment");
+    expect(p.has("panel")).toBe(false);
+  });
+  it("keeps numbered street addresses as text", () => {
+    expect(params("geo:0,0?q=10,+Downing+Street").get("q")).toBe("10, Downing Street");
+  });
+  it("accepts WGS84 altitude/uncertainty without treating altitude as longitude", () => {
+    expect(params("geo:48.137,11.575,10;crs=wgs84;u=5").get("at")).toBe("48.137,11.575");
+  });
+  it.each([
+    "geo:",
+    "geo:91,0",
+    "geo:0,181",
+    "geo:NaN,1",
+    "geo:,1",
+    "geo://evil/1,2",
+    "geo:1,2;crs=other",
+    "geo:0,0?q=91,0",
+    `geo:0,0?q=${"a".repeat(3000)}`,
+  ])("refuses malformed or unsupported input %s", (raw) => {
+    expect(parse(raw)).toBeNull();
+  });
+});

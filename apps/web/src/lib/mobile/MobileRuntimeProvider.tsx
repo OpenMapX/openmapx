@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DEEPLINK_UPDATE_EVENT } from "@/lib/deepLink";
+import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 import { BridgeClient, type HandshakeResult } from "./bridgeClient";
 import { isInstalledShell, shellFeatureBoundary } from "./mobileShellEnvironment";
 import { applyNativeDeepLink, readNativeDeepLink } from "./nativeDeepLink";
@@ -159,7 +159,7 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
             url.search = query;
             window.history.replaceState(window.history.state, "", url.toString());
           },
-          notify: () => window.dispatchEvent(new Event(DEEPLINK_UPDATE_EVENT)),
+          notify: () => window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT)),
           // The navigation view mounts itself off store state, so bringing the
           // trip to the front is exactly reconciling with native.
           showActiveNavigation: () => nativeCommands.requestSnapshot(),

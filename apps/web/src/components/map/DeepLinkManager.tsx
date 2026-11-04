@@ -74,6 +74,7 @@ import {
 import { frameBoundsInstant, jumpToView } from "@/lib/cameraFraming";
 import { closePlaceSelection, closeSidebarPanel } from "@/lib/closeSurfaces";
 import {
+  DEEPLINK_OPEN_EVENT,
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
   formatCameraParam,
@@ -937,6 +938,7 @@ export function DeepLinkManager() {
     const unsubscribeStores = APP_STATE_STORES.map((store) => store.subscribe(scheduleWrite));
     const unsubscribeHistory = subscribeHistoryRestore(onHistoryRestore);
     map?.on("moveend", scheduleWrite);
+    window.addEventListener(DEEPLINK_OPEN_EVENT, applyFromLocation);
     window.addEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
 
     return () => {
@@ -944,6 +946,7 @@ export function DeepLinkManager() {
       for (const unsubscribe of unsubscribeStores) unsubscribe();
       unsubscribeHistory();
       map?.off("moveend", scheduleWrite);
+      window.removeEventListener(DEEPLINK_OPEN_EVENT, applyFromLocation);
       window.removeEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
     };
   }, [mapReady, mapRef, writeUrl]);

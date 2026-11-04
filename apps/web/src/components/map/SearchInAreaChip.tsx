@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { PANEL_WIDTH } from "@/lib/layout";
+import { PANEL_WIDTH, SEARCH_BAR_INSET, topInset } from "@/lib/layout";
 
 // Floating card: sidebar(400) + gap(24) + card(376) = 800px from left edge
 const FLOATING_CARD_RIGHT_EDGE = 800;
@@ -83,10 +83,11 @@ export function SearchInAreaChip() {
       sx={{
         position: "absolute",
         // Below the category chips row:
-        // Desktop: chips at top=18, height=40px → top=66; Mobile: chips at top=72 → top=120
+        // Desktop: chips 6px below the bar's top, 40px tall, then 8px → 54px;
+        // mobile: chips 60px below it → 108px.
         top: {
-          xs: "calc(120px + var(--omx-safe-top))",
-          sm: "calc(66px + var(--omx-safe-top))",
+          xs: topInset(SEARCH_BAR_INSET, 108),
+          sm: topInset(SEARCH_BAR_INSET, 54),
         },
         // When the floating card is open, center in the remaining map area to its right.
         // Remaining area: FLOATING_CARD_RIGHT_EDGE → 100vw, center = (edge + 100%) / 2

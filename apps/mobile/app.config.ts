@@ -61,6 +61,14 @@ const config: ExpoConfig = {
   },
   android: {
     package: mobile.appId,
+    // A map chooser uses an implicit VIEW intent, independently of App Links.
+    intentFilters: [
+      {
+        action: "VIEW",
+        category: ["DEFAULT", "BROWSABLE"],
+        data: [{ scheme: "geo" }],
+      },
+    ],
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: BRAND_COLOR,
