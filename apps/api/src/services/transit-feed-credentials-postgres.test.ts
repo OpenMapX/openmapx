@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
@@ -225,10 +225,8 @@ describe.skipIf(!enabled)(
             Id: "d".repeat(64),
             Labels: {
               ...dmRow.Labels,
-              "com.docker.compose.project.working_dir": join(
-                host.infraDir,
-                ".trusted-config-generations",
-                revision,
+              "com.docker.compose.project.working_dir": dirname(
+                services.configurationGenerationComposeFile(host.infraDir, revision),
               ),
               "com.docker.compose.project.config_files":
                 services.configurationGenerationComposeFile(host.infraDir, revision),
