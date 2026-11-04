@@ -5,8 +5,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { type TransitProgress, useVehicleJourney } from "@openmapx/core";
-import { sliceJourneyToLeg } from "@openmapx/core/navigation";
+import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -201,7 +200,7 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
 export function TransitJourneySheet({
   itinerary,
   currentLegIndex,
-  transitProgress: _transitProgress,
+  transitProgress,
   scroll = true,
   showQueryNotice = true,
 }: {
@@ -227,13 +226,13 @@ export function TransitJourneySheet({
     browserAuthority && isTransitLeg ? (currentLeg?.tripId ?? null) : null,
   );
 
-  const { data: journey } = journeyQuery;
-  const legStops = journey?.stops
-    ? sliceJourneyToLeg(journey.stops, currentLeg?.from.stopId, currentLeg?.to.stopId)
-    : [];
-  // Next stop = first one the vehicle has not yet departed; clamp to the alight.
-  const firstUpcoming = legStops.findIndex((s) => !s.departed);
-  const nextIdx = firstUpcoming === -1 ? Math.max(0, legStops.length - 1) : firstUpcoming;
+  const captures = useNavigationStore((s) => s.transitCaptures);
+  const capture = captures.find(
+    (c) =>
+      c.legIndex === currentLegIndex && c.tripId === currentLeg?.tripId && c.status === "captured",
+  );
+  const legStops = (capture?.stops ?? []) as VehicleJourneyStop[];
+  const nextIdx = transitProgress?.phase === "riding" ? (transitProgress.stopCursor ?? 1) : 0;
 
   const upcomingLegs = legs.slice(currentLegIndex + 1);
 
@@ -277,6 +276,11 @@ export function TransitJourneySheet({
           }
           retrying={journeyQuery.isFetching}
         />
+      )}
+      {isTransitLeg && legStops.length === 0 && (
+        <Typography variant="body2" sx={{ px: 2, py: 1 }}>
+          {t("stopCountUnavailable")}
+        </Typography>
       )}
       {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} />}
       {upcomingLegs.length > 0 && (

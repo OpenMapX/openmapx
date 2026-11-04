@@ -6,6 +6,7 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNow } from "@/lib/useNow";
 import { NavBottomBar } from "./NavBottomBar";
@@ -74,7 +75,10 @@ export function TransitNavBottomBar({
   const fmt = useDateTimeFormat();
   const { endNavigation } = useNavigationMutations();
   const now = useNow(1000);
-  const { data: journey } = useVehicleJourney(currentLeg?.tripId ?? null);
+  const { browserAuthority } = useMobileRuntime();
+  const { data: journey } = useVehicleJourney(
+    browserAuthority ? (currentLeg?.tripId ?? null) : null,
+  );
 
   const delayMs = liveArrivalDelayMs(journey?.stops, currentLeg?.to.stopId, currentLeg?.endTime);
   const arrivalMs = new Date(itinerary.endTime).getTime() + delayMs;

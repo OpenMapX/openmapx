@@ -5,6 +5,7 @@
 // `headlessBoundary.test.ts` bundles this barrel and fails on any of those, and
 // `pnpm mobile:bundle:check` repeats the check against the real Metro graph.
 
+export type { Route } from "../types/routing";
 export {
   type ActiveAlert,
   brakingDistanceMeters,
@@ -155,6 +156,7 @@ export {
   type TransitConfidence,
   type TransitNavigationEvent,
   type TransitPhase,
+  type TransitRiderAction,
   type TransitTickInput,
   type TransitTickOptions,
   type TransitTickResult,
@@ -248,6 +250,7 @@ export {
   signalCoordKey,
   windowGeometry,
 } from "./trafficSignals";
+export { transitAlternativeOrigin } from "./transitAlternatives";
 export {
   type ConnectionRisk,
   type ConnectionRiskLevel,
@@ -268,11 +271,13 @@ export {
   transitItineraryFingerprint,
 } from "./transitPackage";
 export {
+  isApproachingTransitAlight,
   type PreparedTransitProgress,
   prepareTransitProgress,
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";
+export { mergeTransitRefresh } from "./transitRefresh";
 export {
   convexHull,
   DESTINATION_RADIUS_METERS,
@@ -293,15 +298,18 @@ export {
   type CapturableLeg,
   captureTransitLegStops,
   type JourneyStopLike,
+  refreshTransitCaptures,
   sliceJourneyToLeg,
 } from "./transitStops";
 export {
   composeWalkInstruction,
   type TransitWalkManeuver,
+  transitWalkVoiceCue,
   type WalkStepInfo,
   walkLegStepProgress,
   walkStepInfo,
 } from "./transitWalk";
+export { repairTransitWalk } from "./transitWalkRepair";
 export type {
   CameraMode,
   CueTier,

@@ -190,7 +190,18 @@ export function projectionOf(
   assign("coasting", pick<boolean>("coasting"));
   assign("currentSpeedLimit", pick<number | null>("currentSpeedLimit"));
   assign("itinerary", pick<NativeNavigationProjection["itinerary"]>("itinerary"));
+  assign(
+    "transitReplanOptions",
+    pick<NativeNavigationProjection["transitReplanOptions"]>("transitReplanOptions"),
+  );
+  assign("transitCaptures", pick<NativeNavigationProjection["transitCaptures"]>("captures"));
   assign("transitProgress", pick<NativeNavigationProjection["transitProgress"]>("transitProgress"));
+  const liveStatus = pick<{ refresh?: string }>("liveStatus");
+  if (liveStatus)
+    assign(
+      "liveDataUnavailable",
+      liveStatus.refresh === "broken" || liveStatus.refresh === "stale",
+    );
   assign("connectivity", pick<NativeNavigationProjection["connectivity"]>("connectivity"));
   assign("permissionMode", permissionModeOf(raw.permissionMode));
   assign("alertAvailability", alertAvailabilityOf(raw.alightAlertAvailability));

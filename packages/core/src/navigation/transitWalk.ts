@@ -1,4 +1,6 @@
 import type { TransitStep } from "@openmapx/mobility-core/transit";
+import { navOptionsForMode } from "./options";
+import { nextVoiceCue } from "./voiceCue";
 
 /**
  * Walking-leg guidance, shared by the browser engine and the headless mobile
@@ -50,6 +52,7 @@ const FALLBACK = {
 } as const;
 
 export interface WalkStepInfo {
+  instructionText?: string;
   maneuver: TransitWalkManeuver;
   /** i18n sub-key under `navigation.walkDir.*` for the instruction verb. */
   key: string;
@@ -65,6 +68,7 @@ export function walkStepInfo(step: TransitStep): WalkStepInfo {
   const d = DIRECTION[step.instruction] ?? FALLBACK;
   return {
     maneuver: d.maneuver,
+    instructionText: step.instructionText,
     key: d.key,
     stairs: !!step.stairs || step.instruction === "STAIRS",
     elevator: !!step.elevator || step.instruction === "ELEVATOR",
@@ -82,6 +86,7 @@ export function composeWalkInstruction(
   info: WalkStepInfo,
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string {
+  if (info.instructionText) return info.instructionText;
   const action = t(`walkDir.${info.key}`);
   if ((info.stairs || info.elevator) && info.toLevel != null) {
     return t("walkToLevel", { action, level: info.toLevel });
@@ -116,4 +121,29 @@ export function walkLegStepProgress(
     cum += len;
   }
   return { currentStepIndex: steps.length - 1, distanceToNextStepMeters: 0 };
+}
+
+export function transitWalkVoiceCue(
+  step: TransitStep,
+  index: number,
+  distance: number,
+  speed: number,
+  instruction: string,
+  spoken: string[],
+) {
+  return nextVoiceCue(
+    {
+      instruction,
+      distance: step.distanceMeters,
+      duration: step.durationSeconds ?? 0,
+      coordinates: step.coordinates ?? [],
+      maneuver: walkStepInfo(step).maneuver,
+    },
+    index,
+    distance,
+    speed,
+    navOptionsForMode("walking").voice,
+    1,
+    spoken,
+  );
 }

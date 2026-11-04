@@ -18,13 +18,17 @@ import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
+import { useTransitFollowCamera } from "@/lib/navigation/useTransitFollowCamera";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
+import { useTransitWalkRepair } from "@/lib/navigation/useTransitWalkRepair";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { NavSwipeSheet } from "./NavSwipeSheet";
 import { TransitAlertBanner } from "./TransitAlertBanner";
+import { TransitAlternativesDialog } from "./TransitAlternativesDialog";
 import { TransitArrivalCard } from "./TransitArrivalCard";
 import { TransitConnectionRisk } from "./TransitConnectionRisk";
+import { TransitJourneyControls } from "./TransitJourneyControls";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
@@ -55,6 +59,8 @@ export function TransitNavigationView() {
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const { browserAuthority } = useMobileRuntime();
   const { completeArrival } = useNavigationMutations();
+  const walkRepair = useTransitWalkRepair();
+  useTransitFollowCamera();
   const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
@@ -62,6 +68,7 @@ export function TransitNavigationView() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
+  const [alternativesOpen, setAlternativesOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -147,6 +154,10 @@ export function TransitNavigationView() {
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
         >
           <TransitArrivalCard itinerary={itinerary} onClose={() => void completeArrival()} />
+          <TransitJourneyControls
+            walkRepair={walkRepair}
+            onAlternatives={() => setAlternativesOpen(true)}
+          />
         </Box>
       ) : (
         <>
@@ -192,6 +203,10 @@ export function TransitNavigationView() {
                   transfer={transfer}
                 />
               ))}
+            <TransitJourneyControls
+              walkRepair={walkRepair}
+              onAlternatives={() => setAlternativesOpen(true)}
+            />
             <TransitAlertBanner
               itinerary={itinerary}
               currentLegIndex={currentLegIndex}
@@ -273,6 +288,10 @@ export function TransitNavigationView() {
           </Box>
         </>
       )}
+      <TransitAlternativesDialog
+        open={alternativesOpen}
+        onClose={() => setAlternativesOpen(false)}
+      />
       <NavigationSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Box>
   );

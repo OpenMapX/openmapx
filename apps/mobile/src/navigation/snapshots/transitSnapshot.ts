@@ -1,6 +1,8 @@
 import {
+  prepareTransitProgress,
   stripTransitSecretsForSnapshot,
   type TransitMobileSession,
+  transitProgressFromTick,
 } from "@openmapx/core/navigation";
 
 /**
@@ -25,6 +27,7 @@ export interface TransitFullSnapshot {
   itineraryFingerprint: string;
   itinerary: unknown;
   captures: unknown;
+  transitReplanOptions: unknown;
   currentLegIndex: number;
   currentWalkStepIndex: number;
   phase: string;
@@ -37,7 +40,7 @@ export interface TransitFullSnapshot {
   connectivity: TransitMobileSession["connectivity"];
   permissionMode: TransitMobileSession["permissionMode"];
   /** Whether live data is current, and whether a replan is wanted or stuck. */
-  liveStatus: { refresh: string; replan: string; hasLiveToken: boolean };
+  liveStatus: { refresh: string; hasLiveToken: boolean };
   /** Whether the local get-off backup could actually be scheduled. */
   alightAlertAvailability: "scheduled" | "unavailable" | "disabled";
 }
@@ -55,7 +58,7 @@ export interface TransitProgressSnapshot {
   confidence: TransitMobileSession["payload"]["confidence"];
   transitProgress: unknown;
   connectivity: TransitMobileSession["connectivity"];
-  liveStatus: { refresh: string; replan: string; hasLiveToken: boolean };
+  liveStatus: { refresh: string; hasLiveToken: boolean };
 }
 
 export type TransitSnapshot = TransitFullSnapshot | TransitProgressSnapshot;
@@ -63,7 +66,6 @@ export type TransitSnapshot = TransitFullSnapshot | TransitProgressSnapshot;
 function liveStatus(session: TransitMobileSession) {
   return {
     refresh: session.payload.refresh.status,
-    replan: session.payload.replan.status,
     // Whether a token exists, never what it is. The page needs to know live data
     // is possible; it has no use for the value and no business holding it.
     hasLiveToken: session.payload.refreshToken !== null,
@@ -89,11 +91,21 @@ export function transitFullSnapshot(session: TransitMobileSession): TransitFullS
     itineraryFingerprint: startPackage.itineraryFingerprint,
     itinerary: stripTransitSecretsForSnapshot(structuredClone(startPackage.itinerary)),
     captures: stripTransitSecretsForSnapshot(structuredClone(startPackage.captures)),
+    transitReplanOptions: stripTransitSecretsForSnapshot(startPackage.replanOptions ?? null),
     currentLegIndex: tickState.currentLegIndex,
     currentWalkStepIndex: tickState.currentWalkStepIndex,
     phase: tickState.phase,
     confidence: session.payload.confidence,
-    transitProgress: structuredClone(session.payload.progress),
+    transitProgress: structuredClone(
+      session.payload.progress ??
+        transitProgressFromTick(
+          {
+            ...tickState,
+            ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+          },
+          prepareTransitProgress(startPackage.itinerary as never),
+        ),
+    ),
     settings: structuredClone(startPackage.settings),
     locale: session.locale,
     units: session.units,

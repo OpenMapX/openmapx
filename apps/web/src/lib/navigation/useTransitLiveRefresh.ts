@@ -33,7 +33,7 @@ export function useTransitLiveRefresh(active: boolean): void {
       if (store.status !== "navigating" || store.kind !== "transit") return;
       const requestId = store.transitRequestId;
       if (inFlightRef.current?.requestId === requestId) return;
-      if (store.transitRerouteNeeded) return;
+      if (store.transitRerouteNeeded || store.liveDataUnavailable) return;
       const token = store.itinerary?.refreshToken;
       if (!token) return;
 
@@ -43,6 +43,8 @@ export function useTransitLiveRefresh(active: boolean): void {
         const response = await mutateRef.current(token);
         const next = response.data?.itinerary;
         const cur = useNavigationStore.getState();
+        if (!cancelled && cur.transitRequestId === requestId && !next?.refreshToken)
+          cur.setLiveDataUnavailable(true);
         // Apply only if we're still on the same transit trip and no replan is
         // pending (a replan will swap the itinerary itself).
         if (
@@ -57,6 +59,8 @@ export function useTransitLiveRefresh(active: boolean): void {
           cur.updateItinerary(next);
         }
       } catch {
+        if (!cancelled && useNavigationStore.getState().transitRequestId === requestId)
+          useNavigationStore.getState().setLiveDataUnavailable(true);
         // Keep the last itinerary; the vehicle-journey poll still updates the
         // current leg. A broken token chain simply means no more live refreshes.
       } finally {
@@ -67,6 +71,15 @@ export function useTransitLiveRefresh(active: boolean): void {
     const id = setInterval(tick, REFRESH_INTERVAL_MS);
     return () => {
       cancelled = true;
+      const flight = inFlightRef.current;
+      const store = useNavigationStore.getState();
+      if (
+        flight &&
+        store.transitRequestId === flight.requestId &&
+        store.kind === "transit" &&
+        store.status === "navigating"
+      )
+        store.setLiveDataUnavailable(true);
       inFlightRef.current = null;
       clearInterval(id);
     };

@@ -203,6 +203,7 @@ const sidebars: SidebarsConfig = {
             'developer/ambient-places-publication',
             'developer/map-comparison-baseline',
             'developer/navigation-performance',
+            'developer/transit-navigation',
             'developer/offline-maps',
           ],
         },

@@ -11,22 +11,22 @@ import type { AlightAlertCopy } from "./AlightAlertPolicy";
 const COPY: Record<MobileLocale, AlightAlertCopy> = {
   en: {
     title: (stop) => `Get off at ${stop}`,
-    body: (stop, basis, platform) =>
+    body: (stop, _basis, platform) =>
       [
         `Your stop ${stop} is coming up.`,
         platform ? `Platform ${platform}.` : null,
-        basis === "schedule" ? "Timed from the timetable." : null,
+        "Time estimate; check the stops on your service.",
       ]
         .filter(Boolean)
         .join(" "),
   },
   de: {
     title: (stop) => `Aussteigen: ${stop}`,
-    body: (stop, basis, platform) =>
+    body: (stop, _basis, platform) =>
       [
         `Gleich erreichst du ${stop}.`,
         platform ? `Gleis ${platform}.` : null,
-        basis === "schedule" ? "Nach Fahrplan berechnet." : null,
+        "Zeitschätzung; beachte die Haltestellen deiner Verbindung.",
       ]
         .filter(Boolean)
         .join(" "),

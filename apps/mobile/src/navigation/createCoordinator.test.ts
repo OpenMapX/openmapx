@@ -35,7 +35,6 @@ function overrides(sent: Array<{ type: NativeToWebMessage["type"]; forMessageId?
     remote: {
       reroute: async () => undefined,
       transitRefresh: async () => undefined,
-      transitReplan: async () => undefined,
     },
     diagnostics: { record: () => undefined },
   };

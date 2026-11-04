@@ -3,12 +3,16 @@
 import { type TransitProgress, useNavigationStore } from "@openmapx/core";
 import {
   composeWalkInstruction,
+  transitWalkVoiceCue,
   walkLegStepProgress,
   walkStepInfo,
 } from "@openmapx/core/navigation";
+import { formatNavigationCue } from "@openmapx/i18n";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect } from "react";
+import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
+import { claimBrowserTransitCue } from "@/lib/navigation/transitCueLedger";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { ManeuverBanner } from "./ManeuverBanner";
 
@@ -28,6 +32,7 @@ export function TransitWalkBanner({
   transitProgress: TransitProgress | null;
   units: "metric" | "imperial";
 }) {
+  const { browserAuthority } = useMobileRuntime();
   const t = useTranslations("navigation");
   const locale = useLocale();
   const speak = useNavigationVoice(locale);
@@ -35,7 +40,10 @@ export function TransitWalkBanner({
 
   const steps = leg.steps ?? [];
   const fraction = transitProgress?.fractionAlongLeg ?? 0;
-  const { currentStepIndex, distanceToNextStepMeters } = walkLegStepProgress(steps, fraction);
+  const fallback = walkLegStepProgress(steps, fraction);
+  const currentStepIndex = transitProgress?.currentWalkStepIndex ?? fallback.currentStepIndex;
+  const distanceToNextStepMeters =
+    transitProgress?.distanceToNextStepMeters ?? fallback.distanceToNextStepMeters;
 
   // The maneuver you're approaching sits at the END of the current step, i.e. the
   // next step's turn; past the last step you're arriving at the leg destination.
@@ -49,11 +57,46 @@ export function TransitWalkBanner({
   const nextInfo = nextAfter ? walkStepInfo(nextAfter) : null;
   const nextInstruction = nextInfo ? composeWalkInstruction(nextInfo, t) : undefined;
 
-  // Announce each instruction as the step advances (keyed on the step index).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: speak once per step.
   useEffect(() => {
-    if (voiceEnabled) speak(instruction);
-  }, [currentStepIndex]);
+    if (!browserAuthority || !transitProgress || transitProgress.confidence !== "gps" || !upcoming)
+      return;
+    const tick = useNavigationStore.getState().transitTickState;
+    const prefix = `walk:${transitProgress.currentLegIndex}:${transitProgress.walkRevision ?? 0}:`;
+    const cue = transitWalkVoiceCue(
+      upcoming,
+      currentStepIndex,
+      distanceToNextStepMeters,
+      tick?.lastAcceptedFix?.speed ?? 0,
+      instruction,
+      (tick?.spokenCueIds ?? [])
+        .filter((id) => id.startsWith(prefix))
+        .map((id) => id.slice(prefix.length)),
+    );
+    if (!cue || !claimBrowserTransitCue(prefix + cue.key) || !voiceEnabled) return;
+    speak(
+      formatNavigationCue(
+        {
+          kind: "ground-maneuver",
+          tier: cue.tier,
+          instruction,
+          ...(cue.tier === "now" ? {} : { distanceMeters: cue.distance }),
+        },
+        locale === "de" ? "de" : "en",
+        { units },
+      ),
+    );
+  }, [
+    browserAuthority,
+    transitProgress,
+    upcoming,
+    currentStepIndex,
+    distanceToNextStepMeters,
+    instruction,
+    voiceEnabled,
+    speak,
+    locale,
+    units,
+  ]);
 
   return (
     <ManeuverBanner

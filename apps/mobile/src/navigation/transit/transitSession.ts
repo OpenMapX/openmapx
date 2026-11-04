@@ -94,12 +94,11 @@ export function createTransitPreparingSession(
     kind: "transit",
     payload: {
       startPackage: structuredClone(startPackage),
-      tickState: freshTransitTickState(nowMs),
+      tickState: freshTransitTickState(nowMs, startPackage.itinerary as never),
       progress: null,
       confidence: "gps",
       refreshToken,
       refresh: { status: refreshToken ? "ready" : "broken", generation: 0, attempts: 0 },
-      replan: { status: "idle", generation: 0, attempts: 0 },
       scheduledAlerts: [],
     },
   };
@@ -125,7 +124,7 @@ export function transitProfileFor(session: TransitMobileSession): LocationProfil
     (entry) => entry.legIndex === tickState.currentLegIndex,
   );
   if (capture && capture.status === "captured" && capture.stops.length > 0) {
-    const remaining = capture.stops.filter((stop) => !stop.departed).length;
+    const remaining = capture.stops.length - (tickState.stopCursor ?? 1);
     if (remaining <= 2) return "transit-near-event";
   }
   return "transit-cruise";

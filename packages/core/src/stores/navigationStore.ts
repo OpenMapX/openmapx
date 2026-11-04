@@ -1,11 +1,23 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
+import type { TransitLegCapture } from "../navigation/mobileProtocol";
 import {
   createNavigationSessionSnapshot,
   type NavigationSessionSnapshot,
 } from "../navigation/offlineSession";
+import {
+  freshTransitTickState,
+  processTransitFix,
+  type TransitRiderAction,
+  type TransitTickState,
+  transitProgressFromTick,
+} from "../navigation/processTransitFix";
 import type { RouteCountrySpan } from "../navigation/routeCountries";
+import { transitItineraryFingerprint } from "../navigation/transitPackage";
 import type { TransitProgress } from "../navigation/transitProgress";
+import { prepareTransitProgress } from "../navigation/transitProgress";
+import { mergeTransitRefresh } from "../navigation/transitRefresh";
+import { repairTransitWalk } from "../navigation/transitWalkRepair";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
 import type { BikeRoutingOptions } from "../routing/bicycleOptions";
@@ -83,6 +95,8 @@ export interface NativeNavigationProjection {
   currentSpeedLimit?: number | null;
   itinerary?: TripItinerary | null;
   transitProgress?: TransitProgress | null;
+  transitCaptures?: TransitLegCapture[];
+  transitReplanOptions?: TransitReplanOptions | null;
   connectivity?: NavigationConnectivity;
   permissionMode?: NativePermissionMode;
   confidence?: NativeConfidence;
@@ -246,6 +260,9 @@ interface NavigationState {
   /** Identity of the current browser transit trip/replan; live refresh preserves it. */
   transitRequestId: string | null;
   transitProgress: TransitProgress | null;
+  transitTickState: TransitTickState | null;
+  transitCaptures: TransitLegCapture[];
+  transitStopAreas: import("../navigation/transitStopAreas").TransitStopAreaIndex | undefined;
   /** Set when a missed connection is detected and an on-trip replan is wanted. */
   transitRerouteNeeded: boolean;
   /** User's resolved transit options, snapshotted for on-trip replans. */
@@ -296,6 +313,9 @@ interface NavigationState {
   addStop: (route: Route, waypoints: LngLat[], provider?: string) => void;
   startTransitNavigation: (itinerary: TripItinerary, replanOptions?: TransitReplanOptions) => void;
   applyTransitProgress: (p: TransitProgress) => void;
+  applyTransitAction: (action: TransitRiderAction) => boolean;
+  setTransitCaptures: (captures: TransitLegCapture[]) => void;
+  repairTransitWalk: (legIndex: number, route: Route) => boolean;
   setTransitRerouteNeeded: (v: boolean) => void;
   /** Swap in a freshly-planned itinerary (on-trip replan) and clear the flag. */
   replaceItinerary: (itinerary: TripItinerary) => void;
@@ -409,6 +429,8 @@ function nativeStatePatch(projection: NativeNavigationProjection): Partial<Navig
   copy("currentSpeedLimit");
   copy("itinerary");
   copy("transitProgress");
+  copy("transitCaptures");
+  copy("transitReplanOptions");
   copy("connectivity");
   copy("permissionMode");
   copy("rerouteUnavailable");
@@ -466,6 +488,9 @@ const INITIAL = {
   itinerary: null as TripItinerary | null,
   transitRequestId: null as string | null,
   transitProgress: null as TransitProgress | null,
+  transitTickState: null as TransitTickState | null,
+  transitCaptures: [] as TransitLegCapture[],
+  transitStopAreas: undefined,
   transitRerouteNeeded: false,
   transitReplanOptions: null as TransitReplanOptions | null,
   connectivity: "online" as NavigationConnectivity,
@@ -588,15 +613,106 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     });
   },
   applyTransitProgress: (transitProgress) => set({ transitProgress }),
+  setTransitCaptures: (transitCaptures) => set({ transitCaptures }),
+  repairTransitWalk: (legIndex, route) => {
+    const s = get();
+    if (
+      s.navigationAuthority !== "browser" ||
+      s.kind !== "transit" ||
+      s.status !== "navigating" ||
+      !s.itinerary ||
+      s.transitTickState?.currentLegIndex !== legIndex ||
+      s.transitTickState.phase !== "walking"
+    )
+      return false;
+    const next = repairTransitWalk(s.itinerary, legIndex, route);
+    if (!next) return false;
+    set({
+      itinerary: next,
+      transitTickState: {
+        ...s.transitTickState,
+        currentWalkStepIndex: 0,
+        walkRevision: (s.transitTickState.walkRevision ?? 0) + 1,
+        reachedStepEnd: false,
+        distanceToNextStepMeters: route.steps[0]?.distance,
+        offPlan: false,
+      },
+    });
+    return true;
+  },
+  applyTransitAction: (action) => {
+    const s = get();
+    if (
+      s.navigationAuthority !== "browser" ||
+      !s.itinerary ||
+      s.kind !== "transit" ||
+      s.status === "idle"
+    )
+      return false;
+    const prepared = prepareTransitProgress(s.itinerary);
+    const result = processTransitFix({
+      itinerary: s.itinerary,
+      captures: s.transitCaptures,
+      stopAreas: s.transitStopAreas,
+      state: s.transitTickState ?? freshTransitTickState(Date.now(), s.itinerary),
+      action,
+      nowMs: Date.now(),
+      prepared,
+      options: {
+        itineraryFingerprint: transitItineraryFingerprint(s.itinerary),
+        accuracyCapMeters: 100,
+      },
+    });
+    if (result.actionRejected) return false;
+    set({
+      transitTickState: result.state,
+      transitProgress: transitProgressFromTick(result.state, prepared),
+      status: result.state.phase === "arrived" ? "arrived" : "navigating",
+    });
+    return true;
+  },
   setTransitRerouteNeeded: (transitRerouteNeeded) => set({ transitRerouteNeeded }),
   replaceItinerary: (itinerary) =>
     set({
       itinerary,
       transitRequestId: String(++nextTransitRequestId),
       transitProgress: null,
+      transitTickState: null,
+      transitCaptures: [],
+      transitStopAreas: undefined,
+      liveDataUnavailable: false,
       transitRerouteNeeded: false,
     }),
-  updateItinerary: (itinerary) => set({ itinerary }),
+  updateItinerary: (itinerary) => {
+    const s = get();
+    const current = s.itinerary;
+    const merged = current
+      ? mergeTransitRefresh(
+          current,
+          itinerary,
+          s.transitTickState?.currentLegIndex ?? 0,
+          s.transitTickState?.walkRevision ?? 0,
+        )
+      : { itinerary, resetWalk: false };
+    if (!merged) {
+      set({ liveDataUnavailable: true });
+      return;
+    }
+    set({
+      itinerary: merged.itinerary,
+      ...(merged.resetWalk && s.transitTickState
+        ? {
+            transitTickState: {
+              ...s.transitTickState,
+              currentWalkStepIndex: 0,
+              reachedStepEnd: false,
+              distanceToNextStepMeters: undefined,
+              walkRevision: (s.transitTickState.walkRevision ?? 0) + 1,
+            },
+          }
+        : {}),
+    });
+  },
   applyProgress: (progress) => set({ progress }),
   // One publication per accepted fix. A coasted fix omits `coasting` so the
   // ongoing coast survives; a real fix passes false to end it in the same update.

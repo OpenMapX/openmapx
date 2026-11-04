@@ -66,8 +66,7 @@ export type SessionEffect =
   | { kind: "publish-snapshot"; immediate: boolean }
   | { kind: "publish-event"; eventId: string }
   | { kind: "request-reroute"; requestId: string }
-  | { kind: "request-transit-refresh"; requestId: string }
-  | { kind: "request-transit-replan"; requestId: string };
+  | { kind: "request-transit-refresh"; requestId: string };
 
 export interface OutboxEvent {
   eventId: string;

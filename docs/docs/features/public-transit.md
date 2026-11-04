@@ -136,23 +136,50 @@ departure board does not mean the map can track its vehicle.
 
 ## Transit navigation
 
-Navigation follows walking, waiting, riding, transferring, and arrival phases.
-Where data is available, it shows boarding departures, upcoming stops, platform
-changes, connection risk, cancellations, and alerts. Walking instructions and
-indoor guidance depend on the itinerary's geometry and station information.
+Navigation keeps the connection you selected. Walking legs show turn directions
+and the upcoming line, destination sign, departure, boarding stop and platform.
+Off-path walking directions can be updated to the same stop without changing any
+ride. For wheelchair journeys, use **Find alternatives** instead: the transit
+planner keeps the accessibility requirement that a general walking router cannot
+establish.
 
-Stop arrival uses mapped platform or station areas when available, with a
-fallback area around the stop. Device accuracy and mapping can affect when a
-phase changes; check that the selected stop and platform are correct.
+Confirm **I'm on board** once you board the selected service. GPS alone cannot
+tell which vehicle you took at a shared stop. During the ride, your location dot
+and the follow camera show your actual admitted GPS position. The banner and
+expanded journey sheet use the same ordered stop progress. If the route shape
+and your location disagree, progress is marked uncertain; the connection stays
+selected. Without GPS, the last known position and current leg remain in place.
+A timetable never moves your dot, boards you, or finishes a ride.
 
-Voice guidance, a keep-screen-on setting, and an optional get-off alarm support
-the trip. Background notifications depend on browser permission and lifecycle.
-The alarm is suppressed before boarding and for cancelled legs. Do not rely on
-it as your only indication of where to leave the vehicle.
+Confirm **I've got off** after alighting to start the next walk or boarding leg.
+You can undo the last confirmation for two minutes. Where the itinerary explicitly
+continues on the same vehicle, **Stay on board** continues to the next leg. A
+reminder can prompt you to confirm a forgotten boarding or alighting action; it
+does not act on your behalf. Getting off elsewhere keeps recovery and alternatives
+available. The final walk finishes when you reach the destination area.
 
-Transit lines and live vehicles can turn on automatically during planning or
-navigation. Manual layer choices are respected, and automatically enabled
-layers return to their earlier state when the transit context ends.
+A departure time in the past is a reason to check your service, not proof you
+missed it. Delays, platform changes, cancellations, and tight transfers remain
+visible. **Find alternatives** compares journeys without replacing yours. While
+riding, it previews options from the planned alight stop at the expected arrival
+time. After alighting, search from your fresh actual position and choose
+**Use this journey** to change connections. Failure or dismissal keeps the current
+journey. Your transit requirements also apply to the alternative search.
+
+Scheduled times, live predictions, rider location and captured stop information
+have separate meanings. Missing live data or stop counts is stated explicitly.
+Get-off alerts are aids, not a guarantee: GPS, source coverage and operating-system
+permissions can all affect delivery. The installed app arms its scheduled backup
+only while you have confirmed being aboard; that backup is labeled as a time
+estimate. Browser voice and notifications depend on the page's lifecycle.
+
+Browser navigation survives component remounts but ends on a full page reload.
+The installed app persists its own session, including confirmed phase and stop
+progress. An older installed app that lacks the new rider controls needs an update.
+
+Detailed stops and vehicle overlays can accompany the journey when available.
+Manual layer choices remain respected. See the [navigation contract](../developer/transit-navigation.md)
+for the shared engine and native authority boundaries.
 
 ## How the orchestrator works
 

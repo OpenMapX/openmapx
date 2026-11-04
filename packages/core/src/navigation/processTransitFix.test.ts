@@ -1,6 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import type { TransitLegCapture } from "./mobileProtocol";
 import {
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
@@ -8,551 +7,215 @@ import {
   type TransitTickInput,
   type TransitTickState,
 } from "./processTransitFix";
-import type { FixInput } from "./types";
 
-const NOW = 1_700_000_000_000;
-const FP = "itinerary-fp";
-
-/** A straight west-to-east line, so "fraction along" is easy to reason about. */
-function line(startLng: number, endLng: number, lat = 50.1, points = 11): [number, number][] {
-  return Array.from({ length: points }, (_, i) => [
-    startLng + ((endLng - startLng) * i) / (points - 1),
-    lat,
-  ]);
-}
-
-function at(coords: [number, number][], fraction: number): [number, number] {
-  const index = Math.round(fraction * (coords.length - 1));
-  return coords[Math.max(0, Math.min(coords.length - 1, index))];
-}
-
-const WALK_A = line(8.6, 8.61);
-const RIDE = line(8.61, 8.7);
-const WALK_B = line(8.7, 8.71);
-
+const NOW = 1700000000000;
 function itinerary(): TripItinerary {
   return {
+    duration: 1500,
+    startTime: new Date(NOW).toISOString(),
+    endTime: new Date(NOW + 1500000).toISOString(),
+    transfers: 0,
+    walkDistance: 200,
     legs: [
       {
-        geometry: { coordinates: WALK_A },
-        steps: [{ distanceMeters: 300 }, { distanceMeters: 400 }],
-        startTime: new Date(NOW).toISOString(),
-        endTime: new Date(NOW + 5 * 60_000).toISOString(),
-        from: { stopId: "home" },
-        to: { stopId: "board" },
+        mode: "walking",
+        startTime: "",
+        endTime: "",
+        from: { name: "Home", lat: 0, lng: 0 },
+        to: { name: "Board", stopId: "a", lat: 0, lng: 0.002 },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [0.002, 0],
+          ],
+        },
+        steps: [
+          { instruction: "DEPART", distanceMeters: 100 },
+          { instruction: "LEFT", distanceMeters: 120 },
+        ],
       },
       {
+        mode: "bus",
         tripId: "trip-1",
-        geometry: { coordinates: RIDE },
-        startTime: new Date(NOW + 6 * 60_000).toISOString(),
-        endTime: new Date(NOW + 20 * 60_000).toISOString(),
-        from: { stopId: "board" },
-        to: { stopId: "alight" },
+        route: { shortName: "12", longName: "Line 12" },
+        startTime: new Date(NOW + 300000).toISOString(),
+        endTime: new Date(NOW + 1200000).toISOString(),
+        from: { name: "Board", stopId: "a", lat: 0, lng: 0.002 },
+        to: { name: "Alight", stopId: "b", lat: 0, lng: 0.02 },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0.002, 0],
+            [0.02, 0],
+          ],
+        },
       },
       {
-        geometry: { coordinates: WALK_B },
-        steps: [{ distanceMeters: 200 }],
-        startTime: new Date(NOW + 21 * 60_000).toISOString(),
-        endTime: new Date(NOW + 25 * 60_000).toISOString(),
-        from: { stopId: "alight" },
-        to: { stopId: "work" },
+        mode: "walking",
+        startTime: "",
+        endTime: "",
+        from: { name: "Alight", stopId: "b", lat: 0, lng: 0.02 },
+        to: { name: "Destination", lat: 0, lng: 0.022 },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0.02, 0],
+            [0.022, 0],
+          ],
+        },
       },
     ],
-  } as unknown as TripItinerary;
+  };
 }
-
-function captures(overrides: Partial<TransitLegCapture> = {}): TransitLegCapture[] {
-  return [
-    {
-      legIndex: 1,
-      tripId: "trip-1",
-      capturedAtMs: NOW,
-      status: "captured",
-      stops: [
-        { stopId: "board", name: "Board", lat: 50.1, lng: 8.61 },
-        { stopId: "mid", name: "Mid", lat: 50.1, lng: 8.65 },
-        { stopId: "alight", name: "Alight", lat: 50.1, lng: 8.7 },
-      ],
-      ...overrides,
-    },
-  ];
-}
-
-function fix(coords: [number, number], timestampMs: number, accuracy = 8): FixInput {
-  return { coords, accuracy, timestampMs };
-}
-
 function tick(overrides: Partial<TransitTickInput> = {}) {
-  const base: TransitTickInput = {
+  return processTransitFix({
     itinerary: itinerary(),
-    captures: captures(),
+    captures: [],
     state: freshTransitTickState(NOW),
     nowMs: NOW,
-    options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
+    options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: "trip" },
     ...overrides,
-  };
-  return processTransitFix(base);
-}
-
-/** Feeds a sequence of fixes through the engine, threading state. */
-function run(
-  steps: Array<{ fix?: FixInput; nowMs: number }>,
-  start: TransitTickState = freshTransitTickState(NOW),
-  overrides: Partial<TransitTickInput> = {},
-) {
-  let state = start;
-  const events = [];
-  let last = tick({ state, ...overrides });
-  for (const step of steps) {
-    last = processTransitFix({
-      itinerary: itinerary(),
-      captures: captures(),
-      state,
-      fix: step.fix,
-      nowMs: step.nowMs,
-      options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
-      ...overrides,
-    });
-    state = last.state;
-    events.push(...last.events);
-  }
-  return { state, events, last };
-}
-
-describe("walking legs", () => {
-  it("advances walk steps monotonically", () => {
-    const { state } = run([
-      { fix: fix(at(WALK_A, 0.1), NOW + 1_000), nowMs: NOW + 1_000 },
-      { fix: fix(at(WALK_A, 0.6), NOW + 2_000), nowMs: NOW + 2_000 },
-    ]);
-    expect(state.phase).toBe("walking");
-    expect(state.currentWalkStepIndex).toBeGreaterThanOrEqual(1);
   });
-
-  it("never moves a walk step backwards within a leg", () => {
-    // 0.6 stays below the advance threshold, so this exercises step ordering
-    // within one leg rather than the leg transition.
-    const { state } = run([
-      { fix: fix(at(WALK_A, 0.6), NOW + 1_000), nowMs: NOW + 1_000 },
-      { fix: fix(at(WALK_A, 0.1), NOW + 2_000), nowMs: NOW + 2_000 },
-    ]);
-    expect(state.currentLegIndex).toBe(0);
-    expect(state.currentWalkStepIndex).toBeGreaterThanOrEqual(1);
-  });
-});
-
-describe("boarding and riding", () => {
-  it("waits at the board stop before departure", () => {
-    const { state } = run([{ fix: fix(at(RIDE, 0), NOW + 60_000), nowMs: NOW + 60_000 }], {
-      ...freshTransitTickState(NOW),
+}
+function fix(lng: number, lat = 0, at = NOW) {
+  return { coords: [lng, lat] as [number, number], accuracy: 5, timestampMs: at };
+}
+function atRide(): TransitTickState {
+  return { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" };
+}
+describe("physical walking progress", () => {
+  it("enters waiting on reaching the boarding area even before departure", () => {
+    expect(tick({ fix: fix(0.002) }).state).toMatchObject({
       currentLegIndex: 1,
       phase: "waiting-to-board",
     });
-    expect(state.phase).toBe("waiting-to-board");
   });
-
-  it("emits board exactly once when the vehicle starts moving", () => {
-    const { events, state } = run(
-      [
-        { fix: fix(at(RIDE, 0.2), NOW + 7 * 60_000), nowMs: NOW + 7 * 60_000 },
-        { fix: fix(at(RIDE, 0.3), NOW + 8 * 60_000), nowMs: NOW + 8 * 60_000 },
-      ],
-      { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "waiting-to-board" },
-    );
-    expect(state.phase).toBe("riding");
-    expect(events.filter((e) => e.type === "board")).toHaveLength(1);
+  it("does not jump onto a later walk that happens to be closer", () => {
+    expect(tick({ fix: fix(0.021) }).state.currentLegIndex).toBe(0);
   });
-
-  it("warns once when one stop remains", () => {
-    const { events } = run(
-      [
-        { fix: fix(at(RIDE, 0.7), NOW + 15 * 60_000), nowMs: NOW + 15 * 60_000 },
-        { fix: fix(at(RIDE, 0.72), NOW + 15 * 60_000 + 1_000), nowMs: NOW + 15 * 60_000 + 1_000 },
-      ],
-      { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-    );
-    const warnings = events.filter((e) => e.type === "approaching-alight");
-    expect(warnings).toHaveLength(1);
+  it("only advances steps inside the walking corridor", () => {
+    expect(tick({ fix: fix(0.0015, 0.01) }).state.currentWalkStepIndex).toBe(0);
+  });
+  it("keeps committed maneuvers monotonic through jitter", () => {
+    const first = tick({ fix: fix(0.0012) }).state;
+    expect(first.currentWalkStepIndex).toBe(1);
+    expect(
+      tick({ state: first, fix: fix(0.0005, 0, NOW + 1000), nowMs: NOW + 1000 }).state
+        .currentWalkStepIndex,
+    ).toBe(1);
+  });
+  it("does not declare arrival on projecting past the final endpoint from far away", () => {
+    expect(
+      tick({ state: { ...atRide(), currentLegIndex: 2, phase: "walking" }, fix: fix(0.03, 0.01) })
+        .state.phase,
+    ).toBe("walking");
+  });
+  it("finishes only inside the actual destination area", () => {
+    expect(
+      tick({ state: { ...atRide(), currentLegIndex: 2, phase: "walking" }, fix: fix(0.022) }).state
+        .phase,
+    ).toBe("arrived");
   });
 });
-
-describe("leg advancement", () => {
-  it("alights at the actual stop ahead of schedule when the following walk has no usable geometry", () => {
+describe("rider-owned ride boundaries", () => {
+  it("does not infer boarding even after scheduled departure and movement along the line", () => {
+    const r = tick({
+      state: { ...atRide(), phase: "waiting-to-board" },
+      fix: fix(0.015),
+      nowMs: NOW + 600000,
+    });
+    expect(r.state.phase).toBe("waiting-to-board");
+    expect(r.needsReplan).toBe(false);
+  });
+  it("allows confirmation from the access walk and emits one boarding event", () => {
+    const r = tick({ action: { type: "board", legIndex: 1 } });
+    expect(r.state).toMatchObject({ phase: "riding", currentLegIndex: 1 });
+    expect(r.events.filter((e) => e.type === "board")).toHaveLength(1);
+    expect(tick({ state: r.state, action: { type: "board", legIndex: 1 } }).actionRejected).toBe(
+      true,
+    );
+  });
+  it("holds riding at the actual alight stop until confirmation", () => {
+    const r = tick({ state: atRide(), fix: fix(0.02) });
+    expect(r.state.phase).toBe("riding");
+    expect(r.events.some((e) => e.type === "alight")).toBe(false);
+  });
+  it("keeps the final walk after alighting and emits a transfer", () => {
+    const r = tick({ state: atRide(), action: { type: "alight", legIndex: 1 }, fix: fix(0.02) });
+    expect(r.state).toMatchObject({ phase: "walking", currentLegIndex: 2 });
+    expect(r.events).toContainEqual(
+      expect.objectContaining({ type: "transfer", fromLegIndex: 1, toLegIndex: 2 }),
+    );
+    expect(r.events.some((e) => e.type === "arrival")).toBe(false);
+  });
+  it("supports bounded undo without undoing other legs", () => {
+    const r = tick({ action: { type: "board", legIndex: 1 } });
+    expect(
+      tick({ state: r.state, action: { type: "undo", legIndex: 1 }, nowMs: NOW + 119000 }).state
+        .phase,
+    ).toBe("walking");
+    expect(
+      tick({ state: r.state, action: { type: "undo", legIndex: 1 }, nowMs: NOW + 121000 })
+        .actionRejected,
+    ).toBe(true);
+  });
+  it("does not mutate its input state", () => {
+    const s = atRide();
+    const original = structuredClone(s);
+    tick({ state: s, action: { type: "alight", legIndex: 1 } });
+    expect(s).toEqual(original);
+  });
+  it("flags a changed platform once", () => {
     const trip = itinerary();
-    trip.legs[2].geometry = { type: "LineString", coordinates: [] };
-    const early = NOW + 10 * 60_000;
-    const result = tick({
+    trip.legs[1].from.platformCode = "4";
+    trip.legs[1].from.scheduledPlatformCode = "3";
+    const r = tick({
       itinerary: trip,
-      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-      fix: fix([8.7, 50.1], early),
-      nowMs: early,
+      state: { ...atRide(), phase: "waiting-to-board" },
+      fix: fix(0.002),
     });
-    expect(result.state.currentLegIndex).toBe(2);
-    expect(result.state.phase).toBe("walking");
-    expect(result.events.filter((e) => e.type === "alight")).toHaveLength(1);
-    expect(result.events.filter((e) => e.type === "transfer")).toHaveLength(1);
-    const repeated = tick({
-      itinerary: trip,
-      state: result.state,
-      fix: fix([8.7, 50.1], early + 1_000),
-      nowMs: early + 1_000,
-    });
-    expect(repeated.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
-  });
-
-  it("keeps riding when the alight stop is nearest but still over a kilometre away", () => {
-    const result = tick({
-      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-      fix: fix([8.68, 50.1], NOW + 17 * 60_000),
-      nowMs: NOW + 17 * 60_000,
-    });
-    expect(result.state.currentLegIndex).toBe(1);
-    expect(result.state.phase).toBe("riding");
-    expect(result.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
-    expect(result.events).toContainEqual(
-      expect.objectContaining({ type: "approaching-alight", stopsRemaining: 1 }),
-    );
-  });
-
-  it("keeps riding when a looping leg passes close to its later alight stop", () => {
-    const trip = itinerary();
-    trip.legs[1].geometry = {
-      type: "LineString",
-      coordinates: [
-        [8.61, 50.1],
-        [8.7, 50.1],
-        [8.75, 50.11],
-        [8.7, 50.1003],
-      ],
-    };
-    const result = tick({
-      itinerary: trip,
-      captures: captures({
-        stops: [
-          { stopId: "board", name: "Board", lat: 50.1, lng: 8.61 },
-          { stopId: "alight", name: "Alight", lat: 50.1003, lng: 8.7 },
-        ],
-      }),
-      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-      fix: fix([8.7, 50.1], NOW + 10 * 60_000),
-      nowMs: NOW + 10 * 60_000,
-    });
-    expect(result.state.currentLegIndex).toBe(1);
-    expect(result.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
-  });
-  it("advances at most one leg per tick", () => {
-    const { state } = run([{ fix: fix(at(WALK_B, 0.5), NOW + 1_000), nowMs: NOW + 1_000 }]);
-    expect(state.currentLegIndex).toBeLessThanOrEqual(1);
-  });
-
-  it("does not jump to a geometrically closer future leg", () => {
-    // A fix sitting on the final walking leg must not teleport the traveller
-    // there while they are still on the first leg.
-    const { state } = run([{ fix: fix(at(WALK_B, 0.9), NOW + 1_000), nowMs: NOW + 1_000 }]);
-    expect(state.currentLegIndex).toBe(0);
-  });
-
-  it("emits a transfer when it does advance", () => {
-    const { events } = run([
-      { fix: fix(at(WALK_A, 1), NOW + 4 * 60_000), nowMs: NOW + 4 * 60_000 },
-    ]);
-    expect(events.some((e) => e.type === "transfer")).toBe(true);
-  });
-
-  it("emits alight when leaving a ridden leg", () => {
-    const { events } = run(
-      [{ fix: fix(at(RIDE, 1), NOW + 20 * 60_000), nowMs: NOW + 20 * 60_000 }],
-      { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-    );
-    expect(events.some((e) => e.type === "alight")).toBe(true);
-  });
-
-  it("keeps the final walk active after alighting", () => {
-    const result = tick({
-      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-      fix: fix(at(RIDE, 1), NOW + 20 * 60_000),
-      nowMs: NOW + 20 * 60_000,
-    });
-
-    expect(result.state.currentLegIndex).toBe(2);
-    expect(result.state.phase).toBe("walking");
-    expect(result.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "alight", legIndex: 1 }),
-        expect.objectContaining({ type: "transfer", fromLegIndex: 1, toLegIndex: 2 }),
-      ]),
-    );
-    expect(result.events.some((event) => event.type === "arrival")).toBe(false);
-
-    const halfway = tick({
-      state: result.state,
-      fix: fix(at(WALK_B, 0.5), NOW + 22 * 60_000),
-      nowMs: NOW + 22 * 60_000,
-    });
-    expect(halfway.state.phase).toBe("walking");
-    expect(halfway.events.some((event) => event.type === "arrival")).toBe(false);
-
-    const arrived = tick({
-      state: halfway.state,
-      fix: fix(at(WALK_B, 1), NOW + 25 * 60_000),
-      nowMs: NOW + 25 * 60_000,
-    });
-    expect(arrived.state.phase).toBe("arrived");
-    expect(arrived.events.filter((event) => event.type === "arrival")).toEqual([
-      expect.objectContaining({ legIndex: 2 }),
-    ]);
+    expect(r.events.filter((e) => e.type === "platform-change")).toHaveLength(1);
     expect(
       tick({
-        state: arrived.state,
-        fix: fix(at(WALK_B, 1), NOW + 26 * 60_000),
-        nowMs: NOW + 26 * 60_000,
-      }).events,
-    ).toEqual([]);
-  });
-
-  it("never regresses once riding progress is established", () => {
-    const { state } = run(
-      [
-        { fix: fix(at(RIDE, 0.6), NOW + 12 * 60_000), nowMs: NOW + 12 * 60_000 },
-        { fix: fix(at(WALK_A, 0.5), NOW + 13 * 60_000), nowMs: NOW + 13 * 60_000 },
-      ],
-      { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-    );
-    expect(state.currentLegIndex).toBeGreaterThanOrEqual(1);
-  });
-
-  it("allows one narrow recovery to the previous leg", () => {
-    const justEntered: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      currentLegIndex: 1,
-      phase: "waiting-to-board",
-      legEnteredAtMs: NOW,
-    };
-    const { state } = run(
-      [{ fix: fix(at(WALK_A, 0.3), NOW + 5_000), nowMs: NOW + 5_000 }],
-      justEntered,
-    );
-    expect(state.currentLegIndex).toBe(0);
-  });
-
-  it("refuses recovery once the window has passed", () => {
-    const settled: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      currentLegIndex: 1,
-      phase: "waiting-to-board",
-      legEnteredAtMs: NOW - 5 * 60_000,
-    };
-    const { state } = run(
-      [{ fix: fix(at(WALK_A, 0.3), NOW + 5_000), nowMs: NOW + 5_000 }],
-      settled,
-    );
-    expect(state.currentLegIndex).toBe(1);
+        itinerary: trip,
+        state: r.state,
+        fix: fix(0.002, 0, NOW + 1000),
+        nowMs: NOW + 1000,
+      }).events.filter((e) => e.type === "platform-change"),
+    ).toHaveLength(0);
   });
 });
-
-describe("fix admission", () => {
+describe("no-fix and rejected callbacks", () => {
+  it.each(["walking", "waiting-to-board", "riding"] as const)(
+    "holds %s through an arbitrary schedule gap",
+    (phase) => {
+      const state = {
+        ...freshTransitTickState(NOW),
+        currentLegIndex: phase === "walking" ? 0 : 1,
+        phase,
+      };
+      const r = tick({ state, nowMs: NOW + 3600000 });
+      expect(r.state.phase).toBe(phase);
+      expect(r.state.currentLegIndex).toBe(state.currentLegIndex);
+      expect(r.events).toEqual([]);
+      expect(r.needsReplan).toBe(false);
+    },
+  );
   it.each([
-    ["low accuracy", fix([8.61, 50.1], NOW + 1_000, 500), "low-accuracy"],
-    ["invalid coordinates", fix([999, 50.1], NOW + 1_000), "invalid"],
-    ["negative accuracy", fix([8.61, 50.1], NOW + 1_000, -1), "invalid"],
-  ])("rejects a %s fix", (_label, badFix, reason) => {
-    const result = tick({ fix: badFix });
-    expect(result.rejectedReason).toBe(reason);
+    { coords: [NaN, 0] },
+    { accuracy: 101 },
+    { timestampMs: NOW - 31000 },
+    { timestampMs: NOW + 6000 },
+    { coasted: true },
+  ])("does not replace the accepted fix with %j", (bad) => {
+    const first = tick({ fix: fix(0.0005) }).state;
+    const r = tick({ state: first, fix: { ...fix(0.001), ...bad } as never });
+    expect(r.state.lastAcceptedFix).toEqual(first.lastAcceptedFix);
+    expect(r.rejectedReason).toBeDefined();
   });
-
-  it("rejects an out-of-order fix", () => {
-    const state = {
-      ...freshTransitTickState(NOW),
-      lastAcceptedFix: fix([8.61, 50.1], NOW + 5_000),
-    };
-    expect(tick({ state, fix: fix([8.61, 50.1], NOW + 1_000) }).rejectedReason).toBe(
-      "out-of-order",
-    );
-  });
-
-  it("keeps prior state when a fix is rejected", () => {
-    const state = { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" as const };
-    const result = tick({ state, fix: fix([8.65, 50.1], NOW + 1_000, 900) });
-    expect(result.state.currentLegIndex).toBe(1);
-    expect(result.state.phase).toBe("riding");
-  });
-});
-
-describe("schedule fallback", () => {
-  it("stays inactive while fixes arrive", () => {
-    const result = tick({ fix: fix(at(WALK_A, 0.2), NOW + 1_000), nowMs: NOW + 1_000 });
-    expect(result.state.scheduleFallback).toBe("inactive");
-    expect(result.confidence).toBe("gps");
-  });
-
-  it("labels progress as schedule-based after a long gap", () => {
-    const stale: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      lastProgressAtMs: NOW,
-    };
-    const result = tick({ state: stale, nowMs: NOW + 10 * 60_000 });
-    expect(result.confidence).toBe("schedule");
-  });
-
-  it("advances at most one leg from schedule alone", () => {
-    const stale: TransitTickState = { ...freshTransitTickState(NOW), lastProgressAtMs: NOW };
-    const result = tick({ state: stale, nowMs: NOW + 60 * 60_000 });
-    expect(result.state.currentLegIndex).toBe(1);
-  });
-
-  it("never asserts arrival from time alone", () => {
-    const stale: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      currentLegIndex: 2,
-      lastProgressAtMs: NOW,
-    };
-    const result = tick({ state: stale, nowMs: NOW + 90 * 60_000 });
-    expect(result.state.phase).not.toBe("arrived");
-    expect(result.events.some((e) => e.type === "arrival")).toBe(false);
-  });
-
-  it("re-anchors and leaves fallback when a real fix returns", () => {
-    const fallback: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      lastProgressAtMs: NOW,
-      scheduleFallback: "active",
-    };
-    const result = tick({
-      state: fallback,
-      fix: fix(at(WALK_A, 0.3), NOW + 20 * 60_000),
-      nowMs: NOW + 20 * 60_000,
-    });
-    expect(result.state.scheduleFallback).toBe("inactive");
-    expect(result.confidence).toBe("gps");
-  });
-});
-
-describe("missed connections", () => {
-  it("requests a replan once for a leg whose departure has passed", () => {
-    const waiting: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      currentLegIndex: 1,
-      phase: "waiting-to-board",
-    };
-    const first = tick({ state: waiting, nowMs: NOW + 30 * 60_000 });
-    expect(first.needsReplan).toBe(true);
-
-    const second = processTransitFix({
-      itinerary: itinerary(),
-      captures: captures(),
-      state: first.state,
-      nowMs: NOW + 31 * 60_000,
-      options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
-    });
-    expect(second.needsReplan).toBe(false);
-  });
-
-  it("requests it while the rider is still walking to a departure that has passed", () => {
-    const walking = freshTransitTickState(NOW);
-    const result = tick({ state: walking, nowMs: NOW + 9 * 60_000 });
-    expect(result.needsReplan).toBe(true);
-    expect(result.events).toContainEqual(
-      expect.objectContaining({ type: "missed-connection", legIndex: 1 }),
-    );
-  });
-
-  it("does not request a replan while riding", () => {
-    const riding: TransitTickState = {
-      ...freshTransitTickState(NOW),
-      currentLegIndex: 1,
-      phase: "riding",
-    };
-    expect(tick({ state: riding, nowMs: NOW + 30 * 60_000 }).needsReplan).toBe(false);
-  });
-});
-
-describe("determinism and identity", () => {
-  it("never emits the same event twice across ticks", () => {
-    const { events } = run([
-      { fix: fix(at(WALK_A, 1), NOW + 4 * 60_000), nowMs: NOW + 4 * 60_000 },
-      { fix: fix(at(RIDE, 0.2), NOW + 7 * 60_000), nowMs: NOW + 7 * 60_000 },
-      { fix: fix(at(RIDE, 0.3), NOW + 8 * 60_000), nowMs: NOW + 8 * 60_000 },
-      { fix: fix(at(RIDE, 0.9), NOW + 18 * 60_000), nowMs: NOW + 18 * 60_000 },
-    ]);
-    const ids = events.map((e) => e.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("builds event ids from structure, never from a stop name", () => {
-    const { events } = run(
-      [{ fix: fix(at(RIDE, 1), NOW + 20 * 60_000), nowMs: NOW + 20 * 60_000 }],
-      { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
-    );
-    for (const event of events) {
-      expect(event.id).toContain(FP);
-      expect(event.id).not.toContain("Alight");
-      expect(event.id).not.toContain("Board");
-    }
-  });
-
-  it("does not mutate the state it was given", () => {
-    const state = freshTransitTickState(NOW);
-    const before = JSON.stringify(state);
-    tick({ state, fix: fix(at(WALK_A, 0.5), NOW + 1_000), nowMs: NOW + 1_000 });
-    expect(JSON.stringify(state)).toBe(before);
-  });
-
-  it("produces identical output for identical input", () => {
-    const args = {
-      state: freshTransitTickState(NOW),
-      fix: fix(at(WALK_A, 0.4), NOW + 1_000),
-      nowMs: NOW + 1_000,
-    };
-    expect(JSON.stringify(tick(args))).toBe(JSON.stringify(tick(args)));
-  });
-
-  it("survives serialization between ticks, as process death would force", () => {
-    const first = tick({ fix: fix(at(WALK_A, 0.4), NOW + 1_000), nowMs: NOW + 1_000 });
-    const revived = JSON.parse(JSON.stringify(first.state)) as TransitTickState;
-    const continuous = processTransitFix({
-      itinerary: itinerary(),
-      captures: captures(),
-      state: first.state,
-      fix: fix(at(WALK_A, 0.8), NOW + 2_000),
-      nowMs: NOW + 2_000,
-      options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
-    });
-    const restarted = processTransitFix({
-      itinerary: itinerary(),
-      captures: captures(),
-      state: revived,
-      fix: fix(at(WALK_A, 0.8), NOW + 2_000),
-      nowMs: NOW + 2_000,
-      options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
-    });
-    expect(JSON.stringify(restarted.state)).toBe(JSON.stringify(continuous.state));
-  });
-});
-
-describe("monotonic properties over jittered traces", () => {
-  it("holds across 100 deterministic traces", () => {
-    for (let seed = 0; seed < 100; seed++) {
-      let state = freshTransitTickState(NOW);
-      let previousLeg = 0;
-      for (let step = 0; step < 20; step++) {
-        // Deterministic pseudo-jitter: repeatable, no fuzz dependency.
-        const jitter = (((seed * 37 + step * 17) % 21) - 10) / 100_000;
-        const fraction = step / 19;
-        const coords: [number, number] = [8.6 + fraction * 0.11, 50.1 + jitter];
-        const result = processTransitFix({
-          itinerary: itinerary(),
-          captures: captures(),
-          state,
-          fix: fix(coords, NOW + step * 30_000),
-          nowMs: NOW + step * 30_000,
-          options: { ...DEFAULT_TRANSIT_TICK_OPTIONS, itineraryFingerprint: FP },
-        });
-        const next = result.state;
-        expect(next.currentLegIndex - previousLeg).toBeLessThanOrEqual(1);
-        expect(new Set(next.emittedEventIds).size).toBe(next.emittedEventIds.length);
-        previousLeg = next.currentLegIndex;
-        state = next;
-      }
-    }
+  it("ignores out-of-order callbacks", () => {
+    const state = tick({ fix: fix(0.0005) }).state;
+    expect(tick({ state, fix: fix(0.001) }).rejectedReason).toBe("out-of-order");
   });
 });

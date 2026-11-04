@@ -36,7 +36,7 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
   /**
    * Whether a wake-up carrying no usable position still deserves a tick.
    *
-   * True for transit, where a schedule can advance a leg while the rider is
+   * True for transit, where freshness must still change while the rider is
    * underground and producing nothing. False for ground, where position is the
    * only evidence there is — ticking without one would advance nothing and
    * commit a revision saying so.
@@ -69,6 +69,17 @@ export interface NavigationProcessor<K extends "ground" | "transit"> {
     nowMs: number,
   ): ProcessorMutation | { ok: false; code: string };
 
+  repairTransitWalk?(
+    session: Extract<MobileNavigationSession, { kind: K }>,
+    legIndex: number,
+    route: import("@openmapx/core/navigation").Route,
+    nowMs: number,
+  ): ProcessorMutation | { ok: false; code: string };
+  transitAction?(
+    session: Extract<MobileNavigationSession, { kind: K }>,
+    action: import("@openmapx/core/navigation").TransitRiderAction,
+    nowMs: number,
+  ): ProcessorMutation | { ok: false; code: string };
   /** A confirmed offline-to-online transition; may refresh or replan. */
   onConnectivityRestored(
     session: Extract<MobileNavigationSession, { kind: K }>,

@@ -159,15 +159,15 @@ describe("processTransitFix with stop areas", () => {
     expect(result.events.filter((e) => e.type === "board")).toEqual([]);
   });
 
-  it("boards once the rider leaves the platform along the line", () => {
+  it("keeps waiting after leaving the platform until boarding is confirmed", () => {
     const waiting: TransitTickState = {
       ...freshTransitTickState(NOW),
       currentLegIndex: 1,
       phase: "waiting-to-board",
     };
     const result = tick(waiting, xy(400, 0), NOW + 23 * 60_000);
-    expect(result.state.phase).toBe("riding");
-    expect(result.events.map((e) => e.type)).toContain("board");
+    expect(result.state.phase).toBe("waiting-to-board");
+    expect(result.events.map((e) => e.type)).not.toContain("board");
   });
 
   it("does not fall back to the walk while the rider stands on the platform", () => {
@@ -189,7 +189,9 @@ describe("processTransitFix with stop areas", () => {
       phase: "riding",
     };
     // 150 m past the quay point, still on the platform.
-    const result = tick(riding, xy(1650, 1), NOW + 25 * 60_000);
+    const result = tick(riding, xy(1650, 1), NOW + 25 * 60_000, {
+      action: { type: "alight", legIndex: 1 },
+    });
     expect(result.state.currentLegIndex).toBe(2);
     expect(
       result.events.map((e) => e.type).filter((type) => type === "alight" || type === "transfer"),
@@ -214,7 +216,8 @@ describe("processTransitFix with stop areas", () => {
       currentLegIndex: 1,
       phase: "waiting-to-board",
     };
-    const progress = transitProgressFromTick(state, prepareTransitProgress(trip()), xy(150, 2));
+    state.lastAcceptedFix = { coords: xy(150, 2), accuracy: 5, timestampMs: NOW };
+    const progress = transitProgressFromTick(state, prepareTransitProgress(trip()));
     expect(progress).toMatchObject({
       currentLegIndex: 1,
       phase: "waiting-to-board",

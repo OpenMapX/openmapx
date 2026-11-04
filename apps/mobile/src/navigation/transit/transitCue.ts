@@ -1,4 +1,8 @@
-import type { TransitMobileSession, TransitNavigationEvent } from "@openmapx/core/navigation";
+import type {
+  TransitMobileSession,
+  TransitNavigationEvent,
+  VoiceCue,
+} from "@openmapx/core/navigation";
 import { formatNavigationCue } from "@openmapx/i18n";
 import { MAX_CUE_ID_LENGTH, MAX_SPEECH_TEXT_LENGTH } from "../../audio/navigationAudio";
 import type { SessionEffect } from "../../storage/SessionRepository";
@@ -168,6 +172,7 @@ export function transitWalkCueEffect(
   cueKey: string,
   action: string,
   street?: string,
+  timing?: Pick<VoiceCue, "tier" | "distance">,
 ): TransitCueEffect | null {
   const boundedAction = boundedName(action);
   if (!boundedAction) return null;
@@ -180,11 +185,18 @@ export function transitWalkCueEffect(
   );
   try {
     const text = formatNavigationCue(
-      {
-        kind: "walk",
-        action: boundedAction,
-        ...(boundedStreet ? { street: boundedStreet } : {}),
-      },
+      timing
+        ? {
+            kind: "ground-maneuver",
+            tier: timing.tier,
+            instruction: boundedAction,
+            ...(timing.tier === "now" ? {} : { distanceMeters: timing.distance }),
+          }
+        : {
+            kind: "walk",
+            action: boundedAction,
+            ...(boundedStreet ? { street: boundedStreet } : {}),
+          },
       session.locale,
       { units: session.units },
     );

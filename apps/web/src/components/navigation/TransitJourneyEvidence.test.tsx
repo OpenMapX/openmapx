@@ -24,11 +24,27 @@ vi.mock("@/lib/mobile/useMobileRuntime", () => ({
   useMobileRuntime: () => ({ browserAuthority: state.browser }),
 }));
 vi.mock("@/lib/navigation/useNavigationVoice", () => ({ useNavigationVoice: () => state.speak }));
+vi.mock("@/lib/navigation/transitCueLedger", () => ({ claimBrowserTransitCue: () => true }));
 vi.mock("@/lib/navigation/navNotify", () => ({ notifyGetOff: vi.fn(), playAlarmTone: vi.fn() }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useVehicleJourney: state.journey,
-  useNavigationStore: () => true,
+  useNavigationStore: (selector: (s: unknown) => unknown) =>
+    selector({
+      voiceEnabled: true,
+      transitCaptures: [
+        {
+          legIndex: 0,
+          tripId: "ms:trip-a",
+          status: "captured",
+          capturedAtMs: 0,
+          stops: [
+            { stopId: leg.from.stopId, name: leg.from.name, lat: leg.from.lat, lng: leg.from.lng },
+            { stopId: leg.to.stopId, name: leg.to.name, lat: leg.to.lat, lng: leg.to.lng },
+          ],
+        },
+      ],
+    }),
 }));
 const leg: TripLeg = {
   mode: "rail",
@@ -148,8 +164,11 @@ it("announces alighting rather than boarding a cancelled next transfer", () => {
       transitProgress={{
         currentLegIndex: 0,
         snapped: [13.3798, 52.5298],
+        position: [13.3798, 52.5298],
         fractionAlongLeg: 0.98,
         phase: "riding",
+        confidence: "gps",
+        stopCursor: 1,
         deviationMeters: 0,
         arrived: false,
       }}

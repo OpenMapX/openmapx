@@ -7,18 +7,12 @@ import NotificationImportantIcon from "@mui/icons-material/NotificationImportant
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import {
-  prepareRouteMatcher,
-  stopsUntilAlight,
-  type TransitProgress,
-  useNavigationStore,
-  useVehicleJourney,
-} from "@openmapx/core";
+import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TransitTransfer } from "@openmapx/core/navigation";
-import { changedFromPlatform, sliceJourneyToLeg } from "@openmapx/core/navigation";
+import { changedFromPlatform, isApproachingTransitAlight } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -29,26 +23,11 @@ import {
 import { haptics } from "@/lib/haptics";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
+import { claimBrowserTransitCue } from "@/lib/navigation/transitCueLedger";
 import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
 import { useNow } from "@/lib/useNow";
 import { NavBannerShell } from "./NavBannerShell";
 import { TransitTransferCard } from "./TransitTransferCard";
-
-/**
- * Slice the full vehicle journey down to the stops for this leg (board → alight)
- * and project to the shape stopsUntilAlight needs, so the countdown matches the
- * itinerary detail view.
- */
-function legStopsFor(
-  stops: { stopId: string; name: string; lat: number; lng: number }[],
-  leg: TripLeg,
-): { lat: number; lng: number; name: string }[] {
-  return sliceJourneyToLeg(stops, leg.from.stopId, leg.to.stopId).map((s) => ({
-    lat: s.lat,
-    lng: s.lng,
-    name: s.name,
-  }));
-}
 
 /**
  * Transit follow-along banner for the current leg. Reuses {@link NavBannerShell}
@@ -92,18 +71,14 @@ export function TransitLegBanner({
   const alertedRef = useRef(false);
   const line = leg.route?.shortName || leg.route?.longName || "";
 
-  // One index for this leg's shape, shared by the snapped position and every
-  // stop. It belongs to the leg, so the countdown re-renders that follow the
-  // rider along it query the same index instead of rebuilding one each time.
-  const legGeometry = leg.geometry.coordinates;
-  const legMatcher = useMemo(() => prepareRouteMatcher(legGeometry), [legGeometry]);
-
-  const legStops =
-    isTransitLeg && journey?.stops && transitProgress ? legStopsFor(journey.stops, leg) : [];
-  const { nextStopName, stopsRemaining } =
-    transitProgress && legStops.length > 0
-      ? stopsUntilAlight(legMatcher, legStops, transitProgress.snapped)
-      : { nextStopName: null as string | null, stopsRemaining: 0 };
+  const captures = useNavigationStore((s) => s.transitCaptures);
+  const capture = captures.find(
+    (c) => c.legIndex === legIndex && c.tripId === leg.tripId && c.status === "captured",
+  );
+  const legStops = capture?.stops ?? [];
+  const cursor = transitProgress?.stopCursor ?? 1;
+  const nextStopName = legStops[cursor]?.name ?? null;
+  const stopsRemaining = Math.max(0, legStops.length - cursor);
 
   // Boarding platform is only relevant until you're on board; once under way the
   // alight platform (surfaced on the "get off" card) is what matters.
@@ -111,7 +86,10 @@ export function TransitLegBanner({
   // Only aboard can the next stop be the one to get off at; waiting at the
   // boarding stop, a fix just past its pole must not sound the get-off alarm.
   const alightSoon =
-    departed && !leg.cancelled && legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
+    departed &&
+    transitProgress?.confidence === "gps" &&
+    !leg.cancelled &&
+    isApproachingTransitAlight(legStops, cursor, transitProgress.position);
   const boardingPlatform = leg.from.platformCode;
   const alightPlatform = leg.to.platformCode;
   // Show the vehicle's destination sign when it adds information beyond the
@@ -137,7 +115,8 @@ export function TransitLegBanner({
   // can announce again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: announce on the alightSoon transition only.
   useEffect(() => {
-    if (alightSoon && !alertedRef.current) {
+    if (!browserAuthority) return;
+    if (alightSoon && !alertedRef.current && claimBrowserTransitCue(`alight:${legIndex}`)) {
       alertedRef.current = true;
       haptics.warn();
       // Get-off alarm: an attention tone always, and a system notification when
@@ -165,7 +144,8 @@ export function TransitLegBanner({
   // boarded (it's moot once under way).
   // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per leg (keyed on tripId).
   useEffect(() => {
-    if (!isTransitLeg || !voiceEnabled || departed || leg.cancelled) return;
+    if (!browserAuthority || !isTransitLeg || !voiceEnabled || departed || leg.cancelled) return;
+    if (!claimBrowserTransitCue(`boarding:${legIndex}`)) return;
     speak(
       boardingPlatform
         ? t("voiceBoardPlatform", { line, destination: leg.to.name, platform: boardingPlatform })
@@ -189,7 +169,7 @@ export function TransitLegBanner({
   const title =
     leg.mode === "walking"
       ? t("walkTo", { place: leg.to.name })
-      : t("ride", {
+      : t(departed ? "ride" : "boardSelectedLine", {
           line: leg.route?.shortName ?? leg.route?.longName ?? "",
           to: leg.to.name,
         });
@@ -200,13 +180,13 @@ export function TransitLegBanner({
     isTransitLeg && !leg.cancelled && !alightSoon ? (
       <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>
         {departed && nextStopName
-          ? t("nextStop", { stop: nextStopName })
+          ? `${t("nextStop", { stop: nextStopName })} · ${t("stopsRemaining", { count: stopsRemaining })}`
           : !departed && legStops.length > 1
             ? // Still at the boarding stop: the whole ride lies ahead.
               t("alightAtCount", { place: leg.to.name, count: legStops.length - 1 })
             : stopsRemaining > 0
               ? t("alightAtCount", { place: leg.to.name, count: stopsRemaining })
-              : t("alightAt", { place: leg.to.name })}
+              : t("stopCountUnavailable")}
       </Typography>
     ) : undefined;
 
