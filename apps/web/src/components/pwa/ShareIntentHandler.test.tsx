@@ -4,7 +4,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 import { ShareIntentHandler } from "./ShareIntentHandler";
 
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   useSearchStore.getState().setQuery("");

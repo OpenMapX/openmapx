@@ -20,7 +20,6 @@ import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
  */
 export function ShareIntentHandler() {
   const params = useSearchParams();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Next router changes must also re-read the current URL; native delivery uses the event below.
   useEffect(() => {
     const consume = () => {
       // Native warm links use replaceState plus this app's update event;
@@ -56,7 +55,7 @@ export function ShareIntentHandler() {
         `${url.pathname}${url.search}${url.hash}`,
       );
     };
-    consume();
+    if (params.has("q") || params.has("geo") || params.has("action")) consume();
     window.addEventListener(DEEPLINK_OPEN_EVENT, consume);
     return () => window.removeEventListener(DEEPLINK_OPEN_EVENT, consume);
   }, [params]);
