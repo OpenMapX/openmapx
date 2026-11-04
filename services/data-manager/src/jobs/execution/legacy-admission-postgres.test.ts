@@ -2,16 +2,20 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { OpsClient } from "@openmapx/core/ops";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { setupCron } from "../../cron";
 import { db, rawSql } from "../../db";
-import { resetOpsClient } from "../../ops-client";
+import { resetOpsClient, runOpsOperation } from "../../ops-client";
 import { StateStore } from "../../state";
+import { resolveCatalogBumpCandidate } from "../transitous/catalog-bump";
 import { createSingleFlightController } from "../transitous/single-flight";
 import { installDataMutationAdmission } from "./admission";
 import { createDataConfigurationMaintenance } from "./configuration-maintenance";
-import { reconcileLegacyCatalogPreflightRejections } from "./legacy-mutation";
+import {
+  reconcileLegacyCatalogPreflightRejections,
+  withLegacyDataMutation,
+} from "./legacy-mutation";
 
 const enabled =
   Boolean(process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL) ||
@@ -52,25 +56,19 @@ it.skipIf(!enabled)(
     const before = new Set(
       (await rawSql`SELECT id FROM data_manager.jobs`).map((row) => String(row.id)),
     );
-    const cron = setupCron({
-      dataDir: join(root, "data"),
-      countries: ["de"],
-      store: new StateStore(join(root, "data")),
-      singleFlight: createSingleFlightController({ db, admissionSql: rawSql }),
-      logger: { info: () => {}, warn: () => {}, error: () => {} },
-      syncCronExpression: "disabled",
-      feedProxyReloadCronExpression: "disabled",
-      stalenessCheckCronExpression: "disabled",
-      autoBumpCronExpression: "disabled",
-      trafficExtractCronExpression: "disabled",
-      trafficLiveCronExpression: "disabled",
-      trafficPredictedCronExpression: "disabled",
-      overtureCronExpression: "disabled",
-      overtureConflationRetryCronExpression: "disabled",
-    });
     const owned: string[] = [];
     try {
-      await expect(cron.runAutoBumpNow()).rejects.toMatchObject({ code: "catalog-not-cloned" });
+      await expect(
+        withLegacyDataMutation(
+          "transit-proposal",
+          () =>
+            resolveCatalogBumpCandidate({
+              catalogDir: join(root, "data/.transitous-catalog"),
+              branch: "main",
+            }),
+          rawSql,
+        ),
+      ).rejects.toMatchObject({ code: "catalog-not-cloned" });
       const rows = (
         await rawSql`SELECT id,status,finished_at,metadata FROM data_manager.jobs WHERE kind='transit-proposal'`
       ).filter((row) => !before.has(String(row.id)));
@@ -108,7 +106,6 @@ it.skipIf(!enabled)(
         await subsequent.close();
       }
     } finally {
-      cron.stop();
       if (!owned.length)
         owned.push(
           ...(await rawSql`SELECT id FROM data_manager.jobs`)
@@ -121,25 +118,6 @@ it.skipIf(!enabled)(
   30000,
 );
 
-function proposalCron(overrides: Partial<Parameters<typeof setupCron>[0]> = {}) {
-  return setupCron({
-    dataDir: join(root, "data"),
-    countries: ["de"],
-    store: new StateStore(join(root, "data")),
-    singleFlight: createSingleFlightController({ db, admissionSql: rawSql }),
-    logger: { info: () => {}, warn: () => {}, error: () => {} },
-    syncCronExpression: "disabled",
-    feedProxyReloadCronExpression: "disabled",
-    stalenessCheckCronExpression: "disabled",
-    autoBumpCronExpression: "disabled",
-    trafficExtractCronExpression: "disabled",
-    trafficLiveCronExpression: "disabled",
-    trafficPredictedCronExpression: "disabled",
-    overtureCronExpression: "disabled",
-    overtureConflationRetryCronExpression: "disabled",
-    ...overrides,
-  });
-}
 it.skipIf(!enabled).each(["git", "proposal"] as const)(
   "I4 retains the original %s attempt as unknown and blocks admission after recovery",
   async (phase) => {
@@ -166,37 +144,53 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
                 result: { versions: [1, 2] },
               });
             const request = JSON.parse(String(options?.body));
-            if (request.operation.kind === "transitousLock.inspect")
-              return Response.json({
-                version: 1,
-                requestId: request.requestId,
-                ok: true,
-                result: {
-                  execution: "sync",
-                  kind: request.operation.kind,
-                  value: { active: null, proposed: null },
-                },
-              });
+            if (request.operation.kind !== "transitousLock.propose")
+              throw Error("Unexpected legacy proposal fixture operation");
             posts++;
             throw Error("Synthetic proposal response lost after attempted POST");
           },
         }),
       );
     }
-    const cron = proposalCron(
-      phase === "proposal"
-        ? {
-            resolveBumpCandidate: async () => ({
-              branch: "main",
-              ref: "main@" + "a".repeat(40),
-              transitousSha: "a".repeat(40),
-              transitlandAtlasSha: "b".repeat(40),
-            }),
-          }
-        : {},
-    );
+    // Exercise the same legacy owner used by the paired resolver. Cron no
+    // longer accepts the old resolveBumpCandidate hook; its dependency wiring
+    // is covered independently by cron and actual paired-review tests.
+    const attempt = () =>
+      withLegacyDataMutation(
+        "transit-proposal",
+        async () => {
+          if (phase === "git")
+            return resolveCatalogBumpCandidate({ catalogDir: catalog, branch: "main" });
+          const lockedAt = "2026-10-23T00:00:00.000Z";
+          return runOpsOperation({
+            kind: "transitousLock.propose",
+            proposalId: randomUUID(),
+            baseGenerationId: null,
+            pins: createCatalogPinSet(
+              {
+                ref: "main@" + "a".repeat(40),
+                submodules: { "transitland-atlas": "b".repeat(40) },
+                lockedAt,
+                lockedBy: "fixture",
+              },
+              {
+                schemaVersion: 1,
+                source: "mobilitydata-gbfs",
+                commit: "c".repeat(40),
+                url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"c".repeat(40)}/systems.csv`,
+                sha256: "d".repeat(64),
+                lockedAt,
+                lockedBy: "fixture",
+              },
+            ),
+            diffDigest: "e".repeat(64),
+            sourcePolicyRevision: "f".repeat(64),
+          });
+        },
+        rawSql,
+      );
     try {
-      await expect(cron.runAutoBumpNow()).rejects.toThrow();
+      await expect(attempt()).rejects.toThrow();
       const rows = (
         await rawSql`SELECT * FROM data_manager.jobs WHERE kind='transit-proposal'`
       ).filter((row) => !before.has(String(row.id)));
@@ -220,7 +214,6 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
         statusCode: 409,
       });
     } finally {
-      cron.stop();
       resetOpsClient();
       rmSync(catalog, { recursive: true, force: true });
       const ids = (await rawSql`SELECT id FROM data_manager.jobs`)
