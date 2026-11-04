@@ -41,6 +41,7 @@ function runSwiftTests(): void {
   console.log("\n[native-tests] swift test — navigation audio policy");
   run("swift", ["test"], audioModule);
   run("swift", ["test"], join(mobileRoot, "modules/openmapx-navigation-surfaces"));
+  run("swift", ["test"], join(mobileRoot, "modules/openmapx-intake"));
 }
 
 /**
@@ -87,6 +88,7 @@ function runKotlinTests(): void {
     [
       ":openmapx-navigation-audio:testDebugUnitTest",
       ":openmapx-navigation-surfaces:testDebugUnitTest",
+      ":openmapx-intake:testDebugUnitTest",
       "--no-daemon",
     ],
     androidProject,

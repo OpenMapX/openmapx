@@ -496,7 +496,14 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
 export const nativeToWebSchema = z.discriminatedUnion("type", [
   envelope(
     "intake.items",
-    z.object({ items: z.array(intakeItemSchema).max(10), forMessageId: boundedId }).strict(),
+    z
+      .object({
+        items: z.array(intakeItemSchema).max(10),
+        canApply: z.boolean(),
+        scheme: z.string().regex(/^[a-z][a-z0-9+.-]{0,100}$/),
+        forMessageId: boundedId,
+      })
+      .strict(),
   ),
   envelope("intake.chunk", intakeChunkSchema.extend({ forMessageId: boundedId })),
   envelope("intake.completed", z.object({ id: intakeIdSchema, forMessageId: boundedId }).strict()),

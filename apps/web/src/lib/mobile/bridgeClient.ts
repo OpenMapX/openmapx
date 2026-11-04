@@ -65,6 +65,7 @@ export interface HandshakeResult {
     backgroundLocation: boolean;
     localNotifications: boolean;
     speech: boolean;
+    nativeIntake?: boolean;
   };
   permission: string;
   activeSession: { sessionId: string; revision: number; kind: "ground" | "transit" } | null;
@@ -94,6 +95,9 @@ type RequestOptions = {
 };
 
 const EXPECTED_REPLY: Partial<Record<WebToNativeMessage["type"], NativeToWebMessage["type"]>> = {
+  "intake.list": "intake.items",
+  "intake.read": "intake.chunk",
+  "intake.complete": "intake.completed",
   "web.hello": "native.hello",
   "session.prepare": "session.prepared",
   "session.start": "session.started",

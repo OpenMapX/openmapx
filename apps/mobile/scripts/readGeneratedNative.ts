@@ -125,6 +125,17 @@ export async function readGeneratedNativeSurface(
     navigationExtension: plist.parse(
       readText(join(mobileRoot, "ios/OpenMapXNavigationSurface/Info.plist")),
     ) as Record<string, unknown>,
+    shareExtension: {
+      infoPlist: plist.parse(
+        readText(join(mobileRoot, "ios/OpenMapXShareExtension/Info.plist")),
+      ) as Record<string, unknown>,
+      entitlements: plist.parse(
+        readText(join(mobileRoot, "ios/OpenMapXShareExtension/ShareExtension.entitlements")),
+      ) as Record<string, unknown>,
+      privacy: plist.parse(
+        readText(join(mobileRoot, "ios/OpenMapXShareExtension/PrivacyInfo.xcprivacy")),
+      ) as Record<string, unknown>,
+    },
     pbxproj: readText(iosProjectFile(mobileRoot)),
     podfileProperties: JSON.parse(readText(join(mobileRoot, "ios/Podfile.properties.json"))),
     androidManifest,

@@ -14,6 +14,8 @@ import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge"
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
+import { IntakeController } from "./intake/IntakeController";
+import { createNativeIntakePort } from "./intake/nativeIntakeModule";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
@@ -114,7 +116,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     navigatingRef.current = navigating;
     dispatchShell({ type: navigating ? "session-started" : "session-ended" });
   }, []);
+  const intakePort = useMemo(() => createNativeIntakePort(), []);
   const { shell, navigation } = useMemo(() => {
+    let intake: IntakeController;
     let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
     const composed: ShellBridge = createShellBridge({
       webOrigin: config.webOrigin,
@@ -123,6 +127,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       // answers the one-shot location, settings and sign-in requests. A build
       // without it (the feasibility probe) answers only those.
       dispatch: async (message) => {
+        if (message.type.startsWith("intake.")) {
+          await intake.dispatch(message);
+          return;
+        }
         const composedNavigation = await navigation;
         if (composedNavigation) {
           await composedNavigation.coordinator.dispatch(message);
@@ -132,7 +140,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
           composed.bridge.send(type, payload, options),
         );
       },
-      capabilities: async () => (await navigation)?.capabilities() ?? NO_NAVIGATION,
+      capabilities: async () => ({
+        ...((await navigation)?.capabilities() ?? NO_NAVIGATION),
+        nativeIntake: await intakePort.available(),
+      }),
       permission: () => services.permission(),
       activeSession: async () => (await navigation)?.activeSession() ?? null,
     });
@@ -147,8 +158,18 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onNavigatingChanged: setNavigating,
       }).catch(() => null);
     }
-    return { shell: composed, navigation };
-  }, [config, locale, prompter, services, setNavigating]);
+    intake = new IntakeController({
+      port: intakePort,
+      scheme: config.scheme,
+      currentNonce: () => composed.registry.current()?.nonce,
+      send: (type, payload) => composed.bridge.send(type, payload),
+      canApply: async () => {
+        const runtime = await navigation;
+        return runtime !== null && (await runtime.activeSession()) === null;
+      },
+    });
+    return { shell: composed, navigation, intake };
+  }, [config, locale, prompter, services, setNavigating, intakePort]);
   const deliverLink = useCallback(
     (intent: DeepLinkIntent) => {
       shell.bridge.send("deep-link.open", intent);
@@ -250,6 +271,56 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     shell.bridge.discardQueue();
   }, [shell, connectivity.displayed, incomingLinks]);
 
+  const legacyNoticed = useRef("");
+  const announceIntake = useCallback(async () => {
+    try {
+      if (!(await intakePort.available())) return;
+      const items = await intakePort.list();
+      if (shell.registry.handshake()?.protocolVersion === 4) {
+        shell.bridge.send("intake.changed", { pendingCount: items.length });
+      } else if (items.length && visibilityRef.current === "active" && shell.registry.handshake()) {
+        const key = items.map((item) => item.id).join(",");
+        if (legacyNoticed.current === key) return;
+        legacyNoticed.current = key;
+        const failed = items.some((item) => item.kind === "error");
+        const overflow = items.some(
+          (item) => item.kind === "error" && item.errorCode === "inbox-full",
+        );
+        Alert.alert(
+          failed
+            ? locale === "de"
+              ? "Inhalt konnte nicht hinzugefügt werden"
+              : "Shared item could not be added"
+            : locale === "de"
+              ? "Geteilte Inhalte gespeichert"
+              : "Shared items saved",
+          overflow
+            ? locale === "de"
+              ? "Der Eingang ist voll. Die Webansicht aktualisieren und gespeicherte Inhalte öffnen oder verwerfen. Danach erneut teilen. Die Navigation läuft weiter."
+              : "The inbox is full. Update the web view, open or discard saved items, then share again. Navigation continues."
+            : failed
+              ? locale === "de"
+                ? "Einen Ort oder bis zu fünf GPX-, GeoJSON- oder KML-Dateien mit jeweils höchstens 5 MiB teilen. Die Webansicht für die Inhaltsprüfung aktualisieren. Die Navigation läuft weiter."
+                : "Share a location or up to five GPX, GeoJSON or KML files of at most 5 MiB each. Update the web view to review saved items. Navigation continues."
+              : locale === "de"
+                ? "Die Webansicht benötigt ein Update. Gespeicherte Inhalte bleiben bis zu 24 Stunden auf diesem Gerät. Die Navigation läuft weiter."
+                : "The web view needs an update. Saved items stay on this device for up to 24 hours. Navigation continues.",
+        );
+      }
+    } catch {
+      /* Optional module absence cannot interrupt navigation. */
+    }
+  }, [intakePort, shell, locale]);
+  useEffect(
+    () =>
+      intakePort.listen(() => {
+        void announceIntake();
+      }),
+    [intakePort, announceIntake],
+  );
+  useEffect(() => {
+    if (visibility === "active") void announceIntake();
+  }, [visibility, announceIntake]);
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
       // Rejections are silent by design: an error reply to an unauthenticated
@@ -263,11 +334,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
             shell.registry.handshake()
           ) {
             incomingLinks.bridgeReady();
+            void announceIntake();
           }
         })
         .catch(() => undefined);
     },
-    [shell, incomingLinks],
+    [shell, incomingLinks, announceIntake],
   );
 
   const openExternally = useCallback((url: string) => {

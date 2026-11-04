@@ -80,6 +80,7 @@ final class IntakeInbox {
     return try copy(InputStream(data: bytes), kind: "text", name: "Shared location", format: nil, limit: IntakePolicy.textBytes, cancelled: cancelled)
   }
   func putFile(_ file: URL, name: String, cancelled: () -> Bool = { false }) throws -> IntakeEntry {
+    guard file.isFileURL else { throw IntakeFailure.unsupported }
     let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
     guard file.isFileURL, values.isRegularFile == true, values.isSymbolicLink != true, let stream = InputStream(url: file) else { throw IntakeFailure.unreadable }
     let display = IntakePolicy.name(name)

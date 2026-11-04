@@ -80,6 +80,10 @@ function asCommandError(error: unknown): CommandError {
 export class NativeNavigationCommands {
   /** Mutations queue behind this; reads deliberately do not. */
   private queue: Promise<unknown> = Promise.resolve();
+  private pendingMutations = 0;
+  get isMutating(): boolean {
+    return this.pendingMutations > 0;
+  }
 
   constructor(
     private readonly client: BridgeClient,
@@ -93,7 +97,10 @@ export class NativeNavigationCommands {
    * not strand every later one, while the caller still sees its own failure.
    */
   private serialize<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(task, task);
+    this.pendingMutations++;
+    const result = this.queue.then(task, task).finally(() => {
+      this.pendingMutations--;
+    });
     this.queue = result.then(
       () => undefined,
       () => undefined,

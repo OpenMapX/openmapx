@@ -5,9 +5,9 @@
   "androidVersionCode": 1,
   "androidVersionName": "1.0.0",
   "protocol": {
-    "$comment": "The protocol implemented by this first release. Future releases may widen this range once a deployed version actually exists.",
+    "$comment": "Navigation overlaps protocol 3; native inbox commands and capability require protocol 4.",
     "min": 3,
-    "max": 3
+    "max": 4
   },
   "minimumWebBuild": null,
   "channel": "beta"

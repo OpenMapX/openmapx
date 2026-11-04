@@ -7,6 +7,11 @@ import {
 } from "@openmapx/core/saved-place-contributors";
 import { withFeatureContributors } from "@openmapx/mobility-core/contributors";
 import { gpx, kml } from "@tmcw/togeojson";
+import {
+  boundedImportText,
+  MAX_IMPORT_BYTES,
+  validImportedCollection,
+} from "./validateImportedGeometry";
 
 /** Extensions the importer (and the manifest file_handlers) accept. */
 export const IMPORT_ACCEPT = ".gpx,.geojson,.json,.kml";
@@ -37,6 +42,9 @@ function importedFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
   const {
     _mapAttributions: _untrusted,
     fieldContributors: raw,
+    description: _description,
+    icon: _icon,
+    styleUrl: _styleUrl,
     ...properties
   } = feature.properties ?? {};
   const captured = parseSavedPlaceContributors(raw);
@@ -55,15 +63,17 @@ function importedFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
  * for unsupported extensions, malformed XML/JSON, or empty results.
  */
 export function parseGeoFile(filename: string, text: string): GeoJSON.FeatureCollection | null {
+  if (!boundedImportText(text)) return null;
   const lower = filename.toLowerCase();
   try {
     if (lower.endsWith(".geojson") || lower.endsWith(".json")) {
       const fc = toFeatureCollection(JSON.parse(text));
-      return fc && fc.features.length > 0
+      return fc && validImportedCollection(fc)
         ? { ...fc, features: fc.features.map(importedFeature) }
         : null;
     }
     if (lower.endsWith(".gpx") || lower.endsWith(".kml")) {
+      if (/<!\s*(?:DOCTYPE|ENTITY)/i.test(text)) return null;
       const doc = new DOMParser().parseFromString(text, "application/xml");
       if (doc.querySelector("parsererror")) return null;
       const parsed = lower.endsWith(".gpx") ? gpx(doc) : kml(doc);
@@ -99,7 +109,7 @@ export function parseGeoFile(filename: string, text: string): GeoJSON.FeatureCol
             feature.properties = { ...feature.properties, fieldContributors: wpt.capture };
         }
       }
-      return features.length > 0
+      return validImportedCollection({ type: "FeatureCollection", features })
         ? { type: "FeatureCollection", features: features.map(importedFeature) }
         : null;
     }
@@ -115,6 +125,7 @@ export function parseGeoFile(filename: string, text: string): GeoJSON.FeatureCol
  */
 export async function importGeoFromFile(file: File): Promise<boolean> {
   try {
+    if (file.size > MAX_IMPORT_BYTES) return false;
     const text = await file.text();
     const geojson = parseGeoFile(file.name, text);
     if (!geojson) return false;

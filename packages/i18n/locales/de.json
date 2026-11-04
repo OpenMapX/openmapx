@@ -2633,7 +2633,32 @@
     "installTitle": "OpenMapX installieren",
     "iosHintTitle": "Auf iPhone oder iPad installieren",
     "iosHintDescription": "Tippe auf das Teilen-Symbol und wähle \"Zum Home-Bildschirm\" aus, um OpenMapX zu installieren.",
-    "gotIt": "Verstanden"
+    "gotIt": "Verstanden",
+    "intake": {
+      "pending": "Geteilte Inhalte ({count})",
+      "title": "Geteilte Inhalte prüfen",
+      "item": "Inhalt",
+      "deferred": "Deine Navigation bleibt aktiv. Diesen Inhalt erst nach ihrem Ende öffnen oder importieren.",
+      "loading": "Geteilter Inhalt wird gelesen…",
+      "tooLarge": "Die Grenze beträgt 5 MiB pro Datei oder 4.096 Zeichen pro Ort.",
+      "tooMany": "Bis zu fünf Geodateien gleichzeitig teilen.",
+      "inboxFull": "Der Eingang ist voll. Gespeicherte Inhalte öffnen oder verwerfen und erneut teilen.",
+      "expired": "Dieser Inhalt ist abgelaufen. Bitte erneut teilen.",
+      "unsupported": "Einen Ort oder eine GPX-, GeoJSON- oder KML-Datei teilen.",
+      "failed": "Dieser Inhalt konnte nicht gelesen werden. Gespeicherte Inhalte bleiben erhalten. Bitte erneut teilen.",
+      "search": "Ort oder Adresse",
+      "editUnsupported": "Adresse oder Koordinaten eingeben. Kurzlinks werden nicht aufgerufen.",
+      "textHelp": "Den Ort vor dem Öffnen prüfen oder bearbeiten.",
+      "features": "{format} · {count, plural, one {# Kartenobjekt} other {# Kartenobjekte}}",
+      "replace": "Der Import ersetzt die aktuelle Ebene „{name}“.",
+      "retention": "Geteilte Inhalte bleiben bis zu 24 Stunden auf diesem Gerät. Orte werden nicht automatisch gespeichert.",
+      "discard": "Verwerfen",
+      "later": "Später",
+      "replaceAction": "Ebene ersetzen",
+      "import": "Importieren",
+      "open": "Öffnen",
+      "partial": "Einige geteilte Inhalte konnten nicht hinzugefügt werden. Den Fehlereintrag zur Prüfung auswählen. Erfolgreich gespeicherte Inhalte bleiben verfügbar."
+    }
   },
   "offline": {
     "youreOffline": "Keine Internetverbindung — zwischengespeicherte Daten werden angezeigt",

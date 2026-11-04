@@ -100,9 +100,9 @@ After a refusal it answers `denied` without prompting again.
 
 ## The bridge protocol
 
-Both sides currently support protocol **v3 only**. The constants in
+Both sides support protocols **v3 through v4**. The constants in
 `packages/core/src/navigation/mobileProtocol.ts` and the release descriptor in
-`apps/mobile/release/version.json` agree on `min: 3, max: 3`. A non-overlapping
+`apps/mobile/release/version.json` agree on `min: 3, max: 4`. Protocol 3 retains navigation; protocol 4 adds the optional `nativeIntake` capability. A non-overlapping
 range leaves navigation disabled and requires an update. Protocol negotiation
 alone does not establish that a command is implemented.
 
@@ -110,8 +110,11 @@ alone does not establish that a command is implemented.
 
 Before changing the protocol, identify the actually deployed shell and web
 versions. Define and test their overlap, deploy a compatible web build, then ship
-the native build and enable the new capability. The current first-candidate
-configuration has no older version in its compatibility matrix.
+the native build and enable the new capability. New web builds accept older protocol-3 shells. New shells omit `nativeIntake`
+from protocol-3 hello replies and suppress intake events. Queued navigation
+messages are stamped only after negotiation, so a pre-handshake restore remains
+readable by the older page. Pending inbox items survive until a compatible page
+opens them, the user discards them, or their 24-hour expiry.
 
 ### What crosses, and what does not
 
@@ -336,3 +339,74 @@ For App Store distribution, register and provision the additional
 `<app bundle identifier>.NavigationSurface` App ID. Its versions and signing team
 follow the host application. Simulator builds and screenshots do not establish
 physical-device background/force-quit behavior or App Store signing acceptance.
+
+## Native sharing and geographic files
+
+Android receives text/URI sharing and typed GPX, GeoJSON and KML attachments
+through the main activity. Document VIEW handles `content:` grants, without
+BROWSABLE or storage/media permissions. Pre-JS lifecycle capture handles cold and
+warm delivery; restored activities and history launches are ignored to prevent
+Recents replay. The ordinary map/End Linking path ignores document URLs.
+
+Android copies foreign providers into `noBackupFilesDir` while grants are valid.
+It rejects `file:` URLs and positively identified own providers; package-visibility
+lookup failure is not a refusal. Pipe-backed providers use nonblocking polling,
+actual byte counts, cancellation and a ten-second deadline that closes descriptors.
+Two workers and a bounded queue limit unresponsive provider work. Runtime extension
+validation rejects unsupported/mixed attachments even if an explicit intent or
+wildcard sender reaches the activity. Generic MIME fallbacks are not claimed;
+provider MIME compatibility must be checked with the intended Files/mail app.
+
+On iOS, `OpenMapXShareExtension` saves user-confirmed items into
+`group.<appId>.intake`. It completes the extension request and asks the user to
+open OpenMapX manually. It never launches the host through unsupported APIs.
+Only the host and Share Extension have this group; the navigation widget has none.
+The group contains intake bytes only, never authentication or navigation storage.
+Normal document Open In accepts regular, non-symlink direct children of the app's
+OS-managed `Documents/Inbox`, with opening-in-place explicitly disabled. The source
+copy is removed after intake; expired orphan copies are swept on launch.
+`UIFileSharingEnabled` stays absent. The app container is not exposed in Files.
+
+The Foundation store coordinates short commits across the host and extension.
+External provider reads do not hold the coordinator lock. Staging is separated by
+writer and named with a writer-recorded epoch; cleanup waits beyond the copy
+deadline plus a minute, preserving a live writer. Host document commits have a
+background-task assertion. The host module and extension include file-access
+privacy manifests. The extension imports GPX `com.topografix.gpx`, KML
+`com.google.earth.kml`, and Apple's `public.geojson` (also declared for older OS
+versions). Its bounded SUBQUERY activation predicate excludes arbitrary file URLs.
+
+Limits are 4,096 UTF-16 units/8 KiB for text, 5 MiB per file, five files per share,
+and eight content items/20 MiB for the owned inbox. Two bounded error descriptors
+remain available when content is full. Items expire after 24 hours. Names are
+bounded display labels; only opaque UUIDs address immutable entries. Protocol-4
+list/read/complete commands transfer stateless 24 KiB chunks through the existing
+origin/nonce-authenticated bridge. No native path, sender URI or server authority
+crosses it. Reads never acknowledge an item; explicit Open/Import or Discard does.
+Older pages receive a native update notice and preserve their pending items.
+
+The web preview validates UTF-8 and exact chunk boundaries with a 60-second total
+transfer limit. Text is classified locally; short URLs are never fetched. Users
+can edit an unsupported link into an address. Geographic parsing rejects XML
+entities/DOCTYPE before DOMParser, invalid/out-of-range geometry and oversized or
+deep collections. It permits at most 100,000 positions and 10,000 features.
+KML description/icon/style URL metadata is dropped. Browser `.json` import remains
+supported; native document registration is limited to `.gpx`, `.geojson`, `.kml`.
+
+The inbox entry point returns non-map pages to the map before offering preview.
+A route change cancels pending application. Confirmation applies a map search
+or the existing imported overlay. It never adds
+saved places automatically. Replacing an overlay is explicit. A fresh native
+inbox listing supplies navigation availability immediately before application,
+and the page rechecks its native session and pending mutations synchronously.
+Preparing, active, arrived or unresolved navigation defers application. Intake
+never terminates or replaces a trip; Later keeps the item and Discard removes only
+that item.
+
+Platform references: [Expo incoming sharing](https://docs.expo.dev/versions/v57.0.0/sdk/sharing/)
+labels its iOS host-launch approach experimental and unsupported by Apple;
+[Apple's extension guide](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html)
+documents App Groups and activation predicates; the
+[Android receiver guide](https://developer.android.com/develop/ui/compose/sharing/receive)
+and [ContentResolver security guidance](https://developer.android.com/privacy-and-security/risks/content-resolver)
+define the Android receiving and provider authority boundaries.

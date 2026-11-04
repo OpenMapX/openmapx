@@ -2633,7 +2633,32 @@
     "installTitle": "Install OpenMapX",
     "iosHintTitle": "Install on iPhone or iPad",
     "iosHintDescription": "Tap the Share button, then choose \"Add to Home Screen\" to install OpenMapX.",
-    "gotIt": "Got it"
+    "gotIt": "Got it",
+    "intake": {
+      "pending": "Shared items ({count})",
+      "title": "Review shared content",
+      "item": "Item",
+      "deferred": "Your trip stays active. Open or import this after navigation ends.",
+      "loading": "Reading shared content…",
+      "tooLarge": "This item exceeds the limit: 5 MiB per file or 4,096 characters per location.",
+      "tooMany": "Share up to five geographic files at a time.",
+      "inboxFull": "The inbox is full. Open or discard saved items, then share again.",
+      "expired": "This item has expired. Share it again.",
+      "unsupported": "Share a location or a GPX, GeoJSON or KML file.",
+      "failed": "This item could not be read. Your saved items have been kept; try sharing it again.",
+      "search": "Location or address",
+      "editUnsupported": "Enter an address or coordinates. Short links are not followed.",
+      "textHelp": "Review or edit the location before opening it.",
+      "features": "{format} · {count, plural, one {# map feature} other {# map features}}",
+      "replace": "Importing replaces the current overlay “{name}”.",
+      "retention": "Shared content stays on this device for up to 24 hours. Nothing is added to saved places automatically.",
+      "discard": "Discard",
+      "later": "Later",
+      "replaceAction": "Replace overlay",
+      "import": "Import",
+      "open": "Open",
+      "partial": "Some shared items could not be added. Select an error entry to review it; successfully saved items remain available."
+    }
   },
   "offline": {
     "youreOffline": "You're offline — showing cached data",

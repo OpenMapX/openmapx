@@ -5,6 +5,7 @@ import type { ExpoConfig } from "expo/config";
 // apply type stripping.
 import { readMobileConfig } from "./config/mobileConfig.ts";
 import { IOS_USAGE_DESCRIPTIONS } from "./config/nativeCopy.ts";
+import { intakeAndroidFilters } from "./config/nativeIntakeConfig.ts";
 
 /**
  * Continuous Native Generation input.
@@ -47,6 +48,7 @@ const config: ExpoConfig = {
   assetBundlePatterns: ["assets/**"],
   ios: {
     bundleIdentifier: mobile.appId,
+    ...(mobile.appleTeamId && { appleTeamId: mobile.appleTeamId }),
     // Phone is the supported first-release form factor; no tablet layout is
     // claimed anywhere in the store metadata.
     supportsTablet: false,
@@ -63,6 +65,7 @@ const config: ExpoConfig = {
     package: mobile.appId,
     // A map chooser uses an implicit VIEW intent, independently of App Links.
     intentFilters: [
+      ...intakeAndroidFilters(),
       {
         action: "VIEW",
         category: ["DEFAULT", "BROWSABLE"],
@@ -117,6 +120,7 @@ const config: ExpoConfig = {
     // entitlement, the bundle-identifier URL scheme).
     "./plugins/withOpenMapXNativeConfig",
     "./plugins/withNavigationSurfaces",
+    "./plugins/withNativeIntake",
     [
       "expo-build-properties",
       {

@@ -1,9 +1,14 @@
 import ExpoModulesCore
 import Foundation
+import UIKit
 
 public final class OpenMapXIntakeModule: Module {
   private var observer: NSObjectProtocol?
   private func result(_ work: () throws -> [String: Any]) -> [String: Any] {
+    var task = UIBackgroundTaskIdentifier.invalid
+    let start = { task = UIApplication.shared.beginBackgroundTask(withName: "OpenMapX inbox") }
+    if Thread.isMainThread { start() } else { DispatchQueue.main.sync(execute: start) }
+    defer { DispatchQueue.main.async { if task != .invalid { UIApplication.shared.endBackgroundTask(task) } } }
     do { return try work() } catch { return ["errorCode": (error as? IntakeFailure)?.rawValue ?? "unavailable"] }
   }
   public func definition() -> ModuleDefinition {

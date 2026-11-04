@@ -203,3 +203,11 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     return queryIntent(url.searchParams, url.searchParams.get("q") || "OpenMapX");
   return { kind: "unsupported", reason: "unsupported" };
 }
+
+export const intakeListingSchema = z
+  .object({
+    items: z.array(intakeItemSchema).max(10),
+    canApply: z.boolean(),
+    scheme: z.string().regex(/^[a-z][a-z0-9+.-]{0,100}$/),
+  })
+  .strict();

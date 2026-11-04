@@ -21,13 +21,21 @@ object IntakeIngress {
   val listeners = CopyOnWriteArraySet<() -> Unit>()
   private val workers = ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(8))
   private val deadlines = Executors.newSingleThreadScheduledExecutor()
+  private val overflowWorker = Executors.newSingleThreadExecutor()
+  private val overflowPending = AtomicBoolean(false)
   fun inbox(context: Context) = IntakeInbox(File(context.noBackupFilesDir, "openmapx-intake"))
-  private fun changed() { listeners.forEach { it() } }
+  internal fun changed() { listeners.forEach { try { it() } catch (_: Exception) {} } }
   fun capture(context: Context, intent: Intent) {
     val app = context.applicationContext
     // Copy while grants are attached to the receiving Activity. The queue is deliberately bounded.
-    try { workers.execute { ingest(app, intent) } }
-    catch (_: Exception) { inbox(app).recordError("inbox-full"); changed() }
+    try { workers.execute { try { ingest(app, intent) } catch (_: Exception) { changed() } } }
+    catch (_: Exception) {
+      // Rejection runs on the Activity thread; never perform quota/error filesystem work there.
+      if (overflowPending.compareAndSet(false, true)) overflowWorker.execute {
+        try { inbox(app).recordError("inbox-full") } catch (_: Exception) {}
+        finally { overflowPending.set(false); changed() }
+      }
+    }
   }
   @Suppress("DEPRECATION")
   private fun ingest(context: Context, intent: Intent) {
@@ -36,7 +44,7 @@ object IntakeIngress {
     val signal = CancellationSignal()
     val descriptor = AtomicReference<ParcelFileDescriptor?>(null)
     val started = System.nanoTime()
-    val deadline = deadlines.schedule({ cancelled.set(true); signal.cancel(); try { descriptor.get()?.close() } catch (_: Exception) {} }, IntakePolicy.COPY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    val deadline = deadlines.schedule({ cancelled.set(true); try { descriptor.get()?.close() } catch (_: Exception) {}; try { signal.cancel() } catch (_: Exception) {} }, IntakePolicy.COPY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     try {
       val uris = mutableListOf<Uri>()
       if (intent.action == Intent.ACTION_VIEW) intent.data?.let { uris += it }
@@ -80,7 +88,7 @@ object IntakeIngress {
           descriptor.set(null)
         }
       }
-    } catch (e: Exception) { inbox.recordError((e as? IntakeFailure)?.code ?: "unreadable") }
+    } catch (e: Exception) { try { inbox.recordError((e as? IntakeFailure)?.code ?: "unreadable") } catch (_: Exception) {} }
     finally { deadline.cancel(false); try { descriptor.get()?.close() } catch (_: Exception) {}; changed() }
   }
 }

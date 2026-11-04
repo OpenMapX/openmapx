@@ -54,3 +54,45 @@ final class IntakeInboxTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
   }
 }
+
+extension IntakeInboxTests {
+  func testActualFileSizeAndMalformedMetadataAreRejected() throws {
+    let store = try IntakeInbox(root: root.appendingPathComponent("owned"), writer: "host")
+    let file = root.appendingPathComponent("large.gpx")
+    try Data(repeating: 65, count: IntakePolicy.fileBytes + 1).write(to: file)
+    XCTAssertThrowsError(try store.putFile(file, name: "large.gpx"))
+    XCTAssertTrue(try store.list().isEmpty)
+    let item = try store.putText("Berlin")
+    let meta = root.appendingPathComponent("owned/\(item.id)/metadata.json")
+    var raw = item.dictionary; raw["path"] = "/private/file"
+    try JSONSerialization.data(withJSONObject: raw).write(to: meta)
+    XCTAssertTrue(try store.list().isEmpty)
+  }
+  func testConcurrentWritersDoNotExceedQuota() throws {
+    let group = DispatchGroup(), lock = NSLock()
+    var successes = 0
+    for i in 0..<16 {
+      group.enter()
+      DispatchQueue.global().async {
+        defer { group.leave() }
+        if let store = try? IntakeInbox(root: self.root, writer: i % 2 == 0 ? "host" : "extension"), (try? store.putText("Berlin")) != nil {
+          lock.lock(); successes += 1; lock.unlock()
+        }
+      }
+    }
+    XCTAssertEqual(group.wait(timeout: .now() + 10), .success)
+    XCTAssertEqual(successes, 8)
+    XCTAssertEqual(try IntakeInbox(root: root, writer: "host").list().count, 8)
+  }
+  func testChunksRequireAlignedOffsetsAndCancellationNeverCommits() throws {
+    let store = try IntakeInbox(root: root.appendingPathComponent("owned"), writer: "host")
+    let file = root.appendingPathComponent("route.gpx")
+    try Data(repeating: 65, count: 50000).write(to: file)
+    XCTAssertThrowsError(try store.putFile(file, name: "route.gpx", cancelled: { true }))
+    XCTAssertTrue(try store.list().isEmpty)
+    let item = try store.putFile(file, name: "route.gpx")
+    XCTAssertEqual(try store.read(item.id, offset: 49152).byteLength, 848)
+    XCTAssertTrue(try store.read(item.id, offset: 49152).eof)
+    XCTAssertThrowsError(try store.read(item.id, offset: 1))
+  }
+}

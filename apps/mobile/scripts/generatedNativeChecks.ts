@@ -35,6 +35,11 @@ export interface ExpectedNativeSurface {
 export interface GeneratedNativeSurface {
   infoPlist: Record<string, unknown>;
   navigationExtension?: Record<string, unknown>;
+  shareExtension?: {
+    infoPlist: Record<string, unknown>;
+    entitlements: Record<string, unknown>;
+    privacy: Record<string, unknown>;
+  };
   entitlements: Record<string, unknown>;
   /** Raw `project.pbxproj` text. */
   pbxproj: string;
@@ -131,10 +136,14 @@ function checkIos(
       ),
     ),
   ];
-  const expectedIds = [expected.appId, `${expected.appId}.NavigationSurface`];
-  if (bundleIds.length !== 2 || expectedIds.some((id) => !bundleIds.includes(id))) {
+  const expectedIds = [
+    expected.appId,
+    `${expected.appId}.NavigationSurface`,
+    `${expected.appId}.ShareExtension`,
+  ];
+  if (bundleIds.length !== 3 || expectedIds.some((id) => !bundleIds.includes(id))) {
     fail(
-      `expected exactly app and navigation extension bundle identifiers: ${expectedIds.join(", ")}`,
+      `expected exactly app, navigation and share extension bundle identifiers: ${expectedIds.join(", ")}`,
     );
   }
 
@@ -202,6 +211,51 @@ function checkIos(
   if (infoPlist.NSFileProtectionKey !== IOS_DATA_PROTECTION_CLASS) {
     fail(`the app container must declare ${IOS_DATA_PROTECTION_CLASS}`);
   }
+  if (infoPlist.LSSupportsOpeningDocumentsInPlace !== false)
+    fail("LSSupportsOpeningDocumentsInPlace must be explicitly false");
+  const group = `group.${expected.appId}.intake`;
+  const share = generated.shareExtension;
+  if (
+    JSON.stringify(entitlements["com.apple.security.application-groups"]) !==
+      JSON.stringify([group]) ||
+    JSON.stringify(share?.entitlements) !==
+      JSON.stringify({ "com.apple.security.application-groups": [group] })
+  )
+    fail("host and share extension must have exactly the intake App Group");
+  const sharePoint = asObject(share?.infoPlist.NSExtension);
+  const activation = asObject(sharePoint.NSExtensionAttributes).NSExtensionActivationRule;
+  if (
+    sharePoint.NSExtensionPointIdentifier !== "com.apple.share-services" ||
+    sharePoint.NSExtensionPrincipalClass !== "$(PRODUCT_MODULE_NAME).ShareViewController" ||
+    typeof activation !== "string" ||
+    !activation.includes("SUBQUERY") ||
+    activation.includes("TRUEPREDICATE") ||
+    activation.includes("SupportsFileWithMaxCount") ||
+    share?.infoPlist.OpenMapXIntakeAppGroup !== group ||
+    infoPlist.OpenMapXIntakeAppGroup !== group
+  )
+    fail("share extension must use the bounded geographic activation predicate and derived group");
+  if (
+    !generated.pbxproj.includes("OpenMapXShareExtension.appex in Copy Files") ||
+    !generated.pbxproj.includes("OpenMapXShareExtension/ShareExtension.entitlements")
+  )
+    fail("share extension must be embedded with its own entitlement file");
+  if (!JSON.stringify(share?.privacy).includes("C617.1"))
+    fail("share extension privacy manifest must declare its local file access reason");
+  for (const block of generated.pbxproj.matchAll(/buildSettings = \{([\s\S]*?)\};/g)) {
+    if (
+      block[1].includes(`${expected.appId}.NavigationSurface`) &&
+      block[1].includes("CODE_SIGN_ENTITLEMENTS")
+    )
+      fail("navigation extension must not receive intake group entitlements");
+  }
+  const documents = infoPlist.CFBundleDocumentTypes;
+  if (
+    !Array.isArray(documents) ||
+    JSON.stringify(asObject(documents[0]).LSItemContentTypes) !==
+      JSON.stringify(["com.topografix.gpx", "public.geojson", "com.google.earth.kml"])
+  )
+    fail("document types must be exactly GPX, GeoJSON and KML");
   for (const key of FORBIDDEN_IOS_SHARING_KEYS) {
     if (key in infoPlist) fail(`${key} would expose the active session database`);
   }
