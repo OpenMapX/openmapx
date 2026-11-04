@@ -112,6 +112,18 @@ it("projects transit phases without rotating credentials or coordinates", () => 
   expect(JSON.stringify(p)).not.toContain(FIXTURE_TOKEN);
   expect(JSON.stringify(p)).not.toMatch(/refreshToken|geometry|coords/);
 });
+it.each([
+  [1, 3],
+  [2, 2],
+  [3, 1],
+])("counts the next captured stop %i among the %i stops remaining", (cursor, remaining) => {
+  const s = transitSessionFixture();
+  s.payload.tickState.currentLegIndex = 1;
+  s.payload.tickState.phase = "riding";
+  s.payload.tickState.stopCursor = cursor;
+  s.lastAcceptedFix = { coords: [8.68, 50.11], accuracy: 5, timestampMs: now };
+  expect(projectSurface(s, now)?.detail).toBe(`${remaining} stops remaining`);
+});
 it("bounds untrusted feed text and ignores impossible progress", () => {
   const s = ground();
   (s.payload.startPackage.route.steps[0] as { instruction: string }).instruction =

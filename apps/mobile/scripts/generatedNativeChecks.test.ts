@@ -21,6 +21,14 @@ const EXPECTED: ExpectedNativeSurface = {
   androidTargetSdk: 36,
 };
 
+it("rejects the legacy app lifecycle that crashes when built with the iOS 27 SDK", () => {
+  const value = surface();
+  delete value.infoPlist.UIApplicationSceneManifest;
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("scene lifecycle"),
+  );
+});
+
 function androidManifest(): AndroidManifestLike {
   return {
     manifest: {
@@ -55,6 +63,14 @@ function surface(): GeneratedNativeSurface {
     },
     infoPlist: {
       NSSupportsLiveActivities: true,
+      UIApplicationSceneManifest: {
+        UIApplicationSupportsMultipleScenes: false,
+        UISceneConfigurations: {
+          UIWindowSceneSessionRoleApplication: [
+            { UISceneDelegateClassName: "EXExpoAppSceneDelegate" },
+          ],
+        },
+      },
       WKAppBoundDomains: ["openmapx.com"],
       UIBackgroundModes: ["location"],
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: false },

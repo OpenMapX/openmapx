@@ -120,7 +120,8 @@ const config: ExpoConfig = {
     [
       "expo-build-properties",
       {
-        ios: { deploymentTarget: "16.4" },
+        // SDK 57 opt-in: Xcode/iOS 27 builds cannot launch the legacy lifecycle.
+        ios: { deploymentTarget: "16.4", enableSceneSupport: true },
         android: {
           minSdkVersion: 24,
           compileSdkVersion: 36,

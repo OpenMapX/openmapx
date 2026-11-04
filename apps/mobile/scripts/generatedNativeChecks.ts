@@ -78,6 +78,12 @@ function asStringArray(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function gradleProperty(properties: string, key: string): string | undefined {
   const match = properties.match(new RegExp(`^${key.replace(/\./g, "\\.")}=(.*)$`, "m"));
   return match?.[1]?.trim();
@@ -90,6 +96,18 @@ function checkIos(
 ): void {
   const { infoPlist, entitlements } = generated;
   if (infoPlist.NSSupportsLiveActivities !== true) fail("NSSupportsLiveActivities must be enabled");
+  const scenes = asObject(infoPlist.UIApplicationSceneManifest);
+  const applicationScenes = asObject(
+    scenes.UISceneConfigurations,
+  ).UIWindowSceneSessionRoleApplication;
+  if (
+    scenes.UIApplicationSupportsMultipleScenes !== false ||
+    !Array.isArray(applicationScenes) ||
+    applicationScenes.length !== 1 ||
+    asObject(applicationScenes[0]).UISceneDelegateClassName !== "EXExpoAppSceneDelegate"
+  ) {
+    fail("iOS scene lifecycle must use the Expo single-window scene delegate");
+  }
   const extension = generated.navigationExtension;
   const point = extension?.NSExtension as Record<string, unknown> | undefined;
   if (

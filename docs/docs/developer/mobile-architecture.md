@@ -302,6 +302,12 @@ expiry can only end it at the next runtime opportunity. Force-quit survival and
 continuous delivery without OS runtime are not promised. ActivityKit's finite
 lifetime can require recreation on a later foreground opportunity.
 
+SDK 57 builds opt in to Expo's single-window scene lifecycle through
+`expo-build-properties` so binaries built with the iOS 27 SDK can launch.
+Location input normalizes Core Location's fractional millisecond timestamps to
+integer epoch milliseconds before ordering and persistence; otherwise a valid
+iOS fix fails the durable session schema and quarantines the trip.
+
 Both surfaces show bounded English/German instructions and session-selected units.
 Ground progress uses the upcoming maneuver, not the step already performed.
 Transit countdowns use captured departure/arrival times, expire at their target,

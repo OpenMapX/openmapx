@@ -1,10 +1,45 @@
+import { sanitiseFixes } from "../../location/sanitiseFixes";
 import { migrateSessionSchema } from "../../storage/migrations";
 import { SessionRepository } from "../../storage/SessionRepository";
 import { openTestDatabase } from "../../storage/testing/nodeSqliteDatabase";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import { EffectRunner } from "../effects";
+import { GroundNavigationProcessor } from "../ground/GroundNavigationProcessor";
 import { createPublishPort } from "../snapshots/createPublishPort";
 import { SurfaceController } from "./SurfaceController";
+
+it("preserves a schema-valid durable session after an iOS fractional-millisecond GPS fix", async () => {
+  const now = 1_700_000_100_000;
+  const session = groundSessionFixture({ status: "active" });
+  const { accepted } = sanitiseFixes(
+    [
+      {
+        timestamp: now - 0.375,
+        coords: { latitude: 50.11, longitude: 8.68, accuracy: 5, speed: 0 },
+      },
+    ],
+    now,
+    null,
+  );
+  const mutation = new GroundNavigationProcessor().processFixes(session, accepted, now);
+  const db = openTestDatabase();
+  await migrateSessionSchema(db, now);
+  const repository = new SessionRepository(db);
+  try {
+    await repository.createPreparing(session);
+    expect(
+      (await repository.compareAndSwap(session.sessionId, session.revision, () => mutation, now))
+        .ok,
+    ).toBe(true);
+    // The actual next SQLite read must not quarantine the accepted GPS fix.
+    expect(await repository.loadActive(now)).toMatchObject({
+      sessionId: session.sessionId,
+      lastAcceptedFix: { timestampMs: now - 1 },
+    });
+  } finally {
+    await db.closeAsync();
+  }
+});
 
 it("publishes and clears surfaces from owned SQLite without a WebView", async () => {
   const db = openTestDatabase();

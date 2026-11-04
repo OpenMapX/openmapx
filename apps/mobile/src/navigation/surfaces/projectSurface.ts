@@ -96,7 +96,8 @@ export function projectSurface(
     const stops = capture && Array.isArray(capture.stops) ? capture.stops : [];
     const cursor = index(record(s.payload.progress).stopCursor ?? tick.stopCursor);
     if (stops.length && cursor >= 0 && cursor < stops.length)
-      detail = `${stops.length - 1 - cursor} ${copy.stops}`;
+      // The cursor names the next stop, which is still one of the remaining stops.
+      detail = `${stops.length - cursor} ${copy.stops}`;
     if (s.payload.confidence === "schedule") {
       // Schedule progress is useful underground, but is never a fresh GPS fix.
       const progressAt = finite(tick.lastProgressAtMs) ?? 0;
