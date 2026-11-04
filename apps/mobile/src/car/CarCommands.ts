@@ -3,6 +3,7 @@ import {
   carDestinationSchema,
   measurementDistanceParts,
 } from "@openmapx/core/navigation";
+import { createApiClient, fetchGeocode } from "@openmapx/core/navigation/api";
 import { z } from "zod";
 import { readCarDestinations } from "../bridge/receiveCarDestinations";
 import { createLocationDriver } from "../location/createLocationDriver";
@@ -210,30 +211,24 @@ export class CarCommands {
   private async runSearch(query: string, preferences: CarDestinations, generation: number) {
     const controller = new AbortController();
     this.search = controller;
-    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const url = new URL("/api/integrations/geocoding/geocode", this.apiOrigin);
-      url.searchParams.set("q", query);
-      url.searchParams.set("lang", preferences.locale);
-      url.searchParams.set("limit", "10");
-      // Rank places near the car first, as the phone search does; ~1 km precision suffices.
+      // Rank places near the car first, as the phone search does.
       const near = this.autoDrive
-        ? { coords: AUTO_DRIVE_ORIGIN }
-        : await createLocationDriver()
-            .getCurrentFix({ accuracy: "balanced", maxAgeMs: 300000, timeoutMs: 2000 })
-            .catch(() => null);
-      if (near) {
-        url.searchParams.set("lat", near.coords[1].toFixed(2));
-        url.searchParams.set("lng", near.coords[0].toFixed(2));
-      }
+        ? AUTO_DRIVE_ORIGIN
+        : ((
+            await createLocationDriver()
+              .getCurrentFix({ accuracy: "balanced", maxAgeMs: 300000, timeoutMs: 2000 })
+              .catch(() => null)
+          )?.coords ?? null);
       if (generation !== this.searchGeneration || !this.connected) return;
-      const response = await fetch(url.toString(), {
-        credentials: "omit",
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error("unavailable");
+      // The phone search's request, through the shared client (errors, abort, timeout).
+      const places = await fetchGeocode(
+        { q: query, lang: preferences.locale, proximity: near, limit: 10 },
+        createApiClient({ baseUrl: this.apiOrigin, credentials: "omit" }),
+        { signal: controller.signal, timeoutMs: 15000 },
+      );
       const results = searchResponse
-        .parse(await response.json())
+        .parse(places)
         .flatMap((place, index) => {
           const result = carDestinationSchema.safeParse({
             id: place.id ?? `search-${index}`,
@@ -248,8 +243,6 @@ export class CarCommands {
     } catch {
       if (generation === this.searchGeneration && this.connected)
         await this.native.result(JSON.stringify({ error: "search-unavailable" }));
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }
