@@ -53,7 +53,7 @@ export interface OwnedServiceSnapshot {
   };
 }
 /** Docker-host metadata provenance; it does not authenticate a hostile Docker administrator. */
-export interface OwnedServiceInventory {
+interface OwnedServiceInventory {
   services: OwnedServiceSnapshot[];
   /** Retention-only observations, never authorization claims. */
   observedContainerIds: string[];

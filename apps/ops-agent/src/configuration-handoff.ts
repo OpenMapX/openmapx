@@ -17,10 +17,10 @@ import {
 import type { DockerCommandRunner } from "./release-images";
 import { OpsHostUpdateRequiredError } from "./runtime";
 
-export const CONFIGURATION_HANDOFF_ENTRYPOINT = "dist/configuration-handoff-main.mjs";
+const CONFIGURATION_HANDOFF_ENTRYPOINT = "dist/configuration-handoff-main.mjs";
 export const CONFIGURATION_HANDOFF_LABEL = "openmapx.configuration-handoff";
-export const CONFIGURATION_HANDOFF_VERSION = "1";
-export const CONFIGURATION_HANDOFF_IMAGE_LABEL = "openmapx.configuration-handoff.version";
+const CONFIGURATION_HANDOFF_VERSION = "1";
+const CONFIGURATION_HANDOFF_IMAGE_LABEL = "openmapx.configuration-handoff.version";
 const protectedOrder = ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"] as const;
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 /** Only original inherited environment values participate in the private source

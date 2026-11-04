@@ -1,10 +1,7 @@
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 import { installDataWorkflowRuntime, resolveDataDefaultRegion } from "./data-workflow-runtime";
 
-export {
-  type ConfiguredResourceAuthority,
-  loadConfiguredResourceAuthority,
-} from "./configured-resource-authority";
+export { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -129,7 +126,7 @@ const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 type BackupKind = "backup.create" | "backup.restore" | "backup.delete";
 type BackupInventoryEntry = OpsResultFor<"backup.list">["backups"][number];
 
-export interface FixedCliOptions {
+interface FixedCliOptions {
   operationKind?: OpsOperationKind;
   execution?: ExecutionRef;
   controlAssertion?: string;

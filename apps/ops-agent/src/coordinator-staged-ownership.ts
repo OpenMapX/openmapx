@@ -17,8 +17,6 @@ import {
   readLiteralCoordinatorStagedRetention,
 } from "./owned-services";
 
-export { assertStagedCoordinatorConfigurationWrite } from "./configuration-maintenance-store";
-
 import { productionOwnedServices } from "./production-runtime";
 import type { OpsRuntime } from "./runtime";
 

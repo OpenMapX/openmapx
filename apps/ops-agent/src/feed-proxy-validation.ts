@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { feedProxyValidationCompletionDigest } from "@openmapx/core/build-artifacts";
 import type { ExecutionRef } from "@openmapx/core/ops";
 
-export const FEED_PROXY_VALIDATION_SCRIPT =
+const FEED_PROXY_VALIDATION_SCRIPT =
   'nginx -t\nvalidation_status=$?\nprintf "\\nOPENMAPX_NGINX_TEST_V1:%s:%s\\n" "$1" "$validation_status"\nexit 0';
 const PREFIX = "OPENMAPX_NGINX_TEST_V1:";
 export function createFeedProxyValidationInvocation() {

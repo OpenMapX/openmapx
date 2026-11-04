@@ -13,6 +13,8 @@
       "entry": [
         // The Git pre-commit hook invokes this script directly.
         "scripts/check-staged.mjs",
+        // The scoped unused-export audit loads this Knip postprocessor by path.
+        "scripts/knip-service-exports.mjs",
         // Nested workspace commands and an explicitly selected Vitest config.
         "scripts/discovery-eval/run.ts",
         "scripts/record-search-eval.mts",
@@ -93,8 +95,13 @@
         // agent itself and the helper that replaces the agent's container.
         "src/index.ts",
         "src/agent-handoff-main.ts",
+        "src/configuration-handoff-main.ts",
         // Concurrency tests spawn these writer processes by path.
-        "src/__fixtures__/*.mjs"
+        "src/__fixtures__/*.mjs",
+        // Native recovery tests bundle or execute these isolated children by path.
+        "src/artifact-transfer/test-fixtures/*.{ts,mjs}",
+        "src/test-fixtures/data-owned-http-process.ts",
+        "src/test-fixtures/terminal-retention-process.ts"
       ]
     },
     "apps/web": {
@@ -140,8 +147,14 @@
       "ignoreDependencies": ["name-suggestion-index"]
     },
     "packages/cli": {
+      // Durable data tests bundle this fixed CLI subprocess by path.
+      "entry": ["__tests__/fixtures/single-data-cli-process.ts"],
       // Root scripts invoke this workspace through `pnpm exec tsx`.
       "ignoreDependencies": ["tsx"]
+    },
+    "packages/core": {
+      // Artifact/authority tests build these native subprocess entrypoints.
+      "entry": ["src/build-artifacts/test-fixtures/*.ts"]
     },
     "packages/entur-client": {
       // check-types compiles this never-imported file to assert generated
@@ -177,6 +190,9 @@
         "scripts/verify-road-condition-engine.ts",
         "scripts/verify-route-traffic-proof.ts",
         "scripts/traffic-writer-fault.ts",
+        // Native catalog and execution recovery tests spawn these files by path.
+        "__tests__/fixtures/catalog-data-manager-process.mjs",
+        "src/jobs/execution/test-fixtures/dm-recovery-process.ts",
         // Root package scripts invoke this nested OpenAPI CLI directly.
         "scripts/openapi/generate.ts"
       ],

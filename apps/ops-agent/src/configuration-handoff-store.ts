@@ -131,7 +131,7 @@ function writeProgress(
 /** Only the real borrowed typed phase can produce this nominal launch. The
  * old image prerequisite and original generation/guard source are checked
  * before key/grant publication; no new target root is acquired. */
-export async function prepareConfigurationHandoffLaunch(
+async function prepareConfigurationHandoffLaunch(
   runtime: OpsRuntime,
   inputOperation: Extract<OpsOperation, { kind: "configurationHandoff.prepare" }>,
   context: OpsExecutionContext,
@@ -297,7 +297,7 @@ export async function prepareConfigurationHandoffLaunch(
   );
   return marker;
 }
-export function preparedConfigurationHandoffState(value: PreparedConfigurationHandoff) {
+function preparedConfigurationHandoffState(value: PreparedConfigurationHandoff) {
   const state = prepared.get(value);
   if (!state) throw Error("Original nominal handoff required");
   const observed = readIntent(state.authority, state.intent.operation.handoffId);
