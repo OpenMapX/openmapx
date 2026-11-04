@@ -3131,7 +3131,38 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             );
             return;
           }
-          expect(exit.code).toBe(0);
+          const [observed] = await fixture.db
+              .select()
+              .from(schema.adminJob)
+              .where(eq(schema.adminJob.id, id)),
+            observation = observed?.result as Record<string, unknown>;
+          expect(
+            exit.code,
+            JSON.stringify({
+              status: observed?.status,
+              error: observed?.error,
+              candidatePhase: (
+                observation?._configurationCandidate as { phase?: string } | undefined
+              )?.phase,
+              configuration: observation?.configuration,
+              operations: Object.values(
+                (
+                  observation?.opsProjection as
+                    | {
+                        operations?: Record<
+                          string,
+                          { kind?: string; phase?: string; receiptDelivery?: { state?: string } }
+                        >;
+                      }
+                    | undefined
+                )?.operations ?? {},
+              ).map(({ kind, phase, receiptDelivery }) => ({
+                kind,
+                phase,
+                delivery: receiptDelivery?.state,
+              })),
+            }),
+          ).toBe(0);
           const row = await finished(id),
             result = row.result as Record<string, unknown>;
           expect(row.status).toBe("success");

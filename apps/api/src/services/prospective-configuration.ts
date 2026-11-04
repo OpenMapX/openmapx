@@ -4539,16 +4539,17 @@ export async function stageProspectiveConfigurationMaintenance(
     });
   if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
     rejectUnissuedCandidate(candidate, "Configuration candidate expired");
-  await verifyCurrentPreview(candidate, state, signal);
-  await prepareMaintenanceCoordinator(candidate, state, signal);
-  if (state.record.privateCoordinatorLifecycle?.action === "update") {
+  const fixedPull =
+    state.record.privateCoordinatorLifecycle?.action === "update"
+      ? state.record.privateCoordinatorLifecycle.pull
+      : undefined;
+  const deliverPull = async () => {
+    if (!fixedPull) throw Error("Original coordinator Update required");
     try {
       await deliverCoordinatorPullSubmission(owner.job, candidate.candidateId);
     } catch (error) {
       const { ApiOpsError } = await import("./ops-client"),
-        pull = readProjection(owner.job.checkpointResult).operations[
-          state.record.privateCoordinatorLifecycle.pull.operationKey
-        ];
+        pull = readProjection(owner.job.checkpointResult).operations[fixedPull.operationKey];
       // Only this fixed delivery's confirmed original failure selects cleanup.
       // The locked nonissuance producer still re-observes its actual ACK and
       // excludes every maintenance/save attempt before removing the packet.
@@ -4563,6 +4564,19 @@ export async function stageProspectiveConfigurationMaintenance(
         rejectUnissuedCandidate(candidate, "Original coordinator pull failed before maintenance");
       throw error;
     }
+  };
+  const attemptedPull =
+    fixedPull && readProjection(owner.job.checkpointResult).operations[fixedPull.operationKey];
+  if (attemptedPull && attemptedPull.phase !== "prepared" && attemptedPull.phase !== "unissued") {
+    // Reclaim must finish the original lookup/ACK before current inventory
+    // can recognize staged ownership. The fixed CAS makes this lookup-only;
+    // a fresh PREPARED pull still follows the OLD-coordinator prerequisite.
+    await deliverPull();
+  }
+  await verifyCurrentPreview(candidate, state, signal);
+  await prepareMaintenanceCoordinator(candidate, state, signal);
+  if (state.record.privateCoordinatorLifecycle?.action === "update") {
+    await deliverPull();
     if (JSON.parse(state.sealed.bytes.toString()).expiresAt <= new Date().toISOString())
       rejectUnissuedCandidate(candidate, "Configuration candidate expired");
     await verifyCurrentPreview(candidate, state, signal);
