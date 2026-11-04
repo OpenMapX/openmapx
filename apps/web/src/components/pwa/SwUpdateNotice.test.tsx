@@ -1,5 +1,4 @@
 import { useNavigationStore } from "@openmapx/core";
-import { buildWebVisibilityScript } from "@openmapx/core/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,8 +34,17 @@ let downloadActive = false;
 let queryClient: QueryClient;
 
 function nativeVisibility(state: "active" | "background" | "inactive") {
-  // Execute the actual shell delivery against the real jsdom document.
-  new Function("document", "Event", buildWebVisibilityScript(state))(document, Event);
+  // What the installed shell's injected script does (apps/mobile
+  // lifecycle/webVisibility.ts, tested there): mirror the app state onto Page
+  // Visibility and announce a change. The web build cannot import the shell.
+  const visibility = state === "active" ? "visible" : "hidden";
+  const changed = document.visibilityState !== visibility;
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => visibility === "hidden",
+  });
+  if (changed) document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
 }
 async function mountWaiting() {
   render(

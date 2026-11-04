@@ -1,4 +1,3 @@
-import { buildWebVisibilityScript } from "@openmapx/core/navigation";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import {
   type ReactElement,
@@ -17,6 +16,7 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
+import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
 import type { DeepLinkIntent } from "./links/deepLinkIntent";
 import { useIncomingLinks } from "./links/useIncomingLinks";
 import { createLocationDriver } from "./location/createLocationDriver";
