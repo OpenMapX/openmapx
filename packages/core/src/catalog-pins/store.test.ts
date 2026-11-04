@@ -47,6 +47,7 @@ import type { CatalogPinCommitIdentity } from "./types";
 
 const nativeFs = await vi.importActual<typeof import("node:fs")>("node:fs");
 let root: string, docker: string, installation: ControlInstallation, lease: ArtifactTargetLease;
+let leaseAcquired = false;
 const transitous = {
   ref: `main@${"a".repeat(40)}`,
   submodules: { "transitland-atlas": "b".repeat(40) },
@@ -84,6 +85,11 @@ function identity(): CatalogPinCommitIdentity {
   };
 }
 beforeEach(async () => {
+  leaseAcquired = false;
+  // These storage tests use logical time; filesystem load must not expire
+  // their fixture authority. Wall-clock deadlines are tested with the leases.
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now);
   root = mkdtempSync(join(tmpdir(), "omx-catalog-pair-"));
   docker = join(root, "infra/docker");
   mkdirSync(join(docker, "data"), { recursive: true, mode: 0o700 });
@@ -122,12 +128,13 @@ beforeEach(async () => {
     serviceIds: ["motis"],
     owner: authority,
   });
+  leaseAcquired = true;
 });
 afterEach(() => {
   vi.restoreAllMocks();
   vi.mocked(fs.renameSync).mockImplementation(nativeFs.renameSync);
   vi.mocked(fs.readSync).mockImplementation(nativeFs.readSync);
-  closeArtifactTargetLeaseHandle(lease);
+  if (leaseAcquired) closeArtifactTargetLeaseHandle(lease);
   closeControlInstallation(installation);
   rmSync(root, { recursive: true, force: true });
 });
