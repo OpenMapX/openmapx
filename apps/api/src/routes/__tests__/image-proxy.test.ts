@@ -657,58 +657,60 @@ describe("image-proxy route", () => {
   describe("Panoramax federation", () => {
     const ID = "7462790e-3e1c-4ee5-b6b3-b544421afd84";
     const CATALOGUE_PICTURE = `https://api.panoramax.xyz/api/pictures/${ID}/sd.jpg`;
+    const IGN_PICTURE = `https://panoramax.ign.fr/api/pictures/${ID}/sd.jpg`;
+    const OVH_FILE =
+      "https://panoramax-storage-public-fast.s3.gra.perf.cloud.ovh.net/derivates/x/sd.jpg";
+    const MAPCOMPLETE_FILE = "https://panoramax.mapcomplete.org/derivatives/74/62/79/0e/x/sd.jpg";
 
-    async function validatorFor(url: string) {
+    /** Each redirect of one request, in order, as the proxy's fetch asks about them. */
+    async function followChain(url: string, hops: string[]): Promise<boolean[]> {
+      mockFetchWithRedirects.mockReset();
       mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
       await inject({ referer: ALLOWED_REFERER, url });
-      return (
+      const validate = (
         mockFetchWithRedirects.mock.calls[0]?.[1] as {
           validateRedirectUrl: (next: URL, previous?: URL) => boolean;
         }
       ).validateRedirectUrl;
+      let previous = new URL(url);
+      return hops.map((hop) => {
+        const next = new URL(hop);
+        const admitted = validate(next, previous);
+        previous = next;
+        return admitted;
+      });
     }
 
-    it("follows the catalogue's picture redirects to the instance and bucket that hold it", async () => {
-      const validate = await validatorFor(CATALOGUE_PICTURE);
-      // Catalogue → an instance's file.
-      expect(
-        validate(
-          new URL(`https://panoramax.mapcomplete.org/derivatives/74/62/79/0e/x/sd.jpg`),
-          new URL(CATALOGUE_PICTURE),
-        ),
-      ).toBe(true);
-      // Catalogue → an instance's own per-picture endpoint → its storage bucket.
-      const instancePicture = new URL(`https://panoramax.ign.fr/api/pictures/${ID}/sd.jpg`);
-      expect(validate(instancePicture, new URL(CATALOGUE_PICTURE))).toBe(true);
-      expect(
-        validate(
-          new URL(
-            "https://panoramax-storage-public-fast.s3.gra.perf.cloud.ovh.net/derivates/x/sd.jpg",
-          ),
-          instancePicture,
-        ),
-      ).toBe(true);
+    it("follows the catalogue's redirect to the instance that holds the file", async () => {
+      expect(await followChain(CATALOGUE_PICTURE, [MAPCOMPLETE_FILE])).toEqual([true]);
     });
 
-    it("lets only a per-picture endpoint hand the request on, and only over HTTPS", async () => {
-      const validate = await validatorFor(CATALOGUE_PICTURE);
-      // A file may not redirect onward to a host the allowlist does not know.
+    it("follows an instance's own picture endpoint on to its storage bucket", async () => {
+      expect(await followChain(CATALOGUE_PICTURE, [IGN_PICTURE, OVH_FILE])).toEqual([true, true]);
+    });
+
+    it("lets a plain file redirect nowhere a host list does not name", async () => {
       expect(
-        validate(
-          new URL("https://evil.attacker.com/next.jpg"),
-          new URL("https://panoramax.mapcomplete.org/derivatives/x/sd.jpg"),
-        ),
-      ).toBe(false);
+        await followChain(CATALOGUE_PICTURE, [MAPCOMPLETE_FILE, "https://evil.attacker.com/x.jpg"]),
+      ).toEqual([true, false]);
+    });
+
+    it("stops after two federated redirects, even between picture endpoints", async () => {
+      const relay = `https://relay.example.org/api/pictures/${ID}/sd.jpg`;
       expect(
-        validate(new URL("http://panoramax.mapcomplete.org/x.jpg"), new URL(CATALOGUE_PICTURE)),
-      ).toBe(false);
-      expect(
-        validate(
-          new URL("https://panoramax.mapcomplete.org:8443/x.jpg"),
-          new URL(CATALOGUE_PICTURE),
-        ),
-      ).toBe(false);
-      expect(validate(new URL("https://evil.attacker.com/next.jpg"))).toBe(false);
+        await followChain(CATALOGUE_PICTURE, [
+          IGN_PICTURE,
+          relay,
+          "https://evil.attacker.com/x.jpg",
+        ]),
+      ).toEqual([true, true, false]);
+    });
+
+    it.each([
+      `http://panoramax.mapcomplete.org/x.jpg`,
+      `https://panoramax.mapcomplete.org:8443/x.jpg`,
+    ])("refuses a redirect to %s", async (target) => {
+      expect(await followChain(CATALOGUE_PICTURE, [target])).toEqual([false]);
     });
 
     it.each([
@@ -717,13 +719,7 @@ describe("image-proxy route", () => {
       // A picture-shaped path on a host that is no Panoramax catalogue.
       `https://upload.wikimedia.org/api/pictures/${ID}/sd.jpg`,
     ])("follows no federated redirect for %s", async (url) => {
-      const validate = await validatorFor(url);
-      expect(
-        validate(
-          new URL("https://panoramax.mapcomplete.org/x.jpg"),
-          new URL(`https://panoramax.ign.fr/api/pictures/${ID}/sd.jpg`),
-        ),
-      ).toBe(false);
+      expect(await followChain(url, [IGN_PICTURE, OVH_FILE])).toEqual([false, false]);
     });
   });
 

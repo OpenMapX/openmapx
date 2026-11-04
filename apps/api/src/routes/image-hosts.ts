@@ -172,19 +172,34 @@ export function isPanoramaxPictureRequest(url: URL): boolean {
   );
 }
 
+/** Redirects a picture may take to reach its file: catalogue → instance → file. */
+const MAX_PANORAMAX_REDIRECTS = 2;
+
 /**
- * Within a request that started at a catalogue's per-picture endpoint, a
- * redirect from a per-picture endpoint (the catalogue's, or the instance's it
- * handed on to) may go to any HTTPS host on the default port. A plain file
- * cannot hand the request on. Every hop still connects only to public
- * addresses, and the response must still be a bounded image.
+ * The redirects a request to a catalogue's per-picture endpoint may follow to
+ * hosts no allowlist names, or null for any other request.
+ *
+ * Panoramax sends a picture at most two redirects: the catalogue's endpoint to
+ * the instance holding it (a file, or that instance's own per-picture
+ * endpoint), and that endpoint to its storage bucket. The returned check is
+ * stateful and must see every redirect of the request in order. It admits the
+ * first only from the requested catalogue URL, the second only from a
+ * per-picture endpoint, and nothing after that; each target must be HTTPS on
+ * the default port. Every hop still connects only to public addresses, and the
+ * response must still be a bounded image.
  */
-export function isPanoramaxPictureRedirect(next: URL, previous: URL | undefined): boolean {
-  return (
-    previous !== undefined &&
-    previous.protocol === "https:" &&
-    PANORAMAX_PICTURE_PATH.test(previous.pathname) &&
-    next.protocol === "https:" &&
-    next.port === ""
-  );
+export function panoramaxRedirectPolicy(
+  request: URL,
+): ((next: URL, previous: URL | undefined) => boolean) | null {
+  if (!isPanoramaxPictureRequest(request)) return null;
+  let redirects = 0;
+  return (next, previous) => {
+    redirects += 1;
+    if (redirects > MAX_PANORAMAX_REDIRECTS || previous === undefined) return false;
+    const fromPictureEndpoint =
+      previous.protocol === "https:" && PANORAMAX_PICTURE_PATH.test(previous.pathname);
+    const fromRequest = previous.href === request.href;
+    if (redirects === 1 ? !fromRequest : !fromPictureEndpoint) return false;
+    return next.protocol === "https:" && next.port === "";
+  };
 }
