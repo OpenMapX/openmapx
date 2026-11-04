@@ -11,10 +11,13 @@ Use it to check the available address, opening hours, contacts, photos, source
 credits, and related services. **Directions**, **Save**, **Nearby**, and **Share**
 provide the next actions.
 
-To drop a pin, click an empty spot on the map; on a phone, long-press it. On a
-phone, the pin's card also offers **From here**, **Share**, **Save parking**,
-**Copy** and **Details**. A tap on the map puts the pin or the open place away,
-and a place card closes when you swipe it down past its lowest position.
+To drop a pin, click an empty spot on the map; on a phone or tablet, long-press
+it. On a touch screen, the pin's card also offers **From here**, **Share**,
+**Save parking**, **Copy** and **Details**, the actions a right-click offers on
+a computer. **Copy** lets you choose the coordinates, the address or, when you
+pressed on a place's label, its name. A tap on the map puts the pin or the open
+place away, and a place card closes when you swipe it down past its lowest
+position.
 
 Details come from the selected source and enabled enrichment providers. Missing
 or outdated data can leave a partial card. Opening hours, ratings, and photos

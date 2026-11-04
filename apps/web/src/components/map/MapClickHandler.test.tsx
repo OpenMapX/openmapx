@@ -70,6 +70,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  touch("touchend", []);
   vi.useRealTimers();
 });
 
@@ -112,6 +113,22 @@ describe("MapClickHandler on a touch screen", () => {
     // The click some browsers fire as the finger lifts leaves the pin alone.
     click("touch");
     expect(useMapClickStore.getState().clickedLngLat).toEqual([7, 51]);
+  });
+
+  it("keeps the pin when the finger lifts long after it dropped", () => {
+    vi.useFakeTimers();
+    render(<MapClickHandler />);
+    touch("touchstart", [[20, 30]]);
+    vi.advanceTimersByTime(LONG_PRESS_MS + 2500);
+    touch("touchend", []);
+    click("touch");
+    expect(useMapClickStore.getState().clickedLngLat).toEqual([7, 51]);
+
+    // The next tap is a tap of its own, and clears the pin.
+    touch("touchstart", [[20, 30]]);
+    touch("touchend", []);
+    click("touch");
+    expect(useMapClickStore.getState().clickedLngLat).toBeNull();
   });
 
   it("leaves a long-press to the parking picker while it is choosing a spot", () => {

@@ -2,7 +2,7 @@
 
 import type * as maplibregl from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bindMapLongPress, consumeLongPressClick, isTouchClick, LONG_PRESS_MS } from "./mapTouch";
+import { bindMapLongPress, cameFromTouch, consumeLongPressClick, LONG_PRESS_MS } from "./mapTouch";
 
 function touch(target: EventTarget, type: string, points: Array<[number, number]>): void {
   const event = new Event(type, { bubbles: true });
@@ -35,6 +35,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  touch(canvas, "touchend", []);
   unbind();
   container.remove();
   consumeLongPressClick();
@@ -83,26 +84,64 @@ describe("bindMapLongPress", () => {
   it("swallows the one click a long-press may leave behind", () => {
     touch(canvas, "touchstart", [[30, 40]]);
     vi.advanceTimersByTime(LONG_PRESS_MS);
+    touch(canvas, "touchend", []);
     expect(consumeLongPressClick()).toBe(true);
+    expect(consumeLongPressClick()).toBe(false);
+  });
+
+  it("swallows it however long the finger was held, counting from the lift", () => {
+    touch(canvas, "touchstart", [[30, 40]]);
+    vi.advanceTimersByTime(LONG_PRESS_MS + 3000);
+    touch(canvas, "touchend", []);
+    vi.advanceTimersByTime(20);
+    expect(consumeLongPressClick()).toBe(true);
+  });
+
+  it("lets the next tap through when the long-press left no click behind", () => {
+    touch(canvas, "touchstart", [[30, 40]]);
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    touch(canvas, "touchend", []);
+    touch(canvas, "touchstart", [[30, 40]]);
+    touch(canvas, "touchend", []);
+    expect(consumeLongPressClick()).toBe(false);
+  });
+
+  it("leaves a plain tap's click alone", () => {
+    touch(canvas, "touchstart", [[30, 40]]);
+    vi.advanceTimersByTime(100);
+    touch(canvas, "touchend", []);
     expect(consumeLongPressClick()).toBe(false);
   });
 });
 
-describe("isTouchClick", () => {
-  it("trusts a click that says it came from touch", () => {
-    expect(isTouchClick({ pointerType: "touch" })).toBe(true);
-    expect(isTouchClick({ sourceCapabilities: { firesTouchEvents: true } })).toBe(true);
+describe("cameFromTouch", () => {
+  it("trusts an event that says it came from touch", () => {
+    expect(cameFromTouch({ pointerType: "touch" })).toBe(true);
+    expect(cameFromTouch({ sourceCapabilities: { firesTouchEvents: true } })).toBe(true);
   });
 
   it("treats a click right after a touch on the map as that touch (Safari)", () => {
     touch(canvas, "touchstart", [[30, 40]]);
     touch(canvas, "touchend", []);
-    expect(isTouchClick({})).toBe(true);
+    expect(cameFromTouch({})).toBe(true);
   });
 
-  it("treats a mouse click long after any touch as a mouse click", () => {
+  it("treats MapLibre's long-press contextmenu, a plain MouseEvent, as touch while the finger is down", () => {
     touch(canvas, "touchstart", [[30, 40]]);
     vi.advanceTimersByTime(5000);
-    expect(isTouchClick({ pointerType: "mouse" })).toBe(false);
+    expect(cameFromTouch(new MouseEvent("contextmenu", { button: 2 }))).toBe(true);
+  });
+
+  it("sees a touch that never reached the map", () => {
+    touch(document.body, "touchstart", [[30, 40]]);
+    expect(cameFromTouch(new MouseEvent("contextmenu"))).toBe(true);
+  });
+
+  it("treats a mouse event long after any touch as the mouse", () => {
+    touch(canvas, "touchstart", [[30, 40]]);
+    touch(canvas, "touchend", []);
+    vi.advanceTimersByTime(5000);
+    expect(cameFromTouch({ pointerType: "mouse" })).toBe(false);
+    expect(cameFromTouch(new MouseEvent("contextmenu", { button: 2 }))).toBe(false);
   });
 });

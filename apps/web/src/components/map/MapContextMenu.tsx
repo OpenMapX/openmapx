@@ -20,8 +20,6 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  coordinateId,
-  createPlace,
   isLiveNavigationStatus,
   type Place,
   useMapClickStore,
@@ -44,27 +42,21 @@ import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { openLocationDetails, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
-import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
+import { cameFromTouch } from "@/lib/mapTouch";
+import {
+  describeMapLocation,
+  type MapLocation,
+  mapLocationCopyRows,
+  mapLocationPlace,
+} from "./mapLocation";
+import { findStylePoiAtPoint, getStylePoiLayerIds } from "./mapStylePoiTarget";
 
-interface MapContextTarget {
-  coordinates: [number, number];
+interface MapContextTarget extends MapLocation {
   anchorPosition: { top: number; left: number };
-  poi: StylePoiTarget | null;
 }
 
 type ActionId = "from" | "to" | "copy" | "details" | "parking" | "share";
 const ACTION_ORDER: ActionId[] = ["from", "to", "copy", "details", "parking", "share"];
-
-function formatContextCoordinates([lng, lat]: [number, number]): string {
-  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-}
-
-function cameFromTouch(event: MouseEvent & { pointerType?: string }): boolean {
-  const capabilities = (
-    event as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }
-  ).sourceCapabilities;
-  return event.pointerType === "touch" || capabilities?.firesTouchEvents === true;
-}
 
 export function MapContextMenu(): React.ReactNode {
   const t = useTranslations("mapContextMenu");
@@ -104,32 +96,15 @@ export function MapContextMenu(): React.ReactNode {
 
   const coordinates = target?.coordinates ?? null;
   const { data: reverseGeo } = useReverseGeocoding(coordinates, locale);
-  const coordinateLabel = target ? formatContextCoordinates(target.coordinates) : "";
-  const title = target?.poi?.name ?? reverseGeo?.city ?? reverseGeo?.address ?? coordinateLabel;
-  const address = reverseGeo?.address ?? coordinateLabel;
-  const actionLabel = target?.poi?.name ?? reverseGeo?.address ?? coordinateLabel;
+  const text = target ? describeMapLocation(target, reverseGeo) : null;
+  const title = text?.title ?? "";
+  const address = text?.address ?? "";
+  const actionLabel = text?.routeLabel ?? "";
 
-  const place = useMemo<Place | null>(() => {
-    if (!target) return null;
-    if (target.poi) {
-      return createPlace({
-        primaryScheme: "stylePoi",
-        ids: { stylePoi: target.poi.featureId },
-        name: target.poi.name,
-        address: reverseGeo?.address ?? target.poi.name,
-        coordinates: target.poi.coordinates,
-        category: target.poi.category,
-        rawCategory: target.poi.rawCategory,
-      });
-    }
-    return createPlace({
-      primaryScheme: "coordinate",
-      ids: { coordinate: coordinateId(target.coordinates) },
-      name: title,
-      address,
-      coordinates: target.coordinates,
-    });
-  }, [address, reverseGeo?.address, target, title]);
+  const place = useMemo<Place | null>(
+    () => (target ? mapLocationPlace(target, reverseGeo) : null),
+    [reverseGeo, target],
+  );
 
   const restoreCanvasFocus = useCallback(() => {
     if (restoreFocusFrameRef.current !== null) cancelAnimationFrame(restoreFocusFrameRef.current);
@@ -200,6 +175,10 @@ export function MapContextMenu(): React.ReactNode {
         originalEvent.preventDefault();
         return;
       }
+      // Touch never opens this menu: a long-press drops the pin, whose card
+      // carries these actions (MapClickHandler). That includes the contextmenu
+      // MapLibre makes up for a held finger, which would otherwise open the
+      // menu under it only for the click-away listener to close it on the lift.
       if (cameFromTouch(originalEvent)) return;
       originalEvent.preventDefault();
       captureTarget([event.lngLat.lng, event.lngLat.lat], event.point, {
@@ -307,20 +286,17 @@ export function MapContextMenu(): React.ReactNode {
     setFeedback(outcome === "saved" ? tParking("savedToast") : tParking("locationUnavailable"));
   };
 
-  const copyRows = useMemo(() => {
-    if (!target) return [];
-    const candidates = [
-      { label: t("coordinates"), value: coordinateLabel },
-      ...(target.poi?.name ? [{ label: t("name"), value: target.poi.name }] : []),
-      ...(reverseGeo?.address ? [{ label: t("address"), value: reverseGeo.address }] : []),
-    ];
-    const values = new Set<string>();
-    return candidates.filter(({ value }) => {
-      if (values.has(value)) return false;
-      values.add(value);
-      return true;
-    });
-  }, [coordinateLabel, reverseGeo?.address, t, target]);
+  const copyRows = useMemo(
+    () =>
+      target
+        ? mapLocationCopyRows(target, reverseGeo, {
+            coordinates: t("coordinates"),
+            name: t("name"),
+            address: t("address"),
+          })
+        : [],
+    [reverseGeo, t, target],
+  );
 
   const copyValue = async (value: string) => {
     const targetGeneration = targetGenerationRef.current;
