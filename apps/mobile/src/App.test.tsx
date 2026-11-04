@@ -407,8 +407,9 @@ describe("App bridge channel", () => {
     });
   });
 
+  let shellView: Awaited<ReturnType<typeof renderApp>>;
   const hello = async () => {
-    await renderApp();
+    shellView = await renderApp();
     const nonce = nonceIn(bootstrap());
     await emitAsync(mockWebViewProps.onLoadStart);
     await post(nonce, {
@@ -472,6 +473,7 @@ describe("App bridge channel", () => {
       .mockImplementation(() => {});
     const nonce = await hello();
     mockNavigation.coordinator.dispatch.mockImplementation(() => new Promise(() => {}));
+    await fireEvent(shellView.getByTestId("product-shell"), "touchStart");
     await post(nonce, {
       messageId: "voice-1",
       type: "voice.start",
@@ -483,6 +485,37 @@ describe("App bridge channel", () => {
     expect(stop).toHaveBeenCalledWith("r");
     expect(cancel).toHaveBeenCalledWith("r");
     expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a voice start that no observed touch preceded, and admits one per touch", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const start = jest.spyOn(VoiceInputController.prototype, "start").mockResolvedValue();
+    const nonce = await hello();
+    await post(nonce, {
+      messageId: "voice-untouched",
+      type: "voice.start",
+      payload: { requestId: "r0", locale: "en-US" },
+    });
+    expect(start).not.toHaveBeenCalled();
+    expect(decodedMessages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.event",
+        payload: { requestId: "r0", state: "error", error: "generic" },
+      }),
+    );
+    await fireEvent(shellView.getByTestId("product-shell"), "touchStart");
+    await post(nonce, {
+      messageId: "voice-touched",
+      type: "voice.start",
+      payload: { requestId: "r1", locale: "en-US" },
+    });
+    await post(nonce, {
+      messageId: "voice-again",
+      type: "voice.start",
+      payload: { requestId: "r2", locale: "en-US" },
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith("r1", "en-US");
   });
 
   it("hands every page command to the navigation coordinator", async () => {

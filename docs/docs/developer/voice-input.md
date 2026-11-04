@@ -132,6 +132,13 @@ Transcripts are not logged.
 The transcript becomes ordinary search text and follows the normal search-request and search-history rules.
 The compliance registry separates this local audio practice (`voice-search-audio`) from subsequent search data flows.
 
+The page cannot start the microphone on its own.
+The shell accepts `voice.start` only within three seconds of a touch it observed itself on the screen, and each touch admits one start.
+A script injected into the page therefore cannot listen in a loop.
+With a screen reader on, activation arrives as an accessibility action rather than a touch, so the touch requirement is waived there.
+A refused start answers `voice.event` with `error: "generic"` and records nothing.
+Android's own microphone indicator shows whenever the recogniser holds the microphone, and the page cannot hide it.
+
 ## Open verification
 
 Source and unit checks do not establish installed-device behavior.

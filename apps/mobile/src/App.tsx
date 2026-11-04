@@ -9,7 +9,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { Alert, Linking, Platform, StatusBar, StyleSheet, View } from "react-native";
+import {
+  AccessibilityInfo,
+  Alert,
+  Linking,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  View,
+} from "react-native";
 import { WebView } from "react-native-webview";
 import { getNavigationAudio } from "./audio/navigationAudioModule";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
@@ -38,6 +46,7 @@ import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
 import { answerCommand, createShellServices } from "./shell/shellServices";
 import { useHardwareBack } from "./shell/useHardwareBack";
+import { createUserIntentGate } from "./voice/userIntentGate";
 import { VoiceInputController } from "./voice/VoiceInputController";
 
 /**
@@ -89,6 +98,22 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
+  const [voiceIntent] = useState(() => createUserIntentGate());
+  useEffect(() => {
+    let mounted = true;
+    void AccessibilityInfo.isScreenReaderEnabled()
+      .then((enabled) => {
+        if (mounted) voiceIntent.setScreenReader(enabled);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener("screenReaderChanged", (enabled) =>
+      voiceIntent.setScreenReader(enabled),
+    );
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [voiceIntent]);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
   useEffect(() => {
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
@@ -145,6 +170,16 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
           return;
         }
         if (message.type === "voice.start") {
+          // The microphone starts only after a touch the shell itself saw
+          // (see userIntentGate), never on the page's word alone.
+          if (!voiceIntent.admit()) {
+            composed.bridge.send("voice.event", {
+              requestId: message.payload.requestId,
+              state: "error",
+              error: "generic",
+            });
+            return;
+          }
           void voice.start(message.payload.requestId, message.payload.locale);
           return;
         }
@@ -181,7 +216,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       }).catch(() => null);
     }
     return { shell: composed, navigation, voice };
-  }, [config, locale, prompter, services, setNavigating]);
+  }, [config, locale, prompter, services, setNavigating, voiceIntent]);
   useEffect(() => {
     if (visibility !== "active") voice.suspend();
   }, [visibility, voice]);
@@ -401,7 +436,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: palette.background }]}>
+    <View
+      style={[styles.root, { backgroundColor: palette.background }]}
+      // Observes (never claims) touches on the WebView for the voice gate.
+      onTouchStart={voiceIntent.touched}
+      testID="product-shell"
+    >
       <ShellStatusBar palette={palette} />
       <WebView
         key={loadAttempt}
