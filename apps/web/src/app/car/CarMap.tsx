@@ -3,13 +3,14 @@ import { TrafficFlowLayer } from "@integrations/overlay-traffic-flow/map-layer";
 import { RoadConditionsLayer } from "@integrations/road-conditions/map-layer";
 import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
-import { isOverSpeed, useNavigationStore } from "@openmapx/core";
+import { isOverSpeed, type LngLat, useNavigationStore } from "@openmapx/core";
 import type { CarPosition, CarPreview, CarViewport } from "@openmapx/core/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BaseAttributions } from "@/components/map/BaseAttributions";
 import { ContextualOverlays } from "@/components/map/ContextualOverlays";
 import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
 import { RouteTrafficLayer } from "@/components/map/layers/RouteTrafficLayer";
+import { type RoutePillAnchor, routePillAnchors } from "@/components/map/layers/routePillAnchors";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { SpeedLimitBadge } from "@/components/navigation/SpeedLimitBadge";
 import { AttributionLogos } from "@/components/ui/AttributionNotices";
@@ -18,16 +19,11 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributionPresentation } from "@/integration-api/overlay/mapAttributionStore";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
-import {
-  boundsOf,
-  carLabelSize,
-  carLayout,
-  fitCarBounds,
-  routeLabelPoints,
-  routeLetter,
-} from "./carSurface";
+import { boundsOf, carLabelSize, carLayout, fitCarBounds, routeLetter } from "./carSurface";
 import { useCarPositionMarker } from "./useCarPositionMarker";
 
+/** Diameter of a route letter badge, as drawn by the label layers below. */
+const LABEL_DIAMETER = 40;
 /** Width of the host's map control column (buttons plus margin) on Android Auto. */
 const MAP_CONTROLS_WIDTH = 88;
 
@@ -101,6 +97,43 @@ export function CarMap({
       map.off("style.load", apply);
     };
   }, [mapRef, mapReady, styleVersion]);
+  // Placed like the directions map's route pills: on visible geometry, apart from each
+  // other, recomputed whenever the view settles (framing or a zoom from the controls).
+  const [labelAnchors, setLabelAnchors] = useState<RoutePillAnchor[]>([]);
+  useEffect(() => {
+    const map = mapRef.current;
+    const routes = preview?.routes ?? [];
+    if (!map || !mapReady || routes.length === 0) {
+      setLabelAnchors([]);
+      return;
+    }
+    const selected = preview && "selected" in preview ? preview.selected : 0;
+    const place = () =>
+      setLabelAnchors(
+        routePillAnchors(
+          routes.map((route, routeIndex) => ({
+            routeIndex,
+            geometry: route.coordinates as LngLat[],
+            width: LABEL_DIAMETER,
+          })),
+          selected,
+          (coordinate) => map.project(coordinate),
+          {
+            width: viewport.width,
+            height: viewport.height,
+            insets: {
+              ...viewport.stable,
+              right: Math.max(viewport.stable.right, MAP_CONTROLS_WIDTH),
+            },
+          },
+        ),
+      );
+    place();
+    map.on("moveend", place);
+    return () => {
+      map.off("moveend", place);
+    };
+  }, [preview, mapReady, mapRef, viewport]);
   const group = useMemo(
     () => ({
       sources: {
@@ -108,13 +141,13 @@ export function CarMap({
           type: "geojson" as const,
           data: {
             type: "FeatureCollection" as const,
-            features: routeLabelPoints(preview?.routes ?? []).map((point, i) => ({
+            features: labelAnchors.map(({ routeIndex, coordinate }) => ({
               type: "Feature" as const,
               properties: {
-                letter: routeLetter(i),
-                selected: preview && "selected" in preview && preview.selected === i,
+                letter: routeLetter(routeIndex),
+                selected: preview && "selected" in preview && preview.selected === routeIndex,
               },
-              geometry: { type: "Point" as const, coordinates: point },
+              geometry: { type: "Point" as const, coordinates: coordinate },
             })),
           },
         },
@@ -195,7 +228,7 @@ export function CarMap({
         },
       ],
     }),
-    [preview],
+    [preview, labelAnchors],
   );
   useMapLayerGroup(group);
   useEffect(() => {

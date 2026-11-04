@@ -8,7 +8,6 @@ import {
   carLabelSize,
   carLayout,
   createCarSnapshotReceiver,
-  routeLabelPoints,
   routeLetter,
 } from "./carSurface";
 import { fixtureSnapshot } from "./harness";
@@ -127,22 +126,6 @@ describe("car surface", () => {
 describe("route preview labels", () => {
   it("letters routes in list order", () => {
     expect([0, 1, 2].map(routeLetter)).toEqual(["A", "B", "C"]);
-  });
-
-  it("places each label where its route leaves the others", () => {
-    // Shared start and end; route B bows north in the middle.
-    const a = Array.from({ length: 11 }, (_, i) => [6 + i * 0.1, 50] as [number, number]);
-    const b = a.map(([lng, lat], i) => [lng, lat + (i > 2 && i < 8 ? 0.5 : 0)] as [number, number]);
-    const [labelA, labelB] = routeLabelPoints([{ coordinates: a }, { coordinates: b }]);
-    expect(labelB?.[1]).toBe(50.5);
-    expect(labelA?.[1]).toBe(50);
-    expect(labelA?.[0]).toBeGreaterThan(6.2);
-    expect(labelA?.[0]).toBeLessThan(6.8);
-  });
-
-  it("puts a lone route's label halfway along it", () => {
-    const line = Array.from({ length: 5 }, (_, i) => [6 + i, 50] as [number, number]);
-    expect(routeLabelPoints([{ coordinates: line }])).toEqual([[8, 50]]);
   });
 
   it("frames all route coordinates", () => {

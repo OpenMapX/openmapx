@@ -109,47 +109,6 @@ export function routeLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-/**
- * Where to put each route's letter: the point in its middle stretch that lies furthest
- * from every other route, so badges sit on the part that tells the routes apart.
- */
-export function routeLabelPoints(
-  routes: readonly { coordinates: readonly (readonly [number, number])[] }[],
-): [number, number][] {
-  const samples = routes.map((route) => {
-    const step = Math.max(1, Math.floor(route.coordinates.length / 200));
-    return route.coordinates.filter((_, i) => i % step === 0);
-  });
-  // Planar degrees with longitude scaled by latitude: enough to compare nearby distances.
-  const distance = (a: readonly [number, number], b: readonly [number, number]) => {
-    const kx = Math.cos(((a[1] + b[1]) / 2) * (Math.PI / 180));
-    return Math.hypot((a[0] - b[0]) * kx, a[1] - b[1]);
-  };
-  return routes.map((route, index) => {
-    const candidates = samples[index]?.length ? samples[index] : route.coordinates;
-    // A lone route has nothing to stand apart from: its badge sits halfway along.
-    if (routes.length === 1) {
-      const middle = candidates[Math.floor(candidates.length / 2)] ?? route.coordinates[0];
-      return [middle[0], middle[1]];
-    }
-    const from = Math.floor(candidates.length * 0.2);
-    const to = Math.max(from + 1, Math.ceil(candidates.length * 0.8));
-    let best = candidates[Math.floor(candidates.length / 2)] ?? route.coordinates[0];
-    let bestScore = -1;
-    for (const point of candidates.slice(from, to)) {
-      let nearest = Number.POSITIVE_INFINITY;
-      for (const [other, others] of samples.entries()) {
-        if (other === index) continue;
-        for (const q of others) nearest = Math.min(nearest, distance(point, q));
-      }
-      if (nearest > bestScore) {
-        bestScore = nearest;
-        best = point;
-      }
-    }
-    return [best[0], best[1]];
-  });
-}
 export function applyCarCamera(
   map: LibreMap | null,
   message: CarCamera,
