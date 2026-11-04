@@ -40,6 +40,7 @@ export function createDatabaseTestCommand(group = "all", env = process.env) {
       "--project",
       "node",
       "--maxWorkers=1",
+      "--bail=1",
       ...(group === "all" ? Object.values(groups).flat() : groups[group]),
     ],
     env: {

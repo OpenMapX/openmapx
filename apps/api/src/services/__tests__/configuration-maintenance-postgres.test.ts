@@ -190,6 +190,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await fixture.db.insert(schema.adminJob).values({
         id: jobId,
         type: "service.apply",
+        payload: {},
         status: "running",
         result: { _execution: execution },
       });
@@ -2111,7 +2112,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
           },
         ]);
-        const pointer = join(host.infraDir, ".trusted-config-current"),
+        const pointer = join(host.infraDir, services.CURRENT_CONFIGURATION),
           hidden = join(host.root, "fixture-hidden-current");
         // External availability fault on this synthetic host's actual pointer;
         // immutable generation/config bytes are never rewritten.
@@ -2203,30 +2204,32 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ]);
       const ctx = await job();
       await owned(ctx, async () => {
-        const candidate = await prospective.prepareProspectiveConfiguration({
-          actorId: ctx.jobId,
-          operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
-          expectedCurrentRevisionId: host.initial.revisionId,
-          followUp: "service-apply",
-          overlay: {
-            purpose: "service-secret",
-            coordinatorMode: "require-running",
-            changes: [
-              {
-                kind: "service-secret",
-                serviceId: "data-manager",
-                key: "TOKEN",
-                action: "set",
-                value: "synthetic-prospective-capacity-credential",
-              },
-            ],
+        await expect(
+          prospective.prepareProspectiveConfiguration({
+            actorId: ctx.jobId,
+            operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
+            expectedCurrentRevisionId: host.initial.revisionId,
+            followUp: "service-apply",
+            overlay: {
+              purpose: "service-secret",
+              coordinatorMode: "require-running",
+              changes: [
+                {
+                  kind: "service-secret",
+                  serviceId: "data-manager",
+                  key: "TOKEN",
+                  action: "set",
+                  value: "synthetic-prospective-capacity-credential",
+                },
+              ],
+            },
+          }),
+        ).rejects.toMatchObject({
+          result: {
+            errorCode: "configuration_preflight_failed",
+            configurationPreflight: { stage: "preview", errorClass: "runtime" },
           },
         });
-        expect(candidate.sealedBytes).toBeLessThan(524288);
-        const maintenance = await import("../configuration-maintenance");
-        await expect(maintenance.prepareConfigurationMaintenance(candidate)).rejects.toBeInstanceOf(
-          Error,
-        );
         expect(dm!.preparePosts).toBe(0);
         expect(
           existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
@@ -2599,7 +2602,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           prospective.persistAndApplyProspectiveConfiguration(candidate, {
             coordinatorMode: "ensure-running",
           }),
-        ).rejects.toThrow("Configuration candidate expired");
+        ).rejects.toMatchObject({
+          result: {
+            configuration: { outcome: "not_committed", reason: "conflict", cleanupFailed: false },
+          },
+        });
         expect(ctx.checkpointResult!._parentExecution).toEqual(parent);
         expect(ctx.checkpointResult!._configurationCandidate).toMatchObject({
           candidateId: candidate.candidateId,
@@ -2740,11 +2747,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         coordinator.State = "running";
         host.setRows([host.row, coordinator]);
         starts++;
-        // An independent actual connection races the complete original source
-        // after the genuine old-revision Start, before maintenance admission.
-        await fixture.db
-          .insert(schema.serviceConfig)
-          .values({ id: randomUUID(), serviceId: "motis", config: { WORKERS: 7 } });
       });
       const ctx = await job();
       await owned(ctx, async () => {
@@ -2767,11 +2769,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ],
           },
         });
+        await prospective.stageProspectiveConfigurationMaintenance(candidate);
+        // Race only after the genuine old-revision Start has settled, before
+        // maintenance admission; changing source during Docker up is earlier.
+        await fixture.db
+          .insert(schema.serviceConfig)
+          .values({ id: randomUUID(), serviceId: "motis", config: { WORKERS: 7 } });
         await expect(
           prospective.persistAndApplyProspectiveConfiguration(candidate, {
             coordinatorMode: "ensure-running",
           }),
-        ).rejects.toThrow("Configuration source conflict");
+        ).rejects.toMatchObject({
+          result: {
+            configuration: { outcome: "not_committed", reason: "conflict", cleanupFailed: false },
+          },
+        });
         expect(starts).toBe(1);
         expect(dm!.preparePosts).toBe(0);
         expect(dm!.settlePosts).toBe(0);
@@ -3900,7 +3912,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const fault = vi.spyOn(nodeFs, "renameSync").mockImplementation((source, target) => {
               if (
                 (mode === "pointer-ack-loss"
-                  ? basename(String(target)) === ".trusted-config-current"
+                  ? String(target) === join(host.infraDir, services.CURRENT_CONFIGURATION)
                   : basename(String(target)) === candidate.revisionId) &&
                 basename(String(source)).endsWith(".tmp")
               ) {
@@ -4051,13 +4063,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 role: "ops-agent",
                 serviceIds: host.loaded.map((value) => value.manifest.id),
               });
+              const restartedRuntime = await host.reopenRuntime();
               app = buildOpsAgentServer({
                 tokens: {
                   api: host.token,
                   "data-manager": Buffer.alloc(32, 23).toString("base64url"),
                 },
-                runtime: host.runtime,
-                resourceClaimer: host.claimer,
+                runtime: restartedRuntime,
+                resourceClaimer: host.createResourceClaimer(restartedRuntime),
                 journal,
                 controlInstallation: installation,
               });
@@ -4624,13 +4637,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   role: "ops-agent",
                   serviceIds: host.loaded.map((value) => value.manifest.id),
                 });
+                const restartedRuntime = await host.reopenRuntime();
                 app = buildOpsAgentServer({
                   tokens: {
                     api: host.token,
                     "data-manager": Buffer.alloc(32, 23).toString("base64url"),
                   },
-                  runtime: host.runtime,
-                  resourceClaimer: host.claimer,
+                  runtime: restartedRuntime,
+                  resourceClaimer: host.createResourceClaimer(restartedRuntime),
                   journal,
                   controlInstallation: installation,
                 });
@@ -5641,10 +5655,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           role: "ops-agent",
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
+        const restartedRuntime = await host.reopenRuntime();
         app = buildOpsAgentServer({
           tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
-          runtime: host.runtime,
-          resourceClaimer: host.claimer,
+          runtime: restartedRuntime,
+          resourceClaimer: host.createResourceClaimer(restartedRuntime),
           journal,
           controlInstallation: installation,
         });
@@ -5952,10 +5967,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           role: "ops-agent",
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
+        const restartedRuntime = await host.reopenRuntime();
         app = buildOpsAgentServer({
           tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
-          runtime: host.runtime,
-          resourceClaimer: host.claimer,
+          runtime: restartedRuntime,
+          resourceClaimer: host.createResourceClaimer(restartedRuntime),
           journal,
           controlInstallation: installation,
         });
@@ -6937,13 +6953,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               role: "ops-agent",
               serviceIds: host.loaded.map((service) => service.manifest.id),
             });
+            const restartedRuntime = await host.reopenRuntime();
             app = buildOpsAgentServer({
               tokens: {
                 api: host.token,
                 "data-manager": Buffer.alloc(32, 23).toString("base64url"),
               },
-              runtime: host.runtime,
-              resourceClaimer: host.claimer,
+              runtime: restartedRuntime,
+              resourceClaimer: host.createResourceClaimer(restartedRuntime),
               journal,
               controlInstallation: installation,
             });
@@ -6982,13 +6999,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               hiddenOwner = join(host.root, "temporarily-unavailable-maintenance-owner.json");
             nodeFs.renameSync(privateOwner, hiddenOwner);
             try {
+              const restartedRuntime = await host.reopenRuntime();
               app = buildOpsAgentServer({
                 tokens: {
                   api: host.token,
                   "data-manager": Buffer.alloc(32, 23).toString("base64url"),
                 },
-                runtime: host.runtime,
-                resourceClaimer: host.claimer,
+                runtime: restartedRuntime,
+                resourceClaimer: host.createResourceClaimer(restartedRuntime),
                 journal,
                 controlInstallation: installation,
               });

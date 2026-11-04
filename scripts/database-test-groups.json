@@ -47,8 +47,6 @@
   "ingestion": [
     "apps/api/src/services/__tests__/job-runner-postgres.test.ts",
     "apps/api/src/services/__tests__/prospective-configuration-postgres.test.ts",
-    "apps/api/src/services/__tests__/configuration-maintenance-postgres.test.ts",
-    "apps/api/src/services/__tests__/coordinator-lifecycle-postgres.test.ts",
     "apps/api/src/services/configuration-migration/legacy-integration-import.test.ts",
     "services/data-manager/src/jobs/execution/store-postgres.test.ts",
     "services/data-manager/src/jobs/execution/legacy-admission-postgres.test.ts",
@@ -79,6 +77,12 @@
     "services/data-manager/__tests__/transitous/catalog-review.test.ts",
     "services/data-manager/__tests__/transitous/catalog-workflow-postgres.test.ts",
     "apps/api/src/services/activity-catalog-postgres.test.ts"
+  ],
+  "configuration-recovery": [
+    "apps/api/src/services/__tests__/configuration-maintenance-postgres.test.ts"
+  ],
+  "coordinator-recovery": [
+    "apps/api/src/services/__tests__/coordinator-lifecycle-postgres.test.ts"
   ],
   "export-restore": [
     "apps/api/src/privacy/controller-wide-export-postgres.test.ts",

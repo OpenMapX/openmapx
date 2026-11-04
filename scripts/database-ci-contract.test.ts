@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,7 +23,13 @@ function read(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), "utf8");
 }
 
-const groupNames = ["api-privacy", "ingestion", "export-restore"];
+const groupNames = [
+  "api-privacy",
+  "ingestion",
+  "configuration-recovery",
+  "coordinator-recovery",
+  "export-restore",
+];
 const groupsFile = resolve(root, "scripts/database-test-groups.json");
 const groups: Record<string, string[]> = JSON.parse(readFileSync(groupsFile, "utf8"));
 
@@ -42,10 +50,20 @@ describe("required database test gate", () => {
     const workflow = read(".github/workflows/ci.yml");
     const databaseJob =
       workflow.match(/^ {2}database:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
-    const matrixGroups = databaseJob.match(/group: \[([^\]]+)\]/)?.[1].split(/,\s*/);
+    const matrixGroups = databaseJob
+      .match(/group:\s*\[([^\]]+)\]/)?.[1]
+      .split(/,\s*/)
+      .map((group) => group.trim())
+      .filter(Boolean);
     expect(matrixGroups).toEqual(groupNames);
     expect(matrixGroups).toEqual(Object.keys(groups));
     expect(databaseJob).toContain("fail-fast: false");
+    expect(databaseJob).toContain(
+      "DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test",
+    );
+    expect(databaseJob).toContain(
+      `contains(fromJSON('["ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30`,
+    );
     expect(databaseJob).toContain("ghcr.io/baosystems/postgis:18-3.6@sha256:");
     expect(databaseJob).toContain(
       '--health-cmd "pg_isready -h 127.0.0.1 -U postgres -d openmapx_test"',
@@ -201,8 +219,9 @@ describe("required database test gate", () => {
     ]);
   });
 
-  it.each(groupNames)("selects only the registered Vitest files for %s", (group) => {
-    expect(groups[group]?.length).toBeGreaterThan(0);
+  it.each([...groupNames, "all"])("selects only the registered Vitest files for %s", (group) => {
+    const selectors = group === "all" ? Object.values(groups).flat() : groups[group];
+    expect(selectors.length).toBeGreaterThan(0);
     const result = spawnSync(
       process.execPath,
       [
@@ -211,7 +230,7 @@ describe("required database test gate", () => {
         "--project",
         "node",
         "--filesOnly",
-        ...groups[group],
+        ...selectors,
         "--json",
       ],
       { cwd: root, encoding: "utf8", timeout: 15000 },
@@ -219,7 +238,7 @@ describe("required database test gate", () => {
     expect(result.status, result.stderr).toBe(0);
     const selected = JSON.parse(result.stdout) as { file: string }[];
     expect(selected.map(({ file }) => file.replace(`${root}/`, "")).sort()).toEqual(
-      groups[group].slice().sort(),
+      selectors.slice().sort(),
     );
   });
 
@@ -251,6 +270,64 @@ describe("required database test gate", () => {
           expect(() =>
             command(group, { DATABASE_URL: databaseUrl, OPENMAPX_REAL_BACKUP_FIXTURE: fixture }),
           ).toThrow(/DATABASE_URL/);
+        }
+      } finally {
+        rmSync(temp, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "runs the actual launcher with fail-fast behavior: failing=%s",
+    (failing) => {
+      const temp = mkdtempSync(join(tmpdir(), "openmapx-db-bail-contract-"));
+      try {
+        mkdirSync(join(temp, "scripts"));
+        mkdirSync(join(temp, "node_modules"));
+        symlinkSync(resolve(root, "node_modules/vitest"), join(temp, "node_modules/vitest"), "dir");
+        copyFileSync(
+          resolve(root, "scripts/test-database.mjs"),
+          join(temp, "scripts/test-database.mjs"),
+        );
+        writeFileSync(
+          join(temp, "scripts/database-test-groups.json"),
+          JSON.stringify({ ingestion: ["launcher.test.mjs"] }),
+        );
+        writeFileSync(
+          join(temp, "vitest.config.mjs"),
+          `export default { test: { projects: [{ test: { name: "node", include: ["*.test.mjs"] } }] } };`,
+        );
+        writeFileSync(
+          join(temp, "launcher.test.mjs"),
+          `
+        import { it, expect } from "vitest";
+        import { writeFileSync } from "node:fs";
+        it("first", () => { expect(${failing}).toBe(false); });
+        it("later", () => { writeFileSync("later-executed", "yes"); });
+      `,
+        );
+        const result = spawnSync(
+          process.execPath,
+          [join(temp, "scripts/test-database.mjs"), "ingestion"],
+          {
+            env: {
+              ...process.env,
+              DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
+              NO_COLOR: "1",
+            },
+            cwd: temp,
+            encoding: "utf8",
+            timeout: 15000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status, result.stdout + result.stderr).toBe(failing ? 1 : 0);
+        if (failing) {
+          expect(result.stderr).toContain("AssertionError");
+          expect(existsSync(join(temp, "later-executed"))).toBe(false);
+        } else {
+          expect(existsSync(join(temp, "later-executed"))).toBe(true);
+          expect(result.stdout).toContain("2 passed");
         }
       } finally {
         rmSync(temp, { recursive: true, force: true });
@@ -335,8 +412,14 @@ describe("required database test gate", () => {
         OPENMAPX_RUN_DATABASE_TESTS: "0",
         OPENMAPX_RUN_RESTORE_DATABASE_TESTS: "0",
       });
-      expect(selected.args.slice(0, 4)).toEqual(["run", "--project", "node", "--maxWorkers=1"]);
-      expect(selected.args.slice(4).sort()).toEqual(Object.values(groups).flat().sort());
+      expect(selected.args.slice(0, 5)).toEqual([
+        "run",
+        "--project",
+        "node",
+        "--maxWorkers=1",
+        "--bail=1",
+      ]);
+      expect(selected.args.slice(5).sort()).toEqual(Object.values(groups).flat().sort());
       expect(selected.env.OPENMAPX_RUN_DATABASE_TESTS).toBe("1");
       expect(selected.env.OPENMAPX_RUN_RESTORE_DATABASE_TESTS).toBe("1");
       expect(selected.env.OPENMAPX_REAL_BACKUP_FIXTURE).toBe(fixture);

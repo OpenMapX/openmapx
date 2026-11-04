@@ -1778,7 +1778,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect((await finished(next.json().jobId)).status).toBe("success");
     }, 240000);
     it.each(["capability", "admission"])(
-      "keeps bare coordinator pull unavailable at its actual %s boundary",
+      "advertises staged coordinator pull while rejecting legacy direct pull (%s)",
       async (boundary) => {
         const { createApiOpsClient } = await import("../ops-client"),
           client = createApiOpsClient();
@@ -1789,10 +1789,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             status.value.services.find((service) => service.serviceId === "data-manager")?.actions
               .pull,
           ).toMatchObject({
-            available: false,
-            execution: "direct",
-            reason: "unavailable",
-            workflow: null,
+            available: true,
+            execution: "workflow",
+            reason: null,
+            workflow: "image-stage",
           });
           return;
         }

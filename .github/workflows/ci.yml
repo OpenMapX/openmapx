@@ -341,16 +341,16 @@ jobs:
   database:
     name: test (database, ${{ matrix.group }})
     runs-on: ubuntu-latest
-    # Ingestion exercises real 60s ownership recovery and 6min staging expiry
-    # across serial native-process cases. Their combined runtime exceeds 30min;
-    # keep per-test and production deadlines intact while allowing the full group.
-    timeout-minutes: ${{ matrix.group == 'ingestion' && 90 || 30 }}
+    # Native recovery suites run independently with real ownership/staging deadlines.
+    # Retain ingestion's existing budget while gathering its reduced runtime.
+    timeout-minutes: ${{ contains(fromJSON('["ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30 }}
     strategy:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.
       fail-fast: false
       matrix:
-        group: [api-privacy, ingestion, export-restore]
+        group:
+          [api-privacy, ingestion, configuration-recovery, coordinator-recovery, export-restore]
     services:
       postgis:
         # Match the production PostGIS line and pin the reviewed multi-arch
@@ -368,7 +368,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openmapx_test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test
       # This is a positive assertion that database infrastructure is required.
       # Once set, every selected suite fails instead of skipping if PostGIS or
       # the Docker daemon is unavailable.
