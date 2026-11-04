@@ -1,14 +1,16 @@
 ---
-impacts: [migration, operator-action]
+impacts: [breaking, migration, operator-action]
 ---
 
 ## What changes
 
 Administrators can manage services, supported platform settings, transit data,
 prepared artifacts, integrations, account policy, backups and privacy workflows
-through the panel. Mutations retain their original jobs and recovery inputs
-across lost responses and process restarts. Uncertain operations keep their
-writer fences until their original outcomes can be verified.
+through the panel. Accepted host operations retain their backend execution and
+recovery inputs across process restarts. Keyed service, backup and maintenance
+requests return the original job on an exact retry. Other legacy entrypoints
+still require reviewing Activity before submitting another request. Uncertain
+operations keep their writer fences until their original outcomes can be verified.
 
 The API migrations add account-policy, integration ownership, artifact-transfer
 and privacy-workflow storage alongside durable execution records. Existing auth
@@ -30,6 +32,11 @@ Apply the normal API database migrations and upgrade the control services
 together. Preserve existing installation keys, pending jobs and recovery
 records. Inspect Activity before retrying an uncertain mutation; deleting its
 records does not prove that its host effect stopped.
+
+Custom admin API clients must supply a caller-retained `Idempotency-Key` for
+single-service actions, bulk actions and backup create/restore/delete. Reuse it
+when retrying an uncertain response; use a fresh key for a deliberately new
+operation. Upgrade the web client with the API.
 
 Before the first render, make the host-control authority ancestors
 non-group-writable with `chmod go-w . infra infra/docker infra/docker/secrets`
