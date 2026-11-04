@@ -31,14 +31,11 @@ function withProposalDirectory<T>(
     opened.push(actual);
     if (!sameInode(identity(expected.stat), identity(actual.stat)))
       throw Error("Foreign catalog proposal root");
-    let directory = new AnchoredDirectory(rootDir);
+    // The trusted mount is infra/docker; Docker may own its unmounted ancestors.
+    let directory = new AnchoredDirectory(join(rootDir, "infra/docker"));
     opened.push(directory);
-    for (const name of ["infra", "docker", "catalog-pins", "proposals"]) {
-      directory = directory.directory(
-        name,
-        create && ["catalog-pins", "proposals"].includes(name),
-        ["catalog-pins", "proposals"].includes(name),
-      );
+    for (const name of ["catalog-pins", "proposals"]) {
+      directory = directory.directory(name, create, true);
       opened.push(directory);
     }
     return run(directory);

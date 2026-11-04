@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -35,6 +36,7 @@ import { createControlRootOperationKey } from "../ops/control-root-key";
 import { executionFingerprint } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import { createCatalogPinSet } from "./generation";
+import { retainCatalogProposal } from "./proposals";
 import {
   initializeCatalogPinSet,
   publishCatalogPinSet,
@@ -139,6 +141,52 @@ it("imports both exact legacy pins once, ignoring later compatibility-file chang
   expect(await initializeCatalogPinSet({ rootDir: root, lease })).toEqual(first);
   expect(readCatalogPinSet(root)).toEqual(first);
   expect(readFileSync(join(docker, "catalog-pins/current.json"))).toEqual(ptr);
+});
+it("refuses an unsafe mounted infra directory for pair reads and proposal writes", async () => {
+  legacy();
+  const pins = await initializeCatalogPinSet({ rootDir: root, lease });
+  if (!pins) throw Error("missing fixture pair");
+  chmodSync(docker, 0o775);
+  try {
+    expect(() => readCatalogPinSet(root)).toThrow(/Directory authority/);
+    await expect(
+      retainCatalogProposal({
+        rootDir: root,
+        installation,
+        proposal: {
+          proposalId: randomUUID(),
+          baseGenerationId: pins.generationId,
+          pins,
+          diffDigest: "e".repeat(64),
+          sourcePolicyRevision: "f".repeat(64),
+        },
+      }),
+    ).rejects.toThrow(/Directory authority/);
+  } finally {
+    chmodSync(docker, 0o755);
+  }
+});
+it("refuses a proposal in another checkout with this installation's data root", async () => {
+  const other = mkdtempSync(join(tmpdir(), "omx-catalog-proposal-foreign-"));
+  try {
+    mkdirSync(join(other, "infra/docker/data"), { recursive: true, mode: 0o700 });
+    await expect(
+      retainCatalogProposal({
+        rootDir: other,
+        installation,
+        proposal: {
+          proposalId: randomUUID(),
+          baseGenerationId: null,
+          pins: createCatalogPinSet(transitous, gbfs),
+          diffDigest: "e".repeat(64),
+          sourcePolicyRevision: "f".repeat(64),
+        },
+      }),
+    ).rejects.toThrow(/Foreign catalog proposal root/);
+    expect(existsSync(join(other, "infra/docker/catalog-pins/proposals"))).toBe(false);
+  } finally {
+    rmSync(other, { recursive: true, force: true });
+  }
 });
 it("does not initialize from missing or malformed halves", async () => {
   expect(await initializeCatalogPinSet({ rootDir: root, lease })).toBeNull();

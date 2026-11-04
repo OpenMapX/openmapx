@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -32,6 +32,7 @@ import {
   inspectAgentContainer,
   writeAgentHandoff,
 } from "../apps/ops-agent/src/agent-handoff";
+import { readCatalogPinSet } from "../packages/core/src/catalog-pins";
 
 /**
  * The operations agent's own image under both mount layouts it supports: the
@@ -201,6 +202,10 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         id,
         logs,
         client: new OpsClient({ baseUrl, tokenFile }),
+        dataManagerClient: new OpsClient({
+          baseUrl,
+          tokenFile: join(infra, "secrets", "ops-agent-data-manager-token"),
+        }),
         token: readFileSync(tokenFile, "utf8").trim(),
         exec: (...args: string[]) =>
           run("docker", ["exec", id, ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(
@@ -368,6 +373,8 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         const first = await startAgent(root, "checkout");
         await commit(root, first, "import");
         await first.stop();
+        const pins = readCatalogPinSet(root);
+        if (!pins) throw new Error("Expected the initialized managed catalog pair");
         expect(services.serviceFilesImported(infra)).toBe(true);
         // The agent's own render keeps the layout it runs with.
         expect(services.generationAgentMountLayout(infra)).toBe("checkout");
@@ -417,6 +424,32 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
             expect(probe, absent).toMatchObject({ failed: 1 });
           }
         }
+
+        // Docker owns unmounted ancestors in the narrow layout. Catalog reads
+        // and signed proposals use the actual trusted infra/docker mount.
+        await expect(operate(agent, { kind: "catalogPins.inspect" })).resolves.toEqual({
+          active: pins,
+          catalogRevisionId: pins.generationId,
+        });
+        const proposalId = randomUUID();
+        await expect(
+          agent.dataManagerClient.execute({
+            kind: "transitousLock.propose",
+            proposalId,
+            baseGenerationId: pins.generationId,
+            pins,
+            diffDigest: "a".repeat(64),
+            sourcePolicyRevision: "b".repeat(64),
+          }),
+        ).resolves.toMatchObject({
+          execution: "sync",
+          value: { proposalId, proposed: true, catalogRevisionId: pins.generationId },
+        });
+        await expect(
+          agent.dataManagerClient.execute({ kind: "transitousLock.inspect", proposalId }),
+        ).resolves.toMatchObject({
+          value: { active: pins.transitous, proposal: { proposalId, pins } },
+        });
 
         // A configuration change through the admin panel's path, with the
         // override in place of the release's file.

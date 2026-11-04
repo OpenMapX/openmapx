@@ -62,13 +62,9 @@ function directories<T>(
 ): T {
   const opened: AnchoredDirectory[] = [];
   try {
-    let dir = new AnchoredDirectory(rootDir);
-    opened.push(dir);
-    for (const part of ["infra", "docker"]) {
-      dir = dir.directory(part);
-      opened.push(dir);
-    }
-    const docker = dir;
+    // The trusted mount is infra/docker; Docker may own its unmounted ancestors.
+    const docker = new AnchoredDirectory(join(rootDir, "infra/docker"));
+    opened.push(docker);
     let pins: AnchoredDirectory;
     try {
       pins = docker.directory("catalog-pins", create, true);

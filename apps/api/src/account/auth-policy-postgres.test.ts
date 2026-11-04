@@ -477,7 +477,7 @@ dbDescribe("account policy through installed Better Auth", () => {
     ).rejects.toMatchObject({ body: { code: "TOO_MANY_ATTEMPTS" } });
   });
 
-  it("enforces active password bounds on every installed password-writing endpoint", async () => {
+  it("enforces active password bounds on installed credential password-writing endpoints", async () => {
     const person = await auth.api.createUser({
       body: {
         name: "Password bounds",
@@ -545,6 +545,8 @@ dbDescribe("account policy through installed Better Auth", () => {
     await expect(
       auth.api.resetPassword({ body: { token, newPassword: "valid-replacement-password" } }),
     ).resolves.toMatchObject({ status: true });
+  });
+  it("enforces active password bounds when setting the first password through an OTP session", async () => {
     const passwordless = await auth.api.createUser({
       body: { name: "Passwordless", email: "passwordless-policy@example.test" },
     });

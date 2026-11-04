@@ -71,7 +71,7 @@ const resolutionSchema = z.strictObject({
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 const safeUpstreamFetch: typeof fetch = async (input, init) => {
   const response = await safeFetchTextResponse(String(input), {
-    maxBytes: String(input).includes("api.github.com") ? 65536 : 32 * 1024 * 1024,
+    maxBytes: new URL(String(input)).hostname === "api.github.com" ? 65536 : 32 * 1024 * 1024,
     timeoutMs: 30000,
     signal: init?.signal ?? undefined,
     maxRedirects: 0,

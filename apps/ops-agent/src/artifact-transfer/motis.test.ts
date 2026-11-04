@@ -344,6 +344,9 @@ it("produces a portable recipe from the actual accepted upstream pinned template
 it("imports an actual portable candidate through the production agent with destination-managed credentials and no lifecycle effects", async () => {
   const source = await fixture();
   const { ownedServiceHost } = await import("../__fixtures__/owned-service-host");
+  const { readProductionFixtureCompose } = await import(
+    "../__fixtures__/production-compose-config"
+  );
   const { Writable } = await import("node:stream");
   const { cpSync } = await import("node:fs");
   const control = await import("@openmapx/core/build-artifacts");
@@ -356,7 +359,10 @@ it("imports an actual portable candidate through the production agent with desti
   const { installPreparedImportRuntime } = await import("./import-runtime");
   const host = await ownedServiceHost({
     withCoordinator: true,
-    actualComposeConfig: true,
+    composeConfigIO: async (_file, args) => ({
+      stdout: JSON.stringify(readProductionFixtureCompose(args)),
+      stderr: "",
+    }),
     extraServiceIds: ["motis-staging", "motis-feed-proxy"],
     schemas: {
       "data-manager": {

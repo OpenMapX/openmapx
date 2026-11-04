@@ -341,7 +341,10 @@ jobs:
   database:
     name: test (database, ${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Ingestion exercises real 60s ownership recovery and 6min staging expiry
+    # across serial native-process cases. Their combined runtime exceeds 30min;
+    # keep per-test and production deadlines intact while allowing the full group.
+    timeout-minutes: ${{ matrix.group == 'ingestion' && 90 || 30 }}
     strategy:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.

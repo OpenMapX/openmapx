@@ -15,7 +15,7 @@ import {
 import * as nodeFsPromises from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { setTimeout as nativeDelay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
@@ -81,6 +81,12 @@ const { encrypt } = await import("../secrets");
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "actual API candidate / production agent / PostgreSQL preparation",
   () => {
+    const composeFixture = fileURLToPath(
+      new URL(
+        "../../../../ops-agent/src/__fixtures__/production-compose-config.ts",
+        import.meta.url,
+      ),
+    );
     let fixture: Fixture;
     let host: Awaited<ReturnType<typeof ownedServiceHost>>;
     let app: ReturnType<typeof buildOpsAgentServer>;
@@ -88,6 +94,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let dm: Awaited<ReturnType<typeof ownedDataManager>> | undefined;
     let actualPosts: Map<string, number>;
     beforeEach(async (context) => {
+      // Synthetic example/* images have no published release overlay.
+      vi.stubEnv("OPENMAPX_RELEASE", "local");
       fixture = await createConfigurationPostgresFixture();
       state.fixture = fixture;
       const schemas = Object.fromEntries(
@@ -932,11 +940,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               Labels: {
                 ...host.row.Labels,
                 "com.docker.compose.service": "data-manager",
-                "com.docker.compose.project.working_dir": join(
-                  host.infraDir,
-                  ".trusted-config-generations",
-                  nativeRevision,
-                ),
+                "com.docker.compose.project.working_dir": dirname(compose),
                 "com.docker.compose.project.config_files": compose,
                 "com.docker.compose.config-hash": hash,
               },
@@ -1964,7 +1968,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("publishes one credential seed and recreates from it in the same retained job without another render", async () => {
       const { applyTrustedConfiguration } = await import("../trusted-config-operations"),
         { createDurableOpsKey } = await import("../ops-client");
-      const before = readdirSync(join(host.infraDir, ".trusted-config-generations")).length;
+      const before = readdirSync(join(host.infraDir, services.CONFIGURATION_GENERATIONS)).length;
       host.setCreatingProcess(async () => {
         const connection = await fixture.sql.reserve();
         let held = false;
@@ -2007,7 +2011,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       const applied = await applyTrustedConfiguration(options);
       expect(applied.revisionId).toBe(services.currentConfigurationGeneration(host.infraDir));
-      expect(readdirSync(join(host.infraDir, ".trusted-config-generations"))).toHaveLength(
+      expect(readdirSync(join(host.infraDir, services.CONFIGURATION_GENERATIONS))).toHaveLength(
         before + 1,
       );
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -2280,18 +2284,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .trim()
             .split(/\s+/)
             .at(-1)!,
+          compose = services.configurationGenerationComposeFile(host.infraDir, revision),
           row = {
             ...dmRow,
             Id: "d".repeat(64),
             Labels: {
               ...dmRow.Labels,
-              "com.docker.compose.project.working_dir": join(
-                host.infraDir,
-                ".trusted-config-generations",
-                revision,
-              ),
-              "com.docker.compose.project.config_files":
-                services.configurationGenerationComposeFile(host.infraDir, revision),
+              "com.docker.compose.project.working_dir": dirname(compose),
+              "com.docker.compose.project.config_files": compose,
               "com.docker.compose.config-hash": hash,
             },
           },
@@ -4197,11 +4197,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 Id: "d".repeat(64),
                 Labels: {
                   ...dmRow.Labels,
-                  "com.docker.compose.project.working_dir": join(
-                    host.infraDir,
-                    ".trusted-config-generations",
-                    candidate.revisionId,
-                  ),
+                  "com.docker.compose.project.working_dir": dirname(compose),
                   "com.docker.compose.project.config_files": compose,
                   "com.docker.compose.config-hash": hash,
                 },
@@ -8345,6 +8341,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         writeFileSync(
           join(bin, "docker"),
           `#!${process.execPath}\nconst fs=require("node:fs"),args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify(args)+"\\n");
+if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){import(${JSON.stringify(composeFixture)}).then(({readProductionFixtureCompose})=>process.stdout.write(JSON.stringify(readProductionFixtureCompose(args)))).catch(()=>{process.exitCode=1;});}
 if(args.includes("pull")){fs.writeFileSync(${JSON.stringify(marker)},String(process.pid));${mode === "cancel" ? "setInterval(()=>{},1000);" : mode === "pull" ? "process.exit(7);" : mode === "crash-pull" ? crash : ""}}
 if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);" : mode === "crash-recreate" ? crash : mode === "missing-receipt" ? `const directory=${JSON.stringify(receiptDirectory)},names=fs.readdirSync(directory).filter(n=>/^opk1_[A-Za-z0-9_-]+\\.json$/.test(n));if(names.length!==1)throw Error("Expected sole owned lifecycle receipt");fs.unlinkSync(require("node:path").join(directory,names[0]));` : ""}}\n`,
           { mode: 0o700 },
@@ -8504,7 +8501,8 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
         const docker = join(bin, "docker");
         writeFileSync(
           docker,
-          `#!${process.execPath}\nrequire("node:fs").appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+"\\n");\n`,
+          `#!${process.execPath}\nconst args=process.argv.slice(2);require("node:fs").appendFileSync(${JSON.stringify(trace)},JSON.stringify(args)+"\\n");
+if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){import(${JSON.stringify(composeFixture)}).then(({readProductionFixtureCompose})=>process.stdout.write(JSON.stringify(readProductionFixtureCompose(args)))).catch(()=>{process.exitCode=1;});}\n`,
           { mode: 0o700 },
         );
         chmodSync(docker, 0o700);
@@ -8550,11 +8548,10 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
           .trim()
           .split("\n")
           .map((line) => JSON.parse(line) as string[]);
-        expect(
-          calls.map((args) => args.slice(args.indexOf("--project-directory") + 2)),
-        ).toHaveLength(2);
-        expect(calls[0]?.slice(-2)).toEqual(["pull", "motis"]);
-        expect(calls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
+        const lifecycleCalls = calls.filter((args) => args[0] !== "ps" && !args.includes("config"));
+        expect(lifecycleCalls).toHaveLength(2);
+        expect(lifecycleCalls[0]?.slice(-2)).toEqual(["pull", "motis"]);
+        expect(lifecycleCalls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
         if (!competing) {
           const directory = join(host.infraDir, "data/ops-agent/lifecycle"),
             [name] = readdirSync(directory);
@@ -8581,6 +8578,11 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+      vi.stubEnv("OPENMAPX_TEST_FIXED_DM_TARGET", dm.baseUrl);
+      vi.stubEnv(
+        "NODE_OPTIONS",
+        `${process.env.NODE_OPTIONS ?? ""} --import=${new URL("../../../../ops-agent/src/test-fixtures/fixed-cli-data-manager-preload.mjs", import.meta.url).href}`.trim(),
+      );
       host.setRows([
         host.row,
         {
@@ -8601,7 +8603,8 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
       // the installed CLI entry, real shared writer, signed receipt and DM leaf.
       writeFileSync(
         join(bin, "docker"),
-        `#!${process.execPath}\nrequire("node:fs").appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+"\\n");\n`,
+        `#!${process.execPath}\nconst args=process.argv.slice(2);require("node:fs").appendFileSync(${JSON.stringify(trace)},JSON.stringify(args)+"\\n");
+if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){import(${JSON.stringify(composeFixture)}).then(({readProductionFixtureCompose})=>process.stdout.write(JSON.stringify(readProductionFixtureCompose(args)))).catch(()=>{process.exitCode=1;});}\n`,
         { mode: 0o700 },
       );
       for (const [key, value] of Object.entries({
@@ -8636,9 +8639,10 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line) as string[]);
-      expect(calls).toHaveLength(2);
-      expect(calls[0]?.slice(-2)).toEqual(["pull", "motis"]);
-      expect(calls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
+      const lifecycleCalls = calls.filter((args) => args[0] !== "ps" && !args.includes("config"));
+      expect(lifecycleCalls).toHaveLength(2);
+      expect(lifecycleCalls[0]?.slice(-2)).toEqual(["pull", "motis"]);
+      expect(lifecycleCalls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
       expect(dm.posts).toBe(1);
       const [entry] = Object.values(readProjection(ctx.checkpointResult).operations),
         root = restoreAdmittedControlExecution(installation, {

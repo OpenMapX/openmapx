@@ -696,7 +696,7 @@ describe("assembled production service authority", () => {
         },
       });
     // Deployments predating owned retention have complete generations but no new metadata file.
-    rmSync(join(host.infraDir, ".owned-service-generations.json"));
+    rmSync(join(host.infraDir, "state/ops-agent/configuration/.owned-service-generations.json"));
     await initializeTrustedConfigurationRuntime(host.infraDir);
     expect(existsSync(host.firstCompose)).toBe(true);
     const logs = { kind: "service.logs", serviceId: "motis", tail: 20 } as const;

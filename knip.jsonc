@@ -101,6 +101,8 @@
         // Native recovery tests bundle or execute these isolated children by path.
         "src/artifact-transfer/test-fixtures/*.{ts,mjs}",
         "src/test-fixtures/data-owned-http-process.ts",
+        // The fixed CLI nonempty-link test loads this HTTP-only native preload.
+        "src/test-fixtures/fixed-cli-data-manager-preload.mjs",
         "src/test-fixtures/terminal-retention-process.ts"
       ]
     },

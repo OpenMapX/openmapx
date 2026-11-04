@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -7,7 +7,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -19,7 +18,20 @@ import { promisify } from "node:util";
 import { OpsClient } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { decodeTransitousLock } from "../packages/transitous-core/src/catalog-pins";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+} from "../packages/core/src/build-artifacts";
+import {
+  createCatalogPinSet,
+  initializeManagedCatalogPins,
+  readCatalogPinSet,
+  readCatalogProposal,
+} from "../packages/core/src/catalog-pins";
+import {
+  decodeGbfsCatalogLock,
+  decodeTransitousLock,
+} from "../packages/transitous-core/src/catalog-pins";
 import {
   buildRuntimeBundle,
   RUNTIME_BUNDLES,
@@ -27,11 +39,10 @@ import {
 } from "./build-runtime-bundles.mjs";
 
 /**
- * The Transitous pin on a running agent, from its bundle: the release's pin,
- * a proposal and an approval in the agent's own state, and the release pin
- * taking over from an approval made under an earlier one. The checkout is
- * written under umask 002 and holds a planted pin and proposal, which the
- * agent never reads.
+ * The running bundled agent retains signed paired-pin proposals without
+ * activating them. A managed pair is initialized before compatibility files
+ * are planted in a checkout created under umask 002; those files cannot
+ * replace the pair or supply an approvable proposal, including after restart.
  */
 const run = promisify(execFile);
 const ROOT = resolve(import.meta.dirname, "..");
@@ -46,7 +57,9 @@ const releasePin = () =>
     JSON.parse(readFileSync(join(ROOT, "infra", "docker", "transitous.lock.json"), "utf8")),
   );
 
-describe.skipIf(process.platform !== "linux")("the agent's Transitous pin", () => {
+const supported = process.platform === "linux" || process.platform === "darwin";
+
+describe.skipIf(!supported)("the agent's Transitous pin", () => {
   beforeAll(async () => {
     mkdirSync(join(ROOT, "apps", "ops-agent", "dist-temp"), { recursive: true });
     outdir = mkdtempSync(join(ROOT, "apps", "ops-agent", "dist-temp", "transitous-pin-"));
@@ -95,6 +108,20 @@ describe.skipIf(process.platform !== "linux")("the agent's Transitous pin", () =
     );
     const rendered = await cli(target, "compose", "render");
     expect(rendered.stdout).toContain("Rendered");
+    // The one-time operator bootstrap imports both exact source pins. They
+    // must be trusted files before the fixture replaces compatibility files.
+    for (const name of ["transitous.lock.json", "gbfs-catalog.lock.json"])
+      chmodSync(join(infra, name), 0o600);
+    const installation = openControlInstallation({
+      infraDir: infra,
+      role: "host-cli",
+      serviceIds: ["motis"],
+    });
+    try {
+      await initializeManagedCatalogPins({ rootDir: target, installation });
+    } finally {
+      closeControlInstallation(installation);
+    }
     const planted = JSON.stringify({
       ref: PLANTED,
       submodules: {},
@@ -176,60 +203,98 @@ describe.skipIf(process.platform !== "linux")("the agent's Transitous pin", () =
       agent.kill("SIGTERM");
       await new Promise((done) => agent.once("exit", done));
     };
-    return { execute, stop, output: () => output };
+    return { execute, stop };
   }
 
-  it("proposes, approves and gives way to the release's pin, never touching the checkout's", async () => {
+  it("retains signed paired proposals across restart and refuses raw approval without changing pins", async () => {
     const target = await checkout();
     const infra = join(target, "infra", "docker");
-    const state = join(infra, "state", "ops-agent", "transitous");
     const trackedBefore = readFileSync(join(infra, "transitous.lock.json"), "utf8");
     const release = releasePin();
+    const active = readCatalogPinSet(target);
+    if (!active) throw new Error("Expected the managed bootstrap pair");
+    expect(active.transitous).toEqual(release);
+    expect(active.gbfs).toEqual(
+      decodeGbfsCatalogLock(
+        JSON.parse(readFileSync(join(ROOT, "infra/docker/gbfs-catalog.lock.json"), "utf8")),
+      ),
+    );
 
     const agent = await startAgent(target);
-    expect(await agent.execute({ kind: "transitousLock.inspect" })).toMatchObject({
-      active: { ref: release.ref, lockedBy: release.lockedBy },
-      proposed: null,
+    expect(await agent.execute({ kind: "catalogPins.inspect" })).toEqual({
+      active,
+      catalogRevisionId: active.generationId,
     });
-
-    await agent.execute({
-      kind: "transitousLock.propose",
-      ref: CANDIDATE,
-      submodules: { "transitland-atlas": "d".repeat(40) },
-      lockedBy: "auto-bump",
+    const proposalId = randomUUID();
+    const pins = createCatalogPinSet(
+      {
+        ...active.transitous,
+        ref: CANDIDATE,
+        submodules: { "transitland-atlas": "d".repeat(40) },
+        lockedBy: "auto-bump",
+      },
+      active.gbfs,
+    );
+    const proposal = {
+      proposalId,
+      baseGenerationId: active.generationId,
+      pins,
+      diffDigest: "a".repeat(64),
+      sourcePolicyRevision: "b".repeat(64),
+    };
+    expect(
+      await agent.execute({
+        kind: "transitousLock.propose",
+        ...proposal,
+      }),
+    ).toEqual({ proposalId, proposed: true, catalogRevisionId: pins.generationId });
+    expect(
+      await agent.execute({ kind: "transitousLock.inspect", proposalId, offset: 0 }),
+    ).toMatchObject({
+      active: active.transitous,
+      proposal: { ...proposal, state: "proposed" },
+      page: { total: 1, nextOffset: null },
     });
-    expect(await agent.execute({ kind: "transitousLock.inspect" })).toMatchObject({
-      active: { ref: release.ref },
-      proposed: { ref: CANDIDATE },
-    });
-    await agent.execute({ kind: "transitousLock.approve", ref: CANDIDATE, approvedBy: "admin" });
-    expect(await agent.execute({ kind: "transitousLock.inspect" })).toMatchObject({
-      active: { ref: CANDIDATE, lockedBy: "admin" },
-      proposed: null,
-    });
-    expect(readdirSync(state).sort()).toEqual(["approved.json"]);
-    // Nothing in the checkout changed: its planted files are as they were.
+    const installation = openControlInstallation({ infraDir: infra, role: "ops-agent" });
+    try {
+      // Reads and verifies the signature from the actual running agent's proposal.
+      expect(readCatalogProposal({ rootDir: target, installation, proposalId })).toMatchObject({
+        ...proposal,
+        state: "proposed",
+      });
+    } finally {
+      closeControlInstallation(installation);
+    }
+    const proposalFile = join(infra, "catalog-pins", "proposals", `${proposalId}.json`);
+    const retained = readFileSync(proposalFile);
+    // Raw-ref approval is unsupported. Successful paired activation is covered
+    // by the actual catalog-workflow-postgres worker/agent acceptance.
+    await expect(
+      agent.execute({
+        kind: "transitousLock.approve",
+        ref: CANDIDATE,
+        approvedBy: "admin",
+      } as never),
+    ).rejects.toMatchObject({ errorClass: "validation", status: 400 });
+    expect(readCatalogPinSet(target)).toEqual(active);
     expect(readFileSync(join(infra, "transitous.lock.json"), "utf8")).toBe(trackedBefore);
     expect(existsSync(join(infra, "transitous.lock.proposed.json"))).toBe(true);
     await agent.stop();
 
-    // As if approved under an earlier release, whose pin was another one.
-    const approved = JSON.parse(readFileSync(join(state, "approved.json"), "utf8"));
-    writeFileSync(
-      join(state, "approved.next"),
-      JSON.stringify({ ...approved, releasePin: `main@${"0".repeat(40)}` }),
-      { mode: 0o600 },
-    );
-    renameSync(join(state, "approved.next"), join(state, "approved.json"));
-
     const restarted = await startAgent(target);
-    expect(restarted.output()).toContain(`Retired the approved Transitous pin ${CANDIDATE}`);
-    expect(restarted.output()).toContain(`this release pins ${release.ref}`);
-    expect(await restarted.execute({ kind: "transitousLock.inspect" })).toMatchObject({
-      active: { ref: release.ref },
-      proposed: null,
+    expect(await restarted.execute({ kind: "catalogPins.inspect" })).toEqual({
+      active,
+      catalogRevisionId: active.generationId,
     });
-    expect(readdirSync(state)).toEqual([]);
+    expect(
+      await restarted.execute({ kind: "transitousLock.inspect", proposalId, offset: 0 }),
+    ).toMatchObject({
+      proposal: { ...proposal, state: "proposed" },
+      page: { total: 1, nextOffset: null },
+    });
+    expect(readFileSync(proposalFile)).toEqual(retained);
+    expect(readdirSync(join(infra, "catalog-pins", "proposals"))).toEqual([`${proposalId}.json`]);
+    expect(readFileSync(join(infra, "transitous.lock.json"), "utf8")).toBe(trackedBefore);
     await restarted.stop();
   }, 180_000);
 });

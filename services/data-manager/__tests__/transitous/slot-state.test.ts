@@ -1,12 +1,21 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   aliasSlot,
   commitMotisSlotActivation,
   ensureMotisSlotLayout,
   flipMotisSlotAliases,
+  readMotisSlotState,
   reconcileMotisSlotLayout,
 } from "../../src/jobs/transitous/slot-state.js";
 
@@ -22,6 +31,21 @@ function fixture() {
 }
 
 describe("MOTIS two-slot state", () => {
+  it("refuses a slot-state symlink and oversized records", () => {
+    const layout = fixture();
+    const dataDir = dirname(layout.root);
+    const foreign = join(dataDir, "foreign.json");
+    writeFileSync(foreign, JSON.stringify({ schemaVersion: 1, activeSlot: "B" }));
+    rmSync(layout.statePath);
+    symlinkSync(foreign, layout.statePath);
+    expect(() => readMotisSlotState(dataDir)).toThrow();
+    rmSync(layout.statePath);
+    writeFileSync(
+      layout.statePath,
+      JSON.stringify({ schemaVersion: 1, activeSlot: "B", padding: "x".repeat(65536) }),
+    );
+    expect(() => readMotisSlotState(dataDir)).toThrow(/size limit/);
+  });
   it("migrates primary/staging directories into A/B aliases without reimport", () => {
     root = mkdtempSync(join(tmpdir(), "openmapx-motis-slots-migrate-"));
     mkdirSync(join(root, "motis", "live"), { recursive: true });

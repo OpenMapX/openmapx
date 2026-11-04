@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -13,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApiClient } from "@openmapx/core";
 import {
@@ -39,7 +40,6 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
-import { runContainedProcess } from "../../../../ops-agent/src/docker-runtime";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
@@ -90,15 +90,35 @@ async function nativeHelper(
   } = {},
 ) {
   const { bundled = false, fault } = options;
-  if (bundled)
-    await runContainedProcess(
-      process.execPath,
-      [
-        fileURLToPath(new URL("../../../../../scripts/build-runtime-bundles.mjs", import.meta.url)),
-        "ops-agent",
-      ],
-      { signal: AbortSignal.timeout(60000), timeout: 60000, maxBuffer: 1024 * 1024 },
-    );
+  let bundleDirectory: string | undefined;
+  if (bundled) {
+    const root = fileURLToPath(new URL("../../../../../", import.meta.url)),
+      { buildRuntimeBundle, RUNTIME_BUNDLES, writeRuntimeBundle } = createRequire(import.meta.url)(
+        join(root, "scripts/build-runtime-bundles.mjs"),
+      );
+    // Keep the production entries, embedded release authority and dependency pins.
+    // A sibling of dist has the same path depth and never overwrites another build.
+    bundleDirectory = mkdtempSync(join(root, "apps/ops-agent/dist-platform-helper-"));
+    try {
+      const bundle = await buildRuntimeBundle(root, "ops-agent", {
+          ...RUNTIME_BUNDLES["ops-agent"],
+          outdir: relative(root, bundleDirectory),
+        }),
+        releaseManifest = readFileSync(join(root, "services/app-api/service.json"));
+      expect(
+        [...(bundle.files as Map<string, Buffer>).values()].some((bytes) =>
+          bytes.equals(releaseManifest),
+        ),
+      ).toBe(true);
+      expect(
+        host.loaded.find((service) => service.manifest.id === "app-api")?.manifest,
+      ).not.toEqual(JSON.parse(releaseManifest.toString("utf8")));
+      writeRuntimeBundle(bundle);
+    } catch (error) {
+      rmSync(bundleDirectory, { recursive: true, force: true });
+      throw error;
+    }
+  }
   const bridge = Fastify({ logger: false, bodyLimit: 64 * 1024 });
   bridge.post("/docker", async (request, reply) => {
     const args = (request.body as { args: unknown }).args;
@@ -131,14 +151,11 @@ async function nativeHelper(
             import.meta.url,
           ),
         ),
-        fileURLToPath(
-          new URL(
-            bundled
-              ? "../../../../ops-agent/dist/configuration-handoff-main.mjs"
-              : "../../../../ops-agent/src/configuration-handoff-main.ts",
-            import.meta.url,
-          ),
-        ),
+        bundleDirectory
+          ? join(bundleDirectory, "configuration-handoff-main.mjs")
+          : fileURLToPath(
+              new URL("../../../../ops-agent/src/configuration-handoff-main.ts", import.meta.url),
+            ),
       ],
       {
         cwd: process.cwd(),
@@ -202,6 +219,7 @@ async function nativeHelper(
   } finally {
     options.kill?.release();
     await bridge.close();
+    if (bundleDirectory) rmSync(bundleDirectory, { recursive: true, force: true });
     if (options.kill && existsSync(join(host.root, "native-helper-processes"))) {
       const ids = readFileSync(join(host.root, "native-helper-processes"), "utf8")
           .trim()
@@ -420,7 +438,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "policy-change",
       "launch-apply",
       "launch-native",
-      "launch-bundle",
+      "launch-bundle-authority-mismatch",
       "launch-native-before-effect",
       "launch-native-after-effect",
       "launch-native-killed",
@@ -447,7 +465,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const helperEffectEntered = Promise.withResolvers<void>(),
           continueHelperEffect = Promise.withResolvers<void>();
         let writersWereReleased = false;
-        const native = version.startsWith("launch-native") || version === "launch-bundle",
+        const native =
+            version.startsWith("launch-native") || version === "launch-bundle-authority-mismatch",
           application = version === "launch-apply" || native,
           systemRelease = version.startsWith("launch-native-system-release"),
           apiRestart = version.startsWith("launch-native-system-release-api-");
@@ -1686,9 +1705,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                                 : version === "launch-native-after-effect"
                                   ? "after-effect"
                                   : undefined;
+                          const dockerCallsBeforeHelper = host.calls.map((args) => [...args]);
                           await nativeHelper(host, environment, {
-                            bundled: version === "launch-bundle",
+                            bundled: version === "launch-bundle-authority-mismatch",
                             fault,
+                            ...(version === "launch-bundle-authority-mismatch"
+                              ? { failureStage: "application" }
+                              : {}),
                             ...(version === "launch-native-killed"
                               ? {
                                   kill: {
@@ -1698,6 +1721,38 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                                 }
                               : {}),
                           });
+                          if (version === "launch-bundle-authority-mismatch") {
+                            // The production bundle embeds a different release from this
+                            // synthetic source deployment. It must refuse before Docker IO.
+                            expect(host.calls).toEqual(dockerCallsBeforeHelper);
+                            const completion = JSON.parse(
+                              readFileSync(
+                                join(
+                                  host.infraDir,
+                                  "control-private/ops-agent/observations",
+                                  `configuration-handoff-${environment.OPS_CONFIGURATION_HANDOFF_ID}.completion.json`,
+                                ),
+                                "utf8",
+                              ),
+                            ).payload;
+                            expect(completion).toMatchObject({
+                              phase: "recovery_required",
+                              completedAt: null,
+                              observations: [],
+                              targets: [
+                                { serviceId: "app-api", phase: "pending" },
+                                { serviceId: "ops-agent", phase: "pending" },
+                              ],
+                            });
+                            expect(dm.settlePosts).toBe(0);
+                            await expect(dm.assertDataAdmission()).rejects.toThrow();
+                            expect(() =>
+                              verifyRetainedArtifactTargetRootRelease(
+                                restoreAdmittedControlExecution(installation, owner.plan.prepare),
+                              ),
+                            ).toThrow();
+                            return;
+                          }
                           if (version === "launch-native-killed") {
                             const file = join(
                                 host.infraDir,

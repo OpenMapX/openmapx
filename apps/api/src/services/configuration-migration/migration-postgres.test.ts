@@ -293,6 +293,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 90000);
     it("denies secret injection and stale source with zero selected writes", async () => {
       const { jobRunner } = await import("../job-runner");
+      const beforePreview = await state.fixture.db
+        .select()
+        .from(integrationConfig)
+        .orderBy(integrationConfig.integrationId);
       const invalid = document("not-written");
       invalid.integrations[0]!.config.TOKEN = "synthetic-secret";
       const denied = await jobRunner.runImmediateConfigurationMigrationPreview({
@@ -301,6 +305,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         document: invalid,
       });
       expect(denied.denials).toContain("integration:alpha:TOKEN:not_portable");
+      expect(
+        await state.fixture.db
+          .select()
+          .from(integrationConfig)
+          .orderBy(integrationConfig.integrationId),
+      ).toEqual(beforePreview);
       const preview = await jobRunner.runImmediateConfigurationMigrationPreview({
         actorId: "migration-admin",
         operationKey: createDurableOpsKey("migration.test.stale", randomUUID()),
@@ -308,6 +318,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       await state.fixture
         .sql`update integration_config set config = '{"VALUE":"external-race"}'::jsonb where integration_id='beta'`;
+      const beforeApply = await state.fixture.db
+        .select()
+        .from(integrationConfig)
+        .orderBy(integrationConfig.integrationId);
       await expect(
         jobRunner.runImmediateConfigurationMigration({
           actorId: "migration-admin",
@@ -318,10 +332,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }),
       ).rejects.toThrow();
       expect(
-        (await state.fixture.db.select().from(integrationConfig)).find(
-          (r) => r.integrationId === "alpha",
-        )?.config.VALUE,
-      ).toBe("migrated");
+        await state.fixture.db
+          .select()
+          .from(integrationConfig)
+          .orderBy(integrationConfig.integrationId),
+      ).toEqual(beforeApply);
     }, 90000);
     it("round trips actual full-admin sessions and purpose proofs through generated HTTP migration and vault clients", async () => {
       const schema = await import("../../db/schema"),

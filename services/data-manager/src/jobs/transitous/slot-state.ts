@@ -1,13 +1,16 @@
 import {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
-  readFileSync,
   readlinkSync,
+  readSync,
   renameSync,
   rmSync,
-  statSync,
   symlinkSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -55,9 +58,42 @@ export interface MotisSlotLayout {
 const other = (slot: MotisSlot): MotisSlot => (slot === "A" ? "B" : "A");
 
 function readRecord(path: string): MotisSlotRecord | null {
-  if (!existsSync(path)) return null;
-  if (statSync(path).size > 64 * 1024) throw Error("MOTIS slot state exceeds size limit");
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as MotisSlotRecord;
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let parsed: MotisSlotRecord;
+  try {
+    const before = fstatSync(fd);
+    if (!before.isFile()) throw Error("MOTIS slot state must be a regular file");
+    const bytes = Buffer.alloc(64 * 1024 + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, length);
+      if (!count) break;
+      length += count;
+    }
+    if (length > 64 * 1024) throw Error("MOTIS slot state exceeds size limit");
+    const after = fstatSync(fd),
+      named = lstatSync(path);
+    if (
+      before.dev !== named.dev ||
+      before.ino !== named.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs ||
+      length !== after.size
+    )
+      throw Error("MOTIS slot state changed while reading");
+    parsed = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, length)),
+    ) as MotisSlotRecord;
+  } finally {
+    closeSync(fd);
+  }
   if (parsed.schemaVersion !== 1 || !["A", "B"].includes(parsed.activeSlot)) {
     throw new Error(`malformed MOTIS slot state at ${path}`);
   }
@@ -74,8 +110,6 @@ function readRecord(path: string): MotisSlotRecord | null {
  */
 export function readMotisSlotState(dataDir: string): MotisSlotRecord | null {
   const path = join(dataDir, "motis", "slot-state.json");
-  if (existsSync(path) && statSync(path).size > 64 * 1024)
-    throw new Error("MOTIS slot state exceeds size limit");
   const record = readRecord(path);
   if (
     record &&

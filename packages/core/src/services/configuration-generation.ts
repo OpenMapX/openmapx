@@ -47,6 +47,7 @@ import {
 import { validateTrustedConfigurationValues } from "./configuration-schema";
 import type { ContainerBindMounts } from "./container-mounts";
 import {
+  CONFIGURATION_DIRECTORY,
   CONFIGURATION_GENERATION_BASE_PREFIX,
   CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
@@ -1022,15 +1023,25 @@ export async function initializeConfigurationGenerations(infraDir: string): Prom
   );
 }
 
-const RETAINED_GENERATIONS = ".owned-service-generations.json";
+const LEGACY_RETAINED_GENERATIONS = ".owned-service-generations.json";
+const RETAINED_GENERATIONS = `${CONFIGURATION_DIRECTORY}/${LEGACY_RETAINED_GENERATIONS}`;
 interface GenerationRetention {
   conservative: string[];
   containers: Record<string, string[]>;
 }
 function readGenerationRetention(infraDir: string): GenerationRetention {
-  const path = join(infraDir, RETAINED_GENERATIONS);
+  let path = join(infraDir, RETAINED_GENERATIONS);
   try {
-    const metadata = lstatSync(path, { bigint: true });
+    let metadata: BigIntStats;
+    try {
+      metadata = lstatSync(path, { bigint: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // Earlier writers kept this observation in infra/docker. Read it until
+      // the next commit carries it into the agent's writable configuration store.
+      path = join(infraDir, LEGACY_RETAINED_GENERATIONS);
+      metadata = lstatSync(path, { bigint: true });
+    }
     const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o600n]);
     const raw = JSON.parse(contents.toString("utf8")) as GenerationRetention;
     if (
@@ -1186,7 +1197,7 @@ async function retainConfigurationGenerations(
   try {
     await writeDurable(temporary, encoded, 0o600);
     renameSync(temporary, path);
-    await syncDirectory(infraDir);
+    await syncDirectory(dirname(path));
   } finally {
     rmSync(temporary, { force: true });
   }
