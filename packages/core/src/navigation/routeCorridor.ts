@@ -22,28 +22,33 @@ const METERS_PER_DEGREE = 111_320;
 
 type Parts = { points: Position[]; lines: Position[][]; rings: Position[][] };
 
+/** Appends without spreading, so a huge coordinate array cannot overflow the call stack. */
+function append<T>(into: T[], items: T[]): void {
+  for (const item of items) into.push(item);
+}
+
 function collect(geometry: Geometry, parts: Parts): Parts {
   switch (geometry.type) {
     case "Point":
       parts.points.push(geometry.coordinates);
       break;
     case "MultiPoint":
-      parts.points.push(...geometry.coordinates);
+      append(parts.points, geometry.coordinates);
       break;
     case "LineString":
       parts.lines.push(geometry.coordinates);
       break;
     case "MultiLineString":
-      parts.lines.push(...geometry.coordinates);
+      append(parts.lines, geometry.coordinates);
       break;
     case "Polygon":
-      parts.lines.push(...geometry.coordinates);
-      parts.rings.push(...geometry.coordinates);
+      append(parts.lines, geometry.coordinates);
+      append(parts.rings, geometry.coordinates);
       break;
     case "MultiPolygon":
       for (const polygon of geometry.coordinates) {
-        parts.lines.push(...polygon);
-        parts.rings.push(...polygon);
+        append(parts.lines, polygon);
+        append(parts.rings, polygon);
       }
       break;
     case "GeometryCollection":
@@ -82,9 +87,11 @@ function metres(a: Position, b: Position): number {
  * widens for very long geometry so the total stays bounded before any is generated.
  */
 function samples(parts: Parts, corridorMeters: number): Position[] {
-  // Each line keeps its share of the vertex budget (at least its two ends).
-  const total = parts.points.length + parts.lines.reduce((n, line) => n + line.length, 0);
-  const lines = parts.lines.map((line) =>
+  // Each line keeps its share of the vertex budget (at least its two ends); a geometry
+  // of countless short lines is thinned to as many lines as that budget allows.
+  const kept = thin(parts.lines, MAX_VERTICES / 2);
+  const total = kept.reduce((n, line) => n + line.length, 0);
+  const lines = kept.map((line) =>
     thin(line.filter(valid), Math.max(2, Math.floor((MAX_VERTICES * line.length) / total))),
   );
   const out: Position[] = thin(parts.points.filter(valid), MAX_VERTICES);

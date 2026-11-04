@@ -93,6 +93,24 @@ describe("isNearRoute", () => {
     expect(isNearRoute(malformed, route)).toBe(false);
   });
 
+  it("stays bounded for countless short lines or points", () => {
+    const lines = {
+      type: "MultiLineString" as const,
+      coordinates: Array.from({ length: 300_000 }, (_, i) => [
+        [6 + (i % 100) * 0.001, 51],
+        [6 + (i % 100) * 0.001, 51.001],
+      ]),
+    };
+    const points = {
+      type: "MultiPoint" as const,
+      coordinates: Array.from({ length: 300_000 }, () => [6, 51]),
+    };
+    const start = Date.now();
+    expect(isNearRoute(lines, route)).toBe(false);
+    expect(isNearRoute(points, route)).toBe(false);
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
   it("treats missing or empty geometry as not near", () => {
     expect(isNearRoute(null, route)).toBe(false);
     expect(isNearRoute({ type: "MultiPoint", coordinates: [] }, route)).toBe(false);
