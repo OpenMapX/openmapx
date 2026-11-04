@@ -86,7 +86,13 @@ async function loadStyleForViewport(
   return acquisition.bind(withoutNativeBuildingExtrusions(selected.style), selected.offline);
 }
 
-export function MapCanvas() {
+export function MapCanvas({
+  carSurface = false,
+  onSurfaceError,
+}: {
+  carSurface?: boolean;
+  onSurfaceError?: (code: string) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { mapRef, mapReady, notifyMapReady, notifyStyleReload } = useMap();
   const env = useEnv();
@@ -129,13 +135,14 @@ export function MapCanvas() {
   // badge sits over the same corner.
   const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
   const scaleVisible =
+    !carSurface &&
     !groundNavigating &&
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
     (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    initializeMapClickModes();
+    if (!carSurface) initializeMapClickModes();
 
     // Read initial viewport values once at mount — not reactive dependencies.
     // Adding center/zoom/bearing/pitch to the dep array would cause the map to
@@ -144,7 +151,7 @@ export function MapCanvas() {
     // A view the page was opened on (a shared link, a reload) wins; otherwise
     // reopen where the map was last left, unless the user switched that off.
     const linkedView = new URLSearchParams(window.location.search).has("map");
-    const lastView = linkedView ? null : readLastMapView();
+    const lastView = carSurface || linkedView ? null : readLastMapView();
     const { center, zoom } = lastView ?? storeView;
 
     const attempt = retryKey;
@@ -254,10 +261,13 @@ export function MapCanvas() {
         setZoom(map.getZoom());
         setBearing(map.getBearing());
         setPitch(map.getPitch());
-        writeLastMapView({ center, zoom: map.getZoom() });
+        if (!carSurface) writeLastMapView({ center, zoom: map.getZoom() });
       });
 
       mapRef.current = map;
+      if (carSurface) {
+        map.getCanvas().addEventListener("webglcontextlost", () => onSurfaceError?.("webgl-lost"));
+      }
 
       // Every later style load — a dark/light swap, a basemap switch — bumps the
       // counter layers rebuild on. Registering it once here rather than per swap
@@ -316,6 +326,7 @@ export function MapCanvas() {
           containerRef.current?.replaceChildren();
           console.error("Failed to initialize map", event.error);
           setStatus("error");
+          onSurfaceError?.("style-load-failed");
         });
       };
       const markReady = () => {
@@ -346,6 +357,7 @@ export function MapCanvas() {
       containerRef.current?.replaceChildren();
       console.error("Failed to initialize map", err);
       setStatus("error");
+      onSurfaceError?.("style-load-failed");
       return undefined;
     });
 
@@ -377,7 +389,9 @@ export function MapCanvas() {
       });
     };
 
-    if (locationAuthority === "native") {
+    if (carSurface) {
+      // The car is a read-only renderer; never acquire a location fix here.
+    } else if (locationAuthority === "native") {
       // The shell already told us what the OS granted it, so no query is needed
       // and none would be meaningful inside a WebView anyway.
       if (nativePermission === "foreground" || nativePermission === "background") takeFix();
@@ -397,6 +411,8 @@ export function MapCanvas() {
     };
   }, [
     env,
+    carSurface,
+    onSurfaceError,
     locationAuthority,
     mapRef,
     nativePermission,
@@ -481,7 +497,7 @@ export function MapCanvas() {
           },
         }}
       />
-      {status !== "ready" && (
+      {!carSurface && status !== "ready" && (
         <Box
           sx={{
             position: "absolute",

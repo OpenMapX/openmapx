@@ -21,6 +21,7 @@ import type {
 } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
 import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
+import type { NavigationStartContext } from "./startContext";
 import { alightAlertCopy } from "./transit/alightAlertCopy";
 import { createAlertPort } from "./transit/createAlertPort";
 import { TransitRefreshService } from "./transit/TransitRefreshService";
@@ -51,6 +52,8 @@ export interface ForegroundNavigationOptions {
   /** Told when guidance starts or ends, for keep-awake and the shell states. */
   onNavigatingChanged(navigating: boolean): void;
   driver?: LocationDriver;
+  registerAsForeground?: boolean;
+  startContext?(): NavigationStartContext;
 }
 
 export interface ForegroundNavigation {
@@ -112,6 +115,7 @@ export async function createForegroundNavigation(
     permissions: {
       state: () => driver.getPermissionState(),
       isAppActive: options.isAppActive,
+      ...(options.startContext ? { startContext: options.startContext } : {}),
       requestForStart: async () => {
         const decision = await permissions.requestForStart();
         // The tracking notification and the get-off alert both need the
@@ -140,10 +144,15 @@ export async function createForegroundNavigation(
       driver: {
         start: async () => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
+          driver.setLocale?.(session?.locale ?? options.locale);
           await driver.start(profileFor(initialProfileFor(session)));
         },
         stop: () => driver.stop(),
-        updateProfile: (profile) => driver.start(profileFor(profile as LocationProfileKind)),
+        updateProfile: async (profile) => {
+          const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
+          driver.setLocale?.(session?.locale ?? options.locale);
+          await driver.start(profileFor(profile as LocationProfileKind));
+        },
         isRunning: () => driver.isRunning(),
       },
       audio: {
@@ -161,7 +170,9 @@ export async function createForegroundNavigation(
           await createAlertPort({
             repository: repositoryRef,
             scheduler,
-            copy: alightAlertCopy(options.locale),
+            copy: alightAlertCopy(
+              (await repositoryRef.loadActive(now()))?.locale ?? options.locale,
+            ),
             now,
             isAvailable: () => notificationsGranted,
           }).reconcile(sessionId);
@@ -171,7 +182,9 @@ export async function createForegroundNavigation(
           await createAlertPort({
             repository: repositoryRef,
             scheduler,
-            copy: alightAlertCopy(options.locale),
+            copy: alightAlertCopy(
+              (await repositoryRef.loadActive(now()))?.locale ?? options.locale,
+            ),
             now,
             isAvailable: () => notificationsGranted,
           }).cancelSession(sessionId);
@@ -220,7 +233,8 @@ export async function createForegroundNavigation(
     diagnostics: { record },
   });
 
-  const unregister = registerForegroundCoordinator(coordinator);
+  const unregister =
+    options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
 
   return {
     coordinator,

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import * as sdk from "../api/saved-sdk";
 import { useSession } from "../auth/useSession";
 
@@ -176,5 +177,39 @@ export function useDeleteLabel() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
     },
+  });
+}
+
+/** Account-keyed bounded projection for the installed shell's last-sync car cache. */
+export function useCarSavedPlaces() {
+  const { data: session } = useSession();
+  const account = session?.user?.id ?? null;
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (event.type !== "updated" || event.action.type !== "invalidate") return;
+        if (["savedLists", "savedListPlaces"].includes(String(event.query.queryKey[0]))) {
+          void queryClient.invalidateQueries({ queryKey: ["carSavedPlaces", account] });
+        }
+      }),
+    [queryClient, account],
+  );
+  return useQuery({
+    queryKey: ["carSavedPlaces", account],
+    enabled: account !== null,
+    queryFn: async ({ signal }) => {
+      const lists = sdk.unwrapSavedResponse(await sdk.listSavedLists({ signal })).lists;
+      const places: Array<{ id: string; name: string; lng: number; lat: number }> = [];
+      for (const list of lists.slice(0, 50)) {
+        if (places.length >= 50) break;
+        const response = sdk.unwrapSavedResponse(
+          await sdk.listSavedListPlaces(list.id, { signal }),
+        );
+        places.push(...response.places.slice(0, 50 - places.length));
+      }
+      return places;
+    },
+    staleTime: 30_000,
   });
 }

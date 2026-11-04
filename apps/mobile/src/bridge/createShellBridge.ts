@@ -3,6 +3,7 @@ import { nativeApplicationVersion, nativeBuildVersion } from "expo-application";
 import { Platform } from "react-native";
 import { ChannelRegistry } from "./channel";
 import { NativeBridge, type ShellDescription } from "./nativeBridge";
+import { receiveCarDestinations } from "./receiveCarDestinations";
 
 /**
  * Production composition of the bridge.
@@ -54,7 +55,7 @@ export async function describeShell(options: ShellBridgeOptions): Promise<ShellD
     shellVersion: nativeApplicationVersion ?? "0.0.0",
     shellBuild: nativeBuildVersion ?? "0",
     platform: Platform.OS === "android" ? "android" : "ios",
-    capabilities,
+    capabilities: { ...capabilities, carDestinations: true },
     permission: (await options.permission?.()) ?? "not-determined",
     locationDriver: "expo",
     activeSession: (await options.activeSession?.()) ?? null,
@@ -78,6 +79,10 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
     },
     inject: options.inject,
     dispatch: async (message) => {
+      if (message.type === "destinations.update") {
+        await receiveCarDestinations(options.webOrigin, message.payload);
+        return;
+      }
       if (options.dispatch) {
         await options.dispatch(message);
         return;

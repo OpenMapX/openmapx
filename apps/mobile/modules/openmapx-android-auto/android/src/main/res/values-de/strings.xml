@@ -1,0 +1,16 @@
+<resources>
+    <string name="car_destinations">Ziele</string>
+    <string name="car_stop">Beenden</string>
+    <string name="car_test_drive">Testfahrt</string>
+    <string name="car_placeholder">Wähle ein Ziel auf deinem Smartphone.</string>
+    <string name="car_channel">Abbiegehinweise</string>
+    <string name="car_continue">Weiterfahren</string>
+    <string name="car_destination">Ziel</string>
+    <string name="car_search">Suchen</string>
+    <string name="car_phone_setup">Schließe die Navigationseinrichtung auf deinem Smartphone ab.</string>
+    <string name="car_search_unavailable">Die Suche ist nicht verfügbar. Prüfe deine Verbindung.</string>
+    <string name="car_planning">Route wird berechnet…</string>
+    <string name="car_replace">Aktuelle Navigation ersetzen?</string>
+    <string name="car_start">Starten</string>
+    <string name="car_route">Route %1$d</string>
+</resources>

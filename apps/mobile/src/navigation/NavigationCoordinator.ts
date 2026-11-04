@@ -20,6 +20,7 @@ import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 import { onRefreshFailed, onRefreshSucceeded } from "./transit/refreshState";
 import type { RefreshOutcome } from "./transit/TransitRefreshService";
+import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
 
 /**
  * The single authority over an active navigation session.
@@ -52,6 +53,7 @@ export interface PermissionPort {
   state(): Promise<"not-determined" | "foreground" | "background" | "denied" | "limited">;
   /** Whether the app is foregrounded, which Android requires to start a service. */
   isAppActive(): boolean;
+  startContext?(): NavigationStartContext;
   /** The disclosure-and-request flow. Resolves once the user has decided. */
   requestForStart(): Promise<"background" | "foreground-only" | "denied">;
 }
@@ -144,6 +146,64 @@ export class NavigationCoordinator {
     return this.queue.run(() => this.handleCommand(command));
   }
 
+  /** Car starts enter the same executor; authorization is checked again after planning. */
+  startCarTrip(
+    startPackage: import("@openmapx/core/navigation").GroundNavigationStartPackage,
+    context: () => NavigationStartContext,
+    valid: () => boolean,
+    replaceSessionId?: string,
+  ): Promise<CommandResponse | null> {
+    return this.queue.run(async () => {
+      if (!valid()) return errorResponse("invalid-state");
+      const now = this.deps.clock();
+      if (!allowsNavigationStart(context(), await this.deps.permissions.state()))
+        return errorResponse("app-not-visible");
+      const current = await this.deps.repository.loadActive(now);
+      const base = {
+        protocolVersion: 3,
+        messageId: `car-start-${globalThis.crypto.randomUUID()}`,
+        channelNonce: "car-native",
+        sentAtMs: now,
+      };
+      if (current && !this.isTerminal(current)) {
+        if (current.sessionId !== replaceSessionId) return errorResponse("session-active");
+        await this.terminate(
+          { ...base, type: "session.stop", payload: {}, sessionId: current.sessionId },
+          "stopped",
+          now,
+        );
+      }
+      if (!valid()) return errorResponse("invalid-state");
+      const prepared = await this.prepare(
+        { ...base, type: "session.prepare", payload: { startPackage } },
+        now,
+      );
+      if (prepared.type !== "session.prepared") return prepared;
+      if (!valid()) {
+        await this.terminate(
+          { ...base, type: "session.stop", payload: {}, sessionId: prepared.sessionId },
+          "stopped",
+          now,
+        );
+        return errorResponse("invalid-state");
+      }
+      const response = await this.start(
+        {
+          ...base,
+          type: "session.start",
+          payload: {},
+          sessionId: prepared.sessionId,
+          revision: prepared.revision,
+        },
+        now,
+        context(),
+        valid,
+      );
+      this.reply(response, base.messageId);
+      return response;
+    });
+  }
+
   private async handleCommand(command: WebToNativeMessage): Promise<CommandResponse | null> {
     const { repository, clock } = this.deps;
     const now = clock();
@@ -190,6 +250,8 @@ export class NavigationCoordinator {
 
   private async route(command: WebToNativeMessage, now: number): Promise<CommandResponse | null> {
     switch (command.type) {
+      case "destinations.update":
+        return null;
       case "web.hello":
         // Answered by the bridge during the handshake; nothing to coordinate.
         return null;
@@ -271,6 +333,8 @@ export class NavigationCoordinator {
   private async start(
     command: Extract<WebToNativeMessage, { type: "session.start" }>,
     now: number,
+    authorizedContext?: NavigationStartContext,
+    valid: () => boolean = () => true,
   ): Promise<CommandResponse> {
     const { repository, permissions } = this.deps;
     const current = await repository.loadActive(now);
@@ -284,14 +348,22 @@ export class NavigationCoordinator {
     // Android refuses to start a location foreground service from the
     // background, and asking for permission while invisible is a prompt the user
     // cannot connect to anything they did.
-    if (!permissions.isAppActive()) return errorResponse("app-not-visible", command.messageId);
+    const startContext = authorizedContext ??
+      permissions.startContext?.() ?? {
+        kind: "phone",
+        activityVisible: permissions.isAppActive(),
+      };
+    if (!allowsNavigationStart(startContext, await permissions.state()))
+      return errorResponse("app-not-visible", command.messageId);
 
-    const decision = await permissions.requestForStart();
+    const decision =
+      startContext.kind === "car" ? "background" : await permissions.requestForStart();
     if (decision === "denied") {
       await repository.terminate(current.sessionId, "error", now);
       return errorResponse("permission-denied", command.messageId);
     }
 
+    if (!valid()) return errorResponse("invalid-state", command.messageId);
     const committed = await repository.compareAndSwap(
       current.sessionId,
       current.revision,

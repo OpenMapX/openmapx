@@ -1,0 +1,16 @@
+<resources>
+    <string name="car_destinations">Destinations</string>
+    <string name="car_stop">Stop</string>
+    <string name="car_test_drive">Test drive</string>
+    <string name="car_placeholder">Choose a destination on your phone.</string>
+    <string name="car_channel">Turn-by-turn navigation</string>
+    <string name="car_continue">Continue</string>
+    <string name="car_destination">Destination</string>
+    <string name="car_search">Search</string>
+    <string name="car_phone_setup">Finish navigation setup on your phone.</string>
+    <string name="car_search_unavailable">Search is unavailable. Check your connection.</string>
+    <string name="car_planning">Planning route…</string>
+    <string name="car_replace">Replace the current trip?</string>
+    <string name="car_start">Start</string>
+    <string name="car_route">Route %1$d</string>
+</resources>

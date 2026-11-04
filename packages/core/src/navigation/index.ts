@@ -16,6 +16,21 @@ export {
   shouldWarnCamera,
 } from "./alerts";
 export { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
+export {
+  type CarCamera,
+  type CarNativeToWebMessage,
+  type CarPreview,
+  type CarSurfaceMessage,
+  type CarViewport,
+  type CarWebToNativeMessage,
+  carCameraSchema,
+  carNativeToWebSchema,
+  carPreviewSchema,
+  carSurfaceMessageSchema,
+  carViewportSchema,
+  carWebToNativeSchema,
+  parseCarSurfaceMessage,
+} from "./carSurfaceProtocol";
 export { type CoastOptions, type CoastResult, coastState } from "./coast";
 export {
   cumulativeDistances,
@@ -81,6 +96,10 @@ export {
   maneuverArrowTipBearing,
 } from "./maneuverArrow";
 export {
+  type CarDestination,
+  type CarDestinations,
+  carDestinationSchema,
+  carDestinationsSchema,
   enforceAggregateBounds,
   type GroundNavigationStartPackage,
   groundStartPackageSchema,

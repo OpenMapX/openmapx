@@ -64,6 +64,7 @@ export function negotiateMobileProtocol(web: ProtocolRange, native: ProtocolRang
 
 export const WEB_TO_NATIVE_TYPES = [
   "web.hello",
+  "destinations.update",
   "session.prepare",
   "session.start",
   "session.replace",
@@ -328,6 +329,7 @@ export const nativeCapabilitiesSchema = z
     backgroundLocation: z.boolean(),
     localNotifications: z.boolean(),
     speech: z.boolean(),
+    carDestinations: z.boolean().optional(),
   })
   .strict();
 
@@ -358,7 +360,37 @@ const envelope = <TType extends string, TPayload extends z.ZodTypeAny>(
     })
     .strict();
 
+export const carDestinationSchema = z
+  .object({
+    id: z.string().min(1).max(128),
+    label: z.string().min(1).max(160),
+    coordinates: z.tuple([
+      z.number().finite().min(-180).max(180),
+      z.number().finite().min(-90).max(90),
+    ]),
+  })
+  .strict();
+export const carDestinationsSchema = z
+  .object({
+    account: z.string().min(1).max(128).nullable(),
+    recent: z.array(carDestinationSchema).max(20),
+    saved: z.array(carDestinationSchema).max(50),
+    locale: z.enum(["en", "de"]),
+    units: z.enum(["metric", "imperial"]),
+    avoidHighways: z.boolean(),
+    avoidTolls: z.boolean(),
+    avoidFerries: z.boolean(),
+    avoidClosures: z.boolean(),
+    voiceEnabled: z.boolean(),
+    keepScreenOn: z.boolean(),
+    voiceTiming: z.enum(["early", "normal", "late"]),
+  })
+  .strict();
+export type CarDestination = z.infer<typeof carDestinationSchema>;
+export type CarDestinations = z.infer<typeof carDestinationsSchema>;
+
 export const webToNativeSchema = z.discriminatedUnion("type", [
+  envelope("destinations.update", carDestinationsSchema),
   envelope(
     "web.hello",
     z
@@ -720,6 +752,12 @@ export function parseMobileBridgeMessage(
   // Zod's issue list echoes the received value; only the stable code escapes.
   if (!parsed.success) return { ok: false, error: { code: "invalid-message" } };
 
+  if (
+    parsed.data.type === "destinations.update" &&
+    new TextEncoder().encode(raw).byteLength > 64 * 1024
+  ) {
+    return { ok: false, error: { code: "payload-too-large" } };
+  }
   if (options.expectedNonce && parsed.data.channelNonce !== options.expectedNonce) {
     return { ok: false, error: { code: "wrong-channel" } };
   }

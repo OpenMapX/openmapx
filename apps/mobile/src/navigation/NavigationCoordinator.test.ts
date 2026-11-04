@@ -759,7 +759,12 @@ describe("NavigationCoordinator effects", () => {
 
     await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
 
-    expect(context.effectLog).toEqual(["driver.stop", "alerts.cancelSession", "audio.stop"]);
+    expect(context.effectLog).toEqual([
+      "driver.stop",
+      "alerts.cancelSession",
+      "audio.stop",
+      "publish.snapshot",
+    ]);
     await context.close();
   });
 
@@ -990,6 +995,64 @@ describe("native surface stop", () => {
       ).toBe(true);
       expect(h.effectLog).toContain("driver.stop");
       expect(await h.coordinator.stopFromSurface("session-1")).toBe(false);
+    } finally {
+      await h.close();
+    }
+  });
+});
+
+describe("car starts share the coordinator authority", () => {
+  const context = () =>
+    ({ kind: "car", hostAuthorized: true, locationServiceStartAllowed: true }) as const;
+  it("starts while the phone is invisible with a typed authorized car context", async () => {
+    const h = await harness({ appActive: false, permission: "background" });
+    try {
+      const result = await h.coordinator.startCarTrip(
+        groundSessionFixture().payload.startPackage,
+        context,
+        () => true,
+      );
+      expect(result?.type).toBe("session.started");
+      expect(h.effectLog.filter((entry) => entry === "driver.start")).toHaveLength(1);
+      expect(h.sent.some((entry) => entry.type === "session.started")).toBe(true);
+    } finally {
+      await h.close();
+    }
+  });
+  it("rejects expired command generations and unconfirmed replacements", async () => {
+    const h = await harness({ appActive: false, permission: "background" });
+    try {
+      const startPackage = groundSessionFixture().payload.startPackage;
+      const cancelled = await h.coordinator.startCarTrip(startPackage, context, () => false);
+      expect(cancelled?.type).toBe("native.error");
+      expect(h.effectLog).toEqual([]);
+      const first = await h.coordinator.startCarTrip(startPackage, context, () => true);
+      const unconfirmed = await h.coordinator.startCarTrip(startPackage, context, () => true);
+      expect(unconfirmed?.payload).toMatchObject({ code: "session-active" });
+      expect((await h.repository.loadActive(NOW))?.sessionId).toBe(first?.sessionId);
+      const replacement = await h.coordinator.startCarTrip(
+        startPackage,
+        context,
+        () => true,
+        first?.sessionId,
+      );
+      expect(replacement?.type).toBe("session.started");
+      expect(h.effectLog.filter((entry) => entry === "driver.stop")).toHaveLength(1);
+    } finally {
+      await h.close();
+    }
+  });
+  it("requires the background grant even when a host is connected", async () => {
+    const h = await harness({ appActive: false, permission: "foreground-only" });
+    h.deps.permissions.state = async () => "foreground";
+    try {
+      const result = await h.coordinator.startCarTrip(
+        groundSessionFixture().payload.startPackage,
+        context,
+        () => true,
+      );
+      expect(result?.payload).toMatchObject({ code: "app-not-visible" });
+      expect(h.effectLog).toEqual([]);
     } finally {
       await h.close();
     }

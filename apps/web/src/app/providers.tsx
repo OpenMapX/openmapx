@@ -10,12 +10,14 @@ import {
 } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
 import { ThemeColorSync } from "../components/pwa/ThemeColorSync";
 import { createAppQueryClient } from "../lib/appQueryClient";
 import { appTheme } from "../lib/appTheme";
+import { CarDestinationsPublisher } from "../lib/mobile/CarDestinationsPublisher";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
   PERSONAL_TIMELINE_CACHE_BUSTER,
@@ -38,6 +40,7 @@ import { MangroveTransportProvider } from "../providers/MangroveTransportProvide
 import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
 import { SessionAuthorityBoundary } from "../providers/SessionAuthorityBoundary";
 import { subscribeRecentSearchStorage, useRecentSearchStore } from "../stores/recentSearchStore";
+import { CarProviders } from "./car/CarProviders";
 
 /**
  * Identifies this deployment to the installed shell during the handshake, so a
@@ -50,6 +53,15 @@ configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return pathname === "/car" ? (
+    <CarProviders>{children}</CarProviders>
+  ) : (
+    <PhoneProviders>{children}</PhoneProviders>
+  );
+}
+
+function PhoneProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => createAppQueryClient());
 
   // Persister is created lazily client-side so SSR doesn't touch storage. Backed
@@ -96,6 +108,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             guard has to be answerable before the provider that would append them.
           */}
           <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
+            <CarDestinationsPublisher />
             <IntegrationProvider>{children}</IntegrationProvider>
           </MobileRuntimeProvider>
         </MangroveTransportProvider>

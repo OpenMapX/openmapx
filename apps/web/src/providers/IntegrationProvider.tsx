@@ -14,14 +14,23 @@ import {
   integrationRuntimeQueryKey,
 } from "@/lib/integrationRuntimeQuery";
 
-export function IntegrationProvider({ children }: { children: React.ReactNode }) {
+export function IntegrationProvider({
+  children,
+  publicOnly = false,
+}: {
+  children: React.ReactNode;
+  publicOnly?: boolean;
+}) {
   const { apiUrl } = useEnv();
   const apiBase = apiUrl.replace(/\/$/, "");
 
   const baseUrl =
     apiBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001");
-  const client = useMemo(() => createApiClient({ baseUrl, credentials: "include" }), [baseUrl]);
-  configureApiClient({ baseUrl, credentials: "include" });
+  const client = useMemo(
+    () => createApiClient({ baseUrl, credentials: publicOnly ? "omit" : "include" }),
+    [baseUrl, publicOnly],
+  );
+  configureApiClient({ baseUrl, credentials: publicOnly ? "omit" : "include" });
 
   const { data, isPending } = useQuery({
     queryKey: integrationRuntimeQueryKey(apiBase),

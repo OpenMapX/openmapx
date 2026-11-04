@@ -167,7 +167,17 @@ interface FixTarget {
  * frame that publishes nothing twice over stops asking for frames until an input
  * wakes it again.
  */
-export function useNavCamera(): void {
+export function useNavCamera(surface?: { padding: ResolvedPadding; maxPitch: number }): void {
+  const surfaceRef = useRef(surface);
+  surfaceRef.current = surface;
+  const cameraPadding = useCallback(
+    (map: maplibregl.Map) => surfaceRef.current?.padding ?? getCameraPaddingTarget(map),
+    [],
+  );
+  const cameraPitch = useCallback(
+    (pitch: number) => Math.min(pitch, surfaceRef.current?.maxPitch ?? 60),
+    [],
+  );
   const ctx = useMapOptional();
   const mapRef = ctx?.mapRef ?? null;
   const mapReady = ctx?.mapReady ?? false;
@@ -333,6 +343,12 @@ export function useNavCamera(): void {
     requestFrame();
   }, [requestFrame, route, mode, progress]);
 
+  useEffect(() => {
+    void surface;
+    paddingTargetRef.current = null;
+    requestFrame();
+  }, [surface, requestFrame]);
+
   // (Re)entering follow: establish zoom + pitch with a short ease, then let the
   // per-frame loop take over centre/bearing once it settles.
   const enterFollow = useCallback(
@@ -348,11 +364,11 @@ export function useNavCamera(): void {
       const enterZoom = userZoomedRef.current
         ? map.getZoom()
         : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
-      const enterPadding = getCameraPaddingTarget(map);
+      const enterPadding = cameraPadding(map);
       map.easeTo(
         {
           zoom: enterZoom,
-          pitch: PITCH[mode] ?? 0,
+          pitch: cameraPitch(PITCH[mode] ?? 0),
           padding: enterPadding,
           duration: prefersReducedMotion() ? 0 : ENTER_EASE_MS,
         },
@@ -361,7 +377,7 @@ export function useNavCamera(): void {
       // Seed the eased follow-zoom and padding so the per-frame loop continues
       // from here.
       displayedZoomRef.current = enterZoom;
-      displayedPitchRef.current = PITCH[mode] ?? 0;
+      displayedPitchRef.current = cameraPitch(PITCH[mode] ?? 0);
       displayedPaddingRef.current = enterPadding;
       paddingTargetRef.current = enterPadding;
       settleUntilRef.current = performance.now() + SETTLE_MS;
@@ -371,7 +387,7 @@ export function useNavCamera(): void {
       lastCamRef.current = null;
       requestFrame();
     },
-    [mode, requestFrame],
+    [mode, requestFrame, cameraPadding, cameraPitch],
   );
 
   useEffect(() => {
@@ -524,7 +540,7 @@ export function useNavCamera(): void {
           // in one step instead of easing. Mode is read imperatively, like the
           // other store values the frame consumes.
           const travelMode = useNavigationStore.getState().mode;
-          const pitchTarget = approaching ? APPROACH_PITCH : (PITCH[travelMode] ?? 0);
+          const pitchTarget = cameraPitch(approaching ? APPROACH_PITCH : (PITCH[travelMode] ?? 0));
           const tAlpha = prefersReducedMotion() ? 1 : 1 - Math.exp(-Math.max(dt, 0) / PITCH_TAU);
           const pitchBase = displayedPitchRef.current ?? pitchTarget;
           displayedPitchRef.current = settleScalar(
@@ -538,7 +554,7 @@ export function useNavCamera(): void {
           // other.
           let targetPadding = paddingTargetRef.current;
           if (!targetPadding) {
-            targetPadding = getCameraPaddingTarget(map);
+            targetPadding = cameraPadding(map);
             paddingTargetRef.current = targetPadding;
           }
           const pAlpha = 1 - Math.exp(-Math.max(dt, 0) / PADDING_TAU);
@@ -609,7 +625,7 @@ export function useNavCamera(): void {
       lastFrameRef.current = null;
       settledFramesRef.current = 0;
     };
-  }, [active, mapRef, requestFrame]);
+  }, [active, mapRef, requestFrame, cameraPadding, cameraPitch]);
 
   // Hide the puck when not actively navigating, and clear user-control state so
   // the next trip starts in auto-follow. The padding is left where it is: the

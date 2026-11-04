@@ -12,12 +12,23 @@ import type { NavigationCoordinator } from "./NavigationCoordinator";
  * Both share one repository, processors and executor, so either path advances
  * the same session in the same order.
  */
+const listeners = new Set<() => void>();
+export function onForegroundCoordinatorChanged(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 let current: NavigationCoordinator | null = null;
 
 export function registerForegroundCoordinator(coordinator: NavigationCoordinator): () => void {
   current = coordinator;
+  for (const listener of listeners) listener();
   return () => {
-    if (current === coordinator) current = null;
+    if (current === coordinator) {
+      current = null;
+      for (const listener of listeners) listener();
+    }
   };
 }
 
