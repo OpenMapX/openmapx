@@ -1,27 +1,64 @@
 # Android Auto native host
 
-Android-only local Expo module, autolinked by `expo-module.config.json`. The library manifest owns the car service, runtime service, automotive descriptor, surface/navigation permissions and Car API 7 floor. The native config plugin writes the compiled web origin into application metadata. Production host validation uses AndroidX's signed host allowlist; only debuggable applications allow all hosts.
+Android-only local Expo module, autolinked through `expo-module.config.json`.
+See the [Android Auto developer guide](../../../../docs/docs/developer/android-auto.md)
+for architecture, the surface protocol, platform requirements, privacy, DHU
+commands and qualification limits.
 
-`OpenMapXCarRuntime` is registered at shell entry. `CarRuntimeService` uses RN 0.86's `HeadlessJsTaskService`, whose new-architecture implementation starts the application's existing `ReactHost`. It reuses the registered phone coordinator when available; otherwise it composes the shared coordinator core with real rerouting and audio ports, without a phone WebView. The car composition is disposed on phone takeover or detach. The headless task resolves on detach, and session destruction stops its native service. `OpenMapXCar` log output reports coordinator composition and whether an Activity was present; this log is an integration-test receipt, not a substitute for exercising that path.
+## Ownership
 
-The shell's `src/car/nativeCar.ts` describes the native API. `publish` receives JSON `{ projection: CarTripProjection | null, message: NativeToWebMessage | null }`. Full snapshots come from committed sessions on attach, immediate state changes and route fingerprint changes. Ordinary progress uses geometry-free snapshots, coalesced to one update per second; stale revisions are dropped. Terminal cleanup emits the durable terminal acknowledgment. Native commands (`attach`, `stop`, `simulate`, `detach`) remain in a mailbox until acknowledged by JS. Stop uses the coordinator's shared executor. Simulation is exposed only in debuggable car templates and replaces the shared location driver; permission checks continue to use real OS grants.
+- The library manifest owns `OpenMapXCarService`, the internal runtime service,
+  the automotive descriptor, surface/navigation permissions and Car API 7 floor.
+  Gradle pins AndroidX Car App/app-projected/app-testing to 1.7.0. The native config
+  plugin supplies the compiled web origin and Activity navigation-intent filters.
+  Debuggable builds allow all hosts; production uses signed host validation.
+- `CarSurfaceHost` loads the compiled origin's `/car` map-only page in a WebView
+  inside a Presentation/VirtualDisplay. Directions, lanes, ETA and destination
+  controls belong to host templates. `carSurfaceProtocol.ts` owns the v1 surface
+  contract; dimensions/insets/gestures use CSS pixels converted by `dpi / 160`.
+- `OpenMapXCarRuntime` is registered at shell entry. `CarRuntimeService` starts it
+  through the application's existing ReactHost. `src/car/carRuntime.ts` reuses the
+  phone coordinator or composes car ports over the shared executor/repository.
+  There is no second navigation engine. Commands remain in the native mailbox
+  until JS acknowledgment; snapshots fan out from committed state.
+- The optional phone bridge `carDestinations` capability supplies bounded recent
+  selections, saved places and preferences. SQLite holds one current instance/account
+  projection. No cookies or credentials cross the bridge. Search and route planning
+  use the compiled public API with omitted credentials.
 
-The surface transport is exactly `packages/core/src/navigation/carSurfaceProtocol.ts`. Native emits hello/viewport after `car-ready`, then full/progress `car-snapshot` envelopes, preview and camera messages. Viewport dimensions, insets and gestures use CSS pixels (surface density divided by 160). The initial preview is `{ "v": 1, "type": "car-preview", "routes": [] }`; WP-N2 can replace it through the native `preview` method with a validated protocol message. Recenter appears after `car-map-state` reports `following: false`. Only the compiled origin can use the message listener or navigate the WebView; geolocation and permission prompts are denied.
+## Start and lifecycle boundaries
 
-## Destinations and car starts
+A car trip start needs host authorization, background location permission and
+Android service-start eligibility: currently a focused phone Activity or an
+already-running location service. Otherwise the car requests phone setup.
+General car-only cold-start trip creation remains unqualified. Do not fake phone
+visibility to bypass this gate.
 
-The optional negotiated `carDestinations` capability enables `destinations.update`: at most 20 recent coordinate-bearing selections and 50 saved places, bounded labels/IDs, finite WGS84 coordinates and captured navigation preferences, with a 64 KiB serialized ceiling. Query-only historical searches are not assigned invented coordinates. The publisher uses recent selections and account-keyed saved-place data. No cookies or credentials cross the bridge. SQLite holds one current instance/account projection. Account changes, sign-out and explicit empty lists clear places; instance changes discard the prior row. Account changes cancel outstanding car planning.
+Host stop enters the shared coordinator and cancels car planning/replay. Ordinary
+detach releases car resources without issuing a trip stop. Guidance notifications
+use `CarAppExtender` and reuse/restore the Expo location notification when present;
+actual notification/service coexistence and vehicle audio need device acceptance.
+The debug Test drive action replays route coordinates through the shared location
+port and keeps permission checks tied to real OS grants.
 
-Native screens respect host list constraints and provide SearchTemplate and MapWithContentTemplate preview/Start actions. Geocoding uses the compiled public API origin with omitted credentials, a 350 ms debounce, cancellation and bounded validation. CarRoutePlanner obtains a fresh permitted shell fix, fetches directions outside the coordinator queue and validates buildGroundNavigationPackage results. Starts enter the shared executor with a typed car context and command-generation checks. Active-trip replacement requires confirmation bound to the session ID. Coordinate navigation intents and address searches enter this flow from onCreateScreen/onNewIntent.
+## Checks and handoff
 
-**Start eligibility boundary:** host connection plus a background location grant does not alone establish Android foreground-service start eligibility. The current gate accepts a focused phone Activity or an already-running location service. Otherwise the car asks the user to finish setup on the phone. A general Activity-absent cold start remains unqualified. Phone visibility is never fabricated.
+From the repository root:
 
-Connected-car guidance uses NotificationCompat and CarAppExtender, localized distances, maneuver icons, and new-maneuver versus progress alert semantics. It reuses the current Expo navigation-location notification ID and restores service content on disconnect, or uses a stable car ID when no service notification exists. Permission denial is respected. Actual notification/FGS coexistence needs device acceptance. See the [Android navigation guide](https://developer.android.com/training/cars/apps/navigation).
+```bash
+pnpm -C apps/mobile test
+pnpm -C apps/mobile test:native
+```
 
-Renderer process loss and style/WebGL failures recreate the current surface with at most three delayed retries and fixed-code logging. Snapshot gaps request full state without restarting navigation.
+After prebuild, from `apps/mobile/android`, with a test device connected:
 
-## Qualification
+```bash
+./gradlew :openmapx-android-auto:connectedDebugAndroidTest
+```
 
-Robolectric/JVM tests cover template validity, maneuver mapping and roundabouts, lanes, projection bounds, units/locale, ETA, reroute loading, intent coordinates, host-stop deduplication, notification content/coexistence and CSS inset math. `PresentationWebGlTest` is a device-only WP-N0 harness: without an Activity it loads the installed MapLibre distribution into a Presentation WebView on an ImageReader-backed VirtualDisplay, checks a render event and green surface pixels, then destroys and recreates the display. It does not exercise an actual host SurfaceContainer, the deployed `/car` page, lock state or the RN bootstrap.
-
-Run native tests through `pnpm -C apps/mobile test:native`; device proof separately through `:openmapx-android-auto:connectedDebugAndroidTest` after prebuild. Do not run clean prebuild while Gradle is using the generated project. DHU, Activity-absent coordinator startup, lock/reconnect, host takeover, notification delivery, physical audio and real-vehicle qualification remain separate acceptance evidence. Store claims remain forbidden.
+Do not run clean prebuild while Gradle uses the generated project.
+`PresentationWebGlTest` tests an ImageReader-backed VirtualDisplay with the
+installed MapLibre distribution, not the deployed `/car`, real host surface,
+lock state or RN bootstrap. The guide separates these from DHU, real head-unit
+and Play-review evidence. Store claims remain forbidden until real head-unit
+qualification and Play review. No AAOS or CarPlay implementation is included.

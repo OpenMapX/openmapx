@@ -213,6 +213,7 @@ const sidebars: SidebarsConfig = {
           collapsed: true,
           items: [
             'developer/mobile-architecture',
+            'developer/android-auto',
             'developer/mobile-feasibility',
             'developer/mobile-release',
             'developer/mobile-store-operations',
