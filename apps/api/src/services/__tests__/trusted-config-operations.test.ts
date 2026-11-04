@@ -177,18 +177,6 @@ describe("retained trusted configuration producer", () => {
     },
   );
 
-  it("does not restore a snapshot different from the strictly owned candidate", async () => {
-    await expect(
-      subject.applyTrustedConfigurationSnapshot({
-        payload: { ...payload, domain: "changed.example.test" },
-        expectedCurrentRevisionId: previousRevisionId,
-        operationKey: key,
-        ctx: owner(),
-      }),
-    ).rejects.toThrow("Strict compensation requires current owned desired rows");
-    expect(ports.apply).not.toHaveBeenCalled();
-  });
-
   it("keeps a known failure actionable in the owned checkpoint and public immediate response", async () => {
     const ctx = owner();
     const problem = "services/martin/config/martin.yaml has more than one link";

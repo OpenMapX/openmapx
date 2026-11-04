@@ -639,23 +639,7 @@ class AdminJobRunner {
       (result) => {
         if (result.migration)
           return result.migration as import("./configuration-migration/apply").MigrationResult;
-        const steps = (result._migrationSteps ??
-            []) as import("./configuration-migration/apply").MigrationResult["steps"],
-          applied = completeTrustedConfigurationApply(
-            parseTrustedConfigurationApplyOutcome(result.configuration),
-          );
-        return {
-          operationId: String(result._immediateJobId),
-          outcome: applied
-            ? steps.some((s) => s.scope === "pending-auth")
-              ? "partial"
-              : "applied"
-            : "unknown",
-          steps: steps.map((s) => ({
-            ...s,
-            status: s.scope === "pending-auth" ? "pending" : applied ? "applied" : "unknown",
-          })),
-        } as import("./configuration-migration/apply").MigrationResult;
+        throw new JobObservationPending("recovery_required");
       },
     );
   }
@@ -677,7 +661,6 @@ class AdminJobRunner {
           selectedRoots: options.selectedRoots,
           overlay: options.overlay,
           coordinatorMode: options.coordinatorMode,
-          snapshot: options.snapshot,
           followUp: options.followUp,
           ...(Object.hasOwn(options, "expectedCurrentRevisionId")
             ? { expectedCurrentRevisionId: options.expectedCurrentRevisionId }

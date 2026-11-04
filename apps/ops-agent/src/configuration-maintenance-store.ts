@@ -3632,7 +3632,6 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
       state.installation,
       "effects",
       `${state.execution.operationKey}.json`,
-      65536,
     ) as { payload: unknown };
     withConfigurationMaintenanceNoGuardPublication(authority, () => {
       const current = read(authority),
@@ -4949,36 +4948,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
         /* Lookup of that original immutable tuple only; never retry POST. */
       }
     }
-    const state = executionAuthorityState(authority),
-      issuedAt = Date.now(),
-      witness = signControl(
-        state.installation.privateKey,
-        "openmapx-configuration-fence-inspect-v1",
-        {
-          installationId: owner.installationId,
-          maintenanceId: operation.maintenanceId,
-          candidateId: operation.candidateId,
-          ownerCertificateDigest: owner.rootCertificateDigest,
-          issuedAt,
-          expiresAt: issuedAt + 15000,
-        },
-      );
-    // A lost COMMIT acknowledgement may precede DM's shared terminal write.
-    // Its authenticated GET repairs publication only from the original atomic
-    // SQL tuple before the sender tries to copy that terminal. No POST/replay.
-    await inspectDataConfigurationFence(operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal: context.signal,
-    });
-    observeConfigurationFenceSettlementControl(settlement);
-    // This second read lets DM retain the sender's now-durable copy ACK.
-    await inspectDataConfigurationFence(operation.maintenanceId, {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal: context.signal,
-    });
-    await releaseOwnedConfigurationMaintenanceRoot(authority);
+    await observeCommittedMaintenanceSettlement(authority, context.signal);
     return completeConfigurationMaintenanceSettleControl(
       context.configurationMaintenanceControl!,
       operation,

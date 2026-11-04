@@ -21,7 +21,7 @@ import {
 import { createControlRootOperationKey, type OpsResourcePolicy } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { createUnavailableRuntime } from "./runtime";
@@ -97,11 +97,17 @@ function fixture(options: { downloadError?: Error } = {}): Fixture {
 async function artifact(
   f: Fixture,
   id: string,
-  options: { region?: string; strings?: Record<string, string> } = {},
+  options: { region?: string; strings?: Record<string, string>; description?: string } = {},
 ) {
   const source = mkdtempSync(join(tmpdir(), "openmapx-integration-source-"));
   roots.push(source);
-  writeFileSync(join(source, "manifest.json"), JSON.stringify(manifest(id, options.region)));
+  writeFileSync(
+    join(source, "manifest.json"),
+    JSON.stringify({
+      ...manifest(id, options.region),
+      ...(options.description ? { description: options.description } : {}),
+    }),
+  );
   if (options.strings) {
     mkdirSync(join(source, "strings"));
     for (const [locale, text] of Object.entries(options.strings)) {
@@ -350,6 +356,78 @@ describe("integration store", () => {
       });
       expect(JSON.stringify(status.json())).not.toContain("sentinel-secret");
       expect(JSON.stringify(journal.records())).not.toContain("sentinel-secret");
+    } finally {
+      await app.close();
+      closeControlInstallation(installation);
+    }
+  });
+
+  it("inspects a large integration manifest without allocating mutation authority", async () => {
+    const f = fixture();
+    const description = "large integration description ".repeat(3000);
+    const source = await artifact(f, "weather-radar", { description });
+    const infraDir = join(f.root, "infra/docker");
+    mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
+    await provisionControlInstallation(infraDir);
+    const installation = openControlInstallation({
+      infraDir,
+      role: "ops-agent",
+      serviceIds: ["ops-agent"],
+    });
+    const privateRoot = join(infraDir, "control-private/ops-agent");
+    const before = readdirSync(privateRoot, { recursive: true }).sort();
+    const journal = await openOpsJobJournal(services.agentStatePaths(infraDir).journal);
+    const now = new Date();
+    const requestedDeadlineAt = now.getTime() + 60_000;
+    const runtime = createUnavailableRuntime();
+    installIntegrationRuntime(runtime, f.store);
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      resourcePolicy: allowAllResources,
+      journal,
+      controlInstallation: installation,
+      now: () => now,
+      randomBytes: () => Buffer.alloc(18, 35),
+      runtime,
+    });
+    try {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        payload: {
+          version: 2,
+          execution: { requestedDeadlineAt },
+          requestId: "ops1_largeInspection000",
+          operationKey: createControlRootOperationKey({
+            notAfter: requestedDeadlineAt,
+            nonce: Buffer.alloc(16, 36),
+          }),
+          issuedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 20_000).toISOString(),
+          operation: { kind: "catalogIntegration.inspect", source },
+        },
+      });
+      expect(admitted.statusCode, admitted.body).toBe(202);
+      const operationId = admitted.json().result.operationId as string;
+      await vi.waitFor(async () => {
+        const status = await app.inject({
+          method: "GET",
+          url: `/v1/operations/${operationId}`,
+          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        });
+        expect(status.statusCode).toBe(200);
+        expect(status.json().result).toMatchObject({
+          state: "succeeded",
+          result: { integrationId: "weather-radar", valid: true, manifest: { description } },
+        });
+        expect(Buffer.byteLength(JSON.stringify(status.json().result.result))).toBeGreaterThan(
+          65536,
+        );
+      });
+      expect(readdirSync(privateRoot, { recursive: true }).sort()).toEqual(before);
+      expect(existsSync(join(infraDir, "data/.admin-target-control"))).toBe(false);
+      expect(record(f, "weather-radar")).toBeUndefined();
     } finally {
       await app.close();
       closeControlInstallation(installation);

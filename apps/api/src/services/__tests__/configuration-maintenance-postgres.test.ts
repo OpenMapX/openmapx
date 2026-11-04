@@ -259,6 +259,109 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ),
       );
     }
+    it.each(["prepared", "save_attempted"])(
+      "recovers only the proven-unissued ordinary checkpoint (phase=%s)",
+      async (phase) => {
+        const ctx = await job(),
+          checkpoint = ctx.checkpoint;
+        ctx.checkpoint = async (...args) => {
+          await checkpoint(...args);
+          if ((args[0]._configurationCandidate as { phase?: string } | undefined)?.phase === phase)
+            throw Error("API stopped after durable checkpoint");
+        };
+        await expect(
+          owned(ctx, async () => {
+            const candidate = await prospective.prepareProspectiveConfiguration({
+              actorId: ctx.jobId,
+              operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
+              expectedCurrentRevisionId: host.initial.revisionId,
+              overlay: {
+                purpose: "service-config",
+                coordinatorMode: "ensure-running",
+                changes: [
+                  { kind: "service-config", serviceId: "motis", set: { WORKERS: 7 }, unset: [] },
+                ],
+              },
+            });
+            await prospective.persistAndApplyProspectiveConfiguration(candidate, {
+              coordinatorMode: "ensure-running",
+            });
+          }),
+        ).rejects.toThrow("API stopped after durable checkpoint");
+        expect(await fixture.db.select().from(schema.serviceConfig)).toEqual([]);
+        const [original] = await fixture.db
+          .select()
+          .from(schema.adminJob)
+          .where(eq(schema.adminJob.id, ctx.jobId));
+        const candidate = (original!.result as Record<string, unknown>)
+            ._configurationCandidate as Record<string, unknown>,
+          path = join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`),
+          bytes = readFileSync(path),
+          { claimAdminJob } = await import("../admin-job-state"),
+          reclaimed = await claimAdminJob(original!);
+        ctx.execution = (
+          reclaimed!.result as { _execution: NonNullable<JobContext["execution"]> }
+        )._execution;
+        ctx.checkpointResult = reclaimed!.result as Record<string, unknown>;
+        ctx.checkpoint = async (result) => {
+          await fixture.db
+            .update(schema.adminJob)
+            .set({ result })
+            .where(eq(schema.adminJob.id, ctx.jobId));
+          ctx.checkpointResult = result;
+        };
+        if (phase === "save_attempted") {
+          await expect(
+            owned(ctx, () => prospective.resumeRetainedConfigurationCandidate()),
+          ).rejects.toThrow();
+          expect(readFileSync(path).equals(bytes)).toBe(true);
+          await expect(owned(await job(), async () => undefined)).rejects.toThrow(
+            "Configuration writer unavailable",
+          );
+        } else {
+          const complete = ctx.checkpoint;
+          let interrupted = false;
+          ctx.checkpoint = async (...args) => {
+            if (
+              !interrupted &&
+              (args[0]._configurationCandidate as { phase?: string } | undefined)?.phase ===
+                "discarded"
+            ) {
+              interrupted = true;
+              throw Error("API stopped after original unlink");
+            }
+            return complete(...args);
+          };
+          await expect(
+            owned(ctx, () => prospective.resumeRetainedConfigurationCandidate()),
+          ).rejects.toThrow("API stopped after original unlink");
+          expect(existsSync(path)).toBe(false);
+          expect(
+            await prospective.retainedConfigurationIntegrationIds(
+              ctx,
+              ctx.jobId,
+              String(candidate.operationKey),
+            ),
+          ).toEqual([]);
+          const result = await owned(ctx, () => prospective.resumeRetainedConfigurationCandidate());
+          expect(result.configuration).toMatchObject({
+            outcome: "not_committed",
+            cleanupFailed: false,
+          });
+          expect(existsSync(path)).toBe(false);
+          expect(ctx.checkpointResult?._configurationCandidate).toMatchObject({
+            phase: "discarded",
+          });
+          await expect(owned(await job(), async () => "available")).resolves.toBe("available");
+        }
+        expect(actualPosts.get("serviceConfig.apply") ?? 0).toBe(0);
+        expect(await fixture.db.select().from(schema.serviceConfig)).toEqual([]);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+          host.initial.revisionId,
+        );
+      },
+      30000,
+    );
     it.each([
       "saved",
       "applied",
@@ -3352,37 +3455,31 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const ctx = await job();
       await owned(ctx, async () => {
         const candidate = await prospective.prepareProspectiveConfiguration({
-            actorId: ctx.jobId,
-            operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
-            expectedCurrentRevisionId: host.initial.revisionId,
-            followUp: "service-apply",
-            overlay: {
-              purpose: "service-secret",
-              coordinatorMode: "require-running",
-              changes: [
-                {
-                  kind: "service-secret",
-                  serviceId: "data-manager",
-                  key: "TOKEN",
-                  action: "set",
-                  value: "synthetic-rollback-unused-credential",
-                },
-              ],
-            },
-          }),
-          current = await import("../trusted-config-operations");
-        await fixture.sql`ALTER TABLE service_secret ADD CONSTRAINT fixture_reject_desired_token CHECK (key <> 'TOKEN')`;
-        const result = await current.applyTrustedConfigurationWithEvidence({
-          ctx,
           actorId: ctx.jobId,
-          kind: "vault.apply",
-          serviceId: "data-manager",
-          operationKey: candidate.operationKey,
-          candidate,
-          coordinatorMode: "require-running",
-          followUp: "service-apply",
+          operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
           expectedCurrentRevisionId: host.initial.revisionId,
+          followUp: "service-apply",
+          overlay: {
+            purpose: "service-secret",
+            coordinatorMode: "require-running",
+            changes: [
+              {
+                kind: "service-secret",
+                serviceId: "data-manager",
+                key: "TOKEN",
+                action: "set",
+                value: "synthetic-rollback-unused-credential",
+              },
+            ],
+          },
         });
+        await fixture.sql`ALTER TABLE service_secret ADD CONSTRAINT fixture_reject_desired_token CHECK (key <> 'TOKEN')`;
+        const result = await prospective
+          .persistAndApplyProspectiveConfiguration(candidate, {
+            coordinatorMode: "require-running",
+            signal: ctx.signal,
+          })
+          .then(({ application }) => ({ outcome: application }));
         expect(result.outcome).toMatchObject({ outcome: "not_committed", reason: "conflict" });
         expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
@@ -4338,18 +4435,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                       return fetchActual(input, options);
                     })
                   : undefined;
-            const current = await import("../trusted-config-operations"),
-              application = current.applyTrustedConfigurationWithEvidence({
-                ctx,
-                actorId: ctx.jobId,
-                kind: "vault.apply",
-                serviceId: "data-manager",
-                operationKey: candidate.operationKey,
-                candidate,
+            const application = prospective
+              .persistAndApplyProspectiveConfiguration(candidate, {
                 coordinatorMode: "require-running",
-                followUp: "service-apply",
-                expectedCurrentRevisionId: host.initial.revisionId,
-              });
+                signal: ctx.signal,
+              })
+              .then(({ application }) => ({ outcome: application }));
             void application.catch(() => {});
             if (mode === "sql-control-expired") {
               let lateStatus: number;

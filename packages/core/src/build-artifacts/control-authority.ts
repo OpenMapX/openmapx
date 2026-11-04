@@ -491,7 +491,10 @@ export function writePrivateRecord(
   const dir = state.privateRoot.directory(namespace, true, true);
   try {
     const bytes = canonicalJson(value);
-    if (Buffer.byteLength(bytes) > (namespace === "hardlinks" ? 1024 * 1024 : 131072))
+    if (
+      Buffer.byteLength(bytes) >
+      (namespace === "hardlinks" ? 1024 * 1024 : CONTROL_RETENTION_LIMITS.privateRecordBytes)
+    )
       throw Error("Private receipt limit");
     if (
       ![
@@ -854,7 +857,7 @@ export function repairControlJournalTerminal(
     const proof = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
-      readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`, 65536),
+      readPrivateRecord(s.installation, "effects", `${execution.operationKey}.json`),
       settlementSchema.extend({ receipt: effectObservationSchema }),
     );
     const succeeded =
@@ -1014,7 +1017,7 @@ export function readPrivateRecord(
   state: InstallationState,
   namespace: string,
   name: string,
-  max = 131072,
+  max: number = CONTROL_RETENTION_LIMITS.privateRecordBytes,
 ): unknown {
   const dir = state.privateRoot.directory(namespace);
   try {
@@ -1677,7 +1680,7 @@ export function retainConfigurationGenerationNonCommit(
         receipt,
       },
       name = `${state.execution.operationKey}.json`;
-    const prior = readPrivateRecord(state.installation, "effects", name, 65536);
+    const prior = readPrivateRecord(state.installation, "effects", name);
     if (prior !== null) {
       const retained = verifyControl(
         state.installation.installation.publicKey,
@@ -1716,7 +1719,7 @@ export function inspectConfigurationGenerationNonCommit(
   const local = installationState(installation),
     authority = restoreAdmittedControlExecution(installation, execution),
     state = executionAuthorityState(authority),
-    raw = readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+    raw = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
     effect = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
@@ -1855,7 +1858,7 @@ export function retainConfigurationPreEffectRefusal(authority: VerifiedExecution
 export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutionAuthority): void {
   const state = configurationPreEffectState(authority),
     name = `${state.execution.operationKey}.json`,
-    raw = readPrivateRecord(state.installation, "effects", name, 65536),
+    raw = readPrivateRecord(state.installation, "effects", name),
     effect = verifyControl(
       state.installation.installation.publicKey,
       "openmapx-control-settlement-v1",
@@ -2365,7 +2368,7 @@ export function retainControlEffectReceipt(
     );
     const name = `${s.execution.operationKey}.json`;
     try {
-      const raw = readPrivateRecord(s.installation, "effects", name, 65536);
+      const raw = readPrivateRecord(s.installation, "effects", name);
       if (raw === null) {
         writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
         if (s.origin)
@@ -2426,7 +2429,7 @@ export function verifyControlEffectSettlement(
   const evidence = verifyControl(
     installation.publicKey,
     "openmapx-control-settlement-v1",
-    readPrivateRecord(s, "effects", `${execution.operationKey}.json`, 65536),
+    readPrivateRecord(s, "effects", `${execution.operationKey}.json`),
     settlementSchema.extend({ receipt: effectObservationSchema }),
   );
   if (evidence.terminalReceiptDigest !== controlDigest(evidence.receipt))
@@ -2503,7 +2506,7 @@ export function verifyMaintenanceCoordinatorPrerequisite(
     effect = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
-      readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`, 65536),
+      readPrivateRecord(local, "effects", `${fixed.root.operationKey}.json`),
       settlementSchema.extend({ receipt: effectObservationSchema }),
     );
   if (
@@ -2615,7 +2618,7 @@ export function readVerifiedStagedCoordinatorOwnership(
     canonical = readTerminalCommitment(state),
     terminal = terminalIdentity(state, input),
     settlement = verifyControlEffectSettlement(installation, execution),
-    effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+    effectRecord = readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
     effect = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
@@ -2990,12 +2993,7 @@ export function observeCoordinatorPullForMaintenance(
     effect = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
-      readPrivateRecord(
-        state.installation,
-        "effects",
-        `${admitted.execution.operationKey}.json`,
-        65536,
-      ),
+      readPrivateRecord(state.installation, "effects", `${admitted.execution.operationKey}.json`),
       settlementSchema.extend({ receipt: effectObservationSchema }),
     );
   if (
@@ -3159,7 +3157,6 @@ export function publishConfigurationMaintenanceForwardWitness(
         root.installation,
         "effects",
         `${source.execution.operationKey}.json`,
-        65536,
       ),
       status: source.canonical.status,
     };
@@ -3575,12 +3572,7 @@ export function verifyConfigurationMaintenanceChildTerminal(
     effect = verifyControl(
       root.installation.installation.publicKey,
       "openmapx-control-settlement-v1",
-      readPrivateRecord(
-        root.installation,
-        "effects",
-        `${child.execution.operationKey}.json`,
-        65536,
-      ),
+      readPrivateRecord(root.installation, "effects", `${child.execution.operationKey}.json`),
       settlementSchema.extend({ receipt: effectObservationSchema }),
     );
   const nonCommit =
@@ -5170,7 +5162,7 @@ export function readCompletedConfigurationHandoff(
       configurationHandoffWorkerRecordSchema,
     ),
     effectName = `${intent.helper.operationKey}.json`,
-    effectRaw = readPrivateRecord(state, "effects", effectName, 65536),
+    effectRaw = readPrivateRecord(state, "effects", effectName),
     effect = verifyControl(
       intent.helperPublicKey,
       "openmapx-control-settlement-v1",

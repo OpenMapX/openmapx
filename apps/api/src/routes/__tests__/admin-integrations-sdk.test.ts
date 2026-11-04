@@ -38,13 +38,11 @@ vi.mock("../../services/job-runner.js", () => ({
 
 const configDb = integrationConfigDbFixture();
 const mockApplyWithEvidence = vi.fn<IntegrationImportPorts["apply"]>();
-const mockCompensate = vi.fn();
 const mockApply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
 vi.mock("../../services/trusted-config-operations.js", () => ({
   integrationSchemas: () =>
     new Map([["geocoding-maptiler", MOCK_INTEGRATION.manifest.configSchema]]),
   applyTrustedConfigurationWithEvidence: () => mockApplyWithEvidence(),
-  applyTrustedConfigurationSnapshot: (...args: unknown[]) => mockCompensate(...args),
   applyTrustedConfiguration: (...args: unknown[]) => mockApply(...args),
 }));
 
@@ -282,7 +280,6 @@ beforeEach(() => {
       registryUpdateFailed: false,
     },
   });
-  mockCompensate.mockReset().mockRejectedValue(Error("Must not compensate"));
   mockApply.mockReset().mockResolvedValue({
     revisionId: "revision_1",
     integrationReload: { message: "Integrations reloaded", reloaded: 1, enabled: 1 },
@@ -869,7 +866,6 @@ describe("actual integration producers through generated SDK", () => {
             expect(configDb.rows[0].config).toEqual({ label: "saved-before" });
             expect(configDb.writes).toBe(0);
             expect(mockImmediateImport).toHaveBeenCalledTimes(1);
-            expect(mockCompensate).not.toHaveBeenCalled();
             expect(mockApplyWithEvidence).not.toHaveBeenCalled();
             expect(mockReloadIntegrations).not.toHaveBeenCalled();
           } finally {

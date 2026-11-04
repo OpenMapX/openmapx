@@ -34,338 +34,5001 @@ import {
   startPrivacyAdminReauthenticationRequest,
   uploadPrivacyAdminAttachmentRequest,
 } from "./operation-bindings.generated";
-import type {
-  AcceptPrivacyAdminBackupOmissions201,
-  AcceptPrivacyAdminBackupOmissions400,
-  AcceptPrivacyAdminBackupOmissions401,
-  AcceptPrivacyAdminBackupOmissions403,
-  AcceptPrivacyAdminBackupOmissions404,
-  AcceptPrivacyAdminBackupOmissions409,
-  AcceptPrivacyAdminBackupOmissions410,
-  AcceptPrivacyAdminBackupOmissions413,
-  AcceptPrivacyAdminBackupOmissions416,
-  AcceptPrivacyAdminBackupOmissions429,
-  AcceptPrivacyAdminBackupOmissions500,
-  AcceptPrivacyAdminBackupOmissions503,
-  AcceptPrivacyAdminBackupOmissionsBody,
-  AcceptPrivacyAdminBackupOmissionsHeaders,
-  AssignPrivacyAdminTask200,
-  AssignPrivacyAdminTask400,
-  AssignPrivacyAdminTask401,
-  AssignPrivacyAdminTask403,
-  AssignPrivacyAdminTask404,
-  AssignPrivacyAdminTask409,
-  AssignPrivacyAdminTask410,
-  AssignPrivacyAdminTask413,
-  AssignPrivacyAdminTask416,
-  AssignPrivacyAdminTask429,
-  AssignPrivacyAdminTask500,
-  AssignPrivacyAdminTask503,
-  AssignPrivacyAdminTaskBody,
-  AssignPrivacyAdminTaskHeaders,
-  CompletePrivacyAdminEmailChallenge200,
-  CompletePrivacyAdminEmailChallenge400,
-  CompletePrivacyAdminEmailChallenge401,
-  CompletePrivacyAdminEmailChallenge403,
-  CompletePrivacyAdminEmailChallenge404,
-  CompletePrivacyAdminEmailChallenge409,
-  CompletePrivacyAdminEmailChallenge410,
-  CompletePrivacyAdminEmailChallenge413,
-  CompletePrivacyAdminEmailChallenge416,
-  CompletePrivacyAdminEmailChallenge429,
-  CompletePrivacyAdminEmailChallenge500,
-  CompletePrivacyAdminEmailChallenge503,
-  CompletePrivacyAdminEmailChallengeBody,
-  CompletePrivacyAdminEmailChallengeHeaders,
-  CompletePrivacyAdminReauthentication200,
-  CompletePrivacyAdminReauthentication400,
-  CompletePrivacyAdminReauthentication401,
-  CompletePrivacyAdminReauthentication403,
-  CompletePrivacyAdminReauthentication404,
-  CompletePrivacyAdminReauthentication409,
-  CompletePrivacyAdminReauthentication410,
-  CompletePrivacyAdminReauthentication413,
-  CompletePrivacyAdminReauthentication416,
-  CompletePrivacyAdminReauthentication429,
-  CompletePrivacyAdminReauthentication500,
-  CompletePrivacyAdminReauthentication503,
-  CompletePrivacyAdminReauthenticationBody,
-  CompletePrivacyAdminReauthenticationHeaders,
-  CreatePrivacyAdminBackupReview201,
-  CreatePrivacyAdminBackupReview400,
-  CreatePrivacyAdminBackupReview401,
-  CreatePrivacyAdminBackupReview403,
-  CreatePrivacyAdminBackupReview404,
-  CreatePrivacyAdminBackupReview409,
-  CreatePrivacyAdminBackupReview410,
-  CreatePrivacyAdminBackupReview413,
-  CreatePrivacyAdminBackupReview416,
-  CreatePrivacyAdminBackupReview429,
-  CreatePrivacyAdminBackupReview500,
-  CreatePrivacyAdminBackupReview503,
-  CreatePrivacyAdminBackupReviewBody,
-  CreatePrivacyAdminBackupReviewHeaders,
-  CreatePrivacyAdminCase202,
-  CreatePrivacyAdminCase400,
-  CreatePrivacyAdminCase401,
-  CreatePrivacyAdminCase403,
-  CreatePrivacyAdminCase404,
-  CreatePrivacyAdminCase409,
-  CreatePrivacyAdminCase410,
-  CreatePrivacyAdminCase413,
-  CreatePrivacyAdminCase416,
-  CreatePrivacyAdminCase429,
-  CreatePrivacyAdminCase500,
-  CreatePrivacyAdminCase503,
-  CreatePrivacyAdminCaseBody,
-  CreatePrivacyAdminCaseHeaders,
-  DecidePrivacyAdminCase200,
-  DecidePrivacyAdminCase400,
-  DecidePrivacyAdminCase401,
-  DecidePrivacyAdminCase403,
-  DecidePrivacyAdminCase404,
-  DecidePrivacyAdminCase409,
-  DecidePrivacyAdminCase410,
-  DecidePrivacyAdminCase413,
-  DecidePrivacyAdminCase416,
-  DecidePrivacyAdminCase429,
-  DecidePrivacyAdminCase500,
-  DecidePrivacyAdminCase503,
-  DecidePrivacyAdminCaseBody,
-  DecidePrivacyAdminCaseHeaders,
-  DecidePrivacyAdminTask200,
-  DecidePrivacyAdminTask400,
-  DecidePrivacyAdminTask401,
-  DecidePrivacyAdminTask403,
-  DecidePrivacyAdminTask404,
-  DecidePrivacyAdminTask409,
-  DecidePrivacyAdminTask410,
-  DecidePrivacyAdminTask413,
-  DecidePrivacyAdminTask416,
-  DecidePrivacyAdminTask429,
-  DecidePrivacyAdminTask500,
-  DecidePrivacyAdminTask503,
-  DecidePrivacyAdminTaskBody,
-  DecidePrivacyAdminTaskHeaders,
-  DeletePrivacyAdminAttachment400,
-  DeletePrivacyAdminAttachment401,
-  DeletePrivacyAdminAttachment403,
-  DeletePrivacyAdminAttachment404,
-  DeletePrivacyAdminAttachment409,
-  DeletePrivacyAdminAttachment410,
-  DeletePrivacyAdminAttachment413,
-  DeletePrivacyAdminAttachment416,
-  DeletePrivacyAdminAttachment429,
-  DeletePrivacyAdminAttachment500,
-  DeletePrivacyAdminAttachment503,
-  DeletePrivacyAdminAttachmentBody,
-  DeletePrivacyAdminAttachmentHeaders,
-  DownloadPrivacyAdminArtifact400,
-  DownloadPrivacyAdminArtifact401,
-  DownloadPrivacyAdminArtifact403,
-  DownloadPrivacyAdminArtifact404,
-  DownloadPrivacyAdminArtifact409,
-  DownloadPrivacyAdminArtifact410,
-  DownloadPrivacyAdminArtifact413,
-  DownloadPrivacyAdminArtifact416,
-  DownloadPrivacyAdminArtifact429,
-  DownloadPrivacyAdminArtifact500,
-  DownloadPrivacyAdminArtifact503,
-  DownloadPrivacyAdminAttachment400,
-  DownloadPrivacyAdminAttachment401,
-  DownloadPrivacyAdminAttachment403,
-  DownloadPrivacyAdminAttachment404,
-  DownloadPrivacyAdminAttachment409,
-  DownloadPrivacyAdminAttachment410,
-  DownloadPrivacyAdminAttachment413,
-  DownloadPrivacyAdminAttachment416,
-  DownloadPrivacyAdminAttachment429,
-  DownloadPrivacyAdminAttachment500,
-  DownloadPrivacyAdminAttachment503,
-  ExtendPrivacyAdminCase200,
-  ExtendPrivacyAdminCase400,
-  ExtendPrivacyAdminCase401,
-  ExtendPrivacyAdminCase403,
-  ExtendPrivacyAdminCase404,
-  ExtendPrivacyAdminCase409,
-  ExtendPrivacyAdminCase410,
-  ExtendPrivacyAdminCase413,
-  ExtendPrivacyAdminCase416,
-  ExtendPrivacyAdminCase429,
-  ExtendPrivacyAdminCase500,
-  ExtendPrivacyAdminCase503,
-  ExtendPrivacyAdminCaseBody,
-  ExtendPrivacyAdminCaseHeaders,
-  GeneratePrivacyAdminArtifact201,
-  GeneratePrivacyAdminArtifact400,
-  GeneratePrivacyAdminArtifact401,
-  GeneratePrivacyAdminArtifact403,
-  GeneratePrivacyAdminArtifact404,
-  GeneratePrivacyAdminArtifact409,
-  GeneratePrivacyAdminArtifact410,
-  GeneratePrivacyAdminArtifact413,
-  GeneratePrivacyAdminArtifact416,
-  GeneratePrivacyAdminArtifact429,
-  GeneratePrivacyAdminArtifact500,
-  GeneratePrivacyAdminArtifact503,
-  GeneratePrivacyAdminArtifactBody,
-  GeneratePrivacyAdminArtifactHeaders,
-  GetPrivacyAdminCase200,
-  GetPrivacyAdminCase400,
-  GetPrivacyAdminCase401,
-  GetPrivacyAdminCase403,
-  GetPrivacyAdminCase404,
-  GetPrivacyAdminCase409,
-  GetPrivacyAdminCase410,
-  GetPrivacyAdminCase413,
-  GetPrivacyAdminCase416,
-  GetPrivacyAdminCase429,
-  GetPrivacyAdminCase500,
-  GetPrivacyAdminCase503,
-  GetPrivacyAdminReadiness200,
-  GetPrivacyAdminReadiness400,
-  GetPrivacyAdminReadiness401,
-  GetPrivacyAdminReadiness403,
-  GetPrivacyAdminReadiness404,
-  GetPrivacyAdminReadiness409,
-  GetPrivacyAdminReadiness410,
-  GetPrivacyAdminReadiness413,
-  GetPrivacyAdminReadiness416,
-  GetPrivacyAdminReadiness429,
-  GetPrivacyAdminReadiness500,
-  GetPrivacyAdminReadiness503,
-  IssuePrivacyAdminEmailChallenge202,
-  IssuePrivacyAdminEmailChallenge400,
-  IssuePrivacyAdminEmailChallenge401,
-  IssuePrivacyAdminEmailChallenge403,
-  IssuePrivacyAdminEmailChallenge404,
-  IssuePrivacyAdminEmailChallenge409,
-  IssuePrivacyAdminEmailChallenge410,
-  IssuePrivacyAdminEmailChallenge413,
-  IssuePrivacyAdminEmailChallenge416,
-  IssuePrivacyAdminEmailChallenge429,
-  IssuePrivacyAdminEmailChallenge500,
-  IssuePrivacyAdminEmailChallenge503,
-  IssuePrivacyAdminEmailChallengeBody,
-  IssuePrivacyAdminEmailChallengeHeaders,
-  ListPrivacyAdminBackupOmissions200,
-  ListPrivacyAdminBackupOmissions400,
-  ListPrivacyAdminBackupOmissions401,
-  ListPrivacyAdminBackupOmissions403,
-  ListPrivacyAdminBackupOmissions404,
-  ListPrivacyAdminBackupOmissions409,
-  ListPrivacyAdminBackupOmissions410,
-  ListPrivacyAdminBackupOmissions413,
-  ListPrivacyAdminBackupOmissions416,
-  ListPrivacyAdminBackupOmissions429,
-  ListPrivacyAdminBackupOmissions500,
-  ListPrivacyAdminBackupOmissions503,
-  ListPrivacyAdminBackupReviews200,
-  ListPrivacyAdminBackupReviews400,
-  ListPrivacyAdminBackupReviews401,
-  ListPrivacyAdminBackupReviews403,
-  ListPrivacyAdminBackupReviews404,
-  ListPrivacyAdminBackupReviews409,
-  ListPrivacyAdminBackupReviews410,
-  ListPrivacyAdminBackupReviews413,
-  ListPrivacyAdminBackupReviews416,
-  ListPrivacyAdminBackupReviews429,
-  ListPrivacyAdminBackupReviews500,
-  ListPrivacyAdminBackupReviews503,
-  ListPrivacyAdminBackups200,
-  ListPrivacyAdminBackups400,
-  ListPrivacyAdminBackups401,
-  ListPrivacyAdminBackups403,
-  ListPrivacyAdminBackups404,
-  ListPrivacyAdminBackups409,
-  ListPrivacyAdminBackups410,
-  ListPrivacyAdminBackups413,
-  ListPrivacyAdminBackups416,
-  ListPrivacyAdminBackups429,
-  ListPrivacyAdminBackups500,
-  ListPrivacyAdminBackups503,
-  ListPrivacyAdminOperators200,
-  ListPrivacyAdminOperators400,
-  ListPrivacyAdminOperators401,
-  ListPrivacyAdminOperators403,
-  ListPrivacyAdminOperators404,
-  ListPrivacyAdminOperators409,
-  ListPrivacyAdminOperators410,
-  ListPrivacyAdminOperators413,
-  ListPrivacyAdminOperators416,
-  ListPrivacyAdminOperators429,
-  ListPrivacyAdminOperators500,
-  ListPrivacyAdminOperators503,
-  ListPrivacyAdminOperatorsParams,
-  ListPrivacyAdminQueue200,
-  ListPrivacyAdminQueue400,
-  ListPrivacyAdminQueue401,
-  ListPrivacyAdminQueue403,
-  ListPrivacyAdminQueue404,
-  ListPrivacyAdminQueue409,
-  ListPrivacyAdminQueue410,
-  ListPrivacyAdminQueue413,
-  ListPrivacyAdminQueue416,
-  ListPrivacyAdminQueue429,
-  ListPrivacyAdminQueue500,
-  ListPrivacyAdminQueue503,
-  ReviewPrivacyAdminAttachment200,
-  ReviewPrivacyAdminAttachment400,
-  ReviewPrivacyAdminAttachment401,
-  ReviewPrivacyAdminAttachment403,
-  ReviewPrivacyAdminAttachment404,
-  ReviewPrivacyAdminAttachment409,
-  ReviewPrivacyAdminAttachment410,
-  ReviewPrivacyAdminAttachment413,
-  ReviewPrivacyAdminAttachment416,
-  ReviewPrivacyAdminAttachment429,
-  ReviewPrivacyAdminAttachment500,
-  ReviewPrivacyAdminAttachment503,
-  ReviewPrivacyAdminAttachmentBody,
-  ReviewPrivacyAdminAttachmentHeaders,
-  ReviewPrivacyAdminIdentity200,
-  ReviewPrivacyAdminIdentity400,
-  ReviewPrivacyAdminIdentity401,
-  ReviewPrivacyAdminIdentity403,
-  ReviewPrivacyAdminIdentity404,
-  ReviewPrivacyAdminIdentity409,
-  ReviewPrivacyAdminIdentity410,
-  ReviewPrivacyAdminIdentity413,
-  ReviewPrivacyAdminIdentity416,
-  ReviewPrivacyAdminIdentity429,
-  ReviewPrivacyAdminIdentity500,
-  ReviewPrivacyAdminIdentity503,
-  ReviewPrivacyAdminIdentityBody,
-  ReviewPrivacyAdminIdentityHeaders,
-  StartPrivacyAdminReauthentication200,
-  StartPrivacyAdminReauthentication400,
-  StartPrivacyAdminReauthentication401,
-  StartPrivacyAdminReauthentication403,
-  StartPrivacyAdminReauthentication404,
-  StartPrivacyAdminReauthentication409,
-  StartPrivacyAdminReauthentication410,
-  StartPrivacyAdminReauthentication413,
-  StartPrivacyAdminReauthentication416,
-  StartPrivacyAdminReauthentication429,
-  StartPrivacyAdminReauthentication500,
-  StartPrivacyAdminReauthentication503,
-  StartPrivacyAdminReauthenticationBody,
-  StartPrivacyAdminReauthenticationHeaders,
-  UploadPrivacyAdminAttachment201,
-  UploadPrivacyAdminAttachment400,
-  UploadPrivacyAdminAttachment401,
-  UploadPrivacyAdminAttachment403,
-  UploadPrivacyAdminAttachment404,
-  UploadPrivacyAdminAttachment409,
-  UploadPrivacyAdminAttachment410,
-  UploadPrivacyAdminAttachment413,
-  UploadPrivacyAdminAttachment416,
-  UploadPrivacyAdminAttachment429,
-  UploadPrivacyAdminAttachment500,
-  UploadPrivacyAdminAttachment503,
-  UploadPrivacyAdminAttachmentBody,
-  UploadPrivacyAdminAttachmentHeaders,
-} from "./privacy-models";
+export type AdminGetPrivacyAdminReadiness200Schema0 =
+  | string
+  | number
+  | boolean
+  | null
+  | (AdminGetPrivacyAdminReadiness200Schema0 | null)[]
+  | { [key: string]: AdminGetPrivacyAdminReadiness200Schema0 | null };
+
+export type AdminGeneratePrivacyAdminArtifact201Schema0 =
+  | string
+  | number
+  | boolean
+  | null
+  | (AdminGeneratePrivacyAdminArtifact201Schema0 | null)[]
+  | { [key: string]: AdminGeneratePrivacyAdminArtifact201Schema0 | null };
+
+export type ListPrivacyAdminBackups200BackupsItemVolumesItemMode =
+  (typeof ListPrivacyAdminBackups200BackupsItemVolumesItemMode)[keyof typeof ListPrivacyAdminBackups200BackupsItemVolumesItemMode];
+
+export const ListPrivacyAdminBackups200BackupsItemVolumesItemMode = {
+  tar: "tar",
+  pg_dump: "pg_dump",
+} as const;
+
+export type ListPrivacyAdminBackups200BackupsItemVolumesItem = {
+  serviceId: string;
+  volumeId: string;
+  mode: ListPrivacyAdminBackups200BackupsItemVolumesItemMode;
+  sizeBytes: number;
+  sha256: string;
+};
+
+export type ListPrivacyAdminBackups200BackupsItem = {
+  backupId: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @nullable */
+  platformVersion: string | null;
+  /** @nullable */
+  formatVersion: number | null;
+  /** @nullable */
+  manifestDigest: string | null;
+  verified: boolean;
+  expired: boolean;
+  unavailableReason?: string;
+  volumes: ListPrivacyAdminBackups200BackupsItemVolumesItem[];
+};
+
+export type ListPrivacyAdminBackups200 = {
+  backups: ListPrivacyAdminBackups200BackupsItem[];
+  warningCount: number;
+};
+
+export type ListPrivacyAdminBackups400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackups503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperatorsParams = {
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+  /**
+   * @maxLength 512
+   */
+  cursor?: string;
+};
+
+export type ListPrivacyAdminOperators200OperatorsItem = {
+  id: string;
+  name: string;
+};
+
+export type ListPrivacyAdminOperators200 = {
+  operators: ListPrivacyAdminOperators200OperatorsItem[];
+  /** @nullable */
+  nextCursor: string | null;
+};
+
+export type ListPrivacyAdminOperators400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminOperators503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue200RequestsItemKind =
+  (typeof ListPrivacyAdminQueue200RequestsItemKind)[keyof typeof ListPrivacyAdminQueue200RequestsItemKind];
+
+export const ListPrivacyAdminQueue200RequestsItemKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type ListPrivacyAdminQueue200RequestsItemExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type ListPrivacyAdminQueue200RequestsItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: ListPrivacyAdminQueue200RequestsItemKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: ListPrivacyAdminQueue200RequestsItemExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type ListPrivacyAdminQueue200 = {
+  requests: ListPrivacyAdminQueue200RequestsItem[];
+};
+
+export type ListPrivacyAdminQueue400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminQueue503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness200Version =
+  (typeof GetPrivacyAdminReadiness200Version)[keyof typeof GetPrivacyAdminReadiness200Version];
+
+export const GetPrivacyAdminReadiness200Version = {
+  NUMBER_1: 1,
+} as const;
+
+export type GetPrivacyAdminReadiness200KeyRing = {
+  activeVersion: number;
+  availableVersions: number[];
+} | null;
+
+export type GetPrivacyAdminReadiness200ChecksItemStatus =
+  (typeof GetPrivacyAdminReadiness200ChecksItemStatus)[keyof typeof GetPrivacyAdminReadiness200ChecksItemStatus];
+
+export const GetPrivacyAdminReadiness200ChecksItemStatus = {
+  pass: "pass",
+  fail: "fail",
+  warning: "warning",
+} as const;
+
+export type GetPrivacyAdminReadiness200ChecksItem = {
+  id: string;
+  status: GetPrivacyAdminReadiness200ChecksItemStatus;
+  detailCode: string;
+};
+
+export type GetPrivacyAdminReadiness200 = {
+  version: GetPrivacyAdminReadiness200Version;
+  ready: boolean;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  checkedAt: string;
+  evidenceVersion: string;
+  keyRing: GetPrivacyAdminReadiness200KeyRing;
+  checks: GetPrivacyAdminReadiness200ChecksItem[];
+  approvals: (AdminGetPrivacyAdminReadiness200Schema0 | null)[];
+};
+
+export type GetPrivacyAdminReadiness400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminReadiness503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCaseHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type CreatePrivacyAdminCaseBodyKind =
+  (typeof CreatePrivacyAdminCaseBodyKind)[keyof typeof CreatePrivacyAdminCaseBodyKind];
+
+export const CreatePrivacyAdminCaseBodyKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type CreatePrivacyAdminCaseBodyChannel =
+  (typeof CreatePrivacyAdminCaseBodyChannel)[keyof typeof CreatePrivacyAdminCaseBodyChannel];
+
+export const CreatePrivacyAdminCaseBodyChannel = {
+  email: "email",
+  post: "post",
+  representative: "representative",
+  internal: "internal",
+} as const;
+
+export type CreatePrivacyAdminCaseBodySubjectLocatorType =
+  (typeof CreatePrivacyAdminCaseBodySubjectLocatorType)[keyof typeof CreatePrivacyAdminCaseBodySubjectLocatorType];
+
+export const CreatePrivacyAdminCaseBodySubjectLocatorType = {
+  user_id: "user_id",
+  email: "email",
+  username: "username",
+  erasure_reference: "erasure_reference",
+  other_reference: "other_reference",
+} as const;
+
+export type CreatePrivacyAdminCaseBodySubjectAccountState =
+  (typeof CreatePrivacyAdminCaseBodySubjectAccountState)[keyof typeof CreatePrivacyAdminCaseBodySubjectAccountState];
+
+export const CreatePrivacyAdminCaseBodySubjectAccountState = {
+  current: "current",
+  inaccessible: "inaccessible",
+  deleted: "deleted",
+  unknown: "unknown",
+} as const;
+
+export type CreatePrivacyAdminCaseBodySubject = {
+  locatorType: CreatePrivacyAdminCaseBodySubjectLocatorType;
+  /**
+   * @minLength 1
+   * @maxLength 512
+   */
+  locator: string;
+  accountState: CreatePrivacyAdminCaseBodySubjectAccountState;
+};
+
+export type CreatePrivacyAdminCaseBodyRepresentativeContactType =
+  (typeof CreatePrivacyAdminCaseBodyRepresentativeContactType)[keyof typeof CreatePrivacyAdminCaseBodyRepresentativeContactType];
+
+export const CreatePrivacyAdminCaseBodyRepresentativeContactType = {
+  email: "email",
+  other_reference: "other_reference",
+} as const;
+
+export type CreatePrivacyAdminCaseBodyRepresentative = {
+  contactType: CreatePrivacyAdminCaseBodyRepresentativeContactType;
+  /**
+   * @minLength 1
+   * @maxLength 512
+   */
+  contact: string;
+};
+
+export type CreatePrivacyAdminCaseBody = {
+  kind?: CreatePrivacyAdminCaseBodyKind;
+  channel?: CreatePrivacyAdminCaseBodyChannel;
+  /** @nullable */
+  userId?: string | null;
+  subject?: CreatePrivacyAdminCaseBodySubject;
+  representative?: CreatePrivacyAdminCaseBodyRepresentative;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt?: string;
+  locale?: string;
+  timeZone?: string;
+};
+
+export type CreatePrivacyAdminCase202RequestKind =
+  (typeof CreatePrivacyAdminCase202RequestKind)[keyof typeof CreatePrivacyAdminCase202RequestKind];
+
+export const CreatePrivacyAdminCase202RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type CreatePrivacyAdminCase202RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type CreatePrivacyAdminCase202Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: CreatePrivacyAdminCase202RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: CreatePrivacyAdminCase202RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type CreatePrivacyAdminCase202 = {
+  request: CreatePrivacyAdminCase202Request;
+};
+
+export type CreatePrivacyAdminCase400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminCase503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase200RequestKind =
+  (typeof GetPrivacyAdminCase200RequestKind)[keyof typeof GetPrivacyAdminCase200RequestKind];
+
+export const GetPrivacyAdminCase200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type GetPrivacyAdminCase200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type GetPrivacyAdminCase200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: GetPrivacyAdminCase200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: GetPrivacyAdminCase200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type GetPrivacyAdminCase200TasksItemActionsItem =
+  (typeof GetPrivacyAdminCase200TasksItemActionsItem)[keyof typeof GetPrivacyAdminCase200TasksItemActionsItem];
+
+export const GetPrivacyAdminCase200TasksItemActionsItem = {
+  complete: "complete",
+  not_applicable: "not_applicable",
+  operator_review: "operator_review",
+  retryable: "retryable",
+  canceled: "canceled",
+} as const;
+
+export const GetPrivacyAdminCase200TasksItemRequired = { NUMBER_0: 0, NUMBER_1: 1 } as const;
+export type GetPrivacyAdminCase200TasksItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  taskKey: string;
+  actions?: GetPrivacyAdminCase200TasksItemActionsItem[];
+  registrationId: string;
+  source: string;
+  required: (typeof GetPrivacyAdminCase200TasksItemRequired)[keyof typeof GetPrivacyAdminCase200TasksItemRequired];
+  status: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  attempts: number;
+  /** @nullable */
+  assignedTo: string | null;
+  cutoffAt: string | null;
+  collectedAt: string | null;
+  recordCount: number | null;
+  /** @nullable */
+  exceptionCode: string | null;
+  /** @nullable */
+  redactionCode: string | null;
+};
+
+export type GetPrivacyAdminCase200IdentitiesItemParty =
+  (typeof GetPrivacyAdminCase200IdentitiesItemParty)[keyof typeof GetPrivacyAdminCase200IdentitiesItemParty];
+
+export const GetPrivacyAdminCase200IdentitiesItemParty = {
+  subject: "subject",
+  representative: "representative",
+} as const;
+
+export const GetPrivacyAdminCase200IdentitiesItemDeliveryAuthorized = {
+  NUMBER_0: 0,
+  NUMBER_1: 1,
+} as const;
+export type GetPrivacyAdminCase200IdentitiesItem = {
+  party: GetPrivacyAdminCase200IdentitiesItemParty;
+  state: string;
+  /** @nullable */
+  method: string | null;
+  authorityState: string;
+  deliveryAuthorized: (typeof GetPrivacyAdminCase200IdentitiesItemDeliveryAuthorized)[keyof typeof GetPrivacyAdminCase200IdentitiesItemDeliveryAuthorized];
+  verifiedAt: string | null;
+};
+
+export type GetPrivacyAdminCase200AttachmentsItemPurpose =
+  (typeof GetPrivacyAdminCase200AttachmentsItemPurpose)[keyof typeof GetPrivacyAdminCase200AttachmentsItemPurpose];
+
+export const GetPrivacyAdminCase200AttachmentsItemPurpose = {
+  identity_evidence: "identity_evidence",
+  representative_authority: "representative_authority",
+  processor_response: "processor_response",
+  operator_supplement: "operator_supplement",
+} as const;
+
+export type GetPrivacyAdminCase200AttachmentsItemMediaType =
+  (typeof GetPrivacyAdminCase200AttachmentsItemMediaType)[keyof typeof GetPrivacyAdminCase200AttachmentsItemMediaType];
+
+export const GetPrivacyAdminCase200AttachmentsItemMediaType = {
+  "application/pdf": "application/pdf",
+  "text/plain": "text/plain",
+  "text/csv": "text/csv",
+  "application/json": "application/json",
+  "image/png": "image/png",
+  "image/jpeg": "image/jpeg",
+} as const;
+
+export type GetPrivacyAdminCase200AttachmentsItemRightsReviewState =
+  (typeof GetPrivacyAdminCase200AttachmentsItemRightsReviewState)[keyof typeof GetPrivacyAdminCase200AttachmentsItemRightsReviewState];
+
+export const GetPrivacyAdminCase200AttachmentsItemRightsReviewState = {
+  pending: "pending",
+  approved: "approved",
+  redacted: "redacted",
+  rejected: "rejected",
+} as const;
+
+export type GetPrivacyAdminCase200AttachmentsItemMetadata =
+  | {
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      source?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      controller?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      processor?: string;
+      /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+      cutoff?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      reasonCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      redactionCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 64
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]*$
+       */
+      schemaVersion?: string;
+    }
+  | { [key: string]: unknown };
+
+export type GetPrivacyAdminCase200AttachmentsItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  purpose: GetPrivacyAdminCase200AttachmentsItemPurpose;
+  filename: string;
+  mediaType: GetPrivacyAdminCase200AttachmentsItemMediaType;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  plaintextBytes: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  expiresAt: string;
+  rightsReviewState: GetPrivacyAdminCase200AttachmentsItemRightsReviewState;
+  metadata: GetPrivacyAdminCase200AttachmentsItemMetadata;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt?: string;
+};
+
+export type GetPrivacyAdminCase200ArtifactsItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  state: string;
+  /** @nullable */
+  filename: string | null;
+  /** @nullable */
+  mediaType?: string | null;
+  plaintextBytes: number | null;
+  expiresAt: string | null;
+  readyAt?: string | null;
+};
+
+export type GetPrivacyAdminCase200EventsItemPayload = { [key: string]: string };
+
+export type GetPrivacyAdminCase200EventsItem = {
+  eventType: string;
+  actorKind: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  payload?: GetPrivacyAdminCase200EventsItemPayload;
+};
+
+export type GetPrivacyAdminCase200CapabilitiesReasons = { [key: string]: string };
+
+export type GetPrivacyAdminCase200Capabilities = {
+  identityReview: boolean;
+  taskDecision: boolean;
+  taskAssignment: boolean;
+  extendDeadline: boolean;
+  caseDecision: boolean;
+  attachmentWrite: boolean;
+  backupReview: boolean;
+  generate: boolean;
+  assistedDelivery: boolean;
+  representativeDelivery: boolean;
+  reasons: GetPrivacyAdminCase200CapabilitiesReasons;
+};
+
+export type GetPrivacyAdminCase200 = {
+  request: GetPrivacyAdminCase200Request;
+  tasks: GetPrivacyAdminCase200TasksItem[];
+  identities: GetPrivacyAdminCase200IdentitiesItem[];
+  attachments: GetPrivacyAdminCase200AttachmentsItem[];
+  artifacts: GetPrivacyAdminCase200ArtifactsItem[];
+  events: GetPrivacyAdminCase200EventsItem[];
+  capabilities: GetPrivacyAdminCase200Capabilities;
+};
+
+export type GetPrivacyAdminCase400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GetPrivacyAdminCase503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminArtifact503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthenticationHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type CompletePrivacyAdminReauthenticationBody = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  challengeId: string;
+};
+
+export type CompletePrivacyAdminReauthentication200 = {
+  completed: true;
+};
+
+export type CompletePrivacyAdminReauthentication400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminReauthentication503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthenticationHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type StartPrivacyAdminReauthenticationBodyChannel =
+  (typeof StartPrivacyAdminReauthenticationBodyChannel)[keyof typeof StartPrivacyAdminReauthenticationBodyChannel];
+
+export const StartPrivacyAdminReauthenticationBodyChannel = {
+  assisted: "assisted",
+  representative: "representative",
+} as const;
+
+export type StartPrivacyAdminReauthenticationBody = {
+  channel?: StartPrivacyAdminReauthenticationBodyChannel;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode: string;
+};
+
+export type StartPrivacyAdminReauthentication200LoginPath =
+  (typeof StartPrivacyAdminReauthentication200LoginPath)[keyof typeof StartPrivacyAdminReauthentication200LoginPath];
+
+export const StartPrivacyAdminReauthentication200LoginPath = {
+  "/auth/privacy/admin": "/auth/privacy/admin",
+} as const;
+
+export type StartPrivacyAdminReauthentication200 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  challengeId: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  expiresAt: string;
+  loginPath: StartPrivacyAdminReauthentication200LoginPath;
+};
+
+export type StartPrivacyAdminReauthentication400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type StartPrivacyAdminReauthentication503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachmentHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type UploadPrivacyAdminAttachmentBodyPurpose =
+  (typeof UploadPrivacyAdminAttachmentBodyPurpose)[keyof typeof UploadPrivacyAdminAttachmentBodyPurpose];
+
+export const UploadPrivacyAdminAttachmentBodyPurpose = {
+  identity_evidence: "identity_evidence",
+  representative_authority: "representative_authority",
+  processor_response: "processor_response",
+  operator_supplement: "operator_supplement",
+} as const;
+
+export type UploadPrivacyAdminAttachmentBodyMediaType =
+  (typeof UploadPrivacyAdminAttachmentBodyMediaType)[keyof typeof UploadPrivacyAdminAttachmentBodyMediaType];
+
+export const UploadPrivacyAdminAttachmentBodyMediaType = {
+  "application/pdf": "application/pdf",
+  "text/plain": "text/plain",
+  "text/csv": "text/csv",
+  "application/json": "application/json",
+  "image/png": "image/png",
+  "image/jpeg": "image/jpeg",
+} as const;
+
+export type UploadPrivacyAdminAttachmentBodyMetadata = {
+  /**
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  source?: string;
+  /**
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  controller?: string;
+  /**
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+   */
+  processor?: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  cutoff?: string;
+  /**
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode?: string;
+  /**
+   * @minLength 1
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  redactionCode?: string;
+  /**
+   * @minLength 1
+   * @maxLength 64
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]*$
+   */
+  schemaVersion?: string;
+};
+
+export type UploadPrivacyAdminAttachmentBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  purpose: UploadPrivacyAdminAttachmentBodyPurpose;
+  /**
+   * @minLength 1
+   * @maxLength 120
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._ -]*$
+   */
+  filename: string;
+  mediaType: UploadPrivacyAdminAttachmentBodyMediaType;
+  /**
+   * @minLength 4
+   * @maxLength 34952536
+   * @pattern ^[A-Za-z0-9+/]*={0,2}$
+   */
+  contentBase64: string;
+  metadata?: UploadPrivacyAdminAttachmentBodyMetadata;
+};
+
+export type UploadPrivacyAdminAttachment201AttachmentPurpose =
+  (typeof UploadPrivacyAdminAttachment201AttachmentPurpose)[keyof typeof UploadPrivacyAdminAttachment201AttachmentPurpose];
+
+export const UploadPrivacyAdminAttachment201AttachmentPurpose = {
+  identity_evidence: "identity_evidence",
+  representative_authority: "representative_authority",
+  processor_response: "processor_response",
+  operator_supplement: "operator_supplement",
+} as const;
+
+export type UploadPrivacyAdminAttachment201AttachmentMediaType =
+  (typeof UploadPrivacyAdminAttachment201AttachmentMediaType)[keyof typeof UploadPrivacyAdminAttachment201AttachmentMediaType];
+
+export const UploadPrivacyAdminAttachment201AttachmentMediaType = {
+  "application/pdf": "application/pdf",
+  "text/plain": "text/plain",
+  "text/csv": "text/csv",
+  "application/json": "application/json",
+  "image/png": "image/png",
+  "image/jpeg": "image/jpeg",
+} as const;
+
+export type UploadPrivacyAdminAttachment201AttachmentRightsReviewState =
+  (typeof UploadPrivacyAdminAttachment201AttachmentRightsReviewState)[keyof typeof UploadPrivacyAdminAttachment201AttachmentRightsReviewState];
+
+export const UploadPrivacyAdminAttachment201AttachmentRightsReviewState = {
+  pending: "pending",
+  approved: "approved",
+  redacted: "redacted",
+  rejected: "rejected",
+} as const;
+
+export type UploadPrivacyAdminAttachment201AttachmentMetadata =
+  | {
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      source?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      controller?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      processor?: string;
+      /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+      cutoff?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      reasonCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      redactionCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 64
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]*$
+       */
+      schemaVersion?: string;
+    }
+  | { [key: string]: unknown };
+
+export type UploadPrivacyAdminAttachment201Attachment = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  purpose: UploadPrivacyAdminAttachment201AttachmentPurpose;
+  filename: string;
+  mediaType: UploadPrivacyAdminAttachment201AttachmentMediaType;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  plaintextBytes: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  expiresAt: string;
+  rightsReviewState: UploadPrivacyAdminAttachment201AttachmentRightsReviewState;
+  metadata: UploadPrivacyAdminAttachment201AttachmentMetadata;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt?: string;
+};
+
+export type UploadPrivacyAdminAttachment201 = {
+  attachment: UploadPrivacyAdminAttachment201Attachment;
+};
+
+export type UploadPrivacyAdminAttachment400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type UploadPrivacyAdminAttachment503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachmentHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type DeletePrivacyAdminAttachmentBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+};
+
+export type DeletePrivacyAdminAttachment400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DeletePrivacyAdminAttachment503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DownloadPrivacyAdminAttachment503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachmentHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type ReviewPrivacyAdminAttachmentBodyDecision =
+  (typeof ReviewPrivacyAdminAttachmentBodyDecision)[keyof typeof ReviewPrivacyAdminAttachmentBodyDecision];
+
+export const ReviewPrivacyAdminAttachmentBodyDecision = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export type ReviewPrivacyAdminAttachmentBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  decision: ReviewPrivacyAdminAttachmentBodyDecision;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode: string;
+};
+
+export type ReviewPrivacyAdminAttachment200RequestKind =
+  (typeof ReviewPrivacyAdminAttachment200RequestKind)[keyof typeof ReviewPrivacyAdminAttachment200RequestKind];
+
+export const ReviewPrivacyAdminAttachment200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type ReviewPrivacyAdminAttachment200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type ReviewPrivacyAdminAttachment200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: ReviewPrivacyAdminAttachment200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: ReviewPrivacyAdminAttachment200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type ReviewPrivacyAdminAttachment200AttachmentPurpose =
+  (typeof ReviewPrivacyAdminAttachment200AttachmentPurpose)[keyof typeof ReviewPrivacyAdminAttachment200AttachmentPurpose];
+
+export const ReviewPrivacyAdminAttachment200AttachmentPurpose = {
+  identity_evidence: "identity_evidence",
+  representative_authority: "representative_authority",
+  processor_response: "processor_response",
+  operator_supplement: "operator_supplement",
+} as const;
+
+export type ReviewPrivacyAdminAttachment200AttachmentMediaType =
+  (typeof ReviewPrivacyAdminAttachment200AttachmentMediaType)[keyof typeof ReviewPrivacyAdminAttachment200AttachmentMediaType];
+
+export const ReviewPrivacyAdminAttachment200AttachmentMediaType = {
+  "application/pdf": "application/pdf",
+  "text/plain": "text/plain",
+  "text/csv": "text/csv",
+  "application/json": "application/json",
+  "image/png": "image/png",
+  "image/jpeg": "image/jpeg",
+} as const;
+
+export type ReviewPrivacyAdminAttachment200AttachmentRightsReviewState =
+  (typeof ReviewPrivacyAdminAttachment200AttachmentRightsReviewState)[keyof typeof ReviewPrivacyAdminAttachment200AttachmentRightsReviewState];
+
+export const ReviewPrivacyAdminAttachment200AttachmentRightsReviewState = {
+  pending: "pending",
+  approved: "approved",
+  redacted: "redacted",
+  rejected: "rejected",
+} as const;
+
+export type ReviewPrivacyAdminAttachment200AttachmentMetadata =
+  | {
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      source?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      controller?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]*$
+       */
+      processor?: string;
+      /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+      cutoff?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      reasonCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 128
+       * @pattern ^[a-z0-9][a-z0-9._-]*$
+       */
+      redactionCode?: string;
+      /**
+       * @minLength 1
+       * @maxLength 64
+       * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]*$
+       */
+      schemaVersion?: string;
+    }
+  | { [key: string]: unknown };
+
+export type ReviewPrivacyAdminAttachment200Attachment = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  purpose: ReviewPrivacyAdminAttachment200AttachmentPurpose;
+  filename: string;
+  mediaType: ReviewPrivacyAdminAttachment200AttachmentMediaType;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  plaintextBytes: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  expiresAt: string;
+  rightsReviewState: ReviewPrivacyAdminAttachment200AttachmentRightsReviewState;
+  metadata: ReviewPrivacyAdminAttachment200AttachmentMetadata;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt?: string;
+};
+
+export type ReviewPrivacyAdminAttachment200 = {
+  request: ReviewPrivacyAdminAttachment200Request;
+  attachment: ReviewPrivacyAdminAttachment200Attachment;
+};
+
+export type ReviewPrivacyAdminAttachment400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminAttachment503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions200ReviewsItem = {
+  backupReviewId: string;
+  manifestDigest: string;
+  warningCodes: string[];
+  warningsDigest: string;
+  accepted: boolean;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  requestVersion?: number;
+  reasonCode?: string;
+};
+
+export type ListPrivacyAdminBackupOmissions200 = {
+  reviews: ListPrivacyAdminBackupOmissions200ReviewsItem[];
+};
+
+export type ListPrivacyAdminBackupOmissions400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupOmissions503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissionsHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type AcceptPrivacyAdminBackupOmissionsBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  requestVersion: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  warningsDigest: string;
+  /** @pattern ^[a-z0-9][a-z0-9._-]{0,127}$ */
+  reasonCode: string;
+};
+
+export type AcceptPrivacyAdminBackupOmissions201Review = {
+  backupReviewId: string;
+  manifestDigest: string;
+  warningCodes: string[];
+  warningsDigest: string;
+  accepted: boolean;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  requestVersion?: number;
+  reasonCode?: string;
+};
+
+export type AcceptPrivacyAdminBackupOmissions201 = {
+  review: AcceptPrivacyAdminBackupOmissions201Review;
+};
+
+export type AcceptPrivacyAdminBackupOmissions400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AcceptPrivacyAdminBackupOmissions503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews200ReviewsItemDecision =
+  (typeof ListPrivacyAdminBackupReviews200ReviewsItemDecision)[keyof typeof ListPrivacyAdminBackupReviews200ReviewsItemDecision];
+
+export const ListPrivacyAdminBackupReviews200ReviewsItemDecision = {
+  not_applicable: "not_applicable",
+  no_material_difference: "no_material_difference",
+  extract: "extract",
+  unavailable: "unavailable",
+} as const;
+
+export type ListPrivacyAdminBackupReviews200ReviewsItem = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  requestId: string;
+  backupId: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  manifestDigest: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  platformVersion: string;
+  decision: ListPrivacyAdminBackupReviews200ReviewsItemDecision;
+  reasonCode: string;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  reviewedAt: string;
+};
+
+export type ListPrivacyAdminBackupReviews200 = {
+  reviews: ListPrivacyAdminBackupReviews200ReviewsItem[];
+};
+
+export type ListPrivacyAdminBackupReviews400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ListPrivacyAdminBackupReviews503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReviewHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type CreatePrivacyAdminBackupReviewBody = {
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ */
+  backupId: string;
+};
+
+export type CreatePrivacyAdminBackupReview201ReviewDecision =
+  (typeof CreatePrivacyAdminBackupReview201ReviewDecision)[keyof typeof CreatePrivacyAdminBackupReview201ReviewDecision];
+
+export const CreatePrivacyAdminBackupReview201ReviewDecision = {
+  not_applicable: "not_applicable",
+  no_material_difference: "no_material_difference",
+  extract: "extract",
+  unavailable: "unavailable",
+} as const;
+
+export type CreatePrivacyAdminBackupReview201Review = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  requestId: string;
+  backupId: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  manifestDigest: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  platformVersion: string;
+  decision: CreatePrivacyAdminBackupReview201ReviewDecision;
+  reasonCode: string;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  reviewedAt: string;
+};
+
+export type CreatePrivacyAdminBackupReview201 = {
+  review: CreatePrivacyAdminBackupReview201Review;
+};
+
+export type CreatePrivacyAdminBackupReview400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CreatePrivacyAdminBackupReview503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCaseHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type DecidePrivacyAdminCaseBodyDecision =
+  (typeof DecidePrivacyAdminCaseBodyDecision)[keyof typeof DecidePrivacyAdminCaseBodyDecision];
+
+export const DecidePrivacyAdminCaseBodyDecision = {
+  refused: "refused",
+  clarification_needed: "clarification_needed",
+  operator_review: "operator_review",
+} as const;
+
+export type DecidePrivacyAdminCaseBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  decision: DecidePrivacyAdminCaseBodyDecision;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode: string;
+};
+
+export type DecidePrivacyAdminCase200RequestKind =
+  (typeof DecidePrivacyAdminCase200RequestKind)[keyof typeof DecidePrivacyAdminCase200RequestKind];
+
+export const DecidePrivacyAdminCase200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type DecidePrivacyAdminCase200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type DecidePrivacyAdminCase200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: DecidePrivacyAdminCase200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: DecidePrivacyAdminCase200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type DecidePrivacyAdminCase200 = {
+  request: DecidePrivacyAdminCase200Request;
+};
+
+export type DecidePrivacyAdminCase400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminCase503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCaseHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type ExtendPrivacyAdminCaseBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode: string;
+};
+
+export type ExtendPrivacyAdminCase200RequestKind =
+  (typeof ExtendPrivacyAdminCase200RequestKind)[keyof typeof ExtendPrivacyAdminCase200RequestKind];
+
+export const ExtendPrivacyAdminCase200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type ExtendPrivacyAdminCase200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type ExtendPrivacyAdminCase200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: ExtendPrivacyAdminCase200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: ExtendPrivacyAdminCase200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type ExtendPrivacyAdminCase200 = {
+  request: ExtendPrivacyAdminCase200Request;
+};
+
+export type ExtendPrivacyAdminCase400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ExtendPrivacyAdminCase503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifactHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type GeneratePrivacyAdminArtifactBody = { [key: string]: unknown };
+
+export type GeneratePrivacyAdminArtifact201RequestKind =
+  (typeof GeneratePrivacyAdminArtifact201RequestKind)[keyof typeof GeneratePrivacyAdminArtifact201RequestKind];
+
+export const GeneratePrivacyAdminArtifact201RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type GeneratePrivacyAdminArtifact201RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type GeneratePrivacyAdminArtifact201Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: GeneratePrivacyAdminArtifact201RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: GeneratePrivacyAdminArtifact201RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type GeneratePrivacyAdminArtifact201Artifact = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  state: string;
+  /** @nullable */
+  filename: string | null;
+  /** @nullable */
+  mediaType?: string | null;
+  plaintextBytes: number | null;
+  expiresAt: string | null;
+  readyAt?: string | null;
+};
+
+export type GeneratePrivacyAdminArtifact201 = {
+  request: GeneratePrivacyAdminArtifact201Request;
+  artifact: GeneratePrivacyAdminArtifact201Artifact;
+  outcomes: (AdminGeneratePrivacyAdminArtifact201Schema0 | null)[];
+};
+
+export type GeneratePrivacyAdminArtifact400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type GeneratePrivacyAdminArtifact503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentityHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type ReviewPrivacyAdminIdentityBodyParty =
+  (typeof ReviewPrivacyAdminIdentityBodyParty)[keyof typeof ReviewPrivacyAdminIdentityBodyParty];
+
+export const ReviewPrivacyAdminIdentityBodyParty = {
+  subject: "subject",
+  representative: "representative",
+} as const;
+
+export type ReviewPrivacyAdminIdentityBodyOutcome =
+  (typeof ReviewPrivacyAdminIdentityBodyOutcome)[keyof typeof ReviewPrivacyAdminIdentityBodyOutcome];
+
+export const ReviewPrivacyAdminIdentityBodyOutcome = {
+  verified: "verified",
+  failed: "failed",
+  clarification: "clarification",
+} as const;
+
+export type ReviewPrivacyAdminIdentityBodyMethod =
+  (typeof ReviewPrivacyAdminIdentityBodyMethod)[keyof typeof ReviewPrivacyAdminIdentityBodyMethod];
+
+export const ReviewPrivacyAdminIdentityBodyMethod = {
+  account_login: "account_login",
+  verified_email_challenge: "verified_email_challenge",
+  exceptional_evidence: "exceptional_evidence",
+} as const;
+
+export type ReviewPrivacyAdminIdentityBodyAuthorityOutcome =
+  (typeof ReviewPrivacyAdminIdentityBodyAuthorityOutcome)[keyof typeof ReviewPrivacyAdminIdentityBodyAuthorityOutcome];
+
+export const ReviewPrivacyAdminIdentityBodyAuthorityOutcome = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export type ReviewPrivacyAdminIdentityBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  party: ReviewPrivacyAdminIdentityBodyParty;
+  outcome: ReviewPrivacyAdminIdentityBodyOutcome;
+  method?: ReviewPrivacyAdminIdentityBodyMethod;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonableDoubtCode?: string;
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  evidenceAttachmentId?: string;
+  authorityOutcome?: ReviewPrivacyAdminIdentityBodyAuthorityOutcome;
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  authorityAttachmentId?: string;
+  deliveryAuthorized?: boolean;
+};
+
+export type ReviewPrivacyAdminIdentity200RequestKind =
+  (typeof ReviewPrivacyAdminIdentity200RequestKind)[keyof typeof ReviewPrivacyAdminIdentity200RequestKind];
+
+export const ReviewPrivacyAdminIdentity200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type ReviewPrivacyAdminIdentity200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type ReviewPrivacyAdminIdentity200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: ReviewPrivacyAdminIdentity200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: ReviewPrivacyAdminIdentity200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type ReviewPrivacyAdminIdentity200 = {
+  request: ReviewPrivacyAdminIdentity200Request;
+};
+
+export type ReviewPrivacyAdminIdentity400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type ReviewPrivacyAdminIdentity503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallengeHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type IssuePrivacyAdminEmailChallengeBodyParty =
+  (typeof IssuePrivacyAdminEmailChallengeBodyParty)[keyof typeof IssuePrivacyAdminEmailChallengeBodyParty];
+
+export const IssuePrivacyAdminEmailChallengeBodyParty = {
+  subject: "subject",
+  representative: "representative",
+} as const;
+
+export type IssuePrivacyAdminEmailChallengeBody = {
+  party: IssuePrivacyAdminEmailChallengeBodyParty;
+};
+
+export type IssuePrivacyAdminEmailChallenge202DeliveryState =
+  (typeof IssuePrivacyAdminEmailChallenge202DeliveryState)[keyof typeof IssuePrivacyAdminEmailChallenge202DeliveryState];
+
+export const IssuePrivacyAdminEmailChallenge202DeliveryState = {
+  sent: "sent",
+  queued: "queued",
+} as const;
+
+export type IssuePrivacyAdminEmailChallenge202 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  challengeId: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  expiresAt: string;
+  deliveryState: IssuePrivacyAdminEmailChallenge202DeliveryState;
+};
+
+export type IssuePrivacyAdminEmailChallenge400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type IssuePrivacyAdminEmailChallenge503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallengeHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type CompletePrivacyAdminEmailChallengeBodyParty =
+  (typeof CompletePrivacyAdminEmailChallengeBodyParty)[keyof typeof CompletePrivacyAdminEmailChallengeBodyParty];
+
+export const CompletePrivacyAdminEmailChallengeBodyParty = {
+  subject: "subject",
+  representative: "representative",
+} as const;
+
+export type CompletePrivacyAdminEmailChallengeBody = {
+  party: CompletePrivacyAdminEmailChallengeBodyParty;
+  /** @pattern ^\d{6}$ */
+  code: string;
+};
+
+export type CompletePrivacyAdminEmailChallenge200 = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  proofId: string;
+};
+
+export type CompletePrivacyAdminEmailChallenge400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type CompletePrivacyAdminEmailChallenge503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTaskHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type AssignPrivacyAdminTaskBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  assignedTo: string | null;
+};
+
+export type AssignPrivacyAdminTask200RequestKind =
+  (typeof AssignPrivacyAdminTask200RequestKind)[keyof typeof AssignPrivacyAdminTask200RequestKind];
+
+export const AssignPrivacyAdminTask200RequestKind = {
+  access: "access",
+  portability: "portability",
+  access_and_portability: "access_and_portability",
+} as const;
+
+export type AssignPrivacyAdminTask200RequestExtension = {
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extendedUntil: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  extensionNotifiedAt: string;
+  reasonCode: string;
+} | null;
+
+export type AssignPrivacyAdminTask200Request = {
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
+  id: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  originalDueAt?: string;
+  kind: AssignPrivacyAdminTask200RequestKind;
+  channel: string;
+  state: string;
+  /** @nullable */
+  userId: string | null;
+  locale: string;
+  timeZone: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  receivedAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  registeredAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  dueAt: string;
+  extension: AssignPrivacyAdminTask200RequestExtension;
+  identityState: string;
+  locatorType: string;
+  accountState: string;
+  /** @nullable */
+  refusalCode: string | null;
+  deliveryState: string;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  createdAt: string;
+  /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+  updatedAt: string;
+};
+
+export type AssignPrivacyAdminTask200 = {
+  request: AssignPrivacyAdminTask200Request;
+};
+
+export type AssignPrivacyAdminTask400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type AssignPrivacyAdminTask503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTaskHeaders = {
+  /**
+   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
+   */
+  "idempotency-key": string;
+};
+
+export type DecidePrivacyAdminTaskBodyStatus =
+  (typeof DecidePrivacyAdminTaskBodyStatus)[keyof typeof DecidePrivacyAdminTaskBodyStatus];
+
+export const DecidePrivacyAdminTaskBodyStatus = {
+  complete: "complete",
+  not_applicable: "not_applicable",
+  operator_review: "operator_review",
+  retryable: "retryable",
+  canceled: "canceled",
+} as const;
+
+export type DecidePrivacyAdminTaskBody = {
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum 0
+   */
+  version: number;
+  status: DecidePrivacyAdminTaskBodyStatus;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  reasonCode?: string;
+  /**
+   * @maxLength 128
+   * @pattern ^[a-z0-9][a-z0-9._-]*$
+   */
+  redactionCode?: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000
+   */
+  recordCount?: number;
+};
+
+export type DecidePrivacyAdminTask200 = {
+  ok: true;
+};
+
+export type DecidePrivacyAdminTask400 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask401 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask403 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask404 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask409 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask410 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask413 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask416 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask429 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask500 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
+export type DecidePrivacyAdminTask503 =
+  | {
+      /** @maxLength 128 */
+      code: string;
+    }
+  | {
+      error: string;
+      statusCode?: number;
+      message?: string;
+      code?: string;
+    };
+
 export type listPrivacyAdminBackupsResponse200 = {
   data: ListPrivacyAdminBackups200;
   status: 200;

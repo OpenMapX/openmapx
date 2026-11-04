@@ -214,6 +214,94 @@ it("allows only prepared configuration refinement and freezes its canonical tupl
   );
   expect(readFileSync(path)).toEqual(sealed);
 }, 60000);
+it.each([80_000, 130_000])(
+  "repairs and retires an existing %i-byte result within the private receipt budget",
+  async (length) => {
+    const installation = c.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["osrm"],
+    });
+    installations.push(installation);
+    // Older catalog inspections retained authority. Their already signed receipts
+    // must remain observable and collectible after new inspections stop enrolling.
+    const operation = {
+      kind: "catalogIntegration.inspect" as const,
+      source: { kind: "upload" as const, sha256: "a".repeat(64) },
+    };
+    const admittedAt = Date.now(),
+      deadlineAt = admittedAt + 60000;
+    const operationFingerprint = opsOperationFingerprint(operation);
+    const execution = {
+      executor: "ops-agent" as const,
+      principal: "api" as const,
+      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+      operationKey: createControlRootOperationKey({ notAfter: deadlineAt, nonce: randomBytes(16) }),
+      operationFingerprint,
+      deadlineAt,
+      fingerprint: executionFingerprint({ kind: operation.kind, operationFingerprint, deadlineAt }),
+    };
+    const authority = c.retainAdmittedControlExecution(installation, {
+      execution,
+      operation,
+      kind: operation.kind,
+      admittedAt,
+      requestedDeadlineAt: deadlineAt,
+      serviceIds: ["osrm"],
+    });
+    c.requireControlJournalRetention(authority);
+    const result = {
+      integrationId: "example",
+      valid: true,
+      problems: [],
+      manifest: { description: "a".repeat(length) },
+    };
+    const effect = {
+      outcome: "committed" as const,
+      publication: "committed" as const,
+      receipt: { kind: "ops-result", result },
+    };
+    c.retainControlEffectReceipt(authority, effect);
+    expect(() => c.verifyControlEffectSettlement(installation, execution)).not.toThrow();
+    expect(() => c.retainControlEffectReceipt(authority, effect)).not.toThrow();
+    const terminalAt = Date.now();
+    const status: OpsJobStatus = {
+      version: 2,
+      operationId: execution.executionId,
+      operationKey: execution.operationKey,
+      kind: operation.kind,
+      resourceId: "global",
+      state: "succeeded",
+      result,
+      admittedAt,
+      deadlineAt,
+      fingerprint: execution.fingerprint,
+      submittedAt: new Date(admittedAt).toISOString(),
+      updatedAt: new Date(terminalAt).toISOString(),
+    };
+    c.retainControlTerminalCommitment(authority, status, terminalAt);
+    c.retainControlTerminalStatus(installation, execution, status, terminalAt);
+    c.repairControlJournalTerminal(installation, execution, status, terminalAt);
+    const unregister = c.registerControlRetentionJournal(installation, {
+      contained: () => true,
+      retire: async () => {},
+    });
+    try {
+      vi.spyOn(Date, "now").mockReturnValue(deadlineAt + 96 * 3600_000);
+      let retired = 0;
+      for (let n = 0; n < 32 && !retired; n++)
+        retired += (await c.reconcileControlRetention(installation, { maxFamilies: 1 })).retired;
+      expect(retired).toBe(1);
+      expect(
+        existsSync(join(root, `control-private/ops-agent/effects/${execution.operationKey}.json`)),
+      ).toBe(false);
+    } finally {
+      unregister();
+    }
+  },
+  60000,
+);
+
 it("renews ordinary capacity from an eligible terminal family instead of exhausting lifetime receipts", async () => {
   const f = owner();
   terminalWithoutEffect(f.authority);

@@ -1,6 +1,11 @@
-import { type ApiClient, ApiNativeDownloadUnavailableError } from "@openmapx/core";
+import type { ApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { TransferStage } from "@openmapx/core/ops";
+
+import { consumeDownloadToSink, createFileSink, type DownloadSink } from "./downloadSink";
+
+export type { DownloadSink as ArtifactDownloadSink } from "./downloadSink";
+export { fileSinkSupported as artifactFileSinkSupported } from "./downloadSink";
 
 const STREAM_TIMEOUT = 72 * 3600_000;
 function wait(signal: AbortSignal) {
@@ -84,116 +89,23 @@ export async function uploadArtifactFile(input: {
   }
 }
 
-export interface ArtifactDownloadSink {
-  write(chunk: Uint8Array, signal: AbortSignal): Promise<void>;
-  close(): Promise<void>;
-  abort(reason?: unknown): Promise<void>;
-}
 export async function downloadArtifactToSink(input: {
   client: ApiClient;
   stageId: string;
-  sink: ArtifactDownloadSink;
+  sink: DownloadSink;
   signal: AbortSignal;
 }): Promise<void> {
-  let aborting: Promise<void> | undefined;
-  const abort = (reason: unknown) =>
-    (aborting ??= Promise.resolve().then(() => input.sink.abort(reason)));
-  const onAbort = () => {
-    void abort(input.signal.reason).catch(() => {});
-  };
-  input.signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    input.signal.throwIfAborted();
+  return consumeDownloadToSink(input, async (onByteChunk) => {
     sdk.unwrapAdminResponse(
       await sdk.downloadAdminArtifactTransferContent(input.stageId, {
         client: input.client,
         signal: input.signal,
         timeoutMs: STREAM_TIMEOUT,
-        onByteChunk: async (chunk, signal) => {
-          const cancel = () => {
-            void abort(signal.reason).catch(() => {});
-          };
-          signal.addEventListener("abort", cancel, { once: true });
-          try {
-            signal.throwIfAborted();
-            await input.sink.write(chunk, signal);
-            signal.throwIfAborted();
-          } finally {
-            signal.removeEventListener("abort", cancel);
-            if (aborting) await aborting.catch(() => {});
-          }
-        },
+        onByteChunk,
       }),
     );
-    input.signal.throwIfAborted();
-    await input.sink.close();
-  } catch (error) {
-    await abort(error).catch(() => {});
-    throw error;
-  } finally {
-    input.signal.removeEventListener("abort", onAbort);
-    if (aborting) await aborting.catch(() => {});
-  }
+  });
 }
-
-type PickerWindow = Window & {
-  showSaveFilePicker?: (options: { suggestedName: string }) => Promise<{
-    createWritable(): Promise<{
-      write(chunk: Uint8Array): Promise<void>;
-      close(): Promise<void>;
-      abort(reason?: unknown): Promise<void>;
-    }>;
-  }>;
-};
-export function artifactFileSinkSupported(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof (window as PickerWindow).showSaveFilePicker === "function"
-  );
-}
-/** Invoke directly in the user gesture, before awaiting a network request. */
-export async function createArtifactFileSink(): Promise<ArtifactDownloadSink> {
-  const picker = (window as PickerWindow).showSaveFilePicker;
-  if (!picker) throw new ApiNativeDownloadUnavailableError("runtime");
-  const handle = await picker.call(window, { suggestedName: "openmapx-artifact.tar" }),
-    writable = await handle.createWritable();
-  let closed = false,
-    pending: Promise<void> | undefined,
-    aborting: Promise<void> | undefined;
-  const abort = async (reason?: unknown) => {
-    if (closed) {
-      if (aborting) await aborting;
-      return;
-    }
-    closed = true;
-    aborting = Promise.resolve().then(() => writable.abort(reason));
-    const results = await Promise.allSettled([pending, aborting]);
-    const failed = results.find((result) => result.status === "rejected");
-    if (failed?.status === "rejected") throw failed.reason;
-  };
-  return {
-    async write(chunk, signal) {
-      if (closed) throw Error("Download sink is closed");
-      signal.throwIfAborted();
-      const cancel = () => {
-        void abort(signal.reason).catch(() => {});
-      };
-      signal.addEventListener("abort", cancel, { once: true });
-      try {
-        pending = writable.write(chunk);
-        await pending;
-        signal.throwIfAborted();
-      } finally {
-        signal.removeEventListener("abort", cancel);
-        if (aborting) await aborting.catch(() => {});
-      }
-    },
-    async close() {
-      if (closed) throw Error("Download sink is closed");
-      await pending;
-      await writable.close();
-      closed = true;
-    },
-    abort,
-  };
+export function createArtifactFileSink(): Promise<DownloadSink> {
+  return createFileSink("openmapx-artifact.tar");
 }

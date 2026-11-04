@@ -6,7 +6,6 @@ import {
   configurationGenerationRevisionSchema,
   type OpsResultFor,
   type TrustedConfigurationPayload,
-  trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
 import { getAllIntegrations } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
@@ -22,7 +21,6 @@ import {
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
   retireSettledProspectiveConfiguration,
-  type ValidatedConfigurationCandidate,
 } from "./prospective-configuration";
 import {
   completeTrustedConfigurationApply,
@@ -57,9 +55,6 @@ export interface ApplyTrustedConfigurationOptions {
   followUp?: "service-apply";
   expectedCurrentRevisionId?: string | null;
   overlay?: ProspectiveConfigurationOverlay;
-  candidate?: ValidatedConfigurationCandidate;
-  /** Internal compensation must still equal the strictly acquired desired snapshot. */
-  snapshot?: TrustedConfigurationPayload;
 }
 
 export { buildConfigurationInput } from "./configuration-input";
@@ -151,7 +146,7 @@ export async function applyTrustedConfigurationWithEvidence(
       : options.kind === "stack.render" && options.selectedRoots === undefined
         ? { purpose: "render" as const, coordinatorMode, changes: [] }
         : undefined);
-  if (!overlay && !options.candidate)
+  if (!overlay)
     return {
       outcome: {
         outcome: "not_committed",
@@ -182,16 +177,14 @@ export async function applyTrustedConfigurationWithEvidence(
         const expectedCurrentRevisionId = Object.hasOwn(options, "expectedCurrentRevisionId")
           ? options.expectedCurrentRevisionId!
           : previousApplied.revisionId;
-        const candidate =
-          options.candidate ??
-          (await prepareProspectiveConfiguration({
-            actorId,
-            operationKey: options.operationKey,
-            expectedCurrentRevisionId,
-            overlay: overlay!,
-            signal: options.signal ?? ctx.signal,
-            followUp: options.followUp,
-          }));
+        const candidate = await prepareProspectiveConfiguration({
+          actorId,
+          operationKey: options.operationKey,
+          expectedCurrentRevisionId,
+          overlay,
+          signal: options.signal ?? ctx.signal,
+          followUp: options.followUp,
+        });
         const { validatedConfigurationCandidateState } = await import(
           "./prospective-configuration"
         );
@@ -212,8 +205,6 @@ export async function applyTrustedConfigurationWithEvidence(
           throw Error("Configuration candidate intent conflict");
         if (options.followUp && candidateState.record.apiFollowUp !== options.followUp)
           throw Error("Configuration continuation intent conflict");
-        if (options.snapshot && canonicalJson(options.snapshot) !== canonicalJson(payload))
-          throw new Error("Strict compensation requires current owned desired rows");
         const receipt = await persistAndApplyProspectiveConfiguration(candidate, {
           coordinatorMode,
           signal: options.signal ?? ctx.signal,
@@ -314,38 +305,6 @@ export async function applyTrustedConfigurationWithEvidence(
   );
 }
 
-/** Full-snapshot compensation; compare the applied generation, NOT the manifest authority. */
-export async function applyTrustedConfigurationSnapshot(options: {
-  payload: TrustedConfigurationPayload;
-  expectedCurrentRevisionId: string | null;
-  operationKey: string;
-  signal?: AbortSignal;
-  ctx?: JobContext;
-}): Promise<TrustedConfigurationApplyOutcome> {
-  if (
-    !configurationGenerationRevisionSchema.nullable().safeParse(options.expectedCurrentRevisionId)
-      .success
-  ) {
-    return {
-      outcome: "not_committed",
-      reason: "failed",
-      cleanupFailed: false,
-      publisherCleanupFailed: false,
-      registryUpdateFailed: false,
-    };
-  }
-  return applySnapshot(
-    {
-      kind: "stack.render",
-      operationKey: options.operationKey,
-      signal: options.signal,
-      ctx: options.ctx,
-    },
-    options.payload,
-    options.expectedCurrentRevisionId,
-  );
-}
-
 /** Why the agent did not commit `revisionId`, when the operator can act on it; null otherwise or unknown. */
 async function readConfigurationFailure(
   revisionId: string,
@@ -366,21 +325,6 @@ async function readConfigurationFailure(
   } catch {
     return null;
   }
-}
-
-async function applySnapshot(
-  options: ApplyTrustedConfigurationOptions,
-  input: TrustedConfigurationPayload,
-  expectedCurrentRevisionId: string | null,
-): Promise<TrustedConfigurationApplyOutcome> {
-  if (!options.ctx) throw new TrustedConfigurationUpgradeRequired();
-  return (
-    await applyTrustedConfigurationWithEvidence({
-      ...options,
-      expectedCurrentRevisionId,
-      snapshot: trustedConfigurationPayloadSchema.parse(input),
-    })
-  ).outcome;
 }
 
 /** The config schema of every loaded integration, by id. */

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { join } from "node:path";
 import { createApiClient } from "@openmapx/core";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@openmapx/core/api-admin-sdk";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import type { services } from "@openmapx/core/server";
+import { eq } from "drizzle-orm";
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
@@ -26,6 +28,10 @@ const state = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
   loaded: [] as services.LoadedService[],
 }));
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return { ...actual, unlink: vi.fn(actual.unlink) };
+});
 vi.mock("../../db", () => ({
   get db() {
     return state.fixture.db;
@@ -44,7 +50,7 @@ vi.mock("../service-registry", async (actual) => ({
 }));
 
 import type { ConfigurationMigrationDocument } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
-import { integrationConfig, systemSettings, user } from "../../db/schema";
+import { adminJob, integrationConfig, systemSettings, user } from "../../db/schema";
 import { createDurableOpsKey } from "../ops-client";
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
@@ -211,6 +217,79 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(JSON.stringify(portable)).not.toContain("***");
       expect(JSON.stringify(portable)).not.toContain("OPENMAPX_SECRETS_KEY");
+    }, 90000);
+    it("recovers a migration after packet unlink using its original durable completion", async () => {
+      const { jobRunner } = await import("../job-runner"),
+        preview = await jobRunner.runImmediateConfigurationMigrationPreview({
+          actorId: "migration-admin",
+          operationKey: createDurableOpsKey("migration.test.retirement-preview", randomUUID()),
+          document: document("retirement-recovery"),
+        }),
+        input = {
+          actorId: "migration-admin",
+          operationKey: createDurableOpsKey("migration.test.retirement-apply", randomUUID()),
+          previewId: preview.previewId,
+          fingerprint: preview.fingerprint,
+          kind: "migration" as const,
+        },
+        originalUnlink = (
+          await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+        ).unlink;
+      let interrupted = false;
+      vi.mocked(fsPromises.unlink).mockImplementation(async (path) => {
+        if (!interrupted && String(path).includes("/.candidates/")) {
+          const row = (await state.fixture.db.select().from(adminJob)).find(
+            (value) =>
+              (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
+          );
+          const retained = row?.result as Record<string, unknown> | undefined;
+          expect(retained?._configurationCandidate).toMatchObject({
+            phase: "settled",
+            retirement: { version: 1 },
+          });
+          expect((retained?._completion as { result?: unknown } | undefined)?.result).toMatchObject(
+            {
+              migration: { outcome: "applied", operationId: row!.id },
+            },
+          );
+          await originalUnlink(path);
+          interrupted = true;
+          throw Error("API interrupted after migration packet unlink");
+        }
+        return originalUnlink(path);
+      });
+      try {
+        await expect(jobRunner.runImmediateConfigurationMigration(input)).rejects.toThrow();
+        expect(interrupted).toBe(true);
+        const rows = await state.fixture.db.select().from(adminJob),
+          row = rows.find(
+            (value) =>
+              (value.payload as { operationKey?: string })?.operationKey === input.operationKey,
+          )!;
+        expect(row.status).toBe("running");
+        const retained = row.result as Record<string, unknown>;
+        await state.fixture.db
+          .update(adminJob)
+          .set({
+            result: {
+              ...retained,
+              _observationLeaseUntil: new Date(0).toISOString(),
+              observation: {
+                state: "unknown",
+                reason: "recovery_required",
+                nextCheckAt: new Date(0).toISOString(),
+              },
+            },
+          })
+          .where(eq(adminJob.id, row.id));
+        const result = await jobRunner.runImmediateConfigurationMigration(input);
+        expect(result).toEqual(
+          (retained._completion as { result: { migration: unknown } }).result.migration,
+        );
+        expect(await jobRunner.runImmediateConfigurationMigration(input)).toEqual(result);
+      } finally {
+        vi.mocked(fsPromises.unlink).mockImplementation(originalUnlink);
+      }
     }, 90000);
     it("denies secret injection and stale source with zero selected writes", async () => {
       const { jobRunner } = await import("../job-runner");

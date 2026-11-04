@@ -102,6 +102,8 @@ import {
   completedCoordinatorMaintenance,
   completedCoordinatorMaintenanceSchema,
 } from "./configuration-maintenance-step-records";
+import type { MigrationResult } from "./configuration-migration/apply";
+import { migrationCompletionResult } from "./configuration-migration/completion";
 import { assertLegacyIntegrationImportOverlay } from "./configuration-migration/legacy-integration-import-intent";
 import {
   assertStagedMigrationOverlay,
@@ -1079,7 +1081,25 @@ export async function assertSettledConfigurationCandidate(
     receipt.revisionId !== candidate.revisionId ||
     receipt.operationKey !== candidate.operationKey ||
     receipt.sealedOperationKey !== state.record.operationKey ||
-    receipt.phase !== "settled" ||
+    (receipt.phase !== "settled" &&
+      !(
+        state.record.privateIntegrationReload?.stagedMigration &&
+        ["saved", "follow_up_pending"].includes(String(receipt.phase)) &&
+        canonicalJson(result.migration) ===
+          canonicalJson(
+            migrationCompletionResult({
+              operationId: owner.job.jobId,
+              steps: (result._migrationSteps ?? []) as MigrationResult["steps"],
+              pendingServiceIds: z
+                .array(id)
+                .max(256)
+                .optional()
+                .parse(result._migrationPendingServiceIds),
+              application: parseTrustedConfigurationApplyOutcome(result.configuration),
+            }),
+          ) &&
+        (result.migration as MigrationResult | undefined)?.outcome !== "unknown"
+      )) ||
     hasPendingReceiptDelivery(result) ||
     hasUnsettledManagedOperation(result)
   )
@@ -1185,7 +1205,8 @@ export async function retireSettledProspectiveConfiguration(
       if (
         proof?.candidateId !== candidate.candidateId ||
         proof.revisionId !== candidate.revisionId ||
-        proof.phase !== "settled"
+        (proof.phase !== "settled" &&
+          !(state.record.privateIntegrationReload?.stagedMigration && proof.phase === "saved"))
       )
         throw new JobObservationPending("recovery_required");
       const [retired] = await tx
@@ -1218,6 +1239,8 @@ export async function retireSettledProspectiveConfiguration(
         "configuration.apply",
         "integration.config.import",
         "integration.binding.apply",
+        "configuration.migration.apply",
+        "credential.import",
       ].includes(job.jobType ?? ""))
   ) {
     const original = job.checkpointResult;
@@ -1226,6 +1249,7 @@ export async function retireSettledProspectiveConfiguration(
       reload = original.integrationReload as { result?: Record<string, unknown> } | undefined,
       result = {
         configuration: original.configuration,
+        ...(original.migration ? { migration: original.migration } : {}),
         ...(original.serviceCredential ? { serviceCredential: original.serviceCredential } : {}),
         ...(original.coordinatorLifecycle
           ? { coordinatorLifecycle: original.coordinatorLifecycle }
@@ -1294,6 +1318,7 @@ export async function retireSettledProspectiveConfiguration(
       _completion: { operationKey, result },
       _configurationCandidate: {
         ...(original._configurationCandidate as Record<string, unknown>),
+        phase: "settled",
         retirement: { version: 1, integrationIds: [...state.writer.integrationIds] },
       },
     });
@@ -1729,6 +1754,12 @@ export async function retainedConfigurationIntegrationIds(
     const retained = job.checkpointResult?._configurationCandidate as
       | Record<string, unknown>
       | undefined;
+    if (
+      retained?.maintenanceId === null &&
+      ["discarding_unissued", "discarded"].includes(String(retained.phase)) &&
+      retained.operationKey === operationKey
+    )
+      return retirementSchema.parse(retained.unissuedCleanup).integrationIds;
     if (retained?.retirement !== undefined)
       return retirementSchema.parse(retained.retirement).integrationIds;
     if (typeof retained?.sealedOperationKey !== "string") throw Error();
@@ -2485,6 +2516,131 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
   job.checkpointResult = checkpoint;
   return candidate;
 }
+/** Only the exact prepared ordinary packet can start this cleanup. The owned
+ * row records its authenticated disposition before unlink; recovery of that
+ * same disposition may finish a missing prior unlink, never an apply/save. */
+async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string, unknown>> {
+  const writer = currentAdministrativeConfigurationWriter(),
+    { job } = administrativeConfigurationState(writer),
+    publisher = publisherOptions(await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")));
+  let checkpoint: Record<string, unknown> | undefined;
+  await withConfigurationWriteTransaction(writer, async (tx) => {
+    const [row] = await tx
+        .select()
+        .from(schema.adminJob)
+        .where(jobOwnership(job.jobId, job.execution))
+        .for("update"),
+      result = row?.result as Record<string, unknown> | undefined,
+      retained = result?._configurationCandidate as Record<string, unknown> | undefined;
+    if (
+      !row ||
+      !result ||
+      row.type !== job.jobType ||
+      canonicalJson(row.payload ?? {}) !== canonicalJson(job.payload) ||
+      !job.execution ||
+      job.execution.version < 2 ||
+      (writer.actorId !== job.jobId && result._immediateActorId !== writer.actorId) ||
+      retained?.operationKey !== writer.operationKey ||
+      retained.maintenanceId !== null ||
+      retained.prepareOperationKey !== null ||
+      retained.rowVersions !== undefined ||
+      !["prepared", "discarding_unissued", "discarded"].includes(String(retained.phase)) ||
+      result._configurationMaintenance !== undefined ||
+      result._configurationMaintenanceDecision !== undefined ||
+      result._configurationMaintenanceRollback !== undefined ||
+      Object.keys(readProjection(result).operations).length !== 0 ||
+      hasPendingReceiptDelivery(result) ||
+      hasUnsettledManagedOperation(result)
+    )
+      throw new JobObservationPending("recovery_required");
+    if (retained.phase === "prepared") {
+      const { record, snapshot } = await readPreparedTrustedConfigurationCandidate(
+          publisher,
+          String(retained.sealedOperationKey),
+        ),
+        operation = opsOperationSchema.parse(record.operation);
+      if (
+        record.apiJobId !== job.jobId ||
+        record.actorId !== writer.actorId ||
+        record.candidateId !== retained.candidateId ||
+        record.operationKey !== retained.sealedOperationKey ||
+        record.sourceFingerprint !== retained.sourceFingerprint ||
+        snapshot.revisionId !== retained.revisionId ||
+        snapshot.operationFingerprint !== opsOperationFingerprint(operation) ||
+        record.maintenanceId !== null ||
+        record.prepareOperationKey !== null ||
+        canonicalJson(
+          retainedIntegrationIds(record, overlaySchema.parse(record.privateOverlay)),
+        ) !== canonicalJson(writer.integrationIds)
+      )
+        throw new JobObservationPending("recovery_required");
+    } else if (
+      canonicalJson(retirementSchema.parse(retained.unissuedCleanup).integrationIds) !==
+      canonicalJson(writer.integrationIds)
+    )
+      throw new JobObservationPending("recovery_required");
+    checkpoint = {
+      ...result,
+      _configurationCandidate: {
+        ...retained,
+        phase: "discarding_unissued",
+        unissuedCleanup: { version: 1, integrationIds: [...writer.integrationIds] },
+      },
+    };
+    const saved = await tx
+      .update(schema.adminJob)
+      .set({ result: checkpoint })
+      .where(jobOwnership(job.jobId, job.execution))
+      .returning({ id: schema.adminJob.id });
+    if (saved.length !== 1) throw new JobObservationPending("recovery_required");
+  });
+  if (!checkpoint) throw new JobObservationPending("recovery_required");
+  job.checkpointResult = checkpoint;
+  const handle = Object.freeze({}) as RetainedConfigurationRetirement;
+  retirements.set(handle, {
+    writer,
+    publisher,
+    checkpoint: checkpoint._configurationCandidate as Record<string, unknown>,
+    apiJobId: job.jobId,
+    actorId: writer.actorId,
+  });
+  try {
+    await completeRetainedConfigurationRetirement(handle);
+  } finally {
+    retirements.delete(handle);
+  }
+  const configuration: TrustedConfigurationApplyOutcome = {
+    outcome: "not_committed",
+    reason: "conflict",
+    cleanupFailed: false,
+    publisherCleanupFailed: false,
+    registryUpdateFailed: false,
+  };
+  await job.checkpoint({
+    ...job.checkpointResult,
+    _configurationCandidate: {
+      ...(checkpoint._configurationCandidate as Record<string, unknown>),
+      phase: "discarded",
+    },
+    configuration,
+    _configurationOutcomes: {
+      ...(checkpoint._configurationOutcomes as Record<string, unknown>),
+      [writer.operationKey]: configuration,
+    },
+  });
+  if (checkpoint._cancelRequestedAt !== undefined) {
+    await withConfigurationWriteTransaction(writer, async (tx) => {
+      const saved = await tx
+        .update(schema.adminJob)
+        .set({ status: "canceled", finishedAt: new Date(), result: job.checkpointResult })
+        .where(jobOwnership(job.jobId, job.execution))
+        .returning({ id: schema.adminJob.id });
+      if (saved.length !== 1) throw new JobObservationPending("recovery_required");
+    });
+  }
+  return { configuration };
+}
+
 /** The existing ordinary generation producer, with no reload/credential or
  * participant continuation. Its saved row receipts and exact original private
  * packet are authoritative; current desired values never rebuild its seal. */
@@ -2808,6 +2964,11 @@ export async function reconcileUnstagedCoordinatorPull(): Promise<void> {
 export async function resumeRetainedConfigurationCandidate(): Promise<Record<string, unknown>> {
   const current = administrativeConfigurationState(currentAdministrativeConfigurationWriter()).job
     .checkpointResult?._configurationCandidate as Record<string, unknown> | undefined;
+  if (
+    current?.maintenanceId === null &&
+    ["prepared", "discarding_unissued", "discarded"].includes(String(current.phase))
+  )
+    return discardRetainedUnissuedOrdinaryCandidate();
   if (current?.retirement !== undefined) return resumeCompletedConfigurationRetirement();
   let candidate: ValidatedConfigurationCandidate;
   try {
@@ -2921,10 +3082,6 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
       }
       await job.checkpoint({
         ...job.checkpointResult,
-        _configurationCandidate: {
-          ...(job.checkpointResult?._configurationCandidate as Record<string, unknown>),
-          phase: "settled",
-        },
         integrationReload: {
           state: "complete",
           candidateId: candidate.candidateId,
@@ -2933,10 +3090,34 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
         },
       });
     }
+    let migration: MigrationResult | undefined;
+    if (state.record.privateIntegrationReload?.stagedMigration) {
+      migration = migrationCompletionResult({
+        operationId: job.jobId,
+        steps: (job.checkpointResult?._migrationSteps ?? []) as MigrationResult["steps"],
+        pendingServiceIds: z
+          .array(id)
+          .max(256)
+          .optional()
+          .parse(job.checkpointResult?._migrationPendingServiceIds),
+        application: receipt.application,
+      });
+      if (migration.outcome === "unknown") throw new JobObservationPending("recovery_required");
+      await job.checkpoint({ ...job.checkpointResult, migration });
+    } else {
+      await job.checkpoint({
+        ...job.checkpointResult,
+        _configurationCandidate: {
+          ...(job.checkpointResult?._configurationCandidate as Record<string, unknown>),
+          phase: "settled",
+        },
+      });
+    }
     await retireSettledProspectiveConfiguration(candidate);
     const provenance = state.record.privateIntegrationReload?.legacyImport;
     return {
       configuration: receipt.application,
+      ...(migration ? { migration } : {}),
       ...(provenance
         ? {
             integrationImport: {
@@ -4808,7 +4989,11 @@ export async function persistAndApplyProspectiveConfiguration(
       ...owner.job.checkpointResult,
       _configurationCandidate: {
         ...checkpoint,
-        phase: registryUpdateFailed ? "unknown" : "settled",
+        phase: registryUpdateFailed
+          ? "unknown"
+          : state.record.privateIntegrationReload?.stagedMigration
+            ? "saved"
+            : "settled",
       },
       configuration: application,
       _configurationOutcomes: {

@@ -377,7 +377,12 @@ export const OPS_KIND_POLICIES = {
 export function opsKindRequiresControlAuthority(kind: OpsOperationKind): boolean {
   return (
     OPS_KIND_POLICIES[kind].execution === "async" &&
-    !["service.logs.follow", "system.diagnostics", "serviceRepository.inspect"].includes(kind)
+    ![
+      "service.logs.follow",
+      "system.diagnostics",
+      "serviceRepository.inspect",
+      "catalogIntegration.inspect",
+    ].includes(kind)
   );
 }
 const operationKindSchema = z.enum(OPS_OPERATION_KINDS);

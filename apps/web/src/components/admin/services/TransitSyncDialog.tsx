@@ -14,6 +14,7 @@ import { createApiClient } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 
 type Preview = Extract<
   Awaited<ReturnType<typeof sdk.postApiDataManagerTransitSyncPreflight>>,
@@ -33,7 +34,7 @@ function TransitSyncView({ apiUrl, onClose, onQueued }: Props) {
   }, []);
   const [manualCountries, setManualCountries] = useState("");
   const client = useMemo(
-    () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
+    () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
     [apiUrl],
   );
   const profile = useQuery({

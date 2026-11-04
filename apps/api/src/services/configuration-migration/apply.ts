@@ -18,9 +18,10 @@ import {
   retireSettledProspectiveConfiguration,
 } from "../prospective-configuration";
 import { completeTrustedConfigurationApply } from "../trusted-config-outcome";
+import { migrationCompletionResult } from "./completion";
 import type { CredentialPlan } from "./credential-preview";
 import { type MigrationProof, prepareStagedMigrationParticipant } from "./participant";
-import { type MigrationPlan, migrationPlanPreview, previewConfigurationMigration } from "./preview";
+import { type MigrationPlan, previewConfigurationMigration } from "./preview";
 import { MigrationConflict, readMigrationStage } from "./staging";
 
 export type MigrationResult = {
@@ -119,6 +120,7 @@ export async function runConfigurationMigration(ctx: JobContext, input: Migratio
           await ctx.checkpoint({
             ...ctx.checkpointResult,
             _migrationSteps: steps,
+            _migrationPendingServiceIds: plan.pendingServiceIds ?? [],
             _migrationStage: {
               id: stage.previewId,
               kind: stage.kind,
@@ -151,10 +153,6 @@ export async function runConfigurationMigration(ctx: JobContext, input: Migratio
               const reloaded = await reloadProspectiveIntegrations(candidate);
               await ctx.checkpoint({
                 ...ctx.checkpointResult,
-                _configurationCandidate: {
-                  ...(ctx.checkpointResult?._configurationCandidate as Record<string, unknown>),
-                  phase: "settled",
-                },
                 integrationReload: {
                   state: "complete",
                   candidateId: candidate.candidateId,
@@ -162,13 +160,15 @@ export async function runConfigurationMigration(ctx: JobContext, input: Migratio
                   result: reloaded,
                 },
               });
-              for (const step of steps)
-                if (
-                  step.scope !== "pending-auth" &&
-                  !(step.scope.startsWith("service-") && plan.pendingServiceIds?.includes(step.id))
-                )
-                  step.status = "applied";
-              outcome = steps.some((s) => s.status === "pending") ? "partial" : "applied";
+              const completed = migrationCompletionResult({
+                operationId: ctx.jobId,
+                steps,
+                pendingServiceIds: plan.pendingServiceIds ?? [],
+                application: receipt.application,
+              });
+              steps.splice(0, steps.length, ...completed.steps);
+              outcome = completed.outcome;
+              await ctx.checkpoint({ ...ctx.checkpointResult, migration: completed });
               failurePhase = "retirement";
               await retireSettledProspectiveConfiguration(candidate);
             } catch (error) {

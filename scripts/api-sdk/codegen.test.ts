@@ -347,8 +347,8 @@ describe("SDK artifact gate", () => {
     expect(config).toHaveProperty("privacyAdmin");
     expect(config.privacyAdmin.output).toMatchObject({
       target: "/tmp/sdk-config/generated/admin/privacy-admin.generated.ts",
-      schemas: "/tmp/sdk-config/generated/admin/privacy-models",
     });
+    expect(config.privacyAdmin.output.schemas).toBeUndefined();
     expect(typeof config.privacyAdmin.output.client).toBe("function");
     expect(selectTaggedDocument(adopted, "privacy-admin").paths).toHaveProperty(
       "/api/admin/privacy/requests",

@@ -2618,51 +2618,17 @@ export function commitRefusedDataConfigurationSettlementSlotUnused(
             .parse(read(slot.descriptors[0]!)),
           hash = z.string().regex(/^[a-f0-9]{64}$/),
           epoch = z.number().int().nonnegative().safe(),
-          ordinal = z.number().int().min(0).max(255).nullable(),
           intent = verifyControl(
             state.installation.publicKey,
             "openmapx-configuration-unused-capacity-intent-v2",
             compound.unused.intent,
-            z.strictObject({
-              version: z.literal(2),
-              installationId: z.uuid(),
-              origin: controlOriginSchema,
-              role: z.literal("data-manager"),
-              ownerPrepareDigest: hash,
-              prepareExecutionDigest: hash.nullable(),
-              settlementId: hash,
-              projectionDigest: hash,
-              capacityReceiptDigest: hash.nullable(),
-              sourceProofDigest: hash,
-              executionOrdinal: ordinal,
-              intentOrdinal: ordinal,
-              recordDescriptorsDigest: hash,
-              allocatedDescriptorDigests: z.array(hash).max(12),
-              createdAt: epoch,
-            }),
+            configurationUnusedCapacityIntentSchema.extend({ role: z.literal("data-manager") }),
           ),
           refusal = verifyControl(
             state.installation.publicKey,
             "openmapx-dm-configuration-no-guard-refusal-v2",
             compound.refusal,
-            z
-              .object({
-                version: z.literal(2),
-                installationId: z.uuid(),
-                origin: controlOriginSchema,
-                settlementId: hash,
-                projectionDigest: hash,
-                reservationDigest: hash,
-                prepareExecution: executionRefSchema,
-                prepareAdmissionDigest: hash,
-                refusalReceipt: z.unknown(),
-                effectReceiptDigest: hash,
-                effectSettlementDigest: hash,
-                canonicalTerminalDigest: hash,
-                canonicalTerminalAt: epoch,
-                capacityReceiptDigest: hash.nullable(),
-              })
-              .passthrough(),
+            configurationDmNoGuardRefusalSchema,
           );
         if (
           intent.installationId !== state.installation.installationId ||
@@ -2722,7 +2688,11 @@ export function commitRefusedDataConfigurationSettlementSlotUnused(
             effect = verifyControl(
               state.installation.publicKey,
               "openmapx-control-settlement-v1",
-              json(effects, `${refusal.prepareExecution.operationKey}.json`, 65536),
+              json(
+                effects,
+                `${refusal.prepareExecution.operationKey}.json`,
+                CONTROL_RETENTION_LIMITS.privateRecordBytes,
+              ),
               z
                 .object({
                   identity: executionRefSchema,
@@ -4221,7 +4191,11 @@ function localProof(f: Family, p: Progress): boolean {
       const terminal = verifyControl(
         fact.verifier,
         "openmapx-control-settlement-v1",
-        json(effects, `${fact.execution.operationKey}.json`, 65536),
+        json(
+          effects,
+          `${fact.execution.operationKey}.json`,
+          CONTROL_RETENTION_LIMITS.privateRecordBytes,
+        ),
         z
           .object({
             identity: z.unknown(),

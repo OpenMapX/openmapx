@@ -263,7 +263,6 @@ export function installCatalogApprovalRuntime(
         own.installation,
         "effects",
         `${activation.promotion.execution.operationKey}.json`,
-        65536,
       ),
       catalogPromotionEffectSchema,
     );

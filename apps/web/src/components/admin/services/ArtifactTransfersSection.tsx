@@ -42,6 +42,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
     fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null),
     [busy, setBusy] = useState(false),
+    [canCancel, setCanCancel] = useState(false),
     [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ receivedBytes: number; state: string } | null>(null),
     [message, setMessage] = useState<string | null>(null);
@@ -99,6 +100,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
       const capturedFile = file,
         controller = new AbortController();
       byteRequest.current = { owner, controller };
+      setCanCancel(true);
       try {
         const stage = sdk.unwrapAdminResponse(
           await sdk.createAdminArtifactTransfer(
@@ -124,6 +126,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         }
       } finally {
         if (byteRequest.current?.controller === controller) byteRequest.current = null;
+        if (owner.active) setCanCancel(false);
       }
     });
   const download = (stage: TransferStage) =>
@@ -149,10 +152,15 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           "This connection requires a browser with a file-save sink. Reconnect through the same-origin admin panel or use the CLI.",
         );
       if (!owner.active) return;
-      const sink = await createArtifactFileSink(),
-        controller = new AbortController();
+      const controller = new AbortController();
       byteRequest.current = { owner, controller };
+      setCanCancel(true);
       try {
+        const sink = await createArtifactFileSink();
+        if (!owner.active || controller.signal.aborted) {
+          await sink.abort(controller.signal.reason);
+          return;
+        }
         await downloadArtifactToSink({
           client,
           stageId: stage.stageId,
@@ -162,6 +170,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
         if (owner.active) setMessage("Download saved.");
       } finally {
         if (byteRequest.current?.controller === controller) byteRequest.current = null;
+        if (owner.active) setCanCancel(false);
       }
     });
   const target = capabilities.data?.targets.find((item) => item.serviceId === selected);
@@ -224,10 +233,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             Upload bundle
           </Button>
           {busy && (
-            <Button
-              onClick={() => byteRequest.current?.controller.abort()}
-              disabled={!byteRequest.current}
-            >
+            <Button onClick={() => byteRequest.current?.controller.abort()} disabled={!canCancel}>
               Cancel byte transfer
             </Button>
           )}
@@ -317,40 +323,44 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
               Expires {new Date(stage.expiresAt).toLocaleString()} · cleanup {stage.cleanup}
             </Typography>
             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-              {stage.direction === "upload" && ["uploaded", "ready"].includes(stage.state) && (
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const accepted = sdk.unwrapAdminResponse(
-                        await sdk.validateAdminArtifactTransfer(
-                          stage.stageId,
-                          { "idempotency-key": key() },
-                          { client },
-                        ),
-                      );
-                      queued(accepted.jobId, "validation");
-                    })
-                  }
-                >
-                  Validate
-                </Button>
-              )}
-              {stage.direction === "upload" && stage.state === "ready" && (
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const value = sdk.unwrapAdminResponse(
-                        await sdk.previewAdminArtifactImport(stage.stageId, { client }),
-                      );
-                      if (owner.active) setPreview(value);
-                    })
-                  }
-                >
-                  Preview import
-                </Button>
-              )}
+              {stage.purpose === "prepared-artifact" &&
+                stage.direction === "upload" &&
+                ["uploaded", "ready"].includes(stage.state) && (
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const accepted = sdk.unwrapAdminResponse(
+                          await sdk.validateAdminArtifactTransfer(
+                            stage.stageId,
+                            { "idempotency-key": key() },
+                            { client },
+                          ),
+                        );
+                        queued(accepted.jobId, "validation");
+                      })
+                    }
+                  >
+                    Validate
+                  </Button>
+                )}
+              {stage.purpose === "prepared-artifact" &&
+                stage.direction === "upload" &&
+                stage.state === "ready" && (
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const value = sdk.unwrapAdminResponse(
+                          await sdk.previewAdminArtifactImport(stage.stageId, { client }),
+                        );
+                        if (owner.active) setPreview(value);
+                      })
+                    }
+                  >
+                    Preview import
+                  </Button>
+                )}
               {stage.direction === "download" && stage.state === "ready" && (
                 <Button
                   disabled={busy}

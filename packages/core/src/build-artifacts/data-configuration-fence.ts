@@ -263,7 +263,6 @@ export function createDataConfigurationFenceStore(
         local,
         "effects",
         `${preparedGrant.execution.operationKey}.json`,
-        65536,
       ),
       canonical = verifyControl(
         installation.publicKey,
@@ -1607,7 +1606,7 @@ export function createDataConfigurationFenceStore(
       const effect = verifyControl(
         local.installation.publicKey,
         "openmapx-control-settlement-v1",
-        readPrivateRecord(local, "effects", `${state.execution.operationKey}.json`, 65536),
+        readPrivateRecord(local, "effects", `${state.execution.operationKey}.json`),
         z.strictObject({
           identity: executionRefSchema,
           outcome: z.literal("committed"),
@@ -1818,12 +1817,7 @@ export function createDataConfigurationFenceStore(
       bindBorrowedControlExecution(lease, authority);
       let priorEffect: unknown;
       try {
-        priorEffect = readPrivateRecord(
-          local,
-          "effects",
-          `${grant.execution.operationKey}.json`,
-          65536,
-        );
+        priorEffect = readPrivateRecord(local, "effects", `${grant.execution.operationKey}.json`);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -2502,7 +2496,7 @@ export function verifyRetainedDataFenceTerminal(
   const effect = verifyControl(
     installation.publicKey,
     "openmapx-control-settlement-v1",
-    readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+    readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
     z
       .object({
         identity: executionRefSchema,
@@ -2585,7 +2579,7 @@ export function verifyRetainedDataFenceRefusal(
     effect = verifyControl(
       installation.publicKey,
       "openmapx-control-settlement-v1",
-      readPrivateRecord(local, "effects", `${execution.operationKey}.json`, 65536),
+      readPrivateRecord(local, "effects", `${execution.operationKey}.json`),
       z
         .object({
           identity: executionRefSchema,

@@ -1005,17 +1005,6 @@ function assertImagePullTargetLeaseCompatibility(
     data.close();
   }
 }
-function _releaseActiveSlot(s: State) {
-  if (!s.slots) throw Error("Missing retained admission slots");
-  const index = s.control.directory("admission-index-v1"),
-    active = index.directory("active");
-  try {
-    removeSlot(active, s.slots.active);
-  } finally {
-    active.close();
-    index.close();
-  }
-}
 export async function acquireArtifactTargetLease(options: {
   dataRoot: string;
   serviceIds: readonly string[];
@@ -4343,7 +4332,6 @@ export function assertConfigurationMaintenanceRootClosure(
     state.installation,
     "effects",
     `${state.execution.operationKey}.json`,
-    65536,
   ) as {
     payload: {
       outcome: string;

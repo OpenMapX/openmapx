@@ -64,17 +64,46 @@ function preview(countries: string[], ok: boolean) {
     },
   };
 }
-function view() {
+function view(apiUrl = "https://api.example.test") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const queued = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <TransitSyncDialog apiUrl="https://api.example.test" onClose={() => {}} onQueued={queued} />
+      <TransitSyncDialog apiUrl={apiUrl} onClose={() => {}} onQueued={queued} />
     </QueryClientProvider>,
   );
   return queued;
 }
+it("uses the document origin for profile, preflight and sync when no API origin is configured", async () => {
+  const urls: string[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.endsWith("/profile")) return Response.json({ policy });
+    if (url.endsWith("/preflight"))
+      return Response.json(
+        preview(JSON.parse(String((init as RequestInit | undefined)?.body)).countries, true),
+      );
+    return Response.json(
+      { ok: true, jobId: "same-origin-job", status: "started" },
+      { status: 202 },
+    );
+  });
+  const queued = view("");
+  await screen.findByLabelText("DE");
+  fireEvent.click(screen.getByRole("button", { name: "Preview sync" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Queue sync" })).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Queue sync" }));
+  await waitFor(() => expect(queued).toHaveBeenCalledWith("same-origin-job"));
+  expect(urls).toEqual([
+    `${window.location.origin}/api/data-manager/transit/profile`,
+    `${window.location.origin}/api/data-manager/transit/sync/preflight`,
+    `${window.location.origin}/api/data-manager/transit/sync`,
+  ]);
+});
 it("shows server blockers and never queues a blocked preview", async () => {
   const submissions: unknown[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
