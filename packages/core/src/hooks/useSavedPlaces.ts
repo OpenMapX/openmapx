@@ -181,7 +181,11 @@ export function useDeleteLabel() {
 }
 
 /** Account-keyed bounded projection for the installed shell's last-sync car cache. */
-export function useCarSavedPlaces() {
+/**
+ * Saved places for the Android Auto destinations list. `enabled` must only be true
+ * inside the installed app that asked for them: ordinary web sessions never fetch.
+ */
+export function useCarSavedPlaces(enabled = false) {
   const { data: session } = useSession();
   const account = session?.user?.id ?? null;
   const queryClient = useQueryClient();
@@ -189,15 +193,16 @@ export function useCarSavedPlaces() {
     () =>
       queryClient.getQueryCache().subscribe((event) => {
         if (event.type !== "updated" || event.action.type !== "invalidate") return;
+        if (!enabled) return;
         if (["savedLists", "savedListPlaces"].includes(String(event.query.queryKey[0]))) {
           void queryClient.invalidateQueries({ queryKey: ["carSavedPlaces", account] });
         }
       }),
-    [queryClient, account],
+    [queryClient, account, enabled],
   );
   return useQuery({
     queryKey: ["carSavedPlaces", account],
-    enabled: account !== null,
+    enabled: enabled && account !== null,
     queryFn: async ({ signal }) => {
       const lists = sdk.unwrapSavedResponse(await sdk.listSavedLists({ signal })).lists;
       const places: Array<{ id: string; name: string; lng: number; lat: number }> = [];

@@ -15,7 +15,7 @@ import { CarCommands } from "./CarCommands";
 import { CarSessionAdapter } from "./CarSessionAdapter";
 import { nativeCar } from "./nativeCar";
 import { publishCarState } from "./publishCarState";
-import { prepareAutoDrive, startTestDrive, stopTestDrive } from "./testDrive";
+import { prepareAutoDrive, simulatedSessionId, startTestDrive, stopTestDrive } from "./testDrive";
 
 let runtime: Promise<ForegroundNavigation> | null = null;
 export function carCoordinator() {
@@ -86,7 +86,7 @@ async function runCarRuntime(): Promise<void> {
     config.apiOrigin,
     ensureOwner,
     async (geometry) => prepareAutoDrive(geometry, await ensureOwner(), repository),
-    stopTestDrive,
+    () => stopTestDrive(repository),
   );
   let detach: () => void = () => {};
   const finished = new Promise<void>((resolve) => {
@@ -95,6 +95,12 @@ async function runCarRuntime(): Promise<void> {
   const subscription = native.addListener("onCommand", (event) => {
     void (async () => {
       if (event.command === "detach") {
+        // A detach from an ended session can arrive after the next session connected;
+        // the runtime then keeps serving the new one.
+        if (await native.isConnected()) {
+          await native.acknowledge(event.command);
+          return;
+        }
         connected = false;
         commands.disconnect();
         await native.acknowledge(event.command);
@@ -108,7 +114,7 @@ async function runCarRuntime(): Promise<void> {
       const adapter = new CarSessionAdapter(await ensureOwner(), repository);
       if (event.command === "stop") {
         commands.cancel();
-        await stopTestDrive();
+        await stopTestDrive(repository);
         await adapter.stop();
       }
       if (__DEV__ && event.command === "simulate")
@@ -130,7 +136,12 @@ async function runCarRuntime(): Promise<void> {
   } finally {
     connected = false;
     commands.disconnect();
-    await stopTestDrive();
+    // A simulated trip has no real position to continue on once the car is gone.
+    const simulated = simulatedSessionId();
+    const owner = foregroundCoordinator() ?? (await runtime)?.coordinator;
+    if (owner && simulated && (await repository.loadActive(Date.now()))?.sessionId === simulated)
+      await new CarSessionAdapter(owner, repository).stop().catch(() => {});
+    await stopTestDrive(repository);
     subscription.remove();
     unregister();
     (await runtime)?.dispose();

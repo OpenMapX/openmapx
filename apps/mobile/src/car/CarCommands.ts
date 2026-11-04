@@ -120,6 +120,10 @@ export class CarCommands {
       }, 350);
     }
     if (command.action === "plan") {
+      // Choosing a place ends the search: a late result must not replace the plan's result.
+      this.searchGeneration++;
+      this.search?.abort();
+      if (this.timer) clearTimeout(this.timer);
       // A simulated drive needs no location service, so the phone's state does not gate it.
       this.eligible =
         this.autoDrive ||

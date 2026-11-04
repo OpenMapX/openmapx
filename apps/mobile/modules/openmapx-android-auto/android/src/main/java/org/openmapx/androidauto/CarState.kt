@@ -24,6 +24,15 @@ object CarState {
   private val pending = linkedSetOf<String>()
   val observers = mutableSetOf<() -> Unit>()
 
+  /**
+   * A new car session starts with an empty mailbox: commands an earlier session left
+   * unacknowledged (its detach or stop) must not reach this one.
+   */
+  fun beginSession() {
+    pending.clear()
+    result = JSONObject()
+  }
+
   fun command(command: String) {
     if (pending.add(command)) listener?.invoke(command)
   }

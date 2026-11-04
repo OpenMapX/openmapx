@@ -55,7 +55,8 @@ export async function describeShell(options: ShellBridgeOptions): Promise<ShellD
     shellVersion: nativeApplicationVersion ?? "0.0.0",
     shellBuild: nativeBuildVersion ?? "0",
     platform: Platform.OS === "android" ? "android" : "ios",
-    capabilities: { ...capabilities, carDestinations: true },
+    // Only Android Auto reads them; iOS has no car app and must not store saved places.
+    capabilities: { ...capabilities, carDestinations: Platform.OS === "android" },
     permission: (await options.permission?.()) ?? "not-determined",
     locationDriver: "expo",
     activeSession: (await options.activeSession?.()) ?? null,

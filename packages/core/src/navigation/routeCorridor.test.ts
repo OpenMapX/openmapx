@@ -35,6 +35,45 @@ describe("isNearRoute", () => {
     expect(isNearRoute(line, route)).toBe(true);
   });
 
+  it("keeps a long line crossing the route between distant vertices", () => {
+    const crossing = {
+      type: "LineString" as const,
+      coordinates: [
+        [6.05, north(-20_000)],
+        [6.05, north(20_000)],
+      ],
+    };
+    expect(isNearRoute(crossing, route)).toBe(true);
+  });
+
+  it("keeps an area the route runs through even with every edge far away", () => {
+    const area = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [5.9, north(-20_000)],
+          [6.2, north(-20_000)],
+          [6.2, north(20_000)],
+          [5.9, north(20_000)],
+          [5.9, north(-20_000)],
+        ],
+      ],
+    };
+    expect(isNearRoute(area, route)).toBe(true);
+    const elsewhere = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [7.0, 51.0],
+          [7.1, 51.0],
+          [7.1, 51.1],
+          [7.0, 51.0],
+        ],
+      ],
+    };
+    expect(isNearRoute(elsewhere, route)).toBe(false);
+  });
+
   it("treats missing or empty geometry as not near", () => {
     expect(isNearRoute(null, route)).toBe(false);
     expect(isNearRoute({ type: "MultiPoint", coordinates: [] }, route)).toBe(false);

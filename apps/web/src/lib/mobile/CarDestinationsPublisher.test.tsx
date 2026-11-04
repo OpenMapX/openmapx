@@ -5,13 +5,21 @@ const state = vi.hoisted(() => ({
   account: "a" as string | null,
   places: [{ id: "p", name: "Place", lng: 13, lat: 52 }],
   send: vi.fn(),
+  carEnabled: vi.fn(),
+  runtime: {
+    state: "native-compatible",
+    handshake: { capabilities: { carDestinations: true } } as unknown,
+  },
 }));
 vi.mock("@openmapx/core", () => ({
   useSession: () => ({
     data: state.account ? { user: { id: state.account } } : null,
     isPending: false,
   }),
-  useCarSavedPlaces: () => ({ data: state.places }),
+  useCarSavedPlaces: (enabled: boolean) => {
+    state.carEnabled(enabled);
+    return { data: enabled ? state.places : undefined };
+  },
   useDirectionsStore: () => ({ avoidHighways: true, avoidTolls: false, avoidFerries: false }),
   useSettingsStore: () => ({
     units: "imperial",
@@ -26,11 +34,7 @@ vi.mock("@/stores/recentSearchStore", () => ({
   scopeRecentDestinations: () => [],
 }));
 vi.mock("./MobileRuntimeProvider", () => ({
-  useMobileRuntimeContext: () => ({
-    state: "native-compatible",
-    handshake: { capabilities: { carDestinations: true } },
-    client: { send: state.send },
-  }),
+  useMobileRuntimeContext: () => ({ ...state.runtime, client: { send: state.send } }),
 }));
 
 import { CarDestinationsPublisher } from "./CarDestinationsPublisher";
@@ -38,6 +42,11 @@ import { CarDestinationsPublisher } from "./CarDestinationsPublisher";
 beforeEach(() => {
   state.account = "a";
   state.send.mockClear();
+  state.carEnabled.mockClear();
+  state.runtime = {
+    state: "native-compatible",
+    handshake: { capabilities: { carDestinations: true } },
+  };
 });
 it("publishes only bounded coordinates and settings, and explicitly clears on sign-out", () => {
   const view = render(<CarDestinationsPublisher />);
@@ -56,4 +65,12 @@ it("publishes only bounded coordinates and settings, and explicitly clears on si
     "destinations.update",
     expect.objectContaining({ account: null, saved: [], recent: [] }),
   );
+});
+
+it("never fetches saved places for car destinations in an ordinary browser", () => {
+  state.runtime = { state: "browser", handshake: null };
+  render(<CarDestinationsPublisher />);
+  expect(state.carEnabled).toHaveBeenCalledWith(false);
+  expect(state.carEnabled).not.toHaveBeenCalledWith(true);
+  expect(state.send).not.toHaveBeenCalled();
 });

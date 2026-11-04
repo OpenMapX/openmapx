@@ -256,3 +256,38 @@ describe("Android Auto test-drive mode", () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 });
+
+test("a search still in flight does not overwrite the plan's result", async () => {
+  jest.useFakeTimers();
+  let answer: ((value: unknown) => void) | undefined;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = jest.fn(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  ) as unknown as typeof fetch;
+  try {
+    const { car, results } = native();
+    mockPlan.mockResolvedValue([
+      {
+        coordinates: [
+          [6, 50],
+          [7, 51],
+        ],
+        durationSeconds: 1,
+        distanceMeters: 1,
+      },
+    ]);
+    const c = commands(car);
+    await c.handle(`car:${JSON.stringify({ action: "search", query: "berlin" })}`);
+    await jest.advanceTimersByTimeAsync(400);
+    await c.handle(`car:${JSON.stringify({ action: "plan", destination })}`);
+    answer?.({ ok: true, status: 200, headers: new Headers(), json: async () => [] });
+    await jest.advanceTimersByTimeAsync(100);
+    expect(results.at(-1)).toMatchObject({ routes: [expect.anything()] });
+  } finally {
+    globalThis.fetch = realFetch;
+    jest.useRealTimers();
+  }
+});

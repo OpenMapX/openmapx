@@ -1,14 +1,36 @@
 import { z } from "zod";
-import { setDebugLocationDriver } from "../location/createLocationDriver";
+import { createLocationDriver, setDebugLocationDriver } from "../location/createLocationDriver";
+import { initialProfileFor, profileFor } from "../location/profiles";
 import { foregroundCoordinator } from "../navigation/foregroundCoordinator";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import type { SessionRepository } from "../storage/SessionRepository";
 import { SimulatedLocationDriver } from "./SimulatedLocationDriver";
 
 let replay: SimulatedLocationDriver | null = null;
-export async function stopTestDrive(): Promise<void> {
-  if (replay) await setDebugLocationDriver(null, { hostAutoDrive: true });
+/** The trip the replay has been driving, once it delivered a fix to one. */
+let drivenSessionId: string | null = null;
+
+/** The trip a simulated drive is moving, if any: it has no real position to fall back on. */
+export function simulatedSessionId(): string | null {
+  return replay ? drivenSessionId : null;
+}
+
+/**
+ * Removes the replay. Installing it stopped the real location service, so a trip the
+ * replay was not driving (one that stayed active because a simulated start failed)
+ * gets the real service back.
+ */
+export async function stopTestDrive(repository?: SessionRepository): Promise<void> {
+  if (!replay) return;
+  const driven = drivenSessionId;
   replay = null;
+  drivenSessionId = null;
+  await setDebugLocationDriver(null, { hostAutoDrive: true });
+  const session = repository ? await repository.loadActive(Date.now()) : null;
+  if (session && session.status === "active" && session.sessionId !== driven)
+    await createLocationDriver()
+      .start(profileFor(initialProfileFor(session)))
+      .catch(() => {});
 }
 /**
  * Replays a route through the shared coordinator's location batch port.
@@ -21,13 +43,14 @@ async function installReplay(
   repository: SessionRepository,
   options: { hostAutoDrive: boolean; autoStart: boolean },
 ): Promise<void> {
-  await stopTestDrive();
+  await stopTestDrive(repository);
   const next = new SimulatedLocationDriver(geometry, async (fix) => {
     const active = await repository.loadActive(Date.now());
     if (active?.kind !== "ground" || active.status !== "active") {
-      await stopTestDrive();
+      await stopTestDrive(repository);
       return;
     }
+    drivenSessionId = active.sessionId;
     await (foregroundCoordinator() ?? coordinator).handleLocationBatch({
       locations: [
         {

@@ -17,7 +17,9 @@ export function CarDestinationsPublisher() {
   const delivered = useRef<{ client: unknown; json: string } | null>(null);
   const runtime = useMobileRuntimeContext();
   const { data: session, isPending } = useSession();
-  const { data: labels } = useCarSavedPlaces();
+  const { data: labels } = useCarSavedPlaces(
+    runtime.state === "native-compatible" && !!runtime.handshake?.capabilities.carDestinations,
+  );
   const recent = useRecentSearchStore((s) => s.destinations);
   const locale = useLocale();
   const settings = useSettingsStore();

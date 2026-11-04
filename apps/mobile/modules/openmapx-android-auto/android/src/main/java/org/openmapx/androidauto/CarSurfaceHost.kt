@@ -153,6 +153,8 @@ class CarSurfaceHost(private val context: CarContext, private val following: (Bo
         if (data.optInt("v") != 1) return@addWebMessageListener
         when (data.optString("type")) {
           "car-ready" -> {
+            // A page that loaded again resets the budget for later, unrelated failures.
+            retries = 0
             reply = proxy
             send(
               JSONObject()

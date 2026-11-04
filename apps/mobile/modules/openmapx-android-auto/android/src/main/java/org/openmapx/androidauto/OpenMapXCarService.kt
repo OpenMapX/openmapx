@@ -69,6 +69,7 @@ class OpenMapXCarService : CarAppService() {
             android.content.pm.PackageManager.GET_META_DATA,
           )
         CarState.origin = info.metaData.getString("org.openmapx.androidauto.WEB_ORIGIN")
+        CarState.beginSession()
         CarState.connected = true
         carContext.startService(Intent(carContext, CarRuntimeService::class.java))
         return NavigationScreen(carContext).also {

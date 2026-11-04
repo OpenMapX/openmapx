@@ -159,11 +159,16 @@ export function MapCanvas({
     let attemptFailed = false;
     let activeMap: maplibregl.Map | undefined;
     let cleanupConnectivity: (() => void) | undefined;
+    let cleanupContextLost: (() => void) | undefined;
     const isActive = () => !destroyed && attempt === attemptRef.current;
     const dispose = () => {
       styleRequestRef.current++;
       cleanupConnectivity?.();
       cleanupConnectivity = undefined;
+      // Before remove(): MapLibre loses the WebGL context itself while tearing down,
+      // which must not be reported to the car host as a renderer failure.
+      cleanupContextLost?.();
+      cleanupContextLost = undefined;
       if (activeMap) {
         if (scaleRef.current?.map === activeMap) {
           activeMap.removeControl(scaleRef.current.control);
@@ -266,7 +271,10 @@ export function MapCanvas({
 
       mapRef.current = map;
       if (carSurface) {
-        map.getCanvas().addEventListener("webglcontextlost", () => onSurfaceError?.("webgl-lost"));
+        const canvas = map.getCanvas();
+        const onContextLost = () => onSurfaceError?.("webgl-lost");
+        canvas.addEventListener("webglcontextlost", onContextLost);
+        cleanupContextLost = () => canvas.removeEventListener("webglcontextlost", onContextLost);
       }
 
       // Every later style load — a dark/light swap, a basemap switch — bumps the

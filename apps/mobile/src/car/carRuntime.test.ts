@@ -14,7 +14,12 @@ jest.mock("./CarCommands", () => ({
   CarCommands: jest.fn(() => ({ handle: async () => false, disconnect: jest.fn() })),
 }));
 jest.mock("./publishCarState", () => ({ publishCarState: async () => {} }));
-jest.mock("./testDrive", () => ({ stopTestDrive: async () => {}, startTestDrive: async () => {} }));
+jest.mock("./testDrive", () => ({
+  stopTestDrive: async () => {},
+  startTestDrive: async () => {},
+  prepareAutoDrive: async () => {},
+  simulatedSessionId: () => null,
+}));
 jest.mock("./nativeCar", () => ({ nativeCar: jest.fn() }));
 
 import { createForegroundNavigation } from "../navigation/createForegroundNavigation";
@@ -27,11 +32,13 @@ it("uses the phone composition without constructing another chain and resolves o
   const unregister = registerForegroundCoordinator({} as NavigationCoordinator);
   let listener: ((event: { command: string }) => void) | undefined;
   const remove = jest.fn();
+  let connected = true;
   const native = {
     configure: jest.fn(),
     runtimeReady: jest.fn(),
-    isConnected: async () => true,
+    isConnected: async () => connected,
     attach: async () => {
+      connected = false;
       listener?.({ command: "detach" });
     },
     detach: jest.fn(),
@@ -61,10 +68,11 @@ it("composes once without an Activity and disposes the car chain when the phone 
   });
   const dispose = jest.fn(() => wasDisposed());
   (createForegroundNavigation as jest.Mock).mockResolvedValue({ coordinator: {}, dispose });
+  let connected = true;
   const native = {
     configure: jest.fn(),
     runtimeReady: jest.fn(),
-    isConnected: async () => true,
+    isConnected: async () => connected,
     attach: async () => ready(),
     detach: jest.fn(),
     acknowledge: jest.fn(),
@@ -81,8 +89,39 @@ it("composes once without an Activity and disposes the car chain when the phone 
   const unregister = registerForegroundCoordinator({} as NavigationCoordinator);
   await disposed;
   expect(dispose).toHaveBeenCalledTimes(1);
+  connected = false;
   listener?.({ command: "detach" });
   await Promise.all([task, duplicate]);
   expect(dispose).toHaveBeenCalledTimes(1);
+  unregister();
+});
+it("ignores a detach from an ended session once the next car session is connected", async () => {
+  const unregister = registerForegroundCoordinator({} as NavigationCoordinator);
+  let listener: ((event: { command: string }) => void) | undefined;
+  let connected = true;
+  const native = {
+    configure: jest.fn(),
+    runtimeReady: jest.fn(),
+    isConnected: async () => connected,
+    attach: jest.fn(async () => {}),
+    detach: jest.fn(),
+    acknowledge: jest.fn(),
+    addListener: (_name: string, fn: typeof listener) => {
+      listener = fn;
+      return { remove: jest.fn() };
+    },
+  };
+  (nativeCar as jest.Mock).mockReturnValue(native);
+  const task = startCarRuntime();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // Stale: the car is connected again, so the runtime keeps running.
+  listener?.({ command: "detach" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(native.acknowledge).toHaveBeenCalledWith("detach");
+  expect(native.detach).not.toHaveBeenCalled();
+  connected = false;
+  listener?.({ command: "detach" });
+  await task;
+  expect(native.detach).toHaveBeenCalledTimes(1);
   unregister();
 });

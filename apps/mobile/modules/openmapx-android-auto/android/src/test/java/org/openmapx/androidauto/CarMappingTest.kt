@@ -379,4 +379,24 @@ class CarMappingTest {
       CarState.projection = null
     }
   }
+
+  @Test
+  fun aNewCarSessionDropsCommandsTheLastOneLeftPending() {
+    val delivered = mutableListOf<String>()
+    CarState.listener = null
+    CarState.command("detach")
+    CarState.command("stop")
+    CarState.beginSession()
+    CarState.listener = { delivered += it }
+    try {
+      CarState.drain()
+      assertTrue(delivered.isEmpty())
+      // The new session's own attach is not swallowed as a duplicate.
+      CarState.command("attach")
+      assertEquals(listOf("attach"), delivered)
+    } finally {
+      CarState.listener = null
+      CarState.acknowledge("attach")
+    }
+  }
 }

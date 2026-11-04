@@ -41,8 +41,6 @@ function Surface({ host, harness }: { host?: CarHost; harness: boolean }) {
   const [position, setPosition] = useState<CarPosition | null>(null);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
-  const previewRef = useRef(preview);
-  previewRef.current = preview;
   const [locale, setLocale] = useState<"en" | "de">("en");
   const [units, setUnits] = useState<"metric" | "imperial">("metric");
   const messages = useMessages();
@@ -78,10 +76,8 @@ function Surface({ host, harness }: { host?: CarHost; harness: boolean }) {
           setPosition(message);
           break;
         case "car-snapshot":
-          // A trip that starts after a preview drives in follow mode, not the preview's overview.
-          if (previewRef.current?.routes.length)
-            useNavigationStore.getState().setCameraMode("follow");
-          setPreview(null);
+          // A running trip keeps any preview: replacing it previews routes while driving.
+          // Starting a trip sends an empty preview, which returns the camera to follow.
           snapshot.current(message.message);
           break;
       }

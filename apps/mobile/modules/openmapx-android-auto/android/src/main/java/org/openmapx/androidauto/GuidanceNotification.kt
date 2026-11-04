@@ -2,9 +2,11 @@ package org.openmapx.androidauto
 
 import android.app.Notification
 import android.app.NotificationManager
-import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import androidx.car.app.notification.CarAppExtender
+import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationCompat
 import expo.modules.openmapxnavigationsurfaces.NavigationSurfaceHooks
 import java.text.NumberFormat
@@ -62,16 +64,15 @@ object GuidanceNotification {
           if (changed && !CarState.visible) NotificationManager.IMPORTANCE_HIGH
           else NotificationManager.IMPORTANCE_LOW
         )
-    context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
-      extender.setContentIntent(
-        PendingIntent.getActivity(
-          context,
-          406,
-          it,
-          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+    // Tapping the turn in the car opens OpenMapX on the car screen, not the phone app.
+    extender.setContentIntent(
+      CarPendingIntent.getCarApp(
+        context,
+        406,
+        Intent(Intent.ACTION_VIEW).setComponent(ComponentName(context, OpenMapXCarService::class.java)),
+        0,
       )
-    }
+    )
     // CarAppExtender writes its data into the notification extras; the card itself is a
     // framework Notification.Builder, so the extras are carried over.
     builder.addExtras(NotificationCompat.Builder(context, "car").extend(extender.build()).extras)
