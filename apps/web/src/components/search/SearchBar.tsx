@@ -93,7 +93,12 @@ import {
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
-import { SEARCH_BAR_CLEARANCE, SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET } from "@/lib/layout";
+import {
+  SEARCH_BAR_CLEARANCE,
+  SEARCH_BAR_HEIGHT,
+  SEARCH_BAR_INSET,
+  SEARCH_BAR_TOP,
+} from "@/lib/layout";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useBackDismiss } from "@/lib/useBackDismiss";
@@ -1029,7 +1034,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         onBlurCapture={handleBlur}
         sx={{
           position: "absolute",
-          top: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-top))`,
+          top: SEARCH_BAR_TOP,
           left: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-left))`,
           right: {
             xs: `calc(${SEARCH_BAR_INSET}px + var(--omx-safe-right))`,

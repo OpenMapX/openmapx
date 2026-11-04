@@ -6,7 +6,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { PANEL, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useContext, useEffect, useState } from "react";
-import { NAV_LANDSCAPE_PANEL_WIDTH, PANEL_WIDTH } from "@/lib/layout";
+import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH, PANEL_WIDTH } from "@/lib/layout";
 import { useMapObstruction } from "@/lib/mapObstructions";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 import { PLACE_DETENTS } from "./sheet/detents";
@@ -82,7 +82,7 @@ function DesktopDetail({ children }: { children: ReactNode }) {
   // While navigating the card sits beside the guidance column instead; the
   // nav camera keeps its own framing, so it claims no map obstruction.
   const left = navigating ? NAV_LANDSCAPE_PANEL_WIDTH + 2 * CARD_GAP : PANEL_WIDTH + CARD_GAP;
-  const top = navigating ? "calc(var(--omx-safe-top) + 16px)" : "66px";
+  const top = navigating ? NAV_CHROME_TOP : "66px";
   useMapObstruction(
     "detail",
     "left",

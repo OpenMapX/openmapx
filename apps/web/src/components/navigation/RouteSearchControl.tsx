@@ -36,7 +36,7 @@ import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { NAV_CHROME_INSET } from "@/lib/layout";
+import { NAV_CHROME_INSET, NAV_CHROME_TOP } from "@/lib/layout";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 import { routeSearchQueryFor, useRouteSearch } from "@/lib/navigation/useRouteSearch";
@@ -287,7 +287,7 @@ export function RouteSearchControl() {
             position: "fixed",
             left: "50%",
             transform: "translateX(-50%)",
-            top: `calc(var(--omx-safe-top) + ${NAV_CHROME_INSET}px)`,
+            top: NAV_CHROME_TOP,
             width: { xs: `calc(100% - ${2 * NAV_CHROME_INSET}px)`, sm: 480 },
             borderRadius: 3,
             zIndex: 1350,
