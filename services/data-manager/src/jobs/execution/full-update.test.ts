@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,6 +50,12 @@ it.skipIf(
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");
     const bundle = mkdtempSync(join(tmpdir(), "omx-full-update-bundle-"));
+    // The bundled GTFS decoder's createRequire resolves from this entry.
+    symlinkSync(
+      resolve("packages/mobility-formats/node_modules"),
+      join(bundle, "node_modules"),
+      "dir",
+    );
     await build({
       entryPoints: [resolve("packages/cli/__tests__/fixtures/single-data-cli-process.ts")],
       outfile: join(bundle, "cli.mjs"),
@@ -58,7 +65,7 @@ it.skipIf(
       target: "node24",
       tsconfig: resolve("packages/cli/tsconfig.json"),
       banner: {
-        js: `import {createRequire} from 'node:module';const require=createRequire(${JSON.stringify(resolve("packages/cli/package.json"))});`,
+        js: `import {createRequire as fixtureCreateRequire} from 'node:module';const require=fixtureCreateRequire(${JSON.stringify(resolve("packages/cli/package.json"))});`,
       },
     });
     const host = await ownedServiceHost({
@@ -71,6 +78,8 @@ it.skipIf(
     const keys = [
         "OPENMAPX_ROOT_DIR",
         "DATA_MANAGER_URL",
+        "OPENMAPX_TEST_FIXED_DM_TARGET",
+        "NODE_OPTIONS",
         "DATA_MANAGER_AUTH_TOKEN",
         "POSTGRES_PASSWORD",
         "BETTER_AUTH_SECRET",
@@ -208,7 +217,10 @@ it.skipIf(
     const address = app.server.address();
     if (!address || typeof address === "string") throw Error("DM address missing");
     process.env.DATA_MANAGER_URL = `http://127.0.0.1:${address.port}`;
-    const agentJournal = await openOpsJobJournal(join(data, "ops-agent/jobs-v1.json")),
+    process.env.OPENMAPX_TEST_FIXED_DM_TARGET = process.env.DATA_MANAGER_URL;
+    process.env.NODE_OPTIONS =
+      `${process.env.NODE_OPTIONS ?? ""} --import=${new URL("../../../../../apps/ops-agent/src/test-fixtures/fixed-cli-data-manager-preload.mjs", import.meta.url).href}`.trim();
+    const agentJournal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal),
       token = "a".repeat(43),
       tokenFile = join(bundle, "token");
     writeFileSync(tokenFile, token, { mode: 0o600 });

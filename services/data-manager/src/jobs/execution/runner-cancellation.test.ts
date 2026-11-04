@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,6 +27,13 @@ import { createPostgresDataExecutionStore } from "./store";
 let recoveryBundleRoot: string, dmBundle: string, agentBundle: string;
 beforeAll(async () => {
   recoveryBundleRoot = mkdtempSync(join(tmpdir(), "omx-dm-crash-bundle-"));
+  // Bundled createRequire(import.meta.url) still loads runtime dependencies
+  // relative to this temporary entry, rather than the banner require below.
+  symlinkSync(
+    resolve("services/data-manager/node_modules"),
+    join(recoveryBundleRoot, "node_modules"),
+    "dir",
+  );
   dmBundle = join(recoveryBundleRoot, "dm.mjs");
   agentBundle = join(recoveryBundleRoot, "agent.mjs");
   for (const [entry, outfile, manifest] of [
