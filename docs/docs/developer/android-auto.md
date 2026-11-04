@@ -46,8 +46,18 @@ obstructions in the safe map area. OpenMapX follows that split:
   beside the speed-limit sign, next to the map controls, and is hidden while a
   route is chosen. Road shields scale with their sign image (1.6×) rather than
   with the 24 px car label size, because shield images are fixed per reference
-  length. Turn arrows and lane images are drawn as bitmaps: the host renders no
-  maneuver icon of its own.
+  length.
+- Turn arrows and lanes match the phone exactly. `@openmapx/core` decides the glyph
+  (`maneuverIconName`) and the lane cells (`presentGuidanceLanes`: which lanes
+  light up, which arrow is recommended, unmarked-lane fallback, shared stems) for
+  both the phone's banner and the car. The projection sends glyph names; the car
+  draws the same Material icon paths (vector drawables copied from
+  `@mui/icons-material`, MIT; Material Icons, Apache-2.0) in the banner's style:
+  usable lanes on a light tile, recommended arrow white, others at 60 % or 35 %.
+  Like the phone, lanes appear only within `guidanceApproachMeters` of the turn.
+  The car uses the step's sign as lane evidence but not the phone's per-lane OSM
+  destinations, which the web fetches separately. The host renders no maneuver
+  icon of its own, so these bitmaps also feed the cluster and the notification.
 - Without a trip, a native position feed (`car-position`, fused provider, 1 s)
   places a location dot and follows the car at street zoom; it stops while a
   trip runs, because trip snapshots carry their own position. Fixes go to the

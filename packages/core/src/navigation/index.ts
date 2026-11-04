@@ -62,6 +62,17 @@ export type {
   GroundPackageError,
 } from "./groundPackage";
 export { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
+export {
+  type GuidanceIconName,
+  type GuidanceLaneArrow,
+  type GuidanceLaneCell,
+  laneArrowStemShift,
+  laneIndicationIconName,
+  maneuverIconName,
+  normalizeLaneToken,
+  presentGuidanceLanes,
+  unmarkedLaneIconName,
+} from "./guidanceIcons";
 export { formatIncidentAnnouncement, incidentTypeLabelKey } from "./incidentAnnounce";
 export {
   type IncidentAlert,

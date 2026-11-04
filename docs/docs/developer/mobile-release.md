@@ -64,7 +64,9 @@ submission time. Preserve evidence for host stop, notifications/foreground-servi
 coexistence, vehicle audio, lock/reconnect and the documented car-only cold-start
 boundary. The current start gate accepts a focused phone Activity or an already
 running location service with background permission; it is not general headless
-first-time onboarding.
+first-time onboarding. The Android Auto module bundles Material Icons glyph paths
+(Apache-2.0, via MIT `@mui/icons-material`) for turn arrows and lanes; the release
+licence notices must list them.
 
 ## Licensing: the audit, and what it found
 

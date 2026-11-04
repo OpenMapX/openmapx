@@ -1,3 +1,11 @@
+import type { ManeuverLane, ManeuverSign } from "@openmapx/core";
+import {
+  type GuidanceIconName,
+  guidanceApproachMeters,
+  maneuverIconName,
+  presentGuidanceLanes,
+  upcomingManeuverIndex,
+} from "@openmapx/core/navigation";
 import { z } from "zod";
 import type { GroundFullSnapshot } from "../navigation/snapshots/groundSnapshot";
 
@@ -23,12 +31,22 @@ export const carTripProjectionSchema = z.object({
     "roundabout-cw",
     "arrive",
   ]),
+  /** The phone's arrow glyph for this maneuver (shared `maneuverIconName`). */
+  maneuverIcon: z.string().max(32),
+  /** Lane cells exactly as the phone draws them, once the maneuver is near. */
   lanes: z
     .array(
       z.object({
-        indications: z.array(z.string().max(32)).max(8),
         valid: z.boolean(),
-        active: z.string().max(32).optional(),
+        arrows: z
+          .array(
+            z.object({
+              icon: z.string().max(32),
+              active: z.boolean(),
+              stemShift: z.number().finite().min(-1).max(1),
+            }),
+          )
+          .max(8),
       }),
     )
     .max(12)
@@ -61,6 +79,7 @@ const stepSchema = z.object({
     .max(12)
     .optional(),
   roundaboutExitCount: z.number().optional(),
+  sign: z.unknown().optional(),
   maneuver: z
     .object({ type: z.string(), modifier: z.string().optional(), exit: z.number().optional() })
     .optional(),
@@ -70,6 +89,7 @@ const progressSchema = z.object({
   distanceToNextManeuver: nonnegative,
   distanceRemaining: nonnegative,
   durationRemaining: nonnegative,
+  speedMps: z.number().finite().optional(),
 });
 
 /** The maneuver is at the START of the next step, not the step being driven. */
@@ -99,7 +119,7 @@ export function buildCarTripProjection(
         distanceRemaining: route.data.distance ?? 0,
         durationRemaining: route.data.duration ?? 0,
       };
-  const step = route.data.steps[Math.min(p.currentStepIndex + 1, route.data.steps.length - 1)];
+  const step = route.data.steps[upcomingManeuverIndex(p.currentStepIndex, route.data.steps.length)];
   const m = step?.maneuver;
   let maneuver: CarTripProjection["maneuver"] = "straight";
   if (m?.type === "arrive") maneuver = "arrive";
@@ -143,7 +163,20 @@ export function buildCarTripProjection(
       step?.instruction || (snapshot.locale === "de" ? "Weiterfahren" : "Continue")
     ).slice(0, 1024),
     maneuver,
-    lanes: step?.lanes,
+    maneuverIcon: maneuverIconName(m) satisfies GuidanceIconName,
+    // Like the phone's banner: lanes appear once the maneuver is close enough to act on.
+    lanes:
+      step?.lanes &&
+      m &&
+      p.distanceToNextManeuver <=
+        guidanceApproachMeters("driving", "speedMps" in p ? (p.speedMps ?? 0) : 0)
+        ? presentGuidanceLanes(step.lanes as ManeuverLane[], m, {
+            sign: step.sign as ManeuverSign | undefined,
+          }).map((cell) => ({
+            valid: cell.valid,
+            arrows: cell.arrows.map(({ icon, active, stemShift }) => ({ icon, active, stemShift })),
+          }))
+        : undefined,
     ...(maneuver.startsWith("roundabout")
       ? { exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))) }
       : {}),

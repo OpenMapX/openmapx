@@ -175,7 +175,9 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
       navigating = false
     }
     if (p != null)
-      manager.updateTrip(CarTripMapper.trip(p, carContext.carString(R.string.car_destination)))
+      manager.updateTrip(
+        CarTripMapper.trip(carContext, p, carContext.carString(R.string.car_destination))
+      )
     GuidanceNotification.update(carContext, p)
   }
 
@@ -217,7 +219,7 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
         else
           RoutingInfo.Builder()
             .setCurrentStep(
-              CarTripMapper.step(p),
+              CarTripMapper.step(carContext, p),
               CarTripMapper.distance(p.optDouble("distanceToManeuver")),
             )
             .build()

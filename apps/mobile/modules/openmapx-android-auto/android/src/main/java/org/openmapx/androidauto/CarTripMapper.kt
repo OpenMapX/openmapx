@@ -1,9 +1,6 @@
 package org.openmapx.androidauto
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import android.content.Context
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.DateTimeWithZone
 import androidx.car.app.model.Distance
@@ -43,7 +40,7 @@ object CarTripMapper {
 
   private fun roundTo(value: Double, step: Double) = Math.round(value / step) * step
 
-  fun step(p: JSONObject): Step =
+  fun step(context: Context, p: JSONObject): Step =
     Step.Builder(p.getString("instruction"))
       .setManeuver(
         Maneuver.Builder(
@@ -68,7 +65,9 @@ object CarTripMapper {
             if (p.optString("maneuver").startsWith("roundabout"))
               setRoundaboutExitNumber(p.optInt("exit", 1).coerceIn(1, 99))
             setIcon(
-              CarIcon.Builder(IconCompat.createWithBitmap(ManeuverIcons.bitmap(p.optString("maneuver"))))
+              CarIcon.Builder(
+                  IconCompat.createWithBitmap(ManeuverIcons.bitmap(context, p.optString("maneuverIcon")))
+                )
                 .build()
             )
           }
@@ -76,21 +75,26 @@ object CarTripMapper {
       )
       .apply {
         val lanes = p.optJSONArray("lanes")
-        // Lanes without any marking say nothing; an empty image would only leave a blank band.
-        if (lanes != null && lanes.length() > 0 && LaneImage.hasMarkings(lanes)) {
+        // Present only once the maneuver is near, exactly as the phone shows them.
+        if (lanes != null && lanes.length() > 0 && LaneImage.hasArrows(lanes)) {
           for (i in 0 until lanes.length()) {
             val lane = lanes.getJSONObject(i)
-            val indications = lane.getJSONArray("indications")
+            val arrows = lane.optJSONArray("arrows") ?: continue
             val builder = Lane.Builder()
-            for (j in 0 until indications.length()) {
-              val indication = indications.getString(j)
+            for (j in 0 until arrows.length()) {
+              val arrow = arrows.getJSONObject(j)
               builder.addDirection(
-                LaneDirection.create(LaneImage.shape(indication), LaneImage.recommended(lane, indication))
+                LaneDirection.create(
+                  LaneImage.shape(arrow.optString("icon")),
+                  lane.optBoolean("valid") && arrow.optBoolean("active"),
+                )
               )
             }
-            if (indications.length() > 0) addLane(builder.build())
+            if (arrows.length() > 0) addLane(builder.build())
           }
-          setLanesImage(CarIcon.Builder(IconCompat.createWithBitmap(LaneImage.bitmap(lanes))).build())
+          setLanesImage(
+            CarIcon.Builder(IconCompat.createWithBitmap(LaneImage.bitmap(context, lanes))).build()
+          )
         }
       }
       .build()
@@ -103,7 +107,7 @@ object CarTripMapper {
       .setRemainingTimeSeconds(p.optLong("remainingSeconds").coerceAtLeast(0))
       .build()
 
-  fun trip(p: JSONObject, destinationName: String): Trip {
+  fun trip(context: Context, p: JSONObject, destinationName: String): Trip {
     if (p.optBoolean("rerouting")) return Trip.Builder().setLoading(true).build()
     val stepEstimate =
       TravelEstimate.Builder(
@@ -116,7 +120,7 @@ object CarTripMapper {
         .setRemainingTimeSeconds(p.optLong("secondsToManeuver").coerceAtLeast(0))
         .build()
     return Trip.Builder()
-      .addStep(step(p), stepEstimate)
+      .addStep(step(context, p), stepEstimate)
       .addDestination(Destination.Builder().setName(destinationName).build(), estimate(p))
       .build()
   }

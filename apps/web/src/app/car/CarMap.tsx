@@ -176,7 +176,7 @@ export function CarMap({
             "circle-stroke-width": 3,
           },
           slot: "route-markers" as const,
-          order: 11,
+          order: 30,
         },
         {
           id: "car-preview-label-letters",
@@ -191,7 +191,7 @@ export function CarMap({
           },
           paint: { "text-color": "#ffffff" },
           slot: "route-markers" as const,
-          order: 12,
+          order: 31,
         },
       ],
     }),

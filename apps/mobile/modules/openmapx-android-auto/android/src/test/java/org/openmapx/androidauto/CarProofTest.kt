@@ -34,7 +34,7 @@ class CarProofTest {
       assertTrue(screen.onGetTemplate() is NavigationTemplate)
       p.put("rerouting", true)
       assertTrue(screen.onGetTemplate() is NavigationTemplate)
-      assertTrue(CarTripMapper.trip(p, "Destination").isLoading)
+      assertTrue(CarTripMapper.trip(org.robolectric.RuntimeEnvironment.getApplication(), p, "Destination").isLoading)
     } finally {
       CarState.projection = null
     }
@@ -65,6 +65,6 @@ class CarProofTest {
         .put("remainingDistance", 200)
         .put("remainingSeconds", 20)
         .put("etaMs", 1700000000000)
-    assertNotNull(CarTripMapper.trip(p, "Destination"))
+    assertNotNull(CarTripMapper.trip(org.robolectric.RuntimeEnvironment.getApplication(), p, "Destination"))
   }
 }

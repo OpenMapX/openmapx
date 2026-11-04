@@ -42,7 +42,7 @@ class CarMappingTest {
       )
     for ((name, type) in cases) {
       val step =
-        CarTripMapper.step(
+        CarTripMapper.step(RuntimeEnvironment.getApplication(), 
           JSONObject().put("instruction", "Continue").put("maneuver", name).put("exit", 3)
         )
       assertEquals(name, type, step.maneuver!!.type)
@@ -81,36 +81,38 @@ class CarMappingTest {
   }
 
   @Test
-  fun maneuverIconsAndLaneImagesDrawInsideTheirBitmaps() {
-    for (name in
+  fun phoneGlyphsDrawAndUnknownNamesAreRejected() {
+    val context = RuntimeEnvironment.getApplication()
+    for (name in ManeuverIcons.names) assertEquals(128, ManeuverIcons.bitmap(context, name).width)
+    val p =
+      JSONObject()
+        .put("sessionId", "s")
+        .put("instruction", "Continue")
+        .put("locale", "de")
+        .put("units", "metric")
+        .put("maneuverIcon", "TurnLeft")
+    for (key in
       listOf(
-        "straight",
-        "left",
-        "right",
-        "slight-left",
-        "slight-right",
-        "sharp-left",
-        "sharp-right",
-        "keep-left",
-        "keep-right",
-        "uturn-left",
-        "uturn-right",
-        "roundabout",
-        "roundabout-cw",
-        "arrive",
-      )) {
-      val bitmap = ManeuverIcons.bitmap(name)
-      assertEquals(128, bitmap.width)
-    }
-    val unmarked =
-      org.json
-        .JSONArray()
-        .put(JSONObject().put("valid", true).put("indications", org.json.JSONArray().put("none")))
-    assertTrue(!LaneImage.hasMarkings(unmarked))
-    // Unmarked lanes add no lane image, so the routing card has no blank band.
+        "revision",
+        "distanceToManeuver",
+        "secondsToManeuver",
+        "maneuverEtaMs",
+        "remainingDistance",
+        "remainingSeconds",
+        "etaMs",
+      )) p.put(key, 1)
+    assertNotNull(CarProjection.parse(p))
+    assertNull(CarProjection.parse(JSONObject(p.toString()).put("maneuverIcon", "Rocket")))
+  }
+
+  @Test
+  fun unmarkedLaneStripsAddNoImage() {
+    val blank =
+      org.json.JSONArray().put(JSONObject().put("valid", true).put("arrows", org.json.JSONArray()))
+    assertTrue(!LaneImage.hasArrows(blank))
     val step =
-      CarTripMapper.step(
-        JSONObject().put("instruction", "Keep left").put("maneuver", "keep-left").put("lanes", unmarked)
+      CarTripMapper.step(RuntimeEnvironment.getApplication(), 
+        JSONObject().put("instruction", "Keep left").put("maneuverIcon", "TurnSlightLeft").put("lanes", blank)
       )
     assertNull(step.lanesImage)
   }
@@ -232,6 +234,7 @@ class CarMappingTest {
         .put("instruction", "Continue")
         .put("locale", "de")
         .put("units", "metric")
+        .put("maneuverIcon", "Straight")
     for (key in
       listOf(
         "revision",
@@ -248,9 +251,7 @@ class CarMappingTest {
     assertNull(CarProjection.parse(JSONObject(p.toString()).put("instruction", "")))
     val lanes = org.json.JSONArray()
     repeat(13) {
-      lanes.put(
-        JSONObject().put("indications", org.json.JSONArray().put("straight")).put("valid", true)
-      )
+      lanes.put(JSONObject().put("arrows", org.json.JSONArray()).put("valid", true))
     }
     assertNull(CarProjection.parse(JSONObject(p.toString()).put("lanes", lanes)))
   }
@@ -264,6 +265,7 @@ class CarMappingTest {
         .put("remainingDistance", 1000)
         .put("remainingSeconds", 60)
         .put("etaMs", 1700000000000)
+        .put("maneuverIcon", "TurnRight")
         .put(
           "lanes",
           org.json
@@ -271,13 +273,22 @@ class CarMappingTest {
             .put(
               JSONObject()
                 .put("valid", true)
-                .put("active", "right")
-                .put("indications", org.json.JSONArray().put("straight").put("right"))
+                .put(
+                  "arrows",
+                  org.json
+                    .JSONArray()
+                    .put(JSONObject().put("icon", "Straight").put("active", false).put("stemShift", 0))
+                    .put(
+                      JSONObject().put("icon", "TurnRight").put("active", true).put("stemShift", 1.0 / 6)
+                    ),
+                )
             ),
         )
-    val step = CarTripMapper.step(p)
+    val step = CarTripMapper.step(RuntimeEnvironment.getApplication(), p)
     assertEquals(1, step.lanes.size)
     assertEquals(2, step.lanes[0].directions.size)
+    // The recommended arrow is the active one, as on the phone.
+    assertTrue(step.lanes[0].directions.single { it.isRecommended }.shape == androidx.car.app.navigation.model.LaneDirection.SHAPE_NORMAL_RIGHT)
     assertNotNull(step.lanesImage)
     assertEquals(60L, CarTripMapper.estimate(p).remainingTimeSeconds)
   }

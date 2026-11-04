@@ -22,7 +22,8 @@ object GuidanceNotification {
   private var lastId = ID
   private var lastManeuver: String? = null
 
-  fun maneuverIcon(maneuver: String): android.graphics.Bitmap = ManeuverIcons.bitmap(maneuver)
+  fun maneuverIcon(context: Context, icon: String): android.graphics.Bitmap =
+    ManeuverIcons.bitmap(context, icon)
 
   fun distanceText(p: JSONObject): String {
     val distance =
@@ -109,7 +110,7 @@ object GuidanceNotification {
       }
     val extender =
       CarAppExtender.Builder()
-        .setLargeIcon(maneuverIcon(p.optString("maneuver")))
+        .setLargeIcon(maneuverIcon(context, p.optString("maneuverIcon")))
         .setContentTitle(p.optString("instruction"))
         .setContentText(distanceText(p))
         // The routing card already shows a new maneuver while OpenMapX is on the car screen;
