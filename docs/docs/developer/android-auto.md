@@ -138,7 +138,7 @@ car projection. The car page uses the phone snapshot reducer/store path; a gap
 requests a full snapshot through `car-error: snapshot-gap` and native `attach`.
 Rendering snapshots never replay speech cues.
 
-The native mailbox retains commands until JS acknowledgment. The template has no
+The native mailbox retains commands until JS acknowledgment and starts empty for each new car session, so an earlier session's detach or stop never reaches the next one; JS also ignores a detach that arrives once a new session is connected. The template has no
 Stop action of its own: Android Auto draws an end-trip button on the arrival card
 and reports it, like a host takeover, through
 `NavigationManagerCallback.onStopNavigation`, which sends `stop` through
@@ -212,7 +212,7 @@ The turn-by-turn notification Android Auto requires (NF-3) is the trip's existin
 phone navigation card from the navigation-surfaces module, not a second
 notification. While a car is connected, the car module decorates that card through
 `NavigationSurfaceHooks` with a `CarAppExtender`: turn instruction, distance and
-the phone's turn glyph for the car rail. A new turn re-posts the card and alerts
+the phone's turn glyph for the car rail; tapping it in the car opens OpenMapX on the car screen (`CarPendingIntent.getCarApp`). A new turn re-posts the card and alerts
 only while another app is on the car screen; while OpenMapX is shown, its routing
 card already presents it. Distances otherwise follow the card's own update
 cadence. Disconnecting re-posts the card without the extension. A card the user
