@@ -3,6 +3,7 @@ import {
   type GuidanceIconName,
   guidanceApproachMeters,
   maneuverIconName,
+  measurementDistanceParts,
   presentGuidanceLanes,
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
@@ -10,6 +11,12 @@ import { z } from "zod";
 import type { GroundFullSnapshot } from "../navigation/snapshots/groundSnapshot";
 
 const nonnegative = z.number().finite().nonnegative();
+/** The phone banner's rounding (`measurementDistanceParts`), so the car shows the same. */
+const displayDistance = z.object({
+  value: nonnegative,
+  unit: z.enum(["m", "km", "ft", "mi"]),
+  decimals: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+});
 export const carTripProjectionSchema = z.object({
   sessionId: z.string().min(1),
   revision: z.number().int().nonnegative(),
@@ -53,6 +60,8 @@ export const carTripProjectionSchema = z.object({
     .optional(),
   exit: z.number().int().min(1).max(99).optional(),
   distanceToManeuver: nonnegative,
+  maneuverDistance: displayDistance,
+  remainingDistanceDisplay: displayDistance,
   secondsToManeuver: nonnegative,
   maneuverEtaMs: nonnegative,
   remainingDistance: nonnegative,
@@ -181,6 +190,8 @@ export function buildCarTripProjection(
       ? { exit: Math.min(99, Math.max(1, Math.trunc(step?.roundaboutExitCount ?? 1))) }
       : {}),
     distanceToManeuver: p.distanceToNextManeuver,
+    maneuverDistance: measurementDistanceParts(p.distanceToNextManeuver, snapshot.units),
+    remainingDistanceDisplay: measurementDistanceParts(p.distanceRemaining, snapshot.units),
     secondsToManeuver,
     maneuverEtaMs: now + secondsToManeuver * 1000,
     remainingDistance: p.distanceRemaining,

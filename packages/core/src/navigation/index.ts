@@ -6,6 +6,12 @@
 // `pnpm mobile:bundle:check` repeats the check against the real Metro graph.
 
 export type { Route } from "../types/routing";
+// Guidance distance rounding, here so the mobile shell needn't load the core root.
+export {
+  formatMeasurementDistance,
+  type MeasurementDistanceParts,
+  measurementDistanceParts,
+} from "../utils/formatting";
 export {
   type ActiveAlert,
   brakingDistanceMeters,

@@ -28,28 +28,18 @@ object GuidanceNotification {
     NavigationSurfaceHooks.refresh(context)
   }
 
+  /** The rail's distance text, from the shared rounding, in the phone's number format. */
   fun distanceText(p: JSONObject): String {
-    val distance =
-      CarTripMapper.distance(p.optDouble("distanceToManeuver"), p.optString("units", CarState.units))
-    // The host formats the routing card with the system locale; the rail matches it.
+    val parts = p.optJSONObject("maneuverDistance") ?: return ""
+    val decimals = parts.optInt("decimals", 0)
+    // The host formats its routing card with the system locale; the rail matches it.
     val number =
       NumberFormat.getNumberInstance(Locale.getDefault()).apply {
-        val decimal =
-          distance.displayUnit == androidx.car.app.model.Distance.UNIT_KILOMETERS_P1 ||
-            distance.displayUnit == androidx.car.app.model.Distance.UNIT_MILES_P1
-        minimumFractionDigits = if (decimal) 1 else 0
-        maximumFractionDigits = if (decimal) 1 else 0
+        minimumFractionDigits = decimals
+        maximumFractionDigits = decimals
+        isGroupingUsed = false
       }
-    val unit =
-      when (distance.displayUnit) {
-        androidx.car.app.model.Distance.UNIT_KILOMETERS,
-        androidx.car.app.model.Distance.UNIT_KILOMETERS_P1 -> "km"
-        androidx.car.app.model.Distance.UNIT_MILES,
-        androidx.car.app.model.Distance.UNIT_MILES_P1 -> "mi"
-        androidx.car.app.model.Distance.UNIT_FEET -> "ft"
-        else -> "m"
-      }
-    return "${number.format(distance.displayDistance)} $unit"
+    return "${number.format(parts.optDouble("value", 0.0))} ${parts.optString("unit", "m")}"
   }
 
   internal fun decorate(context: Context, card: JSONObject, builder: Notification.Builder) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMeasurementDistance } from "./formatting";
+import { formatMeasurementDistance, measurementDistanceParts } from "./formatting";
 
 describe("formatMeasurementDistance (metric km)", () => {
   it("shows one decimal for a single-digit kilometre value", () => {
@@ -22,5 +22,24 @@ describe("formatMeasurementDistance (metric km)", () => {
 
   it("still shows metres below a kilometre", () => {
     expect(formatMeasurementDistance(850)).toBe("850 m");
+  });
+});
+
+describe("measurementDistanceParts", () => {
+  it("gives renderers the banner's rounding as number and unit", () => {
+    expect(measurementDistanceParts(614.8)).toEqual({ value: 615, unit: "m", decimals: 0 });
+    expect(measurementDistanceParts(3312)).toEqual({ value: 3.3, unit: "km", decimals: 1 });
+    expect(measurementDistanceParts(23400)).toEqual({ value: 23, unit: "km", decimals: 0 });
+    expect(measurementDistanceParts(300, "imperial")).toEqual({
+      value: 984,
+      unit: "ft",
+      decimals: 0,
+    });
+    expect(measurementDistanceParts(2000, "imperial")).toEqual({
+      value: 1.24,
+      unit: "mi",
+      decimals: 2,
+    });
+    expect(measurementDistanceParts(Number.NaN)).toEqual({ value: 0, unit: "m", decimals: 0 });
   });
 });

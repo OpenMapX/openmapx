@@ -103,7 +103,18 @@ test("sends each route's time and distance with the preview", async () => {
       selected: 0,
     },
   ]);
-  expect(results).toEqual([{ routes: [{ durationSeconds: 23820, distanceMeters: 637000 }] }]);
+  expect(results).toEqual([
+    {
+      routes: [
+        {
+          durationSeconds: 23820,
+          distanceMeters: 637000,
+          // The phone banner's rounding, shown by the car as is.
+          distance: { value: 637, unit: "km", decimals: 0 },
+        },
+      ],
+    },
+  ]);
 });
 
 test("reports why planning failed instead of always asking for phone setup", async () => {

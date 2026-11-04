@@ -24,6 +24,13 @@ object CarProjection {
       if (!number.toDouble().isFinite() || number.toDouble() < 0) return null
     }
     if (value.optString("maneuverIcon") !in ManeuverIcons.names) return null
+    for (key in listOf("maneuverDistance", "remainingDistanceDisplay")) {
+      val parts = value.optJSONObject(key) ?: return null
+      if (parts.optString("unit") !in setOf("m", "km", "ft", "mi")) return null
+      val shown = parts.opt("value") as? Number ?: return null
+      if (!shown.toDouble().isFinite() || shown.toDouble() < 0) return null
+      if (parts.optInt("decimals", -1) !in 0..2) return null
+    }
     val lanes = value.optJSONArray("lanes")
     if (lanes != null) {
       if (lanes.length() > 12) return null

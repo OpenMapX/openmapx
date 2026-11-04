@@ -17,28 +17,22 @@ import org.json.JSONObject
 
 /** Pure mapping from committed trip projections to Android for Cars metadata. */
 object CarTripMapper {
-  /** Rounded like spoken guidance: no "614.8 m", whole tens and fifties, one km decimal below 10. */
-  fun distance(meters: Double, units: String = CarState.units): Distance {
-    val safe = if (meters.isFinite()) meters.coerceAtLeast(0.0) else 0.0
-    return if (units == "imperial") {
-      val feet = safe / 0.3048
-      val miles = safe / 1609.344
-      when {
-        feet < 528 -> Distance.create(roundTo(feet, if (feet < 100) 10.0 else 50.0), Distance.UNIT_FEET)
-        miles < 10 -> Distance.create(Math.round(miles * 10) / 10.0, Distance.UNIT_MILES_P1)
-        else -> Distance.create(Math.round(miles).toDouble(), Distance.UNIT_MILES)
-      }
-    } else {
-      when {
-        safe < 950 -> Distance.create(roundTo(safe, if (safe < 100) 10.0 else 50.0), Distance.UNIT_METERS)
-        safe < 9950 ->
-          Distance.create(Math.round(safe / 100) / 10.0, Distance.UNIT_KILOMETERS_P1)
-        else -> Distance.create(Math.round(safe / 1000).toDouble(), Distance.UNIT_KILOMETERS)
-      }
+  /**
+   * A distance already rounded by the shared `measurementDistanceParts` (the phone
+   * banner's rule), as the host's Distance. The host shows at most one decimal for
+   * miles, so the phone's two-decimal miles are shown with one.
+   */
+  fun distance(parts: JSONObject?): Distance {
+    val value = parts?.optDouble("value", 0.0)?.takeIf { it.isFinite() && it >= 0 } ?: 0.0
+    val decimals = parts?.optInt("decimals", 0) ?: 0
+    return when (parts?.optString("unit")) {
+      "km" ->
+        Distance.create(value, if (decimals > 0) Distance.UNIT_KILOMETERS_P1 else Distance.UNIT_KILOMETERS)
+      "ft" -> Distance.create(value, Distance.UNIT_FEET)
+      "mi" -> Distance.create(value, Distance.UNIT_MILES_P1)
+      else -> Distance.create(value, Distance.UNIT_METERS)
     }
   }
-
-  private fun roundTo(value: Double, step: Double) = Math.round(value / step) * step
 
   fun step(context: Context, p: JSONObject): Step =
     Step.Builder(p.getString("instruction"))
@@ -101,7 +95,7 @@ object CarTripMapper {
 
   fun estimate(p: JSONObject): TravelEstimate =
     TravelEstimate.Builder(
-        distance(p.optDouble("remainingDistance")),
+        distance(p.optJSONObject("remainingDistanceDisplay")),
         DateTimeWithZone.create(p.optLong("etaMs"), TimeZone.getDefault()),
       )
       .setRemainingTimeSeconds(p.optLong("remainingSeconds").coerceAtLeast(0))
@@ -111,7 +105,7 @@ object CarTripMapper {
     if (p.optBoolean("rerouting")) return Trip.Builder().setLoading(true).build()
     val stepEstimate =
       TravelEstimate.Builder(
-          distance(p.optDouble("distanceToManeuver")),
+          distance(p.optJSONObject("maneuverDistance")),
           DateTimeWithZone.create(
             p.optLong("maneuverEtaMs", p.optLong("etaMs")),
             TimeZone.getDefault(),

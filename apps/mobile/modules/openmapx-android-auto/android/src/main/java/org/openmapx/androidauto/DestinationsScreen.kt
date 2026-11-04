@@ -229,7 +229,7 @@ class PreviewScreen(context: CarContext, private val routes: JSONArray) :
       )
       val distance = SpannableString(" ")
       distance.setSpan(
-        DistanceSpan.create(CarTripMapper.distance(route.optDouble("distanceMeters", 0.0))),
+        DistanceSpan.create(CarTripMapper.distance(route.optJSONObject("distance"))),
         0,
         1,
         Spanned.SPAN_INCLUSIVE_INCLUSIVE,

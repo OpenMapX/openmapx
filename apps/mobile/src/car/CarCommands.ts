@@ -1,4 +1,8 @@
-import { type CarDestinations, carDestinationSchema } from "@openmapx/core/navigation";
+import {
+  type CarDestinations,
+  carDestinationSchema,
+  measurementDistanceParts,
+} from "@openmapx/core/navigation";
 import { z } from "zod";
 import { readCarDestinations } from "../bridge/receiveCarDestinations";
 import { createLocationDriver } from "../location/createLocationDriver";
@@ -152,6 +156,7 @@ export class CarCommands {
             routes: routes.map(({ durationSeconds, distanceMeters }) => ({
               durationSeconds,
               distanceMeters,
+              distance: measurementDistanceParts(distanceMeters, preferences.units),
             })),
           }),
         );

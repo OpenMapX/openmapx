@@ -229,7 +229,7 @@ class NavigationScreen(context: CarContext) : Screen(context), DefaultLifecycleO
           RoutingInfo.Builder()
             .setCurrentStep(
               CarTripMapper.step(carContext, p),
-              CarTripMapper.distance(p.optDouble("distanceToManeuver")),
+              CarTripMapper.distance(p.optJSONObject("maneuverDistance")),
             )
             .build()
       )

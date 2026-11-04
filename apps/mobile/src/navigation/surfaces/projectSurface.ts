@@ -1,4 +1,8 @@
-import { type MobileNavigationSession, upcomingManeuverIndex } from "@openmapx/core/navigation";
+import {
+  type MobileNavigationSession,
+  measurementDistanceParts,
+  upcomingManeuverIndex,
+} from "@openmapx/core/navigation";
 import { SURFACE_FRESH_MS, type SurfaceModel, surfaceCopy, surfaceText } from "./surfaceModel";
 
 const record = (v: unknown): Record<string, unknown> =>
@@ -6,13 +10,17 @@ const record = (v: unknown): Record<string, unknown> =>
 const finite = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 const index = (v: unknown): number => (Number.isSafeInteger(v) && Number(v) >= 0 ? Number(v) : -1);
+/** The phone banner's rounding (`measurementDistanceParts`), in the trip's language. */
 function distance(v: unknown, imperial: boolean, locale: "en" | "de"): string {
   const n = finite(v);
   if (n === null) return "";
-  const decimal = (value: number) =>
-    value.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  if (imperial) return n < 160.934 ? `${Math.round(n / 0.3048)} ft` : `${decimal(n / 1609.344)} mi`;
-  return n < 1000 ? `${Math.round(n)} m` : `${decimal(n / 1000)} km`;
+  const { value, unit, decimals } = measurementDistanceParts(n, imperial ? "imperial" : "metric");
+  const number = value.toLocaleString(locale, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping: false,
+  });
+  return `${number} ${unit}`;
 }
 /** Read only the fields the OS surface needs from the committed durable session. */
 export function projectSurface(

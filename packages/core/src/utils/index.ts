@@ -119,6 +119,8 @@ export {
   formatDuration,
   formatMeasurementDistance,
   getInitials,
+  type MeasurementDistanceParts,
+  measurementDistanceParts,
 } from "./formatting";
 export {
   FPTF_PRODUCT_MODE,

@@ -58,6 +58,10 @@ obstructions in the safe map area. OpenMapX follows that split:
   The car uses the step's sign as lane evidence but not the phone's per-lane OSM
   destinations, which the web fetches separately. The host renders no maneuver
   icon of its own, so these bitmaps also feed the cluster and the notification.
+- Distances use the phone banner's rounding (`measurementDistanceParts`: whole
+  metres, one decimal below 10 km, feet below a mile). The projection sends the
+  rounded value and unit; the car wraps them as the host's `Distance`, which shows
+  miles with at most one decimal. The trip's navigation card uses the same rule.
 - Without a trip, a native position feed (`car-position`, fused provider, 1 s)
   places a location dot and follows the car at street zoom; it stops while a
   trip runs, because trip snapshots carry their own position. Fixes go to the

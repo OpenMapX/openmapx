@@ -51,33 +51,27 @@ class CarMappingTest {
     }
   }
 
+  private fun parts(value: Double, unit: String, decimals: Int) =
+    JSONObject().put("value", value).put("unit", unit).put("decimals", decimals)
+
   @Test
-  fun distanceUnitsAndInvalidValues() {
-    assertEquals(Distance.UNIT_FEET, CarTripMapper.distance(100.0, "imperial").displayUnit)
-    assertEquals(1.0, CarTripMapper.distance(1609.344, "imperial").displayDistance, 0.0001)
-    assertEquals(Distance.UNIT_MILES_P1, CarTripMapper.distance(1609.344, "imperial").displayUnit)
-    assertEquals(Distance.UNIT_KILOMETERS_P1, CarTripMapper.distance(2000.0, "metric").displayUnit)
-    assertEquals(Distance.UNIT_KILOMETERS, CarTripMapper.distance(23400.0, "metric").displayUnit)
-    assertEquals(0.0, CarTripMapper.distance(Double.NaN).displayDistance, 0.0)
-    assertEquals(0.0, CarTripMapper.distance(-1.0).displayDistance, 0.0)
+  fun sharedDistancesMapToHostUnits() {
+    assertEquals(Distance.UNIT_METERS, CarTripMapper.distance(parts(615.0, "m", 0)).displayUnit)
+    assertEquals(615.0, CarTripMapper.distance(parts(615.0, "m", 0)).displayDistance, 0.0)
+    assertEquals(Distance.UNIT_KILOMETERS_P1, CarTripMapper.distance(parts(3.3, "km", 1)).displayUnit)
+    assertEquals(Distance.UNIT_KILOMETERS, CarTripMapper.distance(parts(23.0, "km", 0)).displayUnit)
+    assertEquals(Distance.UNIT_FEET, CarTripMapper.distance(parts(984.0, "ft", 0)).displayUnit)
+    assertEquals(Distance.UNIT_MILES_P1, CarTripMapper.distance(parts(1.24, "mi", 2)).displayUnit)
+    assertEquals(0.0, CarTripMapper.distance(null).displayDistance, 0.0)
     val previous = java.util.Locale.getDefault()
     java.util.Locale.setDefault(java.util.Locale.GERMANY)
     try {
-      val p = JSONObject().put("distanceToManeuver", 1500).put("locale", "en").put("units", "metric")
       // The rail matches the host's routing card, which follows the phone's locale.
+      val p = JSONObject().put("maneuverDistance", parts(1.5, "km", 1))
       assertEquals("1,5 km", GuidanceNotification.distanceText(p))
     } finally {
       java.util.Locale.setDefault(previous)
     }
-  }
-
-  @Test
-  fun guidanceDistancesAreRounded() {
-    assertEquals(600.0, CarTripMapper.distance(614.8, "metric").displayDistance, 0.0)
-    assertEquals(90.0, CarTripMapper.distance(87.0, "metric").displayDistance, 0.0)
-    assertEquals(3.3, CarTripMapper.distance(3312.0, "metric").displayDistance, 0.0)
-    assertEquals(Distance.UNIT_KILOMETERS_P1, CarTripMapper.distance(960.0, "metric").displayUnit)
-    assertEquals(500.0, CarTripMapper.distance(152.4, "imperial").displayDistance, 0.0)
   }
 
   @Test
@@ -91,6 +85,8 @@ class CarMappingTest {
         .put("locale", "de")
         .put("units", "metric")
         .put("maneuverIcon", "TurnLeft")
+        .put("maneuverDistance", parts(1.0, "m", 0))
+        .put("remainingDistanceDisplay", parts(1.0, "m", 0))
     for (key in
       listOf(
         "revision",
@@ -103,6 +99,9 @@ class CarMappingTest {
       )) p.put(key, 1)
     assertNotNull(CarProjection.parse(p))
     assertNull(CarProjection.parse(JSONObject(p.toString()).put("maneuverIcon", "Rocket")))
+    assertNull(
+      CarProjection.parse(JSONObject(p.toString()).put("maneuverDistance", parts(1.0, "furlong", 0)))
+    )
   }
 
   @Test
@@ -184,6 +183,8 @@ class CarMappingTest {
         .put("locale", "de")
         .put("units", "metric")
         .put("maneuverIcon", "Straight")
+        .put("maneuverDistance", parts(1.0, "m", 0))
+        .put("remainingDistanceDisplay", parts(1.0, "m", 0))
     for (key in
       listOf(
         "revision",
@@ -307,6 +308,7 @@ class CarMappingTest {
       .put("instruction", "Turn right")
       .put("maneuverIcon", "TurnRight")
       .put("distanceToManeuver", 200)
+      .put("maneuverDistance", parts(200.0, "m", 0))
       .put("locale", "en")
       .put("units", "metric")
 

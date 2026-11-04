@@ -27,7 +27,12 @@ it("projects upcoming maneuver and active rerouting with ETA", () => {
     maneuver: "right",
     rerouting: true,
     etaMs: 61000,
+    maneuverIcon: "TurnRight",
   });
+  // The phone banner's rounding, so the car shows the same distance.
+  const projected = buildCarTripProjection(snapshot, 1000);
+  expect(projected?.maneuverDistance).toEqual({ value: 50, unit: "m", decimals: 0 });
+  expect(projected?.remainingDistanceDisplay).toEqual({ value: 500, unit: "m", decimals: 0 });
 });
 it("clears terminal state and refuses invalid progress", () => {
   expect(buildCarTripProjection({ ...snapshot, status: "stopped" }, 0)).toBeNull();
