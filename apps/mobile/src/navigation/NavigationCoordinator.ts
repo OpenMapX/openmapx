@@ -18,9 +18,9 @@ import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } fro
 import { SerialExecutor } from "./serialExecutor";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
+import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
 import { onRefreshFailed, onRefreshSucceeded } from "./transit/refreshState";
 import type { RefreshOutcome } from "./transit/TransitRefreshService";
-import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
 
 /**
  * The single authority over an active navigation session.
@@ -168,7 +168,7 @@ export class NavigationCoordinator {
       if (current && !this.isTerminal(current)) {
         if (current.sessionId !== replaceSessionId) return errorResponse("session-active");
         await this.terminate(
-          { ...base, type: "session.stop", payload: {}, sessionId: current.sessionId },
+          { messageId: base.messageId, sessionId: current.sessionId },
           "stopped",
           now,
         );
@@ -181,7 +181,7 @@ export class NavigationCoordinator {
       if (prepared.type !== "session.prepared") return prepared;
       if (!valid()) {
         await this.terminate(
-          { ...base, type: "session.stop", payload: {}, sessionId: prepared.sessionId },
+          { messageId: base.messageId, sessionId: prepared.sessionId },
           "stopped",
           now,
         );

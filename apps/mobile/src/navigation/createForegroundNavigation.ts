@@ -20,8 +20,8 @@ import type {
   NavigationCoordinator,
 } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
-import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
 import type { NavigationStartContext } from "./startContext";
+import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
 import { alightAlertCopy } from "./transit/alightAlertCopy";
 import { createAlertPort } from "./transit/createAlertPort";
 import { TransitRefreshService } from "./transit/TransitRefreshService";
