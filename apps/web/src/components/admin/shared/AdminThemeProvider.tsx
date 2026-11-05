@@ -60,7 +60,29 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
             },
           },
           MuiDialog: {
-            styleOverrides: { paper: { borderRadius: 16 } },
+            styleOverrides: {
+              paper: {
+                borderRadius: 16,
+                "@media (prefers-reduced-motion: reduce)": {
+                  transition: "none !important",
+                  animation: "none !important",
+                },
+              },
+              root: {
+                "@media (prefers-reduced-motion: reduce)": {
+                  "& *": { transition: "none !important", animation: "none !important" },
+                },
+              },
+            },
+          },
+          MuiPopover: {
+            styleOverrides: {
+              root: {
+                "@media (prefers-reduced-motion: reduce)": {
+                  "& *": { transition: "none !important", animation: "none !important" },
+                },
+              },
+            },
           },
           MuiDialogActions: {
             styleOverrides: { root: { padding: "8px 20px 16px" } },

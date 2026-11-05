@@ -5030,7 +5030,13 @@
     "chooseTopic": "Choose a topic",
     "authorityChanged": "Administrator access changed. Reload to confirm the current account and permissions.",
     "reload": "Reload",
-    "hostedData": "Host-managed data operations are unavailable on this hosted deployment. Transit and Coverage remain available."
+    "hostedData": "Host-managed data operations are unavailable on this hosted deployment. Transit and Coverage remain available.",
+    "buildAll": {
+      "title": "Build all enabled services",
+      "targets": "Build these {count} captured targets: {ids}. The server enforces each service’s build prerequisites. Newly enabled services will not be added to this request.",
+      "cancel": "Cancel",
+      "confirm": "Build reviewed targets"
+    }
   },
   "adminDrafts": {
     "title": "Discard unsaved administration changes?",

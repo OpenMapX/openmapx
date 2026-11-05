@@ -11,6 +11,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/core/api-contracts";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
@@ -211,18 +212,16 @@ export function ServiceBuildAllDialog({
   onQueue: (payload: AdminServicesBulkAction) => Promise<boolean>;
   onClose: () => void;
 }) {
+  const t = useTranslations("adminNavigation.buildAll");
   const [region, setRegion] = useState("");
   const [continueOnError, setContinueOnError] = useState(true);
   const [motisImport, setMotisImport] = useState(false);
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Build all enabled services</DialogTitle>
+      <DialogTitle>{t("title")}</DialogTitle>
       <DialogContent>
         <Stack sx={{ gap: 2, pt: 1 }}>
-          <Typography>
-            Build these {ids.length} captured targets: {ids.join(", ")}. The server enforces each
-            service's build prerequisites. Newly enabled services will not be added to this request.
-          </Typography>
+          <Typography>{t("targets", { count: ids.length, ids: ids.join(", ") })}</Typography>
           <BuildOptions
             region={region}
             setRegion={setRegion}
@@ -236,7 +235,7 @@ export function ServiceBuildAllDialog({
       </DialogContent>
       <DialogActions>
         <Button disabled={busy} onClick={onClose}>
-          Cancel
+          {t("cancel")}
         </Button>
         <Button
           variant="contained"
@@ -253,7 +252,7 @@ export function ServiceBuildAllDialog({
             })
           }
         >
-          Build reviewed targets
+          {t("confirm")}
         </Button>
       </DialogActions>
     </Dialog>

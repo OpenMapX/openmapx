@@ -38,6 +38,7 @@ it.each([false, null])("guards direct host-topic entry for deployment %s", (self
     { wrapper: createQueryWrapper() },
   );
   if (selfHosted === false) {
+    expect(screen.getByRole("combobox", { name: "Topic" })).toHaveTextContent("Choose a topic");
     expect(screen.queryByRole("button", { name: "Host mutation" })).toBeNull();
     expect(screen.getAllByRole("link", { name: "Cache" }).length).toBeGreaterThan(0);
   } else expect(screen.getByRole("button", { name: "Host mutation" })).toBeInTheDocument();

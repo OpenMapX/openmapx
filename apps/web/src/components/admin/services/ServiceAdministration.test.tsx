@@ -1,5 +1,7 @@
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
+import { en } from "@openmapx/i18n";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
@@ -257,7 +259,9 @@ function mount(child: React.ReactNode) {
   caches.push(qc);
   const view = (next: React.ReactNode) => (
     <QueryClientProvider client={qc}>
-      <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      </NextIntlClientProvider>
     </QueryClientProvider>
   );
   return { qc, view, ...render(view(child)) };
@@ -1171,4 +1175,40 @@ it("starts a new apply intent after another successful configuration save", asyn
   await screen.findByText(/Service apply queued/);
   expect(keys).toHaveLength(2);
   expect(keys[0]).not.toBe(keys[1]);
+});
+
+it("reviews and submits captured Build All targets in the established build order", async () => {
+  const ids = ["tileserver", "motis", "osrm"];
+  const requests = setup((url) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          services: ids.map((id) => ({
+            id,
+            name: id,
+            version: "1",
+            quality: "built-in",
+            enabled: true,
+            isBuiltIn: true,
+            status: "not-running",
+            actions: availableActions,
+            provides: [],
+            consumes: [],
+          })),
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          summary: { running: 0, stopped: 3, unknown: 0, total: 3 },
+        })
+      : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "tileserver" });
+  fireEvent.click(screen.getByRole("button", { name: "Build All" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Build reviewed targets" }));
+  await waitFor(() =>
+    expect(requests.some((r) => r.url.pathname.endsWith("/bulk-action"))).toBe(true),
+  );
+  expect(
+    JSON.parse(String(requests.find((r) => r.url.pathname.endsWith("/bulk-action"))?.init.body))
+      .serviceIds,
+  ).toEqual(["osrm", "motis", "tileserver"]);
 });

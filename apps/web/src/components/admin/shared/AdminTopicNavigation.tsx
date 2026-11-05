@@ -39,6 +39,7 @@ export function AdminTopicNavigation({
         size="small"
         fullWidth
         label={t("topic")}
+        slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
         value={entries.find((entry) => entry.id === active)?.href ?? ""}
         onChange={(event) => router.push(event.target.value)}
         sx={{ display: { lg: "none" }, mb: 1 }}

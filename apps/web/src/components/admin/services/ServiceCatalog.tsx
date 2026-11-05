@@ -22,6 +22,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { listAdminServicePresets, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
 import type { AdminServiceSummary, AdminServicesBulkAction } from "@openmapx/core/api-contracts";
+import { compareServiceBuildOrder } from "@openmapx/core/api-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -305,7 +306,8 @@ function ServiceCatalogView() {
                 setBuildAllTargets(
                   services
                     .filter((service) => service.enabled && service.actions?.build.available)
-                    .map((service) => service.id),
+                    .map((service) => service.id)
+                    .sort(compareServiceBuildOrder),
                 )
               }
               disabled={

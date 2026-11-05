@@ -18,6 +18,7 @@ import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import { TOPBAR_HEIGHT } from "./layoutConstants";
+import { PlatformPreviewLifecycle } from "./settings/PlatformPreviewLifecycle";
 import { AdminNavigationContext } from "./shared/AdminNavigationContext";
 import { AdminPageHeader } from "./shared/AdminPageHeader";
 import { AdminThemeProvider } from "./shared/AdminThemeProvider";
@@ -80,6 +81,7 @@ function AdminLayoutContent({ children, user, selfHosted = false }: AdminLayoutP
               className="omx-admin"
               sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
             >
+              <PlatformPreviewLifecycle apiUrl={apiUrl} actorId={user.id} />
               <AdminSidebar
                 open={sidebarOpen}
                 onClose={() => setMobileOpen(false)}

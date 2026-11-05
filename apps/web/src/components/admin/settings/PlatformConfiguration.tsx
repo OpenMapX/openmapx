@@ -23,6 +23,7 @@ import {
   adminPlatformPreviewRetainedSchema,
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
@@ -36,6 +37,7 @@ import {
 } from "../activity/activityQueries";
 import { JobDetail } from "../activity/JobDetail";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
+import { usePlatformPreviewDiscard } from "./PlatformPreviewLifecycle";
 import {
   buildPlatformCandidate,
   PLATFORM_SCOPE_FIELDS,
@@ -220,6 +222,7 @@ function PlatformForm({
     [reauth, setReauth] = useState(false),
     [accepted, setAccepted] = useState<string>(),
     [, tick] = useState(0);
+  const previewEpoch = useRef(0);
   const previewKey = useRef<string | null>(null),
     applyKey = useRef<string | null>(null);
   const acceptedJob = useQuery({
@@ -233,11 +236,16 @@ function PlatformForm({
   const pending = view.pending ?? [],
     busy = pending.length > 0 || (!!accepted && !observedTerminal);
   const clearPreview = () => {
+    previewEpoch.current++;
     setRetained(null);
     setConfirmations(emptyConfirmations);
     setProof(undefined);
     setReauth(false);
-    sessionStorage.removeItem(storageKey);
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      /* Storage is optional for local discard. */
+    }
     previewKey.current = null;
     applyKey.current = null;
   };
@@ -265,7 +273,10 @@ function PlatformForm({
   const previewMutation = useMutation({
     retry: false,
     mutationFn: async () => {
+      const epoch = previewEpoch.current;
       const fresh = await freshView();
+      if (epoch !== previewEpoch.current)
+        throw new PlatformScopeError("Draft changed before the preview started.");
       const edits = Object.fromEntries(
         ordinaryDraft.dirtyKeys.map((key) => [key, ordinaryDraft.values[key]]),
       ) as PlatformDraft;
@@ -290,13 +301,13 @@ function PlatformForm({
         throw new PlatformScopeError(
           "The preview changes a field owned by another topic. Reload before continuing.",
         );
-      return { value, fresh };
+      return { value, fresh, epoch };
     },
     onError: () => {
       if (owner.active) previewKey.current = null;
     },
-    onSuccess: ({ value, fresh }) => {
-      if (!owner.active) return;
+    onSuccess: ({ value, fresh, epoch }) => {
+      if (!owner.active || epoch !== previewEpoch.current) return;
       queryClient.setQueryData(["admin", "platform", apiUrl, actorId], fresh);
       setRetained(value);
       sessionStorage.setItem(storageKey, JSON.stringify(value));
@@ -347,6 +358,11 @@ function PlatformForm({
       clearPreview();
     },
   });
+  usePlatformPreviewDiscard(scope, () => {
+    clearPreview();
+    previewMutation.reset();
+    applyMutation.reset();
+  });
   useEffect(() => {
     if (!retained) return;
     const timeout = setTimeout(
@@ -378,6 +394,14 @@ function PlatformForm({
     expired = !!retained && Date.parse(retained.expiresAt) <= Date.now();
   return (
     <Stack sx={{ gap: 2, pt: 1 }}>
+      {scope === "deployment" && (
+        <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+          <Typography variant="body2">Release selector: {view.values.releaseSelector}</Typography>
+          <Button component={Link} href="/admin/system/updates#release-selector">
+            Manage release selection
+          </Button>
+        </Stack>
+      )}
       <Typography variant="body2">
         Host-owned values are locked until you explicitly adopt them. Returning a field to the host
         uses its current environment value. Previewing does not save or restart services.

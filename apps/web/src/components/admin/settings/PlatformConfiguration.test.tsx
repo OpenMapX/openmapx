@@ -1,7 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useContext } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AdminDraftContext, AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { PlatformConfiguration } from "./PlatformConfiguration";
+import { PlatformPreviewLifecycle } from "./PlatformPreviewLifecycle";
 import type { PlatformScope } from "./platformScope";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), preview: vi.fn(), apply: vi.fn(), job: vi.fn() }));
@@ -315,4 +318,78 @@ it("retains the exact unexpired actor-bound preview across the alternate-login r
   mount();
   expect(await screen.findByText("Review platform changes")).toBeVisible();
   expect(mocks.preview).toHaveBeenCalledTimes(1);
+});
+
+it.each([false, true])(
+  "clears retained platform previews on global discard while the form is hidden=%s",
+  async (hide) => {
+    function Discard() {
+      const store = useContext(AdminDraftContext);
+      return (
+        <button type="button" onClick={() => store?.discard()}>
+          Discard all
+        </button>
+      );
+    }
+    const cache = createTestQueryClient();
+    caches.push(cache);
+    const tree = (show: boolean) => (
+      <QueryClientProvider client={cache}>
+        <AdminDraftProvider>
+          <PlatformPreviewLifecycle apiUrl="http://admin.test" actorId="admin-a" />
+          <Discard />
+          {show && <PlatformConfiguration scope="retention" />}
+        </AdminDraftProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(true));
+    fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+    await screen.findByText("Review platform changes");
+    const key = "openmapx-platform-preview:http://admin.test:admin-a:retention";
+    expect(sessionStorage.getItem(key)).not.toBeNull();
+    if (hide) view.rerender(tree(false));
+    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    expect(sessionStorage.getItem(key)).toBeNull();
+    if (hide) view.rerender(tree(true));
+    expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+  },
+);
+it("does not revive a preview that arrives after global discard", async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.preview.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  function Discard() {
+    const store = useContext(AdminDraftContext);
+    return (
+      <button type="button" onClick={() => store?.discard()}>
+        Discard all
+      </button>
+    );
+  }
+  const cache = createTestQueryClient();
+  caches.push(cache);
+  render(
+    <QueryClientProvider client={cache}>
+      <AdminDraftProvider>
+        <Discard />
+        <PlatformConfiguration scope="retention" />
+      </AdminDraftProvider>
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+  await waitFor(() => expect(mocks.preview).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+  resolve({
+    status: 200,
+    data: { preview, expiresAt: new Date(Date.now() + 600000).toISOString() },
+  });
+  await new Promise((done) => setTimeout(done, 0));
+  expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+  expect(
+    sessionStorage.getItem("openmapx-platform-preview:http://admin.test:admin-a:retention"),
+  ).toBeNull();
 });

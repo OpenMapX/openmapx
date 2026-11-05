@@ -666,7 +666,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
       )}
       {["app-api", "traefik", "ops-agent"].includes(manifest.id) && (
         <Button component={Link} href="/admin/system/updates" size="small">
-          System Maintenance
+          Updates
         </Button>
       )}
       {manifest.id === "dawarich-app" && <ManagedDawarichSetup />}
