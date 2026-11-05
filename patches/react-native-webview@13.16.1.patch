@@ -18,3 +18,38 @@ index 07f73fd00a083ebf5a03bffaa7bbadbd1f648505..0e50b1997e7775d2846081b7560e5186
          grantedPermissions = new ArrayList<>();
  
          ArrayList<String> requestedAndroidPermissions = new ArrayList<>();
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..14a3371c28d3750bec989c444d8bfdc99815aa1d 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -74,11 +74,11 @@ public class RNCWebViewClient extends WebViewClient {
+     public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
+       super.doUpdateVisitedHistory(webView, url, isReload);
+ 
+-      ((RNCWebView) webView).dispatchEvent(
+-        webView,
+-        new TopLoadingStartEvent(
+-          RNCWebViewWrapper.getReactTagFromWebView(webView),
+-          createWebViewEvent(webView, url)));
++      // Preserve navigation/back state without claiming a document committed.
++      WritableMap event = createWebViewEvent(webView, url);
++      event.putBoolean("openmapxDocumentStart", false);
++      ((RNCWebView) webView).dispatchEvent(webView,
++        new TopLoadingStartEvent(RNCWebViewWrapper.getReactTagFromWebView(webView), event));
+     }
+ 
+     @Override
+@@ -86,7 +86,13 @@ public class RNCWebViewClient extends WebViewClient {
+       super.onPageStarted(webView, url, favicon);
+       mLastLoadFailed = false;
+ 
++      // OpenMapX: only this native callback establishes a new document. Report
++      // it before injection can send a hello; getProgress is not an identity.
++      WritableMap event = createWebViewEvent(webView, url);
++      event.putBoolean("openmapxDocumentStart", true);
+       RNCWebView reactWebView = (RNCWebView) webView;
++      reactWebView.dispatchEvent(webView,
++        new TopLoadingStartEvent(RNCWebViewWrapper.getReactTagFromWebView(webView), event));
+       reactWebView.callInjectedJavaScriptBeforeContentLoaded();
+     }
+ 

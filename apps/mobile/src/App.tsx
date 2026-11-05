@@ -116,6 +116,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       subscription.remove();
     };
   }, [voiceIntent]);
+  const webSource = useMemo(() => ({ uri: new URL(config.webOrigin).href }), [config.webOrigin]);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
   useEffect(() => {
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
@@ -301,20 +302,33 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   /**
    * The nonce the document-start script currently publishes.
    *
-   * It is rotated only after a load finishes, never while one is in flight: the
+   * It is rotated after a load finishes or fails, never while one is in flight: the
    * script that carries it runs as the document is created, so changing it
    * mid-navigation would hand the page a value the shell no longer accepts.
    */
   const [publishedNonce, setPublishedNonce] = useState(() => shell.registry.mintNonce());
+  const documentInFlight = useRef(true);
+  const missingDocumentTagReported = useRef(false);
 
   const handleLoadStart = useCallback(
-    (event?: { nativeEvent?: { loading?: boolean } }) => {
-      // Android also reports every same-document history change (`pushState`,
-      // `replaceState`) as a load start, from `doUpdateVisitedHistory`, with
-      // `loading: false` because the document has already finished. That is not
-      // a new document: adopting the next nonce there would orphan the page's
-      // negotiated channel and put the loading screen back over a working page.
-      if (event?.nativeEvent?.loading === false) return;
+    (event?: { nativeEvent?: { url?: string; openmapxDocumentStart?: boolean } }) => {
+      // Android history callbacks can report loading=true even after a finish.
+      // Only the patched native onPageStarted event identifies a new document.
+      // A stale development APK must fail closed, never guess from progress.
+      if (Platform.OS === "android" && event?.nativeEvent?.openmapxDocumentStart !== true) {
+        if (
+          __DEV__ &&
+          event?.nativeEvent?.openmapxDocumentStart === undefined &&
+          !missingDocumentTagReported.current
+        ) {
+          missingDocumentTagReported.current = true;
+          console.error(
+            "OpenMapX document-start tag missing; rebuild the Android development app.",
+          );
+        }
+        return;
+      }
+      documentInFlight.current = true;
       // A real top-level navigation or reload.
       //
       // Navigation and its location driver survive a reload. Voice input is
@@ -329,6 +343,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   const handleLoadEnd = useCallback(() => {
+    // iOS emits load-end for pushState/replaceState too. Only the first end
+    // after an actual start prepares the next document's bootstrap nonce.
+    if (!documentInFlight.current) return;
+    documentInFlight.current = false;
     // A load can finish while backgrounded; lifecycle delivery to the previous
     // document must not leave this document thinking the app is visible.
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibilityRef.current));
@@ -338,11 +356,14 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   }, [shell]);
 
   const handleLoadFailure = useCallback(() => {
+    documentInFlight.current = false;
     voice.cancel();
     dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
     incomingLinks.documentStarted();
     shell.registry.invalidate();
     shell.bridge.discardQueue();
+    // A retry must not reuse the failed document's nonce.
+    setPublishedNonce(shell.registry.mintNonce());
   }, [shell, connectivity.displayed, incomingLinks, voice]);
 
   const legacyNoticed = useRef("");
@@ -518,7 +539,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       <WebView
         key={loadAttempt}
         ref={webViewRef}
-        source={{ uri: config.webOrigin }}
+        source={webSource}
         style={styles.webView}
         // Exact origin, both as a navigation allowlist and as the WebKit
         // App-Bound Domain set generated into Info.plist.

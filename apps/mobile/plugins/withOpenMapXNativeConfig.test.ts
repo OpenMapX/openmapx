@@ -356,6 +356,13 @@ describe("iOS storage protection", () => {
     );
   });
 
+  it("allows Files to offer OpenMapX without exposing its private container", () => {
+    expect(applyDataProtection({}).LSSupportsOpeningDocumentsInPlace).toBe(true);
+    expect(applyDataProtection({ UISupportsDocumentBrowser: true })).not.toHaveProperty(
+      "UISupportsDocumentBrowser",
+    );
+  });
+
   it.each(FORBIDDEN_IOS_SHARING_KEYS)(
     "removes %s, which would expose the session database",
     (key) => {

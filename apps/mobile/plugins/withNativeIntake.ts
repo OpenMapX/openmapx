@@ -39,7 +39,6 @@ const withNativeIntake: ConfigPlugin = (config) => {
     Object.assign(mod.modResults, {
       CFBundleDocumentTypes: intakeDocumentTypes(),
       UTImportedTypeDeclarations: intakeImportedTypes(),
-      LSSupportsOpeningDocumentsInPlace: false,
       OpenMapXIntakeAppGroup: group,
     });
     return mod;

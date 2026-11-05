@@ -132,7 +132,16 @@ export class BridgeClient {
   private messageCounter = 0;
   private detach: (() => void) | null = null;
 
-  constructor(private readonly options: BridgeClientOptions) {}
+  private readonly scheduleTimeout: NonNullable<BridgeClientOptions["setTimeout"]>;
+  private readonly cancelTimeout: NonNullable<BridgeClientOptions["clearTimeout"]>;
+
+  constructor(private readonly options: BridgeClientOptions) {
+    this.scheduleTimeout =
+      options.setTimeout ?? ((callback, ms) => globalThis.setTimeout(callback, ms));
+    this.cancelTimeout =
+      options.clearTimeout ??
+      ((handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>));
+  }
 
   get isAvailable(): boolean {
     return this.nonce !== null && this.transport !== null;
@@ -173,7 +182,7 @@ export class BridgeClient {
   close(reason: BridgeFailure = "channel-reset"): void {
     this.closed = true;
     for (const [, entry] of this.pending) {
-      this.options.clearTimeout?.(entry.timer);
+      this.cancelTimeout(entry.timer);
       entry.reject(new BridgeError(reason));
     }
     this.pending.clear();
@@ -267,7 +276,7 @@ export class BridgeClient {
     if (!validated.success) return Promise.reject(new BridgeError("invalid-command"));
 
     return new Promise<NativeToWebMessage>((resolve, reject) => {
-      const timer = this.options.setTimeout?.(() => {
+      const timer = this.scheduleTimeout(() => {
         this.pending.delete(messageId);
         reject(new BridgeError("timeout"));
       }, options.timeoutMs ?? READ_TIMEOUT_MS);
@@ -277,7 +286,7 @@ export class BridgeClient {
         this.transport?.postMessage(JSON.stringify(validated.data));
       } catch {
         this.pending.delete(messageId);
-        this.options.clearTimeout?.(timer);
+        this.cancelTimeout(timer);
         reject(new BridgeError("no-transport"));
       }
     });
@@ -340,7 +349,7 @@ export class BridgeClient {
     const entry = key ? this.pending.get(key) : undefined;
     if (entry && key) {
       this.pending.delete(key);
-      this.options.clearTimeout?.(entry.timer);
+      this.cancelTimeout(entry.timer);
       const expectedType = EXPECTED_REPLY[entry.requestType];
       if (message.type !== "native.error" && expectedType !== message.type) {
         entry.reject(new BridgeError("invalid-response"));

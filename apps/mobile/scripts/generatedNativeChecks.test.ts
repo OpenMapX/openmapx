@@ -73,7 +73,18 @@ function surface(): GeneratedNativeSurface {
     shareExtension: {
       infoPlist: intakeShareInfo("org.openmapx.app"),
       entitlements: { "com.apple.security.application-groups": ["group.org.openmapx.app.intake"] },
-      privacy: { NSPrivacyAccessedAPITypes: [{ NSPrivacyAccessedAPITypeReasons: ["C617.1"] }] },
+      privacy: {
+        NSPrivacyAccessedAPITypes: [
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+            NSPrivacyAccessedAPITypeReasons: ["C617.1", "3B52.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategorySystemBootTime",
+            NSPrivacyAccessedAPITypeReasons: ["35F9.1"],
+          },
+        ],
+      },
     },
     navigationExtension: {
       NSExtension: { NSExtensionPointIdentifier: "com.apple.widgetkit-extension" },
@@ -81,7 +92,7 @@ function surface(): GeneratedNativeSurface {
       CFBundleShortVersionString: "$(MARKETING_VERSION)",
     },
     infoPlist: {
-      LSSupportsOpeningDocumentsInPlace: false,
+      LSSupportsOpeningDocumentsInPlace: true,
       CFBundleDocumentTypes: intakeDocumentTypes(),
       OpenMapXIntakeAppGroup: "group.org.openmapx.app.intake",
       NSMicrophoneUsageDescription:
@@ -390,7 +401,7 @@ describe("storage and component exposure", () => {
     ).toContainEqual(expect.stringContaining("NSFileProtectionComplete"));
   });
 
-  it.each(["UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"])(
+  it.each(["UIFileSharingEnabled", "UISupportsDocumentBrowser"])(
     "rejects %s, which would expose the session database",
     (key) => {
       expect(
@@ -479,17 +490,32 @@ it("rejects intake groups leaking to the navigation widget or broad extension en
     expect.stringContaining("exactly the intake App Group"),
   );
 });
-it("requires explicit opening-in-place false and a real extension privacy manifest", () => {
+it("requires explicit opening-in-place true and a real extension privacy manifest", () => {
   const allowed = surface();
   expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toEqual([]);
-  allowed.infoPlist.LSSupportsOpeningDocumentsInPlace = true;
+  allowed.infoPlist.LSSupportsOpeningDocumentsInPlace = false;
   expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toContainEqual(
-    expect.stringContaining("explicitly false"),
+    expect.stringContaining("explicitly true"),
   );
   const missing = surface();
   if (!missing.shareExtension) throw new Error("missing fixture");
   missing.shareExtension.privacy = {};
   expect(checkGeneratedNativeSurface(missing, EXPECTED)).toContainEqual(
+    expect.stringContaining("privacy manifest"),
+  );
+});
+it("rejects missing selected-file metadata or deadline privacy reasons", () => {
+  const value = surface();
+  if (!value.shareExtension) throw new Error("missing fixture");
+  value.shareExtension.privacy = {
+    NSPrivacyAccessedAPITypes: [
+      {
+        NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+        NSPrivacyAccessedAPITypeReasons: ["C617.1"],
+      },
+    ],
+  };
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
     expect.stringContaining("privacy manifest"),
   );
 });

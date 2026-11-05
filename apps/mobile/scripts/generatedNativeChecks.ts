@@ -214,8 +214,8 @@ function checkIos(
   if (infoPlist.NSFileProtectionKey !== IOS_DATA_PROTECTION_CLASS) {
     fail(`the app container must declare ${IOS_DATA_PROTECTION_CLASS}`);
   }
-  if (infoPlist.LSSupportsOpeningDocumentsInPlace !== false)
-    fail("LSSupportsOpeningDocumentsInPlace must be explicitly false");
+  if (infoPlist.LSSupportsOpeningDocumentsInPlace !== true)
+    fail("LSSupportsOpeningDocumentsInPlace must be explicitly true");
   const group = `group.${expected.appId}.intake`;
   const share = generated.shareExtension;
   if (
@@ -243,8 +243,25 @@ function checkIos(
     !generated.pbxproj.includes("OpenMapXShareExtension/ShareExtension.entitlements")
   )
     fail("share extension must be embedded with its own entitlement file");
-  if (!JSON.stringify(share?.privacy).includes("C617.1"))
-    fail("share extension privacy manifest must declare its local file access reason");
+  const accessed = asObject(share?.privacy).NSPrivacyAccessedAPITypes;
+  const reasons = (category: string, required: string[]) =>
+    Array.isArray(accessed) &&
+    accessed.some((entry) => {
+      const value = asObject(entry);
+      const declared = value.NSPrivacyAccessedAPITypeReasons;
+      return (
+        value.NSPrivacyAccessedAPIType === category &&
+        Array.isArray(declared) &&
+        required.every((reason) => declared.includes(reason))
+      );
+    });
+  if (
+    !reasons("NSPrivacyAccessedAPICategoryFileTimestamp", ["C617.1", "3B52.1"]) ||
+    !reasons("NSPrivacyAccessedAPICategorySystemBootTime", ["35F9.1"])
+  )
+    fail(
+      "share extension privacy manifest must declare local/selected file metadata and deadline reasons",
+    );
   for (const block of generated.pbxproj.matchAll(/buildSettings = \{([\s\S]*?)\};/g)) {
     if (
       block[1].includes(`${expected.appId}.NavigationSurface`) &&

@@ -419,17 +419,40 @@ On iOS, `OpenMapXShareExtension` saves user-confirmed items into
 open OpenMapX manually. It never launches the host through unsupported APIs.
 Only the host and Share Extension have this group; the navigation widget has none.
 The group contains intake bytes only, never authentication or navigation storage.
-Normal document Open In accepts regular, non-symlink direct children of the app's
-OS-managed `Documents/Inbox`, with opening-in-place explicitly disabled. The source
-copy is removed after intake; expired orphan copies are swept on launch.
-`UIFileSharingEnabled` stays absent. The app container is not exposed in Files.
+Files Open With requires `LSSupportsOpeningDocumentsInPlace=true`. For an OS-delivered
+in-place URL, the host requires a positive security-scope grant, asynchronously
+coordinates the read and copies at most 5 MiB into owned staging within a ten-second
+deadline. Scope is acquired on the worker and released on success, failure, timeout
+or background-task expiration. The provider's original is never edited or deleted;
+no bookmark or grant is retained. The descriptor is opened without following
+symlinks or blocking on FIFOs, checked with `fstat`, and rejected if its resolved
+path is in the app's data container or intake App Group. The private inbox commit
+runs after the external accessor exits.
+
+For non-in-place OS copies, only regular, non-symlink direct children of
+`Documents/Inbox` are accepted; the temporary OS copy is removed after handling, and abandoned
+copies expire on launch. `UIFileSharingEnabled` and `UISupportsDocumentBrowser`
+stay absent. Opening a selected external document does not expose the app container
+in Files. RN Linking never grants file access.
+
+Android document channels reset only on the vendor-tagged native `onPageStarted`
+event. History callbacks still update navigation/back state, but cannot reset the
+bridge even when Chromium reports `loading=true` after a finish. A missing tag in
+a stale development APK fails closed. Native load-end handling is idempotent,
+failed loads retain their error state, and bridge requests always have production
+deadlines. The per-document nonce remains main-frame-only. Fast consecutive real
+loads can still race nonce-prop delivery; iOS policy starts can include a fragment
+or a navigation that never commits. These are separate qualification limits, not
+reasons to accept an old channel or fall back to browser navigation.
 
 The Foundation store coordinates short commits across the host and extension.
 External provider reads do not hold the coordinator lock. Staging is separated by
 writer and named with a writer-recorded epoch; cleanup waits beyond the copy
 deadline plus a minute, preserving a live writer. Host document commits have a
 background-task assertion. The host module and extension include file-access
-privacy manifests. The extension imports GPX `com.topografix.gpx`, KML
+privacy manifests. Their [required-reason declarations](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)
+cover app/group metadata (`C617.1`), selected-file metadata (`3B52.1`) and monotonic
+deadline timers (`35F9.1`). No uptime or metadata is transmitted. The extension imports GPX `com.topografix.gpx`, KML
 `com.google.earth.kml`, and Apple's `public.geojson` (also declared for older OS
 versions). Its bounded SUBQUERY activation predicate excludes arbitrary file URLs.
 URL and text attachments are combined into one editable location, retaining

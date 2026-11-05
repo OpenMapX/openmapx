@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 struct IntakeEntry: Codable {
   let id: String, createdAtMs: Int64, kind: String, name: String, byteLength: Int
@@ -27,10 +28,11 @@ final class IntakeInbox {
     try fm.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: self.root.path)
     #endif
   }
-  private func coordinated<T>(_ work: () throws -> T) throws -> T {
+  private func coordinated<T>(onCoordinator: ((NSFileCoordinator) -> Void)? = nil, _ work: () throws -> T) throws -> T {
     Self.localLock.lock(); defer { Self.localLock.unlock() }
     var coordinationError: NSError?, outcome: Result<T, Error>?
-    NSFileCoordinator().coordinate(writingItemAt: root, options: .forMerging, error: &coordinationError) { _ in outcome = Result { try work() } }
+    let coordinator = NSFileCoordinator(); onCoordinator?(coordinator)
+    coordinator.coordinate(writingItemAt: root, options: .forMerging, error: &coordinationError) { _ in outcome = Result { try work() } }
     if let coordinationError { throw coordinationError }
     guard let outcome else { throw IntakeFailure.unavailable }; return try outcome.get()
   }
@@ -79,44 +81,91 @@ final class IntakeInbox {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw IntakeFailure.unsupported }
     return try copy(InputStream(data: bytes), kind: "text", name: "Shared location", format: nil, limit: IntakePolicy.textBytes, cancelled: cancelled)
   }
-  func putFile(_ file: URL, name: String, cancelled: () -> Bool = { false }) throws -> IntakeEntry {
-    guard file.isFileURL else { throw IntakeFailure.unsupported }
-    let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-    guard file.isFileURL, values.isRegularFile == true, values.isSymbolicLink != true, let stream = InputStream(url: file) else { throw IntakeFailure.unreadable }
-    let display = IntakePolicy.name(name)
-    return try copy(stream, kind: "file", name: display, format: IntakePolicy.format(display), limit: IntakePolicy.fileBytes, cancelled: cancelled)
+  /// A staging capability can only be created by this inbox; it owns cleanup.
+  final class StagedEntry {
+    fileprivate let owner: IntakeInbox, folder: URL, kind: String, name: String, format: String?, byteLength: Int
+    fileprivate init(owner: IntakeInbox, folder: URL, kind: String, name: String, format: String?, byteLength: Int) {
+      self.owner = owner; self.folder = folder; self.kind = kind; self.name = name; self.format = format; self.byteLength = byteLength
+    }
+    deinit { try? FileManager.default.removeItem(at: folder) }
+  }
+  func putFile(_ file: URL, name: String, deadline: TimeInterval = ProcessInfo.processInfo.systemUptime + 10,
+    cancelled: () -> Bool = { false }, onCoordinator: ((NSFileCoordinator) -> Void)? = nil) throws -> IntakeEntry {
+    let staged = try stageFile(file, name: name, deadline: deadline, cancelled: cancelled)
+    return try commit(staged, deadline: deadline, cancelled: cancelled, onCoordinator: onCoordinator)
+  }
+  /// No inbox coordination is held while reading a foreign file. O_NONBLOCK
+  /// prevents FIFO-open hangs; fstat checks the actual descriptor after open.
+  func stageFile(_ file: URL, name: String, deadline: TimeInterval, cancelled: () -> Bool,
+    validateOpened: ((URL) throws -> Void)? = nil) throws -> StagedEntry {
+    guard file.isFileURL, !cancelled(), ProcessInfo.processInfo.systemUptime < deadline else { throw IntakeFailure.unreadable }
+    let display = IntakePolicy.name(name), format = try IntakePolicy.format(display)
+    let fd = Darwin.open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+    guard fd >= 0 else { throw IntakeFailure.unreadable }; defer { Darwin.close(fd) }
+    var info = stat()
+    guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size >= 0 else { throw IntakeFailure.unreadable }
+    guard info.st_size <= IntakePolicy.fileBytes else { throw IntakeFailure.tooLarge }
+    if let validateOpened {
+      var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+      guard fcntl(fd, F_GETPATH, &path) == 0 else { throw IntakeFailure.unreadable }
+      try validateOpened(URL(fileURLWithPath: String(cString: path)))
+    }
+    return try stage(kind: "file", name: display, format: format, limit: IntakePolicy.fileBytes, deadline: deadline, cancelled: cancelled) { buffer in
+      let count = Darwin.read(fd, &buffer, buffer.count)
+      guard count >= 0 else { throw IntakeFailure.unreadable }; return count
+    }
   }
   private func copy(_ input: InputStream, kind: String, name: String, format: String?, limit: Int, cancelled: () -> Bool = { false }) throws -> IntakeEntry {
-    let started = now(); let deadline = ProcessInfo.processInfo.systemUptime + 10
-    let stage = root.appendingPathComponent("staging/\(writer)/\(started)-\(UUID().uuidString)")
-    try fm.createDirectory(at: stage, withIntermediateDirectories: true)
-    defer { try? fm.removeItem(at: stage) }
-    let file = stage.appendingPathComponent("data"); guard fm.createFile(atPath: file.path, contents: nil) else { throw IntakeFailure.unreadable }
-    let output = try FileHandle(forWritingTo: file); defer { try? output.close() }
+    let deadline = ProcessInfo.processInfo.systemUptime + 10
     input.open(); defer { input.close() }
+    let staged = try stage(kind: kind, name: name, format: format, limit: limit, deadline: deadline, cancelled: cancelled) { buffer in
+      let count = input.read(&buffer, maxLength: buffer.count)
+      guard count >= 0 else { throw IntakeFailure.unreadable }; return count
+    }
+    return try commit(staged, deadline: deadline, cancelled: cancelled)
+  }
+  private func stage(kind: String, name: String, format: String?, limit: Int, deadline: TimeInterval,
+    cancelled: () -> Bool, read: (inout [UInt8]) throws -> Int) throws -> StagedEntry {
+    let folder = root.appendingPathComponent("staging/\(writer)/\(now())-\(UUID().uuidString)")
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    var retained = false; defer { if !retained { try? fm.removeItem(at: folder) } }
+    let file = folder.appendingPathComponent("data"); guard fm.createFile(atPath: file.path, contents: nil) else { throw IntakeFailure.unreadable }
+    let output = try FileHandle(forWritingTo: file); defer { try? output.close() }
     var size = 0, buffer = [UInt8](repeating: 0, count: 8192)
     while true {
       guard !cancelled(), ProcessInfo.processInfo.systemUptime < deadline else { throw IntakeFailure.unreadable }
-      let count = input.read(&buffer, maxLength: buffer.count)
-      if count < 0 { throw IntakeFailure.unreadable }; if count == 0 { break }
+      let capacity = min(8192, limit - size + 1)
+      if buffer.count != capacity { buffer = [UInt8](repeating: 0, count: capacity) }
+      let count = try read(&buffer)
+      if count == 0 { break }
       size += count; guard size <= limit else { throw IntakeFailure.tooLarge }
       try output.write(contentsOf: Data(buffer.prefix(count)))
     }
     guard size > 0 else { throw IntakeFailure.invalidData }
     try output.synchronize()
-    return try coordinated {
+    let result = StagedEntry(owner: self, folder: folder, kind: kind, name: name, format: format, byteLength: size)
+    retained = true; return result
+  }
+  /// Called after the external accessor has returned, never inside its lock.
+  func commit(_ stage: StagedEntry, deadline: TimeInterval, cancelled: () -> Bool,
+    onCoordinator: ((NSFileCoordinator) -> Void)? = nil) throws -> IntakeEntry {
+    guard stage.owner === self, !cancelled(), ProcessInfo.processInfo.systemUptime < deadline else { throw IntakeFailure.unreadable }
+    return try coordinated(onCoordinator: onCoordinator) {
       guard !cancelled(), ProcessInfo.processInfo.systemUptime < deadline else { throw IntakeFailure.unreadable }
       let current = try entries().filter { $0.kind != "error" }
-      guard current.count < IntakePolicy.contentItems, current.reduce(0, { $0 + $1.byteLength }) + size <= IntakePolicy.inboxBytes else { throw IntakeFailure.inboxFull }
-      let item = IntakeEntry(id: UUID().uuidString.lowercased(), createdAtMs: now(), kind: kind, name: name, byteLength: size, format: format)
-      try JSONEncoder().encode(item).write(to: stage.appendingPathComponent("metadata.json"), options: .atomic)
-      try fm.moveItem(at: stage, to: directory(item.id)); return item
+      guard current.count < IntakePolicy.contentItems, current.reduce(0, { $0 + $1.byteLength }) + stage.byteLength <= IntakePolicy.inboxBytes else { throw IntakeFailure.inboxFull }
+      let item = IntakeEntry(id: UUID().uuidString.lowercased(), createdAtMs: now(), kind: stage.kind, name: stage.name, byteLength: stage.byteLength, format: stage.format)
+      try JSONEncoder().encode(item).write(to: stage.folder.appendingPathComponent("metadata.json"), options: .atomic)
+      guard !cancelled(), ProcessInfo.processInfo.systemUptime < deadline else { throw IntakeFailure.unreadable }
+      try fm.moveItem(at: stage.folder, to: directory(item.id)); return item
     }
   }
-  func recordError(_ code: String) throws { try coordinated {
+  func recordError(_ code: String, cancelled: () -> Bool = { false }, onCoordinator: ((NSFileCoordinator) -> Void)? = nil) throws { try coordinated(onCoordinator: onCoordinator) {
+    guard !cancelled() else { throw IntakeFailure.unreadable }
     let old = try entries().filter { $0.kind == "error" }
     for item in old.prefix(max(0, old.count - IntakePolicy.errorItems + 1)) { try? fm.removeItem(at: directory(item.id)) }
     let item = IntakeEntry(id: UUID().uuidString.lowercased(), createdAtMs: now(), kind: "error", name: "OpenMapX", byteLength: 0, errorCode: IntakeFailure(rawValue: code)?.rawValue ?? "unreadable")
+    guard !cancelled() else { throw IntakeFailure.unreadable }
     let dir = try directory(item.id); try fm.createDirectory(at: dir, withIntermediateDirectories: true)
     try JSONEncoder().encode(item).write(to: dir.appendingPathComponent("metadata.json"), options: .atomic)
   } }
@@ -133,12 +182,17 @@ final class IntakeInbox {
     return IntakeChunk(id: id, offset: offset, data: data.base64EncodedString(), byteLength: count, eof: offset + count == item.byteLength)
   } }
   func complete(_ id: String) throws { try coordinated { let dir = try directory(id); if fm.fileExists(atPath: dir.path) { try fm.removeItem(at: dir) } } }
-  func captureDocument(_ file: URL, osInbox: URL, openInPlace: Bool) throws -> IntakeEntry {
+  func captureDocument(_ file: URL, osInbox: URL, openInPlace: Bool,
+    deadline: TimeInterval = ProcessInfo.processInfo.systemUptime + 10, cancelled: () -> Bool = { false },
+    onCoordinator: ((NSFileCoordinator) -> Void)? = nil) throws -> IntakeEntry {
     let canonical = IntakePolicy.canonical(file), inbox = IntakePolicy.canonical(osInbox)
     let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
     guard !openInPlace, file.isFileURL, values.isRegularFile == true, values.isSymbolicLink != true,
       canonical.deletingLastPathComponent().path == inbox.path else { throw IntakeFailure.unsupported }
+    // This is an OS-owned temporary copy, not the provider's original. Remove
+    // it on rejection too so oversized/full-inbox imports cannot accumulate in
+    // the app's backed-up Documents directory.
     defer { try? fm.removeItem(at: canonical) }
-    return try putFile(canonical, name: file.lastPathComponent)
+    return try putFile(canonical, name: file.lastPathComponent, deadline: deadline, cancelled: cancelled, onCoordinator: onCoordinator)
   }
 }
