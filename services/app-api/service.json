@@ -131,9 +131,18 @@
     "memory": "2g",
     "restart": "unless-stopped",
     "dependsOn": [
-      { "service": "postgis", "condition": "service_healthy" },
-      { "service": "redis", "condition": "service_healthy" },
-      { "service": "ops-agent", "condition": "service_healthy" }
+      {
+        "service": "postgis",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "redis",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "ops-agent",
+        "condition": "service_healthy"
+      }
     ],
     "healthcheck": {
       "type": "http",
@@ -217,10 +226,65 @@
       "enabled": true,
       "pathPrefix": "/api",
       "additionalRoutes": [
-        { "path": "/health" },
-        { "pathPrefix": "/api/internal", "middleware": ["internal-deny@file"] }
+        {
+          "path": "/health"
+        },
+        {
+          "pathPrefix": "/api/internal",
+          "middleware": ["internal-deny@file"]
+        }
       ]
     }
   },
-  "ui": { "category": "application" }
+  "ui": {
+    "category": "application"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "LOG_LEVEL": {
+        "type": "string",
+        "title": "Log level",
+        "enum": ["fatal", "error", "warn", "info", "debug", "trace", "silent"]
+      },
+      "RATE_LIMIT_IMAGE_PROXY_MAX_BYTES": {
+        "type": "integer",
+        "title": "Image proxy bytes per window",
+        "minimum": 1048576,
+        "maximum": 10737418240
+      },
+      "RATE_LIMIT_IMAGE_PROXY_WINDOW_MS": {
+        "type": "integer",
+        "title": "Image proxy window (ms)",
+        "minimum": 1000,
+        "maximum": 3600000
+      },
+      "RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_PER_CLIENT": {
+        "type": "integer",
+        "title": "Concurrent images per client",
+        "minimum": 1,
+        "maximum": 256
+      },
+      "RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_GLOBAL": {
+        "type": "integer",
+        "title": "Concurrent images for instance",
+        "minimum": 1,
+        "maximum": 4096
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

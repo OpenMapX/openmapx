@@ -188,4 +188,28 @@ integration("dropping the POI-ingest pipeline's database state", () => {
       await sql.end({ timeout: 5 });
     }
   }, 120_000);
+
+  it("applies administration migrations after the latest released main migration", async () => {
+    const sql = await freshDatabase("admin_after_released_main");
+    try {
+      await migrateTo(sql, migrationsUpTo("0044_job_stages_job_id_index"));
+      expect(await sql`SELECT to_regclass('public.auth_policy_state') AS name`).toEqual([
+        { name: null },
+      ]);
+      await migrateTo(sql, MIGRATIONS);
+      expect(await sql`SELECT to_regclass('public.auth_policy_state') AS name`).toEqual([
+        { name: "auth_policy_state" },
+      ]);
+      expect(await sql`SELECT execution_version FROM data_manager.jobs LIMIT 0`).toEqual([]);
+      expect(await jobStagesIndexes(sql)).toEqual([JOB_STAGES_INDEX_DEF]);
+      const before =
+        await sql`SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id`;
+      await migrateTo(sql, MIGRATIONS);
+      expect(
+        await sql`SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id`,
+      ).toEqual(before);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }, 120_000);
 });

@@ -17,4 +17,22 @@ export type DisableAdminIntegration409 =
       error: string;
       message: string;
       code?: string;
+    }
+  | {
+      code: "CONFIGURATION_SOURCE_OWNED";
+      error: string;
+      ownership: {
+        source: "default" | "database" | "vault" | "config.json" | "env";
+        writable: boolean;
+        secret: boolean;
+        adoption: "direct" | "host_action_required";
+        reason: "host_environment" | "host_file" | "vault_only" | "managed_workflow" | null;
+        /** @pattern ^[A-Z_][A-Z0-9_]{0,127}$ */
+        envVar?: string;
+        managedBy?: "transit.credentials" | "dawarich-provisioning";
+      };
+    }
+  | {
+      code: "CONFIGURATION_VERSION_CONFLICT";
+      error: string;
     };

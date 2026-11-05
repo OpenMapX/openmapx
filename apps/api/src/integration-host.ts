@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -42,6 +42,7 @@ import {
   type ConfigValueWithSource,
   resolveConfig,
   resolveConfigWithSources,
+  resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
@@ -55,6 +56,10 @@ import {
 } from "./integration-routes";
 import { redis } from "./redis";
 import {
+  type AdministrativeConfigurationReadContext,
+  assertAdministrativeConfigurationRead,
+} from "./services/administrative-configuration-context";
+import {
   AttributionIndex,
   defaultMotisLicenseFile,
   getAttributionIndex,
@@ -66,6 +71,10 @@ import {
   executeAllIntegrationHealthChecks,
   getCachedIntegrationHealthSnapshot,
 } from "./services/integration-health";
+import {
+  integrationRuntimeEvidence,
+  stageIntegrationRuntimeEvidence,
+} from "./services/integration-runtime-evidence";
 import { getMetricsRecorder } from "./services/metrics/recorder";
 import { cursorCodecFromEnvironment } from "./services/opaque-cursor";
 import {
@@ -87,6 +96,11 @@ const integrations = new Map<string, LoadedIntegration>();
 
 export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
 type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
+
+/** A read of the current host registry, never a projection of saved bindings. */
+export function inspectIntegrationRuntime(integrationId: string) {
+  return integrationRuntimeEvidence(integrations.get(integrationId));
+}
 
 // Stored for reload support
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
@@ -857,6 +871,7 @@ export async function initIntegrations(
   fastify: FastifyInstance<any, any, any, any>,
   integrationDirs: IntegrationDirectoryInput[],
 ): Promise<void> {
+  const generationId = randomUUID();
   _fastify = fastify;
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
@@ -1055,6 +1070,7 @@ export async function initIntegrations(
         }
       }
 
+      stageIntegrationRuntimeEvidence(integration, generationId);
       activationScope.complete();
       integrations.set(id, integration);
       log.info(`Integration ${id} v${manifest.version ?? "unknown"} loaded successfully`);
@@ -1249,7 +1265,19 @@ let pendingReload: Promise<ReloadResult> | null = null;
  * files is guaranteed a discover+setup pass starting at or after its call,
  * while N concurrent callers cause at most one queued rebuild.
  */
-export async function reloadIntegrations(): Promise<ReloadResult> {
+export async function reloadIntegrations(
+  context?: AdministrativeConfigurationReadContext,
+): Promise<ReloadResult> {
+  if (context) {
+    assertAdministrativeConfigurationRead(context);
+    // Each committed candidate receives its own exact pass. Coalescing it with
+    // another caller's snapshot could publish a different desired generation.
+    while (activeReload) await activeReload.catch(() => undefined);
+    activeReload = doReloadIntegrations(context).finally(() => {
+      activeReload = null;
+    });
+    return activeReload;
+  }
   if (!activeReload) {
     activeReload = doReloadIntegrations().finally(() => {
       activeReload = null;
@@ -1273,8 +1301,12 @@ export async function reloadIntegrations(): Promise<ReloadResult> {
  * previous generation. A failed rebuild is discarded without disturbing the
  * integrations that are currently serving requests.
  */
-async function doReloadIntegrations(): Promise<ReloadResult> {
+async function doReloadIntegrations(
+  context?: AdministrativeConfigurationReadContext,
+): Promise<ReloadResult> {
+  const generationId = randomUUID();
   if (!_fastify) throw new Error("Integration host not initialized");
+  if (context) assertAdministrativeConfigurationRead(context);
 
   const previousCount = integrations.size;
   const previousIntegrations = Array.from(integrations.values());
@@ -1290,13 +1322,26 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
     // Re-discover and re-setup (topological sort by dependencies, same as cold start).
     const discovered = await discoverManifests(_integrationDirs);
     const sorted = topologicalSort(discovered);
+    if (
+      context &&
+      (sorted.length !== context.integrations.length ||
+        sorted.some((item) => {
+          const captured = context.integrations.find((i) => i.id === item.manifest.id);
+          return (
+            !captured ||
+            captured.directory !== item.directory ||
+            JSON.stringify(captured.manifest) !== JSON.stringify(item.manifest)
+          );
+        }))
+    )
+      throw Error("Captured integration registry changed");
 
     // Reload capability bindings and service registry for requires: resolution.
     let reloadBindings = new Map<string, Map<string, string>>();
     try {
-      reloadBindings = await loadAllBindingsByIntegration();
+      reloadBindings = await loadAllBindingsByIntegration(context);
     } catch {
-      _fastify.log.debug("Capability bindings unavailable during reload");
+      throw Error("Captured integration bindings unavailable");
     }
 
     let reloadRegistry: ReturnType<typeof getServiceRegistry> | null = null;
@@ -1304,7 +1349,9 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
     try {
       reloadRegistry = getServiceRegistry();
       reloadServices = reloadRegistry.list();
+      if (context) reloadServices = [...context.services];
     } catch {
+      if (context) throw Error("Captured service registry unavailable");
       _fastify.log.debug("Service registry unavailable during reload");
     }
 
@@ -1343,7 +1390,13 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
         }
       }
 
-      const config = await resolveConfig(manifest, directory);
+      const config = context
+        ? Object.fromEntries(
+            Object.entries(
+              await resolveIntegrationConfigWithSourcesStrict(manifest, directory, context),
+            ).map(([key, entry]) => [key, entry.value]),
+          )
+        : await resolveConfig(manifest, directory);
       const log = createLogger(id, _fastify);
       const http = createHttpClient(log);
       const cache = createCacheClient(id);
@@ -1425,6 +1478,7 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
           }
         }
 
+        stageIntegrationRuntimeEvidence(integration, generationId);
         next.set(id, integration);
         log.info(`Integration ${id} v${manifest.version ?? "unknown"} reloaded successfully`);
         stagedEventBus.emit({ type: "integration.loaded", integrationId: id });

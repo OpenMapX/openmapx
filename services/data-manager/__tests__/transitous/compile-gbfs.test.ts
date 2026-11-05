@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
+import type { GbfsCatalogLock } from "@openmapx/core/catalog-pins/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
@@ -22,15 +24,6 @@ import { StateStore } from "../../src/state.js";
 // The GBFS catalog lock lives under the repository's `infra/docker/`, which is
 // agent-owned. Tests hand the same pinned record through the typed operation.
 const gbfsLock: { value: Record<string, unknown> | null } = { value: null };
-vi.mock("../../src/ops-client.js", () => ({
-  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
-    if (operation.kind === "gbfsCatalogLock.inspect") {
-      if (!gbfsLock.value) throw new Error("GBFS catalog lock is missing");
-      return gbfsLock.value;
-    }
-    return { changed: true };
-  }),
-}));
 
 const originalFetch = globalThis.fetch;
 const originalEnabled = process.env.MOTIS_GBFS_CATALOG_ENABLED;
@@ -163,6 +156,16 @@ describe("bounded GBFS candidate validation", () => {
       now: () => "2026-01-01T00:00:00Z",
     });
     ctx.state.catalogDir = catalog;
+    if (gbfsLock.value)
+      ctx.state.catalogPins = createCatalogPinSet(
+        {
+          ref: `main@${"a".repeat(40)}`,
+          submodules: {},
+          lockedAt: "2026-01-01T00:00:00Z",
+          lockedBy: "fixture",
+        },
+        gbfsLock.value as unknown as GbfsCatalogLock,
+      );
 
     const result = await run(ctx);
 
@@ -226,6 +229,16 @@ describe("bounded GBFS candidate validation", () => {
         now: () => "2026-01-01T00:00:00Z",
       });
       ctx.state.catalogDir = catalog;
+      if (gbfsLock.value)
+        ctx.state.catalogPins = createCatalogPinSet(
+          {
+            ref: `main@${"a".repeat(40)}`,
+            submodules: {},
+            lockedAt: "2026-01-01T00:00:00Z",
+            lockedBy: "fixture",
+          },
+          gbfsLock.value as unknown as GbfsCatalogLock,
+        );
 
       const result = await run(ctx);
 
@@ -292,6 +305,16 @@ describe("bounded GBFS candidate validation", () => {
         now: () => "2026-01-01T00:00:00Z",
       });
       ctx.state.catalogDir = catalog;
+      if (gbfsLock.value)
+        ctx.state.catalogPins = createCatalogPinSet(
+          {
+            ref: `main@${"a".repeat(40)}`,
+            submodules: {},
+            lockedAt: "2026-01-01T00:00:00Z",
+            lockedBy: "fixture",
+          },
+          gbfsLock.value as unknown as GbfsCatalogLock,
+        );
       const result = await run(ctx);
       expect(result.status).toBe("ok");
       expect(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")).toContain("openmapx-demo");

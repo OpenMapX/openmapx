@@ -175,7 +175,7 @@ const NAV_GROUPS = [
 interface AdminSidebarProps {
   open: boolean;
   onClose: () => void;
-  selfHosted?: boolean;
+  selfHosted?: boolean | null;
   role?: string;
 }
 
@@ -284,7 +284,7 @@ export function AdminSidebar({
 
   const navItems = BASE_NAV_ITEMS.filter(
     (item) =>
-      (!item.selfHostedOnly || selfHosted) &&
+      (!item.selfHostedOnly || selfHosted !== false) &&
       (!item.privacyOnly || role === "admin" || role === "privacy_admin"),
   ).filter((item) => role === "admin" || item.privacyOnly);
 
@@ -298,7 +298,7 @@ export function AdminSidebar({
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
   };
 
-  const servicesExpanded = selfHosted && pathname.startsWith("/admin/services");
+  const servicesExpanded = selfHosted !== false && pathname.startsWith("/admin/services");
 
   const drawerContent = (
     <>
@@ -353,7 +353,7 @@ export function AdminSidebar({
               {groupItems.map((item) => {
                 const hasActiveChild =
                   item.href === "/admin/services" &&
-                  selfHosted &&
+                  selfHosted !== false &&
                   SERVICES_SUB_ITEMS.some(isSubActive);
                 return (
                   <Box key={item.href}>
@@ -367,7 +367,7 @@ export function AdminSidebar({
                           : item.label
                       }
                     />
-                    {item.href === "/admin/services" && selfHosted && (
+                    {item.href === "/admin/services" && selfHosted !== false && (
                       <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
                         <List dense disablePadding>
                           {SERVICES_SUB_ITEMS.map((sub) => (

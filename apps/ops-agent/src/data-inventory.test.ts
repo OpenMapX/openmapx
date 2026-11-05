@@ -1,134 +1,274 @@
-import {
-  chmodSync,
-  linkSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+/** Readiness must be metadata-backed, never directory presence. */
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeTransitousProposal } from "@openmapx/transitous-core/pins";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { inspectDataInventory } from "./data-inventory";
 
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-
-/**
- * A checkout as `git clone` leaves it under a umask of 002: its own
- * directories group-writable. The data directory is created by the stack
- * (owner-only), and the services' outputs inside it by data-manager.
- */
-function umask002Checkout(): { root: string; data: string } {
-  const root = mkdtempSync(join(tmpdir(), "openmapx-inventory-"));
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), "omx-data-inventory-"));
   roots.push(root);
-  const data = join(root, "infra", "docker", "data");
-  mkdirSync(join(data, "osm"), { recursive: true });
-  mkdirSync(join(data, "valhalla"));
-  mkdirSync(join(data, "motis", "live"), { recursive: true });
-  writeFileSync(join(data, "osm", "germany-latest.osm.pbf"), "pbf");
-  writeFileSync(
-    join(data, "motis", "slot-state.json"),
-    JSON.stringify({ activeSlot: "B", previousHealthySlot: "A" }),
-  );
-  // A proposal in the agent's state; one planted in infra/docker is not read.
-  mkdirSync(join(root, "infra", "docker", "state", "ops-agent"), { recursive: true, mode: 0o700 });
-  writeTransitousProposal(join(root, "infra", "docker"), {
-    ref: `main@${"a".repeat(40)}`,
-    submodules: {},
-    lockedAt: "2026-10-25T00:00:00.000Z",
-    lockedBy: "auto-bump",
-  });
-  writeFileSync(join(root, "infra", "docker", "transitous.lock.proposed.json"), "{}");
-  // data-manager writes the data directory's contents with a umask of 022.
-  for (const path of ["osm", "valhalla", "motis", join("motis", "live")]) {
-    chmodSync(join(data, path), 0o755);
-  }
-  for (const path of [join("osm", "germany-latest.osm.pbf"), join("motis", "slot-state.json")]) {
-    chmodSync(join(data, path), 0o644);
-  }
-  for (const path of [root, join(root, "infra")]) chmodSync(path, 0o775);
-  // Rendering takes group and other write off infra/docker, which holds the
-  // stack's pointers; the agent only runs after a render.
-  chmodSync(join(root, "infra", "docker"), 0o755);
-  chmodSync(data, 0o700);
+  const data = join(root, "infra/docker/data");
+  mkdirSync(join(data, "osm"), { mode: 0o755, recursive: true });
   return { root, data };
 }
-
-describe("data inventory", () => {
-  // Every read is descriptor-anchored through /proc/self/fd.
-  it.runIf(process.platform === "linux")(
-    "reads a checkout whose own directories a umask of 002 left group-writable",
-    async () => {
-      const { root } = umask002Checkout();
-      const inventory = await inspectDataInventory(root);
-      expect(inventory.osm).toMatchObject({ found: true, filename: "germany-latest.osm.pbf" });
-      expect(inventory.builds).toContainEqual(
-        expect.objectContaining({ target: "valhalla", built: true }),
-      );
-      expect(inventory.motisTransitous).toMatchObject({
-        activeSlot: "B",
-        previousHealthySlot: "A",
-        pinProposalPending: true,
-      });
-    },
+it("pages every extract with stable IDs and does not call unrecorded bytes verified", async () => {
+  const { root, data } = fixture();
+  writeFileSync(join(data, "osm/z.osm.pbf"), "z", { mode: 0o644 });
+  writeFileSync(join(data, "osm/a.osm.pbf"), "aa", { mode: 0o644 });
+  const first = await inspectDataInventory(root, { osmLimit: 1, osmOffset: 0 }),
+    second = await inspectDataInventory(root, { osmLimit: 1, osmOffset: 1 });
+  expect(first.osm).toMatchObject({
+    total: 2,
+    offset: 0,
+    limit: 1,
+    unavailable: false,
+    items: [{ filename: "a.osm.pbf", fingerprintState: "missing", sourceFingerprint: null }],
+  });
+  expect(second.osm.items[0]?.filename).toBe("z.osm.pbf");
+  expect(second.osm.items[0]?.artifactId).not.toBe(first.osm.items[0]?.artifactId);
+});
+it("reports empty prepared directories incomplete and database-backed stores unknown", async () => {
+  const { root, data } = fixture();
+  for (const p of [
+    "osrm-graph",
+    "otp-graph",
+    "tile-mbtiles",
+    "motis/live",
+    "nominatim",
+    "photon",
+    "overpass",
+  ])
+    mkdirSync(join(data, p), { mode: 0o755, recursive: true });
+  const inventory = await inspectDataInventory(root);
+  for (const target of ["osrm", "otp", "tiles", "motis"])
+    expect(inventory.builds.find((x) => x.target === target)).toMatchObject({
+      built: false,
+      readiness: "incomplete",
+    });
+  for (const target of ["nominatim", "photon", "overpass"])
+    expect(inventory.builds.find((x) => x.target === target)).toMatchObject({
+      built: false,
+      readiness: "unknown",
+    });
+});
+it("reports legacy build records as unknown rather than verified readiness", async () => {
+  const { root, data } = fixture();
+  mkdirSync(join(data, "otp-graph"), { mode: 0o755 });
+  writeFileSync(join(data, "otp-graph/graph.obj"), "graph", { mode: 0o644 });
+  mkdirSync(join(data, ".openmapx-builds"), { mode: 0o755 });
+  writeFileSync(
+    join(data, ".openmapx-builds/otp.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      service: "otp",
+      builtAt: new Date().toISOString(),
+      runtimeImages: { otp: "example.test/otp@sha256:" + "a".repeat(64) },
+      toolImages: {},
+    }),
+    { mode: 0o644 },
   );
-
-  it.runIf(process.platform === "linux")(
-    "reads a fresh install's data directory, which the umask left group-writable",
-    async () => {
-      const { root, data } = umask002Checkout();
-      // Created by the CLI's first commands and written by data-manager, both
-      // as this user, under a umask of 002.
-      chmodSync(data, 0o775);
-      for (const path of ["osm", "valhalla", "motis", join("motis", "live")]) {
-        chmodSync(join(data, path), 0o775);
-      }
-      for (const path of [
-        join("osm", "germany-latest.osm.pbf"),
-        join("motis", "slot-state.json"),
-      ]) {
-        chmodSync(join(data, path), 0o664);
-      }
-      const inventory = await inspectDataInventory(root);
-      expect(inventory.osm).toMatchObject({ found: true, filename: "germany-latest.osm.pbf" });
-      expect(inventory.builds).toContainEqual(
-        expect.objectContaining({ target: "valhalla", built: true }),
-      );
-      expect(inventory.motisTransitous).toMatchObject({ activeSlot: "B" });
-    },
+  expect((await inspectDataInventory(root)).builds.find((x) => x.target === "otp")).toMatchObject({
+    readiness: "unknown",
+    buildRecordVersion: 1,
+    built: false,
+  });
+});
+it("surfaces unsafe OSM directories as unavailable, without exposing host paths", async () => {
+  const { root, data } = fixture();
+  renameSync(join(data, "osm"), join(data, "saved"));
+  writeFileSync(join(data, "osm"), "not a directory", { mode: 0o644 });
+  const result = await inspectDataInventory(root);
+  expect(result.osm).toMatchObject({ unavailable: true, items: [] });
+  expect(JSON.stringify(result)).not.toContain(root);
+});
+it.each(["output", "source"] as const)(
+  "invalidates same-size %s replacement without hashing on poll",
+  async (changed) => {
+    const { root, data } = fixture();
+    const { capturePreparedBuildEvidence, hashDataFile, osmArtifactId } = await import(
+      "@openmapx/core/build-artifacts"
+    );
+    mkdirSync(join(data, "osrm-graph"), { mode: 0o755 });
+    for (const file of [
+      "region.osrm",
+      "region.osrm.partition",
+      "region.osrm.cells",
+      "region.osrm.mldgr",
+    ])
+      writeFileSync(join(data, "osrm-graph", file), "graph bytes", { mode: 0o644 });
+    const path = "osm/europe-germany.osm.pbf";
+    writeFileSync(join(data, path), "pbf bytes", { mode: 0o644 });
+    const source = await hashDataFile(join(data, path));
+    const record = await capturePreparedBuildEvidence({
+      dataRoot: data,
+      record: {
+        schemaVersion: 2,
+        service: "osrm",
+        builtAt: new Date().toISOString(),
+        region: "europe/germany",
+        sourcePbf: { name: "europe-germany.osm.pbf", sizeBytes: source.sizeBytes },
+        runtimeImages: { osrm: "example.test/osrm@sha256:" + "a".repeat(64) },
+        toolImages: {},
+        sourceFingerprints: [
+          {
+            id: osmArtifactId("europe-germany.osm.pbf"),
+            sha256: source.sha256,
+            sizeBytes: source.sizeBytes,
+          },
+        ],
+        artifactFingerprint: "0".repeat(64),
+      },
+      inputs: [
+        {
+          path,
+          sha256: source.sha256,
+          device: source.device,
+          inode: source.inode,
+          sizeBytes: source.sizeBytes,
+          modifiedAtMs: source.modifiedAtMs,
+          changedAtMs: source.changedAtMs,
+        },
+      ],
+    });
+    writeFileSync(join(data, ".openmapx-builds/osrm.json"), JSON.stringify(record), {
+      mode: 0o644,
+    });
+    expect(
+      (await inspectDataInventory(root)).builds.find((x) => x.target === "osrm"),
+    ).toMatchObject({
+      built: true,
+      readiness: "ready",
+      buildRecordVersion: 2,
+      region: "europe/germany",
+    });
+    const replaced = join(data, changed === "output" ? "osrm-graph/region.osrm" : path),
+      bytes = changed === "output" ? "other bytes" : "new bytes";
+    writeFileSync(replaced + ".replacement", bytes, { mode: 0o644 });
+    renameSync(replaced + ".replacement", replaced);
+    expect(
+      (await inspectDataInventory(root)).builds.find((x) => x.target === "osrm"),
+    ).toMatchObject({ built: false, readiness: "stale" });
+  },
+);
+it("invalidates a download fingerprint after same-size inode replacement", async () => {
+  const { root, data } = fixture();
+  const { fileIdentity, osmArtifactId } = await import("@openmapx/core/build-artifacts");
+  const { lstatSync } = await import("node:fs");
+  const name = "europe-germany.osm.pbf",
+    path = join(data, "osm", name);
+  writeFileSync(path, "before", { mode: 0o644 });
+  writeFileSync(
+    path + ".openmapx.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      artifactId: osmArtifactId(name),
+      region: "europe/germany",
+      sha256: "c".repeat(64),
+      ...fileIdentity(lstatSync(path, { bigint: true })),
+    }),
+    { mode: 0o644 },
   );
-
-  it.runIf(process.platform === "linux")(
-    "still opens nothing through a link in the data directory",
-    async () => {
-      const { root, data } = umask002Checkout();
-      chmodSync(data, 0o775);
-      // A directory swapped for a symlink, and a status file hard-linked.
-      const elsewhere = join(root, "elsewhere");
-      mkdirSync(elsewhere, { mode: 0o755 });
-      writeFileSync(join(elsewhere, "planted-latest.osm.pbf"), "pbf", { mode: 0o644 });
-      rmSync(join(data, "osm"), { recursive: true });
-      symlinkSync(elsewhere, join(data, "osm"));
-      linkSync(join(data, "motis", "slot-state.json"), join(root, "slot-state-alias.json"));
-      const inventory = await inspectDataInventory(root);
-      expect(inventory.osm).toEqual({ found: false });
-      expect(inventory.motisTransitous).toMatchObject({ activeSlot: null });
-    },
+  expect((await inspectDataInventory(root)).osm.items[0]).toMatchObject({
+    fingerprintState: "verified",
+    sourceFingerprint: "c".repeat(64),
+  });
+  writeFileSync(path + ".replacement", "after!", { mode: 0o644 });
+  renameSync(path + ".replacement", path);
+  expect((await inspectDataInventory(root)).osm.items[0]).toMatchObject({
+    fingerprintState: "stale",
+    sourceFingerprint: null,
+  });
+});
+it("does not silently truncate extracts at the previous first page", async () => {
+  const { root, data } = fixture();
+  for (let i = 0; i < 501; i++)
+    writeFileSync(join(data, "osm", `${String(i).padStart(4, "0")}.osm.pbf`), "x", { mode: 0o644 });
+  const page = await inspectDataInventory(root, { osmOffset: 500, osmLimit: 50 });
+  expect(page.osm).toMatchObject({ total: 501, offset: 500, unavailable: false });
+  expect(page.osm.items.map((x) => x.filename)).toEqual(["0500.osm.pbf"]);
+});
+it("checks changed source evidence even outside the displayed OSM page", async () => {
+  const { root, data } = fixture();
+  const { capturePreparedBuildEvidence, fileIdentity, osmArtifactId } = await import(
+    "@openmapx/core/build-artifacts"
   );
-
-  it.runIf(process.platform === "linux")(
-    "does not read through a data directory anyone can write",
-    async () => {
-      const { root, data } = umask002Checkout();
-      chmodSync(data, 0o777);
-      const inventory = await inspectDataInventory(root);
-      expect(inventory.osm).toEqual({ found: false });
-      expect(inventory.motisTransitous).toMatchObject({ activeSlot: null });
-    },
+  const { lstatSync } = await import("node:fs");
+  mkdirSync(join(data, "otp-graph"), { mode: 0o755 });
+  writeFileSync(join(data, "otp-graph/graph.obj"), "graph", { mode: 0o644 });
+  for (let i = 0; i < 50; i++)
+    writeFileSync(join(data, "osm", `a${i}.osm.pbf`), "x", { mode: 0o644 });
+  const name = "zz.osm.pbf",
+    path = join(data, "osm", name);
+  writeFileSync(path, "new source", { mode: 0o644 });
+  writeFileSync(
+    path + ".openmapx.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      artifactId: osmArtifactId(name),
+      region: "zz",
+      sha256: "d".repeat(64),
+      ...fileIdentity(lstatSync(path, { bigint: true })),
+    }),
+    { mode: 0o644 },
   );
+  const record = await capturePreparedBuildEvidence({
+    dataRoot: data,
+    record: {
+      schemaVersion: 2,
+      service: "otp",
+      builtAt: new Date().toISOString(),
+      sourcePbf: { name, sizeBytes: 10 },
+      runtimeImages: { otp: "example.test/otp" },
+      toolImages: {},
+      sourceFingerprints: [{ id: osmArtifactId(name), sha256: "e".repeat(64), sizeBytes: 10 }],
+      artifactFingerprint: "0".repeat(64),
+    },
+  });
+  writeFileSync(join(data, ".openmapx-builds/otp.json"), JSON.stringify(record), { mode: 0o644 });
+  const inventory = await inspectDataInventory(root);
+  expect(inventory.osm.items).toHaveLength(50);
+  expect(inventory.osm.items.some((item) => item.filename === name)).toBe(false);
+  expect(inventory.builds.find((item) => item.target === "otp")).toMatchObject({
+    built: false,
+    readiness: "stale",
+  });
+});
+it("reports a disappeared listed extract as unavailable, not an empty successful scan", async () => {
+  const { root, data } = fixture(),
+    file = join(data, "osm/vanishing.osm.pbf");
+  writeFileSync(file, "bytes", { mode: 0o644 });
+  const { AnchoredDirectory } = await import(
+    "../../../packages/core/src/build-artifacts/filesystem"
+  );
+  const { unlinkSync } = await import("node:fs");
+  const { vi } = await import("vitest");
+  const list = AnchoredDirectory.prototype.listBounded;
+  const spy = vi.spyOn(AnchoredDirectory.prototype, "listBounded").mockImplementation(function (
+    this: InstanceType<typeof AnchoredDirectory>,
+    maximum: number,
+  ) {
+    const names = list.call(this, maximum);
+    if (this.path.endsWith("/osm") && names.includes("vanishing.osm.pbf")) unlinkSync(file);
+    return names;
+  });
+  try {
+    expect((await inspectDataInventory(root)).osm).toMatchObject({ unavailable: true, items: [] });
+  } finally {
+    spy.mockRestore();
+  }
+});
+it("preserves the legacy top-level extract fallback when managed OSM storage is absent", async () => {
+  const { root, data } = fixture();
+  rmSync(join(data, "osm"), { recursive: true });
+  writeFileSync(join(data, "legacy-latest.osm.pbf"), "legacy", { mode: 0o644 });
+  expect((await inspectDataInventory(root)).osm).toMatchObject({
+    unavailable: false,
+    total: 1,
+    items: [{ filename: "legacy-latest.osm.pbf", fingerprintState: "missing", region: null }],
+  });
 });

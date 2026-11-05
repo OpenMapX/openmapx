@@ -1,11 +1,19 @@
 import type { FastifyInstance } from "fastify";
-import { getAllIntegrations, getIntegration, reloadIntegrations } from "../integration-host";
+import { getAllIntegrations, getIntegration, inspectIntegrationRuntime } from "../integration-host";
+import {
+  createDirectAdminOpsKey,
+  DIRECT_OPS_IDEMPOTENCY_HEADER,
+  parseDirectOpsIdempotency,
+} from "../services/direct-ops-idempotency";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
+  inspectIntegrationCredentialView,
+  latestIntegrationApplication,
 } from "../services/integration-credential-status";
 import { executeIntegrationHealthCheck } from "../services/integration-health";
-import { deleteSecret, isSecretsConfigured, listSecrets, setSecret } from "../services/secrets";
+import { jobRunner } from "../services/job-runner";
+import { isSecretsConfigured, listSecrets } from "../services/secrets";
 import { writeAuditLog } from "../utils/audit-log";
 import { getAdminSession } from "../utils/require-admin";
 import { getSecretFields } from "../utils/validate-config-body";
@@ -41,11 +49,16 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     const integration = getIntegration(request.params.integrationId);
     if (!integration) return reply.status(404).send({ error: "Integration not found" });
 
-    const credentialStatus = await computeCredentialStatus(integration);
+    const view = await inspectIntegrationCredentialView(integration);
+    const credentialStatus = view.credentials;
+    const application = await latestIntegrationApplication(integration.id);
     return {
       integrationId: integration.id,
       name: getIntegrationDisplayName(integration),
       credentials: credentialStatus,
+      configurationRevision: view.revision,
+      runtime: inspectIntegrationRuntime(integration.id),
+      application,
       secretsConfigured: isSecretsConfigured(),
     };
   });
@@ -79,23 +92,29 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
       });
     }
 
-    await setSecret(integrationId, key, value, adminSession.user.id);
+    const applied = await jobRunner.applyImmediateIntegrationCredential({
+      integrationId,
+      key,
+      action: "set",
+      value,
+      expectedRevision: request.body.expectedRevision,
+      actorId: adminSession.user.id,
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integrationId,
       targetType: "integration",
       action: "credential.set",
-      details: { key },
+      details: { key, database: applied.database, runtime: applied.runtime },
       request,
     });
 
-    // Reload so the running integration picks up the new secret. An
-    // integration captures its resolved config (incl. vault secrets) once at
-    // `setup(ctx)` load time, so without this a freshly-set key never reaches
-    // the provider until the next restart. Mirrors the config-PATCH endpoint.
-    const reloadResult = await reloadIntegrations();
-    return { ok: true, ...reloadResult };
+    return applied;
   });
 
   // DELETE /admin/credentials/:integrationId/:key
@@ -106,21 +125,28 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
 
     const adminSession = getAdminSession(request);
 
-    await deleteSecret(integrationId, key);
+    const applied = await jobRunner.applyImmediateIntegrationCredential({
+      integrationId,
+      key,
+      action: "delete",
+      expectedRevision: request.body.expectedRevision,
+      actorId: adminSession.user.id,
+      operationKey: createDirectAdminOpsKey(
+        adminSession.user.id,
+        parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      ),
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integrationId,
       targetType: "integration",
       action: "credential.delete",
-      details: { key },
+      details: { key, database: applied.database, runtime: applied.runtime },
       request,
     });
 
-    // Reload so the running integration drops the removed secret (see the
-    // set-secret handler above).
-    const reloadResult = await reloadIntegrations();
-    return { ok: true, ...reloadResult };
+    return applied;
   });
 
   // POST /admin/credentials/:integrationId/test — test credentials via health check

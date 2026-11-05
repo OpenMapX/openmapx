@@ -44,12 +44,17 @@ export function osmExtractFor(
   osm: OsmInventory,
   datasets: readonly DatasetMetadata[],
 ): OsmExtract | undefined {
-  if (!osm.found || !osm.filename) return undefined;
+  // This is an instance-wide summary. A paged/multi-extract inventory cannot
+  // identify one file as the current extract merely by its ordering.
+  if (osm.unavailable || osm.total !== 1 || osm.offset !== 0 || osm.items.length !== 1)
+    return undefined;
+  const file = osm.items[0];
+  if (!file) return undefined;
   const dataset = datasets.find(
     (d) =>
       d.type === "osm-pbf" &&
-      basename(d.path) === osm.filename &&
-      d.sizeBytes === osm.sizeBytes &&
+      basename(d.path) === file.filename &&
+      d.sizeBytes === file.sizeBytes &&
       isTimestamp(d.osmTimestamp),
   );
   if (!dataset?.osmTimestamp) return undefined;

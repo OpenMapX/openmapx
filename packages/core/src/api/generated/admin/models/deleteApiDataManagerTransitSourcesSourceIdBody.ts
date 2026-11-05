@@ -4,4 +4,6 @@
 export type DeleteApiDataManagerTransitSourcesSourceIdBody = {
   /** @maxLength 200 */
   idempotencyKey?: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  expectedSourceRevision: string;
 };

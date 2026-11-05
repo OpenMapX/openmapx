@@ -1,17 +1,19 @@
 import { createHash } from "node:crypto";
-import {
+import filesystem, {
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -211,6 +213,107 @@ describe("defaultBackupName", () => {
 });
 
 describe("backup retention", () => {
+  it.each(["invalid-selection", "stale-generation"])(
+    "does not change expiry for a rejected %s policy request",
+    async (mode) => {
+      const { services } = await import("@openmapx/core/server"),
+        infraDir = join(tmp, "infra", "docker");
+      process.env.BACKUP_RETENTION_DAYS = "30";
+      const dir = writeBackup("legacy", {
+          name: "legacy",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          services: [],
+        }),
+        original = readFileSync(join(dir, "manifest.json"));
+      await expect(
+        services.commitConfigurationGeneration({
+          infraDir,
+          services: [],
+          ...(mode === "stale-generation"
+            ? { expectedCurrentRevisionId: `cfg1_${"z".repeat(43)}` }
+            : {}),
+          input: {
+            domain: "maps.example.test",
+            selectedRoots: mode === "invalid-selection" ? ["missing"] : [],
+            serviceConfigs: [],
+            integrationConfigs: [],
+            serviceSecrets: [],
+            platform: { version: 1, backupRetentionDays: { source: "database", value: 1 } },
+          },
+        }),
+      ).rejects.toThrow();
+      expect(readFileSync(join(dir, "manifest.json"))).toEqual(original);
+    },
+  );
+  it("freezes legacy expiry before a policy increase and never reverses a later shortening", async () => {
+    const { services } = await import("@openmapx/core/server"),
+      infraDir = join(tmp, "infra", "docker");
+    process.env.BACKUP_RETENTION_DAYS = "30";
+    const dir = writeBackup("legacy", {
+      name: "legacy",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      services: [],
+    });
+    const input = {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    for (const days of [60, 5, 365]) {
+      await services.commitConfigurationGeneration({
+        infraDir,
+        services: [],
+        input: {
+          ...input,
+          platform: { version: 1, backupRetentionDays: { source: "database", value: days } },
+        },
+      });
+      expect(readBackupManifest(join(dir, "manifest.json")).expiresAt).toBe(
+        days === 60 ? "2026-08-31T00:00:00.000Z" : "2026-08-06T00:00:00.000Z",
+      );
+    }
+  });
+  it("does not extend a backup's stamped expiry when retention increases", () => {
+    writeBackup("stamped", {
+      name: "stamped",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      services: [],
+    });
+    const result = pruneExpiredBackups({
+      rootDir: tmp,
+      retentionDays: 365,
+      now: new Date("2026-08-31T00:00:00.000Z"),
+    });
+    expect(result.deleted).toEqual(["stamped"]);
+  });
+  it("rejects an expired stamped archive before any restore, including archives without the account database", () => {
+    const dir = writeBackup("expired", {
+      name: "expired",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      services: [],
+    });
+    const manifest = readBackupManifest(join(dir, "manifest.json"));
+    expect(() =>
+      validateRestoreDataProtection(manifest, {
+        rootDir: tmp,
+        retentionDays: 365,
+        now: new Date("2026-08-31T00:00:00.000Z"),
+      }),
+    ).toThrow(/expired|retention/i);
+  });
+  it("rejects invalid portable expiry fields", () => {
+    const dir = writeBackup("invalid-expiry", {
+      name: "invalid-expiry",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-07-01T00:00:00.000Z",
+      services: [],
+    });
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/expiry/i);
+  });
   it("deletes only valid backups strictly older than the retention boundary", () => {
     writeBackup("old", { name: "old", createdAt: "2026-07-01T00:00:00.000Z", services: [] });
     writeBackup("boundary", {
@@ -397,6 +500,57 @@ describe("readBackupManifest", () => {
     linkSync(manifest, hardlink);
     expect(() => readBackupManifest(hardlink)).toThrow(/private regular file/);
   });
+
+  it.each(["symlink", "regular file"] as const)(
+    "does not consume a %s substituted after observing the original manifest",
+    (replacement) => {
+      const dir = writeBackup("trusted", {
+        name: "trusted",
+        createdAt: "2026-04-19T00:00:00Z",
+        services: [],
+      });
+      const foreignDir = writeBackup("foreign", {
+        name: "foreign",
+        createdAt: "2026-04-19T00:00:00Z",
+        services: [],
+      });
+      const manifest = join(dir, "manifest.json"),
+        foreignManifest = join(foreignDir, "manifest.json"),
+        original = statSync(manifest),
+        nativeLstat = filesystem.lstatSync,
+        nativeFstat = filesystem.fstatSync;
+      let replaced = false;
+      // Perform real replacement after the native observation returns. The legacy
+      // reader observed a pathname; the fixed reader observes its already-open FD.
+      const replaceObservedManifest = (stat: { dev: number | bigint; ino: number | bigint }) => {
+        if (replaced || stat.dev !== original.dev || stat.ino !== original.ino) return;
+        replaced = true;
+        renameSync(manifest, join(dir, "original-manifest.json"));
+        if (replacement === "symlink") symlinkSync(foreignManifest, manifest);
+        else renameSync(foreignManifest, manifest);
+      };
+      const lstat = vi.spyOn(filesystem, "lstatSync").mockImplementation((path, options) => {
+        const stat = nativeLstat(path, options);
+        if (stat) replaceObservedManifest(stat);
+        return stat;
+      });
+      const fstat = vi.spyOn(filesystem, "fstatSync").mockImplementation((fd, options) => {
+        const stat = nativeFstat(fd, options);
+        replaceObservedManifest(stat);
+        return stat;
+      });
+      syncBuiltinESMExports();
+      try {
+        expect(readBackupManifest(manifest).name).toBe("trusted");
+        expect(replaced).toBe(true);
+        expect(JSON.parse(readFileSync(manifest, "utf8")).name).toBe("foreign");
+      } finally {
+        lstat.mockRestore();
+        fstat.mockRestore();
+        syncBuiltinESMExports();
+      }
+    },
+  );
 
   it("publishes a private manifest atomically and flushes temporary names", () => {
     const dir = join(tmp, "infra", "docker", "backups", "atomic");
@@ -1545,6 +1699,35 @@ describe("restore data-protection preflight", () => {
     };
   }
 
+  it("uses applied retention for restore and observes return to host on the next call", async () => {
+    const { services } = await import("@openmapx/core/server"),
+      infraDir = join(tmp, "infra", "docker");
+    const input = {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    };
+    process.env.BACKUP_RETENTION_DAYS = "30";
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, backupRetentionDays: { source: "database", value: 60 } },
+      },
+    });
+    const manifest = protectedManifest("2026-07-01T00:00:00.000Z"),
+      opts = { rootDir: tmp, now: new Date("2026-08-01T00:00:00.000Z") };
+    expect(() => validateRestoreDataProtection(manifest, opts)).not.toThrow();
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: { ...input, platform: { version: 1, backupRetentionDays: { source: "host" } } },
+    });
+    expect(() => validateRestoreDataProtection(manifest, opts)).toThrow(/retention policy/);
+  });
   it("accepts an in-policy OpenMapX backup covered by the external journal", () => {
     const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
     mkdirSync(join(journalPath, ".."), { recursive: true });

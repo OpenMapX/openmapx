@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { findRepoRoot, services } from "@openmapx/core/server";
-import { readCommunityServices } from "./community-repositories";
+import { readCommunityServices } from "./community-service-inventory";
 
 const {
   APPLIED_SERVICES_ENV,

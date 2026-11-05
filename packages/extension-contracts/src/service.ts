@@ -7,6 +7,26 @@ import type { ManifestProvenance, ServiceManifest } from "./service-types";
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
 const TAG_REGEX = /^[a-zA-Z0-9._-]+$/;
 const IMAGE_DIGEST_REGEX = /^sha256:[a-f0-9]{64}$/;
+/** Bounded references derived from trusted manifest/release image fields.
+ * Parsing is data validation, never permission to choose or pull an image. */
+export const serviceImageReferenceSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .refine((value) => {
+    const [reference = "", digest, ...extra] = value.split("@"),
+      colon = reference.lastIndexOf(":"),
+      tagged = colon > reference.lastIndexOf("/"),
+      repository = tagged ? reference.slice(0, colon) : reference,
+      tag = tagged ? reference.slice(colon + 1) : undefined,
+      withoutRegistryPort = repository.replace(/^([^/]+):[0-9]{1,5}\//, "$1/");
+    return (
+      extra.length === 0 &&
+      IMAGE_REGEX.test(withoutRegistryPort) &&
+      (tag === undefined || TAG_REGEX.test(tag)) &&
+      (digest === undefined || IMAGE_DIGEST_REGEX.test(digest))
+    );
+  });
 // Docker's container-name grammar: `[a-zA-Z0-9][a-zA-Z0-9_.-]*` (single-char
 // names are legal, hence `*` not `+` after the leading char).
 const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;

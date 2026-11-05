@@ -70,6 +70,8 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
           ok: true,
           unchanged: false,
           proposed: true,
+          proposalId: "1d2b29cd-23de-4b19-8c32-86c196833b79",
+          catalogRevisionId: "a".repeat(64),
           submoduleSha: "deadbeef",
           lockedAt: "2026-10-19T00:00:00.000Z",
           lockedBy: "admin-1",

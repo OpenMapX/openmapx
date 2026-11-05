@@ -6,6 +6,7 @@ import { runOpsOperation } from "../../ops-client.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
 import { openConditionsHeaders } from "./openconditions-auth.js";
 import { encodePredictedSpeeds, expandHourlyToBuckets } from "./predicted-encode.js";
+import { PredictedTrafficInputError } from "./predicted-input-error.js";
 import {
   loadWaysToEdges as loadWaysToEdgesDefault,
   type RefreshWaysToEdgesResult,
@@ -244,7 +245,12 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
   //
   // A failure here is fatal by design. Falling back to the map on disk is the
   // exact behaviour that produced the incident.
-  const [profiles, coveredWayIds] = await Promise.all([fetchProfiles(), resolveCoveredWayIds()]);
+  const [profiles, coveredWayIds] = await Promise.all([
+    fetchProfiles(),
+    resolveCoveredWayIds(),
+  ]).catch((cause: unknown) => {
+    throw new PredictedTrafficInputError(cause);
+  });
   const waysResult = await refreshWays(coveredWayIds, { logger: deps.logger });
   const waysToEdges = await loadEdges();
 

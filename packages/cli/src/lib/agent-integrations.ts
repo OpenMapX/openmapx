@@ -3,10 +3,12 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  createControlRootOperationKey,
   OpsClient,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
+  opsExecutionBudget,
 } from "@openmapx/core/ops";
 import { services as coreServices, gitShallowClone } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
@@ -36,22 +38,61 @@ function localAgentClient(): OpsClient {
   });
 }
 
-const operationKey = () => `opk1_${randomBytes(18).toString("base64url")}`;
-
+const CATALOG_KINDS = new Set([
+  "catalogIntegration.inspect",
+  "catalogIntegration.publish",
+  "catalogIntegration.settle",
+  "catalogIntegration.remove",
+  "catalogIntegration.adopt",
+]);
 async function run<K extends OpsOperationKind>(
   client: OpsClient,
   operation: Extract<OpsOperation, { kind: K }>,
 ): Promise<OpsResultFor<K>> {
-  const submitted = await client.execute(operation, { operationKey: operationKey() });
+  if (!CATALOG_KINDS.has(operation.kind)) throw new Error("Unsupported catalog operation");
+  const requestedDeadlineAt = Date.now() + opsExecutionBudget(operation.kind).processMs;
+  const operationKey = createControlRootOperationKey({
+    notAfter: requestedDeadlineAt,
+    nonce: randomBytes(16),
+  });
+  const execution = { requestedDeadlineAt };
+  let submitted: Awaited<ReturnType<typeof client.execute<K>>>;
+  try {
+    // The local API bearer identifies this caller truthfully. The agent retains
+    // its own normal root; this CLI does not invent an API database job parent.
+    submitted = await client.execute(operation, { operationKey, execution });
+  } catch (error) {
+    // An ambiguous response never authorizes another submission. Observe the
+    // exact original body/key, including when the agent is still unreachable.
+    for (;;) {
+      if (Date.now() >= requestedDeadlineAt) throw error;
+      try {
+        const status = await client.lookup(operation, operationKey, { execution });
+        if (status.state === "succeeded") return status.result as OpsResultFor<K>;
+        if (!["queued", "running", "termination_pending"].includes(status.state))
+          throw new Error(
+            `The operations agent could not complete ${operation.kind} (${status.state})`,
+          );
+        submitted = { execution: "async", operationId: status.operationId } as typeof submitted;
+        break;
+      } catch {
+        await new Promise((done) => setTimeout(done, 500));
+      }
+    }
+  }
   if (submitted.execution === "sync") return submitted.value as OpsResultFor<K>;
   for (;;) {
     const status = await client.status(operation.kind, submitted.operationId);
     if (status.state === "succeeded") return status.result as OpsResultFor<K>;
-    if (status.state !== "queued" && status.state !== "running") {
+    if (!["queued", "running", "termination_pending"].includes(status.state)) {
       throw new Error(
         `The operations agent could not complete ${operation.kind} (${status.state})`,
       );
     }
+    if (Date.now() >= requestedDeadlineAt)
+      throw new Error(
+        `The original ${operation.kind} deadline expired; reconcile its retained receipt`,
+      );
     await new Promise((done) => setTimeout(done, 500));
   }
 }
@@ -59,18 +100,18 @@ async function run<K extends OpsOperationKind>(
 /** Install `source` as an operator integration through the local agent. */
 export async function installThroughLocalAgent(source: IntegrationSource): Promise<string> {
   const client = localAgentClient();
-  const inspected = await run(client, { kind: "integration.inspect", source });
+  const inspected = await run(client, { kind: "catalogIntegration.inspect", source });
   if (!inspected.valid || !inspected.integrationId) {
     throw new Error(inspected.problems.join("; ") || "The integration archive is not valid");
   }
   const published = await run(client, {
-    kind: "integration.publish",
+    kind: "catalogIntegration.publish",
     integrationId: inspected.integrationId,
     source,
   });
   // The operator's install is complete once published; nothing else depends on it.
   await run(client, {
-    kind: "integration.settle",
+    kind: "catalogIntegration.settle",
     integrationId: published.integrationId,
     transactionId: published.transactionId,
     outcome: "commit",
@@ -79,7 +120,8 @@ export async function installThroughLocalAgent(source: IntegrationSource): Promi
 }
 
 export async function removeThroughLocalAgent(integrationId: string): Promise<boolean> {
-  return (await run(localAgentClient(), { kind: "integration.remove", integrationId })).removed;
+  return (await run(localAgentClient(), { kind: "catalogIntegration.remove", integrationId }))
+    .removed;
 }
 
 /** Whether the stack's operations agent container is running. */

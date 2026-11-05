@@ -60,6 +60,8 @@ function sealed(issuedAtMs = now) {
     operationKey: "opk1_0123456789abcdef",
     operationForRevision: (revisionId) => ({
       expectedCurrentRevisionId: null,
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      coordinatorMode: "ensure-running",
       kind: "stack.render",
       revisionId,
     }),
@@ -76,6 +78,8 @@ function distinctSealed(index: number) {
     operationKey: "opk1_0123456789abcdef",
     operationForRevision: (revisionId) => ({
       expectedCurrentRevisionId: null,
+      expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+      coordinatorMode: "ensure-running",
       kind: "stack.render",
       revisionId,
     }),

@@ -6,6 +6,12 @@ import { execa } from "execa";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
 import { osmPbfName } from "../download-osm.js";
+import {
+  assertDataPublication,
+  dataWorkerSignal,
+  publishDataChange,
+  retainDataPublication,
+} from "../execution/worker-scope.js";
 import { withOsmiumLocationIndex } from "../osm-resources.js";
 import { assertValidRegion } from "./pull.js";
 import { assertValidOvertureSchema } from "./schema.js";
@@ -195,7 +201,7 @@ export async function extractOsmPois(
       await execa(
         "osmium",
         ["tags-filter", pbfPath, ...uniqueFilters.map((f) => `nwr/${f}`), "-o", filteredPbf, "-O"],
-        { stdio: "inherit" },
+        { stdio: "inherit", cancelSignal: dataWorkerSignal() },
       );
       const stagingTable = "osm_pois__staging";
       opts.onProgress?.("Preparing a fresh OSM POI staging table...");
@@ -224,7 +230,7 @@ export async function extractOsmPois(
         ],
         // Execa buffers piped output by default. Germany-scale GeoJSON exceeds
         // that buffer, so consume stdout exclusively through the line iterator.
-        OSMIUM_EXPORT_STREAM_OPTIONS,
+        { ...OSMIUM_EXPORT_STREAM_OPTIONS, cancelSignal: dataWorkerSignal() },
       );
       opts.onProgress?.("Streaming osmium GeoJSON output into PostGIS...");
       const { createInterface } = await import("node:readline");
@@ -283,22 +289,26 @@ export async function extractOsmPois(
         `Emitted ${emitted} OSM geometries and retained ${extracted} unique POIs; ` +
           "publishing the staged snapshot...",
       );
-      await sql.begin(async (tx) => {
-        await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
-        await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
-        await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
-        await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
-        await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
-        await tx.unsafe(
-          `CREATE INDEX idx_osm_pois_h3
+      assertDataPublication();
+      await publishDataChange(() =>
+        sql.begin(async (tx) => {
+          await tx.unsafe(`DROP TABLE IF EXISTS "${schema}".osm_pois__previous`);
+          await tx.unsafe(`ALTER TABLE "${schema}".osm_pois RENAME TO osm_pois__previous`);
+          await tx.unsafe(`ALTER TABLE "${schema}"."${stagingTable}" RENAME TO osm_pois`);
+          await tx.unsafe(`DROP TABLE "${schema}".osm_pois__previous`);
+          await tx.unsafe(`CREATE INDEX idx_osm_pois_category ON "${schema}".osm_pois (category)`);
+          await tx.unsafe(
+            `CREATE INDEX idx_osm_pois_h3
          ON "${schema}".osm_pois (h3_r8, osm_type, osm_id)`,
-        );
-        await tx.unsafe(
-          `CREATE INDEX idx_osm_pois_geom
+          );
+          await tx.unsafe(
+            `CREATE INDEX idx_osm_pois_geom
          ON "${schema}".osm_pois USING GIST (ST_Point(lng, lat))`,
-        );
-        await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
-      });
+          );
+          await tx.unsafe(`ANALYZE "${schema}".osm_pois`);
+        }),
+      );
+      await retainDataPublication();
       opts.onProgress?.(
         `Published ${extracted} unique OSM POIs to ${schema}.osm_pois ` +
           `(${emitted} geometries emitted).`,

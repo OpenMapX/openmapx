@@ -1,5 +1,14 @@
+import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+
+const availableActions = Object.fromEntries(
+  SERVICE_ACTIONS.map((action) => [
+    action,
+    { available: true, execution: "direct", reason: null, workflow: null },
+  ]),
+);
+const acquisition = { state: "available", reason: null };
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://admin.test" }),
@@ -8,6 +17,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 vi.mock("@/hooks/useServices", () => ({
   useServiceDetail: (serviceId: string) => ({
     data: {
+      acquisition,
       manifest: {
         id: serviceId,
         name: serviceId === "dawarich-app" ? "Dawarich" : "Redis",
@@ -17,6 +27,7 @@ vi.mock("@/hooks/useServices", () => ({
       },
       directory: "/services/example",
       isBuiltIn: false,
+      actions: availableActions,
       enabled: true,
       status: "not-running",
     },

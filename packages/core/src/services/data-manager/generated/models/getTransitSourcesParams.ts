@@ -4,6 +4,7 @@ import type { GetTransitSourcesLifecycle } from "./getTransitSourcesLifecycle";
 import type { GetTransitSourcesOrigin } from "./getTransitSourcesOrigin";
 
 export type GetTransitSourcesParams = {
+  country?: string;
   search?: string;
   lifecycle?: GetTransitSourcesLifecycle;
   origin?: GetTransitSourcesOrigin;

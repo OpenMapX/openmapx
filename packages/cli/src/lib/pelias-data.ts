@@ -13,6 +13,7 @@ import { atomicWrite } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { withStagedBuildDir } from "./build-staging";
+import { cliProcessOptions } from "./execution-deadline";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
 
@@ -62,7 +63,11 @@ async function defaultRunner(
   args: string[],
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
-  await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "inherit" });
+  await execa(command, args, {
+    ...cliProcessOptions(),
+    cwd: opts.cwd,
+    stdio: opts.stdio ?? "inherit",
+  });
 }
 
 function linkOrCopy(source: string, target: string): void {

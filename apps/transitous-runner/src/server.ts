@@ -42,5 +42,19 @@ export function buildTransitousRunnerServer(options: TransitousRunnerOptions) {
     }
   });
 
+  for (const action of ["inspect", "cancel", "acknowledge"] as const)
+    app.post(`/v1/run/${action}`, async (request, reply) => {
+      const parsed = transitousRunnerRequestSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ ok: false, error: "validation" });
+      try {
+        return action === "cancel"
+          ? runner.cancel(parsed.data)
+          : action === "acknowledge"
+            ? runner.acknowledge(parsed.data)
+            : runner.inspect(parsed.data);
+      } catch {
+        return reply.code(404).send({ ok: false, error: "unknown" });
+      }
+    });
   return app;
 }

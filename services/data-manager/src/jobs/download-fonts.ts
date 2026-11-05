@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { execa } from "execa";
 import type { StateStore } from "../state.js";
 import { curlAtomic } from "./atomic-download.js";
+import { assertDataPublication, publishDataChange } from "./execution/worker-scope.js";
 
 export const DEFAULT_OPENMAPTILES_FONTS_URL =
   "https://github.com/openmaptiles/fonts/releases/download/v2.0/v2.0.zip";
@@ -48,12 +49,14 @@ function containsGlyphPbf(root: string): boolean {
 }
 
 export interface DownloadFontsOptions {
+  signal?: AbortSignal;
   dataDir: string;
   store: StateStore;
 }
 
 /** Download and atomically replace the glyph tree used online and by offline packages. */
 export async function downloadFonts(opts: DownloadFontsOptions): Promise<void> {
+  opts.signal?.throwIfAborted();
   mkdirSync(opts.dataDir, { recursive: true });
   const url = resolveFontAssetUrl();
   const fontsDir = join(opts.dataDir, "tile-fonts");
@@ -63,21 +66,29 @@ export async function downloadFonts(opts: DownloadFontsOptions): Promise<void> {
   const backup = join(stagingRoot, "previous");
   let previousMoved = false;
   let installedNew = false;
+  let retainRecovery = false;
   try {
-    await curlAtomic(url, fontsZip);
-    const archive = await execa("unzip", ["-Z1", fontsZip]);
+    await curlAtomic(url, fontsZip, { signal: opts.signal });
+    const archive = await execa("unzip", ["-Z1", fontsZip], { cancelSignal: opts.signal });
     validateFontArchiveEntries(archive.stdout.split("\n").filter(Boolean));
-    await execa("unzip", ["-qo", fontsZip, "-d", stagingFonts], { stdio: "inherit" });
+    await execa("unzip", ["-qo", fontsZip, "-d", stagingFonts], {
+      stdio: "inherit",
+      cancelSignal: opts.signal,
+      forceKillAfterDelay: 5000,
+    });
     if (!containsGlyphPbf(stagingFonts))
       throw new Error("font archive contains no glyph PBF files");
     const sizeBytes = statSync(fontsZip).size;
 
-    if (existsSync(fontsDir)) {
-      renameSync(fontsDir, backup);
-      previousMoved = true;
-    }
-    renameSync(stagingFonts, fontsDir);
-    installedNew = true;
+    opts.signal?.throwIfAborted();
+    await publishDataChange(() => {
+      if (existsSync(fontsDir)) {
+        renameSync(fontsDir, backup);
+        previousMoved = true;
+      }
+      renameSync(stagingFonts, fontsDir);
+      installedNew = true;
+    });
     opts.store.upsert({
       type: "tile-fonts",
       id: "openmaptiles-v2",
@@ -91,10 +102,21 @@ export async function downloadFonts(opts: DownloadFontsOptions): Promise<void> {
     installedNew = false;
     if (removeBackup) rmSync(backup, { recursive: true, force: true });
   } catch (error) {
-    if (installedNew && existsSync(fontsDir)) rmSync(fontsDir, { recursive: true, force: true });
-    if (previousMoved && existsSync(backup)) renameSync(backup, fontsDir);
+    // A completed replacement survives later observer/store failures. A lost
+    // ownership/publication checkpoint never authorizes another rename.
+    if (installedNew) retainRecovery = true;
+    else if (previousMoved && existsSync(backup)) {
+      try {
+        opts.signal?.throwIfAborted();
+        assertDataPublication();
+        renameSync(backup, fontsDir);
+        previousMoved = false;
+      } catch {
+        retainRecovery = true;
+      }
+    }
     throw error;
   } finally {
-    rmSync(stagingRoot, { recursive: true, force: true });
+    if (!retainRecovery) rmSync(stagingRoot, { recursive: true, force: true });
   }
 }

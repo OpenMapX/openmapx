@@ -34,6 +34,7 @@ export const adminOverviewSchema = z.strictObject({
     .strictObject({
       running: adminCountSchema,
       stopped: adminCountSchema,
+      unknown: adminCountSchema,
       unhealthy: adminCountSchema,
     })
     .nullable(),

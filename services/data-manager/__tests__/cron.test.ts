@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // never resolves and the test hangs to the 15s timeout. Mock the db module to
 // a chainable thenable that resolves immediately — no query ever executes.
 // The catalog lock is agent-owned. This models the agent's slot behaviour so
-// the cron's propose/approve sequence can be asserted without a repo mount.
+// the cron's proposal retention can be asserted without a repo mount.
 const lockSlots: {
   active: Record<string, unknown> | null;
   proposed: Record<string, unknown> | null;
@@ -28,15 +28,8 @@ vi.mock("../src/ops-client.js", () => ({
           lockedBy: operation.lockedBy,
         };
         return { ref: operation.ref, proposed: true };
-      case "transitousLock.approve": {
-        if (!lockSlots.proposed) throw new Error("No Transitous lock proposal to approve");
-        if (lockSlots.proposed.ref !== operation.ref) {
-          throw new Error("Transitous lock proposal does not match the approved ref");
-        }
-        lockSlots.active = { ...lockSlots.proposed, lockedBy: operation.approvedBy };
-        lockSlots.proposed = null;
-        return { ref: operation.ref, lockedAt: "2026-05-01T00:00:00.000Z" };
-      }
+      case "transitousLock.approve":
+        throw new Error("Paired approval requires the validation-bound activation runtime");
       default:
         return { changed: true };
     }
@@ -67,18 +60,67 @@ vi.mock("../src/db/index.js", () => {
   return { db: makeChain(), sql: { end: async () => {} } };
 });
 
+import type { DataExecutionStatus } from "@openmapx/core/data-manager-contracts";
 import {
   awaitInflightSync,
   type CronHandles,
   type CronSetupOptions,
-  setupCron,
+  setupCron as setupProductionCron,
 } from "../src/cron.js";
+import type { DataExecutionReceiver } from "../src/jobs/execution/api.js";
 import * as trafficEvidence from "../src/jobs/traffic/evidence.js";
 import * as spanEdges from "../src/jobs/traffic/span-edges.js";
 import {
   createSingleFlightController,
   type SingleFlightController,
 } from "../src/jobs/transitous/single-flight.js";
+
+vi.mock("../src/jobs/execution/legacy-mutation.js", () => ({
+  beginLegacyCatalogPreflight: async () => {},
+  rejectLegacyMissingCatalog: async () => {},
+  markLegacyCatalogFetchAttempt: async () => {},
+  withLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
+  independentLegacyDataMutation: async (_kind: string, run: () => Promise<unknown>) => run(),
+}));
+function receipt(patch: Partial<DataExecutionStatus> = {}): DataExecutionStatus {
+  return {
+    id: "00000000-0000-4000-8000-000000000001",
+    operationKey: "opk1_unit_cron_original",
+    fingerprint: "a".repeat(64),
+    admittedAt: 1,
+    deadlineAt: 4102444800000,
+    kind: "transit-sync",
+    status: "ok",
+    publication: "committed",
+    cancellationRequestedAt: null,
+    progress: 1,
+    diagnostics: { tail: [], truncated: false },
+    ...patch,
+  };
+}
+function receiverFixture(patch: Partial<DataExecutionReceiver> = {}): DataExecutionReceiver {
+  const unsupported = async (): Promise<never> => {
+    throw Error("Unused fixture receiver operation");
+  };
+  return {
+    admitLocal: async () => receipt(),
+    admitMaintenance: async () => receipt({ kind: "transit-maintenance" }),
+    subscribe: () => () => {},
+    legacyResult: () => undefined,
+    admit: unsupported,
+    admitHardlinks: unsupported,
+    inspect: async () => receipt(),
+    lookup: unsupported,
+    requestCancel: unsupported,
+    prepareFence: unsupported,
+    inspectFence: unsupported,
+    settleFence: unsupported,
+    ...patch,
+  };
+}
+function setupCron(options: CronSetupOptions) {
+  return setupProductionCron({ executionReceiver: receiverFixture(), ...options });
+}
 
 interface JobRow {
   id: string;
@@ -220,7 +262,7 @@ describe("setupCron", () => {
         key: "syncCron",
         configure: (work) => ({
           syncCronExpression: everySecond,
-          runPipeline: async (jobId) => ({ jobId, results: [], finalStatus: "ok" }),
+          executionReceiver: receiverFixture(),
           // Keep the post-sync check pending after the domain lock releases:
           // the scheduler must still own the complete callback lifetime.
           runStalenessCheck: work,
@@ -230,7 +272,12 @@ describe("setupCron", () => {
         key: "feedProxyReloadCron",
         configure: (work) => ({
           feedProxyReloadCronExpression: everySecond,
-          reloadFeedProxy: work,
+          executionReceiver: receiverFixture({
+            admitMaintenance: async () => {
+              await work();
+              return receipt({ kind: "transit-maintenance" });
+            },
+          }),
         }),
       },
       {
@@ -244,16 +291,12 @@ describe("setupCron", () => {
         key: "autoBumpCron",
         configure: (work) => ({
           autoBumpCronExpression: everySecond,
-          resolveBumpCandidate: async () => {
-            await work();
-            return {
-              branch: "main",
-              ref: `main@${"a".repeat(40)}`,
-              transitousSha: "a".repeat(40),
-              transitlandAtlasSha: "b".repeat(40),
-            };
-          },
-          runBumpPipeline: async (jobId) => ({ jobId, results: [], finalStatus: "ok" }),
+          catalogReview: {
+            resolveCatalogProposal: async () => {
+              await work();
+              return { proposalId: "00000000-0000-4000-8000-000000000001" };
+            },
+          } as unknown as CronSetupOptions["catalogReview"],
         }),
       },
       {
@@ -519,7 +562,11 @@ describe("setupCron", () => {
       logger: { info: () => {}, warn: () => {}, error: () => {} },
       syncCronExpression: "0 0 1 1 *", // far-future; we trigger manually
       feedProxyReloadCronExpression: "disabled",
-      runPipeline,
+      executionReceiver: receiverFixture({
+        admitLocal: async () => {
+          throw Error("configuration_maintenance_busy");
+        },
+      }),
     });
 
     await handles.runSyncNow();
@@ -545,7 +592,17 @@ describe("setupCron", () => {
       syncCronExpression: "0 0 1 1 *",
       feedProxyReloadCronExpression: "disabled",
       stalenessCheckCronExpression: "disabled",
-      runPipeline,
+      executionReceiver: receiverFixture({
+        admitLocal: async () => {
+          await runPipeline();
+          return receipt({ status: "error" });
+        },
+        legacyResult: () => ({
+          results: [
+            { stage: "motis-health", status: "error", error: { message: "rentals empty" } },
+          ],
+        }),
+      }),
       runStalenessCheck: async () => {},
       githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
     });
@@ -557,6 +614,42 @@ describe("setupCron", () => {
     expect(title).toContain("cron");
     expect(body).toContain("motis-health");
     handles.stop();
+  });
+
+  it("keeps observing running unknown publication and alerts on the original partial terminal", async () => {
+    const inspect = vi
+        .fn()
+        .mockResolvedValueOnce(receipt({ status: "running", publication: "unknown" }))
+        .mockResolvedValueOnce(receipt({ status: "partial" })),
+      cancel = vi.fn(),
+      createIssue = vi.fn(async () => "https://x/issues/2"),
+      staleness = vi.fn(async () => {});
+    const handles = setupCron({
+      dataDir,
+      countries: [],
+      store: {} as never,
+      singleFlight: makeController(),
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      syncCronExpression: "disabled",
+      feedProxyReloadCronExpression: "disabled",
+      stalenessCheckCronExpression: "disabled",
+      runStalenessCheck: staleness,
+      githubIssueSink: { createIssue },
+      executionReceiver: receiverFixture({
+        admitLocal: async () => receipt({ status: "running", publication: "unknown" }),
+        inspect,
+        requestCancel: cancel,
+      }),
+    });
+    try {
+      await handles.runSyncNow();
+      expect(inspect).toHaveBeenCalledTimes(2);
+      expect(createIssue).toHaveBeenCalledOnce();
+      expect(staleness).toHaveBeenCalledOnce();
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      handles.stop();
+    }
   });
 
   describe("auto-bump cron", () => {
@@ -601,13 +694,36 @@ describe("setupCron", () => {
       handles.stop();
     });
 
-    it("activates the new pin when the canary passes", async () => {
+    it("creates a paired proposal even when the Transitous SHA is unchanged, and never activates", async () => {
       seedLocks();
-      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
-        jobId: "j",
-        results: [],
-        finalStatus: "ok" as const,
-      }));
+      const resolveCatalogProposal = vi.fn(async () => ({
+        proposalId: "00000000-0000-4000-8000-000000000001",
+      })) as unknown as NonNullable<CronSetupOptions["catalogReview"]>["resolveCatalogProposal"];
+      const handles = setupCron({
+        dataDir,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        catalogReview: { resolveCatalogProposal },
+      });
+      try {
+        const { runOpsOperation } = await import("../src/ops-client.js");
+        vi.mocked(runOpsOperation).mockClear();
+        await handles.runAutoBumpNow();
+        expect(resolveCatalogProposal).toHaveBeenCalledOnce();
+        expect(runOpsOperation).not.toHaveBeenCalled();
+        expect(activeLock().ref).toBe(`main@${ACTIVE}`);
+      } finally {
+        handles.stop();
+      }
+    });
+    it("refuses scheduled proposals when the installed paired resolver is unavailable", async () => {
+      seedLocks();
       const handles = setupCron({
         dataDir,
         countries: [],
@@ -619,75 +735,13 @@ describe("setupCron", () => {
         stalenessCheckCronExpression: "disabled",
         autoBumpCronExpression: "0 0 1 1 *",
         resolveBumpCandidate: async () => newCandidate,
-        runBumpPipeline,
       });
-      await handles.runAutoBumpNow();
-      expect(runBumpPipeline).toHaveBeenCalledTimes(1);
-      const active = activeLock();
-      expect(active.ref).toBe(`main@${CANDIDATE}`);
-      expect(active.submodules["transitland-atlas"]).toBe(ATLAS_NEW);
-      expect(proposalExists()).toBe(false);
-      handles.stop();
-    });
-
-    it("keeps the current pin, retains the proposal, and alerts when the canary rejects", async () => {
-      seedLocks();
-      const createIssue = vi.fn(async (_t: string, _b: string) => "https://x/issues/1");
-      const runBumpPipeline = vi.fn(async (_jobId: string) => {
-        throw new Error('motis-health probe "rentals" failed: empty');
-      });
-      const handles = setupCron({
-        dataDir,
-        countries: [],
-        store: {} as never,
-        singleFlight: makeController(),
-        logger: { info: () => {}, warn: () => {}, error: () => {} },
-        syncCronExpression: "disabled",
-        feedProxyReloadCronExpression: "disabled",
-        stalenessCheckCronExpression: "disabled",
-        autoBumpCronExpression: "0 0 1 1 *",
-        resolveBumpCandidate: async () => newCandidate,
-        runBumpPipeline,
-        githubIssueSink: { findOpenIssueByTitle: async () => null, createIssue },
-      });
-      await handles.runAutoBumpNow();
-      expect(activeLock().ref).toBe(`main@${ACTIVE}`);
-      expect(proposalExists()).toBe(true);
-      expect(createIssue).toHaveBeenCalledTimes(1);
-      const [title] = createIssue.mock.calls[0] ?? [];
-      expect(title).toContain("auto-bump");
-      handles.stop();
-    });
-
-    it("does nothing when the active pin already matches upstream", async () => {
-      seedLocks();
-      const runBumpPipeline = vi.fn(async (_jobId: string) => ({
-        jobId: "j",
-        results: [],
-        finalStatus: "ok" as const,
-      }));
-      const handles = setupCron({
-        dataDir,
-        countries: [],
-        store: {} as never,
-        singleFlight: makeController(),
-        logger: { info: () => {}, warn: () => {}, error: () => {} },
-        syncCronExpression: "disabled",
-        feedProxyReloadCronExpression: "disabled",
-        stalenessCheckCronExpression: "disabled",
-        autoBumpCronExpression: "0 0 1 1 *",
-        resolveBumpCandidate: async () => ({
-          branch: "main",
-          ref: `main@${ACTIVE}`,
-          transitousSha: ACTIVE,
-          transitlandAtlasSha: ATLAS_OLD,
-        }),
-        runBumpPipeline,
-      });
-      await handles.runAutoBumpNow();
-      expect(runBumpPipeline).not.toHaveBeenCalled();
-      expect(proposalExists()).toBe(false);
-      handles.stop();
+      try {
+        await expect(handles.runAutoBumpNow()).rejects.toThrow(/paired catalog resolver/i);
+        expect(proposalExists()).toBe(false);
+      } finally {
+        handles.stop();
+      }
     });
   });
 
@@ -707,7 +761,12 @@ describe("setupCron", () => {
       logger: { info: () => {}, warn: () => {}, error: () => {} },
       syncCronExpression: "disabled",
       feedProxyReloadCronExpression: "0 0 1 1 *",
-      reloadFeedProxy: reload,
+      executionReceiver: receiverFixture({
+        admitMaintenance: async () => {
+          await reload();
+          return receipt({ kind: "transit-maintenance" });
+        },
+      }),
     });
 
     // First run: file exists, no previous reload, so we should reload.
@@ -737,7 +796,12 @@ describe("setupCron", () => {
       logger: { info: () => {}, warn: () => {}, error: () => {} },
       syncCronExpression: "disabled",
       feedProxyReloadCronExpression: "0 0 1 1 *",
-      reloadFeedProxy: reload,
+      executionReceiver: receiverFixture({
+        admitMaintenance: async () => {
+          await reload();
+          return receipt({ kind: "transit-maintenance" });
+        },
+      }),
     });
     await handles.runFeedProxyReloadNow();
     expect(reload).not.toHaveBeenCalled();

@@ -1,0 +1,7 @@
+# Reproducible outputs: review their contracts/generators first, then expand
+# these files when checking the generated wire surface or migration metadata.
+apps/api/openapi.json linguist-generated=true
+services/data-manager/openapi.json linguist-generated=true
+packages/core/src/api/generated/** linguist-generated=true
+packages/core/src/services/data-manager/generated/** linguist-generated=true
+apps/api/src/db/migrations/meta/*_snapshot.json linguist-generated=true

@@ -12,7 +12,8 @@ const {
 } = installAdminRouteMocks();
 
 // Rate limiters — no-op
-vi.mock("../../utils/rate-limit.js", () => ({
+vi.mock("../../utils/rate-limit.js", async (importActual) => ({
+  ...(await importActual<typeof import("../../utils/rate-limit.js")>()),
   healthCheckSweepLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
   serviceActionLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
   storeInstallLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
@@ -26,10 +27,30 @@ vi.mock("../../utils/rate-limit.js", () => ({
 // Job runner
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
+// Controlled application-broker boundary, never host or durable completion proof.
+const mockImmediateCredential = vi.fn(async (intent: { integrationId: string }) => ({
+  operationId: "credential-route-fixture",
+  integrationId: intent.integrationId,
+  desiredRevision: "a".repeat(64),
+  database: "retained",
+  runtime: "applied",
+  runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
+}));
+const mockImmediateImport = vi.fn().mockResolvedValue({
+  ok: true,
+  imported: 1,
+  skipped: [],
+  message: "Integrations reloaded",
+  reloaded: 1,
+  enabled: 1,
+});
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
+    applyImmediateIntegrationCredential: (intent: { integrationId: string }) =>
+      mockImmediateCredential(intent),
+    importImmediateIntegrationConfiguration: (...args: unknown[]) => mockImmediateImport(...args),
   },
 }));
 
@@ -59,7 +80,10 @@ vi.mock("../../services/trusted-config-operations.js", () => ({
       registryUpdateFailed: false,
     },
   }),
-  applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
+  applyTrustedConfiguration: vi.fn().mockResolvedValue({
+    revisionId: "revision_1",
+    integrationReload: { message: "Integrations reloaded", reloaded: 1, enabled: 1 },
+  }),
 }));
 
 const mockListActivityJobs = vi.fn().mockResolvedValue({ jobs: [], total: 0 });
@@ -67,6 +91,7 @@ const mockGetActivityJob = vi.fn().mockResolvedValue(null);
 vi.mock("../../services/activity-jobs.js", () => ({
   listActivityJobs: (...args: unknown[]) => mockListActivityJobs(...args),
   getActivityJob: (...args: unknown[]) => mockGetActivityJob(...args),
+  cancelDataManagerActivityJob: vi.fn().mockResolvedValue(false),
 }));
 
 // DB — multiple tables used across admin.ts
@@ -124,6 +149,7 @@ vi.mock("../../db/schema.js", () => ({
     finishedAt: "finishedAt",
     createdBy: "createdBy",
     error: "error",
+    result: "result",
   },
   adminJobLog: { jobId: "jobId", seq: "seq" },
   integrationConfig: { id: "id", integrationId: "integrationId", config: "config" },
@@ -166,6 +192,7 @@ vi.mock("../../integration-host.js", () => ({
   getIntegration: (...args: unknown[]) => mockGetIntegration(...args),
   reloadIntegrations: (...args: unknown[]) => mockReloadIntegrations(...args),
   resolveConfigWithSources: (...args: unknown[]) => mockResolveConfigWithSources(...args),
+  inspectIntegrationRuntime: () => null,
 }));
 
 // Health services
@@ -198,6 +225,54 @@ vi.mock("../../services/secrets.js", () => ({
   listSecrets: (...args: unknown[]) => mockListSecrets(...args),
   setSecret: (...args: unknown[]) => mockSetSecret(...args),
   deleteSecret: (...args: unknown[]) => mockDeleteSecret(...args),
+}));
+
+// Route-only captured-read collaborator. Real credential projection and scope
+// validation execute; PostgreSQL capture and file reads belong to their owned suites.
+vi.mock("../../services/administrative-configuration-writer-owner", async () => {
+  const {
+    openAdministrativeConfigurationRead,
+    closeAdministrativeConfigurationRead,
+    withAdministrativeConfigurationReadScope,
+  } = await import("../../services/administrative-configuration-context");
+  return {
+    withAdministrativeConfigurationRead: async (
+      _options: unknown,
+      run: (read: unknown) => Promise<unknown>,
+    ) => {
+      const integrations = mockGetAllIntegrations();
+      const resolved = await mockResolveConfigWithSources();
+      const secrets = await mockListSecrets();
+      const read = openAdministrativeConfigurationRead({
+        services: [],
+        integrations: integrations as never,
+        env: {},
+        serviceRows: [],
+        integrationRows: [],
+        serviceSecretRows: [],
+        integrationSecretRows: secrets.map((row: Record<string, unknown>) => ({
+          ...row,
+          integrationId: "geocoding-maptiler",
+        })) as never,
+        integrationReloadSnapshot: Object.fromEntries(
+          integrations.map((i: typeof MOCK_INTEGRATION) => [i.id, resolved]),
+        ),
+      });
+      try {
+        return await withAdministrativeConfigurationReadScope(read, () => run(read));
+      } finally {
+        closeAdministrativeConfigurationRead(read);
+      }
+    },
+  };
+});
+vi.mock("../../services/service-inventory", () => ({
+  readServiceInventory: async () => ({
+    acquisition: { state: "available", reason: null },
+    services: [],
+    capabilityInventory: { recognized: [], unrecognized: [] },
+    summary: { running: 0, stopped: 0, unknown: 0, total: 0 },
+  }),
 }));
 
 // Docker compose
@@ -235,7 +310,10 @@ beforeAll(async () => {
 });
 
 afterAll(() => app?.close());
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  mockDbSelect.mockReset().mockImplementation(() => makeSelectChain());
+});
 
 describe("GET /admin/overview", () => {
   it("returns system health overview with integration stats", async () => {
@@ -397,7 +475,7 @@ describe("POST /admin/integrations/health/run", () => {
 
 describe("POST /admin/integrations/:id/enable", () => {
   it.each(["unknown", "committed", "not_committed"] as const)(
-    "restores integration overrides only with proven non-commit (%s)",
+    "delegates %s apply evidence without a route-owned restore",
     async (outcome) => {
       const error = new TrustedConfigurationApplyError({
         ...(outcome === "unknown"
@@ -418,9 +496,25 @@ describe("POST /admin/integrations/:id/enable", () => {
       const res = await app.inject({
         method: "POST",
         url: "/admin/integrations/geocoding-maptiler/enable",
+        headers: { "idempotency-key": "admin-route-enable-fixture-0001" },
       });
       expect(res.statusCode).toBe(500);
-      expect(mockRestoreOwned).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+      expect(mockRestoreOwned).not.toHaveBeenCalled();
+      expect(applyTrustedConfiguration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "integrationConfig.apply",
+          overlay: expect.objectContaining({
+            changes: [
+              {
+                kind: "integration-config",
+                integrationId: "geocoding-maptiler",
+                set: { enabled: true },
+                unset: [],
+              },
+            ],
+          }),
+        }),
+      );
       expect(mockReloadIntegrations).not.toHaveBeenCalled();
     },
   );
@@ -428,6 +522,7 @@ describe("POST /admin/integrations/:id/enable", () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/integrations/geocoding-maptiler/enable",
+      headers: { "idempotency-key": "admin-route-enable-fixture-0001" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -436,7 +531,8 @@ describe("POST /admin/integrations/:id/enable", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.enabled", targetId: "geocoding-maptiler" }),
     );
-    expect(mockReloadIntegrations).toHaveBeenCalled();
+    expect(res.json()).toMatchObject({ reloaded: 1, enabled: 1 });
+    expect(mockReloadIntegrations).not.toHaveBeenCalled();
   });
 
   it("returns 404 for unknown integration", async () => {
@@ -445,6 +541,7 @@ describe("POST /admin/integrations/:id/enable", () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/integrations/no-such-integration/enable",
+      headers: { "idempotency-key": "admin-route-missing-fixture-0001" },
     });
 
     expect(res.statusCode).toBe(404);
@@ -689,6 +786,7 @@ describe("POST /admin/integrations/import", () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/integrations/import",
+      headers: { "idempotency-key": "admin-route-import-fixture-0001" },
       payload: {
         integrations: [{ integrationId: "geocoding-maptiler", config: { enabled: false } }],
       },
@@ -696,41 +794,76 @@ describe("POST /admin/integrations/import", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, imported: 1, reloaded: 1 });
-    expect(mockReloadIntegrations).toHaveBeenCalledOnce();
+    expect(mockImmediateImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: fakeSession.user.id,
+        body: {
+          integrations: [{ integrationId: "geocoding-maptiler", config: { enabled: false } }],
+        },
+      }),
+    );
+    expect(mockReloadIntegrations).not.toHaveBeenCalled();
   });
 });
 
 describe("PUT /admin/credentials/:integrationId/:key", () => {
-  it("stores the secret AND reloads so the running integration picks it up", async () => {
+  it("delegates the exact secret intent and exposes its captured runtime receipt", async () => {
     mockGetSecretFields.mockReturnValueOnce([{ key: "apiKey", title: "API Key" }]);
 
     const res = await app.inject({
       method: "PUT",
       url: "/admin/credentials/fuel/apiKey",
-      payload: { value: "secret-value" },
+      headers: { "idempotency-key": "admin-route-credential-set-0001" },
+      payload: { value: "secret-value", expectedRevision: "a".repeat(64) },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().ok).toBe(true);
-    expect(mockSetSecret).toHaveBeenCalledWith(
-      "fuel",
-      "apiKey",
-      "secret-value",
-      fakeSession.user.id,
+    expect(res.json()).toMatchObject({
+      integrationId: "fuel",
+      database: "retained",
+      runtime: "applied",
+    });
+    expect(mockImmediateCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: "fuel",
+        key: "apiKey",
+        action: "set",
+        value: "secret-value",
+        expectedRevision: "a".repeat(64),
+        actorId: fakeSession.user.id,
+      }),
     );
-    // The crux: without this reload the freshly-vaulted key never reaches the
-    // provider (config is captured once at setup() load time).
-    expect(mockReloadIntegrations).toHaveBeenCalled();
+    expect(mockSetSecret).not.toHaveBeenCalled();
+    expect(mockReloadIntegrations).not.toHaveBeenCalled();
   });
 });
 
 describe("DELETE /admin/credentials/:integrationId/:key", () => {
-  it("deletes the secret AND reloads", async () => {
-    const res = await app.inject({ method: "DELETE", url: "/admin/credentials/fuel/apiKey" });
+  it("delegates removal with the expected revision and exposes its captured runtime receipt", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/credentials/fuel/apiKey",
+      headers: { "idempotency-key": "admin-route-credential-delete-0001" },
+      payload: { expectedRevision: "a".repeat(64) },
+    });
 
     expect(res.statusCode).toBe(200);
-    expect(mockDeleteSecret).toHaveBeenCalledWith("fuel", "apiKey");
-    expect(mockReloadIntegrations).toHaveBeenCalled();
+    expect(res.json()).toMatchObject({
+      integrationId: "fuel",
+      database: "retained",
+      runtime: "applied",
+    });
+    expect(mockImmediateCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: "fuel",
+        key: "apiKey",
+        action: "delete",
+        expectedRevision: "a".repeat(64),
+        actorId: fakeSession.user.id,
+      }),
+    );
+    expect(mockDeleteSecret).not.toHaveBeenCalled();
+    expect(mockReloadIntegrations).not.toHaveBeenCalled();
   });
 });
 
@@ -777,6 +910,7 @@ describe("integration contract tightening", () => {
       key: { value: "synthetic", source: "config.json" },
     });
     const response = await app.inject("/admin/credentials/geocoding-maptiler");
+    expect(response.statusCode, response.body).toBe(200);
     expect(response.json().credentials[0]).toMatchObject({
       source: "config.json",
       updatedBy: "actor",

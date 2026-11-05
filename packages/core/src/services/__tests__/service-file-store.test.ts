@@ -400,9 +400,10 @@ describe("the runtime bundle's service files", () => {
 
   it("knows every file's current bytes as a version the release shipped", () => {
     for (const file of files) {
-      expect(history.files[`${file.serviceId}/${file.path}`]).toContain(
-        sha256(readFileSync(fileURLToPath(file.url))),
-      );
+      expect(
+        history.files[`${file.serviceId}/${file.path}`],
+        `${file.serviceId}/${file.path}`,
+      ).toContain(sha256(readFileSync(fileURLToPath(file.url))));
     }
   });
 

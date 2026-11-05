@@ -3,6 +3,8 @@
 import type { PostApiDataManagerTransitSourcesBodyLicense } from "./postApiDataManagerTransitSourcesBodyLicense";
 
 export type PostApiDataManagerTransitSourcesBody = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  expectedSourceRevision: string;
   /** @maxLength 200 */
   idempotencyKey?: string;
   /** @minLength 1 */

@@ -8,6 +8,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import { useQueryClient } from "@tanstack/react-query";
+import { TransitCredentialsSection } from "@/components/admin/services/TransitCredentialsSection";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import { useTransitState } from "@/lib/admin/transitHooks";
 import { CurrentJobCard } from "./CurrentJobCard";
@@ -42,6 +43,9 @@ export function TransitPipelinePage() {
             </Tooltip>
           }
         />
+      </Box>
+      <Box sx={{ mb: 2 }}>
+        <TransitCredentialsSection />
       </Box>
       {isLoading && (
         <Box

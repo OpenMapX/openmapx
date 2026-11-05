@@ -91,11 +91,15 @@ export const transitJobsQuerySchema = z.strictObject({
   kind: z.string().optional(),
 });
 export const transitCatalogQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
   search: z.string().optional(),
   country: z.string().optional(),
 });
 export const transitCatalogFeedSchema = z.strictObject({
   id: z.string(),
+  installedSourceId: z.string().nullable(),
+  discoveryIds: z.array(z.string()),
   name: z.string(),
   source: z.enum(["transitous", "mobilitydb", "manual"]),
   countryCode: z.string(),
@@ -114,6 +118,8 @@ export const transitCatalogFeedSchema = z.strictObject({
   dataType: z.string().optional(),
 });
 export const transitCatalogResponseSchema = z.strictObject({
+  limit: count,
+  offset: count,
   sources: z.array(transitCatalogFeedSchema),
   total: count,
 });

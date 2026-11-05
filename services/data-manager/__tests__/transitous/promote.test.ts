@@ -1,3 +1,10 @@
+vi.mock("../../src/jobs/transitous/owned-ops.js", async () => {
+  const original = await vi.importActual<typeof import("../../src/jobs/transitous/owned-ops.js")>(
+    "../../src/jobs/transitous/owned-ops.js",
+  );
+  return { ...original, ...(await import("../helpers/owned-transit-unit.js")) };
+});
+
 import {
   chmodSync,
   closeSync,
@@ -163,34 +170,36 @@ function setupFixture(opts: FixtureOptions): {
   const stagingDir = join(tmp, "motis", "staging");
   const currentDir = join(tmp, "motis", "live");
   if (opts.staging) {
-    mkdirSync(join(stagingDir, "data"), { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
+    mkdirSync(join(stagingDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt", { mode: 0o600 });
     writeFileSync(
       join(stagingDir, IMPORT_MARKER_FILE),
       JSON.stringify({ finishedAt: "2026-05-01T00:00:00.000Z" }),
+      { mode: 0o600 },
     );
   }
   if (opts.stagingWithoutMarker) {
-    mkdirSync(join(stagingDir, "data"), { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
+    mkdirSync(join(stagingDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt", { mode: 0o600 });
   }
   if (opts.stagingJunk) {
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "leftover.log"), "junk");
+    mkdirSync(stagingDir, { mode: 0o700, recursive: true });
+    writeFileSync(join(stagingDir, "leftover.log"), "junk", { mode: 0o600 });
   }
   if (opts.current) {
-    mkdirSync(join(currentDir, "data"), { recursive: true });
-    writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old");
+    mkdirSync(join(currentDir, "data"), { mode: 0o700, recursive: true });
+    writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old", { mode: 0o600 });
   }
   if (opts.staging || opts.stagingWithoutMarker) {
     writeFileSync(
       join(stagingDir, "config.yml"),
       "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+      { mode: 0o600 },
     );
-    writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs");
-    writeFileSync(join(stagingDir, "license.json"), "{}\n");
+    writeFileSync(join(stagingDir, "demo.gtfs.zip"), "gtfs", { mode: 0o600 });
+    writeFileSync(join(stagingDir, "license.json"), "{}\n", { mode: 0o600 });
     writeFileSync(
       join(stagingDir, TRANSIT_SOURCE_MANIFEST_FILENAME),
       `${JSON.stringify({
@@ -214,11 +223,12 @@ function setupFixture(opts: FixtureOptions): {
           },
         ],
       })}\n`,
+      { mode: 0o600 },
     );
     const proxy = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
-    mkdirSync(join(proxy, "conf"), { recursive: true });
-    writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n");
-    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+    mkdirSync(join(proxy, "conf"), { mode: 0o700, recursive: true });
+    writeFileSync(join(proxy, "conf", "default.conf"), "server {}\n", { mode: 0o600 });
+    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     const manifest = createCandidateManifest(stagingDir, "test-epoch", "2026-05-01T00:00:00.000Z");
     writeFileSync(
       join(stagingDir, "mobility-capabilities.json"),
@@ -232,6 +242,7 @@ function setupFixture(opts: FixtureOptions): {
         health: { rt: true },
         probes: [],
       })}\n`,
+      { mode: 0o600 },
     );
   }
   return {
@@ -295,8 +306,8 @@ function directorySnapshot(root: string): unknown[] {
 
 function readyFixture(layout: "rename" | "two-slot") {
   const fx = setupFixture({ staging: true, current: true });
-  mkdirSync(fx.previousDir, { recursive: true });
-  writeFileSync(join(fx.previousDir, "retained-timetable"), "older rollback data");
+  mkdirSync(fx.previousDir, { mode: 0o700, recursive: true });
+  writeFileSync(join(fx.previousDir, "retained-timetable"), "older rollback data", { mode: 0o600 });
   globalThis.fetch = vi.fn(async (input: unknown) => {
     const url = typeof input === "string" ? input : (input as Request | URL).toString();
     return jsonResponse(successfulBody(url));
@@ -310,7 +321,7 @@ describe("promotion directory snapshot", () => {
   it("closes a captured marker descriptor when reading fails", () => {
     tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-close-"));
     const marker = join(tmp, "marker");
-    writeFileSync(marker, "original marker");
+    writeFileSync(marker, "original marker", { mode: 0o600 });
     let descriptor: number | undefined;
     snapshotRace.afterAccess = (path, opened) => {
       if (path === marker && opened !== undefined) descriptor = opened;
@@ -328,13 +339,13 @@ describe("promotion directory snapshot", () => {
     tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-race-"));
     const root = tmp;
     const marker = join(root, "marker");
-    writeFileSync(marker, "original marker");
+    writeFileSync(marker, "original marker", { mode: 0o600 });
     const inode = statSync(marker).ino;
     snapshotRace.afterAccess = (path) => {
       if (path !== marker) return;
       snapshotRace.afterAccess = undefined;
       renameSync(marker, join(root, "captured"));
-      writeFileSync(marker, "replacement marker");
+      writeFileSync(marker, "replacement marker", { mode: 0o600 });
     };
     expect(directorySnapshot(tmp)).toContainEqual(["marker", inode, "file", "original marker"]);
   });
@@ -434,117 +445,26 @@ describe("promote stage", () => {
       },
     );
 
-    it("bounds nonterminal old-primary recovery after job cancellation with real status polling", async () => {
-      const { fx, ctx } = readyFixture(layout);
-      const actual =
-        await vi.importActual<typeof import("../../src/ops-client.js")>("../../src/ops-client.js");
-      const tokenFile = join(fx.dataDir, "ops-test-token");
-      writeFileSync(tokenFile, "a".repeat(43));
-      const unchanged = directorySnapshot(fx.dataDir);
-      vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:4300");
-      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-      actual.resetOpsClient();
-      const cancelled = new AbortController();
-      ctx.abortSignal = cancelled.signal;
-      const cleanup = new AbortController();
-      const nativeTimeout = AbortSignal.timeout.bind(AbortSignal);
-      const timeout = vi
-        .spyOn(AbortSignal, "timeout")
-        .mockImplementation((ms) => nativeTimeout(ms > 120_000 ? 100 : ms));
-      let polls = 0;
-      let deletes = 0;
-      let admitted = false;
-      let operationKey = "";
-      globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
-        const url = String(input);
-        if (!url.startsWith("http://ops-agent:4300/")) return jsonResponse(successfulBody(url));
-        init?.signal?.throwIfAborted();
-        if (init?.method === "DELETE") deletes++;
-        const operationId = "job1_pendingRecovery000";
-        let requestId: string | null;
-        let result: unknown;
-        if (init?.method === "POST") {
-          const request = JSON.parse(String(init.body));
-          requestId = request.requestId;
-          operationKey = request.operationKey;
-          admitted = true;
-          result = {
-            execution: "async",
-            operationId,
-            operationKey,
-            kind: "motis.primary.restart",
-            state: "running",
-          };
-        } else {
-          polls++;
-          requestId = new Headers(init?.headers).get("x-ops-request-id");
-          result = {
-            version: 1,
-            operationId,
-            operationKey,
-            kind: "motis.primary.restart",
-            resourceId: "motis",
-            state: "termination_pending",
-            submittedAt: "2026-05-01T00:00:00.000Z",
-            updatedAt: "2026-05-01T00:00:01.000Z",
-          };
-        }
-        return jsonResponse({ version: 1, requestId, ok: true, result });
-      }) as typeof fetch;
-      vi.mocked(runOpsOperation).mockImplementation(async (operation, options) => {
+    it("does not start old-primary recovery after job cancellation", async () => {
+      const { fx, ctx } = readyFixture(layout),
+        before = directorySnapshot(fx.dataDir),
+        controller = new AbortController();
+      ctx.abortSignal = controller.signal;
+      vi.mocked(runOpsOperation).mockImplementation(async (operation) => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
-          cancelled.abort();
-          throw new Error("staging stop timed out");
-        }
-        if (operation.kind === "motis.primary.restart") {
-          return actual.runOpsOperation(operation, {
-            ...options,
-            signal: options?.signal ?? cleanup.signal,
-            pollIntervalMs: 10,
-          });
+          controller.abort();
+          throw Error("staging stop timed out");
         }
         return { changed: true, state: "stopped" };
       });
-      const pending = promoteRun(ctx);
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        // The shortened 100 ms recovery deadline is what must end promotion;
-        // this watchdog only turns a regression into a failure instead of a
-        // hang, so it leaves room for a saturated runner.
-        const result = await Promise.race([
-          pending,
-          new Promise<undefined>((resolve) => {
-            timer = setTimeout(() => resolve(undefined), 10_000);
-          }),
-        ]);
-        expect(cancelled.signal.aborted).toBe(true);
-        expect(admitted).toBe(true);
-        expect(polls).toBeGreaterThan(1);
-        expect(
-          result,
-          "nonterminal recovery must not keep promotion pending indefinitely",
-        ).toBeDefined();
-        expect(result?.status).toBe("error");
-        expect(result?.message).toContain("staging stop timed out");
-        expect(result?.message).toMatch(/recovery completion unknown.*deadline/i);
-        expect(timeout).toHaveBeenCalledWith(125_000);
-        expect(deletes).toBe(0);
-        expect(directorySnapshot(fx.dataDir)).toEqual(unchanged);
-        expect(opsCalls.map(({ kind }) => kind)).toEqual([
-          "motis.primary.stop",
-          "motis.staging.stop",
-          "motis.primary.restart",
-        ]);
-        expect(recordPromotedSource).not.toHaveBeenCalled();
-      } finally {
-        if (timer) clearTimeout(timer);
-        cleanup.abort();
-        await pending;
-        timeout.mockRestore();
-        actual.resetOpsClient();
-        vi.unstubAllEnvs();
-      }
+      await expect(promoteRun(ctx)).rejects.toThrow(/abort/i);
+      expect(directorySnapshot(fx.dataDir)).toEqual(before);
+      expect(opsCalls.map((call) => call.kind)).toEqual([
+        "motis.primary.stop",
+        "motis.staging.stop",
+      ]);
+      expect(recordPromotedSource).not.toHaveBeenCalled();
     });
 
     it("refuses promotion when the data target changes despite confirmed stops", async () => {
@@ -554,8 +474,8 @@ describe("promote stage", () => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
           renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
-          mkdirSync(ctx.motisDataDir);
-          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          mkdirSync(ctx.motisDataDir, { mode: 0o700 });
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement", { mode: 0o600 });
           externallyChanged = directorySnapshot(fx.dataDir);
         }
         return { changed: true, state: "stopped" };
@@ -577,8 +497,8 @@ describe("promote stage", () => {
         opsCalls.push(operation);
         if (operation.kind === "motis.staging.stop") {
           renameSync(ctx.motisDataDir, `${ctx.motisDataDir}.externally-moved`);
-          mkdirSync(ctx.motisDataDir);
-          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement");
+          mkdirSync(ctx.motisDataDir, { mode: 0o700 });
+          writeFileSync(join(ctx.motisDataDir, "external-data"), "replacement", { mode: 0o600 });
           externallyChanged = directorySnapshot(fx.dataDir);
           throw new Error("staging stop timed out");
         }
@@ -700,7 +620,7 @@ describe("promote stage", () => {
 
   it("preserves staging directory permissions for the next import", async () => {
     const fx = setupFixture({ staging: true, current: true });
-    chmodSync(fx.stagingDir, 0o777);
+    chmodSync(fx.stagingDir, 0o750);
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
       return jsonResponse(successfulBody(url));
@@ -714,7 +634,16 @@ describe("promote stage", () => {
     );
 
     expect(result.status).toBe("ok");
-    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o777);
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o750);
+  });
+
+  it("rejects a world-writable candidate before any host effect", async () => {
+    const fx = setupFixture({ staging: true, current: true });
+    chmodSync(fx.stagingDir, 0o777);
+    const runner = vi.fn(async () => {});
+    const result = await promoteRun(makeCtx({ dataDir: fx.dataDir, runner }));
+    expect(result.status).toBe("error");
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("rejects a candidate whose epoch duplicates the active dataset", async () => {
@@ -748,6 +677,7 @@ describe("promote stage", () => {
           proxyVars: {},
         },
       })}\n`,
+      { mode: 0o600 },
     );
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
@@ -768,7 +698,9 @@ describe("promote stage", () => {
 
   it("rejects a duplicate epoch from authoritative two-slot state", async () => {
     const fx = setupFixture({ staging: true, current: true });
-    writeFileSync(join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME), "not current-contract json\n");
+    writeFileSync(join(fx.currentDir, CANDIDATE_MANIFEST_FILENAME), "not current-contract json\n", {
+      mode: 0o600,
+    });
     const ctx = makeCtx({
       dataDir: fx.dataDir,
       runner: async () => {
@@ -863,8 +795,9 @@ describe("promote stage", () => {
       opsBehaviour.failPromote = false;
     });
     expect(result.status).toBe("error");
-    // initial promote + rollback promote
-    expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(2);
+    // The retained recovery phase restarts the original primary, never replays promotion.
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(1);
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
     // After successful rollback the previous data is back in `currentDir`,
     // and staging holds the (now-stale) new data.
     expect(existsSync(fx.currentDir)).toBe(true);
@@ -902,7 +835,8 @@ describe("promote stage", () => {
 
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/slot B restart failed.*rollback ok/);
-    expect(promoteCalls).toBe(2);
+    expect(promoteCalls).toBe(1);
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
     expect(ctx.slotLayout.record.activeSlot).toBe("A");

@@ -1,10 +1,17 @@
 import { createApiClient } from "@openmapx/core";
-import { serviceAdminOperations } from "@openmapx/core/api-contracts";
+import {
+  artifactTransferAdminOperations,
+  cacheAdminOperations,
+  platformAdminOperations,
+  releaseControlAdminOperations,
+  serviceAdminOperations,
+} from "@openmapx/core/api-contracts";
 import {
   type OpsOperation,
   type OpsOperationKind,
   type OpsSubmitResult,
   parseOpsJobStatusForKind,
+  SERVICE_ACTIONS,
 } from "@openmapx/core/ops";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +27,18 @@ import {
   serviceHardlinksFixture,
   serviceSelectionFixture,
 } from "./helpers/service-admin-fixtures";
+
+// Existing admin session guards are supplied by installAdminRouteMocks below.
+// Any accidental fallback to the external Better Auth provider fails closed.
+vi.mock("../../auth", () => ({
+  auth: {
+    api: {
+      getSession: async () => {
+        throw Error("Unexpected external session lookup in admin SDK fixture");
+      },
+    },
+  },
+}));
 
 const { requireAdmin, session, writeAuditLog } = installAdminRouteMocks();
 const service = {
@@ -69,10 +88,13 @@ const registry = vi.fn(() => ({ list: () => [service], get: getService }));
 vi.mock("../../services/service-registry", () => ({ getServiceRegistry: () => registry() }));
 const enqueue = vi.fn().mockResolvedValue("job-accepted");
 const cancelJob = vi.fn();
+const composeStart = vi.fn();
 vi.mock("../../services/job-runner", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => enqueue(...args),
+    enqueueMaintenance: (...args: unknown[]) => enqueue(...args),
     cancel: (...args: unknown[]) => cancelJob(...args),
+    startImmediateCompose: (...args: unknown[]) => composeStart(...args),
   },
 }));
 const apply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
@@ -117,6 +139,16 @@ vi.mock("../../services/service-config-resolver", () => ({
   resolveServiceConfigWithSources: async () => ({
     count: { value: 2, source: "default" },
     API_KEY: { value: "synthetic-secret", source: "env" },
+  }),
+}));
+vi.mock("../../services/configuration-ownership-view", async (original) => ({
+  ...(await original<typeof import("../../services/configuration-ownership-view")>()),
+  inspectServiceConfiguration: async () => ({
+    resolved: {
+      count: { value: 2, source: "default" },
+      API_KEY: { value: "synthetic-secret", source: "env" },
+    },
+    ownership: {},
   }),
 }));
 const setSecret = vi.fn();
@@ -221,11 +253,36 @@ const execute = vi.fn(
     operation: OpsOperation,
     options: { operationKey?: string; signal?: AbortSignal },
   ): Promise<OpsSubmitResult> => {
+    if (operation.kind === "services.inspect")
+      return {
+        execution: "sync",
+        kind: operation.kind,
+        value: {
+          services: [
+            {
+              serviceId: "motis",
+              state: "running",
+              actions: Object.fromEntries(
+                SERVICE_ACTIONS.map((action) => [
+                  action,
+                  { available: false, execution: "direct", reason: "unavailable", workflow: null },
+                ]),
+              ) as never,
+            },
+          ],
+        },
+      };
     if (operation.kind === "stack.status")
       return {
         execution: "sync",
         kind: operation.kind,
         value: { services: [{ serviceId: "motis", state: "running" }] },
+      };
+    if (operation.kind === "configuration.inspect")
+      return {
+        execution: "sync",
+        kind: operation.kind,
+        value: { revisionId: null, integrationConfigDigests: [] },
       };
     if (operation.kind === "data.inspect")
       return { execution: "sync", kind: operation.kind, value: serviceDataFixture };
@@ -279,12 +336,21 @@ vi.mock("../../services/ops-client", async (actual) => ({
 }));
 
 const sdk = await import("@openmapx/core/api-admin-sdk");
+const executeDefault = execute.getMockImplementation()!;
 const { adminServicesRoute } = await import("../admin-services");
 const { adminOperationsRoute } = await import("../admin-operations");
 const { adminDawarichRoute } = await import("../admin-dawarich");
 const { registerAdminComposeRoutes } = await import("../admin-compose");
 beforeEach(() => {
   vi.clearAllMocks();
+  apply
+    .mockReset()
+    .mockResolvedValue({ revisionId: `cfg1_${"a".repeat(43)}`, jobId: "job-accepted" });
+  execute.mockReset().mockImplementation(executeDefault);
+  composeStart
+    .mockReset()
+    .mockResolvedValue({ ok: true, stdout: "", hardlinks: serviceHardlinksFixture });
+  dockerAvailable.mockReset().mockResolvedValue(true);
   internalFailures.length = 0;
   restore.mockReset().mockResolvedValue(true);
   persist.mockReset().mockImplementation(async (...args: unknown[]) => {
@@ -300,6 +366,7 @@ afterEach(() => {
 });
 async function wire(max = 1000) {
   const app = Fastify({ bodyLimit: 8192 });
+
   const limiter = new RateLimiter({ max, windowMs: 60000 });
   const unexpected = async () => {
     throw Error("Wrong tier");
@@ -323,6 +390,7 @@ async function wire(max = 1000) {
   });
   for (const route of [
     adminServicesRoute,
+    (await import("../admin-backup-maintenance")).adminBackupMaintenanceRoute,
     adminOperationsRoute,
     adminDawarichRoute,
     registerAdminComposeRoutes,
@@ -344,8 +412,24 @@ async function wire(max = 1000) {
 }
 
 describe("actual service producers through final exported SDK", () => {
+  it("keeps configured deployment identity while the agent is unavailable", async () => {
+    vi.stubEnv("OPS_AGENT_URL", "http://ops-agent:3000");
+    vi.stubEnv("OPS_AGENT_TOKEN_FILE", "/unavailable/token");
+    dockerAvailable.mockResolvedValue(false);
+    const { options, close } = await wire();
+    try {
+      expect(await sdk.getAdminDeployment(options)).toMatchObject({
+        status: 200,
+        data: { selfHosted: true, dockerAvailable: false, hostControlConfigured: true },
+      });
+    } finally {
+      await close();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([null, { count: 1 }])(
-    "preserves a newer request while an older noncommit fails (prior %j)",
+    "forwards overlapping intents without route-local desired writes or inverse compensation (prior %j)",
     async (prior) => {
       storedConfig = prior;
       let version = 0;
@@ -378,15 +462,40 @@ describe("actual service producers through final exported SDK", () => {
         });
       });
       const { options, close } = await wire();
-      const older = sdk.updateAdminServiceConfig("motis", { config: { count: 3 } }, options);
+      const older = sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 3 } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      );
       try {
         await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1), { timeout: 2000 });
         expect(
-          (await sdk.updateAdminServiceConfig("motis", { config: { count: 4 } }, options)).status,
+          (
+            await sdk.updateAdminServiceConfig(
+              "motis",
+              { config: { count: 4 } },
+              { "idempotency-key": crypto.randomUUID() },
+              options,
+            )
+          ).status,
         ).toBe(200);
         resume.resolve();
         expect((await older).status).toBe(500);
-        expect(storedConfig).toEqual({ count: 4 });
+        expect(storedConfig).toEqual(prior);
+        expect(persist).not.toHaveBeenCalled();
+        expect(restore).not.toHaveBeenCalled();
+        expect(apply).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            overlay: {
+              purpose: "service-config",
+              coordinatorMode: "ensure-running",
+              changes: [
+                { kind: "service-config", serviceId: "motis", set: { count: 4 }, unset: [] },
+              ],
+            },
+          }),
+        );
       } finally {
         resume.resolve();
         await older;
@@ -421,12 +530,13 @@ describe("actual service producers through final exported SDK", () => {
         const response = await sdk.updateAdminServiceConfig(
           "motis",
           { config: { count: 3 } },
+          { "idempotency-key": crypto.randomUUID() },
           options,
         );
         expect(response.status).toBe(500);
         expect(response.data).toEqual({ error: "Service administration failed" });
-        expect(persist).toHaveBeenCalledWith("motis", { count: 3 });
-        expect(restore).toHaveBeenCalledTimes(outcome === "not_committed" ? 1 : 0);
+        expect(persist).not.toHaveBeenCalled();
+        expect(restore).not.toHaveBeenCalled();
         expect(internalFailures).toEqual([failure]);
         expect(writeAuditLog).not.toHaveBeenCalled();
       } finally {
@@ -435,7 +545,7 @@ describe("actual service producers through final exported SDK", () => {
     },
   );
 
-  it("retains original apply failure internally when the inverse fails without leaking either error", async () => {
+  it("retains the original producer failure internally without a route-local inverse", async () => {
     const failure = new TrustedConfigurationApplyError({
       outcome: "not_committed",
       reason: "failed",
@@ -452,30 +562,57 @@ describe("actual service producers through final exported SDK", () => {
       const response = await sdk.updateAdminServiceConfig(
         "motis",
         { config: { count: 3 } },
+        { "idempotency-key": crypto.randomUUID() },
         options,
       );
       expect(response.status).toBe(500);
       expect(response.data).toEqual({ error: "Service administration failed" });
-      expect(internalFailures[0]).toBeInstanceOf(AggregateError);
-      expect((internalFailures[0] as AggregateError).cause).toBe(failure);
-      expect((internalFailures[0] as AggregateError).errors).toEqual([failure, inverseFailure]);
+      expect(internalFailures[0]).toBe(failure);
+      expect(restore).not.toHaveBeenCalled();
     } finally {
       await close();
     }
   });
 
-  it("exports all 30 actual registered methods", async () => {
+  it("exports every registered service-family method", async () => {
     const { registered, close } = await wire();
     try {
-      expect([...registered.keys()].sort()).toEqual(Object.keys(serviceAdminOperations).sort());
+      const dedicated = new Set([
+        ...Object.keys(releaseControlAdminOperations),
+        ...Object.keys(cacheAdminOperations), // Scoped route/SDK/real Valkey coverage is dedicated.
+        ...Object.keys(platformAdminOperations),
+        ...Object.keys(artifactTransferAdminOperations),
+      ]);
+      expect([...registered.keys()].sort()).toEqual(
+        Object.keys(serviceAdminOperations)
+          .filter((id) => !dedicated.has(id))
+          .sort(),
+      );
       for (const [id, contract] of Object.entries(serviceAdminOperations)) {
         expect(sdk).toHaveProperty(id, expect.any(Function));
-        expect(registered.get(id)).toBe(contract.path);
+        if (!dedicated.has(id)) expect(registered.get(id)).toBe(contract.path);
       }
     } finally {
       await close();
     }
   });
+  it("forwards only bounded OSM pagination through the actual route and generated SDK", async () => {
+    const { options, close } = await wire();
+    try {
+      const result = await sdk.getAdminServiceData({ osmLimit: 2, osmOffset: 50 }, options);
+      expect(result.status).toBe(200);
+      expect(execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "data.inspect", osmLimit: 2, osmOffset: 50 }),
+        expect.anything(),
+      );
+      const before = execute.mock.calls.length;
+      expect((await sdk.getAdminServiceData({ osmLimit: 501 }, options)).status).toBe(400);
+      expect(execute.mock.calls.length).toBe(before);
+    } finally {
+      await close();
+    }
+  });
+
   it("preserves complete manifests, omitted defaults, configuration, timestamps and inventory", async () => {
     const { options, close } = await wire();
     try {
@@ -497,7 +634,7 @@ describe("actual service producers through final exported SDK", () => {
           credentials: [
             {
               key: "API_KEY",
-              source: "vault",
+              source: "env",
               updatedAt: "2026-10-21T00:00:00.000Z",
               updatedBy: null,
               setup: { url: "https://example.test/setup" },
@@ -505,7 +642,7 @@ describe("actual service producers through final exported SDK", () => {
           ],
         },
       });
-      expect(await sdk.getAdminServiceData(options)).toMatchObject({
+      expect(await sdk.getAdminServiceData(undefined, options)).toMatchObject({
         status: 200,
         data: { ...serviceDataFixture, fetchedAt: expect.any(String) },
       });
@@ -546,16 +683,68 @@ describe("actual service producers through final exported SDK", () => {
         () => sdk.listAdminServices(options),
         () => sdk.getAdminDeployment(options),
         () => sdk.getAdminServiceSelection(options),
-        () => sdk.setAdminServiceSelection({ selectedRoots: [] }, options),
-        () => sdk.updateAdminServiceConfig("motis", { config: { count: 3 } }, options),
-        () => sdk.setAdminServiceCredential("motis", "API_KEY", { value: " synthetic " }, options),
-        () => sdk.deleteAdminServiceCredential("motis", "API_KEY", undefined, options),
-        () => sdk.runAdminServiceAction("motis", { action: "restart" }, options),
-        () => sdk.runAdminServicesBulkAction({ action: "build", all: true }, options),
-        () => sdk.createAdminServiceBackup(undefined, options),
         () =>
-          sdk.restoreAdminServiceBackup("nightly", { serviceIds: [], stopRunning: true }, options),
-        () => sdk.deleteAdminServiceBackup("nightly", undefined, options),
+          sdk.setAdminServiceSelection(
+            { selectedRoots: [] },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.updateAdminServiceConfig(
+            "motis",
+            { config: { count: 3 } },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.setAdminServiceCredential(
+            "motis",
+            "API_KEY",
+            { value: " synthetic " },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          ),
+        () =>
+          sdk.deleteAdminServiceCredential(
+            "motis",
+            "API_KEY",
+            { "idempotency-key": crypto.randomUUID() },
+            undefined,
+            options,
+          ),
+        () =>
+          sdk.runAdminServiceAction(
+            "motis",
+            { action: "restart" },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          ),
+        () =>
+          sdk.runAdminServicesBulkAction(
+            { action: "build", all: true },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          ),
+        () =>
+          sdk.createAdminServiceBackup(
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            undefined,
+            options,
+          ),
+        () =>
+          sdk.restoreAdminServiceBackup(
+            "nightly",
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            { serviceIds: [], stopRunning: true },
+            options,
+          ),
+        () =>
+          sdk.deleteAdminServiceBackup(
+            "nightly",
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            undefined,
+            options,
+          ),
         () => sdk.startAdminCompose(key, undefined, options),
         () => sdk.listAdminOperations(options),
         () => sdk.previewAdminOperation("download-fonts", null, options),
@@ -564,7 +753,8 @@ describe("actual service producers through final exported SDK", () => {
         () => sdk.rollbackAdminSharedMobility("bike", { enabled: false }, options),
         () => sdk.getAdminDawarich(options),
       ];
-      for (const call of calls) expect((await call()).status).toBe(200);
+      for (const [index, call] of calls.entries())
+        expect((await call()).status, `call ${index}`).toBe(200);
       serviceActionLimit.reset();
       expect((await sdk.provisionAdminDawarich(undefined, options)).status).toBe(200);
       serviceActionLimit.reset();
@@ -585,7 +775,7 @@ describe("actual service producers through final exported SDK", () => {
         await sdk.streamAdminServiceLogs(
           "motis",
           key,
-          { lines: "3.9" },
+          { lines: "3" },
           {
             ...options,
             onTextChunk: (chunk) => {
@@ -595,8 +785,27 @@ describe("actual service producers through final exported SDK", () => {
         ),
       ).toMatchObject({ status: 200, data: undefined });
       expect(chunks.join("")).toBe("hello €\n");
-      expect(setSecret).toHaveBeenCalledWith("motis", "API_KEY", " synthetic ", session.user.id);
-      expect(enqueue).toHaveBeenCalledTimes(8);
+      expect(setSecret).not.toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "vault.apply",
+          followUp: "service-apply",
+          overlay: {
+            purpose: "service-secret",
+            coordinatorMode: "ensure-running",
+            changes: [
+              {
+                kind: "service-secret",
+                serviceId: "motis",
+                key: "API_KEY",
+                action: "set",
+                value: " synthetic ",
+              },
+            ],
+          },
+        }),
+      );
+      expect(enqueue).toHaveBeenCalledTimes(6);
       expect(cancelJob).not.toHaveBeenCalled();
       expect(opsCancel).not.toHaveBeenCalled();
     } finally {
@@ -647,10 +856,18 @@ describe("actual service producers through final exported SDK", () => {
   it("retains action limiter, managed credential, bundle and unknown-ID-first gates", async () => {
     const { app, options, close } = await wire();
     try {
-      expect((await sdk.runAdminServiceAction("motis", { action: "start" }, options)).status).toBe(
-        200,
-      );
+      expect(
+        (
+          await sdk.runAdminServiceAction(
+            "motis",
+            { action: "start" },
+            { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+            options,
+          )
+        ).status,
+      ).toBe(200);
       const limited = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
         method: "POST",
         url: "/api/admin/services/motis/action",
         remoteAddress: "198.51.100.8",
@@ -672,6 +889,7 @@ describe("actual service producers through final exported SDK", () => {
       expect(
         (
           await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
             method: "POST",
             url: "/api/admin/dawarich/provision",
             payload: { publicHost: 9 },
@@ -679,6 +897,7 @@ describe("actual service producers through final exported SDK", () => {
         ).statusCode,
       ).toBe(409);
       const unknown = await app.inject({
+        headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
         method: "POST",
         url: "/api/admin/operations/missing/run",
         payload: [1],
@@ -723,6 +942,7 @@ it("rejects malformed mutation envelopes and members before persistence or host 
       expect(
         (
           await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
             method: "POST",
             url: "/api/admin/services/backups/nightly/restore",
             payload,
@@ -735,8 +955,14 @@ it("rejects malformed mutation envelopes and members before persistence or host 
       { action: "start", serviceIds: ["motis"], all: true },
     ])
       expect(
-        (await app.inject({ method: "POST", url: "/api/admin/services/bulk-action", payload }))
-          .statusCode,
+        (
+          await app.inject({
+            headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
+            method: "POST",
+            url: "/api/admin/services/bulk-action",
+            payload,
+          })
+        ).statusCode,
       ).toBe(400);
     for (const payload of [{ value: 7 }, { value: " " }, { value: "synthetic", extra: true }])
       expect(
@@ -759,16 +985,26 @@ it("rejects malformed mutation envelopes and members before persistence or host 
   }
 });
 
-it("retains structured domain failures and manual-render credential results through SDK validation", async () => {
+it("retains structured domain failures and retained credential jobs through SDK validation", async () => {
   const { options, close } = await wire();
   try {
     expect(
-      await sdk.updateAdminServiceConfig("motis", { config: { count: 0 } }, options),
+      await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 0 } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
     ).toMatchObject({ status: 400, data: { errors: [expect.any(String)] } });
     expect(merge).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
     expect(
-      await sdk.updateAdminServiceConfig("motis", { config: { locked: "changed" } }, options),
+      await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { locked: "changed" } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
     ).toMatchObject({ status: 400, data: { errors: [expect.any(String)] } });
     expect(merge).not.toHaveBeenCalled();
     expect(
@@ -781,15 +1017,21 @@ it("retains structured domain failures and manual-render credential results thro
         issues: expect.arrayContaining([{ path: expect.any(String), message: expect.any(String) }]),
       },
     });
-    dockerAvailable.mockResolvedValueOnce(false);
     expect(
-      await sdk.setAdminServiceCredential("motis", "API_KEY", { value: "synthetic" }, options),
-    ).toMatchObject({ status: 200, data: { ok: true, needsRender: true } });
+      await sdk.setAdminServiceCredential(
+        "motis",
+        "API_KEY",
+        { value: "synthetic" },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
+    ).toMatchObject({ status: 200, data: { ok: true, jobId: "job-accepted" } });
     expect(
       await sdk.setAdminServiceCredential(
         "dawarich-app",
         "OIDC_CLIENT_SECRET",
         { value: "synthetic" },
+        { "idempotency-key": crypto.randomUUID() },
         options,
       ),
     ).toMatchObject({
@@ -797,7 +1039,7 @@ it("retains structured domain failures and manual-render credential results thro
       data: { code: "DAWARICH_CREDENTIAL_MANAGED", error: expect.any(String) },
     });
     execute.mockRejectedValueOnce(Error("synthetic-secret must be redacted"));
-    const failed = await sdk.getAdminServiceData(options);
+    const failed = await sdk.getAdminServiceData(undefined, options);
     expect(failed).toMatchObject({ status: 500, data: { error: "Service administration failed" } });
     expect(() => sdk.unwrapAdminResponse(failed)).toThrow("API request failed with status 500");
     expect(JSON.stringify(failed)).not.toContain("synthetic-secret");
@@ -806,7 +1048,19 @@ it("retains structured domain failures and manual-render credential results thro
     });
     expect(await sdk.listAdminServices(options)).toMatchObject({
       status: 200,
-      data: { services: [{ status: "not-running" }] },
+      data: {
+        acquisition: { state: "unavailable", reason: "ops_unavailable" },
+        summary: { running: 0, stopped: 0, unknown: 1, total: 1 },
+        services: [
+          {
+            status: "unknown",
+            actions: {
+              start: { available: false, reason: "unavailable" },
+              logs: { available: false, reason: "unavailable" },
+            },
+          },
+        ],
+      },
     });
     expect(cancelJob).not.toHaveBeenCalled();
   } finally {
@@ -858,7 +1112,7 @@ it("serves actual raw log Content-Type and complete streamed bytes over loopback
     const result = await sdk.streamAdminServiceLogs(
       "motis",
       { "idempotency-key": "raw-synthetic-intent-001" },
-      { lines: "3.9" },
+      { lines: "3" },
       {
         client,
         timeoutMs: 3000,
@@ -1026,6 +1280,7 @@ it("retains registry-first selection failure and redacts pre-validation domain e
       throw Error("synthetic-secret");
     });
     const failed = await app.inject({
+      headers: { "idempotency-key": "route-retained-mutation-fixture-0001" },
       method: "POST",
       url: "/api/admin/services/motis/config",
       payload: {},
@@ -1068,7 +1323,7 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
         ...options,
         onTextChunk: () => {},
       }),
-    ).toMatchObject({ status: 409, data: { error: expect.any(String) } });
+    ).toMatchObject({ status: 200 });
     registry.mockImplementationOnce(() => {
       throw Error("unavailable");
     });
@@ -1078,23 +1333,34 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
         onTextChunk: () => {},
       }),
     ).toMatchObject({ status: 503, data: { error: "Service registry not available" } });
-    expect(execute).not.toHaveBeenCalled();
-    for (const [lines, tail] of [
-      ["", 1],
-      ["-2", 1],
-      ["3.9", 3],
-      ["99999", 1000],
-      ["Infinity", 200],
-      ["garbage", 200],
-    ] as const) {
-      await sdk.streamAdminServiceLogs(
+    expect(execute).toHaveBeenCalledTimes(1);
+    for (const lines of ["", "-2", "3.9", "99999", "Infinity", "garbage"]) {
+      const result = await sdk.streamAdminServiceLogs(
         "motis",
         key,
         { lines },
         { ...options, onTextChunk: () => {} },
       );
+      expect(result).toMatchObject({
+        status: 400,
+        data: { error: "Invalid administration query" },
+      });
+    }
+    expect(execute).toHaveBeenCalledTimes(1);
+    for (const [lines, tail] of [
+      ["1", 1],
+      ["3", 3],
+      ["1000", 1000],
+    ] as const) {
+      const result = await sdk.streamAdminServiceLogs(
+        "motis",
+        key,
+        { lines },
+        { ...options, onTextChunk: () => {} },
+      );
+      expect(result.status).toBe(200);
       expect(execute).toHaveBeenLastCalledWith(
-        expect.objectContaining({ kind: "service.logs.follow", tail }),
+        expect.objectContaining({ kind: "service.logs.follow", tail, maxDurationSeconds: 900 }),
         expect.anything(),
       );
     }
@@ -1111,7 +1377,11 @@ it("keeps log pre-hijack JSON statuses/media, required single headers and bounde
 it("returns complete Compose HTTP200 failure and does not retry the host action", async () => {
   const { options, close } = await wire();
   try {
-    execute.mockRejectedValueOnce(Error("synthetic-host-failure"));
+    composeStart.mockResolvedValueOnce({
+      ok: false,
+      stdout: "",
+      hardlinks: serviceHardlinksFixture,
+    });
     expect(
       await sdk.startAdminCompose(
         { "idempotency-key": "compose-synthetic-intent-002" },
@@ -1122,7 +1392,7 @@ it("returns complete Compose HTTP200 failure and does not retry the host action"
       status: 200,
       data: { ok: false, stdout: "", hardlinks: serviceHardlinksFixture },
     });
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(composeStart).toHaveBeenCalledTimes(1);
     expect(opsCancel).not.toHaveBeenCalled();
   } finally {
     await close();
@@ -1142,7 +1412,10 @@ it("leaves accepted mutation jobs running after the HTTP observer disconnects", 
     const controller = new AbortController();
     const pending = loopbackFetch(`${baseUrl}/api/admin/services/motis/action`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "observer-disconnect-action-0001",
+      },
       body: JSON.stringify({ action: "start" }),
       signal: controller.signal,
     });
@@ -1166,7 +1439,13 @@ it("retains env-owned selection failures and explicit trimmed/deduplicated inten
     validateSelection.mockRejectedValueOnce(
       Error("OPENMAPX_SERVICES is set; unset it before editing selection"),
     );
-    expect(await sdk.setAdminServiceSelection({ selectedRoots: [] }, options)).toMatchObject({
+    expect(
+      await sdk.setAdminServiceSelection(
+        { selectedRoots: [] },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      ),
+    ).toMatchObject({
       status: 400,
       data: { error: expect.stringContaining("OPENMAPX_SERVICES") },
     });
@@ -1174,6 +1453,7 @@ it("retains env-owned selection failures and explicit trimmed/deduplicated inten
     const response = await app.inject({
       method: "PUT",
       url: "/api/admin/services/selection",
+      headers: { "idempotency-key": crypto.randomUUID() },
       payload: { selectedRoots: [" motis ", "motis"] },
     });
     expect(response.statusCode).toBe(200);
@@ -1258,22 +1538,59 @@ it("retains public corrupt backup metadata, admission failures and intentional r
       kind: "backup.list",
       value: { backups: [corrupt], warningCount: 1 },
     });
-    expect(await sdk.restoreAdminServiceBackup("broken", undefined, options)).toMatchObject({
+    expect(
+      await sdk.restoreAdminServiceBackup(
+        "broken",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 409,
       data: { error: expect.stringContaining("invalid_manifest") },
     });
-    expect(await sdk.restoreAdminServiceBackup("missing", undefined, options)).toMatchObject({
+    expect(
+      await sdk.restoreAdminServiceBackup(
+        "missing",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 404,
       data: { error: "Backup not found: missing" },
     });
-    expect(await sdk.deleteAdminServiceBackup("missing", undefined, options)).toMatchObject({
+    expect(
+      await sdk.deleteAdminServiceBackup(
+        "missing",
+        { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+        undefined,
+        options,
+      ),
+    ).toMatchObject({
       status: 404,
       data: { error: "Backup not found: missing" },
     });
     expect(enqueue).not.toHaveBeenCalled();
-    expect((await sdk.restoreAdminServiceBackup("nightly", undefined, options)).status).toBe(200);
     expect(
-      (await sdk.restoreAdminServiceBackup("nightly", { serviceIds: [] }, options)).status,
+      (
+        await sdk.restoreAdminServiceBackup(
+          "nightly",
+          { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+          undefined,
+          options,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await sdk.restoreAdminServiceBackup(
+          "nightly",
+          { "idempotency-key": "sdk-retained-mutation-fixture-0001" },
+          { serviceIds: [] },
+          options,
+        )
+      ).status,
     ).toBe(200);
     expect(enqueue).toHaveBeenCalledTimes(2);
     for (const [, payload] of enqueue.mock.calls)
@@ -1287,3 +1604,8 @@ it("retains public corrupt backup metadata, admission failures and intentional r
     await close();
   }
 });
+
+vi.mock("../../services/retained-maintenance-job", async (actual) => ({
+  ...(await actual<typeof import("../../services/retained-maintenance-job")>()),
+  lookupMaintenanceJob: vi.fn(async () => null),
+}));

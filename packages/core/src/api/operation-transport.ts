@@ -200,6 +200,11 @@ export function createOperationBinder<const Operations extends Record<string, Ap
                 if (!onTextChunk) throw new ApiContractError(response.status);
                 await consumeTextStream(response, effectiveSignal, onTextChunk);
                 data = undefined;
+              } else if (contract.kind === "bytes") {
+                // Binary administration routes use the focused owned byte
+                // consumer; this generic JSON/text transport cannot buffer them.
+                await response.body?.cancel().catch(() => {});
+                throw new ApiContractError(response.status);
               } else {
                 const raw =
                   contract.kind === "json"

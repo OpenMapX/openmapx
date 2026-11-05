@@ -42,7 +42,9 @@ export function containersOnCheckoutServiceFiles(
   rootDir: string,
   mounts: readonly ContainerBindMounts[],
 ): string[] {
-  const services = `${rootDir.replace(/\/+$/, "")}/services/`;
+  let end = rootDir.length;
+  while (end > 0 && rootDir.charCodeAt(end - 1) === 47) end--;
+  const services = `${rootDir.slice(0, end)}/services/`;
   const traefikDynamic = `${services}traefik/config/dynamic`;
   return mounts
     .filter((mount) =>

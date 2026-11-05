@@ -34,6 +34,8 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { AuthPolicySettings } from "./AuthPolicySettings";
+import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
 
 export interface ResolvedSetting {
   group: string;
@@ -900,9 +902,23 @@ export function SystemSettings({
 
   const panels = useMemo(() => {
     if (!data) return [];
+    const groups = data.groups
+      .map((group) => ({
+        ...group,
+        settings: group.settings.filter(
+          (setting) =>
+            ![
+              "emailVerificationRequired",
+              "sessionDurationHours",
+              "twoFaEnabled",
+              "passwordMinLength",
+            ].includes(setting.key),
+        ),
+      }))
+      .filter((group) => group.settings.length > 0);
     return sections
       ? sections.flatMap((section) => {
-          const source = data.groups.find((group) => group.id === section.groupId);
+          const source = groups.find((group) => group.id === section.groupId);
           if (!source) return [];
           const settings = source.settings
             .filter(
@@ -918,7 +934,7 @@ export function SystemSettings({
             { section, group: { ...source, id: section.id, label: section.label, settings } },
           ];
         })
-      : data.groups.map((group) => ({ section: undefined, group }));
+      : groups.map((group) => ({ section: undefined, group }));
   }, [data, sections, settingText]);
 
   if (isLoading) {
@@ -946,6 +962,8 @@ export function SystemSettings({
       }}
     >
       {showHeader && <AdminPageHeader title="Settings" subtitle="Operator configuration" />}
+      {(!sections || sections.some((section) => section.groupId === "auth")) &&
+        data.groups.some((group) => group.id === "auth") && <AuthPolicySettings />}
       {panels.map(({ group, section }) => (
         <SettingsGroupPanel
           key={section?.id ?? group.id}
@@ -964,6 +982,7 @@ export function SystemSettings({
         />
       ))}
       {showTransfer && <ExportImportSection onMsg={showToast} />}
+      {showTransfer && <ConfigurationMigrationPanel />}
       <Snackbar
         open={!!toast}
         autoHideDuration={4000}

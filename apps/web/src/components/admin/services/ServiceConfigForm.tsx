@@ -1,6 +1,10 @@
 "use client";
 
-import type { AdminServiceResolvedConfig } from "@openmapx/core/api-contracts";
+import type {
+  AdminServiceResolvedConfig,
+  ConfigurationOwnership,
+} from "@openmapx/core/api-contracts";
+import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
 import { useActivityClient } from "../activity/activityQueries";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
 
@@ -11,6 +15,7 @@ interface ServiceConfigFormProps {
   resolvedConfig: AdminServiceResolvedConfig;
   /** Env-var prefix (`SERVICE_<ID>_`) shown as an override hint in the header. */
   envPrefix?: string;
+  ownership?: Record<string, ConfigurationOwnership>;
   /** Save the new config to the database (no container restart). */
   onSave: (values: Record<string, unknown>) => Promise<void>;
   /**
@@ -30,20 +35,31 @@ export function ServiceConfigForm({
   schema,
   resolvedConfig,
   envPrefix,
+  ownership,
   onSave,
   onSaveAndApply,
 }: ServiceConfigFormProps) {
   const { apiUrl } = useActivityClient();
+  const withResourceResets = (values: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        value === "" && (SERVICE_RESOURCE_FIELDS as readonly string[]).includes(key) ? null : value,
+      ]),
+    );
   return (
     <SchemaConfigForm
       key={JSON.stringify([apiUrl, serviceId, schema])}
       preserveDirtyValuesOnRefresh
-      applySuccessMessage="Configuration saved. Service start queued."
+      applySuccessMessage="Configuration saved. Service apply queued."
       schema={schema}
       resolvedConfig={resolvedConfig}
       envPrefix={envPrefix}
-      onSave={onSave}
-      onSaveAndApply={onSaveAndApply}
+      ownership={ownership}
+      onSave={(values) => onSave(withResourceResets(values))}
+      onSaveAndApply={
+        onSaveAndApply ? (values) => onSaveAndApply(withResourceResets(values)) : undefined
+      }
       applyLabel="Save & apply"
       emptyMessage="No editable configuration fields declared for this service."
     />

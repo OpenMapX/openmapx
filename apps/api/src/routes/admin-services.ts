@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import type { OpsResultFor } from "@openmapx/core/ops";
+import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
+import { type OpsResultFor, trustedConfigurationPayloadSchema } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
 import {
@@ -13,34 +14,34 @@ import {
   getServiceSelectionSummary,
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
-import { isDockerAvailable } from "../services/admin-ops";
+import { inspectServiceConfiguration } from "../services/configuration-ownership-view";
 import {
-  DAWARICH_CREDENTIAL_MANAGED_BY,
   DAWARICH_CREDENTIAL_MANAGED_CODE,
   DAWARICH_CREDENTIAL_MANAGED_ERROR,
   isProvisioningOwnedDawarichCredential,
 } from "../services/dawarich/credential-policy.js";
+import { hostControlConfigured, isSelfHostedDeployment } from "../services/deployment-mode";
 import {
   createDirectAdminOpsKey,
   DIRECT_OPS_IDEMPOTENCY_HEADER,
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
 import { jobRunner } from "../services/job-runner";
+import {
+  isManagedTransitCredential,
+  managedServiceCredential,
+  TRANSIT_CREDENTIAL_MANAGED_CODE,
+} from "../services/managed-service-credentials";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { osmExtractFor, readDataManagerDatasets } from "../services/osm-extract";
+import { lookupMaintenanceJob } from "../services/retained-maintenance-job";
 import { isSecretsConfigured } from "../services/secrets";
-import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
-import { persistServiceConfigPatch } from "../services/service-config-writer";
+import { readServiceInventory } from "../services/service-inventory";
 import { getServiceRegistry } from "../services/service-registry";
-import {
-  deleteServiceSecret,
-  listServiceSecrets,
-  setServiceSecret,
-} from "../services/service-secrets";
+import { listServiceSecrets } from "../services/service-secrets";
 import { applyTrustedConfiguration } from "../services/trusted-config-operations";
-import { isProvenConfigurationNonCommit } from "../services/trusted-config-outcome";
 import { writeAuditLog } from "../utils/audit-log";
-import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
+import { dockerComposeLogs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
@@ -48,7 +49,7 @@ import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
-const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
+const { serviceConfigEnvPrefix } = coreServices;
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
 function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
@@ -77,6 +78,7 @@ function presentBackupInventory(inventory: BackupInventory) {
     backups: inventory.backups.map((backup) => ({
       name: backup.backupId,
       createdAt: backup.createdAt,
+      ...(backup.expiresAt ? { expiresAt: backup.expiresAt } : {}),
       ...(backup.platformVersion ? { openmapxVersion: backup.platformVersion } : {}),
       serviceCount: backup.serviceCount,
       volumeCount: backup.volumeCount,
@@ -126,27 +128,26 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services — list all services from registry with docker ps status
   registerServiceAdminRoute(app, "listAdminServices", async () => {
-    const registry = getServiceRegistry();
-    const ps = await dockerComposePs();
-    const services = registry.list().map((s) => ({
-      id: s.manifest.id,
-      name: s.manifest.name,
-      version: s.manifest.version,
-      description: s.manifest.description,
-      quality: s.manifest.quality,
-      // Normalised to bare strings for the admin UI; the structured-form
-      // metadata isn't surfaced anywhere yet (reserved slot for future
-      // runtime layers like region-aware routing).
-      provides: getProvidedCapabilityNames(s.manifest.provides),
-      consumes: s.manifest.consumes ?? [],
-      exposure: s.manifest.exposure,
-      enabled: s.enabled,
-      isBuiltIn: s.isBuiltIn,
-      status: ps.find((p) => p.service === s.manifest.id)?.state ?? "not-running",
-    }));
-    const running = services.filter((s) => s.status === "running").length;
-    const stopped = services.filter((s) => s.status !== "running").length;
-    return { services, summary: { running, stopped, total: services.length } };
+    return readServiceInventory();
+  });
+
+  registerServiceAdminRoute(app, "listAdminServicePresets", async (_req, reply) => {
+    try {
+      const loaded = getServiceRegistry().list();
+      return {
+        presets: Object.entries(coreServices.PRESETS).map(([id, rootIds]) => {
+          const selection = coreServices.expandServiceSelection(loaded, rootIds);
+          return {
+            id,
+            rootIds: [...rootIds],
+            effectiveIds: [...selection.enabledIds],
+            missingIds: selection.missingIds,
+          };
+        }),
+      };
+    } catch {
+      return reply.code(503).send({ error: "Service registry not available" });
+    }
   });
 
   // GET /admin/services/:id — single service detail
@@ -162,10 +163,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       reply.status(404);
       return { error: "Service not found" };
     }
-    const ps = await dockerComposePs();
+    const inventory = await readServiceInventory();
+    const observed = inventory.services.find((row) => row.id === svc.manifest.id);
+    if (!observed) {
+      reply.status(503);
+      return { error: "Service registry changed; retry the request" };
+    }
     return {
       ...svc,
-      status: ps.find((p) => p.service === svc?.manifest.id)?.state ?? "not-running",
+      status: observed.status,
+      actions: observed.actions,
+      acquisition: inventory.acquisition,
     };
   });
 
@@ -176,10 +184,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { id } = req.params;
       const { action } = req.body;
-      if (!["start", "stop", "restart"].includes(action)) {
+      if (!["start", "stop", "restart", "apply"].includes(action)) {
         reply.status(400);
-        return { error: "Invalid action — must be start | stop | restart" };
+        return { error: "Invalid action — must be start | stop | restart | apply" };
       }
+      const adminSession = getAdminSession(req),
+        coreRestart = action === "restart" && (id === "app-api" || id === "traefik"),
+        type = coreRestart ? "service.core-restart" : (`service.${action}` as const),
+        payload = { service: id },
+        key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        retained = await lookupMaintenanceJob(type, payload, adminSession.user.id, key);
+      if (retained) return { ok: true, jobId: retained };
       // Verify the id is a known service before enqueueing — prevents the job
       // runner from spawning a `docker compose start <unknown>` call (or worse,
       // a flag-shaped id bleeding into the docker-compose argv).
@@ -194,13 +209,25 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(404);
         return { error: `Service "${id}" not found` };
       }
-      const adminSession = getAdminSession(req);
-
-      const jobId = await jobRunner.enqueue(
-        `service.${action}`,
-        { service: id },
-        adminSession.user.id,
-      );
+      if (coreRestart) {
+        try {
+          const inventory = await executeAndWait(
+            createApiOpsClient(),
+            { kind: "services.inspect" },
+            createDurableOpsKey("admin.core-restart.inspect", `${adminSession.user.id}:${id}`),
+            { signal: AbortSignal.timeout(15_000) },
+          );
+          const decision = inventory.services.find((s) => s.serviceId === id)?.actions.restart;
+          if (!decision?.available || decision.workflow !== "core-restart") {
+            reply.status(503);
+            return { error: "Core service restart is not available" };
+          }
+        } catch {
+          reply.status(503);
+          return { error: "Core service restart is not available" };
+        }
+      }
+      const jobId = await jobRunner.enqueueMaintenance(type, payload, adminSession.user.id, key);
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: id,
@@ -247,13 +274,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: (err as Error).message };
       }
 
-      const operationKey = createDurableOpsKey(
-        "admin-route.selection.apply",
-        `${getAdminSession(req).user.id}\0${String(req.id)}`,
+      const operationKey = createDirectAdminOpsKey(
+        getAdminSession(req).user.id,
+        parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
       );
       const applied = await applyTrustedConfiguration({
         kind: "serviceSelection.apply",
         selectedRoots: validated.normalized,
+        actorId: getAdminSession(req).user.id,
         operationKey,
       });
       const summary = await getServiceSelectionSummary(registry, validated.normalized);
@@ -285,6 +313,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // POST /admin/services/bulk-action — enqueue CLI-backed bulk service actions
   registerServiceAdminRoute(app, "runAdminServicesBulkAction", async (req, reply) => {
+    const adminSession = getAdminSession(req),
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("service.bulk", req.body, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
     const action = req.body?.action;
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
       reply.status(400);
@@ -292,14 +324,53 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
     const allowedKeys =
       action === "build"
-        ? new Set(["action", "serviceIds", "all", "region", "continueOnError"])
-        : new Set(["action", "serviceIds", "continueOnError"]);
+        ? new Set([
+            "action",
+            "serviceIds",
+            "all",
+            "region",
+            "continueOnError",
+            "presetIds",
+            "motisImport",
+          ])
+        : action === "update"
+          ? new Set(["action", "serviceIds", "continueOnError", "noDeps", "presetIds"])
+          : new Set(["action", "serviceIds", "continueOnError", "presetIds"]);
     if (!hasOnlyBodyKeys(req.body, allowedKeys)) {
       reply.status(400);
       return { error: "Request contains unsupported fields" };
     }
 
-    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
+    let serviceIds: string[];
+    try {
+      serviceIds = [
+        ...new Set([
+          ...(req.body.serviceIds ?? []),
+          ...coreServices.expandPresets(req.body.presetIds ?? []),
+        ]),
+      ];
+      const registry = getServiceRegistry();
+      if (serviceIds.some((id) => !registry.get(id)))
+        return reply
+          .code(400)
+          .send({ error: "Selected preset or service contains an uninstalled service" });
+      if (action === "build" && "motisImport" in req.body && req.body.motisImport) {
+        const motis = registry.get("motis");
+        if (
+          !motis?.enabled ||
+          !motis.isBuiltIn ||
+          !motis.manifest.buildCommand ||
+          !(serviceIds.includes("motis") || ("all" in req.body && req.body.all === true))
+        )
+          return reply
+            .code(400)
+            .send({ error: "MOTIS import requires a build including enabled built-in MOTIS" });
+      }
+    } catch (error) {
+      if (error instanceof coreServices.UnknownPresetError)
+        return reply.code(400).send({ error: "Unknown service preset" });
+      return reply.code(503).send({ error: "Service registry not available" });
+    }
     if (action !== "build" && serviceIds.length === 0) {
       reply.status(400);
       return { error: `Action "${action}" requires one or more serviceIds` };
@@ -314,8 +385,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const region = "region" in req.body ? req.body.region?.trim() || undefined : undefined;
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "service.bulk",
       {
         action,
@@ -323,8 +393,12 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         all: ("all" in req.body ? req.body.all : undefined) === true,
         region,
         continueOnError: req.body?.continueOnError,
+        ...("noDeps" in req.body ? { noDeps: req.body.noDeps } : {}),
+        ...("motisImport" in req.body ? { motisImport: req.body.motisImport } : {}),
       },
       adminSession.user.id,
+      key,
+      req.body,
     );
 
     await writeAuditLog({
@@ -353,17 +427,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     // Reduce declared-secret fields to the "***" configured sentinel so a
     // credential never reaches the Config tab, mirroring the integration
     // detail route.
-    const resolvedConfig = maskSecretConfigValues(
-      await resolveServiceConfigWithSources({
-        id: svc.manifest.id,
-        configSchema: svc.manifest.configSchema,
-      }),
-      svc.manifest.configSchema,
-    );
+    const snapshot = await inspectServiceConfiguration(svc.manifest.id);
+    const resolvedConfig = maskSecretConfigValues(snapshot.resolved, svc.manifest.configSchema);
     return {
       schema: svc.manifest.configSchema ?? null,
       resolvedConfig,
       envPrefix: serviceConfigEnvPrefix(svc.manifest.id),
+      ownership: snapshot.ownership,
     };
   });
 
@@ -377,7 +447,27 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(404);
         return { error: "Service not found" };
       }
-      const body = req.body?.config;
+      const body = { ...req.body.config };
+      const unset: string[] = [];
+      const properties = svc.manifest.configSchema?.properties as
+        | Record<string, { readOnly?: boolean; type?: string }>
+        | undefined;
+      for (const key of Object.keys(body)) {
+        if (
+          body[key] === null &&
+          svc.isBuiltIn &&
+          (SERVICE_RESOURCE_FIELDS as readonly string[]).includes(key) &&
+          properties?.[key] &&
+          properties[key].readOnly !== true &&
+          !(
+            Array.isArray(svc.manifest.configSchema?.required) &&
+            svc.manifest.configSchema.required.includes(key)
+          )
+        ) {
+          unset.push(key);
+          delete body[key];
+        }
+      }
       // Validate against the manifest's configSchema so operators can't store
       // values the service won't accept at startup. Same validator used by the
       // integration config endpoint.
@@ -393,37 +483,35 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
-      const saved = await persistServiceConfigPatch(req.params.id, config);
-      try {
-        await applyTrustedConfiguration({
-          kind: "serviceConfig.apply",
-          serviceId: req.params.id,
-          operationKey: createDurableOpsKey(
-            "admin-route.service-config.apply",
-            `${adminSession.user.id}\0${String(req.id)}`,
-          ),
-        });
-      } catch (error) {
-        if (!isProvenConfigurationNonCommit(error)) throw error;
-        try {
-          // False means a later writer owns the row. Either way the apply failed;
-          // do not promise restoration or turn this into a successful response.
-          await saved.restore();
-        } catch (restoreError) {
-          throw new AggregateError(
-            [error, restoreError],
-            "Service configuration apply and restoration failed",
-            { cause: error },
-          );
-        }
-        throw error;
-      }
+      await applyTrustedConfiguration({
+        kind: "serviceConfig.apply",
+        serviceId: req.params.id,
+        actorId: adminSession.user.id,
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-config",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-config",
+              serviceId: req.params.id,
+              set: trustedConfigurationPayloadSchema.shape.serviceConfigs.element.shape.values.parse(
+                config,
+              ),
+              unset,
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
         targetType: "service",
         action: "service.config.update",
-        details: { keys: Object.keys(config) },
+        details: { keys: [...Object.keys(config), ...unset] },
         request: req,
       });
       return { ok: true };
@@ -442,21 +530,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // replaces the service container (services bake env/secrets at create time — no live
   // reload). Requires Docker host-control; otherwise the caller gets
   // `needsRender` and must render + apply on the host.
-  async function applyServiceSecretChange(
-    serviceId: string,
-    userId: string,
-  ): Promise<{ ok: true; jobId?: string; needsRender?: boolean }> {
-    if (await isDockerAvailable()) {
-      const jobId = await jobRunner.enqueue(
-        "service.apply",
-        { service: serviceId, configurationKind: "vault" },
-        userId,
-      );
-      return { ok: true, jobId };
-    }
-    return { ok: true, needsRender: true };
-  }
-
   // GET /admin/services/:id/credentials — declared secret fields + per-field
   // status (vault | missing), setup guides, and who set each + when.
   registerServiceAdminRoute(app, "getAdminServiceCredentials", async (req, reply) => {
@@ -466,6 +539,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: "Service not found" };
     }
     const fields = getSecretFields(svc.manifest.configSchema);
+    const snapshot = await inspectServiceConfiguration(svc.manifest.id);
     const vault = await listServiceSecrets(svc.manifest.id);
     const vaultByKey = new Map(vault.map((v) => [v.key, v]));
     return {
@@ -478,10 +552,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           title: f.title,
           description: f.description,
           setup: f.setup,
-          source: v ? ("vault" as const) : ("missing" as const),
-          managedBy: isProvisioningOwnedDawarichCredential(svc.manifest.id, f.key)
-            ? DAWARICH_CREDENTIAL_MANAGED_BY
-            : undefined,
+          source:
+            snapshot.resolved[f.key]?.value === undefined ||
+            snapshot.resolved[f.key]?.value === null ||
+            snapshot.resolved[f.key]?.value === ""
+              ? ("missing" as const)
+              : snapshot.resolved[f.key]!.source,
+          ownership: snapshot.ownership[f.key],
+          managedBy: managedServiceCredential(svc.manifest.id, f.key),
           updatedAt: v?.updatedAt?.toISOString(),
           updatedBy: v?.updatedBy ?? null,
         };
@@ -503,6 +581,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid credential key" };
       }
+      if (isManagedTransitCredential(svc.manifest.id, req.params.key))
+        return reply.code(409).send({
+          code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+          error: "Use the pinned transit feed credential workflow.",
+        });
       if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
         reply.status(409);
         return {
@@ -527,7 +610,29 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { error: "value must be a non-empty string" };
       }
       const adminSession = getAdminSession(req);
-      await setServiceSecret(svc.manifest.id, req.params.key, value, adminSession.user.id);
+      const applied = await applyTrustedConfiguration({
+        kind: "vault.apply",
+        serviceId: svc.manifest.id,
+        actorId: adminSession.user.id,
+        followUp: "service-apply",
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-secret",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: svc.manifest.id,
+              key: req.params.key,
+              action: "set",
+              value,
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
@@ -536,7 +641,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         details: { key: req.params.key },
         request: req,
       });
-      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
+      return { ok: true as const, jobId: applied.jobId };
     },
     {
       beforeValidation: async (req, reply) => {
@@ -545,6 +650,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         if (!svc) return reply.code(404).send({ error: "Service not found" });
         if (!isValidSecretKey(key))
           return reply.code(400).send({ error: "Invalid credential key" });
+        if (isManagedTransitCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+            error: "Use the pinned transit feed credential workflow.",
+          });
         if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
           return reply.code(409).send({
             code: DAWARICH_CREDENTIAL_MANAGED_CODE,
@@ -568,6 +678,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid credential key" };
       }
+      if (isManagedTransitCredential(svc.manifest.id, req.params.key))
+        return reply.code(409).send({
+          code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+          error: "Use the pinned transit feed credential workflow.",
+        });
       if (isProvisioningOwnedDawarichCredential(svc.manifest.id, req.params.key)) {
         reply.status(409);
         return {
@@ -591,7 +706,28 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         }
       }
       const adminSession = getAdminSession(req);
-      await deleteServiceSecret(svc.manifest.id, req.params.key);
+      const applied = await applyTrustedConfiguration({
+        kind: "vault.apply",
+        serviceId: svc.manifest.id,
+        actorId: adminSession.user.id,
+        followUp: "service-apply",
+        operationKey: createDirectAdminOpsKey(
+          adminSession.user.id,
+          parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+        ),
+        overlay: {
+          purpose: "service-secret",
+          coordinatorMode: "ensure-running",
+          changes: [
+            {
+              kind: "service-secret",
+              serviceId: svc.manifest.id,
+              key: req.params.key,
+              action: "delete",
+            },
+          ],
+        },
+      });
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
@@ -600,7 +736,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         details: { key: req.params.key },
         request: req,
       });
-      return applyServiceSecretChange(svc.manifest.id, adminSession.user.id);
+      return { ok: true as const, jobId: applied.jobId };
     },
     {
       beforeValidation: async (req, reply) => {
@@ -609,6 +745,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         if (!svc) return reply.code(404).send({ error: "Service not found" });
         if (!isValidSecretKey(key))
           return reply.code(400).send({ error: "Invalid credential key" });
+        if (isManagedTransitCredential(svc.manifest.id, key))
+          return reply.code(409).send({
+            code: TRANSIT_CREDENTIAL_MANAGED_CODE,
+            error: "Use the pinned transit feed credential workflow.",
+          });
         if (isProvisioningOwnedDawarichCredential(svc.manifest.id, key))
           return reply.code(409).send({
             code: DAWARICH_CREDENTIAL_MANAGED_CODE,
@@ -639,12 +780,9 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         action: "service.logs.read",
         request: req,
       });
-      // `--tail` is a docker-compose argv element: clamp to a whole number in
-      // range so a non-numeric or negative `lines` can never reach it.
-      const requested = Number(req.query.lines ?? 200);
-      const tail = Number.isFinite(requested)
-        ? Math.min(Math.max(Math.trunc(requested), 1), 1000)
-        : 200;
+      const tail = Number(req.query.lines ?? 200);
+      const follow = req.query.follow !== false && req.query.follow !== "false";
+      const maxDurationSeconds = Number(req.query.maxDurationSeconds ?? 900);
       // Hijack bypasses Fastify header flushing; set the actual raw response.
       reply.raw.setHeader("Content-Type", "text/plain; charset=utf-8");
       reply.hijack();
@@ -652,6 +790,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       // agent operation; the API no longer spawns a Docker log process.
       await dockerComposeLogs(req.params.id, reply.raw, {
         tail,
+        follow,
+        maxDurationSeconds,
         operationKey,
       });
       return reply;
@@ -670,12 +810,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
           reply.status(404);
           return reply.send({ error: `Service "${(req.params as { id: string }).id}" not found` });
         }
-        if (!service.enabled) {
-          reply.status(409);
-          return reply.send({
-            error: `Service "${(req.params as { id: string }).id}" is disabled`,
-          });
-        }
         try {
           parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
         } catch (error) {
@@ -689,18 +823,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   registerServiceAdminRoute(app, "getAdminDeployment", async () => {
     const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
-    // When the API runs inside app-api, docker-compose actions need the
-    // generated compose file's bind paths to resolve to real host paths.
-    // That only works when the operator sets OPENMAPX_HOST_DIR to the
-    // absolute host-side repo path and the app-api service.json bind-mounts
-    // `${OPENMAPX_HOST_DIR}:${OPENMAPX_HOST_DIR}`. Surface the state so the
-    // admin UI can warn on deploy actions that would silently no-op.
     const hostDir = process.env.OPENMAPX_HOST_DIR?.trim();
-    const hostControlConfigured = Boolean(hostDir) && existsSync(hostDir as string);
     return {
-      selfHosted: dockerAvailable,
+      selfHosted: isSelfHostedDeployment(),
       dockerAvailable,
-      hostControlConfigured,
+      hostControlConfigured: hostControlConfigured(),
       hostDir: hostDir ?? null,
       // True once a configuration generation is applied: its render bakes the
       // applied services into app-api; a host-run API sees the generation.
@@ -716,23 +843,27 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   // POST /admin/services/check — docker compose ps summary
   registerServiceAdminRoute(app, "checkAdminServices", async (request) => {
     const adminSession = getAdminSession(request);
-    const ps = await dockerComposePs();
+    const inventory = await readServiceInventory();
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetType: "service",
       action: "service.health_check",
       request,
     });
-    return { statuses: ps, checkedAt: new Date().toISOString() };
+    return {
+      acquisition: inventory.acquisition,
+      statuses: inventory.services.map((s) => ({ service: s.id, state: s.status })),
+      checkedAt: new Date().toISOString(),
+    };
   });
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
-  registerServiceAdminRoute(app, "getAdminServiceData", async () => {
+  registerServiceAdminRoute(app, "getAdminServiceData", async (request) => {
     const [inventory, datasets] = await Promise.all([
       executeAndWait(
         createApiOpsClient(),
-        { kind: "data.inspect" },
-        createDurableOpsKey("admin.data.inspect", "current"),
+        { kind: "data.inspect", ...request.query },
+        createDurableOpsKey("admin.data.inspect", JSON.stringify(request.query)),
         { signal: AbortSignal.timeout(30_000) },
       ),
       readDataManagerDatasets(),
@@ -768,10 +899,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
       { operation: "create", name: name || undefined },
       adminSession.user.id,
+      parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -798,6 +930,18 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
+    const serviceIds = [...new Set(req.body?.serviceIds ?? [])],
+      adminSession = getAdminSession(req),
+      payload = {
+        operation: "restore",
+        name,
+        serviceIds,
+        stopRunning: req.body?.stopRunning === true,
+      },
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
+
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
     const target = inventory.backups.find((backup) => backup.backupId === name);
     if (!target) {
@@ -811,17 +955,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const serviceIds = [...new Set(req.body?.serviceIds ?? [])];
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
-      {
-        operation: "restore",
-        name,
-        serviceIds,
-        stopRunning: req.body?.stopRunning === true,
-      },
+      payload,
       adminSession.user.id,
+      key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -848,17 +986,23 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
+    const adminSession = getAdminSession(req),
+      payload = { operation: "delete", name },
+      key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
+      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+    if (retained) return { ok: true, jobId: retained };
+
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
     if (!inventory.backups.some((backup) => backup.backupId === name)) {
       reply.status(404);
       return { error: `Backup not found: ${name}` };
     }
 
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
+    const jobId = await jobRunner.enqueueMaintenance(
       "backup.operation",
-      { operation: "delete", name },
+      payload,
       adminSession.user.id,
+      key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,

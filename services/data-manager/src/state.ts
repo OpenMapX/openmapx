@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { type DatasetMetadata, datasetMetadataSchema } from "@openmapx/core/data-manager-contracts";
+import { atomicWriteJsonSync } from "./utils/atomic-write.js";
 
 export type { DatasetMetadata, DatasetType } from "@openmapx/core/data-manager-contracts";
 
@@ -99,8 +100,11 @@ export class StateStore {
   }
 
   private persist(): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify(this.state, null, 2), "utf-8");
+    atomicWriteJsonSync(this.path, this.state, {
+      durability: "full",
+      createParentDirectory: true,
+      mode: 0o600,
+    });
     this.loadDiagnostics = { status: "ok", error: null };
   }
 }

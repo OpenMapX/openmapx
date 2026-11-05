@@ -1,3 +1,5 @@
+import { setTimeout as probeDelay } from "node:timers/promises";
+import { dataWorkerDeadline, dataWorkerSignal } from "../execution/worker-scope.js";
 /**
  * Shared HTTP-probe helpers for the MOTIS staging/primary smoke checks. Both
  * motis-health and promote used to carry byte-identical copies of these; the
@@ -71,7 +73,7 @@ function rawHttpGet(
       clearTimeout(timer);
       fn();
     };
-    const req = client.get(url, { headers }, (res) => {
+    const req = client.get(url, { headers, signal: dataWorkerSignal() }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk) => chunks.push(chunk as Buffer));
       res.on("end", () =>
@@ -116,6 +118,8 @@ export async function fetchWithTimeout(
   timeoutMs: number,
   options: { retries?: number; headers?: Record<string, string> } = {},
 ): Promise<Response> {
+  dataWorkerSignal()?.throwIfAborted();
+  timeoutMs = Math.max(1, Math.min(timeoutMs, (dataWorkerDeadline() ?? Infinity) - Date.now()));
   const retries = options.retries ?? 2;
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -124,7 +128,7 @@ export async function fetchWithTimeout(
     } catch (error) {
       lastError = error;
       if (attempt === retries || !isTransientFetchError(error)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await probeDelay(200, undefined, { signal: dataWorkerSignal() });
     }
   }
   throw lastError;
@@ -158,13 +162,6 @@ export async function probe(
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const t = setTimeout(resolve, ms);
-    if (typeof t.unref === "function") t.unref();
-  });
-}
-
 /**
  * Poll `url` until it answers 200 + JSON (returns null) or `deadline` passes.
  *
@@ -181,17 +178,19 @@ export async function pollUntilHealthy(
   deadline: number,
   opts: { name?: string; intervalMs?: number; probeTimeoutMs?: number } = {},
 ): Promise<ProbeFailure | null> {
+  deadline = Math.min(deadline, dataWorkerDeadline() ?? Infinity);
   const name = opts.name ?? "health";
   const interval = opts.intervalMs ?? 1_000;
   const probeTimeout = opts.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   let last: ProbeFailure | null = null;
   while (Date.now() < deadline) {
+    dataWorkerSignal()?.throwIfAborted();
     const remaining = deadline - Date.now();
     last = await probe(name, url, Math.min(probeTimeout, remaining));
     if (!last) return null;
     const sleep = Math.min(interval, deadline - Date.now());
     if (sleep <= 0) break;
-    await delay(sleep);
+    await probeDelay(sleep, undefined, { signal: dataWorkerSignal() });
   }
   return last ?? { probe: name, reason: "did not become healthy within budget" };
 }

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as containedProbeDelay } from "node:timers/promises";
 import type {
   HealthResponse,
   InitialResponse,
@@ -10,6 +11,7 @@ import type {
 import type { TransitousLock } from "@openmapx/transitous-core";
 import { MOTIS_VERSION } from "@openmapx/transitous-core";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
+import { dataWorkerDeadline, dataWorkerSignal } from "../execution/worker-scope.js";
 import { CAPABILITY_SNAPSHOT_FILENAME, type MotisCandidateManifest } from "./candidate.js";
 import {
   elevationPlanUrl,
@@ -257,7 +259,7 @@ async function executeOneToManyCanary(
           maxPostTransitTime: 900,
           maxDirectTime: 900,
         }),
-        signal: controller.signal,
+        signal: dataWorkerSignal(controller.signal),
       });
     } finally {
       clearTimeout(timer);
@@ -298,8 +300,6 @@ export interface RunFunctionalProbesOptions {
   rentalsPollIntervalMs?: number;
 }
 
-const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 /**
  * Run one probe, retrying while it fails for up to `warmupMs` (bounded by attempt
  * count so it terminates deterministically even under an instant/no-op sleep).
@@ -334,7 +334,13 @@ export async function runFunctionalProbes(
   deadline: number,
   options: RunFunctionalProbesOptions = {},
 ): Promise<FunctionalProbeReport> {
-  const sleep = options.sleep ?? realSleep;
+  deadline = Math.min(deadline, dataWorkerDeadline() ?? Infinity);
+  const sleep =
+    options.sleep ??
+    (async (ms: number) => {
+      dataWorkerSignal()?.throwIfAborted();
+      await containedProbeDelay(ms, undefined, { signal: dataWorkerSignal() });
+    });
   const rentalsWarmupMs =
     options.rentalsWarmupMs ?? parseIntEnv("MOTIS_RENTALS_WARMUP_MS", DEFAULT_RENTALS_WARMUP_MS);
   const rentalsPollIntervalMs =

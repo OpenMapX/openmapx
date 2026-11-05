@@ -1,10 +1,12 @@
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { migrateBeforeApiUpdate, stopMigrationArgs } from "../src/lib/api-migrations";
+import { cliControlContext } from "../src/lib/control-context";
 import { dockerCompose, dockerComposeStream } from "../src/lib/docker";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
 vi.mock("node:child_process", () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })) }));
+vi.mock("../src/lib/control-context", () => ({ cliControlContext: vi.fn() }));
 vi.mock("../src/lib/docker", () => ({ dockerCompose: vi.fn(), dockerComposeStream: vi.fn() }));
 vi.mock("../src/lib/paths", () => ({
   repoPaths: () => ({ infraDir: "/srv/openmapx/infra/docker" }),
@@ -32,6 +34,7 @@ const MARKER = "org.openmapx.migration=app-api";
 const FILTERS = ["--filter", `label=${PROJECT_LABEL}`, "--filter", `label=${MARKER}`];
 
 beforeEach(() => {
+  vi.mocked(cliControlContext).mockReset().mockReturnValue(undefined);
   vi.mocked(dockerCompose)
     .mockReset()
     .mockResolvedValue({
@@ -103,6 +106,22 @@ describe("migrateBeforeApiUpdate", () => {
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(5);
     expect(await migrateBeforeApiUpdate({ deps: false })).toBe(5);
     expect(composeCalls()).toEqual([["stop", "app-api"]]);
+  });
+
+  it("leaves managed migration signal recovery under its original owner", async () => {
+    // Signal-policy selection only: this mock does not mint or verify authority.
+    vi.mocked(cliControlContext).mockReturnValue(
+      {} as NonNullable<ReturnType<typeof cliControlContext>>,
+    );
+    const before = process.listenerCount("SIGTERM");
+    let during = -1;
+    vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
+      if (args[0] === "run") during = process.listenerCount("SIGTERM");
+      return 0;
+    });
+    expect(await migrateBeforeApiUpdate({ deps: false })).toBe(0);
+    expect(during).toBe(before);
+    expect(process.listenerCount("SIGTERM")).toBe(before);
   });
 
   it("listens for a stop request only while the migration container runs", async () => {

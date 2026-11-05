@@ -1,3 +1,4 @@
+import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 /**
  * Lightweight per-property validator + introspection helpers for the
  * JSON-Schema-shaped manifest `configSchema` block used by both integrations
@@ -139,6 +140,12 @@ function validateSchemaValue(
     if (typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) {
       return [`${path} has an invalid format`];
     }
+    if (
+      typeof schema.format === "string" &&
+      (OPERATOR_STRING_FORMATS as readonly string[]).includes(schema.format) &&
+      !validOperatorString(value, schema.format)
+    )
+      return [`${path} has an invalid format`];
     if (schema.format === "url" && value !== "") {
       try {
         const parsed = new URL(value);

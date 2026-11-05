@@ -1,9 +1,13 @@
 import z from "zod/v4";
-import { OPS_RESULT_SCHEMAS } from "../../../ops/contract";
+import { dataInspectionResultSchema } from "../../../ops/data-inventory-records";
 import { adminCountSchema, adminTimestampSchema } from "../admin";
 import { adminServiceIdListSchema } from "./common";
 
-export const adminServiceDataSchema = OPS_RESULT_SCHEMAS["data.inspect"].extend({
+export const adminServiceDataQuerySchema = z.strictObject({
+  osmLimit: z.coerce.number().int().min(1).max(500).optional(),
+  osmOffset: z.coerce.number().int().min(0).max(1000000).optional(),
+});
+export const adminServiceDataSchema = dataInspectionResultSchema.extend({
   /**
    * How current the OSM extract on disk is, from its header as data-manager
    * recorded it; absent when the file names no time or data-manager has none.
@@ -50,6 +54,7 @@ export const adminServiceBackupParamsSchema = z.strictObject({
 export const adminServiceBackupSchema = z.strictObject({
   name: z.string(),
   createdAt: adminTimestampSchema,
+  expiresAt: adminTimestampSchema.optional(),
   openmapxVersion: z.string().optional(),
   serviceCount: adminCountSchema,
   volumeCount: adminCountSchema,

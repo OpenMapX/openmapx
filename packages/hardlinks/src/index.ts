@@ -208,8 +208,8 @@ function readSentinel(sentinelPath: string): Sentinel | null {
 }
 
 function writeSentinel(sentinelPath: string, sentinel: Sentinel): void {
-  mkdirSync(dirname(sentinelPath), { recursive: true });
-  writeFileSync(sentinelPath, `${JSON.stringify(sentinel, null, 2)}\n`);
+  mkdirSync(dirname(sentinelPath), { recursive: true, mode: 0o755 });
+  writeFileSync(sentinelPath, `${JSON.stringify(sentinel, null, 2)}\n`, { mode: 0o644 });
 }
 
 function removeSentinel(sentinelPath: string): void {
@@ -231,7 +231,7 @@ function linkFileAt(
     }
     rmSync(tgtPath, { force: true });
   }
-  mkdirSync(dirname(tgtPath), { recursive: true });
+  mkdirSync(dirname(tgtPath), { recursive: true, mode: 0o755 });
   linkSync(srcPath, tgtPath);
   return { linked: 1, skipped: 0 };
 }
@@ -292,7 +292,7 @@ function linkTreeWithSentinel(
     rmSync(targetDir, { force: true });
     result.pruned += 1;
   }
-  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(targetDir, { recursive: true, mode: 0o755 });
 
   const sourcePaths = collectSourceFiles(sourceDir);
   const sourceSet = new Set(sourcePaths);
@@ -351,7 +351,7 @@ function linkSingleFileWithSentinel(
     rmSync(targetDir, { force: true });
     result.pruned += 1;
   }
-  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(targetDir, { recursive: true, mode: 0o755 });
 
   const tgtPath = join(targetDir, targetFilename);
   const r = linkFileAt(join(sourceDir, file.name), tgtPath, rootAbs);

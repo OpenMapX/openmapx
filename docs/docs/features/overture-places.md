@@ -70,6 +70,17 @@ Places snapshot. Link rebuilding is a separate resumable workflow; an incomplete
 rebuild does not establish readiness for nearby-place publication. Failed work
 preserves the prior published data at the relevant boundary.
 
+The admin panel offers these operations under **Services → Data workflows →
+Overture Places**. **Full sync** runs the complete refresh. **Resume links**
+continues the installed release's durable rebuild; **Restart links from scratch**
+discards its resumable workspace while preserving published Places. Both show a
+server preview before confirmation. **Advanced recovery** exposes download,
+ingest and OSM extraction separately. Ingest uses the newest completed local
+partition for the selected region; it does not discover a newer upstream release.
+The worker rechecks installed Places, the region's OSM PBF and conflicting work
+under the shared Overture lease before execution. Follow the retained job in
+Activity; acceptance does not establish publication readiness.
+
 Use [Preparing data](../install/preparing-data.md) for source preparation and the
 [publication reference](../developer/ambient-places-publication.md) for generation
 activation, status, capacity, restart, rollback, and cache behavior. Review

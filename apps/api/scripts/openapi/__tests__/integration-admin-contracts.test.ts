@@ -2,7 +2,7 @@ import { integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { expect, it, vi } from "vitest";
 import { generateDocument } from "../document";
 
-it("collects exactly all 22 actual integration producers, complete statuses, headers and admin auth", async () => {
+it("collects exactly all 35 actual integration producers, complete statuses, headers and admin auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     throw Error("Network denied");
   });
@@ -11,7 +11,7 @@ it("collects exactly all 22 actual integration producers, complete statuses, hea
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("integration-admin"));
-    expect(tagged).toHaveLength(22);
+    expect(tagged).toHaveLength(35);
     for (const [id, contract] of Object.entries(integrationAdminOperations)) {
       const actual =
         document.paths[contract.path.replace(/:([^/]+)/g, "{$1}")][contract.method.toLowerCase()];

@@ -123,7 +123,8 @@ export function useSyncTransit() {
   const client = useAdminClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: SyncTransitInput = {}) =>
+    retry: false,
+    mutationFn: (input: SyncTransitInput) =>
       adminOrThrow(sdk.postApiDataManagerTransitSync(input, { client })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "transit", "state"] });

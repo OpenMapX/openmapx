@@ -341,13 +341,16 @@ jobs:
   database:
     name: test (database, ${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Native recovery suites run independently with real ownership/staging deadlines.
+    # Retain ingestion's existing budget while gathering its reduced runtime.
+    timeout-minutes: ${{ contains(fromJSON('["ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30 }}
     strategy:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.
       fail-fast: false
       matrix:
-        group: [api-privacy, ingestion, export-restore]
+        group:
+          [api-privacy, ingestion, configuration-recovery, coordinator-recovery, export-restore]
     services:
       postgis:
         # Match the production PostGIS line and pin the reviewed multi-arch
@@ -365,7 +368,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openmapx_test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test
       # This is a positive assertion that database infrastructure is required.
       # Once set, every selected suite fails instead of skipping if PostGIS or
       # the Docker daemon is unavailable.
@@ -387,6 +390,19 @@ jobs:
 
       - name: Apply the production database migrations
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: matrix.group == 'ingestion'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/motis/tools/transitous/requirements.txt
+
+      - name: Install Transitous runner Python dependencies
+        if: matrix.group == 'ingestion'
+        # Catalog workflows execute the real runner on the host in this job.
+        # Its feed-proxy renderer needs the same packages as the runner image.
+        run: python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
 
       # Docker Hub throttles and fails transiently. Pull the pinned digest with
       # backoff here so the fixtures, which forbid pulling themselves, only

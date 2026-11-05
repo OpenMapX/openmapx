@@ -795,17 +795,13 @@ retain commit evidence. A completed result after cancellation still carries that
 evidence. Failed transport or lost journal evidence remains unknown, never proof
 of non-commit. There are no automatic mutation retries.
 
-The API's `applyTrustedConfigurationSnapshot({ payload,
-expectedCurrentRevisionId, operationKey, signal? })` accepts a complete trusted
-snapshot and requires an explicit condition. It returns the host outcome or
-`outcome: "unknown"`, plus `publisherCleanupFailed` and `registryUpdateFailed`.
-Normal `applyTrustedConfiguration` keeps its successful return shape and throws
-`TrustedConfigurationApplyError` for incomplete outcomes. Callers may consider
-restoring their own DB changes only with explicit non-commit evidence, and must
-separately prove DB ownership. Compensation after a known commit must condition
-an inverse of only proven named projections in the actually submitted snapshot
-on the committed revision. Unrelated submitted fields must be retained. Conflict, unknown or
-incomplete recovery requires reconciliation.
+The API prepares an immutable candidate from the strictly owned desired rows and
+source snapshot. Desired writes and their actual row-version receipts share the
+original database transaction. Recovery resumes that original candidate and
+observes already-attempted operations; it never rebuilds a snapshot or submits a
+new compensation intent. `applyTrustedConfiguration` retains its successful
+return shape and throws `TrustedConfigurationApplyError` for incomplete outcomes.
+Conflict, unknown or incomplete recovery requires reconciliation.
 
 ## Where to go next
 

@@ -9,3 +9,8 @@
 // still measures real disk; `??=` lets an individual test opt into its own
 // value (e.g. to exercise the insufficient-disk path).
 process.env.MOTIS_FREE_DISK_BYTES ??= String(1024 ** 4); // 1 TiB
+
+// Unit suites may load the real auth module through administrative consumers.
+// Supply an explicit test credential here; production still requires its own
+// configured secret, and secret-policy tests pass isolated environments.
+process.env.BETTER_AUTH_SECRET ??= "openmapx-node-tests-only-auth-secret";

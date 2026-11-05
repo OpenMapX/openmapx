@@ -1,3 +1,8 @@
+import {
+  assertCliExecutionAvailable,
+  assertCliRemoteMutationSupported,
+  cliAcquisitionOptions,
+} from "./execution-deadline";
 // The CLI never links in the data directory itself: it hands the generated
 // plan to data-manager's `/link` route. Other containers write into the data
 // root, so a symlink planted there could race the planner's path checks;
@@ -99,7 +104,9 @@ async function dataManagerReachable(baseUrl: string, timeoutMs: number): Promise
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/status`, {
-      signal: controller.signal,
+      signal: cliAcquisitionOptions().signal
+        ? AbortSignal.any([controller.signal, cliAcquisitionOptions().signal!])
+        : controller.signal,
     });
     return res.ok;
   } catch {
@@ -112,6 +119,7 @@ async function dataManagerReachable(baseUrl: string, timeoutMs: number): Promise
 export async function applyGeneratedHardlinks(
   opts: ApplyGeneratedHardlinkOptions = {},
 ): Promise<ApplyGeneratedHardlinkResult> {
+  assertCliExecutionAvailable();
   const paths = repoPaths(opts.rootDir);
   const planPath = hardlinkPlanPath(paths.infraDir);
   if (!existsSync(planPath)) {
@@ -153,7 +161,10 @@ export async function applyGeneratedHardlinks(
     }
     throw new DataManagerUnavailableError(baseUrl, plan.length);
   }
+  assertCliExecutionAvailable();
+  assertCliRemoteMutationSupported();
   const transport = createDataManagerTransport({
+    ...cliAcquisitionOptions(),
     baseUrl,
     authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
   });

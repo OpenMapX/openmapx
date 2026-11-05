@@ -233,3 +233,18 @@ export function privacyIdentityChallengeEmail(
     ),
   };
 }
+
+export function setupPasswordEmail(url: string): { subject: string; text: string; html: string } {
+  return {
+    subject: "Set your password — OpenMapX",
+    text: `An administrator invited you to set a password for your OpenMapX account.\n\nChoose your password:\n${url}\n\nSetting a password does not verify your email. Follow the separate verification email if your account is unverified.`,
+    html: layout(
+      heading("Set your password") +
+        paragraph(
+          "An administrator invited you to set a password for your OpenMapX account. Email verification is a separate step.",
+        ) +
+        button("Set Password", url) +
+        linkFallback(url),
+    ),
+  };
+}

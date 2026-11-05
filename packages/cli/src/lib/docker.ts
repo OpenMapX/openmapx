@@ -1,12 +1,15 @@
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
 export async function dockerCompose(
   args: string[],
+  rootDir?: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const paths = repoPaths();
+  const paths = repoPaths(rootDir);
   const result = await execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
+    ...cliProcessOptions(),
     cwd: paths.infraDir,
     reject: false,
   });
@@ -26,7 +29,7 @@ export async function dockerCompose(
 export async function dockerRun(
   args: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const result = await execa("docker", ["run", ...args], { reject: false });
+  const result = await execa("docker", ["run", ...args], { ...cliProcessOptions(), reject: false });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
@@ -37,6 +40,7 @@ export async function dockerRun(
 export async function dockerComposeStream(args: string[]): Promise<number> {
   const paths = repoPaths();
   const sub = execa("docker", [...coreServices.stackComposeArgs(paths), ...args], {
+    ...cliProcessOptions(),
     cwd: paths.infraDir,
     stdio: "inherit",
     reject: false,
@@ -61,4 +65,21 @@ export async function runningComposeServices(serviceIds: string[]): Promise<stri
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && serviceIds.includes(line));
+}
+/** Artifact movement must prove consumers stopped; acquisition failure is unknown. */
+export async function runningComposeServicesStrict(
+  serviceIds: string[],
+  rootDir?: string,
+): Promise<string[]> {
+  if (!serviceIds.length) return [];
+  const result = await dockerCompose(
+    ["ps", "--status=running", "--services", ...serviceIds],
+    rootDir,
+  );
+  if (result.exitCode !== 0)
+    throw Error("Container state is unavailable; no prepared artifacts were moved");
+  return result.stdout
+    .split("\n")
+    .map((value) => value.trim())
+    .filter((value) => serviceIds.includes(value));
 }

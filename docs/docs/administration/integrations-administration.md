@@ -143,11 +143,21 @@ pick one to bind it, or choose the clear-binding option to clear the binding and
 let requirement resolution run again. A fallback exists only when that integration implements one. The picker only offers
 services that declare the capability; the API rejects a service that does not provide it.
 
-After changing a binding, reload integrations or restart the API. Bindings are
-stored per integration and read when the host loads. A saved binding does not
-start its service. The provider must be enabled and offer that capability; a
-stale binding can leave resolution ambiguous when several enabled providers
-remain.
+A binding is a stored `(integration, capability) → service` mapping. Saving it
+also applies the trusted configuration and reloads the integration. The panel
+shows **Saved** and **Active** separately: a saved choice is only active after
+the host has activated that exact provider generation. If reload fails, the
+previous provider remains active and the desired choice stays saved. Use
+**Apply saved binding** to make a new explicit attempt. Disabled integrations
+remain pending until enabled. **Refresh binding status** reads the retained
+operation outcome without repeating the write.
+
+Changes check the previously observed mapping and revision, so a stale page
+cannot overwrite another administrator's choice. Refresh after a conflict.
+Binding changes and their retained outcomes are audit-logged.
+
+Saving a binding does not start its service. The provider must be enabled and
+offer the required capability.
 
 :::note[Bindings are per integration, not global]
 The same capability can be bound to different services for different
@@ -416,3 +426,40 @@ was restored, or that reconciliation is required. Restoration never authorizes
 overwriting a newer administrator/host edit. If reconciliation is required,
 inspect saved configuration, the applied host generation and runtime state before
 making another deliberate change. Do not automatically retry the import.
+
+## Portable configuration and protected credentials
+
+System Settings includes configuration migration with an ownership inventory.
+Export contains declared database-owned non-secret settings, integration and
+service configuration, bindings, and installation prerequisites. Environment
+and file overrides, vault values, bootstrap keys, and unsupported metadata are
+listed as omissions. Install missing extensions and resolve required credentials
+before applying dependent configuration.
+
+Import a configuration JSON file of at most 1 MiB, review the selected scopes and
+prerequisites, and apply its ten-minute preview. The preview is bound to the
+administrator and original configuration sources. A changed configuration or
+source requires a new preview. Selected desired changes share one guarded
+transaction and generation; later provider or host effects can remain partial or
+unknown. Activity retains those outcomes. Imported authentication settings are
+pending drafts until the separate authentication policy Apply action.
+
+Platform fields use the existing origin, DNS/TLS, OAuth, passkey and alternate
+login confirmations. Domain changes require a fresh purpose-bound sign-in and
+use the same guarded generation as the other selected configuration.
+
+Protected credential transfer exports only explicitly selected, effective vault
+credentials to `openmapx-vault-transfer.json.enc`. Supply a passphrase of 12–1024
+UTF-8 bytes and confirm a fresh administrator sign-in. The authenticated encrypted
+file is at most 1 MiB. A lost export response requires another explicit sign-in;
+the server does not retain the passphrase or a plaintext export for replay.
+
+On import, confirm sign-in to decrypt and review the file, then explicitly choose
+which fields to import or skip. Existing ordinary credentials are overwritten
+only when selected. Managed Transitous credentials also require the current
+catalog and credential revisions: selected feed IDs are merged, unselected keys
+are preserved, and only explicitly listed deletion IDs are removed. Applying a
+managed transfer requires both import and transit-credential purposes from one
+fresh sign-in. The encrypted preview expires after ten minutes; changing choices
+invalidates its prior confirmation. Passphrases are cleared after each request
+and when the dialog closes.

@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import rateLimit, { normalizeIP } from "@fastify/rate-limit";
+import { controlHeaders } from "@openmapx/core/build-artifacts";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -74,7 +75,13 @@ export function resolveAuthToken(app: FastifyInstance): string {
  * before body parsing. Health endpoints remain open so container/k8s probes
  * and cross-service discovery keep working.
  */
-export function registerAuth(app: FastifyInstance, expectedToken: string): void {
+export function registerAuth(
+  app: FastifyInstance,
+  expectedToken: string,
+  options: {
+    executionReceiver?: () => import("./jobs/execution/api.js").DataExecutionReceiver | undefined;
+  } = {},
+): void {
   // Register the maintained limiter in this root scope, while invoking it only
   // for failed credentials. Successful long-running jobs and probes have no
   // authentication-attempt budget. The root hook runs before body parsing.
@@ -98,6 +105,28 @@ export function registerAuth(app: FastifyInstance, expectedToken: string): void 
           .header("Retry-After", String(limit.ttlInSeconds))
           .send({ error: "Too many authentication attempts" });
       return reply.code(401).send({ error: "Unauthorized" });
+    }
+    // Task02.3 owns durable receiver admission. Never silently ignore an internal authority header.
+    try {
+      const headers = controlHeaders(req.raw.rawHeaders);
+      const path = req.url.split("?")[0] ?? "";
+      const admission =
+        req.method === "POST" &&
+        ([
+          "/executions",
+          "/executions/generation-hardlinks",
+          "/executions/configuration-maintenance/prepare",
+        ].includes(path) ||
+          /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(path));
+      if (
+        (headers.delegation !== undefined || headers.parent !== undefined) &&
+        (!admission || !options.executionReceiver?.())
+      )
+        return reply
+          .code(503)
+          .send({ error: "Managed data-manager execution requires the durable receiver upgrade" });
+    } catch {
+      return reply.code(403).send({ error: "Invalid control authority" });
     }
   });
 }

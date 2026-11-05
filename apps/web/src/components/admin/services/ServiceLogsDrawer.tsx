@@ -1,18 +1,22 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { streamAdminServiceLogs } from "@openmapx/core/api-admin-sdk";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 
-const MAX_LINES = 500;
+import { BoundedServiceLogBuffer } from "./service-log-buffer";
 
 interface ServiceLogsDrawerProps {
   open: boolean;
@@ -47,39 +51,55 @@ function ServiceLogsSession({
   serviceName,
   client,
 }: ServiceLogsDrawerProps & Pick<ReturnType<typeof useActivityClient>, "client">) {
-  const [lines, setLines] = useState<string[]>([]);
-  const [streaming, setStreaming] = useState(open);
-  const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-
+  const [output, setOutput] = useState({ lines: [] as string[], truncated: false });
+  const [streaming, setStreaming] = useState(open),
+    [error, setError] = useState<string | null>(null);
+  const [tail, setTail] = useState(200),
+    [follow, setFollow] = useState(true),
+    [duration, setDuration] = useState(900),
+    [paused, setPaused] = useState(false),
+    [connection, setConnection] = useState(0);
+  const lines = output.lines;
+  const request = useMemo(
+    () => ({ tail, follow, duration, connection, idempotencyKey: crypto.randomUUID() }),
+    [tail, follow, duration, connection],
+  );
+  const bottomRef = useRef<HTMLDivElement>(null),
+    abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
-    if (!open) return;
-    const controller = new AbortController();
+    if (!open || paused) return;
+    const controller = new AbortController(),
+      buffer = new BoundedServiceLogBuffer();
     abortRef.current = controller;
-    let residual = "";
-    function append(parts: string[]) {
-      if (controller.signal.aborted) return;
-      setLines((previous) =>
-        [...previous, ...parts.filter((line) => line.length > 0)].slice(-MAX_LINES),
-      );
-    }
+    setOutput(buffer.snapshot());
+    setError(null);
+    setStreaming(true);
     void (async () => {
       try {
         await serviceOrThrow(
-          streamAdminServiceLogs(serviceId, { "idempotency-key": idempotencyKey }, undefined, {
-            client,
-            signal: controller.signal,
-            onTextChunk: (chunk) => {
-              if (controller.signal.aborted) return;
-              const parts = (residual + chunk).split("\n");
-              residual = parts.pop() ?? "";
-              append(parts);
+          streamAdminServiceLogs(
+            serviceId,
+            { "idempotency-key": request.idempotencyKey },
+            {
+              lines: request.tail,
+              follow: request.follow,
+              ...(request.follow ? { maxDurationSeconds: request.duration } : {}),
             },
-          }),
+            {
+              client,
+              signal: controller.signal,
+              onTextChunk: (chunk) => {
+                if (controller.signal.aborted) return;
+                buffer.append(chunk);
+                setOutput(buffer.snapshot());
+              },
+            },
+          ),
         );
-        append([residual]);
+        if (!controller.signal.aborted) {
+          buffer.finish();
+          setOutput(buffer.snapshot());
+        }
       } catch (error) {
         if (!controller.signal.aborted)
           setError(error instanceof Error ? error.message : "Service request failed");
@@ -89,9 +109,9 @@ function ServiceLogsSession({
     })();
     return () => {
       controller.abort();
-      abortRef.current = null;
+      if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [open, serviceId, client, idempotencyKey]);
+  }, [open, paused, serviceId, client, request]);
 
   useEffect(() => {
     if (open && lines.length > 0) {
@@ -101,7 +121,7 @@ function ServiceLogsSession({
 
   function handleClose() {
     abortRef.current?.abort();
-    setLines([]);
+    setOutput({ lines: [], truncated: false });
     setError(null);
     setStreaming(false);
     onClose();
@@ -151,7 +171,7 @@ function ServiceLogsSession({
           </Typography>
           {streaming && (
             <Chip
-              label="streaming"
+              label={follow ? "following" : "loading snapshot"}
               size="small"
               color="success"
               variant="outlined"
@@ -167,10 +187,101 @@ function ServiceLogsSession({
             />
           )}
         </Stack>
-        <IconButton size="small" onClick={handleClose} edge="end">
+        <IconButton aria-label="Close service logs" size="small" onClick={handleClose} edge="end">
           <CloseIcon fontSize="small" />
         </IconButton>
       </Stack>
+      <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", p: 2 }}>
+        <TextField
+          select
+          size="small"
+          label="Tail lines"
+          value={tail}
+          onChange={(e) => {
+            setPaused(false);
+            setTail(Number(e.target.value));
+          }}
+          sx={{ minWidth: 110 }}
+        >
+          {[100, 200, 500, 1000].map((lines) => (
+            <MenuItem key={lines} value={lines}>
+              {lines}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Log mode"
+          value={follow ? "follow" : "snapshot"}
+          onChange={(e) => {
+            setPaused(false);
+            setFollow(e.target.value === "follow");
+          }}
+          sx={{ minWidth: 130 }}
+        >
+          <MenuItem value="follow">Follow</MenuItem>
+          <MenuItem value="snapshot">Snapshot</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Follow duration"
+          disabled={!follow}
+          value={duration}
+          onChange={(e) => {
+            setPaused(false);
+            setDuration(Number(e.target.value));
+          }}
+          sx={{ minWidth: 150 }}
+        >
+          {[30, 60, 300, 900].map((seconds) => (
+            <MenuItem key={seconds} value={seconds}>
+              {seconds} seconds
+            </MenuItem>
+          ))}
+        </TextField>
+        {follow && (
+          <Button
+            disabled={!streaming && !paused}
+            onClick={() => {
+              if (paused) {
+                setPaused(false);
+                setConnection((value) => value + 1);
+              } else {
+                abortRef.current?.abort();
+                setStreaming(false);
+                setPaused(true);
+              }
+            }}
+          >
+            {paused ? "Resume" : "Pause"}
+          </Button>
+        )}
+        <Button
+          onClick={() => {
+            setPaused(false);
+            setConnection((value) => value + 1);
+          }}
+        >
+          {follow ? "Reconnect" : "Reload snapshot"}
+        </Button>
+      </Stack>
+      {output.truncated && (
+        <Alert severity="info">
+          Earlier output was discarded. Display is limited to 1000 lines and 256 KiB, including an
+          incomplete line.
+        </Alert>
+      )}
+      {!streaming && !error && (
+        <Typography variant="caption" sx={{ px: 2, pb: 1 }}>
+          {paused
+            ? "Paused. Resume starts a fresh log read."
+            : follow
+              ? "Log reader ended. Reconnect for new output; this does not indicate service failure."
+              : "Snapshot complete."}
+        </Typography>
+      )}
       <Box
         sx={{
           flex: 1,

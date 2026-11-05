@@ -89,7 +89,24 @@ not a security audit. See [Community extensions](./community-extensions.md).
   from the API's operation catalog; destructive operations require confirmation.
 - **Backups:** create, inspect, restore and delete retained snapshots.
 
-See [Services administration](./services-administration.md) for procedures.
+- **Catalog** — every installed service (built-in or extension-installed), its
+  capabilities and container state, with start/stop/restart.
+- **Compose preview** — the generated `docker-compose` file, so you can see what
+  the renderer will do before bringing the stack up. Generate configuration only,
+  start the selected stack, or copy host shutdown guidance from this page.
+- **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
+  feeds, glyph fonts), GTFS import controls, and Overture Places release and
+  durable OSM↔GERS link operations. The operation cards are rendered from a
+  server-side catalog: the API declares each operation's fields, defaults,
+  validation, and risk level, and the form only mirrors that contract. Queueing
+  an operation first asks the API for a preview of what it will do; destructive
+  operations add an explicit warning to that confirmation step.
+- **Backups** — the on-disk snapshot manager. See [Backup and
+  restore](./backup-and-restore.md).
+
+The full picture of services and the `openmapx` CLI that backs these pages is in
+[Services administration](./services-administration.md) and [Managing
+services](../install/managing-services.md).
 
 ### Maintenance _(self-hosted only)_
 
@@ -122,9 +139,21 @@ be verified. See [Coverage & freshness](./coverage-freshness.md).
 
 ### Cache
 
-Inspect and clear application-owned Redis/Valkey namespaces. **Clear all** is
-limited to OpenMapX cache prefixes; it does not run `FLUSHDB` or `FLUSHALL` on a
-possibly shared Redis instance. Clear only the affected namespace when possible.
+The Redis/Valkey cache inspector — list the cache namespaces (geocoding
+results, provider responses, and the rest) with their key counts, and clear one
+namespace or the whole application cache. A scoped Redis glob must begin literally
+with `int:` or `cache:` and contain at most 256 characters. **Preview pattern**
+counts without deleting or changing invalidation state; counts are estimates under
+concurrent writes and SCAN duplication. **Clear previewed pattern** requires a
+confirmation of the captured target. Session/job/foreign prefixes and unrestricted
+`*` are rejected. **Clear all** also stays within OpenMapX cache prefixes. Web clears never run
+`FLUSHDB` or `FLUSHALL` on a shared Redis instance.
+
+Clears consume SCAN pages and delete bounded batches, preserving the shared
+invalidation fence against concurrent cache fills.
+
+Handy after switching a provider or credential so
+stale responses don't linger.
 
 ### Activity
 

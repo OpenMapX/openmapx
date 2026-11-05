@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
+import { executeAdminJobOperation } from "../services/admin-job-ops";
+import type { JobContext } from "../services/job-runner";
 import {
   type ApiOpsClient,
   ApiOpsError,
@@ -12,16 +14,19 @@ import {
 
 export interface PsEntry {
   service: string;
-  state: "running" | "exited" | "restarting" | "created" | "paused" | "not-running";
+  state: "running" | "exited" | "restarting" | "created" | "paused" | "not-running" | "unknown";
 }
 
 interface OpsDependencies {
   client?: ApiOpsClient;
+  signal?: AbortSignal;
 }
 
 interface AsyncOpsDependencies extends OpsDependencies {
+  ctx?: JobContext;
   operationKey?: string;
   signal?: AbortSignal;
+  expectedConfigurationRevisionId?: string;
 }
 
 let sharedClient: ApiOpsClient | undefined;
@@ -35,7 +40,7 @@ function client(dependencies: OpsDependencies): ApiOpsClient {
 function composeState(
   state: OpsResultFor<"stack.status">["services"][number]["state"],
 ): PsEntry["state"] {
-  if (state === "stopped" || state === "unknown") return "not-running";
+  if (state === "stopped") return "not-running";
   return state;
 }
 
@@ -48,16 +53,12 @@ export async function dockerStatus(
 }
 
 export async function dockerComposePs(dependencies: OpsDependencies = {}): Promise<PsEntry[]> {
-  try {
-    const submitted = await client(dependencies).execute({ kind: "stack.status" }, {});
-    if (submitted.execution !== "sync") return [];
-    return submitted.value.services.map((service) => ({
-      service: service.serviceId,
-      state: composeState(service.state),
-    }));
-  } catch {
-    return [];
-  }
+  const submitted = await client(dependencies).execute({ kind: "stack.status" }, {});
+  if (submitted.execution !== "sync") throw new ApiOpsError("runtime");
+  return submitted.value.services.map((service) => ({
+    service: service.serviceId,
+    state: composeState(service.state),
+  }));
 }
 
 export async function inspectDawarichProvisioning(
@@ -86,23 +87,38 @@ export type DockerComposeAction =
 export const STACK_STOP_GUIDANCE =
   "Stack shutdown is unavailable from the web API because it would stop the operations agent. Run the documented host shutdown command instead.";
 
-function typedAction(serviceId: string, action: DockerComposeAction): OpsOperation | null {
-  if (!serviceId) return action === "start" ? { kind: "stack.start" } : null;
+function typedAction(
+  serviceId: string,
+  action: DockerComposeAction,
+  expectedConfigurationRevisionId?: string,
+): OpsOperation | null {
+  if (!serviceId)
+    return action === "start" && expectedConfigurationRevisionId
+      ? { kind: "stack.start", expectedConfigurationRevisionId }
+      : null;
   switch (action) {
     case "start":
-      return { kind: "service.start", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.start", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "stop":
       return { kind: "service.stop", serviceId };
     case "restart":
       return { kind: "service.restart", serviceId };
     case "recreate":
-      return { kind: "service.recreate", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.recreate", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "recreate-isolated":
-      return { kind: "service.recreateIsolated", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.recreateIsolated", serviceId, expectedConfigurationRevisionId }
+        : null;
     case "remove":
       return { kind: "service.remove", serviceId };
     case "pull":
-      return { kind: "service.pull", serviceId };
+      return expectedConfigurationRevisionId
+        ? { kind: "service.pull", serviceId, expectedConfigurationRevisionId }
+        : null;
   }
 }
 
@@ -114,13 +130,19 @@ export async function dockerComposeAction(
   if (!serviceId && action === "stop") {
     return { exitCode: 1, stdout: "", stderr: STACK_STOP_GUIDANCE };
   }
-  const operation = typedAction(serviceId, action);
+  const operation = typedAction(serviceId, action, options.expectedConfigurationRevisionId);
   if (!operation || !options.operationKey) {
     return {
       exitCode: 1,
       stdout: "",
       stderr: "A durable operation identity is required for this request.",
     };
+  }
+  if (options.ctx) {
+    await executeAdminJobOperation(options.ctx, operation, "extension.lifecycle", {
+      operationKey: options.operationKey,
+    });
+    return { exitCode: 0, stdout: "", stderr: "" };
   }
   try {
     await executeAndWait(client(options), operation, options.operationKey, {
@@ -144,7 +166,7 @@ export async function dockerComposeLogSnapshot(
 ): Promise<OpsResultFor<"service.logs">> {
   const submitted = await client(dependencies).execute(
     { kind: "service.logs", serviceId, tail },
-    {},
+    dependencies.signal ? { signal: dependencies.signal } : {},
   );
   if (submitted.execution !== "sync") throw new ApiOpsError("runtime");
   return submitted.value;
@@ -153,7 +175,7 @@ export async function dockerComposeLogSnapshot(
 export async function dockerComposeLogs(
   serviceId: string,
   out: ServerResponse,
-  options: AsyncOpsDependencies & { tail: number; maxDurationSeconds?: number },
+  options: AsyncOpsDependencies & { tail: number; follow?: boolean; maxDurationSeconds?: number },
 ): Promise<void> {
   if (!options.operationKey) throw new ApiOpsError("validation");
   if (out.destroyed || out.writableEnded || options.signal?.aborted) return;
@@ -161,8 +183,19 @@ export async function dockerComposeLogs(
   const abort = () => controller.abort();
   out.once("close", abort);
   options.signal?.addEventListener("abort", abort, { once: true });
+  const opsClient = client(options);
   try {
-    const opsClient = client(options);
+    if (options.follow === false) {
+      const snapshot = await dockerComposeLogSnapshot(serviceId, options.tail, {
+        client: opsClient,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted && !out.destroyed) {
+        for (const line of snapshot.lines) out.write(`${line}\n`);
+        if (snapshot.truncated) out.write("Log snapshot truncated.\n");
+      }
+      return;
+    }
     const submitted = await submitOpsOperationWithRecovery(
       opsClient,
       {
@@ -177,7 +210,7 @@ export async function dockerComposeLogs(
     if (submitted.execution !== "async") throw new ApiOpsError("runtime");
     if (controller.signal.aborted || out.destroyed || out.writableEnded) {
       await opsClient
-        .cancel(submitted.operationId, { signal: AbortSignal.timeout(2_000) })
+        .cancel(submitted.operationId, { signal: AbortSignal.timeout(2000) })
         .catch(() => undefined);
       return;
     }

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
 import { type Options as ExecaOptions, type Result as ExecaResult, execa } from "execa";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 
 /**
  * Replaces the password in any embedded Postgres connection string with `***`.
@@ -33,7 +34,7 @@ export async function runDuckDb(args: string[], options?: ExecaOptions): Promise
     return (await execa(
       "duckdb",
       ["-bail", "-cmd", duckDbResourceSql(process.env, scratch), ...args],
-      options ?? {},
+      { ...options, cancelSignal: dataWorkerSignal(options?.cancelSignal) },
     )) as ExecaResult;
   } catch (err) {
     const e = err as { message?: string; stderr?: unknown; stdout?: unknown; exitCode?: number };

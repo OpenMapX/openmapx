@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { session, user } from "./auth-schema";
 import { dataExportArtifact, dataSubjectRequest } from "./privacy-schema";
 
@@ -24,6 +33,9 @@ export const sessionAuthAssurance = pgTable(
       .references(() => session.id, { onDelete: "cascade" }),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     method: text("method").$type<SessionAuthMethod>().notNull(),
+    originIndependentPasswordLogin: boolean("origin_independent_password_login")
+      .notNull()
+      .default(false),
     authenticatedAt: timestamp("authenticated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

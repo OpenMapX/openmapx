@@ -2,7 +2,7 @@
   "id": "motis-staging",
   "name": "MOTIS (staging)",
   "version": "1.0.0",
-  "description": "Staging MOTIS instance — rebuild target for the data-manager's Transitous atomic-swap pipeline. Not query-facing; only the primary `motis` service receives application traffic. Opt-in: start with `--services motis-staging` (or add to the persisted selection) when running the data-manager promotion flow.",
+  "description": "Staging MOTIS instance \u2014 rebuild target for the data-manager's Transitous atomic-swap pipeline. Not query-facing; only the primary `motis` service receives application traffic. Opt-in: start with `--services motis-staging` (or add to the persisted selection) when running the data-manager promotion flow.",
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://github.com/motis-project/motis",
@@ -24,7 +24,12 @@
     "command": [
       "until [ -f /motis-data/config.yml ]; do echo 'motis-staging: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server || { echo 'motis-staging: import/serve failed; holding (a pipeline restart will retry)'; while true; do sleep 3600; done; }"
     ],
-    "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
+    "dependsOn": [
+      {
+        "service": "motis-feed-proxy",
+        "condition": "service_started"
+      }
+    ],
     "memory": "${MOTIS_SLOT_MEMORY:-16g}",
     "restart": "unless-stopped",
     "healthcheck": {
@@ -38,15 +43,51 @@
     },
     "logging": {
       "driver": "json-file",
-      "options": { "max-size": "50m", "max-file": "3" }
+      "options": {
+        "max-size": "50m",
+        "max-file": "3"
+      }
     }
   },
   "provides": ["transit-engine-staging"],
   "bindMounts": [
-    { "source": "@infra:data/motis/staging", "target": "/motis-data", "readOnly": false }
+    {
+      "source": "@infra:data/motis/staging",
+      "target": "/motis-data",
+      "readOnly": false
+    }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 8080, "host": 8083, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 8080,
+        "host": 8083,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "transit" }
+  "ui": {
+    "category": "transit"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Configure this resource on primary MOTIS. One generation applies the same limit to both slots and the transit preflight capacity envelope.",
+        "readOnly": true
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Configure this resource on primary MOTIS. One generation applies the same limit to both slots and the transit preflight capacity envelope.",
+        "readOnly": true
+      }
+    }
+  }
 }

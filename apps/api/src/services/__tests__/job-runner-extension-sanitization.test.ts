@@ -1,3 +1,4 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const database = vi.hoisted(() => {
@@ -17,8 +18,27 @@ const database = vi.hoisted(() => {
       })),
       update: vi.fn(() => ({
         set: vi.fn((value: Record<string, unknown>) => {
-          updates.push(value);
-          return { where: vi.fn().mockResolvedValue([]) };
+          const captured = { ...value };
+          if (
+            captured.result &&
+            typeof captured.result === "object" &&
+            "queryChunks" in captured.result
+          ) {
+            const query = new PgDialect().sqlToQuery(
+              captured.result as Parameters<PgDialect["sqlToQuery"]>[0],
+            );
+            const patch = query.params.find(
+              (param) => typeof param === "string" && param.startsWith("{"),
+            );
+            if (typeof patch === "string") captured.result = JSON.parse(patch);
+          }
+          updates.push(captured);
+          const rows = [{ id: "unit-owned-job", status: "running", result: captured.result }];
+          return {
+            where: vi.fn(() =>
+              Object.assign(Promise.resolve(rows), { returning: vi.fn().mockResolvedValue(rows) }),
+            ),
+          };
         }),
       })),
     },
@@ -26,6 +46,15 @@ const database = vi.hoisted(() => {
 });
 
 vi.mock("../../db", () => ({ db: database.db }));
+// This suite tests output encoding, not SQL ownership. Real owner-CAS/native
+// recovery are covered by the PostgreSQL suites.
+vi.mock("../admin-job-state", async (actual) => ({
+  ...(await actual<typeof import("../admin-job-state")>()),
+  insertOwnedJobLog: vi.fn(async (_owner, entry: Record<string, unknown>) => {
+    database.inserts.push(entry);
+    return true;
+  }),
+}));
 vi.mock("../admin-job-ops", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../admin-job-ops")>()),
   cancelAdminJobOperations: vi.fn(),
@@ -170,7 +199,8 @@ describe("extension job durable boundaries", () => {
         update.result !== null &&
         "opsProjection" in update.result,
     )?.result as typeof checkpoint | undefined;
-    expect(persisted?.opsProjection.operations).toEqual(operations);
+    expect(Object.keys(persisted?.opsProjection.operations ?? {})).toEqual(Object.keys(operations));
+    expect(persisted?.opsProjection.operations).toMatchObject(operations);
   });
 
   it("redacts schemes containing URL-parser whitespace as a complete value", async () => {

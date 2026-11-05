@@ -9,6 +9,7 @@ import {
   reconcileCommunityRepositoryTransactions,
   type ServiceRuntimeRecovery,
 } from "./community-repositories";
+import type { JobContext } from "./job-runner";
 import { createDurableOpsKey } from "./ops-client";
 import { openRuntimeRecoveryAuthority } from "./runtime-recovery-authority";
 import { mergeRuntimeRecovery, type RuntimeRecoveryRecord } from "./runtime-recovery-journal";
@@ -51,11 +52,12 @@ export async function adoptUnrecordedIntegrations(signal?: AbortSignal): Promise
 
 export async function recoverInterruptedExtensionChanges(
   signal?: AbortSignal,
-  options: { adoptIntegrations?: boolean } = {},
+  options: { adoptIntegrations?: boolean; ctx?: JobContext } = {},
 ): Promise<void> {
   const integrations = await recoverAgentIntegrations({
     signal,
     adopt: options.adoptIntegrations ?? true,
+    ctx: options.ctx,
   });
   if (
     (integrations.rolledBack.length > 0 || integrations.adopted.length > 0) &&
@@ -70,6 +72,7 @@ export async function recoverInterruptedExtensionChanges(
   }
   const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(findRepoRoot());
   const serviceRecovery: ServiceRuntimeRecovery = await reconcileCommunityRepositoryTransactions({
+    ctx: options.ctx,
     signal,
     restoreSelection: async (roots, recoveryId) => {
       await initServiceRegistry({ strict: true });
@@ -151,6 +154,6 @@ export function warnAboutLegacyInstallJournals(
   if (journals.length === 0) return;
   warn(
     `Found ${journals.length} extension install journal(s) from an earlier release in ${customIntegrationsDir} (${journals.join(", ")}). ` +
-      "The operations agent verifies the integrations of that interrupted change by adoption; integrations it cannot verify need a reinstall. The journal files can be deleted.",
+      "Recovery requires the original publication and administrative job identity; startup observation does not settle these journals or authorize deleting them.",
   );
 }

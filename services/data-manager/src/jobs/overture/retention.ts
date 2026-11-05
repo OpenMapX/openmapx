@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sql } from "../../db/index.js";
+import { assertDataPublication, publishDataChange } from "../execution/worker-scope.js";
 import { assertValidOvertureSchema } from "./schema.js";
 import { assertValidOvertureRelease } from "./stac.js";
 
@@ -78,6 +79,7 @@ export function pruneOvertureReleases(
     if (target !== join(root, release)) {
       throw new Error(`Refusing to prune Overture release outside ${root}: ${target}`);
     }
+    assertDataPublication();
     rmSync(target, { recursive: true, force: true });
     removed.push(release);
     opts.onProgress?.(`Pruned superseded Overture snapshot ${release}.`);
@@ -109,7 +111,8 @@ export async function finalizeOvertureReleaseFiles(
   }
   if (state.release_files_pruned_at !== null) return null;
 
-  const result = pruneOvertureReleases(opts);
+  const result = await publishDataChange(() => pruneOvertureReleases(opts));
+  assertDataPublication();
   await sql.unsafe(
     `UPDATE "${schema}".conflation_state
      SET release_files_pruned_at = COALESCE(release_files_pruned_at, NOW()),

@@ -13,12 +13,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import type { OpsOperation, OpsResourcePolicy } from "@openmapx/core/ops";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
+import { createControlRootOperationKey, type OpsResourcePolicy } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { packageIntegration } from "@openmapx/integration-framework/installer";
-import { afterEach, describe, expect, it } from "vitest";
-import { IntegrationStore } from "./integration-store";
-import type { OpsJobJournal, PersistedOpsJob } from "./journal";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { IntegrationStore, installIntegrationRuntime } from "./integration-store";
+import { openOpsJobJournal } from "./journal";
+import { createUnavailableRuntime } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
@@ -91,11 +97,17 @@ function fixture(options: { downloadError?: Error } = {}): Fixture {
 async function artifact(
   f: Fixture,
   id: string,
-  options: { region?: string; strings?: Record<string, string> } = {},
+  options: { region?: string; strings?: Record<string, string>; description?: string } = {},
 ) {
   const source = mkdtempSync(join(tmpdir(), "openmapx-integration-source-"));
   roots.push(source);
-  writeFileSync(join(source, "manifest.json"), JSON.stringify(manifest(id, options.region)));
+  writeFileSync(
+    join(source, "manifest.json"),
+    JSON.stringify({
+      ...manifest(id, options.region),
+      ...(options.description ? { description: options.description } : {}),
+    }),
+  );
   if (options.strings) {
     mkdirSync(join(source, "strings"));
     for (const [locale, text] of Object.entries(options.strings)) {
@@ -159,7 +171,7 @@ describe("integration store", () => {
     const source = await artifact(f, "weather-radar", { strings: { en: '{"title":"Radar"}' } });
     const published = await f.store.publish(
       {
-        kind: "integration.publish",
+        kind: "catalogIntegration.publish",
         integrationId: "weather-radar",
         source: { kind: "artifact", url: source.url, sha256: source.sha256 },
         extensionId: "radar-bundle",
@@ -180,7 +192,7 @@ describe("integration store", () => {
     expect(loads(f)).toEqual(["weather-radar"]);
 
     await f.store.settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: published.transactionId,
       outcome: "commit",
@@ -202,7 +214,7 @@ describe("integration store", () => {
     await expect(
       f.store.publish(
         {
-          kind: "integration.publish",
+          kind: "catalogIntegration.publish",
           integrationId: "weather-radar",
           source: { kind: "artifact", url, sha256: "a".repeat(64) },
         },
@@ -223,7 +235,7 @@ describe("integration store", () => {
 
     await f.store.publish(
       {
-        kind: "integration.publish",
+        kind: "catalogIntegration.publish",
         integrationId: "weather-radar",
         source: { kind: "artifact", url: noncanonical, sha256: source.sha256 },
       },
@@ -246,7 +258,7 @@ describe("integration store", () => {
 
     const result = await f.store.inspect(
       {
-        kind: "integration.inspect",
+        kind: "catalogIntegration.inspect",
         source: {
           kind: "artifact",
           url: "https://artifacts.example.test/archive.tgz",
@@ -268,75 +280,158 @@ describe("integration store", () => {
     const f = fixture({
       downloadError: new Error(`Too many redirects while fetching ${secretRedirect}`),
     });
-    let persistedJobs: readonly PersistedOpsJob[] = [];
-    const journal: OpsJobJournal = {
-      records: () => [],
-      replace: async (records) => {
-        persistedJobs = structuredClone(records);
-      },
-    };
-    const now = new Date("2026-10-25T20:00:00.000Z");
+    const infraDir = join(f.root, "infra/docker");
+    mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
+    await provisionControlInstallation(infraDir);
+    const installation = openControlInstallation({
+      infraDir,
+      role: "ops-agent",
+      serviceIds: ["ops-agent"],
+    });
+    const journal = await openOpsJobJournal(services.agentStatePaths(infraDir).journal);
+    const now = new Date();
+    const requestedDeadlineAt = now.getTime() + 60_000;
+    const runtime = createUnavailableRuntime();
+    installIntegrationRuntime(runtime, f.store);
     const app = buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
       resourcePolicy: allowAllResources,
       journal,
+      controlInstallation: installation,
       now: () => now,
       randomBytes: () => Buffer.alloc(18, 33),
-      dispatch: async (operation: OpsOperation, _runtime, context) => {
-        if (operation.kind !== "integration.inspect") throw new Error("unexpected operation");
-        return f.store.inspect(operation, context.signal);
-      },
+      runtime,
     });
 
-    const admitted = await app.inject({
-      method: "POST",
-      url: "/v1/operations",
-      headers: { authorization: `Bearer ${apiToken}` },
-      payload: {
-        version: 1,
-        requestId: "ops1_redirectDiagnostic",
-        operationKey: "opk1_redirectDiagnostic",
-        issuedAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + 20_000).toISOString(),
-        operation: {
-          kind: "integration.inspect",
-          source: {
-            kind: "artifact",
-            url: "https://artifacts.example.test/archive.tgz",
-            sha256: "a".repeat(64),
+    try {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        payload: {
+          version: 2,
+          execution: { requestedDeadlineAt },
+          requestId: "ops1_redirectDiagnostic",
+          operationKey: createControlRootOperationKey({
+            notAfter: requestedDeadlineAt,
+            nonce: Buffer.alloc(16, 34),
+          }),
+          issuedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 20_000).toISOString(),
+          operation: {
+            kind: "catalogIntegration.inspect",
+            source: {
+              kind: "artifact",
+              url: "https://artifacts.example.test/archive.tgz",
+              sha256: "a".repeat(64),
+            },
           },
         },
-      },
-    });
-    expect(admitted.statusCode).toBe(202);
-    const operationId = admitted.json().result.operationId as string;
+      });
+      expect(admitted.statusCode, admitted.body).toBe(202);
+      const operationId = admitted.json().result.operationId as string;
 
-    let status = await app.inject({
-      method: "GET",
-      url: `/v1/operations/${operationId}`,
-      headers: { authorization: `Bearer ${apiToken}` },
-    });
-    for (
-      let attempt = 0;
-      attempt < 50 && status.json().result.state !== "succeeded";
-      attempt += 1
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
-      status = await app.inject({
+      let status = await app.inject({
         method: "GET",
         url: `/v1/operations/${operationId}`,
         headers: { authorization: `Bearer ${apiToken}` },
       });
-    }
+      for (
+        let attempt = 0;
+        attempt < 50 && status.json().result.state !== "succeeded";
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        status = await app.inject({
+          method: "GET",
+          url: `/v1/operations/${operationId}`,
+          headers: { authorization: `Bearer ${apiToken}` },
+        });
+      }
 
-    expect(status.statusCode).toBe(200);
-    expect(status.json().result).toMatchObject({
-      state: "succeeded",
-      result: { valid: false, problems: ["The archive could not be downloaded"] },
+      expect(status.statusCode).toBe(200);
+      expect(status.json().result).toMatchObject({
+        state: "succeeded",
+        result: { valid: false, problems: ["The archive could not be downloaded"] },
+      });
+      expect(JSON.stringify(status.json())).not.toContain("sentinel-secret");
+      expect(JSON.stringify(journal.records())).not.toContain("sentinel-secret");
+    } finally {
+      await app.close();
+      closeControlInstallation(installation);
+    }
+  });
+
+  it("inspects a large integration manifest without allocating mutation authority", async () => {
+    const f = fixture();
+    const description = "large integration description ".repeat(3000);
+    const source = await artifact(f, "weather-radar", { description });
+    const infraDir = join(f.root, "infra/docker");
+    mkdirSync(join(infraDir, "data"), { recursive: true, mode: 0o700 });
+    await provisionControlInstallation(infraDir);
+    const installation = openControlInstallation({
+      infraDir,
+      role: "ops-agent",
+      serviceIds: ["ops-agent"],
     });
-    expect(JSON.stringify(status.json())).not.toContain("sentinel-secret");
-    expect(JSON.stringify(persistedJobs)).not.toContain("sentinel-secret");
-    await app.close();
+    const privateRoot = join(infraDir, "control-private/ops-agent");
+    const before = readdirSync(privateRoot, { recursive: true }).sort();
+    const journal = await openOpsJobJournal(services.agentStatePaths(infraDir).journal);
+    const now = new Date();
+    const requestedDeadlineAt = now.getTime() + 60_000;
+    const runtime = createUnavailableRuntime();
+    installIntegrationRuntime(runtime, f.store);
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      resourcePolicy: allowAllResources,
+      journal,
+      controlInstallation: installation,
+      now: () => now,
+      randomBytes: () => Buffer.alloc(18, 35),
+      runtime,
+    });
+    try {
+      const admitted = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        payload: {
+          version: 2,
+          execution: { requestedDeadlineAt },
+          requestId: "ops1_largeInspection000",
+          operationKey: createControlRootOperationKey({
+            notAfter: requestedDeadlineAt,
+            nonce: Buffer.alloc(16, 36),
+          }),
+          issuedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 20_000).toISOString(),
+          operation: { kind: "catalogIntegration.inspect", source },
+        },
+      });
+      expect(admitted.statusCode, admitted.body).toBe(202);
+      const operationId = admitted.json().result.operationId as string;
+      await vi.waitFor(async () => {
+        const status = await app.inject({
+          method: "GET",
+          url: `/v1/operations/${operationId}`,
+          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        });
+        expect(status.statusCode).toBe(200);
+        expect(status.json().result).toMatchObject({
+          state: "succeeded",
+          result: { integrationId: "weather-radar", valid: true, manifest: { description } },
+        });
+        expect(Buffer.byteLength(JSON.stringify(status.json().result.result))).toBeGreaterThan(
+          65536,
+        );
+      });
+      expect(readdirSync(privateRoot, { recursive: true }).sort()).toEqual(before);
+      expect(existsSync(join(infraDir, "data/.admin-target-control"))).toBe(false);
+      expect(record(f, "weather-radar")).toBeUndefined();
+    } finally {
+      await app.close();
+      closeControlInstallation(installation);
+    }
   });
 
   it("keeps the previous copy until settled and restores it on rollback", async () => {
@@ -346,7 +441,7 @@ describe("integration store", () => {
     const publish = (source: typeof first) =>
       f.store.publish(
         {
-          kind: "integration.publish",
+          kind: "catalogIntegration.publish",
           integrationId: "weather-radar",
           source: { kind: "artifact", url: source.url, sha256: source.sha256 },
           extensionId: "radar-bundle",
@@ -355,7 +450,7 @@ describe("integration store", () => {
       );
     const installedFirst = await publish(first);
     await f.store.settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: installedFirst.transactionId,
       outcome: "commit",
@@ -368,7 +463,7 @@ describe("integration store", () => {
     await expect(publish(first)).rejects.toThrow();
 
     await f.store.settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: update.transactionId,
       outcome: "rollback",
@@ -391,11 +486,11 @@ describe("integration store", () => {
     const f = fixture();
     const source = await artifact(f, "weather-radar");
     const published = await f.store.publish(
-      { kind: "integration.publish", integrationId: "weather-radar", source },
+      { kind: "catalogIntegration.publish", integrationId: "weather-radar", source },
       signal,
     );
     await f.store.settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: published.transactionId,
       outcome: "rollback",
@@ -422,7 +517,7 @@ describe("integration store", () => {
     const publish = (overrides: Record<string, unknown>) =>
       f.store.publish(
         {
-          kind: "integration.publish",
+          kind: "catalogIntegration.publish",
           integrationId: "weather-radar",
           source: { kind: "artifact", url: source.url, sha256: source.sha256 },
           ...overrides,
@@ -472,7 +567,7 @@ describe("integration store", () => {
     const publish = (extensionId?: string) =>
       f.store.publish(
         {
-          kind: "integration.publish",
+          kind: "catalogIntegration.publish",
           integrationId: "weather-radar",
           source,
           ...(extensionId ? { extensionId } : {}),
@@ -481,7 +576,7 @@ describe("integration store", () => {
       );
     const settle = (transactionId: string) =>
       f.store.settle({
-        kind: "integration.settle",
+        kind: "catalogIntegration.settle",
         integrationId: "weather-radar",
         transactionId,
         outcome: "commit",
@@ -491,13 +586,13 @@ describe("integration store", () => {
     await expect(publish()).rejects.toThrow("another owner");
     await expect(
       f.store.remove({
-        kind: "integration.remove",
+        kind: "catalogIntegration.remove",
         integrationId: "weather-radar",
         extensionId: "another-bundle",
       }),
     ).rejects.toThrow("another owner");
     await f.store.remove({
-      kind: "integration.remove",
+      kind: "catalogIntegration.remove",
       integrationId: "weather-radar",
       extensionId: "radar-bundle",
     });
@@ -546,7 +641,7 @@ describe("integration store", () => {
     copyFileSync(source.path, join(uploads, `${source.sha256}.tar.gz`));
     await f.store.publish(
       {
-        kind: "integration.publish",
+        kind: "catalogIntegration.publish",
         integrationId: "weather-radar",
         source: { kind: "upload", sha256: source.sha256 },
       },
@@ -556,7 +651,7 @@ describe("integration store", () => {
     expect(record(f, "weather-radar")?.source).toEqual({ kind: "upload", sha256: source.sha256 });
     await expect(
       f.store.inspect(
-        { kind: "integration.inspect", source: { kind: "upload", sha256: "f".repeat(64) } },
+        { kind: "catalogIntegration.inspect", source: { kind: "upload", sha256: "f".repeat(64) } },
         signal,
       ),
     ).resolves.toMatchObject({ valid: false, problems: [expect.stringContaining("No uploaded")] });
@@ -566,7 +661,7 @@ describe("integration store", () => {
     const f = fixture();
     const source = await artifact(f, "weather-radar");
     await f.store.publish(
-      { kind: "integration.publish", integrationId: "weather-radar", source },
+      { kind: "catalogIntegration.publish", integrationId: "weather-radar", source },
       signal,
     );
     writeFileSync(
@@ -598,18 +693,18 @@ describe("integration store", () => {
     const first = await artifact(f, "weather-radar", { region: "eu" });
     const second = await artifact(f, "weather-radar", { region: "us" });
     const published = await f.store.publish(
-      { kind: "integration.publish", integrationId: "weather-radar", source: first },
+      { kind: "catalogIntegration.publish", integrationId: "weather-radar", source: first },
       signal,
     );
     await f.store.settle({
-      kind: "integration.settle",
+      kind: "catalogIntegration.settle",
       integrationId: "weather-radar",
       transactionId: published.transactionId,
       outcome: "commit",
     });
     // Interrupted after the new copy was moved in, before the record said so.
     const update = await f.store.publish(
-      { kind: "integration.publish", integrationId: "weather-radar", source: second },
+      { kind: "catalogIntegration.publish", integrationId: "weather-radar", source: second },
       signal,
     );
     const path = services.integrationRecordPath(join(f.root, "infra", "docker"), "weather-radar");
@@ -689,7 +784,7 @@ describe("integration store", () => {
     const adopt = (f: Fixture, source?: { url: string; sha256: string }) =>
       f.store.adopt(
         {
-          kind: "integration.adopt",
+          kind: "catalogIntegration.adopt",
           integrationId: "weather-radar",
           extensionId: "radar-bundle",
           ...(source
@@ -781,7 +876,7 @@ describe("integration store", () => {
       await adopt(f, source);
       const published = await f.store.publish(
         {
-          kind: "integration.publish",
+          kind: "catalogIntegration.publish",
           integrationId: "weather-radar",
           source,
           extensionId: "radar-bundle",
@@ -789,7 +884,7 @@ describe("integration store", () => {
         signal,
       );
       await f.store.settle({
-        kind: "integration.settle",
+        kind: "catalogIntegration.settle",
         integrationId: "weather-radar",
         transactionId: published.transactionId,
         outcome: "commit",

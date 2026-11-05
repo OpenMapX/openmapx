@@ -35,7 +35,17 @@ describe("privacy delivery ceremony", () => {
     const complete = vi
       .spyOn(PrivacyReauthenticationService.prototype, "complete")
       .mockResolvedValue();
-    const database = { insert: () => ({ values: async () => undefined }) } as never;
+    const chain: Record<string, unknown> = {
+      // biome-ignore lint/suspicious/noThenProperty: Drizzle query builders are intentionally awaitable.
+      then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+    };
+    for (const name of ["from", "where", "for", "limit"]) chain[name] = () => chain;
+    const fixtureDatabase = {
+      select: () => chain,
+      insert: () => ({ values: async () => undefined }),
+      transaction: async (run: (tx: unknown) => Promise<unknown>) => run(fixtureDatabase),
+    };
+    const database = fixtureDatabase as never;
     if (assisted) await app.register(privacyAdminRoute, { database });
     else await app.register(privacyRequestsRoute, { database });
     try {

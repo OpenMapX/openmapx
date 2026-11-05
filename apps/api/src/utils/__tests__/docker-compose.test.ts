@@ -47,6 +47,20 @@ describe("inspectDawarichProvisioning", () => {
 });
 
 describe("typed Compose facade", () => {
+  it("does not report a stopped stack when control-plane acquisition fails", async () => {
+    const execute = vi.fn().mockRejectedValue(new Error("Agent unavailable"));
+    await expect(dockerComposePs({ client: clientWithExecute(execute) })).rejects.toThrow();
+  });
+  it("preserves an unfamiliar observed state as unknown", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      execution: "sync",
+      value: { services: [{ serviceId: "motis", state: "unknown" }] },
+    });
+    await expect(dockerComposePs({ client: clientWithExecute(execute) })).resolves.toEqual([
+      { service: "motis", state: "unknown" },
+    ]);
+  });
+
   it("does not submit follow work for an already disconnected response", async () => {
     const execute = vi.fn() as ApiOpsClient["execute"];
     const out = Object.assign(new EventEmitter(), {
@@ -215,7 +229,7 @@ describe("typed Compose facade", () => {
     delete process.env.OPS_AGENT_URL;
     delete process.env.OPS_AGENT_TOKEN_FILE;
     try {
-      await expect(dockerComposePs()).resolves.toEqual([]);
+      await expect(dockerComposePs()).rejects.toThrow();
     } finally {
       if (previousUrl !== undefined) process.env.OPS_AGENT_URL = previousUrl;
       if (previousTokenFile !== undefined) process.env.OPS_AGENT_TOKEN_FILE = previousTokenFile;
@@ -223,65 +237,22 @@ describe("typed Compose facade", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it("waits on typed lifecycle work with the caller-owned stable key", async () => {
-    const operationKey = "opk1_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
-    const execute = vi.fn(async () => ({
-      execution: "async" as const,
-      operationId: "job1_abcdefghijklmnop",
-      operationKey,
-      kind: "service.restart" as const,
-      state: "queued" as const,
-    })) as ApiOpsClient["execute"];
-    const status = vi.fn(async () => ({
-      version: 1 as const,
-      operationId: "job1_abcdefghijklmnop",
-      operationKey,
-      kind: "service.restart" as const,
-      resourceId: "redis",
-      state: "succeeded" as const,
-      submittedAt: "2026-08-23T10:00:00.000Z",
-      updatedAt: "2026-08-23T10:00:01.000Z",
-      result: { changed: true },
-    })) as ApiOpsClient["status"];
-    const client = { ...clientWithExecute(execute), status };
-
-    await expect(
-      dockerComposeAction("redis", "restart", { client, operationKey }),
-    ).resolves.toEqual({ exitCode: 0, stdout: "", stderr: "" });
-    expect(execute).toHaveBeenCalledWith(
-      { kind: "service.restart", serviceId: "redis" },
-      { operationKey },
-    );
-  });
-
-  it("maps ordinary and isolated recreation to two exact typed effects", async () => {
-    const operationKey = "opk1_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
-    const execute = vi.fn().mockResolvedValue({
-      execution: "async",
-      operationId: "job1_abcdefghijklmnop",
-      operationKey,
-      kind: "service.recreate",
-      state: "succeeded",
-    });
-    const client = clientWithExecute(execute as ApiOpsClient["execute"]);
-    await dockerComposeAction("redis", "recreate", { client, operationKey });
-    expect(execute).toHaveBeenLastCalledWith(
-      { kind: "service.recreate", serviceId: "redis" },
-      { operationKey },
-    );
-    execute.mockResolvedValueOnce({
-      execution: "async",
-      operationId: "job1_abcdefghijklmnop",
-      operationKey,
-      kind: "service.recreateIsolated",
-      state: "succeeded",
-    } as never);
-    await dockerComposeAction("redis", "recreate-isolated", { client, operationKey });
-    expect(execute).toHaveBeenLastCalledWith(
-      { kind: "service.recreateIsolated", serviceId: "redis" },
-      { operationKey },
-    );
-  });
+  it.each(["restart", "recreate", "recreate-isolated"] as const)(
+    "requires original administrative authority for %s",
+    async (action) => {
+      const execute = vi.fn() as ApiOpsClient["execute"];
+      const result = await dockerComposeAction("motis", action, {
+        client: clientWithExecute(execute),
+        operationKey: "opk1_abcdefghijklmnopqrstuvwxyzABCDEFGH123456789",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      });
+      expect(result).toMatchObject({
+        exitCode: 1,
+        stderr: "Operations request failed (control_upgrade_required).",
+      });
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuses stack.stop locally with fixed operator recovery guidance", async () => {
     const execute = vi.fn() as ApiOpsClient["execute"];
@@ -298,3 +269,78 @@ describe("typed Compose facade", () => {
 });
 
 import { EventEmitter } from "node:events";
+
+it("uses only the synchronous typed snapshot for follow:false", async () => {
+  const out = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    write: vi.fn(),
+    end: vi.fn(),
+  });
+  const execute = vi.fn().mockResolvedValue({
+    execution: "sync",
+    kind: "service.logs",
+    value: { lines: ["one", "two"], truncated: true },
+  }) as ApiOpsClient["execute"];
+  const api = clientWithExecute(execute);
+  await dockerComposeLogs("app-api", out as never, {
+    client: api,
+    tail: 200,
+    follow: false,
+    operationKey: "opk1_snapshotOnly000000",
+  });
+  expect(execute).toHaveBeenCalledWith(
+    { kind: "service.logs", serviceId: "app-api", tail: 200 },
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(api.events).not.toHaveBeenCalled();
+  expect(api.cancel).not.toHaveBeenCalled();
+  expect(out.write).toHaveBeenCalledWith("Log snapshot truncated.\n");
+  expect(out.end).toHaveBeenCalledOnce();
+});
+it("cancels only its admitted log reader when the active HTTP observer closes", async () => {
+  const out = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    write: vi.fn(),
+    end: vi.fn(),
+  });
+  const execute = vi.fn().mockResolvedValue({
+    execution: "async",
+    kind: "service.logs.follow",
+    operationId: "job1_ownedLogReader0000",
+    operationKey: "opk1_ownedLogReader0000",
+    state: "running",
+  }) as ApiOpsClient["execute"];
+  let entered!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const api = clientWithExecute(execute);
+  api.cancel = vi.fn().mockResolvedValue({});
+  api.events = vi.fn(async (_id, options) => {
+    entered();
+    return new Promise((_resolve, reject) =>
+      options?.signal?.addEventListener(
+        "abort",
+        () => reject(new DOMException("Aborted", "AbortError")),
+        { once: true },
+      ),
+    );
+  }) as ApiOpsClient["events"];
+  const observing = dockerComposeLogs("redis", out as never, {
+    client: api,
+    tail: 100,
+    maxDurationSeconds: 30,
+    operationKey: "opk1_ownedLogReader0000",
+  });
+  await ready;
+  out.destroyed = true;
+  out.emit("close");
+  await observing;
+  expect(api.cancel).toHaveBeenCalledOnce();
+  expect(api.cancel).toHaveBeenCalledWith("job1_ownedLogReader0000", {
+    signal: expect.any(AbortSignal),
+  });
+  expect(execute).toHaveBeenCalledOnce();
+});

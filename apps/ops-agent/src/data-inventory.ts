@@ -1,18 +1,17 @@
 import { createHash } from "node:crypto";
-import { lstatSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
+import { listCatalogProposals } from "@openmapx/core/catalog-pins";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
-import { readTransitousProposal } from "@openmapx/transitous-core/pins";
-import {
-  type DescriptorWriteModeOption,
-  listDescriptorAnchoredDirectory,
-  readDescriptorAnchoredUtf8,
-  statDescriptorAnchoredEntry,
-} from "./descriptor-file";
+import type { DescriptorWriteModeOption } from "./descriptor-file";
+import { readDescriptorAnchoredUtf8 } from "./descriptor-file";
+import { inspectOsmInventory } from "./osm-inventory";
+import { inspectPreparedInventory } from "./prepared-inventory";
 
 const MAX_STATUS_FILE_BYTES = 1024 * 1024;
 const MAX_DIRECTORY_ENTRIES = 1024;
@@ -21,19 +20,6 @@ const MAX_TEXT = 2_048;
 
 type DataInventory = OpsResultFor<"data.inspect">;
 type MotisInventory = DataInventory["motisTransitous"];
-
-const BUILT_PRODUCT_DIRS = {
-  valhalla: "valhalla",
-  osrm: "osrm-graph",
-  otp: "otp-graph",
-  motis: "motis/live",
-  motisFeedProxy: "motis-feed-proxy",
-  tiles: "tile-mbtiles",
-  pelias: "pelias",
-  nominatim: "nominatim",
-  photon: "photon",
-  overpass: "overpass",
-} as const;
 
 interface MobilityCapabilitySnapshot {
   schemaVersion: 1;
@@ -66,10 +52,16 @@ function isDirectory(path: string): boolean {
 
 /** Whether the agent holds a Transitous pin proposal; unreadable state reads as none. */
 function transitousProposalPending(infraDir: string): boolean {
+  const installation = openControlInstallation({
+    infraDir,
+    role: "ops-agent",
+    serviceIds: [],
+    container: existsSync("/run/secrets/openmapx-control-verifiers"),
+  });
   try {
-    return readTransitousProposal(infraDir) !== null;
-  } catch {
-    return false;
+    return listCatalogProposals({ rootDir: join(infraDir, "../.."), installation }).total > 0;
+  } finally {
+    closeControlInstallation(installation);
   }
 }
 
@@ -134,75 +126,6 @@ function countBoundedStrings(value: unknown): number {
   if (!Array.isArray(value)) return 0;
   return value.slice(0, MAX_DIRECTORY_ENTRIES).filter((item) => boundedString(item) !== null)
     .length;
-}
-
-function inspectOsm(dataRoot: string): DataInventory["osm"] {
-  const osmDir = join(dataRoot, "osm");
-  const directory = isDirectory(osmDir) ? osmDir : dataRoot;
-  if (!isDirectory(directory)) return { found: false };
-  let entries: ReturnType<typeof listDescriptorAnchoredDirectory>;
-  try {
-    const child = relative(dataRoot, directory);
-    entries = listDescriptorAnchoredDirectory(dataRoot, child ? child.split(sep) : [], {
-      ...DATA_DIRECTORY,
-      maximumEntries: MAX_DIRECTORY_ENTRIES,
-    });
-  } catch {
-    return { found: false };
-  }
-  const name = entries
-    .filter(
-      (entry) =>
-        entry.type === "file" && entry.name.length <= 255 && entry.name.endsWith(".osm.pbf"),
-    )
-    .map((entry) => entry.name)
-    .sort((left, right) => left.localeCompare(right))[0];
-  if (!name) return { found: false };
-  // Read the metadata through the same descriptor-anchored walk that chose the
-  // name. Reopening `join(directory, name)` would let a rename between
-  // enumeration and stat fabricate the reported size and timestamp.
-  const child = relative(dataRoot, directory);
-  let metadata: ReturnType<typeof statDescriptorAnchoredEntry>;
-  try {
-    metadata = statDescriptorAnchoredEntry(
-      dataRoot,
-      [...(child ? child.split(sep) : []), name],
-      DATA_DIRECTORY,
-    );
-  } catch {
-    return { found: false };
-  }
-  if (metadata.type !== "file") return { found: false };
-  return {
-    found: true,
-    filename: name,
-    sizeBytes: metadata.sizeBytes,
-    modifiedAt: new Date(metadata.modifiedAtMs).toISOString(),
-    region: name
-      .replace(/-latest\.osm\.pbf$/, "")
-      .replace(/\.osm\.pbf$/, "")
-      .slice(0, MAX_TEXT),
-  };
-}
-
-function inspectBuilds(dataRoot: string): DataInventory["builds"] {
-  return Object.entries(BUILT_PRODUCT_DIRS).map(([target, relativePath]) => {
-    const key = target as keyof typeof BUILT_PRODUCT_DIRS;
-    try {
-      // Descriptor-anchored so that a renamed or hardlinked path cannot
-      // fabricate a built status or timestamp.
-      const metadata = statDescriptorAnchoredEntry(
-        dataRoot,
-        relativePath.split("/"),
-        DATA_DIRECTORY,
-      );
-      return metadata.type === "directory"
-        ? { target: key, built: true, builtAt: new Date(metadata.modifiedAtMs).toISOString() }
-        : { target: key, built: false };
-    } catch {
-      return { target: key, built: false };
-    }
-  });
 }
 
 function missingGbfsCatalog(): MotisInventory["gbfsCatalog"] {
@@ -431,7 +354,13 @@ async function inspectMotis(infraDir: string, dataRoot: string): Promise<MotisIn
       capacity.freeDiskBytes >= 0
         ? capacity.freeDiskBytes
         : null,
-    pinProposalPending: transitousProposalPending(infraDir),
+    pinProposalPending: (() => {
+      try {
+        return transitousProposalPending(infraDir);
+      } catch {
+        return false;
+      }
+    })(),
     crowdsourceState: "disabled-pending-review" as const,
     gbfsCatalog: inspectGbfsCatalog(dataRoot, motisDir),
   };
@@ -522,12 +451,16 @@ async function inspectMotis(infraDir: string, dataRoot: string): Promise<MotisIn
   };
 }
 
-export async function inspectDataInventory(rootDir: string): Promise<DataInventory> {
+export async function inspectDataInventory(
+  rootDir: string,
+  options: { osmLimit?: number; osmOffset?: number } = {},
+): Promise<DataInventory> {
   const infraDir = join(rootDir, "infra", "docker");
   const dataRoot = join(infraDir, "data");
+  const osm = inspectOsmInventory(dataRoot, options);
   return {
-    osm: inspectOsm(dataRoot),
-    builds: inspectBuilds(dataRoot),
+    osm,
+    builds: inspectPreparedInventory(dataRoot, osm),
     motisTransitous: await inspectMotis(infraDir, dataRoot),
   };
 }

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -150,9 +150,12 @@ function discoverDockerProviders(): string[] {
 function readdirRecursive(directory: string): string[] {
   const files: string[] = [];
   for (const name of readdirSync(directory)) {
+    if (name === "node_modules") continue;
     const path = join(directory, name);
-    if (statSync(path).isDirectory()) files.push(...readdirRecursive(path));
-    else files.push(path);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) files.push(...readdirRecursive(path));
+    else if (stat.isFile()) files.push(path);
   }
   return files;
 }

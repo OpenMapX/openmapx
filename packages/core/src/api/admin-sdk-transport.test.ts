@@ -215,7 +215,7 @@ describe("canonical administration SDK acquisition", () => {
 });
 
 describe("pending integration family operation binding", () => {
-  it("validates all22canonical operation closures before final producer generation", async () => {
+  it("validates all35canonical operation closures before final producer generation", async () => {
     const { integrationAdminOperations } = await import("./contracts/integration-admin");
     let calls = 0;
     for (const [id, operation] of Object.entries(integrationAdminOperations)) {
@@ -229,10 +229,11 @@ describe("pending integration family operation binding", () => {
       const result = await bindAdminOperation(id as keyof typeof integrationAdminOperations)(path, {
         client,
         method: operation.method,
+        headers: { "idempotency-key": "synthetic-intent-0001" },
       });
       expect(result).toMatchObject({ status: 400, data: { error: "Synthetic rejection" } });
     }
-    expect(calls).toBe(22);
+    expect(calls).toBe(35);
   });
   it("retains domain errors and vault hints and requires Retry-After without exposing malformed bodies", async () => {
     const cases = [
@@ -267,7 +268,11 @@ describe("pending integration family operation binding", () => {
         });
       });
       expect(
-        await bindAdminOperation(entry.id)(entry.path, { client, method: entry.method }),
+        await bindAdminOperation(entry.id)(entry.path, {
+          client,
+          method: entry.method,
+          headers: { "idempotency-key": "synthetic-intent-0001" },
+        }),
       ).toMatchObject({ status: entry.status, data: entry.data });
     }
     vi.stubGlobal("fetch", async () =>
@@ -282,7 +287,7 @@ describe("pending integration family operation binding", () => {
     vi.stubGlobal("fetch", async () => Response.json({ value: "forbidden" }, { status: 503 }));
     const error = await bindAdminOperation("setAdminIntegrationCredential")(
       "/api/admin/credentials/sample/apiKey",
-      { client, method: "PUT" },
+      { client, method: "PUT", headers: { "idempotency-key": "synthetic-intent-0001" } },
     ).catch((error) => error);
     expect(error).toBeInstanceOf(ApiContractError);
     expect(String(error)).not.toContain("forbidden");

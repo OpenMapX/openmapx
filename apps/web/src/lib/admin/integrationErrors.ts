@@ -5,12 +5,15 @@ import type { AdminIntegrationImportFailure } from "@openmapx/core/api-contracts
 function importFailureMessage(failure: AdminIntegrationImportFailure): string {
   if (failure.recovery === "restored")
     return "Import failed. Previous saved and applied configuration was restored.";
-  const saved = {
-    retained: "The imported configuration is saved.",
-    restored: "The previous saved configuration was restored.",
-    conflict: "Saved configuration changed during the import; newer edits were preserved.",
-    unknown: "The saved configuration is uncertain.",
-  }[failure.database];
+  const saved =
+    failure.phase === "persistence" && failure.database === "retained"
+      ? "The saved configuration is unchanged."
+      : {
+          retained: "The imported configuration is saved.",
+          restored: "The previous saved configuration was restored.",
+          conflict: "Saved configuration changed during the import; newer edits were preserved.",
+          unknown: "The saved configuration is uncertain.",
+        }[failure.database];
   const applied =
     failure.runtime === "restored"
       ? "The previous running configuration was restored."

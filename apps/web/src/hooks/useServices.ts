@@ -12,6 +12,7 @@ import {
   serviceOrThrow,
 } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
+import { useAdminMutationKey } from "@/lib/admin/useAdminMutationOwner";
 
 export function useServicesList() {
   const { client, apiUrl } = useActivityClient();
@@ -39,19 +40,25 @@ export function useServiceSelection() {
  */
 function useServiceWrite<T extends object, V = void>(
   effect: ServiceAdministrationEffect,
-  run: (client: ApiClient, values: V) => Promise<T>,
+  run: (client: ApiClient, values: V, idempotencyKey: string) => Promise<T>,
+  retainIntent = false,
 ) {
   const { client, apiUrl } = useActivityClient();
   const qc = useQueryClient();
   const register = useServiceJobRegistration();
+  const intent = useAdminMutationKey(client);
   return useMutation({
     mutationKey: ["service-write", apiUrl, effect],
     retry: false,
     mutationFn: async (values: V) => {
-      const result = await run(client, values);
+      const key = retainIntent
+        ? intent.forIntent(JSON.stringify([apiUrl, effect, values]))
+        : crypto.randomUUID();
+      const result = await run(client, values, key);
       if ("jobId" in result && typeof result.jobId === "string")
         register({ client, apiUrl, jobId: result.jobId, effect });
       else void invalidateServiceAdministration(qc, apiUrl, effect);
+      intent.complete(key);
       return result;
     },
   });
@@ -62,27 +69,53 @@ export function useServiceConfigSave(id: string) {
     (client, config: Record<string, unknown>) => {
       const body = sdk.adminServiceConfigUpdateSchema.safeParse({ config });
       if (!body.success) throw new Error("Invalid service configuration");
-      return serviceOrThrow(sdk.updateAdminServiceConfig(id, body.data, { client }));
+      return serviceOrThrow(
+        sdk.updateAdminServiceConfig(
+          id,
+          body.data,
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
+      );
     },
   );
 }
 export function useServiceAction(id: string) {
   return useServiceWrite(
     { kind: "service", serviceId: id },
-    (client, action: AdminServiceAction["action"]) =>
-      serviceOrThrow(sdk.runAdminServiceAction(id, { action }, { client })),
+    (client, action: AdminServiceAction["action"], key) =>
+      serviceOrThrow(
+        sdk.runAdminServiceAction(id, { action }, { "idempotency-key": key }, { client }),
+      ),
+    true,
   );
 }
 export function useSetServiceCredential(id: string) {
   return useServiceWrite(
     { kind: "credentials", serviceId: id },
     (client, { key, value }: { key: string; value: string }) =>
-      serviceOrThrow(sdk.setAdminServiceCredential(id, key, { value }, { client })),
+      serviceOrThrow(
+        sdk.setAdminServiceCredential(
+          id,
+          key,
+          { value },
+          { "idempotency-key": crypto.randomUUID() },
+          { client },
+        ),
+      ),
   );
 }
 export function useDeleteServiceCredential(id: string) {
   return useServiceWrite({ kind: "credentials", serviceId: id }, (client, key: string) =>
-    serviceOrThrow(sdk.deleteAdminServiceCredential(id, key, undefined, { client })),
+    serviceOrThrow(
+      sdk.deleteAdminServiceCredential(
+        id,
+        key,
+        { "idempotency-key": crypto.randomUUID() },
+        undefined,
+        { client },
+      ),
+    ),
   );
 }
 export function useServiceHealthCheck() {
@@ -92,11 +125,33 @@ export function useServiceHealthCheck() {
 }
 export function useServiceSelectionSave() {
   return useServiceWrite({ kind: "catalog" }, (client, selectedRoots: string[]) =>
-    serviceOrThrow(sdk.setAdminServiceSelection({ selectedRoots }, { client })),
+    serviceOrThrow(
+      sdk.setAdminServiceSelection(
+        { selectedRoots },
+        { "idempotency-key": crypto.randomUUID() },
+        { client },
+      ),
+    ),
   );
 }
 export function useServicesBulkAction() {
-  return useServiceWrite({ kind: "catalog" }, (client, body: AdminServicesBulkAction) =>
-    serviceOrThrow(sdk.runAdminServicesBulkAction(body, { client })),
+  return useServiceWrite(
+    { kind: "catalog" },
+    (client, body: AdminServicesBulkAction, key) =>
+      serviceOrThrow(sdk.runAdminServicesBulkAction(body, { "idempotency-key": key }, { client })),
+    true,
+  );
+}
+export function useServiceImageStage() {
+  return useServiceWrite(
+    { kind: "catalog" },
+    (client, values: { serviceIds: string[]; idempotencyKey: string }) =>
+      serviceOrThrow(
+        sdk.pullAdminServiceImages(
+          { serviceIds: values.serviceIds },
+          { "idempotency-key": values.idempotencyKey },
+          { client },
+        ),
+      ),
   );
 }

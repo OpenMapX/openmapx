@@ -1,4 +1,5 @@
 import { STATUS_CODES } from "node:http";
+import type {} from "@fastify/swagger";
 import {
   type ApiOperation,
   type ApiResponseContract,
@@ -14,6 +15,7 @@ import type {
   RouteGenericInterface,
 } from "fastify";
 import type z from "zod/v4";
+import { bindAdminByteResponse, isAdminByteResponse } from "./admin-byte-response";
 
 type Registry = Record<string, ApiOperation>;
 type ContractPart<R extends Registry, K extends keyof R, P extends string> = R[K] extends {
@@ -70,7 +72,9 @@ export function createContractRouteRegistrar<const R extends Registry>(
       const body =
         "schema" in contract
           ? convert(contract.schema, `${operationId}_${status}`, "output")
-          : { type: "string" };
+          : contract.kind === "bytes"
+            ? { type: "string", format: "binary" }
+            : { type: "string" };
       const media =
         contract.kind === "json"
           ? "application/json"
@@ -157,11 +161,23 @@ export function createContractRouteRegistrar<const R extends Registry>(
       } as FastifyContextConfig & { auth: ApiOperation["auth"]; adminOptionalBody?: boolean },
       schema: {
         operationId,
+        ...(Object.values(responses).some((c) => c.kind === "bytes" && c.nativeDownload)
+          ? { "x-openmapx-native-download": true }
+          : {}),
         tags: [family.tag],
         ...requestSchemas,
         response: responseSchemas,
+        ...(operation.requestBody
+          ? {
+              body: { type: "string", format: "binary" },
+              consumes: [operation.requestBody.mediaType],
+            }
+          : {}),
       },
       ...(family.bodyLimit ? { bodyLimit: family.bodyLimit } : {}),
+      onRequest: async (_request, reply) => {
+        bindAdminByteResponse(reply, responses);
+      },
       validatorCompiler: () => (value) => ({ value }),
       preValidation: family.validationPhase === "preValidation" ? validateRequest : undefined,
       preHandler:
@@ -175,6 +191,10 @@ export function createContractRouteRegistrar<const R extends Registry>(
         ({ httpStatus }) =>
         (payload) => {
           const status = Number(httpStatus);
+          if (responses[status]?.kind === "bytes")
+            throw new Error(
+              "Administration byte response must be streamed through its send adapter",
+            );
           let wire: unknown;
           if (payload instanceof Error) {
             const error = payload as Error & { error?: unknown; code?: unknown };
@@ -206,6 +226,14 @@ export function createContractRouteRegistrar<const R extends Registry>(
           );
           if (!contract.headers.safeParse(normalized).success)
             throw new Error("Invalid administration response headers");
+        }
+        if (contract.kind === "bytes") {
+          if (
+            !isAdminByteResponse(reply) ||
+            reply.getHeader("content-type")?.toString().split(";")[0] !== contract.mediaType
+          )
+            throw Error("Administration bytes require the canonical send adapter");
+          return payload;
         }
         if (contract.kind === "text-download") {
           const media = reply

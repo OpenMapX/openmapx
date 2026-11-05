@@ -23,4 +23,9 @@ export type PostApiDataManagerTransitSources409 =
       reason: "in-flight" | "duplicate-idempotency-key";
       /** @nullable */
       existingJobId: string | null;
+    }
+  | {
+      ok: false;
+      error: string;
+      code: "source_action_not_allowed";
     };

@@ -1,4 +1,4 @@
-import { apiClient, apiUrl } from "./client";
+import { type ApiClient, apiClient, apiUrl } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export type PrivacyRequestKind = "access" | "portability" | "access_and_portability";
@@ -149,9 +149,17 @@ export type PrivacyAdminRole = "privacy_admin" | "user";
 /** Full-admin-only least-privilege role mutation.  This intentionally does
  * not use Better Auth's broad admin plugin, whose role union is limited to
  * `admin` and `user` and would make it too easy to bypass the privacy boundary. */
-export function setPrivacyAdminRole(userId: string, role: PrivacyAdminRole) {
+export function setPrivacyAdminRole(
+  userId: string,
+  role: PrivacyAdminRole,
+  options?: { client?: ApiClient },
+) {
   const action = role === "privacy_admin" ? "grant" : "revoke";
-  return apiClient.post<{ userId: string; role: PrivacyAdminRole; changed: boolean }>(
+  return (options?.client ?? apiClient).post<{
+    userId: string;
+    role: PrivacyAdminRole;
+    changed: boolean;
+  }>(
     `${API_ENDPOINTS.privacyAdminRoles}/${encodeURIComponent(userId)}/${action}`,
     {},
     mutationOptions(),

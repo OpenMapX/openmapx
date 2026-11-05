@@ -13,31 +13,37 @@ beforeAll(async () => {
 const text = (name: string) => Buffer.from(files.get(name) ?? []).toString("utf8");
 
 describe("the ops-agent bundle's catalog pins", () => {
-  it.each(["gbfs-catalog.lock.json", "transitous.lock.json"])(
-    "carries the release's %s and reads nothing else by that name",
-    (name) => {
-      const pattern = new RegExp(`^assets/[a-f0-9]{12}-${name.replaceAll(".", "\\.")}$`);
-      const assets = [...files.keys()].filter((file) => pattern.test(file));
-      expect(assets).toHaveLength(1);
-      const [asset] = assets as [string];
-      expect(Buffer.from(files.get(asset) ?? []).toString("utf8")).toBe(
-        readFileSync(join(ROOT, "infra", "docker", name), "utf8"),
-      );
-      // Every mention of the file in the agent's and the CLI's code is the asset.
-      const mention = new RegExp(`[^"'\`\\s]*${name.replaceAll(".", "\\.")}`, "g");
-      for (const entry of ["agent.mjs", "cli.mjs"]) {
-        const mentions = text(entry).match(mention) ?? [];
-        expect(
-          mentions.filter((found) => found !== `./${asset}`),
-          entry,
-        ).toEqual([]);
-      }
-    },
-  );
+  it.each(["transitous.lock.json"])("embeds the release's immutable %s baseline", (name) => {
+    const pattern = new RegExp(`^assets/[a-f0-9]{12}-${name.replaceAll(".", "\\.")}$`);
+    const assets = [...files.keys()].filter((file) => pattern.test(file));
+    expect(assets).toHaveLength(1);
+    const [asset] = assets as [string];
+    expect(Buffer.from(files.get(asset) ?? []).toString("utf8")).toBe(
+      readFileSync(join(ROOT, "infra", "docker", name), "utf8"),
+    );
 
-  it("reads no Transitous proposal from the checkout", () => {
-    for (const entry of ["agent.mjs", "cli.mjs"]) {
-      expect(text(entry), entry).not.toContain("transitous.lock.proposed.json");
-    }
+    // Paired-pin management intentionally retains fixed compatibility import
+    // paths. Runtime consumers still receive this immutable release baseline;
+    // activation and proposal isolation are covered by the actual catalog store.
+    for (const entry of ["agent.mjs"]) expect(text(entry), entry).toContain(`./${asset}`);
+  });
+
+  it("omits unused GBFS release files when consumers read the managed pair", () => {
+    expect([...files.keys()].filter((name) => name.endsWith("-gbfs-catalog.lock.json"))).toEqual(
+      [],
+    );
+    expect(text("cli.mjs")).toContain("catalogPins.inspect");
+  });
+
+  it("packages no mutable checkout proposal as a release asset", () => {
+    expect([...files.keys()].filter((name) => name.includes("transitous.lock.proposed"))).toEqual(
+      [],
+    );
+    const runtime = readFileSync(
+      join(ROOT, "apps/ops-agent/src/transitous-lock-runtime.ts"),
+      "utf8",
+    );
+    expect(runtime).toContain("readCatalogPinSet");
+    expect(runtime).toContain("retainCatalogProposal");
   });
 });

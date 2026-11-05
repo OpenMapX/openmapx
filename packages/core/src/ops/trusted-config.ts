@@ -1,6 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import z from "zod/v4";
-import { type OpsOperation, type OpsRole, opsOperationSchema } from "./contract";
+import { platformConfigurationSchema } from "../services/platform-configuration";
+import {
+  isTrustedConfigurationApplyOperation,
+  type OpsOperation,
+  type OpsRole,
+  opsOperationSchema,
+} from "./contract";
 import { opsOperationFingerprint } from "./fingerprint";
 
 export const OPS_TRUSTED_CONFIG_MAX_BYTES = 512 * 1024;
@@ -120,6 +126,12 @@ function uniqueBy<T>(values: readonly T[], identity: (value: T) => string): bool
 export const trustedConfigurationPayloadSchema = z
   .strictObject({
     domain,
+    platform: platformConfigurationSchema.optional(),
+    // Opaque encrypted-row identity, never a digest of a credential value.
+    transitCredentialsRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     // A new selection, carried by `serviceSelection.apply` only; every other
     // apply renders the operator's selection as it stands.
     selectedRoots: z.array(serviceId).max(256).optional(),
@@ -209,9 +221,7 @@ function snapshotMac(snapshot: AuthenticatedSnapshot, token: string): string {
 }
 
 function revisionFromOperation(operation: OpsOperation): string | undefined {
-  return "revisionId" in operation && typeof operation.revisionId === "string"
-    ? operation.revisionId
-    : undefined;
+  return isTrustedConfigurationApplyOperation(operation) ? operation.revisionId : undefined;
 }
 
 function deepFreeze<T>(value: T): T {

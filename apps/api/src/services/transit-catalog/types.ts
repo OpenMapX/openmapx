@@ -3,6 +3,8 @@ import type { Licensing } from "@openmapx/mobility-core/licensing";
 
 export interface TransitCatalogFeed {
   id: string;
+  installedSourceId?: string | null;
+  discoveryIds?: string[];
   name: string;
   source: "transitous" | "mobilitydb" | "manual";
   countryCode: string;

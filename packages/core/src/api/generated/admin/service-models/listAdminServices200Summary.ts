@@ -16,5 +16,10 @@ export type ListAdminServices200Summary = {
    * @minimum 0
    * @maximum 9007199254740991
    */
+  unknown: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   total: number;
 };

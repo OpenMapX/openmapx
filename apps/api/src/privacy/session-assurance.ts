@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { currentFactorEntryHadSession } from "../account/factor-entry-context";
 import { db as defaultDb } from "../db/index.js";
 import type { SessionAuthMethod } from "../db/privacy-auth-schema.js";
 import { sessionAuthAssurance } from "../db/schema.js";
@@ -34,11 +35,12 @@ export interface SessionAssuranceDatabase {
 }
 
 export async function recordSessionAuthAssurance(input: {
-  database?: typeof defaultDb;
+  database?: Pick<SessionAssuranceDatabase, "insert">;
   sessionId: string;
   userId: string;
   method: SessionAuthMethod;
   authenticatedAt?: Date;
+  originIndependentPasswordLogin?: boolean;
 }): Promise<void> {
   const database = input.database ?? defaultDb;
   const authenticatedAt = input.authenticatedAt ?? new Date();
@@ -49,11 +51,17 @@ export async function recordSessionAuthAssurance(input: {
       userId: input.userId,
       method: input.method,
       authenticatedAt,
+      originIndependentPasswordLogin: input.originIndependentPasswordLogin === true,
       createdAt: authenticatedAt,
     })
     .onConflictDoUpdate({
       target: sessionAuthAssurance.sessionId,
-      set: { userId: input.userId, method: input.method, authenticatedAt },
+      set: {
+        userId: input.userId,
+        method: input.method,
+        authenticatedAt,
+        originIndependentPasswordLogin: input.originIndependentPasswordLogin === true,
+      },
     });
 }
 
@@ -82,7 +90,7 @@ export async function getSessionAuthAssurance(
 export async function recordSessionFromAuthContext(
   session: { id: string; userId: string; createdAt?: Date },
   context: { path?: string; body?: unknown } | null | undefined,
-  database: typeof defaultDb = defaultDb,
+  database: Pick<SessionAssuranceDatabase, "insert"> = defaultDb,
 ): Promise<boolean> {
   const method = assuranceMethodForAuthPath(context?.path);
   if (!method) return false;
@@ -92,6 +100,10 @@ export async function recordSessionFromAuthContext(
     userId: session.userId,
     method,
     authenticatedAt: session.createdAt ?? new Date(),
+    originIndependentPasswordLogin:
+      method === "password" ||
+      ((method === "password_totp" || method === "password_recovery") &&
+        currentFactorEntryHadSession() === false),
   });
   return true;
 }

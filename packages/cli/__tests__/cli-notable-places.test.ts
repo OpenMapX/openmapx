@@ -1,6 +1,12 @@
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerDataCommands } from "../src/commands/data";
+import { runCliDataStep } from "../src/lib/data-execution";
+import { unitDataCommandResult } from "./helpers/data-command-result";
+
+// Command presentation/result-policy unit boundary. Durable POST/GET identity,
+// signed containment and SQL ownership belong to the real execution suites.
+vi.mock("../src/lib/data-execution", () => ({ runCliDataStep: vi.fn() }));
 
 function makeProgram(): Command {
   const program = new Command();
@@ -8,41 +14,21 @@ function makeProgram(): Command {
   registerDataCommands(program);
   return program;
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.mocked(runCliDataStep).mockReset();
+});
 
 describe("data notable-places CLI", () => {
-  it("builds the index and forwards validated progress messages", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (url) => {
-      expect(String(url)).toMatch(/\/notable-places\/build$/);
-      return new Response(
-        [
-          { event: "progress", stage: "names", message: "Fetching labels in en" },
-          {
-            event: "done",
-            ok: true,
-            epoch: "e1",
-            source: "https://qlever.dev/api/wikidata",
-            minSitelinks: 8,
-            placeCount: 150_000,
-            nameCount: 790_000,
-          },
-        ]
-          .map((event) => JSON.stringify(event))
-          .join("\n"),
-        {
-          headers: {
-            "content-type": "application/x-ndjson",
-            "cache-control": "no-cache",
-            "x-accel-buffering": "no",
-          },
-        },
-      );
-    });
+  it("builds the index through the durable command and prints its execution identity", async () => {
+    vi.mocked(runCliDataStep).mockResolvedValueOnce(unitDataCommandResult("notable-places-build"));
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
     await makeProgram().parseAsync(["data", "notable-places", "build"], { from: "user" });
     const printed = output.mock.calls.flat().join(" ");
-    expect(printed).toContain("Fetching labels in en");
-    expect(printed).toContain("150000 places");
+    expect(vi.mocked(runCliDataStep).mock.calls[0]?.[0]).toEqual({ kind: "notable-places-build" });
+    expect(printed).toContain(
+      "Notable places published; execution 00000000-0000-4000-8000-000000000001",
+    );
   });
   it("prints the published snapshot", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

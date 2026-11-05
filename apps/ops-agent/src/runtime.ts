@@ -1,12 +1,31 @@
+import type {
+  ArtifactTargetLease,
+  BorrowedArtifactTargetLease,
+  VerifiedExecutionAuthority,
+} from "@openmapx/core/build-artifacts";
 import type { TrustedConfigurationPayload } from "@openmapx/core/ops";
 import {
+  type ExecutionRef,
   OPS_OPERATION_KINDS,
   OPS_PUBLIC_ERROR_MESSAGES,
+  type OpsErrorClass,
+  type OpsFailureResult,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
   parseOpsResult,
+  type ServiceBatchResult,
 } from "@openmapx/core/ops";
+
+export class OpsExecutionFailure extends Error {
+  constructor(
+    readonly errorClass: OpsErrorClass,
+    readonly failureResult: OpsFailureResult,
+  ) {
+    super(OPS_PUBLIC_ERROR_MESSAGES[errorClass]);
+    this.name = "OpsExecutionFailure";
+  }
+}
 
 export class OpsNotWiredError extends Error {
   constructor() {
@@ -31,11 +50,28 @@ export class OpsAgentBusyError extends Error {
 }
 
 export interface OpsExecutionContext {
+  readonly configurationMaintenanceControl?: import("./configuration-maintenance-store").ConfigurationMaintenanceControlOwner;
+  readonly execution: ExecutionRef;
+  readonly artifactLease?: BorrowedArtifactTargetLease;
+  readonly ownedTargetLease?: ArtifactTargetLease;
+  readonly controlAuthority?: VerifiedExecutionAuthority;
+  commitFeedProxyValidationFailure?(input: {
+    candidateDigest: string;
+    validationExitCode: number;
+    completionDigest: string;
+  }): Promise<void>;
+  markFeedProxyReloadAttempted?(): Promise<void>;
+  /** Installed only by the shared production exclusion; records denial before external creation. */
+  beginServiceCreation?(): void;
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
   claim: OpsTrustedClaim;
   /** Unfinished operations other than this one; replacing the agent would end them. */
   otherActiveOperations?(): number;
+  /** Persist progress before a batch can start its next effect. */
+  checkpointServiceBatch?(result: ServiceBatchResult): Promise<void>;
+  checkpointDataWorkflow?(result: import("@openmapx/core/ops").DataWorkflowReceipt): Promise<void>;
+  ownDataFinalizationLease?(lease: ArtifactTargetLease): void;
 }
 
 export interface OpsTrustedClaim {

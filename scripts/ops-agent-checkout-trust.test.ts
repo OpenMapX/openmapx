@@ -16,14 +16,17 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
-import { OpsClient } from "@openmapx/core/ops";
+import {
+  createControlRootOperationKey,
+  OpsClient,
+  type OpsOperation,
+  type OpsOperationKind,
+  type OpsResultFor,
+  opsExecutionBudget,
+} from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  createDurableOpsKey,
-  executeAndWait,
-  executeTrustedConfigurationAndWait,
-} from "../apps/api/src/services/ops-client";
+import { waitForOpsResult } from "../apps/api/src/services/ops-client";
 import {
   consumePublishedTrustedConfiguration,
   publishTrustedConfigurationSnapshot,
@@ -58,7 +61,7 @@ afterAll(() => {
   for (const agent of agents.splice(0)) agent.kill("SIGKILL");
   if (outdir) rmSync(outdir, { recursive: true, force: true });
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
+}, 120_000);
 
 const secret = () => randomBytes(24).toString("base64url");
 
@@ -84,6 +87,18 @@ async function umask002Checkout(): Promise<string> {
     ].join("\n"),
     { mode: 0o600 },
   );
+  // Durable control keys require non-group-writable authority ancestors.
+  // This is an explicit operator bootstrap step, not application chmod of a
+  // shared checkout. Service/integration source trees retain umask-002 modes.
+  const unsafe = await cli(checkout, "compose", "render");
+  expect(unsafe.stderr).toContain("Directory authority changed or unsafe");
+  for (const directory of [
+    checkout,
+    join(checkout, "infra"),
+    join(checkout, "infra", "docker"),
+    join(checkout, "infra", "docker", "secrets"),
+  ])
+    chmodSync(directory, 0o700);
   return checkout;
 }
 
@@ -175,10 +190,32 @@ async function startAgent(checkout: string): Promise<RunningAgent> {
   return { port, output: () => output, stop: () => agent.kill("SIGTERM") };
 }
 
-/**
- * Publishes a trusted-configuration request as app-api does, asks the agent
- * to render it, and expects a committed generation.
- */
+/** The fixed local CLI's truthful bearer-root identity; no API job is invented. */
+function localRootIdentity(kind: OpsOperationKind) {
+  const requestedDeadlineAt = Date.now() + opsExecutionBudget(kind).processMs;
+  return {
+    operationKey: createControlRootOperationKey({
+      notAfter: requestedDeadlineAt,
+      nonce: randomBytes(16),
+    }),
+    execution: { requestedDeadlineAt },
+  };
+}
+
+async function executeLocalRoot<K extends OpsOperationKind>(
+  client: OpsClient,
+  operation: Extract<OpsOperation, { kind: K }>,
+  identity = localRootIdentity(operation.kind),
+): Promise<OpsResultFor<K>> {
+  const submitted = await client.execute<K>(operation, identity);
+  if (submitted.execution === "sync") return submitted.value;
+  return waitForOpsResult<K>(client, operation.kind, submitted, {
+    execution: identity.execution,
+    observerDeadlineAt: identity.execution.requestedDeadlineAt,
+  });
+}
+
+/** Publishes the real sealed payload and current source witness over agent HTTP. */
 async function expectTrustedConfigurationCommitted(
   checkout: string,
   agent: RunningAgent,
@@ -190,7 +227,11 @@ async function expectTrustedConfigurationCommitted(
   const tokenFile = join(infra, "secrets", "ops-agent-api-token");
   const token = readFileSync(tokenFile, "utf8").trim();
   const directory = statSync(trustedConfig);
-  const operationKey = createDurableOpsKey("stack.render", name);
+  const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
+  const inspected = await client.execute({ kind: "configuration.sources.inspect" });
+  if (inspected.execution !== "sync") throw Error("Expected a synchronous source inspection");
+  const identity = localRootIdentity("stack.render");
+  const { operationKey } = identity;
   const before = services.currentConfigurationGeneration(infra);
   const sealed = await publishTrustedConfigurationSnapshot({
     directory: trustedConfig,
@@ -202,6 +243,8 @@ async function expectTrustedConfigurationCommitted(
       kind: "stack.render",
       revisionId,
       expectedCurrentRevisionId: before,
+      expectedSourceRevision: inspected.value.sourceRevision,
+      coordinatorMode: "require-running",
     }),
     payload: {
       domain: `${name}.example.test`,
@@ -211,13 +254,8 @@ async function expectTrustedConfigurationCommitted(
       ...payload,
     },
   });
-  const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
   const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
-    executeTrustedConfigurationAndWait(
-      client,
-      sealed.operation as Parameters<typeof executeTrustedConfigurationAndWait>[1],
-      operationKey,
-    ),
+    executeLocalRoot(client, sealed.operation, identity),
   );
   expect(consumed.submission.status, agent.output()).toBe("fulfilled");
   const result = consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
@@ -237,12 +275,10 @@ describe("a checkout written under umask 002", () => {
   it("gets the bundled agent through startup and a trusted-configuration request", async () => {
     const checkout = await umask002Checkout();
     for (const path of [
-      checkout,
       join(checkout, "services"),
       join(checkout, "services", "valhalla", "service.json"),
       join(checkout, "integrations"),
       join(checkout, "integrations", "air-quality", "manifest.json"),
-      join(checkout, "infra", "docker"),
     ]) {
       expect(statSync(path).mode & 0o020, path).toBe(0o020);
     }
@@ -253,8 +289,8 @@ describe("a checkout written under umask 002", () => {
     const agent = await startAgent(checkout);
     await expectTrustedConfigurationCommitted(checkout, agent, "umask-002-checkout", {});
     agent.stop();
-    // The agent's state is its own directory; a group-writable infra/docker is
-    // fine as it is, and nothing changes its mode.
+    // The explicitly hardened authority ancestors retain their operator modes;
+    // source directories keep their original umask-002 permissions.
     expect(statSync(join(checkout, "infra", "docker")).mode).toBe(infraMode);
   }, 120_000);
 });
@@ -412,15 +448,11 @@ describe("integrations installed through the operations agent", () => {
     // The earlier install is recorded only after its files match its archive.
     const tokenFile = join(infra, "secrets", "ops-agent-api-token");
     const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
-    const adopted = await executeAndWait(
-      client as unknown as Parameters<typeof executeAndWait>[0],
-      {
-        kind: "integration.adopt",
-        integrationId: "legacy",
-        source: { kind: "upload", sha256: legacy },
-      },
-      createDurableOpsKey("integration.adopt", "legacy"),
-    );
+    const adopted = await executeLocalRoot(client, {
+      kind: "catalogIntegration.adopt",
+      integrationId: "legacy",
+      source: { kind: "upload", sha256: legacy },
+    });
     expect(adopted).toEqual({ integrationId: "legacy", status: "recorded", reason: null });
 
     await expectTrustedConfigurationCommitted(checkout, agent, "installed-integrations", {

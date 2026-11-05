@@ -16,5 +16,10 @@ export type GetAdminOverview200Services = {
    * @minimum 0
    * @maximum 9007199254740991
    */
+  unknown: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
   unhealthy: number;
 } | null;

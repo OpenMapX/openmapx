@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { verifyCandidateManifest } from "./candidate.js";
+import { verifyCandidateManifestAsync } from "./candidate.js";
 import { runFunctionalProbes, writeCapabilitySnapshot } from "./functional-probes.js";
 import { healthUrl } from "./motis-endpoints.js";
 import { parseIntEnv, pollUntilHealthy } from "./motis-probe.js";
@@ -36,7 +36,7 @@ export const run: StageFn = async (ctx) => {
   }
 
   try {
-    const manifest = verifyCandidateManifest(ctx.motisStagingDataDir);
+    const manifest = await verifyCandidateManifestAsync(ctx.motisStagingDataDir, ctx.abortSignal);
     const baseUrl = process.env.MOTIS_STAGING_URL ?? DEFAULT_STAGING_URL;
     const importDeadline =
       Date.now() + parseIntEnv("MOTIS_IMPORT_TIMEOUT_MS", DEFAULT_IMPORT_TIMEOUT_MS);
@@ -51,7 +51,7 @@ export const run: StageFn = async (ctx) => {
     }
 
     // Re-verify after the long import wait: no candidate input may change once probing begins.
-    verifyCandidateManifest(ctx.motisStagingDataDir);
+    await verifyCandidateManifestAsync(ctx.motisStagingDataDir, ctx.abortSignal);
     const report = await runFunctionalProbes(baseUrl, manifest, Date.now() + FUNCTIONAL_BUDGET_MS);
     if (!report.ok) {
       return finish(

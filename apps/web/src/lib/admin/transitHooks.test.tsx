@@ -57,6 +57,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const reviewed = {
+  countries: ["de"],
+  preflightId: "00000000-0000-4000-8000-000000000001",
+  fingerprint: "a".repeat(64),
+};
 describe("transit administration acquisition", () => {
   it("rejects a malformed successful state instead of caching an asserted DTO", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({}));
@@ -73,7 +78,7 @@ describe("transit administration acquisition", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useSyncTransit(), { wrapper });
     await act(async () => {
-      await expect(result.current.mutateAsync({})).rejects.toThrow();
+      await expect(result.current.mutateAsync(reviewed)).rejects.toThrow();
     });
     expect(invalidate).not.toHaveBeenCalled();
   });
@@ -140,7 +145,7 @@ describe("transit administration acquisition", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, initValue) => {
       const init = initValue as RequestInit | undefined;
       expect(JSON.parse(init?.body as string)).toEqual({
-        countries: ["de"],
+        ...reviewed,
         idempotencyKey: "attempt-1",
       });
       return Response.json({ ok: true, jobId: "job-1", status: "started" }, { status: 202 });
@@ -150,7 +155,7 @@ describe("transit administration acquisition", () => {
     const { result } = renderHook(() => useSyncTransit(), { wrapper });
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ countries: ["de"], idempotencyKey: "attempt-1" }),
+        result.current.mutateAsync({ ...reviewed, idempotencyKey: "attempt-1" }),
       ).resolves.toMatchObject({ jobId: "job-1" });
     });
     expect(invalidate.mock.calls).toEqual([
@@ -169,7 +174,7 @@ describe("transit administration acquisition", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useSyncTransit(), { wrapper });
     await act(async () => {
-      await expect(result.current.mutateAsync({})).rejects.toMatchObject({ status: 409 });
+      await expect(result.current.mutateAsync(reviewed)).rejects.toMatchObject({ status: 409 });
     });
     expect(invalidate).not.toHaveBeenCalled();
   });

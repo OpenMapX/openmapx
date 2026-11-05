@@ -29,15 +29,17 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials, proxyImageUrl, setPrivacyAdminRole } from "@openmapx/core";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getInitials, proxyImageUrl } from "@openmapx/core";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { useClientPagination } from "../shared/tableHooks";
+import { AccountRecoveryActions } from "./AccountRecoveryActions";
 import { BanUserDialog } from "./BanUserDialog";
 
 interface AdminUser {
@@ -54,17 +56,15 @@ interface AdminUser {
   updatedAt: Date | string;
 }
 
-interface SessionRecord {
-  id: string;
-  token: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-  createdAt: Date | string;
-  expiresAt: Date | string;
-}
-
-function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
-  const qc = useQueryClient();
+function ProfileTab({
+  user,
+  isSelf,
+  impersonate,
+}: {
+  user: AdminUser;
+  isSelf: boolean;
+  impersonate: { mutate: () => void; isPending: boolean; error: Error | null };
+}) {
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
@@ -75,42 +75,9 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
 
   const dirty = name !== user.name || email !== user.email || role !== (user.role ?? "user");
 
-  const updateUser = useMutation({
-    mutationFn: async () => {
-      if (name !== user.name) {
-        await authClient.admin.updateUser({ userId: user.id, data: { name } });
-      }
-      if (role !== (user.role ?? "user")) {
-        if (role === "privacy_admin" || (user.role === "privacy_admin" && role === "user")) {
-          await setPrivacyAdminRole(user.id, role as "privacy_admin" | "user");
-        } else {
-          await authClient.admin.updateUser({ userId: user.id, data: { role } });
-        }
-      }
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user", user.id] }),
-  });
-
-  const impersonate = useMutation({
-    mutationFn: () => authClient.admin.impersonateUser({ userId: user.id }),
-    onSuccess: () => {
-      router.push("/");
-      router.refresh();
-    },
-  });
-
-  const unban = useMutation({
-    mutationFn: () => authClient.admin.unbanUser({ userId: user.id }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user", user.id] }),
-  });
-
-  const deleteUser = useMutation({
-    mutationFn: () => authClient.admin.removeUser({ userId: user.id }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
-      router.push("/admin/users");
-    },
-  });
+  const updateUser = useAccountAction(user.id);
+  const unban = useAccountAction(user.id);
+  const deleteUser = useAccountAction(user.id, { onSuccess: () => router.push("/admin/users") });
 
   return (
     <Stack
@@ -118,6 +85,11 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
         gap: 3,
       }}
     >
+      {(updateUser.error || impersonate.error || unban.error || deleteUser.error) && (
+        <Alert severity="error">
+          {(updateUser.error || impersonate.error || unban.error || deleteUser.error)?.message}
+        </Alert>
+      )}
       <Stack
         direction="row"
         sx={{
@@ -160,6 +132,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
         <TextField
           label="Full Name"
           value={name}
+          disabled={updateUser.isPending}
           onChange={(e) => setName(e.target.value)}
           size="small"
         />
@@ -174,14 +147,15 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
         <FormControl size="small">
           <InputLabel>Role</InputLabel>
           <Select
+            inputProps={{ "aria-label": "Role" }}
             value={role}
             label="Role"
             onChange={(e) => setRole(e.target.value)}
-            disabled={isSelf}
+            disabled={isSelf || updateUser.isPending}
           >
             <MenuItem value="user">User</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
-            {user.role !== "admin" && <MenuItem value="privacy_admin">Privacy admin</MenuItem>}
+            <MenuItem value="privacy_admin">Privacy admin</MenuItem>
           </Select>
         </FormControl>
         {dirty && (
@@ -189,7 +163,13 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
             variant="contained"
             size="small"
             sx={{ alignSelf: "flex-start" }}
-            onClick={() => updateUser.mutate()}
+            onClick={() =>
+              updateUser.mutate(async (client) => {
+                if (name !== user.name) await client.updateName(user.id, name);
+                if (role !== (user.role ?? "user"))
+                  await client.changeRole(user.id, role, user.role ?? "user");
+              })
+            }
             disabled={updateUser.isPending}
           >
             Save Changes
@@ -245,6 +225,8 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
         </Stack>
       </Box>
       <Divider />
+      <AccountRecoveryActions user={user} />
+      <Divider />
       <Stack
         direction="row"
         sx={{
@@ -257,7 +239,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
             startIcon={<SupervisorAccountIcon />}
             variant="outlined"
             size="small"
-            onClick={() => impersonate.mutate()}
+            onClick={impersonate.mutate}
             disabled={impersonate.isPending}
           >
             Impersonate
@@ -268,7 +250,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
             startIcon={<CheckCircleIcon />}
             variant="outlined"
             size="small"
-            onClick={() => unban.mutate()}
+            onClick={() => unban.mutate((client) => client.unban(user.id))}
             disabled={unban.isPending}
           >
             Unban
@@ -307,7 +289,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
         confirmLabel="Delete"
         confirmColor="error"
         loading={deleteUser.isPending}
-        onConfirm={() => deleteUser.mutate()}
+        onConfirm={() => deleteUser.mutate((client) => client.remove(user.id))}
         onCancel={() => setDeleteOpen(false)}
       />
     </Stack>
@@ -315,25 +297,15 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
 }
 
 function SessionsTab({ userId }: { userId: string }) {
-  const qc = useQueryClient();
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "user-sessions", userId],
-    queryFn: async () => {
-      const res = await authClient.admin.listUserSessions({ userId });
-      return (res.data?.sessions ?? []) as unknown as SessionRecord[];
-    },
+  const account = useAccountAdmin();
+  const { data, isLoading, error } = useQuery({
+    queryKey: account.keys.sessions(userId),
+    enabled: Boolean(account.actorId),
+    retry: false,
+    queryFn: () => account.client.sessions(userId),
   });
-
-  const revoke = useMutation({
-    mutationFn: (sessionToken: string) => authClient.admin.revokeUserSession({ sessionToken }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user-sessions", userId] }),
-  });
-
-  const revokeAll = useMutation({
-    mutationFn: () => authClient.admin.revokeUserSessions({ userId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user-sessions", userId] }),
-  });
+  const revoke = useAccountAction(userId),
+    revokeAll = useAccountAction(userId);
 
   const sessions = data ?? [];
   const { paged, paginationProps } = useClientPagination(sessions);
@@ -346,6 +318,11 @@ function SessionsTab({ userId }: { userId: string }) {
         gap: 2,
       }}
     >
+      {(error || revoke.error || revokeAll.error) && (
+        <Alert severity="error">
+          {error ? "Could not load sessions." : (revoke.error || revokeAll.error)?.message}
+        </Alert>
+      )}
       <Stack
         direction="row"
         sx={{
@@ -356,7 +333,7 @@ function SessionsTab({ userId }: { userId: string }) {
           variant="outlined"
           size="small"
           color="warning"
-          onClick={() => revokeAll.mutate()}
+          onClick={() => revokeAll.mutate((client) => client.revokeAll(userId))}
           disabled={revokeAll.isPending || (data?.length ?? 0) === 0}
         >
           Revoke All Sessions
@@ -385,7 +362,7 @@ function SessionsTab({ userId }: { userId: string }) {
                         py: 2,
                       }}
                     >
-                      No active sessions
+                      {error ? "Unable to load sessions" : "No active sessions"}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -416,7 +393,7 @@ function SessionsTab({ userId }: { userId: string }) {
                       <Button
                         size="small"
                         color="error"
-                        onClick={() => revoke.mutate(s.token)}
+                        onClick={() => revoke.mutate((client) => client.revoke(s.token))}
                         disabled={revoke.isPending}
                       >
                         Revoke
@@ -459,18 +436,26 @@ function AccountsTab() {
 
 export function UserDetail({ userId }: { userId: string }) {
   const [tab, setTab] = useState(0);
-  const { data: session } = authClient.useSession();
-  const currentUserId = session?.user?.id;
-
-  const { data: userData, isLoading } = useQuery({
-    queryKey: ["admin", "user", userId],
-    queryFn: async () => {
-      const res = await authClient.admin.listUsers({
-        query: { filterField: "id", filterValue: userId, filterOperator: "eq", limit: 1 },
-      });
-      const users = (res.data?.users ?? []) as AdminUser[];
-      return users[0] ?? null;
+  const account = useAccountAdmin();
+  const currentUserId = account.actorId;
+  const router = useRouter();
+  const impersonate = useAccountAction(userId, {
+    impersonation: true,
+    onSuccess: () => {
+      router.push("/");
+      router.refresh();
     },
+  });
+
+  const {
+    data: userData,
+    isLoading,
+    error: readError,
+  } = useQuery({
+    queryKey: account.keys.detail(userId),
+    enabled: Boolean(account.actorId),
+    retry: false,
+    queryFn: () => account.client.get(userId),
   });
 
   if (isLoading) {
@@ -487,6 +472,7 @@ export function UserDetail({ userId }: { userId: string }) {
     );
   }
 
+  if (readError && !userData) return <Alert severity="error">Could not load this account.</Alert>;
   if (!userData) {
     return (
       <Box>
@@ -513,6 +499,11 @@ export function UserDetail({ userId }: { userId: string }) {
         gap: 2,
       }}
     >
+      {readError && (
+        <Alert severity="error">
+          Could not load this account. Showing the last confirmed details.
+        </Alert>
+      )}
       <AdminPageHeader
         title="User details"
         subtitle={`${userData.name} · ${userData.email}`}
@@ -527,8 +518,20 @@ export function UserDetail({ userId }: { userId: string }) {
         </Tabs>
       </Box>
       <Box>
-        {tab === 0 && <ProfileTab user={userData} isSelf={isSelf} />}
-        {tab === 1 && <SessionsTab userId={userId} />}
+        {tab === 0 && (
+          <ProfileTab
+            key={`${account.apiUrl}:${account.actorId}:${userData.id}`}
+            user={userData}
+            isSelf={isSelf}
+            impersonate={{
+              ...impersonate,
+              mutate: () => impersonate.mutate((client) => client.impersonate(userId)),
+            }}
+          />
+        )}
+        {tab === 1 && (
+          <SessionsTab key={`${account.apiUrl}:${account.actorId}:${userId}`} userId={userId} />
+        )}
         {tab === 2 && <AccountsTab />}
       </Box>
     </Stack>

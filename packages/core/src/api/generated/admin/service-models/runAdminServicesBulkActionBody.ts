@@ -3,19 +3,42 @@
 
 export type RunAdminServicesBulkActionBody =
   | {
-      action: "start" | "stop" | "restart" | "update";
+      action: "start" | "stop" | "restart";
+      /** @items.minLength 1 */
+      serviceIds?: string[];
       /**
-       * @minItems 1
+       * @maxItems 64
        * @items.minLength 1
+       * @items.maxLength 64
        */
-      serviceIds: string[];
+      presetIds?: string[];
+      continueOnError?: boolean;
+    }
+  | {
+      action: "update";
+      /** @items.minLength 1 */
+      serviceIds?: string[];
+      /**
+       * @maxItems 64
+       * @items.minLength 1
+       * @items.maxLength 64
+       */
+      presetIds?: string[];
+      noDeps?: boolean;
       continueOnError?: boolean;
     }
   | {
       action: "build";
       /** @items.minLength 1 */
       serviceIds?: string[];
+      /**
+       * @maxItems 64
+       * @items.minLength 1
+       * @items.maxLength 64
+       */
+      presetIds?: string[];
       all?: boolean;
       region?: string;
       continueOnError?: boolean;
+      motisImport?: boolean;
     };

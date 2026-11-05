@@ -44,6 +44,7 @@ COPY --parents \
     packages/hey-api-client-fetch/package.json \
     packages/mobility-core/package.json \
     packages/mobility-formats/package.json \
+    packages/motis-feed-proxy-config/package.json \
     packages/transitous-core/package.json \
     ./
 COPY apps/transitous-runner/package.json apps/transitous-runner/
@@ -61,6 +62,7 @@ COPY --parents \
     packages/hey-api-client-fetch/ \
     packages/mobility-core/ \
     packages/mobility-formats/ \
+    packages/motis-feed-proxy-config/ \
     packages/transitous-core/ \
     ./
 COPY apps/transitous-runner/ apps/transitous-runner/

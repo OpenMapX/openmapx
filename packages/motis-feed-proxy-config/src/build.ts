@@ -152,9 +152,12 @@ export function normalizeFeedProxyVars(raw: unknown): FeedProxyVars {
 export function writeFeedProxyVarsFile(outputPath: string, raw: unknown): FeedProxyVars {
   const normalized = normalizeFeedProxyVars(raw);
   const sorted = Object.fromEntries(sortedEntries(normalized));
-  mkdirSync(dirname(outputPath), { recursive: true });
+  mkdirSync(dirname(outputPath), { recursive: true, mode: 0o700 });
   const temporaryPath = `${outputPath}.tmp-${process.pid}`;
-  writeFileSync(temporaryPath, `${JSON.stringify(sorted, null, 2)}\n`, "utf-8");
+  writeFileSync(temporaryPath, `${JSON.stringify(sorted, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
   renameSync(temporaryPath, outputPath);
   return sorted;
 }
@@ -320,7 +323,7 @@ export async function buildFeedProxyConfig(
     includeGbfsServers: input.includeGbfsServers,
     headerComment: input.headerComment,
   });
-  mkdirSync(dirname(input.outputPath), { recursive: true });
-  writeFileSync(input.outputPath, rendered, "utf-8");
+  mkdirSync(dirname(input.outputPath), { recursive: true, mode: 0o700 });
+  writeFileSync(input.outputPath, rendered, { encoding: "utf-8", mode: 0o600 });
   return { wrote: true, entries: Object.keys(vars).length };
 }

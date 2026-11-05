@@ -10,7 +10,7 @@
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types && pnpm discovery-eval:check-types",
     "check-dead-code": "knip --no-progress --reporter compact && pnpm check-unused-exports",
-    "check-unused-exports": "knip --no-progress --reporter compact --workspace apps/ops-agent --workspace apps/transitous-runner --include exports,types --exclude files,dependencies",
+    "check-unused-exports": "knip --no-progress --reporter compact --include exports,types --exclude files,dependencies --preprocessor ./scripts/knip-service-exports.mjs",
     "check-duplicates": "jscpd --config .jscpd.json --cross-formats js-ts --no-tips apps packages integrations services scripts",
     "check-infrastructure": "bash scripts/check-infrastructure.sh",
     "test": "vitest run",

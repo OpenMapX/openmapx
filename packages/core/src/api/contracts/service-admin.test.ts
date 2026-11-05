@@ -2,12 +2,43 @@ import { createRequire } from "node:module";
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import { describe, expect, it } from "vitest";
 import { OPS_RESULT_SCHEMAS } from "../../ops/contract";
+import { SERVICE_ACTIONS } from "../../ops/service-results";
 import { routeJsonSchema } from "../schema";
 import type { AdminOperation } from "./admin";
 import * as contracts from "./index";
 
+const acquisition = { state: "available", reason: null };
+const actions = Object.fromEntries(
+  SERVICE_ACTIONS.map((action) => [
+    action,
+    { available: false, execution: "direct", reason: "unavailable", workflow: null },
+  ]),
+);
 const at = "2026-10-21T10:00:00.000Z";
 const inventory = [
+  ["pullAdminServiceImages", "POST", "/services/images/pull"],
+  ["clearAdminReleaseSelection", "POST", "/system/release/clear"],
+  ["previewAdminBackupPrune", "POST", "/services/backups/prune/preview"],
+  ["pruneAdminServiceBackups", "POST", "/services/backups/prune"],
+  ["listAdminCacheNamespaces", "GET", "/cache"],
+  ["clearAdminCache", "POST", "/cache/clear"],
+  ["getAdminArtifactTransferCapabilities", "GET", "/artifact-transfers/capabilities"],
+  ["exportAdminArtifactTransfer", "POST", "/artifact-transfers/exports"],
+  ["previewAdminArtifactImport", "POST", "/artifact-transfers/:stageId/preview-import"],
+  ["importAdminArtifactTransfer", "POST", "/artifact-transfers/:stageId/import"],
+  ["validateAdminArtifactTransfer", "POST", "/artifact-transfers/:stageId/validate"],
+  ["listAdminServicePresets", "GET", "/services/presets"],
+  ["renderAdminComposeConfiguration", "POST", "/compose/render"],
+
+  ["listAdminArtifactTransfers", "GET", "/artifact-transfers"],
+  ["createAdminArtifactTransfer", "POST", "/artifact-transfers"],
+  ["getAdminArtifactTransfer", "GET", "/artifact-transfers/:stageId"],
+  ["deleteAdminArtifactTransfer", "DELETE", "/artifact-transfers/:stageId"],
+  ["uploadAdminArtifactTransferContent", "PUT", "/artifact-transfers/:stageId/content"],
+  ["downloadAdminArtifactTransferContent", "GET", "/artifact-transfers/:stageId/content"],
+  ["getAdminPlatformConfiguration", "GET", "/platform/configuration"],
+  ["previewAdminPlatformConfiguration", "POST", "/platform/configuration/preview"],
+  ["applyAdminPlatformConfiguration", "POST", "/platform/configuration/apply"],
   ["listAdminServices", "GET", "/services"],
   ["getAdminService", "GET", "/services/:id"],
   ["getAdminServiceConfig", "GET", "/services/:id/config"],
@@ -110,13 +141,35 @@ const dawarich = {
 };
 const data = {
   osm: {
-    found: true,
-    filename: "synthetic.osm.pbf",
-    sizeBytes: 42,
-    modifiedAt: at,
-    region: "test",
+    items: [
+      {
+        artifactId: "a".repeat(64),
+        filename: "synthetic.osm.pbf",
+        region: "test",
+        sizeBytes: 42,
+        modifiedAt: at,
+        sourceFingerprint: null,
+        fingerprintState: "missing",
+      },
+    ],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    unavailable: false,
   },
-  builds: [{ target: "motis", built: true, builtAt: at }],
+  builds: [
+    {
+      target: "motis",
+      built: false,
+      readiness: "unknown",
+      reason: "Synthetic readiness unavailable",
+      sizeBytes: null,
+      sourceFingerprints: [],
+      buildRecordVersion: null,
+      region: null,
+      runtimeImages: {},
+    },
+  ],
   motisTransitous: {
     configFound: true,
     datasetCount: 1,
@@ -183,16 +236,15 @@ function response(
 }
 
 describe("canonical complete service administration contracts", () => {
-  it("binds the exact30 approved identities, methods, paths and admin auth", () => {
+  it("binds the complete approved identities, methods, paths and admin auth", () => {
     expect(contracts).toHaveProperty("serviceAdminOperations");
     expect(
-      Object.entries(contracts.serviceAdminOperations).map(([id, op]) => [
-        id,
-        op.method,
-        op.path,
-        op.auth,
-      ]),
-    ).toEqual(inventory.map(([id, method, path]) => [id, method, `/api/admin${path}`, "admin"]));
+      Object.entries(contracts.serviceAdminOperations)
+        .map(([id, op]) => [id, op.method, op.path, op.auth])
+        .sort(),
+    ).toEqual(
+      inventory.map(([id, method, path]) => [id, method, `/api/admin${path}`, "admin"]).sort(),
+    );
   });
   it("retains full raw manifests including unknown nested JSON, structured capabilities and omitted defaults", () => {
     expect(serviceManifestSchema.parse(raw).container.gpu).toEqual({
@@ -202,6 +254,8 @@ describe("canonical complete service administration contracts", () => {
     });
     expect(contracts.adminServiceManifestSchema.parse(raw)).toEqual(raw);
     const detail = {
+      acquisition,
+      actions,
       manifest: raw,
       directory: "/synthetic/service",
       isBuiltIn: false,
@@ -268,6 +322,7 @@ describe("canonical complete service administration contracts", () => {
   });
   it("keeps list normalized names and config JSON/source fields complete", () => {
     const summary = {
+      actions,
       id: raw.id,
       name: raw.name,
       version: raw.version,
@@ -279,7 +334,15 @@ describe("canonical complete service administration contracts", () => {
       isBuiltIn: false,
       status: "not-running",
     };
-    const list = { services: [summary], summary: { running: 0, stopped: 1, total: 1 } };
+    const list = {
+      acquisition,
+      services: [summary],
+      capabilityInventory: {
+        recognized: ["routing-engine"],
+        unrecognized: [{ capability: "custom/routing", serviceIds: [raw.id] }],
+      },
+      summary: { running: 0, stopped: 1, unknown: 0, total: 1 },
+    };
     expect(response("listAdminServices", 200, list)).toEqual(list);
     const config = {
       schema: raw.configSchema,
@@ -288,6 +351,23 @@ describe("canonical complete service administration contracts", () => {
         secret: { value: "***", source: "env" },
       },
       envPrefix: "SERVICE_SAMPLE",
+      ownership: {
+        field: {
+          source: "database",
+          secret: false,
+          writable: true,
+          adoption: "direct",
+          reason: null,
+        },
+        secret: {
+          source: "env",
+          secret: true,
+          writable: false,
+          adoption: "host_action_required",
+          reason: "host_environment",
+          envVar: "SERVICE_SAMPLE_SECRET",
+        },
+      },
     };
     expect(response("getAdminServiceConfig", 200, config)).toEqual(config);
     expect(response("getAdminServiceConfig", 200, { ...config, schema: null })).toEqual({
@@ -602,10 +682,11 @@ describe("canonical complete service administration contracts", () => {
     expect(response("rollbackAdminSharedMobility", 200, policy)).toEqual(policy);
     expect(
       response("checkAdminServices", 200, {
+        acquisition,
         statuses: [{ service: "sample", state: "paused" }],
         checkedAt: at,
       }),
-    ).toEqual({ statuses: [{ service: "sample", state: "paused" }], checkedAt: at });
+    ).toEqual({ acquisition, statuses: [{ service: "sample", state: "paused" }], checkedAt: at });
     const deployment = {
       selfHosted: true,
       dockerAvailable: false,

@@ -304,6 +304,22 @@ describe("clearReleaseSelection", () => {
     return { infraDir, path, store };
   }
 
+  it("requires the exact checked release when clearing from a remote preview", async () => {
+    const { infraDir, path, store } = fixture(),
+      before = readFileSync(path, "utf8");
+    await expect(
+      clearReleaseSelection({ infraDir, expectedReleaseId: "different-release" }),
+    ).rejects.toThrow(/changed/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(await clearReleaseSelection({ infraDir, expectedReleaseId: "deadbeef" })).toEqual({
+      path,
+      cleared: true,
+    });
+    expect(readFileSync(join(store, "current.json"), "utf8")).toBe("running-state");
+    await expect(
+      clearReleaseSelection({ infraDir, expectedReleaseId: "deadbeef" }),
+    ).rejects.toThrow(/changed/);
+  });
   it("clears only the local overlay idempotently and retains running release evidence", async () => {
     const { infraDir, path, store } = fixture();
     const evidence = services.releaseStatePaths(infraDir).evidence;
@@ -327,6 +343,11 @@ describe("clearReleaseSelection", () => {
     expect(readdirSync(store)).toEqual(["current.json"]);
   });
 
+  it("retains explicit host clearing of malformed overlays without reading unbounded bytes", async () => {
+    const { infraDir, path } = fixture();
+    writeFileSync(path, Buffer.alloc(100000, 255));
+    await expect(clearReleaseSelection({ infraDir })).resolves.toEqual({ path, cleared: true });
+  });
   it("refuses an active transaction even if the overlay is absent", async () => {
     const { infraDir, path, store } = fixture();
     writeFileSync(join(store, "transaction.json"), "pending transaction");
@@ -370,7 +391,7 @@ describe("clearReleaseSelection", () => {
   it("refuses an overlay that is group-writable or someone else's", async () => {
     const { infraDir, path } = fixture();
     chmodSync(path, 0o620);
-    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/group or others/);
+    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/unsafe/i);
     chmodSync(path, 0o600);
     // Tests cannot chown: inject the uid the state must belong to instead.
     const foreign = (process.geteuid?.() ?? 0) + 1;
@@ -476,6 +497,48 @@ it("rejects a malformed existing overlay without replacing it or reaching the re
   await expect(ensureReleaseOverlay({ infraDir, docker })).rejects.toThrow(/malformed/);
   expect(readFileSync(path, "utf8")).toBe("services: {}\n");
   expect(docker).not.toHaveBeenCalled();
+});
+
+it("uses the applied UI selector on each invocation without changing process environment", async () => {
+  const { services } = await import("@openmapx/core/server");
+  temp = mkdtempSync(join(tmpdir(), "omx-applied-release-"));
+  const infraDir = join(temp, "infra", "docker");
+  mkdirSync(infraDir, { recursive: true });
+  const input = {
+    domain: "maps.example.test",
+    selectedRoots: [],
+    serviceConfigs: [],
+    integrationConfigs: [],
+    serviceSecrets: [],
+  };
+  vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
+  vi.stubEnv("OPENMAPX_RELEASE", "local");
+  try {
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, releaseSelector: { source: "database", value: "local" } },
+      },
+    });
+    const docker = fakeDocker();
+    await expect(ensureReleaseOverlay({ docker })).resolves.toEqual({ status: "disabled" });
+    expect(docker).not.toHaveBeenCalled();
+    await services.commitConfigurationGeneration({
+      infraDir,
+      services: [],
+      input: {
+        ...input,
+        platform: { version: 1, releaseSelector: { source: "database", value: "main" } },
+      },
+    });
+    await resolveReleaseManifest(docker);
+    expect(docker).toHaveBeenCalledWith(["pull", "ghcr.io/openmapx/release-manifest:main"]);
+    expect(process.env.OPENMAPX_RELEASE).toBe("local");
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 describe("an earlier release's selection that did not come over", () => {

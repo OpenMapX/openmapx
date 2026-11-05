@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createCatalogPinSet } from "../catalog-pins/generation";
 import {
   authorizeOpsOperation,
   OPS_KIND_POLICIES,
@@ -8,6 +9,7 @@ import {
   type OpsOperation,
   type OpsRole,
   opsResourceId,
+  parseBoundedOpsResult,
   parseOpsRequest,
   parseOpsResult,
   redactedOpsError,
@@ -16,6 +18,24 @@ import { configurationProjectionFingerprint } from "./fingerprint";
 
 const issuedAt = "2026-08-23T18:00:00.000Z";
 const expiresAt = "2026-08-23T18:00:20.000Z";
+const maintenanceBinding = {
+  maintenanceId: "11111111-1111-4111-8111-111111111111",
+  candidateId: "22222222-2222-4222-8222-222222222222",
+  applyOperationKey: "opk1_originalApply000001",
+  applyOperationFingerprint: "a".repeat(64),
+  expectedCurrentRevisionId: null,
+  revisionId: `cfg1_${"b".repeat(43)}`,
+  expectedSourceRevision: "33333333-3333-4333-8333-333333333333",
+  coordinatorMode: "ensure-running" as const,
+  followUp: "render-only" as const,
+};
+const maintenanceIdentity = {
+  maintenanceId: maintenanceBinding.maintenanceId,
+  candidateId: maintenanceBinding.candidateId,
+  prepareOperationKey: "opk1_originalPrepare0001",
+  prepareFingerprint: "c".repeat(64),
+  planDigest: "d".repeat(64),
+};
 
 function request(operation: unknown, extra: Record<string, unknown> = {}) {
   return {
@@ -29,10 +49,196 @@ function request(operation: unknown, extra: Record<string, unknown> = {}) {
   };
 }
 
+const transferIdentity = {
+  executionId: "job1_abcdefghijklmnop",
+  operationKey: "opk1_abcdefghijklmnop",
+  fingerprint: "a".repeat(64),
+  executionDeadlineAt: "2026-10-29T00:00:00.000Z",
+};
+const transferClaim = {
+  claimId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  stageId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  ownerId: "admin",
+  purpose: "prepared-artifact" as const,
+  use: "validate-build" as const,
+  identity: transferIdentity,
+  sha256: "a".repeat(64),
+  bytes: 4,
+};
 const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
+  "artifactTransfer.capabilities": { kind: "artifactTransfer.capabilities", ownerId: "admin" },
+  "artifactTransfer.export": {
+    kind: "artifactTransfer.export",
+    serviceId: "osrm",
+    ownerId: "admin",
+    expectedArtifactFingerprint: "a".repeat(64),
+  },
+  "artifactTransfer.previewImport": {
+    kind: "artifactTransfer.previewImport",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+  },
+  "artifactTransfer.import": {
+    kind: "artifactTransfer.import",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    expectedSha256: "a".repeat(64),
+    previewFingerprint: "b".repeat(64),
+    expectedCurrentRevisionId: null,
+  },
+  "configurationHandoff.prepare": {
+    kind: "configurationHandoff.prepare",
+    handoffId: "77777777-7777-4777-8777-777777777777",
+    maintenanceId: maintenanceBinding.maintenanceId,
+    candidateId: maintenanceBinding.candidateId,
+    planDigest: "d".repeat(64),
+    previewFingerprint: "e".repeat(64),
+    expectedCurrentRevisionId: maintenanceBinding.revisionId,
+    serviceIds: ["app-api"],
+    expectedImageIdentities: { "app-api": `sha256:${"1".repeat(64)}` },
+    mode: { kind: "configuration" },
+  },
+  "configurationHandoff.inspect": {
+    kind: "configurationHandoff.inspect",
+    handoffId: "77777777-7777-4777-8777-777777777777",
+  },
+  "integration.inventory": { kind: "integration.inventory" },
+  "integration.inspectOwnership": {
+    kind: "integration.inspectOwnership",
+    integrationId: "fixture",
+    expectedContentDigest: "a".repeat(64),
+    ownerId: "admin",
+    operationId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  },
+  "integration.remove": {
+    kind: "integration.remove",
+    transactionId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    expectedContentDigest: "a".repeat(64),
+  },
+  "integration.inspectInstall": {
+    kind: "integration.inspectInstall",
+    ownerId: "admin",
+    source: {
+      kind: "artifact",
+      url: "https://example.com/integration.tar.gz",
+      sha256: "a".repeat(64),
+    },
+  },
+  "integration.install": {
+    kind: "integration.install",
+    ownerId: "admin",
+    inspectionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    expectedContentDigest: "a".repeat(64),
+    operationId: "81a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+  },
+  "integration.settle": {
+    kind: "integration.settle",
+    transactionId: "91a78b3e-208b-4ba4-9ddf-870fbdf1da22",
+    decision: "commit",
+    expectedContentDigest: "a".repeat(64),
+  },
+  "artifactTransfer.validate": {
+    kind: "artifactTransfer.validate",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+  },
+  "artifactTransfer.create": {
+    kind: "artifactTransfer.create",
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+    direction: "upload",
+    operationKey: "opk1_abcdefghijklmnop",
+    declaredBytes: 4,
+  },
+  "artifactTransfer.list": {
+    kind: "artifactTransfer.list",
+    ownerId: "admin",
+    limit: 50,
+    offset: 0,
+  },
+  "artifactTransfer.inspect": {
+    kind: "artifactTransfer.inspect",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+  },
+  "artifactTransfer.delete": {
+    kind: "artifactTransfer.delete",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+  },
+  "artifactTransfer.claim": {
+    kind: "artifactTransfer.claim",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    purpose: "prepared-artifact",
+    use: "validate-build",
+    identity: transferIdentity,
+    expectedSha256: "a".repeat(64),
+  },
+  "artifactTransfer.inspectClaim": {
+    kind: "artifactTransfer.inspectClaim",
+    stageId: transferClaim.stageId,
+    ownerId: "admin",
+    identity: transferIdentity,
+  },
+  "artifactTransfer.settle": {
+    kind: "artifactTransfer.settle",
+    claim: transferClaim,
+    settlement: { outcome: "unknown", receiptId: "retained" },
+  },
+  "controlRetention.acknowledge": {
+    kind: "controlRetention.acknowledge",
+    originRootKey: "opk1_abcdefghijklmnop",
+    operationKey: "opk1_abcdefghijklmnop",
+    fingerprint: "a".repeat(64),
+    terminalDigest: "b".repeat(64),
+    proof: "test",
+  },
   "docker.status": { kind: "docker.status" },
   "stack.status": { kind: "stack.status" },
+  "services.inspect": { kind: "services.inspect" },
   "configuration.inspect": { kind: "configuration.inspect" },
+  "configuration.sources.inspect": { kind: "configuration.sources.inspect" },
+  "configurationMaintenance.prepare": {
+    kind: "configurationMaintenance.prepare",
+    ...maintenanceBinding,
+  },
+  "configurationMaintenance.inspect": {
+    kind: "configurationMaintenance.inspect",
+    maintenanceId: maintenanceBinding.maintenanceId,
+    candidateId: maintenanceBinding.candidateId,
+  },
+  "configurationMaintenance.decide": {
+    kind: "configurationMaintenance.decide",
+    ...maintenanceIdentity,
+    decisionId: "44444444-4444-4444-8444-444444444444",
+    decision: "abandon",
+    expectedSequence: 1,
+    checkpointVersion: 1,
+    checkpointDigest: "e".repeat(64),
+  },
+  "configurationMaintenance.settle": {
+    kind: "configurationMaintenance.settle",
+    ...maintenanceIdentity,
+    decisionId: "44444444-4444-4444-8444-444444444444",
+    expectedSequence: 2,
+    evidenceDigest: "f".repeat(64),
+  },
+  "configuration.hardlinks.preview": {
+    kind: "configuration.hardlinks.preview",
+    candidateId: maintenanceBinding.candidateId,
+    revisionId: maintenanceBinding.revisionId,
+    expectedCurrentRevisionId: null,
+    expectedSourceRevision: maintenanceBinding.expectedSourceRevision,
+    coordinatorMode: "ensure-running",
+  },
+  "configuration.hardlinks.apply": {
+    kind: "configuration.hardlinks.apply",
+    revisionId: maintenanceBinding.revisionId,
+    coordinatorMode: "ensure-running",
+  },
   "configuration.hardlinks.inspect": {
     kind: "configuration.hardlinks.inspect",
     revisionId: `cfg1_${"a".repeat(43)}`,
@@ -43,19 +249,51 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "stack.render": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "stack.render",
     revisionId: "config_20260823",
   },
-  "stack.start": { kind: "stack.start" },
+  "stack.start": { kind: "stack.start", expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}` },
   "stack.stop": { kind: "stack.stop" },
-  "service.start": { kind: "service.start", serviceId: "motis" },
+  "service.start": {
+    kind: "service.start",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.stop": { kind: "service.stop", serviceId: "motis" },
   "service.restart": { kind: "service.restart", serviceId: "motis" },
-  "service.recreate": { kind: "service.recreate", serviceId: "motis" },
-  "service.recreateIsolated": { kind: "service.recreateIsolated", serviceId: "motis" },
-  "service.pull": { kind: "service.pull", serviceId: "motis" },
+  "coreService.restart": {
+    kind: "coreService.restart",
+    serviceId: "app-api",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.recreate": {
+    kind: "service.recreate",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.recreateIsolated": {
+    kind: "service.recreateIsolated",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.image.stage": {
+    kind: "service.image.stage",
+    serviceId: "data-manager",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
+  "service.pull": {
+    kind: "service.pull",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.remove": { kind: "service.remove", serviceId: "motis" },
-  "service.update": { kind: "service.update", serviceId: "motis" },
+  "service.update": {
+    kind: "service.update",
+    serviceId: "motis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  },
   "service.build": { kind: "service.build", serviceId: "motis", regionId: "europe/germany" },
   "services.buildAll": { kind: "services.buildAll", failFast: true },
   "service.logs": { kind: "service.logs", serviceId: "motis", tail: 200 },
@@ -69,6 +307,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "release.resolve": { kind: "release.resolve" },
   "release.pull": { kind: "release.pull", releaseId: "2026.08.23" },
   "release.inspect": { kind: "release.inspect" },
+  "release.clear": { kind: "release.clear", releaseId: "checked-release" },
   "release.apply": { kind: "release.apply", releaseId: "2026.08.23" },
   "appApi.replace": {
     kind: "appApi.replace",
@@ -92,6 +331,17 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     stopRunning: true,
   },
   "backup.delete": { kind: "backup.delete", backupId: "pre-update-20260823" },
+  "backup.prune.preview": { kind: "backup.prune.preview" },
+  "backup.prune": {
+    kind: "backup.prune",
+    proof: {
+      inventoryDigest: "a".repeat(64),
+      policyRevision: "b".repeat(64),
+      previewedAt: issuedAt,
+      expiresAt,
+      authenticator: "c".repeat(64),
+    },
+  },
   "system.diagnostics": { kind: "system.diagnostics" },
   "system.inspect": { kind: "system.inspect" },
   "system.update": {
@@ -129,57 +379,65 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     extensionId: "maps-bundle",
   },
   "communityServices.inspect": { kind: "communityServices.inspect" },
-  "integration.inspect": {
-    kind: "integration.inspect",
+  "catalogIntegration.inspect": {
+    kind: "catalogIntegration.inspect",
     source: {
       kind: "artifact",
       url: "https://example.test/weather-radar-1.0.0.tar.gz",
       sha256: "c".repeat(64),
     },
   },
-  "integration.publish": {
-    kind: "integration.publish",
+  "catalogIntegration.publish": {
+    kind: "catalogIntegration.publish",
     integrationId: "weather-radar",
     source: { kind: "upload", sha256: "c".repeat(64) },
     extensionId: "maps-bundle",
   },
-  "integration.settle": {
-    kind: "integration.settle",
+  "catalogIntegration.settle": {
+    kind: "catalogIntegration.settle",
     integrationId: "weather-radar",
     transactionId: `itx1_${"d".repeat(24)}`,
     outcome: "rollback",
   },
-  "integration.remove": {
-    kind: "integration.remove",
+  "catalogIntegration.remove": {
+    kind: "catalogIntegration.remove",
     integrationId: "weather-radar",
     extensionId: "maps-bundle",
   },
-  "integration.adopt": {
-    kind: "integration.adopt",
+  "catalogIntegration.adopt": {
+    kind: "catalogIntegration.adopt",
     integrationId: "weather-radar",
     extensionId: "maps-bundle",
   },
   "installedIntegrations.inspect": { kind: "installedIntegrations.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "serviceSelection.apply",
     revisionId: "selection_20260823",
   },
   "serviceSelection.inspect": { kind: "serviceSelection.inspect" },
   "serviceConfig.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "serviceConfig.apply",
     serviceId: "motis",
     revisionId: "config_20260823",
   },
   "integrationConfig.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "integrationConfig.apply",
     integrationId: "routing",
     revisionId: "config_20260823",
   },
   "vault.apply": {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running",
     kind: "vault.apply",
     serviceId: "motis",
     revisionId: "vault_20260823",
@@ -196,6 +454,9 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     catalogRevisionId: "catalog_20260823",
   },
   "data.overtureSync": { kind: "data.overtureSync", regionId: "europe/germany" },
+  "data.overturePull": { kind: "data.overturePull", regionId: "europe/germany" },
+  "data.overtureIngest": { kind: "data.overtureIngest", regionId: "europe/germany" },
+  "data.overtureExtract": { kind: "data.overtureExtract", regionId: "europe/germany" },
   "data.overtureConflate": {
     kind: "data.overtureConflate",
     regionId: "europe/germany",
@@ -223,17 +484,43 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "valhalla.traffic.refreshWaysToEdges": { kind: "valhalla.traffic.refreshWaysToEdges" },
   "postgis.capacity.inspect": { kind: "postgis.capacity.inspect" },
+  "catalogPins.inspect": { kind: "catalogPins.inspect" },
+  "transitCredentials.inspect": {
+    kind: "transitCredentials.inspect",
+    catalogRevisionId: "a".repeat(64),
+  },
   "transitousLock.inspect": { kind: "transitousLock.inspect" },
   "transitousLock.propose": {
     kind: "transitousLock.propose",
-    ref: `main@${"a".repeat(40)}`,
-    submodules: { "transitland-atlas": "b".repeat(40) },
-    lockedBy: "fixture-actor",
+    proposalId: "00000000-0000-4000-8000-000000000001",
+    baseGenerationId: null,
+    pins: createCatalogPinSet(
+      {
+        ref: `main@${"a".repeat(40)}`,
+        submodules: { "transitland-atlas": "b".repeat(40) },
+        lockedAt: issuedAt,
+        lockedBy: "fixture-actor",
+      },
+      {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit: "c".repeat(40),
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"c".repeat(40)}/systems.csv`,
+        sha256: "d".repeat(64),
+        lockedAt: issuedAt,
+        lockedBy: "fixture-actor",
+      },
+    ),
+    diffDigest: "e".repeat(64),
+    sourcePolicyRevision: "f".repeat(64),
   },
   "transitousLock.approve": {
     kind: "transitousLock.approve",
-    ref: `main@${"a".repeat(40)}`,
-    approvedBy: "fixture-actor",
+    proposalId: "00000000-0000-4000-8000-000000000001",
+    validationId: "00000000-0000-4000-8000-000000000002",
+    expectedGenerationId: null,
+    diffDigest: "a".repeat(64),
+    acknowledgeLicenseChanges: false,
   },
   "gbfsCatalogLock.inspect": { kind: "gbfsCatalogLock.inspect" },
   "transitousPin.inspect": { kind: "transitousPin.inspect" },
@@ -272,7 +559,7 @@ describe("ops contract", () => {
     });
   });
 
-  it("preserves budgets outside the wired lifecycle operations", () => {
+  it("retains short operation budgets and expands long build budgets", () => {
     for (const [kind, timeoutMs] of [
       ["docker.status", 5_000],
       ["stack.status", 15_000],
@@ -280,8 +567,8 @@ describe("ops contract", () => {
       ["service.logs", 30_000],
       ["service.logs.follow", 900_000],
       ["service.pull", 900_000],
-      ["service.build", 1_800_000],
-      ["services.buildAll", 1_800_000],
+      ["service.build", 43_200_000],
+      ["services.buildAll", 86_400_000],
       ["stack.stop", 300_000],
       ["service.update", 900_000],
     ] as const)
@@ -293,6 +580,11 @@ describe("ops contract", () => {
       // Take the role from the policy table rather than re-deriving it from a
       // kind prefix: a prefix list silently omits every kind added later.
       const role: OpsRole = OPS_KIND_POLICIES[operation.kind].role;
+      if (operation.kind === "data.generateApiKeys") {
+        expect(() => parseOpsRequest(request(operation), { role })).toThrow(/not permitted/);
+        continue;
+      }
+      expect(() => parseOpsRequest(request(operation), { role }), operation.kind).not.toThrow();
       expect(parseOpsRequest(request(operation), { role }).operation).toEqual(operation);
     }
   });
@@ -327,9 +619,9 @@ describe("ops contract", () => {
   ])("rejects unsafe integration artifact locators before agent dispatch: %s", (url) => {
     const source = { kind: "artifact", url, sha256: "a".repeat(64) };
     for (const operation of [
-      { kind: "integration.inspect", source },
-      { kind: "integration.publish", integrationId: "fixture", source },
-      { kind: "integration.adopt", integrationId: "fixture", source },
+      { kind: "catalogIntegration.inspect", source },
+      { kind: "catalogIntegration.publish", integrationId: "fixture", source },
+      { kind: "catalogIntegration.adopt", integrationId: "fixture", source },
     ]) {
       expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow(OpsContractError);
     }
@@ -338,7 +630,7 @@ describe("ops contract", () => {
   it("canonicalizes accepted integration artifact locators before dispatch", () => {
     const parsed = parseOpsRequest(
       request({
-        kind: "integration.inspect",
+        kind: "catalogIntegration.inspect",
         source: {
           kind: "artifact",
           url: "https://ARTIFACTS.example.test:443/releases/../integration.tgz",
@@ -349,7 +641,7 @@ describe("ops contract", () => {
     );
 
     expect(parsed.operation).toEqual({
-      kind: "integration.inspect",
+      kind: "catalogIntegration.inspect",
       source: {
         kind: "artifact",
         url: "https://artifacts.example.test/integration.tgz",
@@ -523,7 +815,7 @@ describe("ops contract", () => {
     ).toBe("release-1");
   });
 
-  it("keeps data inventory kind-only and validates its bounded typed result", () => {
+  it("accepts bounded data inventory paging and validates its typed result", () => {
     expect(parseOpsRequest(request({ kind: "data.inspect" }), { role: "api" }).operation).toEqual({
       kind: "data.inspect",
     });
@@ -536,13 +828,35 @@ describe("ops contract", () => {
     }
     const inventory = {
       osm: {
-        found: true,
-        filename: "germany-latest.osm.pbf",
-        sizeBytes: 42,
-        modifiedAt: "2026-08-23T18:00:00.000Z",
-        region: "germany",
+        items: [
+          {
+            artifactId: "a".repeat(64),
+            filename: "synthetic.osm.pbf",
+            region: "test",
+            sizeBytes: 42,
+            modifiedAt: "2026-08-23T18:00:00.000Z",
+            sourceFingerprint: null,
+            fingerprintState: "missing",
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+        unavailable: false,
       },
-      builds: [{ target: "valhalla", built: true, builtAt: "2026-08-23T18:00:00.000Z" }],
+      builds: [
+        {
+          target: "valhalla",
+          built: false,
+          readiness: "unknown",
+          reason: "Synthetic readiness unavailable",
+          sizeBytes: null,
+          sourceFingerprints: [],
+          buildRecordVersion: null,
+          region: null,
+          runtimeImages: {},
+        },
+      ],
       motisTransitous: {
         configFound: false,
         datasetCount: 0,
@@ -585,6 +899,25 @@ describe("ops contract", () => {
       },
     };
     expect(parseOpsResult("data.inspect", inventory)).toEqual(inventory);
+    const fullPage = {
+      ...inventory,
+      osm: {
+        items: Array.from({ length: 500 }, (_, i) => ({
+          artifactId: i.toString(16).padStart(64, "0"),
+          filename: "f".repeat(220) + ".osm.pbf",
+          region: "r".repeat(220),
+          sizeBytes: 42,
+          modifiedAt: "2026-08-23T18:00:00.000Z",
+          sourceFingerprint: "a".repeat(64),
+          fingerprintState: "verified",
+        })),
+        total: 500,
+        offset: 0,
+        limit: 500,
+        unavailable: false,
+      },
+    };
+    expect(() => parseBoundedOpsResult("data.inspect", fullPage)).not.toThrow();
     expect(() =>
       parseOpsResult("data.inspect", { ...inventory, dataRoot: "/host/data" }),
     ).toThrow();
@@ -693,6 +1026,9 @@ describe("ops contract", () => {
   });
 
   it("authorizes roles from the operation kind without inspecting operation arguments", () => {
+    expect(authorizeOpsOperation("api", "catalogPins.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "catalogPins.inspect")).toBe(true);
+    expect(authorizeOpsOperation("data-manager", "configuration.inspect")).toBe(false);
     expect(authorizeOpsOperation("api", "service.start")).toBe(true);
     expect(authorizeOpsOperation("api", "motis.primary.restart")).toBe(false);
     expect(authorizeOpsOperation("data-manager", "motis.primary.restart")).toBe(true);
@@ -816,4 +1152,27 @@ describe("ops contract", () => {
       parseOpsResult("serviceRepository.inspect", { ...inspection, checkout: "/srv" }),
     ).toThrow();
   });
+});
+
+it("fix1 reads only the actual historical or exact v2 admission projection", async () => {
+  const { parseOpsAdmission } = await import("./contract");
+  const historical = {
+    execution: "async",
+    operationId: "job1_0123456789abcdef",
+    operationKey: "opk1_0123456789abcdef",
+    kind: "service.build",
+    state: "queued",
+  };
+  expect(parseOpsAdmission(historical)).toEqual(historical);
+  for (const extra of [{ version: 1 }, { deadlineAt: 10 }, { parent: {} }, { unexpected: true }])
+    expect(() => parseOpsAdmission({ ...historical, ...extra })).toThrow();
+  expect(
+    parseOpsAdmission({
+      ...historical,
+      version: 2,
+      admittedAt: 1,
+      deadlineAt: 2,
+      fingerprint: "a".repeat(64),
+    }),
+  ).toMatchObject({ version: 2 });
 });

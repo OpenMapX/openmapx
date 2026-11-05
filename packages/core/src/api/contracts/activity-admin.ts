@@ -1,4 +1,21 @@
 import z from "zod/v4";
+import { opsFailureResultSchema, processDiagnosticsSchema } from "../../ops/job-evidence";
+export const adminJobObservationSchema = z.strictObject({
+  state: z.literal("unknown"),
+  reason: z.enum([
+    "transport",
+    "observer_deadline",
+    "recovery_required",
+    "unavailable",
+    "invalid_identity",
+  ]),
+  nextCheckAt: z.iso.datetime(),
+});
+export const adminJobEvidenceSchema = opsFailureResultSchema.safeExtend({
+  observation: adminJobObservationSchema.optional(),
+  diagnostics: processDiagnosticsSchema.optional(),
+});
+
 import {
   type AdminOperation,
   adminCommonResponses,
@@ -78,8 +95,23 @@ export const adminActivityJobStageSchema = z.strictObject({
   error: adminJsonValueSchema,
   artifacts: adminJsonValueSchema,
 });
+// Historical JSON results remain supported; known evidence members are strict.
+export const adminActivityJobResultSchema = adminJsonValueSchema.superRefine((value, ctx) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  if (Object.keys(value).some((key) => key.startsWith("_") || key === "opsProjection"))
+    ctx.addIssue({ code: "custom", message: "Internal administrative job state" });
+  const evidence = Object.fromEntries(
+    Object.entries(value).filter(([key]) =>
+      ["serviceBatch", "dataWorkflow", "serviceLifecycle", "diagnostics", "observation"].includes(
+        key,
+      ),
+    ),
+  );
+  if (!adminJobEvidenceSchema.safeParse(evidence).success)
+    ctx.addIssue({ code: "custom", message: "Invalid administrative job evidence" });
+});
 const detail = {
-  result: adminJsonValueSchema,
+  result: adminActivityJobResultSchema,
   logs: z.array(adminActivityJobLogSchema),
   stages: z.array(adminActivityJobStageSchema),
 };
@@ -118,7 +150,7 @@ export const adminJobStreamEventSchemas = {
     status: adminApplicationJobStatusSchema,
     progress: z.number().finite().nullable().optional(),
     error: z.string().nullable().optional(),
-    result: adminJsonValueSchema.optional(),
+    result: adminActivityJobResultSchema.optional(),
     startedAt: adminTimestampSchema.nullable().optional(),
     finishedAt: adminTimestampSchema.nullable().optional(),
   }),

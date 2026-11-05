@@ -3,8 +3,10 @@ import { availableParallelism } from "node:os";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
 import type { StateStore } from "../state.js";
+import { publishDataChange } from "./execution/worker-scope.js";
 
 interface ConvertOverpassOptions {
+  signal?: AbortSignal;
   /** State-store-resolved input .osm.pbf path. */
   sourcePbf: string;
   /** Canonical output .osm.bz2 path under `dataDir`. */
@@ -14,6 +16,7 @@ interface ConvertOverpassOptions {
 }
 
 async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
+  opts.signal?.throwIfAborted();
   mkdirSync(dirname(opts.targetBz2), { recursive: true });
 
   // Overpass wants bz2-compressed OSM XML (`planet.osm.bz2`). libosmium's bz2
@@ -24,12 +27,20 @@ async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
   // `data.osm.bz2` behind.
   const threads = Math.max(2, availableParallelism());
   const temporary = `${opts.targetBz2}.tmp`;
+  const pipeFailure = new AbortController();
+  const signal = opts.signal
+    ? AbortSignal.any([opts.signal, pipeFailure.signal])
+    : pipeFailure.signal;
   const osmium = execa("osmium", ["cat", opts.sourcePbf, "-f", "osm", "-o", "-"], {
     stderr: "inherit",
+    cancelSignal: signal,
+    forceKillAfterDelay: 5000,
   });
   const compressed = osmium.pipe("lbzip2", ["-n", String(threads), "-c"], {
     stdout: { file: temporary },
     stderr: "inherit",
+    cancelSignal: signal,
+    forceKillAfterDelay: 5000,
   });
 
   const poll = opts.onProgress
@@ -43,8 +54,19 @@ async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
     : null;
 
   try {
-    await compressed;
-    renameSync(temporary, opts.targetBz2);
+    const contain = async (child: PromiseLike<unknown>) => {
+      try {
+        return await child;
+      } catch (error) {
+        pipeFailure.abort(error);
+        throw error;
+      }
+    };
+    const outcomes = await Promise.allSettled([contain(osmium), contain(compressed)]);
+    const failed = outcomes.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+    opts.signal?.throwIfAborted();
+    await publishDataChange(() => renameSync(temporary, opts.targetBz2));
   } catch (error) {
     rmSync(temporary, { force: true });
     throw error;
@@ -61,6 +83,7 @@ async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
 }
 
 export interface ConvertOverpassForRegionOptions {
+  signal?: AbortSignal;
   /**
    * OSM region id (e.g. `europe/germany`, or `planet`). When absent, the
    * single most-recently-downloaded `osm-pbf` entry in the state store is
@@ -127,6 +150,7 @@ export async function convertPbfToBz2ForRegion(
   // makes a misleading progress target. Let the CLI fall back to its
   // unknown-total renderer (bytes + rate, no bar, no ETA).
   await convertPbfToBz2({
+    signal: opts.signal,
     sourcePbf: picked.path,
     targetBz2,
     onProgress: opts.onProgress ? (bytes) => opts.onProgress?.(bytes) : undefined,

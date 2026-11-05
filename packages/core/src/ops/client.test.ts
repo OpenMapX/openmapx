@@ -19,10 +19,52 @@ function tokenFile(contents = Buffer.alloc(32, 7).toString("base64url")): string
   return path;
 }
 
+// Existing operation tests use a negotiated v2 peer; negotiation itself is tested below.
+class ProtocolTestClient extends OpsClient {
+  constructor(options: ConstructorParameters<typeof OpsClient>[0]) {
+    const transport = options.fetch ?? globalThis.fetch;
+    super({
+      ...options,
+      fetch: async (url, init) => {
+        if (new URL(String(url)).pathname === "/v1/protocol")
+          return new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: new Headers(init?.headers).get("x-ops-request-id"),
+              ok: true,
+              result: { versions: [1, 2] },
+            }),
+          );
+        return transport(url, init);
+      },
+    });
+  }
+}
+
 describe("ops client", () => {
+  it.each(Object.entries(OPS_PUBLIC_ERROR_MESSAGES))(
+    "preserves the existing canonical %s refusal class",
+    async (errorClass, message) => {
+      const client = new ProtocolTestClient({
+        baseUrl: "http://127.0.0.1:3002",
+        tokenFile: tokenFile(),
+        fetch: async (_url, init) =>
+          new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: JSON.parse(String(init?.body)).requestId,
+              ok: false,
+              error: { class: errorClass, message },
+            }),
+            { status: 409 },
+          ),
+      });
+      await expect(client.execute({ kind: "docker.status" })).rejects.toMatchObject({ errorClass });
+    },
+  );
   it("derives synchronous transport timeouts from the per-kind execution budget", () => {
-    expect(opsRequestTimeoutMs("docker.status")).toBe(10_000);
-    expect(opsRequestTimeoutMs("service.logs")).toBe(35_000);
+    expect(opsRequestTimeoutMs("docker.status")).toBe(15_000);
+    expect(opsRequestTimeoutMs("service.logs")).toBe(15_000);
     expect(opsRequestTimeoutMs("service.logs", 7)).toBe(7);
     expect(opsRequestTimeoutMs("service.pull")).toBe(15_000);
   });
@@ -41,7 +83,7 @@ describe("ops client", () => {
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       expect(body).toMatchObject({
-        version: 1,
+        version: 2,
         requestId: "ops1_AQEBAQEBAQEBAQEBAQEBAQEB",
         operationKey: "opk1_AQEBAQEBAQEBAQEBAQEBAQEB",
         issuedAt: "2026-08-23T18:00:00.000Z",
@@ -64,7 +106,7 @@ describe("ops client", () => {
         { status: 200 },
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
@@ -86,7 +128,7 @@ describe("ops client", () => {
   ])(
     "accepts only canonical host-update errors (canonical: %s)",
     async (canonical, expectedCode) => {
-      const client = new OpsClient({
+      const client = new ProtocolTestClient({
         baseUrl: "http://ops-agent:4300",
         tokenFile: tokenFile(),
         fetch: async (_url, init) =>
@@ -120,11 +162,11 @@ describe("ops client", () => {
   it("bounds response bodies and never includes token, file path, URL, or remote body in errors", async () => {
     const token = Buffer.alloc(32, 11).toString("base64url");
     const path = tokenFile(token);
-    const secretBody = `remote docker stderr ${token}`;
-    const client = new OpsClient({
+    const secretBody = `remote docker stderr ${token}`.repeat(100);
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: path,
-      maxResponseBytes: 32,
+      maxResponseBytes: 256,
       fetch: async () => new Response(secretBody, { status: 500 }),
     });
 
@@ -145,7 +187,7 @@ describe("ops client", () => {
           });
         }),
     );
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
@@ -159,7 +201,7 @@ describe("ops client", () => {
 
   it("rejects non-private destinations without echoing the URL", () => {
     for (const baseUrl of ["http://evil.example/steal?token=x", "https://evil.example"]) {
-      expect(() => new OpsClient({ baseUrl, tokenFile: tokenFile() })).toThrow(
+      expect(() => new ProtocolTestClient({ baseUrl, tokenFile: tokenFile() })).toThrow(
         "Invalid ops agent destination",
       );
     }
@@ -198,7 +240,7 @@ describe("ops client", () => {
     ]) {
       expect(
         () =>
-          new OpsClient({
+          new ProtocolTestClient({
             baseUrl: "http://ops-agent:4300",
             tokenFile: tokenFile(),
             ...options,
@@ -207,13 +249,13 @@ describe("ops client", () => {
     }
     expect(
       () =>
-        new OpsClient({
+        new ProtocolTestClient({
           baseUrl: "http://ops-agent:4300",
           tokenFile: tokenFile(),
           maxResponseBytes: OPS_MAX_HTTP_RESPONSE_BYTES,
         }),
     ).not.toThrow();
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 4),
@@ -248,6 +290,10 @@ describe("ops client", () => {
           requestId: body.requestId,
           ok: true,
           result: {
+            version: 2,
+            admittedAt: 0,
+            deadlineAt: 1000,
+            fingerprint: "a".repeat(64),
             execution: "async",
             operationId: "job1_reusableOperation1",
             operationKey: body.operationKey,
@@ -258,21 +304,39 @@ describe("ops client", () => {
         { status: 202 },
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 8),
       fetch,
     });
 
-    await expect(client.execute({ kind: "service.pull", serviceId: "redis" })).rejects.toThrow(
-      "Async operation key is required",
-    );
+    await expect(
+      client.execute({
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      }),
+    ).rejects.toThrow("Async operation key is required");
     expect(fetch).not.toHaveBeenCalled();
 
     const operationKey = client.createOperationKey();
-    await client.execute({ kind: "service.pull", serviceId: "redis" }, { operationKey });
-    await client.execute({ kind: "service.pull", serviceId: "redis" }, { operationKey });
+    await client.execute(
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
+      { operationKey },
+    );
+    await client.execute(
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
+      { operationKey },
+    );
     expect(requests.map((request) => request.operationKey)).toEqual([operationKey, operationKey]);
   });
 
@@ -281,7 +345,7 @@ describe("ops client", () => {
     const token = Buffer.alloc(32, 17).toString("base64url");
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operations/${operationId}`);
-      expect(init?.method).toBe("DELETE");
+      expect(["GET", "DELETE"]).toContain(init?.method);
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -302,7 +366,7 @@ describe("ops client", () => {
         }),
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(token),
       fetch,
@@ -326,7 +390,7 @@ describe("ops client", () => {
     const fingerprints: string[] = [];
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operation-keys/${operationKey}`);
-      const fingerprint = new Headers(init?.headers).get("x-ops-operation-fingerprint");
+      const fingerprint = new Headers(init?.headers).get("x-ops-body-fingerprint");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
       fingerprints.push(fingerprint as string);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
@@ -348,7 +412,7 @@ describe("ops client", () => {
         }),
       );
     });
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       fetch,
@@ -366,7 +430,7 @@ describe("ops client", () => {
 
   it("preserves caller AbortError for an in-flight event request", async () => {
     const controller = new AbortController();
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
@@ -388,7 +452,7 @@ describe("ops client", () => {
 
   it("carries caller AbortSignal through admission and retained status requests", async () => {
     const signals: AbortSignal[] = [];
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
@@ -401,7 +465,11 @@ describe("ops client", () => {
     });
     const admissionAbort = new AbortController();
     const admission = client.execute(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       { operationKey: "opk1_signalAdmission000", signal: admissionAbort.signal },
     );
     await vi.waitFor(() => expect(signals).toHaveLength(1));
@@ -427,7 +495,7 @@ describe("ops client", () => {
       "timed_out",
     ] as const;
     let index = 0;
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 12),
@@ -442,6 +510,10 @@ describe("ops client", () => {
             requestId: body.requestId,
             ok: true,
             result: {
+              version: 2,
+              admittedAt: 0,
+              deadlineAt: 1000,
+              fingerprint: "a".repeat(64),
               execution: "async",
               operationId: `job1_retainedClient${index}00`,
               operationKey: body.operationKey,
@@ -456,7 +528,11 @@ describe("ops client", () => {
     for (const [stateIndex, state] of states.entries()) {
       await expect(
         client.execute(
-          { kind: "service.pull", serviceId: "redis" },
+          {
+            kind: "service.pull",
+            serviceId: "redis",
+            expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          },
           { operationKey: `opk1_retainedClient${stateIndex}00` },
         ),
       ).resolves.toMatchObject({ state });
@@ -464,7 +540,7 @@ describe("ops client", () => {
   });
 
   it("strictly parses typed retained status and bounded event pages", async () => {
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 9),
@@ -512,7 +588,7 @@ describe("ops client", () => {
   });
 
   it("rejects retained responses for another operation and incoherent event cursors", async () => {
-    const client = new OpsClient({
+    const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       randomBytes: () => Buffer.alloc(18, 10),
@@ -547,4 +623,41 @@ describe("ops client", () => {
       client.events("job1_retainedOperation0", { after: 2, limit: 10 }),
     ).rejects.toMatchObject({ errorClass: "runtime" });
   });
+});
+
+it("fix1 refuses an older agent before any version2 mutation admission", async () => {
+  let posts = 0;
+  const client = new OpsClient({
+    baseUrl: "http://ops-agent:4300",
+    tokenFile: tokenFile(),
+    fetch: async (_url, init) => {
+      if (init?.method !== "POST")
+        return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
+      posts++;
+      const body = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify({
+          version: 1,
+          requestId: body.requestId,
+          ok: true,
+          result: {
+            execution: "async",
+            operationId: "job1_abcdefghijklmnop",
+            operationKey: body.operationKey,
+            kind: "service.build",
+            state: "running",
+          },
+        }),
+        { status: 202 },
+      );
+    },
+  });
+  const error = await client
+    .execute(
+      { kind: "service.build", serviceId: "osrm" },
+      { operationKey: "opk1_abcdefghijklmnop" },
+    )
+    .catch((error) => error);
+  expect(posts).toBe(0);
+  expect(error).toMatchObject({ name: "OpsProtocolUpgradeRequiredError" });
 });

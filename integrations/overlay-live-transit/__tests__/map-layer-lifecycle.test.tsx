@@ -17,6 +17,8 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion }),
 }));
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useOptionalEnv: () => ({ apiUrl: "https://api.test" }),
+
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());

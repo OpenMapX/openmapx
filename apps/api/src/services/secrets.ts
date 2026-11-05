@@ -2,6 +2,10 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { integrationSecret } from "../db/schema";
+import {
+  type AdministrativeConfigurationReadContext,
+  assertAdministrativeConfigurationRead,
+} from "./administrative-configuration-context";
 
 const ALGORITHM = "aes-256-gcm" as const;
 
@@ -156,4 +160,23 @@ export async function listAllSecrets(): Promise<
       updatedBy: integrationSecret.updatedBy,
     })
     .from(integrationSecret);
+}
+
+export async function resolveIntegrationVaultSecretsStrict(
+  integrationId: string,
+  context: AdministrativeConfigurationReadContext,
+): Promise<Record<string, string>> {
+  try {
+    assertAdministrativeConfigurationRead(context);
+    const result: Record<string, string> = {};
+    for (const row of context.integrationSecretRows.filter(
+      (row) => row.integrationId === integrationId,
+    )) {
+      if (Object.hasOwn(result, row.key)) throw new Error("duplicate secret");
+      result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+    }
+    return result;
+  } catch {
+    throw new Error("Configuration acquisition unavailable");
+  }
 }

@@ -1,7 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import {
+  closeControlInstallation,
+  openControlInstallation,
+  provisionControlInstallation,
+} from "@openmapx/core/build-artifacts";
 import {
   type OpsOperation,
   opsOperationFingerprint,
@@ -9,19 +15,26 @@ import {
   sealTrustedConfigurationSnapshot,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  issueApiJobChildAssertion,
+  prepareApiJobChildAttempt,
+  prepareApiJobRoot,
+} from "../../api/src/services/admin-job-parent";
+import type { JobContext } from "../../api/src/services/job-runner";
+import { installConfigurationRuntimeFixture as installTrustedConfigurationRuntime } from "./__fixtures__/configuration-runtime";
+import { configurationSource } from "./__fixtures__/configuration-source";
+import { testExecution } from "./__fixtures__/execution";
 import type { PersistedOpsJob } from "./journal";
 import { createRegistryResourceClaimer } from "./policy";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 import { buildOpsAgentServer } from "./server";
-import {
-  installTrustedConfigurationRuntime,
-  type TrustedConfigurationRuntimeOptions,
-} from "./trusted-config-runtime";
+import type { TrustedConfigurationRuntimeOptions } from "./trusted-config-runtime";
 import { createFileTrustedOpsDataSource } from "./trusted-config-source";
 
 const roots: string[] = [];
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 async function bounded<T>(promise: Promise<T>): Promise<T> {
@@ -42,9 +55,9 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-ownership-"));
   roots.push(root);
   const infraDir = join(root, "infra/docker");
-  mkdirSync(infraDir, { recursive: true });
+  mkdirSync(infraDir, { recursive: true, mode: 0o700 });
   // The whole checkout is mounted, as this release's manifest has it.
-  mkdirSync(join(root, "services"));
+  mkdirSync(join(root, "services"), { mode: 0o755 });
   // The deployment's user, which only a host render writes into .env.
   writeFileSync(
     join(infraDir, ".env"),
@@ -83,12 +96,14 @@ function fixture() {
       ...hooks,
     });
     const operation = {
+      ...(await configurationSource(runtime, infraDir)),
       expectedCurrentRevisionId: coreServices.currentConfigurationGeneration(infraDir),
       kind: "stack.render",
       revisionId: revision(letter),
       ...(expected !== undefined ? { expectedCurrentRevisionId: expected } : {}),
     } as OpsOperation & { kind: "stack.render" };
     return dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog() {},
       claim: {
@@ -148,6 +163,7 @@ describe("trusted configuration ownership and outcomes", () => {
           env: {},
         });
         const operation = {
+          ...(await configurationSource(runtime, f.infraDir)),
           kind,
           revisionId: revision("c"),
           expectedCurrentRevisionId: capturedRevision,
@@ -157,6 +173,7 @@ describe("trusted configuration ownership and outcomes", () => {
           ...(kind === "integrationConfig.apply" ? { integrationId: "demo" } : {}),
         } as OpsOperation;
         return dispatchOpsOperation(runtime, operation, {
+          execution: testExecution(),
           signal: new AbortController().signal,
           emitLog() {},
           claim: {
@@ -219,6 +236,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const operation = { kind: "configuration.inspect" as const };
     let settled = false;
     const observation = dispatchOpsOperation(runtime, operation, {
+      execution: testExecution(),
       signal: new AbortController().signal,
       emitLog() {},
       claim: {
@@ -290,7 +308,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const foreign = join(f.infraDir, coreServices.CONFIGURATION_DIRECTORY, ".writer", "foreign");
     const result = await f.apply("a", undefined, {
       afterCommit: async () => {
-        writeFileSync(foreign, "preserve");
+        writeFileSync(foreign, "preserve", { mode: 0o644 });
       },
     });
     expect(result).toMatchObject({
@@ -312,6 +330,7 @@ describe("trusted configuration ownership and outcomes", () => {
       env: {},
     });
     const claimed = {
+      ...(await configurationSource(runtime, f.infraDir)),
       kind: "stack.render" as const,
       revisionId: revision("a"),
       expectedCurrentRevisionId: null,
@@ -319,6 +338,7 @@ describe("trusted configuration ownership and outcomes", () => {
     const operation = { ...claimed, expectedCurrentRevisionId: revision("b") };
     await expect(
       dispatchOpsOperation(runtime, operation, {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog() {},
         claim: {
@@ -342,6 +362,8 @@ describe("trusted configuration ownership and outcomes", () => {
   });
   it("binds strict expected-current metadata into operation identity", () => {
     const base = {
+      expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
+      coordinatorMode: "require-running" as const,
       expectedCurrentRevisionId: null,
       kind: "stack.render" as const,
       revisionId: revision("a"),
@@ -365,6 +387,36 @@ describe("authenticated conditional configuration admission", () => {
     async (fault) => {
       const f = fixture();
       const token = Buffer.alloc(32, 7).toString("base64url");
+      mkdirSync(join(f.infraDir, "data"), { mode: 0o700 });
+      await provisionControlInstallation(f.infraDir);
+      const installation = openControlInstallation({
+        infraDir: f.infraDir,
+        role: "ops-agent",
+        serviceIds: ["alpha"],
+      });
+      // Portable API-producer fixture. This is not a PostgreSQL ownership proof;
+      // the current PG suite covers the actual durable job/checkpoint boundary.
+      const parentContext: JobContext = {
+        jobId: randomUUID(),
+        execution: { owner: randomUUID(), version: 1 },
+        payload: {},
+        signal: new AbortController().signal,
+        log: async () => {},
+        setProgress: async () => {},
+        checkpoint: async (value) => {
+          parentContext.checkpointResult = value;
+        },
+      };
+      const prepared = prepareApiJobRoot(parentContext, "stack.render", "ownership.render"),
+        { operationKey, requestedDeadlineAt } = prepared;
+      const sourceRuntime = createUnavailableRuntime();
+      installTrustedConfigurationRuntime(sourceRuntime, {
+        infraDir: f.infraDir,
+        services: f.services,
+        integrationSchemas: new Map(),
+        env: {},
+      });
+      const source = await configurationSource(sourceRuntime, f.infraDir);
       const queue = join(f.root, "queue");
       mkdirSync(queue, { mode: 0o700 });
       mkdirSync(join(queue, ".claimed"), { mode: 0o700 });
@@ -372,8 +424,9 @@ describe("authenticated conditional configuration admission", () => {
         role: "api",
         token,
         nonce: "nonce_conditional1234567",
-        operationKey: "opk1_conditionalApply123",
+        operationKey,
         operationForRevision: (revisionId) => ({
+          ...source,
           kind: "stack.render",
           revisionId,
           expectedCurrentRevisionId: null,
@@ -385,6 +438,17 @@ describe("authenticated conditional configuration admission", () => {
           serviceSecrets: [],
         },
       });
+      const tokenPath = join(f.root, "api-token");
+      writeFileSync(tokenPath, token, { mode: 0o600 });
+      vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenPath);
+      const attempt = prepareApiJobChildAttempt(
+        parentContext,
+        sealed.operation,
+        operationKey,
+        prepared,
+      )!;
+      await parentContext.checkpoint({ _parentExecution: prepared.parent, attempt });
+      const parentAssertion = await issueApiJobChildAssertion(attempt);
       writeFileSync(join(queue, `${sealed.revisionId}.json`), sealed.bytes, { mode: 0o600 });
       const fileSource = createFileTrustedOpsDataSource({
         directory: queue,
@@ -467,6 +531,10 @@ describe("authenticated conditional configuration admission", () => {
       const app = buildOpsAgentServer({
         tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
         resourceClaimer: claimer,
+        controlInstallation: installation,
+        // This deliberately holds one authenticated claim across the other real
+        // control-store/configuration commits; its fixture budget must cover that I/O.
+        claimTimeoutMs: 15_000,
         journal: {
           records: () => journalRecords,
           replace: async (records) => {
@@ -478,13 +546,14 @@ describe("authenticated conditional configuration admission", () => {
         runtime,
       });
       let counter = 0;
-      const submit = (operation: OpsOperation, key = "opk1_conditionalApply123") =>
+      const submit = (operation: OpsOperation, key = operationKey, assertion = parentAssertion) =>
         app.inject({
           method: "POST",
           url: "/v1/operations",
-          headers: { authorization: `Bearer ${token}` },
+          headers: { authorization: `Bearer ${token}`, "x-openmapx-parent-execution": assertion },
           payload: {
-            version: 1,
+            version: 2,
+            execution: { requestedDeadlineAt },
             requestId: `ops1_conditional${String(++counter).padStart(12, "0")}`,
             operationKey: key,
             issuedAt: new Date().toISOString(),
@@ -592,16 +661,32 @@ describe("authenticated conditional configuration admission", () => {
         expect(replay.json().result).toMatchObject({ operationId: id, state: "succeeded" });
         expect(executions).toBe(1);
         expect(f.label()).toBe("b");
-        const changed = await submit({
+        const changedBody = {
           ...sealed.operation,
           expectedCurrentRevisionId: `cfg1_${"b".repeat(43)}`,
-        } as OpsOperation);
+        } as OpsOperation;
+        const changedAttempt = prepareApiJobChildAttempt(
+          parentContext,
+          changedBody,
+          operationKey,
+          prepared,
+        )!;
+        await parentContext.checkpoint({
+          _parentExecution: prepared.parent,
+          attempt: changedAttempt,
+        });
+        const changed = await submit(
+          changedBody,
+          operationKey,
+          await issueApiJobChildAssertion(changedAttempt),
+        );
         expect(changed.statusCode).toBe(409);
       } finally {
         returnClaim.resolve();
         returnCleanup.resolve();
         finish();
         await app.close();
+        closeControlInstallation(installation);
       }
     },
   );

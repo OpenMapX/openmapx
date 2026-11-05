@@ -2,13 +2,16 @@ import type { DatasetMetadata } from "@openmapx/core/data-manager-contracts";
 import { describe, expect, it } from "vitest";
 import { osmExtractFor } from "./osm-extract";
 
-const osm = {
-  found: true,
+const file = {
+  artifactId: "a".repeat(64),
   filename: "europe-germany-berlin.osm.pbf",
   sizeBytes: 1000,
   modifiedAt: "2026-11-01T03:00:00.000Z",
   region: "europe-germany-berlin",
+  sourceFingerprint: null,
+  fingerprintState: "missing" as const,
 };
+const osm = { items: [file], total: 1, limit: 50, offset: 0, unavailable: false };
 
 function dataset(over: Partial<DatasetMetadata> = {}): DatasetMetadata {
   return {
@@ -42,8 +45,14 @@ describe("osmExtractFor", () => {
   it("reports nothing without a recorded time, a file or a usable record", () => {
     expect(osmExtractFor(osm, [dataset({ osmTimestamp: undefined })])).toBeUndefined();
     expect(osmExtractFor(osm, [dataset({ osmTimestamp: "yesterday-ish" })])).toBeUndefined();
-    expect(osmExtractFor({ found: false }, [dataset()])).toBeUndefined();
+    expect(osmExtractFor({ ...osm, items: [], total: 0 }, [dataset()])).toBeUndefined();
     expect(osmExtractFor(osm, [])).toBeUndefined();
+  });
+
+  it("does not label one file as current when the inventory is incomplete or ambiguous", () => {
+    expect(osmExtractFor({ ...osm, unavailable: true }, [dataset()])).toBeUndefined();
+    expect(osmExtractFor({ ...osm, total: 2 }, [dataset()])).toBeUndefined();
+    expect(osmExtractFor({ ...osm, offset: 1 }, [dataset()])).toBeUndefined();
   });
 
   it("drops a feed that is not https rather than failing the response", () => {

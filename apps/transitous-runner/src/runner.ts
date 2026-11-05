@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
+import { setTimeout as processGroupDelay } from "node:timers/promises";
 import {
   CAPABILITY_TTL_MS,
   OPERATOR_METADATA_DIR,
@@ -119,7 +121,10 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     spentNonces.set(verified.nonce, at);
   }
 
-  async function execute(run: TransitousRunnerScript): Promise<TransitousRunnerResult> {
+  async function execute(
+    run: TransitousRunnerScript,
+    signal: AbortSignal,
+  ): Promise<TransitousRunnerResult> {
     const argv = transitousRunnerArgv(run);
     if (run.script === "fetch") assertInsideCatalog(options.catalogDir, run.feedPath);
     if (run.script === "fetch-operator") {
@@ -180,6 +185,9 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
           child.kill("SIGKILL");
         }
       };
+      const abort = () => terminate();
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
       const timer = setTimeout(() => {
         truncated = true;
         terminate();
@@ -189,6 +197,7 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        signal.removeEventListener("abort", abort);
         // Child output is arbitrary bytes. Decode lossily, then bound the
         // resulting UTF-8 string too: a replacement character for a partial or
         // invalid sequence can occupy more bytes than the input it replaced.
@@ -213,16 +222,91 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
           durationMs: Date.now() - startedAt,
         });
       };
-      child.on("close", (code) => settle(code ?? 1));
-      child.on("error", () => settle(1));
+      child.on("close", (code) => {
+        // A parent exit does not prove its detached descendants have exited.
+        // Poll only the original group; never report containment while it lives.
+        void (async () => {
+          for (;;) {
+            if (child.pid === undefined) break;
+            try {
+              process.kill(-child.pid, 0);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code === "ESRCH") break;
+              await processGroupDelay(100);
+              continue;
+            }
+            await processGroupDelay(100);
+          }
+          settle(signal.aborted ? 1 : (code ?? 1));
+        })();
+      });
+      child.on("error", () => {
+        /* close follows spawn/stdio failure; await it */
+      });
     });
   }
 
+  type OwnedRun = {
+    requestDigest: string;
+    controller: AbortController;
+    state: "running" | "cancel_pending" | "terminal";
+    result?: TransitousRunnerResult;
+    finishedAt?: number;
+  };
+  const retained = new Map<string, OwnedRun>();
+  const address = (request: TransitousRunnerRequest) =>
+    createHash("sha256").update(request.capability).digest("hex");
+  const requestDigest = (request: TransitousRunnerRequest) =>
+    createHash("sha256").update(JSON.stringify(request.run)).digest("hex");
+  function find(request: TransitousRunnerRequest) {
+    const row = retained.get(address(request));
+    if (!row || row.requestDigest !== requestDigest(request))
+      throw new TransitousRunnerError("authorization", "Original runner identity is unknown");
+    return row;
+  }
+  const snapshot = (row: OwnedRun) => ({
+    version: 1 as const,
+    state: row.state,
+    ...(row.result ? { result: row.result } : {}),
+  });
   return {
-    /** Validate, authorize, and run one request. */
+    inspect(request: TransitousRunnerRequest) {
+      return snapshot(find(request));
+    },
+    acknowledge(request: TransitousRunnerRequest) {
+      const row = find(request);
+      if (row.state !== "terminal") throw Error("Runner remains active");
+      retained.delete(address(request));
+      return { acknowledged: true };
+    },
+    cancel(request: TransitousRunnerRequest) {
+      const row = find(request);
+      if (row.state !== "terminal") {
+        row.state = "cancel_pending";
+        row.controller.abort();
+      }
+      return snapshot(row);
+    },
     async run(request: TransitousRunnerRequest): Promise<TransitousRunnerResult> {
+      for (const [key, row] of retained)
+        if (row.finishedAt !== undefined && now() - row.finishedAt > 24 * 3600000)
+          retained.delete(key);
+      if (retained.size >= 256)
+        throw new TransitousRunnerError("isolation", "Retained runner capacity is full");
       consumeCapability(request.capability, request.run);
-      return await execute(request.run);
+      const row: OwnedRun = {
+        requestDigest: requestDigest(request),
+        controller: new AbortController(),
+        state: "running",
+      };
+      retained.set(address(request), row);
+      // The retained identity precedes the actual spawn. Disconnecting the
+      // POST reader never owns this process group or its cancellation.
+      const result = await execute(request.run, row.controller.signal);
+      row.result = result;
+      row.state = "terminal";
+      row.finishedAt = now();
+      return result;
     },
   };
 }

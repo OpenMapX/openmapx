@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import type {
   OpsEventBatch,
   OpsJobStatusFor,
@@ -13,8 +14,18 @@ import {
   executeAndWait,
   executeTrustedConfigurationAndWait,
   followOpsEvents,
+  OpsObservationPending,
   waitForOpsResult,
 } from "../ops-client.js";
+
+// Typed transport fixture only; not an ownership or image-source proof.
+const pullResult = {
+  changed: true as const,
+  revisionId: `cfg1_${"a".repeat(43)}`,
+  imageReference: "example/redis:1",
+  imageId: `sha256:${"b".repeat(64)}`,
+  releaseSelectionDigest: null,
+};
 
 function fakeClient(overrides: Partial<Record<keyof ApiOpsClient, unknown>> = {}): ApiOpsClient {
   return {
@@ -94,7 +105,7 @@ describe("bounded async ops helpers", () => {
           checkpoints.push(now);
         },
       }),
-    ).rejects.toMatchObject({ errorClass: "timeout" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending" });
     expect(checkpoints).toContain(630_000);
     expect(now).toBe(635_000);
     expect(client.execute).not.toHaveBeenCalled();
@@ -143,7 +154,7 @@ describe("bounded async ops helpers", () => {
           recoveryTimeoutMs: 5,
         },
       ),
-    ).rejects.toMatchObject({ errorClass: "timeout" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending" });
     expect(execute).not.toHaveBeenCalled();
     expect(lookup).toHaveBeenCalled();
   });
@@ -180,7 +191,7 @@ describe("bounded async ops helpers", () => {
       state: "succeeded",
       submittedAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:00:01.000Z",
-      result: { changed: true },
+      result: pullResult,
     });
     const lookup = vi.fn().mockResolvedValue({
       version: 1,
@@ -195,18 +206,31 @@ describe("bounded async ops helpers", () => {
     await expect(
       executeAndWait(
         fakeClient({ execute, status, lookup }),
-        { kind: "service.pull", serviceId: "redis" },
+        {
+          kind: "service.pull",
+          serviceId: "redis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
         operationKey,
+        { parentAssertion: "retained-test-parent" },
       ),
-    ).resolves.toEqual({ changed: true });
+    ).resolves.toEqual(pullResult);
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute).toHaveBeenNthCalledWith(
       1,
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       expect.objectContaining({ operationKey }),
     );
     expect(lookup).toHaveBeenCalledWith(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.pull",
+        serviceId: "redis",
+        expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      },
       operationKey,
       expect.anything(),
     );
@@ -229,7 +253,7 @@ describe("bounded async ops helpers", () => {
       state: "succeeded" as const,
       submittedAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:00:01.000Z",
-      result: { changed: true },
+      result: pullResult,
     };
     const transient = vi
       .fn()
@@ -239,13 +263,13 @@ describe("bounded async ops helpers", () => {
       waitForOpsResult(fakeClient({ status: transient }), admission.kind, admission, {
         sleep: async () => undefined,
       }),
-    ).resolves.toEqual({ changed: true });
+    ).resolves.toEqual(pullResult);
     expect(transient).toHaveBeenCalledTimes(2);
 
     const denied = vi.fn().mockRejectedValue(new ApiOpsError("authorization"));
     await expect(
       waitForOpsResult(fakeClient({ status: denied }), admission.kind, admission),
-    ).rejects.toMatchObject({ errorClass: "authorization" });
+    ).rejects.toMatchObject({ name: "OpsObservationPending", reason: "unavailable" });
     expect(denied).toHaveBeenCalledTimes(1);
   });
 
@@ -342,7 +366,10 @@ describe("bounded async ops helpers", () => {
         now += ms;
       },
     });
-    await expect(timedOut).rejects.toEqual(new ApiOpsError("timeout"));
+    await expect(timedOut).rejects.toMatchObject({
+      name: "OpsObservationPending",
+      reason: "observer_deadline",
+    });
   });
 
   it("rejects a status bound to a different operation key", async () => {
@@ -367,15 +394,13 @@ describe("bounded async ops helpers", () => {
       })),
     });
     await expect(waitForOpsResult(client, admission.kind, admission)).rejects.toMatchObject({
-      name: "ApiOpsError",
-      errorClass: "runtime",
+      name: "OpsObservationPending",
+      reason: "invalid_identity",
     });
   });
 
   it("removes the sleep abort listener after every normal poll", async () => {
     const controller = new AbortController();
-    const add = vi.spyOn(controller.signal, "addEventListener");
-    const remove = vi.spyOn(controller.signal, "removeEventListener");
     const admission = {
       execution: "async" as const,
       operationId: "job1_abcdefghijklmnop",
@@ -383,36 +408,35 @@ describe("bounded async ops helpers", () => {
       kind: "service.stop" as const,
       state: "queued" as const,
     };
-    const status = vi
-      .fn()
-      .mockResolvedValueOnce({
-        version: 1,
-        operationId: admission.operationId,
-        operationKey: admission.operationKey,
-        kind: admission.kind,
-        resourceId: "redis",
-        state: "running",
-        submittedAt: "2026-08-23T10:00:00.000Z",
-        updatedAt: "2026-08-23T10:00:01.000Z",
-      })
-      .mockResolvedValueOnce({
-        version: 1,
-        operationId: admission.operationId,
-        operationKey: admission.operationKey,
-        kind: admission.kind,
-        resourceId: "redis",
-        state: "succeeded",
-        submittedAt: "2026-08-23T10:00:00.000Z",
-        updatedAt: "2026-08-23T10:00:02.000Z",
-        result: { changed: true },
-      });
-    await waitForOpsResult(fakeClient({ status }), admission.kind, admission, {
-      signal: controller.signal,
-      pollIntervalMs: 1,
-      timeoutMs: 100,
+    let effectiveSignal: AbortSignal | undefined;
+    let reads = 0;
+    const client = fakeClient({
+      status: async (_kind: unknown, _id: unknown, options: { signal: AbortSignal }) => {
+        effectiveSignal = options.signal;
+        reads++;
+        return {
+          version: 1,
+          operationId: admission.operationId,
+          operationKey: admission.operationKey,
+          kind: admission.kind,
+          resourceId: "redis",
+          state: reads === 1 ? "running" : "succeeded",
+          submittedAt: "2026-08-23T10:00:00.000Z",
+          updatedAt: "2026-08-23T10:00:01.000Z",
+          ...(reads === 1 ? {} : { result: { changed: true } }),
+        };
+      },
     });
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(remove).toHaveBeenCalledTimes(1);
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        signal: controller.signal,
+        pollIntervalMs: 1,
+        timeoutMs: 100,
+      }),
+    ).resolves.toEqual({ changed: true });
+    if (!effectiveSignal) throw new Error("Status did not receive the observer signal");
+    expect(getEventListeners(effectiveSignal, "abort")).toHaveLength(0);
+    expect(reads).toBe(2);
   });
 
   it("streams bounded event pages and stops promptly on caller cancellation", async () => {
@@ -560,6 +584,8 @@ describe("bounded async ops helpers", () => {
 describe("configuration outcome evidence", () => {
   const operation = {
     expectedCurrentRevisionId: null,
+    expectedSourceRevision: "11111111-1111-4111-8111-111111111111",
+    coordinatorMode: "ensure-running" as const,
     kind: "stack.render" as const,
     revisionId: `cfg1_${"a".repeat(43)}`,
   };
@@ -568,7 +594,9 @@ describe("configuration outcome evidence", () => {
       execute: vi.fn().mockRejectedValue(new Error("connection lost after send")),
     });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
     expect(client.execute).toHaveBeenCalledTimes(1);
   });
@@ -590,7 +618,9 @@ describe("configuration outcome evidence", () => {
         }),
       });
       expect(
-        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+        await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+          parentAssertion: "retained-test-parent",
+        }),
       ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
       expect(client.execute).toHaveBeenCalledTimes(1);
     },
@@ -619,10 +649,115 @@ describe("configuration outcome evidence", () => {
       });
     const client = fakeClient({ execute });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome123", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toMatchObject({ outcome: "not_committed", reason: "conflict" });
     expect(
-      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456"),
+      await executeTrustedConfigurationAndWait(client, operation, "opk1_configOutcome456", {
+        parentAssertion: "retained-test-parent",
+      }),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
   });
+});
+
+describe("independent observation deadlines", () => {
+  it("observes beyond thirty minutes without extending or canceling backend work", async () => {
+    let now = 0;
+    const admission = {
+      execution: "async" as const,
+      kind: "service.build" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      state: "running" as const,
+      admittedAt: 0,
+      deadlineAt: 12 * 3600_000,
+      fingerprint: "a".repeat(64),
+    };
+    let polls = 0;
+    const client = fakeClient({
+      status: async () => ({
+        version: 2,
+        ...admission,
+        resourceId: "valhalla",
+        submittedAt: new Date(0).toISOString(),
+        updatedAt: new Date(now).toISOString(),
+        state: ++polls === 1 ? "running" : "succeeded",
+        ...(polls === 1 ? {} : { result: { completed: true } }),
+      }),
+    });
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        now: () => now,
+        sleep: async () => {
+          now = 31 * 60_000;
+        },
+      }),
+    ).resolves.toEqual({ completed: true });
+    expect(client.cancel).not.toHaveBeenCalled();
+    expect(client.execute).not.toHaveBeenCalled();
+  });
+  it("allows a separately selected observer beyond forty-eight hours and reports loss as pending", async () => {
+    const controller = new AbortController();
+    const admission = {
+      execution: "async" as const,
+      kind: "system.update" as const,
+      operationId: "job1_abcdefghijklmnop",
+      operationKey: "opk1_abcdefghijklmnop",
+      state: "running" as const,
+    };
+    const client = fakeClient({
+      status: async () => {
+        controller.abort();
+        throw new DOMException("Aborted", "AbortError");
+      },
+    });
+    await expect(
+      waitForOpsResult(client, admission.kind, admission, {
+        signal: controller.signal,
+        timeoutMs: 72 * 3600_000,
+      }),
+    ).rejects.toBeInstanceOf(OpsObservationPending);
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+});
+
+it("bounds an inflight status read by the observer deadline without canceling execution", async () => {
+  const admission = {
+    execution: "async" as const,
+    kind: "service.build" as const,
+    operationId: "job1_abcdefghijklmnop",
+    operationKey: "opk1_abcdefghijklmnop",
+    state: "running" as const,
+  };
+  const client = fakeClient({
+    status: async (_kind: unknown, _id: unknown, options: { signal: AbortSignal }) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () =>
+            resolve({
+              version: 1,
+              ...admission,
+              resourceId: "valhalla",
+              state: "succeeded",
+              result: { completed: true },
+              submittedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }),
+          200,
+        );
+        options.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true },
+        );
+      }),
+  });
+  await expect(
+    waitForOpsResult(client, admission.kind, admission, { observerDeadlineAt: Date.now() + 20 }),
+  ).rejects.toMatchObject({ name: "OpsObservationPending", reason: "observer_deadline" });
+  expect(client.cancel).not.toHaveBeenCalled();
 });

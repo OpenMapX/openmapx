@@ -3,6 +3,14 @@ import Fastify from "fastify";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// UNIT persistence collaborator only: the actual policy loader, Better Auth
+// runtime and production Fastify bridge still serve the discovery document.
+vi.mock("../../db", async (importActual) => {
+  const actual = await importActual<typeof import("../../db")>();
+  const { createDbMock } = await import("../../test/db");
+  return { ...actual, db: { ...createDbMock().db, _: actual.db._ } };
+});
+
 beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_SECRET", "discovery-test-secret-at-least-thirty-two-chars");
   vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");

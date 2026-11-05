@@ -53,6 +53,11 @@ configuration files from it, `services build` uses its build contexts, and
 user, the Debian and Ubuntu default, meets this even with their umask of `002`.
 Where the account's group has other members, clone and pull with umask `022`.
 
+The durable host-control keys require non-group-writable authority ancestors,
+even when the account has a private group. After cloning, run
+`chmod go-w . infra infra/docker infra/docker/secrets` before the first render.
+Existing unsafe control directories are refused rather than silently repaired.
+
 ## Hardware
 
 Size for the services that run together, including temporary build containers.

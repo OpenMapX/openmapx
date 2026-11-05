@@ -47,8 +47,15 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     );
     expect(rows).toEqual([
       "account.user_id:c",
+      "account_action_receipt.actor_id:n",
+      "account_action_receipt.target_id:n",
+      "account_mail_outbox.user_id:c",
+      "admin_action_reauthentication.actor_id:c",
       "admin_audit_log.actor_id:n",
       "admin_job.created_by:n",
+      "auth_policy_application.actor_id:n",
+      "auth_policy_state.activated_by:n",
+      "configuration_migration_preview.actor_id:c",
       "data_disclosure_event.user_id:n",
       "data_export_reauthentication.initiating_admin_user_id:n",
       "data_export_reauthentication.user_id:n",
@@ -62,6 +69,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "data_subject_request_task.assigned_to:n",
       "installed_extension.installed_by:n",
       "installed_integration.installed_by:n",
+      "integration_application_receipt.actor_id:n",
       "integration_secret.updated_by:n",
       "labeled_place.user_id:c",
       "mangrove_keypair.user_id:c",
@@ -74,11 +82,13 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "passkey.user_id:c",
       "personal_timeline_connection.user_id:c",
       "personal_vehicle.user_id:c",
+      "platform_configuration_preview.actor_id:c",
       "saved_list.user_id:c",
       "service_secret.updated_by:n",
       "session.user_id:c",
       "session_auth_assurance.user_id:n",
       "share_link.user_id:c",
+      "transit_credential_preview.actor_id:c",
       "two_factor.user_id:c",
     ]);
   });

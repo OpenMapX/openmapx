@@ -11,9 +11,11 @@ const mocks = installAdminRouteMocks();
 const list = vi.fn();
 const detail = vi.fn();
 const cancel = vi.fn();
+const cancelData = vi.fn();
 vi.mock("../../services/activity-jobs", () => ({
   listActivityJobs: (...args: unknown[]) => list(...args),
   getActivityJob: (...args: unknown[]) => detail(...args),
+  cancelDataManagerActivityJob: (...args: unknown[]) => cancelData(...args),
 }));
 vi.mock("../../services/job-runner", () => ({
   jobRunner: { cancel: (...args: unknown[]) => cancel(...args) },
@@ -65,6 +67,7 @@ beforeEach(() => {
   list.mockReset().mockResolvedValue({ jobs: [], total: 0 });
   detail.mockReset().mockResolvedValue(null);
   cancel.mockReset().mockResolvedValue(true);
+  cancelData.mockReset().mockResolvedValue(false);
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -237,6 +240,28 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
       await app.close();
     }
   });
+  it("sends supported data cancellation through the authenticated receiver and audits its distinct identity", async () => {
+    cancelData.mockResolvedValueOnce(true);
+    const app = await createAdminTestApp(adminActivityRoute);
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/jobs/durable-data-id/cancel?source=data-manager",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(cancelData).toHaveBeenCalledWith("durable-data-id");
+      expect(cancel).not.toHaveBeenCalled();
+      expect(mocks.writeAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetId: "durable-data-id",
+          targetType: "data-manager-job",
+          action: "job.cancel",
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
   it("validates actual 400/401/403/404/429/500 JSON and Retry-After", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     expect(sdk.listAdminActivityJobs).toBeTypeOf("function");
@@ -256,7 +281,10 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
       }
       expect(
         await sdk.cancelAdminActivityJob("job-1", { source: "data-manager" }, { client }),
-      ).toMatchObject({ status: 400, data: { error: "Data-manager jobs cannot be canceled" } });
+      ).toMatchObject({
+        status: 400,
+        data: { error: "Job cannot be canceled (not running or queued)" },
+      });
       expect(await sdk.getAdminActivityJob("missing", undefined, { client })).toMatchObject({
         status: 404,
         data: { error: "Job not found" },
@@ -301,3 +329,72 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
     }
   });
 });
+
+it("serializes retained failure and observation evidence through the actual SDK and rejects internal ownership", async () => {
+  const { getAdminActivityJob } = await import("@openmapx/core/api-admin-sdk");
+  const app = await createAdminTestApp(adminActivityRoute);
+  try {
+    const evidence = {
+      serviceBatch: {
+        outcome: "partial",
+        completedServiceIds: ["tileserver"],
+        failedServiceIds: ["valhalla"],
+        skippedServiceIds: [],
+      },
+      diagnostics: { truncated: false, tail: [{ stream: "stderr", message: "final diagnostic" }] },
+      observation: {
+        state: "unknown",
+        reason: "recovery_required",
+        nextCheckAt: "2026-10-23T20:00:00.000Z",
+      },
+    };
+    detail.mockResolvedValue({ ...activityDetail(), status: "cancel_pending", result: evidence });
+    const response = await app.inject("/admin/jobs/job-1");
+    expect(response.statusCode).toBe(200);
+    expect(response.json().result).toEqual(evidence);
+    // The generated JSON result decoder must preserve this same producer shape.
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(response.body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createApiClient({ baseUrl: "http://api.test" });
+    expect(await getAdminActivityJob("job-1", {}, { client })).toMatchObject({
+      data: { result: evidence },
+    });
+    detail.mockResolvedValue({
+      ...activityDetail(),
+      result: { _execution: { owner: "private", version: 1 } },
+    });
+    const rejected = await app.inject("/admin/jobs/job-1");
+    expect(rejected.statusCode).toBe(500);
+    expect(rejected.body).not.toContain("private");
+  } finally {
+    await app.close();
+  }
+});
+
+it.each([401, 403])(
+  "denies detail/cancel before any domain call for guard status %s",
+  async (statusCode) => {
+    const app = await createAdminTestApp(adminActivityRoute);
+    try {
+      for (const [method, url] of [
+        ["GET", "/admin/jobs/job-1"],
+        ["POST", "/admin/jobs/job-1/cancel"],
+      ] as const) {
+        mocks.requireAdmin.mockRejectedValueOnce(
+          Object.assign(new Error("Denied"), { statusCode }),
+        );
+        expect((await app.inject({ method, url })).statusCode).toBe(statusCode);
+      }
+      expect(detail).not.toHaveBeenCalled();
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  },
+);

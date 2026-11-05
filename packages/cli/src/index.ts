@@ -11,13 +11,14 @@ import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerServicesCommands } from "./commands/services";
 import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerUsersCommands } from "./commands/users";
+import { fixedCliCommandExitCode } from "./lib/control-context";
+import { assertCliExecutionAvailable, withCliExecutionDeadline } from "./lib/execution-deadline";
 import { loadInfraEnv } from "./lib/infra-env";
 import { log } from "./lib/output";
 
 // Mirror Docker Compose's behaviour: auto-load infra/docker/.env so that
 // `--domain` and `SERVICE_<ID>_<KEY>` overrides resolve consistently between
 // `pnpm openmapx compose render` (CLI) and `docker compose up` (compose).
-loadInfraEnv();
 
 const program = new Command();
 
@@ -40,13 +41,21 @@ registerCacheCommands(program);
 registerTransitousCommands(program);
 
 try {
-  await program.parseAsync(process.argv);
+  await withCliExecutionDeadline(process.argv.slice(2), async () => {
+    loadInfraEnv();
+    program.hook("preAction", () => assertCliExecutionAvailable());
+    await program.parseAsync(process.argv);
+  });
 } catch (error) {
-  // A community repository the operations agent no longer recognizes is an
-  // operator problem with a known remedy, not a crash.
-  if (error instanceof coreServices.CommunityServiceRecordsError) {
-    log.err(error.message);
-    process.exit(1);
+  if (!process.env.OPENMAPX_CONTROL_DELEGATION && !process.env.OPENMAPX_PARENT_EXECUTION) {
+    if (error instanceof coreServices.CommunityServiceRecordsError) {
+      log.err(error.message);
+      process.exitCode = 1;
+    } else throw error;
+  } else {
+    // The control context has already retained its actual disposition and closed
+    // local handles. Avoid forwarding exception paths/stacks to public job logs.
+    process.stderr.write("Fixed CLI command failed; inspect the original operation status.\n");
+    process.exitCode = fixedCliCommandExitCode(error) ?? 1;
   }
-  throw error;
 }

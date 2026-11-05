@@ -13,7 +13,7 @@ const FIXTURE_GTFS_ZIP = Buffer.from(
 );
 
 export function writeFixtureGtfsArchive(path: string): void {
-  writeFileSync(path, FIXTURE_GTFS_ZIP);
+  writeFileSync(path, FIXTURE_GTFS_ZIP, { mode: 0o600 });
 }
 
 export function isFixtureGtfsArchive(bytes: Buffer): boolean {

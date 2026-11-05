@@ -14,15 +14,15 @@ import {
  */
 function buildFakeDb(rows: Array<{ id: string }>): {
   handle: JobReconcileWriter;
-  captured: { set?: { status: string; finishedAt: Date }; whereCalled: boolean };
+  captured: { set?: { status: string; finishedAt: Date | null }; whereCalled: boolean };
 } {
-  const captured: { set?: { status: string; finishedAt: Date }; whereCalled: boolean } = {
+  const captured: { set?: { status: string; finishedAt: Date | null }; whereCalled: boolean } = {
     whereCalled: false,
   };
   const handle = {
     update(_table: unknown) {
       return {
-        set(values: { status: string; finishedAt: Date }) {
+        set(values: { status: string; finishedAt: Date | null }) {
           captured.set = values;
           return {
             where(_predicate: unknown) {
@@ -42,7 +42,7 @@ function buildFakeDb(rows: Array<{ id: string }>): {
 }
 
 describe("reconcileOrphanedJobs", () => {
-  it("stamps running jobs as interrupted with a finish time and returns their ids", async () => {
+  it("marks orphaned legacy jobs interrupted without inventing a containment time", async () => {
     const now = new Date("2026-06-27T10:00:00.000Z");
     const { handle, captured } = buildFakeDb([{ id: "job-a" }, { id: "job-b" }]);
 
@@ -50,7 +50,7 @@ describe("reconcileOrphanedJobs", () => {
 
     expect(ids).toEqual(["job-a", "job-b"]);
     expect(captured.whereCalled).toBe(true);
-    expect(captured.set).toEqual({ status: INTERRUPTED_STATUS, finishedAt: now });
+    expect(captured.set).toEqual({ status: INTERRUPTED_STATUS, finishedAt: null });
     expect(INTERRUPTED_STATUS).toBe("interrupted");
   });
 

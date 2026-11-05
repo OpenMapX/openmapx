@@ -21,6 +21,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("admin layout deployment boundary", () => {
+  it("retains unknown deployment for an authenticated full admin during an outage", async () => {
+    vi.stubGlobal("fetch", async (url: string) =>
+      new URL(url).pathname === "/api/me"
+        ? Response.json({ user: { name: "Admin", email: "admin@example.test", role: "admin" } })
+        : Response.json({ error: "unavailable" }, { status: 503 }),
+    );
+    const rendered = await request.run("session=admin", () =>
+      AdminRootLayout({ children: "child" }),
+    );
+    expect(rendered.props.selfHosted).toBeNull();
+  });
   it("keeps me authentication and privacy_admin deployment skip", async () => {
     const paths: string[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {

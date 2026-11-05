@@ -5,7 +5,7 @@ export const installedIntegration = pgTable(
   "installed_integration",
   {
     id: text("id").primaryKey(),
-    repository: text("repository").notNull(),
+    repository: text("repository"),
     installedVersion: text("installed_version").notNull(),
     sourceType: text("source_type").notNull().default("registry"), // registry | artifact
     installedAt: timestamp("installed_at").defaultNow().notNull(),

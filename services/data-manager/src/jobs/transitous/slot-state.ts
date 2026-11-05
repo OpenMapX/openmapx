@@ -1,17 +1,30 @@
 import {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
-  readFileSync,
   readlinkSync,
+  readSync,
   renameSync,
   rmSync,
-  statSync,
   symlinkSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import z from "zod/v4";
 import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
+
+const rollbackRecordSchema = z.strictObject({
+  proposalId: z.uuid(),
+  validationId: z.uuid(),
+  slot: z.enum(["A", "B"]),
+  epoch: z.string().min(1).max(512),
+  manifestHash: z.string().regex(/^[a-f0-9]{64}$/),
+  filesDigest: z.string().regex(/^[a-f0-9]{64}$/),
+});
 
 export type MotisSlot = "A" | "B";
 
@@ -19,6 +32,14 @@ export interface MotisSlotRecord {
   schemaVersion: 1;
   activeSlot: MotisSlot;
   previousHealthySlot?: MotisSlot;
+  retainedRollback?: {
+    proposalId: string;
+    validationId: string;
+    slot: MotisSlot;
+    epoch: string;
+    manifestHash: string;
+    filesDigest: string;
+  };
   datasetEpoch?: string;
   manifestHash?: string;
   imageDigest?: string;
@@ -37,11 +58,48 @@ export interface MotisSlotLayout {
 const other = (slot: MotisSlot): MotisSlot => (slot === "A" ? "B" : "A");
 
 function readRecord(path: string): MotisSlotRecord | null {
-  if (!existsSync(path)) return null;
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as MotisSlotRecord;
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let parsed: MotisSlotRecord;
+  try {
+    const before = fstatSync(fd);
+    if (!before.isFile()) throw Error("MOTIS slot state must be a regular file");
+    const bytes = Buffer.alloc(64 * 1024 + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, length);
+      if (!count) break;
+      length += count;
+    }
+    if (length > 64 * 1024) throw Error("MOTIS slot state exceeds size limit");
+    const after = fstatSync(fd),
+      named = lstatSync(path);
+    if (
+      before.dev !== named.dev ||
+      before.ino !== named.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs ||
+      length !== after.size
+    )
+      throw Error("MOTIS slot state changed while reading");
+    parsed = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, length)),
+    ) as MotisSlotRecord;
+  } finally {
+    closeSync(fd);
+  }
   if (parsed.schemaVersion !== 1 || !["A", "B"].includes(parsed.activeSlot)) {
     throw new Error(`malformed MOTIS slot state at ${path}`);
   }
+  if (parsed.previousHealthySlot !== undefined && !["A", "B"].includes(parsed.previousHealthySlot))
+    throw Error("Malformed previous healthy slot");
+  if (parsed.retainedRollback !== undefined) rollbackRecordSchema.parse(parsed.retainedRollback);
   return parsed;
 }
 
@@ -52,8 +110,6 @@ function readRecord(path: string): MotisSlotRecord | null {
  */
 export function readMotisSlotState(dataDir: string): MotisSlotRecord | null {
   const path = join(dataDir, "motis", "slot-state.json");
-  if (existsSync(path) && statSync(path).size > 64 * 1024)
-    throw new Error("MOTIS slot state exceeds size limit");
   const record = readRecord(path);
   if (
     record &&
@@ -131,6 +187,7 @@ export function commitMotisSlotActivation(
     schemaVersion: 1,
     activeSlot: next.activeSlot,
     previousHealthySlot: layout.record.activeSlot,
+    ...(layout.record.retainedRollback ? { retainedRollback: layout.record.retainedRollback } : {}),
     datasetEpoch: next.datasetEpoch,
     manifestHash: next.manifestHash,
     imageDigest: next.imageDigest,

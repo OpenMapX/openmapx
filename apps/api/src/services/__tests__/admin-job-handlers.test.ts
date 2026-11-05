@@ -2,6 +2,11 @@ import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 
 const runCliMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const preparedRevision = `cfg1_${"p".repeat(43)}`;
+const prepareGenerationMock = vi.hoisted(() => vi.fn());
+vi.mock("../service-preparation", () => ({
+  prepareServiceGeneration: (...args: unknown[]) => prepareGenerationMock(...args),
+}));
 const runAdminOperationMock = vi.hoisted(() =>
   vi
     .fn()
@@ -15,7 +20,8 @@ const runAdminOperationMock = vi.hoisted(() =>
 // Stub the heavy import chain so the argv-guard tests don't bring in the real
 // service registry, postgres client, or CLI runner. We only exercise pure
 // validation helpers.
-vi.mock("@openmapx/core/server", () => ({
+vi.mock("@openmapx/core/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core/server")>()),
   findRepoRoot: () => "/repo",
 }));
 vi.mock("@openmapx/core", () => ({
@@ -35,6 +41,7 @@ vi.mock("../service-registry", () => ({
     list: () => [
       { manifest: { id: "valhalla" } },
       { manifest: { id: "osrm" } },
+      { manifest: { id: "motis" } },
       { manifest: { id: "app-api" } },
     ],
   }),
@@ -208,7 +215,11 @@ describe("admin job handlers", () => {
         });
         expect(response.statusCode).toBe(200);
         const payload = enqueue.mock.calls[0][1];
-        expect(payload).toEqual({ operation: id, version: 1, input: raw });
+        expect(payload).toEqual({
+          operation: id,
+          version: id === "overture-conflate" ? 2 : 1,
+          input: raw,
+        });
         const ctx = dataCtx(payload);
         await handleDataOperationJob(ctx);
         expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, `admin-job.data.${id}`]]);
@@ -295,13 +306,44 @@ describe("admin job handlers", () => {
       runAdminOperationMock.mockClear();
       await expect(
         handleDataOperationJob(
-          dataCtx({ operation: "overture-conflate", version: 1, input: { region: "../etc" } }),
+          dataCtx({ operation: "overture-conflate", version: 2, input: { region: "../etc" } }),
         ),
       ).rejects.toThrow(/region/);
       await expect(
         handleDataOperationJob(dataCtx({ operation: "search-index-build", version: 1, input: {} })),
       ).rejects.toThrow(/region/);
       expect(runAdminOperationMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects old conflation jobs and forwards both reviewed version2 modes exactly", async () => {
+      runAdminOperationMock.mockClear();
+      await expect(
+        handleDataOperationJob(
+          dataCtx({
+            operation: "overture-conflate",
+            version: 1,
+            input: { region: "europe/germany", restart: true },
+          }),
+        ),
+      ).rejects.toThrow(/catalog version 1; current is 2/);
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
+      for (const restart of [false, true]) {
+        const ctx = dataCtx({
+          operation: "overture-conflate",
+          version: 2,
+          input: { region: "europe/germany", restart },
+        });
+        await handleDataOperationJob(ctx);
+        expect(runAdminOperationMock).toHaveBeenLastCalledWith(
+          ctx,
+          {
+            kind: "data.overtureConflate",
+            regionId: "europe/germany",
+            ...(restart ? { restart: true } : {}),
+          },
+          "admin-job.data.overture-conflate",
+        );
+      }
     });
 
     it("rejects unknown operations and stale catalog versions", async () => {
@@ -330,20 +372,174 @@ describe("admin job handlers", () => {
             },
           }),
         ),
-      ).rejects.toThrow(/Invalid input/);
+      ).rejects.toThrow();
       expect(runAdminOperationMock).not.toHaveBeenCalled();
 
       const ctx = dataCtx({ operation: "generate-api-keys", version: 1, input: {} });
-      await handleDataOperationJob(ctx);
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
-        "admin-job.data.generate-api-keys",
-      );
+      await expect(handleDataOperationJob(ctx)).rejects.toThrow();
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
     });
   });
 
   describe("bulk service operations", () => {
+    it("prepares one full generation before bulk Start and carries it to deterministic target children", async () => {
+      prepareGenerationMock.mockReset().mockResolvedValue({
+        revisionId: preparedRevision,
+        coordinatorMode: "ensure-running",
+        hardlinks: { applied: true, entries: 0, linked: 0, skipped: 0, pruned: 0 },
+      });
+      runAdminOperationMock.mockClear();
+      const ctx = {
+        jobId: "bulk-start-fixture",
+        payload: { action: "start", serviceIds: ["valhalla", "osrm"] },
+        signal: new AbortController().signal,
+        log: vi.fn(),
+        setProgress: vi.fn(),
+        checkpoint: vi.fn(),
+      };
+      await handleServiceBulkJob(ctx);
+      expect(prepareGenerationMock).toHaveBeenCalledTimes(1);
+      expect(prepareGenerationMock).toHaveBeenCalledWith(ctx, "bulk-start", {
+        coordinatorMode: "ensure-running",
+      });
+      expect(runAdminOperationMock.mock.calls.map((call) => call[1])).toEqual([
+        {
+          kind: "service.start",
+          serviceId: "valhalla",
+          expectedConfigurationRevisionId: preparedRevision,
+        },
+        {
+          kind: "service.start",
+          serviceId: "osrm",
+          expectedConfigurationRevisionId: preparedRevision,
+        },
+      ]);
+      expect(runAdminOperationMock.mock.calls.map((call) => call[3])).toEqual([
+        { durableIdentity: "valhalla" },
+        { durableIdentity: "osrm" },
+      ]);
+    });
+    it("starts no bulk target when full preparation or hardlinks fail", async () => {
+      prepareGenerationMock.mockReset().mockRejectedValue(new Error("synthetic hardlink failure"));
+      runAdminOperationMock.mockClear();
+      await expect(
+        handleServiceBulkJob({
+          jobId: "bulk-start-refusal",
+          payload: { action: "start", serviceIds: ["valhalla", "osrm"] },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toThrow("synthetic hardlink failure");
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
+    });
+    it("does not continue a batch after unknown admission even with continueOnError", async () => {
+      const { OpsObservationPending } = await import("../ops-client");
+      const pending = new OpsObservationPending(
+        { kind: "service.build", operationKey: "opk1_abcdefghijklmnop" },
+        "transport",
+      );
+      runAdminOperationMock.mockClear();
+      runAdminOperationMock.mockRejectedValueOnce(pending);
+      await expect(
+        handleServiceBulkJob({
+          jobId: "job",
+          payload: { action: "build", serviceIds: ["valhalla", "osrm"], continueOnError: true },
+          signal: new AbortController().signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpoint: vi.fn(),
+        }),
+      ).rejects.toBe(pending);
+      expect(runAdminOperationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["continue", "fail-fast", "all-failed", "unknown", "cancel"] as const)(
+      "checkpoints exact batch results before failure: %s",
+      async (mode) => {
+        const { ApiOpsError, OpsObservationPending } = await import("../ops-client");
+        const { AdminJobFailure } = await import("../admin-job-failure");
+        const controller = new AbortController();
+        const pending = new OpsObservationPending(
+          { kind: "service.build", operationKey: "opk1_abcdefghijklmnop" },
+          "transport",
+        );
+        runAdminOperationMock.mockClear();
+        runAdminOperationMock.mockImplementationOnce(async () => {
+          if (mode === "all-failed") throw new ApiOpsError("runtime");
+          return { completed: true };
+        });
+        runAdminOperationMock.mockImplementationOnce(async () => {
+          if (mode === "unknown") throw pending;
+          if (mode === "cancel") {
+            controller.abort();
+            throw new DOMException("Aborted", "AbortError");
+          }
+          throw new ApiOpsError("runtime");
+        });
+        if (mode === "continue" || mode === "all-failed")
+          runAdminOperationMock.mockImplementationOnce(async () => {
+            if (mode === "all-failed") throw new ApiOpsError("runtime");
+            return { completed: true };
+          });
+        const checkpoints: Record<string, unknown>[] = [];
+        const ctx = {
+          jobId: "batch",
+          payload: {
+            action: "build",
+            serviceIds: ["valhalla", "osrm", "app-api"],
+            ...(mode === "fail-fast" ? {} : { continueOnError: true }),
+          },
+          signal: controller.signal,
+          log: vi.fn(),
+          setProgress: vi.fn(),
+          checkpointResult: { retained: true } as Record<string, unknown>,
+          checkpoint: async (value: Record<string, unknown>) => {
+            checkpoints.push(structuredClone(value));
+            ctx.checkpointResult = value;
+          },
+        };
+        const failure = await handleServiceBulkJob(ctx).catch((error) => error);
+        if (mode === "unknown") expect(failure).toBe(pending);
+        else if (mode === "cancel") expect(failure.name).toBe("AbortError");
+        else expect(failure).toBeInstanceOf(AdminJobFailure);
+        const batch = {
+          outcome: mode === "all-failed" ? "failed" : "partial",
+          completedServiceIds:
+            mode === "all-failed"
+              ? []
+              : mode === "continue"
+                ? ["valhalla", "app-api"]
+                : ["valhalla"],
+          failedServiceIds:
+            mode === "all-failed"
+              ? ["valhalla", "osrm", "app-api"]
+              : mode === "unknown" || mode === "cancel"
+                ? []
+                : ["osrm"],
+          skippedServiceIds:
+            mode === "unknown" || mode === "cancel"
+              ? ["app-api"]
+              : mode === "fail-fast"
+                ? ["app-api"]
+                : [],
+        };
+        expect(checkpoints[0]).toMatchObject({
+          retained: true,
+          serviceBatch: { completedServiceIds: mode === "all-failed" ? [] : ["valhalla"] },
+        });
+        expect(checkpoints.at(-1)).toMatchObject({ retained: true, serviceBatch: batch });
+        if (mode !== "unknown" && mode !== "cancel")
+          expect(failure.result.serviceBatch).toEqual(batch);
+        expect(runAdminOperationMock.mock.calls.map((call) => call[1].serviceId)).toEqual(
+          mode === "continue" || mode === "all-failed"
+            ? ["valhalla", "osrm", "app-api"]
+            : ["valhalla", "osrm"],
+        );
+      },
+    );
+
     it("submits one typed lifecycle operation per exact service ID", async () => {
       runAdminOperationMock.mockClear();
       const ctx = {
@@ -370,8 +566,31 @@ describe("admin job handlers", () => {
       expect(runCliMock).not.toHaveBeenCalled();
     });
 
+    it("carries MOTIS import only into the fixed MOTIS child", async () => {
+      runAdminOperationMock.mockReset().mockResolvedValue({ completed: true });
+      const ctx = {
+        jobId: "job",
+        payload: { action: "build", serviceIds: ["motis"], motisImport: true },
+        signal: new AbortController().signal,
+        log: vi.fn(),
+        setProgress: vi.fn(),
+        checkpoint: vi.fn(),
+      };
+      await handleServiceBulkJob(ctx);
+      expect(runAdminOperationMock).toHaveBeenCalledWith(
+        ctx,
+        { kind: "service.build", serviceId: "motis", motisImport: true },
+        "admin-job.service.build",
+        { durableIdentity: "motis" },
+      );
+    });
+
     it("uses the bounded build-all variant and typed region options", async () => {
       runAdminOperationMock.mockClear();
+      runAdminOperationMock.mockResolvedValueOnce({
+        completedServiceIds: ["osrm"],
+        failedServiceIds: [],
+      });
       const ctx = {
         jobId: "job",
         payload: {

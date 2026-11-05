@@ -48,7 +48,12 @@ afterEach(() => {
 describe("service feature hooks use the generated SDK", () => {
   it("acquires list data and surfaces declared errors", async () => {
     const fetch = vi.fn(() =>
-      Response.json({ services: [], summary: { running: 2, stopped: 1, total: 3 } }),
+      Response.json({
+        acquisition: { state: "available", reason: null },
+        services: [],
+        capabilityInventory: { recognized: [], unrecognized: [] },
+        summary: { running: 2, stopped: 1, unknown: 0, total: 3 },
+      }),
     );
     vi.stubGlobal("fetch", fetch);
     const { result } = mount(useServicesList);
@@ -96,6 +101,20 @@ describe("service feature hooks use the generated SDK", () => {
         );
       });
       expect(fetch).toHaveBeenCalledTimes(1);
+      if (["config", "set", "delete", "selection"].includes(kind)) {
+        const init = fetch.mock.calls[0]![1] as RequestInit;
+        expect(new Headers(init.headers).get("idempotency-key")).toMatch(
+          /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
+        );
+        if (kind !== "delete")
+          expect(JSON.parse(String(init.body))).toEqual(
+            kind === "config"
+              ? { config: { count: 2 } }
+              : kind === "set"
+                ? { value: "synthetic-private" }
+                : { selectedRoots: [] },
+          );
+      }
       if (kind === "set" || kind === "delete")
         expect(fetch.mock.calls[0][0]).toContain("TOKEN%20%2Fkey");
     },
@@ -128,3 +147,40 @@ describe("service feature hooks use the generated SDK", () => {
     expect(qc.getQueryState(second)?.isInvalidated).toBe(false);
   });
 });
+it.each(["action", "bulk"] as const)(
+  "retains %s intent through lost response and rotates after acceptance",
+  async (kind) => {
+    const keys: string[] = [];
+    const fetch = vi.fn(async (...args: unknown[]) => {
+      const init = args[1] as RequestInit | undefined;
+      if (init?.method === "POST") {
+        keys.push(new Headers(init.headers).get("idempotency-key")!);
+        if (keys.length === 1) throw new TypeError("response lost");
+        return Response.json({ ok: true, jobId: "accepted-job" });
+      }
+      return Response.json({ error: "No activity fixture" }, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { result } = mount(() => ({
+      action: useServiceAction("demo"),
+      bulk: useServicesBulkAction(),
+    }));
+    const submit = () =>
+      kind === "action"
+        ? result.current.action.mutateAsync("apply")
+        : result.current.bulk.mutateAsync({ action: "update", serviceIds: ["demo"] });
+    await act(async () => {
+      await expect(submit()).rejects.toThrow();
+    });
+    await act(async () => {
+      await submit();
+    });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^[a-f0-9-]{36}$/);
+    expect(keys[1]).toBe(keys[0]);
+    await act(async () => {
+      await submit();
+    });
+    expect(keys[2]).not.toBe(keys[0]);
+  },
+);

@@ -181,3 +181,24 @@ describe("generated Traefik file configuration", () => {
     ).toBeNull();
   });
 });
+
+it("keeps large-transfer entrypoint deadlines static and generated routes unbuffered", () => {
+  const shipped = parseYaml(
+    readFileSync(join(REPO_ROOT, "services/traefik/config/traefik.yml"), "utf8"),
+  ) as {
+    entryPoints: { websecure: { transport: { respondingTimeouts: Record<string, string> } } };
+  };
+  expect(shipped.entryPoints.websecure.transport.respondingTimeouts).toEqual({
+    readTimeout: "72h",
+    writeTimeout: "72h",
+    idleTimeout: "5m",
+  });
+  const dynamic = renderTraefikDynamicConfiguration(
+    loadBuiltIns().map((s) => s.manifest),
+    {
+      domain: DOMAIN,
+      resolveProxyHost: (candidate) => resolveProxyHost(candidate, { domain: DOMAIN }),
+    },
+  );
+  expect(JSON.stringify(dynamic)).not.toContain('"buffering"');
+});

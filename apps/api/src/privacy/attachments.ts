@@ -1,100 +1,27 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { and, eq, isNull } from "drizzle-orm";
-import z from "zod/v4";
+import type z from "zod/v4";
 import { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestAttachment } from "../db/schema.js";
 import type { EncryptedBlobStore } from "./artifact-storage.js";
 
-export const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
-export const attachmentPurposeSchema = z.enum([
-  "identity_evidence",
-  "representative_authority",
-  "processor_response",
-  "operator_supplement",
-]);
-export const attachmentMediaTypeSchema = z.enum([
-  "application/pdf",
-  "text/plain",
-  "text/csv",
-  "application/json",
-  "image/png",
-  "image/jpeg",
-]);
-export type AttachmentPurpose = z.infer<typeof attachmentPurposeSchema>;
+export {
+  ATTACHMENT_MAX_BYTES,
+  attachmentMediaTypeSchema,
+  attachmentMetadataSchema,
+  attachmentPurposeSchema,
+} from "@openmapx/core/privacy";
 
-/** Provenance is metadata only; the supplied document remains encrypted and
- * is never copied into this JSON object. Keeping a strict allowlist prevents a
- * caller from smuggling personal notes or credentials into case telemetry. */
-export const attachmentMetadataSchema = z
-  .object({
-    source: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
-      .optional(),
-    controller: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
-      .optional(),
-    processor: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
-      .optional(),
-    cutoff: z.iso.datetime({ offset: true }).optional(),
-    reasonCode: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[a-z0-9][a-z0-9._-]*$/)
-      .optional(),
-    redactionCode: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[a-z0-9][a-z0-9._-]*$/)
-      .optional(),
-    schemaVersion: z
-      .string()
-      .min(1)
-      .max(64)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
-      .optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (!value.source && !value.controller && !value.processor) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["source"],
-        message: "attachment provenance requires a source",
-      });
-    }
-    if (JSON.stringify(value).length > 2_048) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["source"],
-        message: "attachment metadata is too large",
-      });
-    }
-  });
-export type AttachmentMetadata = z.infer<typeof attachmentMetadataSchema>;
-
-const filenameSchema = z
-  .string()
-  .min(1)
-  .max(120)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/)
-  .refine(
-    (value) => !/\.(?:exe|dll|js|mjs|html?|svg|zip|tar|gz|7z|rar|docm|xlsm)$/iu.test(value),
-    "active or archive attachments are not permitted",
-  );
-
+import {
+  ATTACHMENT_MAX_BYTES,
+  type AttachmentMetadata,
+  type AttachmentPurpose,
+  attachmentMediaTypeSchema,
+  attachmentMetadataSchema,
+  attachmentPurposeSchema,
+  attachmentFilenameSchema as filenameSchema,
+} from "@openmapx/core/privacy";
 export interface AttachmentUploadInput {
   requestId: string;
   ownerId: string;
@@ -178,34 +105,40 @@ export async function createEncryptedAttachment(
     maxBytes: ATTACHMENT_MAX_BYTES,
   });
   const database = options.database ?? defaultDb;
+  let insertCompleted = false;
   try {
-    const [row] = await database
-      .insert(dataSubjectRequestAttachment)
-      .values({
-        id,
-        requestId: input.requestId,
-        purpose,
-        storageKey,
-        filename,
-        mediaType,
-        encryptedBytes: stored.ciphertextBytes,
-        plaintextBytes: stored.plaintextBytes,
-        plaintextSha256: stored.plaintextSha256,
-        ciphertextSha256: stored.ciphertextSha256,
-        iv: stored.iv,
-        tag: stored.tag,
-        wrappedDek: JSON.stringify(stored.wrappedDek),
-        masterKeyVersion: stored.masterKeyVersion,
-        ownerId: input.ownerId,
-        expiresAt: input.expiresAt,
-        rightsReviewState: input.rightsReviewState ?? "pending",
-        metadata,
-      })
-      .returning();
-    if (!row) throw new Error("attachment metadata insert failed");
-    return { row, storage: stored };
+    // Own this commit/savepoint even for standalone callers. A callback failure
+    // cannot have issued COMMIT, whereas a rejected commit may already be durable.
+    return await database.transaction(async (transaction) => {
+      const [row] = await transaction
+        .insert(dataSubjectRequestAttachment)
+        .values({
+          id,
+          requestId: input.requestId,
+          purpose,
+          storageKey,
+          filename,
+          mediaType,
+          encryptedBytes: stored.ciphertextBytes,
+          plaintextBytes: stored.plaintextBytes,
+          plaintextSha256: stored.plaintextSha256,
+          ciphertextSha256: stored.ciphertextSha256,
+          iv: stored.iv,
+          tag: stored.tag,
+          wrappedDek: JSON.stringify(stored.wrappedDek),
+          masterKeyVersion: stored.masterKeyVersion,
+          ownerId: input.ownerId,
+          expiresAt: input.expiresAt,
+          rightsReviewState: input.rightsReviewState ?? "pending",
+          metadata,
+        })
+        .returning();
+      if (!row) throw new Error("attachment metadata insert failed");
+      insertCompleted = true;
+      return { row, storage: stored };
+    });
   } catch (error) {
-    await options.store.delete(storageKey).catch(() => undefined);
+    if (!insertCompleted) await options.store.delete(storageKey).catch(() => undefined);
     throw error;
   }
 }

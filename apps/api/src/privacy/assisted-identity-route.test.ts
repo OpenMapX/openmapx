@@ -37,7 +37,14 @@ describe("assisted identity challenge routes", () => {
         payload: { party: "subject" },
       });
       expect(issued.statusCode).toBe(202);
-      expect(issue).toHaveBeenCalledWith({ requestId, party: "subject" });
+      expect(issue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId,
+          party: "subject",
+          actorId: "caseworker",
+          idempotencyKey: expect.any(String),
+        }),
+      );
       expect(dispatchPending).toHaveBeenCalledOnce();
 
       const challengeId = issued.json().challengeId as string;
@@ -53,6 +60,8 @@ describe("assisted identity challenge routes", () => {
         challengeId,
         party: "subject",
         code: "123456",
+        actorId: "caseworker",
+        idempotencyKey: expect.any(String),
       });
     } finally {
       await app.close();

@@ -58,7 +58,9 @@ describe("notable-places schedule", () => {
       operationLock: lock,
       logger,
       cronExpression: "0 2 1 * *",
-      build,
+      runOwned: async () => {
+        await build();
+      },
     });
     await schedule.buildIfMissing();
     schedule.stop();
@@ -73,7 +75,9 @@ describe("notable-places schedule", () => {
       operationLock: lock,
       logger,
       cronExpression: "0 2 1 * *",
-      build,
+      runOwned: async () => {
+        await build();
+      },
     });
     await schedule.buildIfMissing();
     schedule.stop();
@@ -88,7 +92,9 @@ describe("notable-places schedule", () => {
       operationLock: lock,
       logger,
       cronExpression: "off",
-      build,
+      runOwned: async () => {
+        await build();
+      },
     });
     await schedule.buildIfMissing();
     schedule.stop();
@@ -106,7 +112,9 @@ describe("notable-places schedule", () => {
       operationLock: lock,
       logger: { info: vi.fn(), warn },
       cronExpression: "0 2 1 * *",
-      build,
+      runOwned: async () => {
+        await build();
+      },
     });
     await expect(schedule.buildIfMissing()).resolves.toBeUndefined();
     schedule.stop();

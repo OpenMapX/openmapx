@@ -2,7 +2,11 @@
 
 import { type ApiClient, createApiClient } from "@openmapx/core";
 import { getAdminActivityJob, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
-import type { AdminActivityJobDetail, AdminActivityJobSource } from "@openmapx/core/api-contracts";
+import {
+  type AdminActivityJobDetail,
+  type AdminActivityJobSource,
+  adminJobObservationSchema,
+} from "@openmapx/core/api-contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -40,4 +44,13 @@ export function activityJobQueryOptions(
       );
     },
   });
+}
+
+export function hasUnresolvedJobObservation(result: unknown): boolean {
+  return (
+    !!result &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    adminJobObservationSchema.safeParse((result as Record<string, unknown>).observation).success
+  );
 }

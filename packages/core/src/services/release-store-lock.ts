@@ -70,7 +70,14 @@ export async function acquireStoreLock(
   hooks: ReleaseStoreLockHooks = {},
   nowMs: () => number = Date.now,
   failIfBusy = false,
+  leaseMs = RELEASE_STORE_LOCK_TTL_MS,
 ): Promise<ReleaseStoreLock> {
+  if (
+    !Number.isSafeInteger(leaseMs) ||
+    leaseMs < RELEASE_STORE_LOCK_TTL_MS ||
+    leaseMs > 24 * 60 * 60 * 1000
+  )
+    throw Error("Invalid store lock lease");
   const lockPath = join(directory, lockName);
   const ownerPath = join(lockPath, "owner.json");
   const deadline = nowMs() + RELEASE_STORE_LOCK_ACQUIRE_TIMEOUT_MS;
@@ -80,7 +87,7 @@ export async function acquireStoreLock(
       mkdirSync(lockPath, { mode: 0o700 });
       hooks.afterLockDirectoryCreate?.();
       hooks.beforeOwnerRecordWrite?.();
-      atomicWrite(ownerPath, JSON.stringify({ ...owner, acquiredAtMs: nowMs() }));
+      atomicWrite(ownerPath, JSON.stringify({ ...owner, acquiredAtMs: nowMs(), leaseMs }));
       fsyncDirectory(lockPath);
       return {
         release() {
@@ -103,11 +110,19 @@ export async function acquireStoreLock(
     let expired = false;
     try {
       const raw = strictReadFile(ownerPath, MAX_RELEASE_STATE_BYTES);
-      const record = JSON.parse(raw) as { acquiredAtMs?: unknown };
+      const record = JSON.parse(raw) as { acquiredAtMs?: unknown; leaseMs?: unknown };
+      const retainedLease = record.leaseMs ?? leaseMs;
+      if (
+        typeof retainedLease !== "number" ||
+        !Number.isSafeInteger(retainedLease) ||
+        retainedLease < RELEASE_STORE_LOCK_TTL_MS ||
+        retainedLease > 24 * 60 * 60 * 1000
+      )
+        throw Error("Store lock lease is unreadable");
       expired =
         typeof record.acquiredAtMs !== "number" ||
         !Number.isFinite(record.acquiredAtMs) ||
-        nowMs() - record.acquiredAtMs > RELEASE_STORE_LOCK_TTL_MS;
+        nowMs() - record.acquiredAtMs > retainedLease;
     } catch (error) {
       // A lock directory without a readable owner record is either mid-
       // acquisition or abandoned before its record landed. Treat it as

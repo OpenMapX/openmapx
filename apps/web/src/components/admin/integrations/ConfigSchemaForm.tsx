@@ -1,6 +1,9 @@
 "use client";
 
-import type { AdminIntegrationResolvedConfig } from "@openmapx/core/api-contracts";
+import type {
+  AdminIntegrationResolvedConfig,
+  ConfigurationOwnership,
+} from "@openmapx/core/api-contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -14,6 +17,7 @@ interface ConfigSchemaFormProps {
   schema: Record<string, unknown> | undefined;
   /** Resolved config values with source annotations. */
   resolvedConfig: AdminIntegrationResolvedConfig;
+  ownership?: Record<string, ConfigurationOwnership>;
   /** Called after a successful save + reload. */
   onSaved?: () => void;
 }
@@ -29,6 +33,7 @@ export function ConfigSchemaForm({
   integrationId,
   schema,
   resolvedConfig,
+  ownership,
   onSaved,
 }: ConfigSchemaFormProps) {
   const admin = useIntegrationAdmin();
@@ -49,6 +54,7 @@ export function ConfigSchemaForm({
       key={JSON.stringify([admin.apiUrl, integrationId])}
       schema={schema}
       resolvedConfig={resolvedConfig}
+      ownership={ownership}
       excludeKeys={excludedKeys}
       onSave={async (diff) => {
         await saveMutation.mutateAsync(diff);

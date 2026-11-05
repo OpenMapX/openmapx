@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import type { TransitousRunnerScript } from "@openmapx/core/transitous-runner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../src/jobs/transitous/index.js";
@@ -17,17 +18,17 @@ const PINNED_LOCK = {
 };
 vi.mock("../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
-    if (operation.kind === "transitousLock.inspect") {
-      return { active: PINNED_LOCK, proposed: null };
-    }
-    if (operation.kind === "gbfsCatalogLock.inspect") {
-      return {
+    if (operation.kind === "catalogPins.inspect") {
+      const active = createCatalogPinSet(PINNED_LOCK, {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
         commit: "b".repeat(40),
-        url: "https://example.test/catalog.csv",
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${"b".repeat(40)}/systems.csv`,
         sha256: "c".repeat(64),
         lockedAt: "2026-04-20T12:00:00.000Z",
         lockedBy: "test",
-      };
+      });
+      return { active, catalogRevisionId: active.generationId };
     }
     return { changed: true };
   }),

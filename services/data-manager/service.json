@@ -62,6 +62,7 @@
       "TRANSITOUS_STALENESS_CHECK_CRON": "${TRANSITOUS_STALENESS_CHECK_CRON:-}",
       "TRANSITOUS_FEED_PROXY_RELOAD_CRON": "${TRANSITOUS_FEED_PROXY_RELOAD_CRON:-}",
       "TRANSITOUS_AUTO_BUMP_CRON": "${TRANSITOUS_AUTO_BUMP_CRON:-}",
+      "TRANSITOUS_AUTO_BUMP_BRANCH": "${TRANSITOUS_AUTO_BUMP_BRANCH:-}",
       "TRANSITOUS_ALERT_GH_TOKEN": "${TRANSITOUS_ALERT_GH_TOKEN:-}",
       "TRANSITOUS_ALERT_GH_REPO": "${TRANSITOUS_ALERT_GH_REPO:-}",
       "MOTIS_ELEVATORS_URL": "${MOTIS_ELEVATORS_URL:-}",
@@ -143,17 +144,38 @@
       "startPeriod": "120s"
     },
     "dependsOn": [
-      { "service": "postgis", "condition": "service_healthy" },
-      { "service": "ops-agent", "condition": "service_healthy" },
-      { "service": "transitous-runner", "condition": "service_healthy" }
+      {
+        "service": "postgis",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "ops-agent",
+        "condition": "service_healthy"
+      },
+      {
+        "service": "transitous-runner",
+        "condition": "service_healthy"
+      }
     ]
   },
   "provides": ["osm-data", "gtfs-data", "tile-asset-data"],
   "produces": [
-    { "type": "osm-pbf", "sourceDir": "data/osm" },
-    { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" },
-    { "type": "gtfs", "sourceDir": "data/gtfs" },
-    { "type": "tile-fonts", "sourceDir": "data/tile-fonts" }
+    {
+      "type": "osm-pbf",
+      "sourceDir": "data/osm"
+    },
+    {
+      "type": "osm-pbf-bz2",
+      "sourceDir": "data/osm-bz2"
+    },
+    {
+      "type": "gtfs",
+      "sourceDir": "data/gtfs"
+    },
+    {
+      "type": "tile-fonts",
+      "sourceDir": "data/tile-fonts"
+    }
   ],
   "bindMounts": [
     {
@@ -166,7 +188,11 @@
       "target": "/run/secrets/transitous-runner-capability",
       "readOnly": true
     },
-    { "source": "@infra:data", "target": "/data", "readOnly": false },
+    {
+      "source": "@infra:data",
+      "target": "/data",
+      "readOnly": false
+    },
     {
       "source": "@infra:secrets/transitous-api-keys",
       "target": "/config/transitous",
@@ -178,10 +204,81 @@
       "target": "/secrets/transitous-feed-proxy.age",
       "readOnly": true,
       "optional": true
+    },
+    {
+      "source": "@infra:secrets/control-data-manager.key",
+      "target": "/run/secrets/openmapx-control-role-key",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/control-verifiers.json",
+      "target": "/run/secrets/openmapx-control-verifiers",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:control-private/data-manager",
+      "target": "/var/lib/openmapx/control-private",
+      "readOnly": false
     }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 4000, "host": 4000, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 4000,
+        "host": 4000,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "infrastructure" }
+  "ui": {
+    "category": "infrastructure"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "TRANSITOUS_API_KEYS": {
+        "type": "string",
+        "title": "Transit feed credentials",
+        "description": "Managed by the dedicated Transit credentials page.",
+        "x-openmapx-secret": true
+      },
+      "LOG_LEVEL": {
+        "type": "string",
+        "title": "Log level",
+        "enum": ["fatal", "error", "warn", "info", "debug", "trace", "silent"]
+      },
+      "OVERTURE_DUCKDB_MEMORY_MB": {
+        "type": "integer",
+        "title": "Overture DuckDB memory (MiB)",
+        "minimum": 256,
+        "maximum": 1048576
+      },
+      "OVERTURE_DUCKDB_THREADS": {
+        "type": "integer",
+        "title": "Overture DuckDB threads",
+        "minimum": 1,
+        "maximum": 64
+      },
+      "OVERTURE_DUCKDB_TEMP_MB": {
+        "type": "integer",
+        "title": "Overture DuckDB temporary disk (MiB)",
+        "minimum": 1024,
+        "maximum": 10485760
+      },
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

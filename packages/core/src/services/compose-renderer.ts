@@ -13,6 +13,11 @@ import {
   readExternalProxyNetwork,
 } from "./external-proxy";
 import { detectConsumesCycle } from "./resolver";
+import {
+  isRuntimeResourceKey,
+  resolveServiceRuntimeResources,
+  runtimeResourceNumber,
+} from "./runtime-resources";
 import { assertRenderSandbox } from "./sandbox-policy";
 import type {
   HardlinkEntry,
@@ -199,6 +204,8 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 }
 
 export interface RenderContext {
+  platform?: import("./platform-configuration").PlatformConfiguration;
+  platformValues?: import("./platform-configuration").PlatformValues;
   domain?: string;
   /**
    * How the operations agent's container mounts the checkout's path (see
@@ -480,7 +487,7 @@ export interface ComposeServiceSnippet {
   logging?: { driver: string; options?: Record<string, string> };
   deploy?: {
     resources?: {
-      limits?: { memory?: string };
+      limits?: { memory?: string; cpus?: string };
       reservations?: {
         devices?: Array<{ driver: string; count: number | "all"; capabilities: string[] }>;
       };
@@ -538,6 +545,7 @@ function writeServiceConfigEnvReferences(
   const prefix = serviceConfigEnvPrefix(m.id);
   const env = snippet.environment ?? {};
   for (const key of envKeys) {
+    if (isRuntimeResourceKey(key)) throw Error("Resource settings require validated scalar values");
     if (!fields.has(key)) {
       throw new Error(
         `Service "${m.id}": env-sourced config key "${key}" is not a non-secret configSchema field`,
@@ -606,6 +614,23 @@ export function renderServiceSnippet(
 
   if (c.command !== undefined) snippet.command = c.command;
   if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
+  // This one audited command slot publishes TileJSON URLs. Do not leave a
+  // stale host DOMAIN reference after platform domain adoption, and do not
+  // evaluate arbitrary command templates.
+  if (
+    service.isBuiltIn &&
+    m.id === "tileserver" &&
+    ctx.platform?.domain?.source === "database" &&
+    ctx.platformValues &&
+    Array.isArray(snippet.command)
+  ) {
+    const command = [...snippet.command];
+    const position = command.indexOf("--public_url");
+    if (position < 0 || command[position + 1] !== "https://${DOMAIN:-localhost}/tiles/")
+      throw Error("Tileserver public origin slot changed; review platform rendering");
+    command[position + 1] = `https://${ctx.platformValues.domain}/tiles/`;
+    snippet.command = command;
+  }
   // Env files are deployment files under the infra root (built-in services
   // only), so a generation directory resolves them back to it.
   if (c.envFile?.length) {
@@ -615,18 +640,86 @@ export function renderServiceSnippet(
       : [...c.envFile];
   }
   if (c.environment) snippet.environment = { ...c.environment };
+  // Only known platform slots in audited built-in manifests may be adopted.
+  // Host-owned slots keep their original Compose interpolation byte-for-byte.
+  if (service.isBuiltIn && snippet.environment && ctx.platform && ctx.platformValues) {
+    const slots = {
+      DOMAIN: "domain",
+      ACME_EMAIL: "acmeEmail",
+      OPENMAPX_RELEASE: "releaseSelector",
+      OPENMAPX_REGION: "defaultRegion",
+      BACKUP_RETENTION_DAYS: "backupRetentionDays",
+    } as const;
+    for (const [key, value] of Object.entries(snippet.environment)) {
+      snippet.environment[key] = value.replace(
+        /\$\{(DOMAIN|ACME_EMAIL|OPENMAPX_RELEASE|OPENMAPX_REGION|BACKUP_RETENTION_DAYS)(?::-[^}]*)?\}/g,
+        (reference, variable: keyof typeof slots) => {
+          const field = slots[variable];
+          return ctx.platform?.[field]?.source === "database"
+            ? escapeComposeInterpolation(String(ctx.platformValues?.[field] ?? ""))
+            : reference;
+        },
+      );
+    }
+  }
   // Overlay operator-resolved config onto the manifest's baseline environment.
   // Resolved values win over manifest defaults (that's the whole point of
   // admin/env config). Keys with `undefined`/`null` values are skipped so a
   // partial config map doesn't blank out manifest defaults.
-  const resolved = ctx.resolvedServiceConfigs?.get(m.id);
+  const ownResolved = ctx.resolvedServiceConfigs?.get(m.id);
+  if (
+    service.isBuiltIn &&
+    m.id === "motis-staging" &&
+    ["OPENMAPX_MEMORY_MIB", "OPENMAPX_CPU_LIMIT"].some((key) => ownResolved?.[key] !== undefined)
+  )
+    throw Error("Configure the primary MOTIS slot to coordinate both resource limits");
+  const motis = ctx.resolvedServiceConfigs?.get("motis");
+  const resolved =
+    service.isBuiltIn && m.id === "motis-staging"
+      ? {
+          ...ownResolved,
+          ...Object.fromEntries(
+            Object.entries(motis ?? {}).filter(
+              ([key]) => key === "OPENMAPX_MEMORY_MIB" || key === "OPENMAPX_CPU_LIMIT",
+            ),
+          ),
+        }
+      : ownResolved;
   if (resolved) {
     const env = snippet.environment ?? {};
     for (const [key, value] of Object.entries(resolved)) {
       if (value === undefined || value === null) continue;
-      env[key] = String(value);
+      if (isRuntimeResourceKey(key)) {
+        if (!service.isBuiltIn) throw Error("Community resource override forbidden");
+        if (key === "OPENMAPX_JAVA_HEAP_MIB") {
+          if (m.id !== "elasticsearch") throw Error("Unsupported heap override");
+          const heap = runtimeResourceNumber(key, value);
+          env.ES_JAVA_OPTS = `-Xms${heap}m -Xmx${heap}m`;
+        }
+        continue;
+      }
+      env[key] =
+        m.id === "valhalla" && service.isBuiltIn && typeof value === "boolean"
+          ? value
+            ? "True"
+            : "False"
+          : String(value);
     }
     if (Object.keys(env).length > 0) snippet.environment = env;
+  }
+  // Keep the transit preflight's declared envelope consistent with both slots.
+  // Its profile minimums, headroom and runtime checks remain authoritative.
+  if (service.isBuiltIn && m.id === "data-manager" && motis) {
+    const env = snippet.environment ?? {};
+    if (motis.OPENMAPX_MEMORY_MIB !== undefined)
+      env.MOTIS_SLOT_MEMORY_GB = String(
+        runtimeResourceNumber("OPENMAPX_MEMORY_MIB", motis.OPENMAPX_MEMORY_MIB) / 1024,
+      );
+    if (motis.OPENMAPX_CPU_LIMIT !== undefined)
+      env.MOTIS_SLOT_CPU = String(
+        runtimeResourceNumber("OPENMAPX_CPU_LIMIT", motis.OPENMAPX_CPU_LIMIT),
+      );
+    snippet.environment = env;
   }
   // Vault secrets (the container track): mount each as a Docker secret at
   // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
@@ -810,9 +903,10 @@ export function renderServiceSnippet(
   }
 
   if (c.logging) snippet.logging = c.logging;
-  if (c.memory || c.gpu) {
+  const limits = resolveServiceRuntimeResources(m, resolved ?? {});
+  if (limits.memory || limits.cpus || c.gpu) {
     const resources: NonNullable<NonNullable<typeof snippet.deploy>["resources"]> = {};
-    if (c.memory) resources.limits = { memory: c.memory };
+    if (limits.memory || limits.cpus) resources.limits = limits;
     if (c.gpu) {
       resources.reservations = {
         devices: [{ driver: c.gpu.driver, count: c.gpu.count, capabilities: c.gpu.capabilities }],

@@ -1,0 +1,18 @@
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_version" integer;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "operation_key" text;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "operation_fingerprint" text;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_fingerprint" text;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "admitted_at" bigint;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "deadline_at" bigint;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "requested_deadline_at" bigint;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_parent" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_input" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_state" jsonb;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "execution_children" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD COLUMN "ownership_version" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "data_manager_jobs_execution_key_uq" ON "data_manager"."jobs" USING btree ("operation_key") WHERE "data_manager"."jobs"."operation_key" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "data_manager_jobs_configuration_maintenance_uq" ON "data_manager"."jobs" USING btree (("metadata"->'configurationMaintenance'->'receipt'->>'maintenanceId')) WHERE "data_manager"."jobs"."kind" = 'configuration-maintenance';--> statement-breakpoint
+CREATE UNIQUE INDEX "data_manager_jobs_configuration_guard_uq" ON "data_manager"."jobs" USING btree ("kind") WHERE "data_manager"."jobs"."kind" = 'configuration-maintenance' AND coalesce("data_manager"."jobs"."metadata"->'configurationMaintenance'->>'guardState','recovery_required') <> 'settled';--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD CONSTRAINT "data_manager_jobs_execution_bounds" CHECK ("data_manager"."jobs"."ownership_version" >= 0 AND jsonb_typeof("data_manager"."jobs"."execution_children") = 'array' AND jsonb_array_length("data_manager"."jobs"."execution_children") <= 32 AND octet_length("data_manager"."jobs"."execution_children"::text) <= 131072);--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD CONSTRAINT "data_manager_jobs_execution_shape" CHECK ("data_manager"."jobs"."execution_version" IS NULL OR coalesce(("data_manager"."jobs"."execution_version" = 2 AND "data_manager"."jobs"."operation_key" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND "data_manager"."jobs"."operation_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."execution_fingerprint" ~ '^[a-f0-9]{64}$' AND "data_manager"."jobs"."admitted_at" >= 0 AND "data_manager"."jobs"."deadline_at" > "data_manager"."jobs"."admitted_at" AND "data_manager"."jobs"."execution_input" IS NOT NULL AND "data_manager"."jobs"."execution_state" IS NOT NULL), false));--> statement-breakpoint
+ALTER TABLE "data_manager"."jobs" ADD CONSTRAINT "data_manager_jobs_configuration_guard_shape" CHECK ("data_manager"."jobs"."kind" <> 'configuration-maintenance' OR coalesce((jsonb_typeof("data_manager"."jobs"."metadata"->'configurationMaintenance') = 'object' AND "data_manager"."jobs"."metadata"->'configurationMaintenance'->>'version' = '1' AND "data_manager"."jobs"."metadata"->'configurationMaintenance'->>'guardState' IN ('preparing','prepared','settling','settled','recovery_required') AND jsonb_typeof("data_manager"."jobs"."metadata"->'configurationMaintenance'->'receipt') = 'object' AND octet_length(("data_manager"."jobs"."metadata"->'configurationMaintenance')::text) <= 65536), false));

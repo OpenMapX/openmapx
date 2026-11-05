@@ -44,7 +44,7 @@ describe("data-manager /transit/bump branch validation", () => {
     },
   );
 
-  it("accepts a normal branch name (passes validation, fails later on missing catalog)", async () => {
+  it("accepts a normal branch name and reports the missing installed paired resolver", async () => {
     const app = createTestApp();
     registerApi(app, { dataDir: join(fixtureRoot, "data") });
     const res = await app.inject({
@@ -52,9 +52,7 @@ describe("data-manager /transit/bump branch validation", () => {
       url: "/transit/bump",
       payload: { branch: "release/2026-06" },
     });
-    // Passes the ref check, then hits the catalog-not-cloned guard (409),
-    // proving the validator did not reject a legitimate ref.
-    expect(res.statusCode).toBe(409);
-    expect(JSON.parse(res.body).error).toBe("catalog-not-cloned");
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toBe("Paired catalog resolver is unavailable");
   });
 });

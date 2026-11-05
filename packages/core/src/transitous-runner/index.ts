@@ -18,4 +18,5 @@ export {
   transitousRunnerRequestSchema,
   transitousRunnerResultSchema,
   transitousRunnerScriptSchema,
+  transitousRunnerStatusSchema,
 } from "./contract";

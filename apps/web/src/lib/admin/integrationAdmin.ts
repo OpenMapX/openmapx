@@ -123,8 +123,18 @@ export function useIntegrationAdmin() {
       toggle: (id: string, enabled: boolean) =>
         integrationOrThrow(
           enabled
-            ? sdk.enableAdminIntegration(id, undefined, { client })
-            : sdk.disableAdminIntegration(id, undefined, { client }),
+            ? sdk.enableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              )
+            : sdk.disableAdminIntegration(
+                id,
+                { "idempotency-key": crypto.randomUUID() },
+                undefined,
+                { client },
+              ),
         ),
       healthSweep: () =>
         integrationOrThrow(sdk.runAdminIntegrationHealthChecks(undefined, { client })),
@@ -133,19 +143,62 @@ export function useIntegrationAdmin() {
           sdk.patchAdminIntegrationConfig(
             id,
             sdk.adminIntegrationConfigPatchSchema.parse(updates),
+            { "idempotency-key": crypto.randomUUID() },
             { client },
           ),
         ),
-      setCredential: (id: string, key: string, value: string) =>
-        integrationOrThrow(sdk.setAdminIntegrationCredential(id, key, { value }, { client })),
-      deleteCredential: (id: string, key: string) =>
-        integrationOrThrow(sdk.deleteAdminIntegrationCredential(id, key, undefined, { client })),
-      setBinding: (id: string, capability: string, serviceId: string | null) =>
+      setCredential: (
+        id: string,
+        key: string,
+        value: string,
+        expectedRevision: string,
+        operationId = crypto.randomUUID(),
+      ) =>
         integrationOrThrow(
-          serviceId === null
-            ? sdk.deleteAdminIntegrationBinding(id, capability, undefined, { client })
-            : sdk.setAdminIntegrationBinding(id, capability, { serviceId }, { client }),
+          sdk.setAdminIntegrationCredential(
+            id,
+            key,
+            { value, expectedRevision },
+            { "idempotency-key": operationId },
+            { client },
+          ),
         ),
+      deleteCredential: (
+        id: string,
+        key: string,
+        expectedRevision: string,
+        operationId = crypto.randomUUID(),
+      ) =>
+        integrationOrThrow(
+          sdk.deleteAdminIntegrationCredential(
+            id,
+            key,
+            { expectedRevision },
+            { "idempotency-key": operationId },
+            { client },
+          ),
+        ),
+      setBinding: (
+        id: string,
+        capability: string,
+        serviceId: string | null,
+        expected: {
+          expectedServiceId: string | null;
+          expectedRevision: string;
+          operationId: string;
+        },
+      ) => {
+        const { operationId, expectedServiceId, expectedRevision } = expected,
+          body = { expectedServiceId, expectedRevision },
+          headers = { "idempotency-key": operationId };
+        return integrationOrThrow(
+          serviceId === null
+            ? sdk.deleteAdminIntegrationBinding(id, capability, body, headers, { client })
+            : sdk.setAdminIntegrationBinding(id, capability, { ...body, serviceId }, headers, {
+                client,
+              }),
+        );
+      },
       importConfigs: async (input: unknown) => {
         const parsed = sdk.adminIntegrationConfigImportSchema.safeParse(input);
         if (!parsed.success)
@@ -154,7 +207,11 @@ export function useIntegrationAdmin() {
           );
         try {
           return await integrationOrThrow(
-            sdk.importAdminIntegrationConfigs(parsed.data, { client }),
+            sdk.importAdminIntegrationConfigs(
+              parsed.data,
+              { "idempotency-key": crypto.randomUUID() },
+              { client },
+            ),
           );
         } finally {
           void invalidateIntegrationAdmin(qc, apiUrl);

@@ -48,6 +48,7 @@ export interface RunMotisPreflightInput {
   sourceUrls?: string[];
   selectedSources?: Array<{
     id: string;
+    artifactId?: string;
     originUrl?: string;
     license?: Record<string, unknown>;
   }>;
@@ -107,7 +108,17 @@ export function runMotisPreflight(input: RunMotisPreflightInput): MotisPreflight
   }
   if (input.policy.feedAllowList.length > 0) {
     const allowed = new Set(input.policy.feedAllowList);
-    const outside = (input.selectedFeedIds ?? []).filter((id) => !allowed.has(id.toLowerCase()));
+    const captured = input.selectedSources ?? [];
+    const outside =
+      captured.length && captured.every((source) => source.artifactId)
+        ? captured
+            .filter(
+              (source) =>
+                !allowed.has(source.id.toLowerCase()) &&
+                !allowed.has(source.artifactId!.toLowerCase()),
+            )
+            .map((source) => source.id)
+        : (input.selectedFeedIds ?? []).filter((id) => !allowed.has(id.toLowerCase()));
     if (outside.length > 0) blockers.push(`feeds outside allow-list: ${outside.sort().join(", ")}`);
   }
   if (input.policy.profile === "regional-sovereign") {
@@ -230,6 +241,7 @@ export const run: StageFn = async (ctx) => {
     selectedSources: (ctx.state.selectedFeedFiles ?? []).flatMap((feed) =>
       feed.activeScheduleSources.map((source) => ({
         id: source.id,
+        artifactId: `${source.region}_${source.name}`.toLowerCase(),
         originUrl: source.originUrl,
         license: source.license,
       })),

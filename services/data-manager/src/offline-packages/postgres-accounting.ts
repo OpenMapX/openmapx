@@ -1,5 +1,6 @@
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
 import type postgres from "postgres";
+import { assertDataMutationAdmission } from "../jobs/execution/admission.js";
 import {
   assertOfflineArtifactIdentity,
   assertOfflinePackagePrincipal,
@@ -223,6 +224,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
   ): Promise<OfflinePackageAdmission> {
     assertOfflinePackagePrincipal(principal);
     return await this.sql.begin(async (tx) => {
+      await assertDataMutationAdmission(tx);
       await this.lockGlobal(tx);
       await this.lockPrincipal(tx, principal);
       await this.lockRequest(tx, candidate.request.requestKey);

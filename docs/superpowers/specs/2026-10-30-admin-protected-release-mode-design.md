@@ -1,0 +1,37 @@
+# Protected configuration and release handoff modes
+
+Status: APPROVED after bounded independent Codex R1 READY (0 Critical / 0 Important). Design only; product/runtime/CI verification remains required. Extends only Task08.3, same50 tasks/one PR. No source clearance or runtime acceptance.
+
+## Decision
+
+Use the existing maintenance root -> maintenance-handoff -> configuration-helper finite graph for both modes, with a discriminated, frozen handoff intent. Do not stage release images under an unrelated root and then try to recover old containers from the changed cache. The maintenance root captures the ordinary owned containers BEFORE pulling a release. The detached helper performs the fixed release pull only AFTER terminal handoff preparation, under the original delegated full target closure. Desired configuration can be committed before this follow-up; failure retains its truthful desired-commit evidence.
+
+Same-image mode retains the exact proposed generation, current trusted image references and old container/image identities. It performs no image pull. Resource/env/mount verification must use the proposed generation even when image identity is unchanged.
+
+Release mode additionally retains the exact checked release ID, canonical manifest digest and closed per-service pinned image-reference map. The agent loads this map from its existing verified release manifest; the API cannot provide image strings, overlay bytes or paths. A pinned reference identifies the requested image BEFORE download; a Docker image ID is an observed result AFTER download. They are distinct fields and must never be compared as if they were the same hash. Root/step fingerprints bind the immutable pinned reference map, not later Docker-assigned execution IDs or observations.
+
+## Fixed producer and scope
+
+Add strict configurationHandoff.prepare/inspect operations as allocated by C3. A prepare's mode is either configuration or release. Both bind handoffId, maintenanceId, candidateId, planDigest, exact old/new configuration revisions, preview fingerprint, bounded sorted target subset and retained old-container image identities. Configuration mode uses the proposed generation's existing image references. Release mode names only releaseId+canonical manifest digest; the actual agent derives/compares its pinned map during whole-candidate preflight, includes its digest in the private frozen plan and refuses missing/unpinned/mismatching entries BEFORE any desired save. No runtime callback, path, caller boolean or arbitrary image reference is an issuer.
+
+The frozen maintenance effect list includes the existing configuration commit, optional sole DM hardlinks leaf, ordinary recreates and one protected handoff. The handoff's exact operation fingerprint/target closure is reserved at root admission; its sole helper child's fixed body binds the handoff ID plus immutable intent digest. Only identity/deadline normalization uses the accepted late-child protocol. No late operation-body field or grant retargeting is introduced. Protected configuration target order is postgis, redis, app-web, app-api, traefik, ops-agent. A release's ordinary enabled service targets are also frozen and processed before protected agent-last replacement. Any included DM recreation uses the original durable guard/startup mirror and settled hardlinks prerequisite.
+
+All target/image expectations, download count/bytes/deadline and journal space are preflighted before ownership admission. The existing bounded receipt cells and role-private fixed journals remain the storage roots; new purpose records must be indexed/charged and included in existing retention families, never a second journal key or signing root.
+
+## Helper execution and publication
+
+Persist immutable launch intent and deterministic helper identity before Docker create. Inspect an attempted launch rather than create another helper. The helper adopts only its original configuration-helper grant and verifies terminal prepared handoff before draining mutating operations/byte streams. Read-only logs/inspection and terminal logical preparation records do not block drain. No configuration/release writer lock crosses Docker process replacement. Each write takes original target ownership -> configuration writer -> release-store and revalidates actual source, original grant, generation and manifest at that effect boundary.
+
+In release mode the helper pulls ONLY frozen pinned references. After each awaited pull, inspect that exact reference, require the expected RepoDigest/architecture and retain actual Docker image ID before any recreate. Existing old containers remain captured by their original immutable image IDs; there is no general owned-services resolver weakening. The new generation/release overlay is constructed by the existing release renderer from the verified manifest, not API-supplied YAML. Every subsequent container must have its intended image ID and exact desired config/hash/environment/resources/mount/readiness. Secret comparisons stay private/keyed. Self replacement is last; the helper uses the known old agent image and survives its parent's exit.
+
+Publication intent precedes each overlay/current-state/container effect. Lost results inspect original receipts/Docker identities; no attempted pull/recreate/publication is blindly replayed. A new agent reconstructs the same helper/owner from authenticated retained sources and never relaunches it. The original root and DM guard cannot release while a launch, child, container, source or SQL outcome is unknown.
+
+## Failure, rollback and retirement
+
+A conclusive pre-recreation pull failure permits a contained follow-up result only after proving zero recreation and restoring the exact old host generation/overlay under the original root. Desired database rows remain committed and reported unapplied. Restoration is a conditional comparison against the exact original proposed pointer/overlay and retained original bytes/inodes, never an arbitrary path or source. Once recreation begins, automatic rollback is permitted only if all changed targets can be restored to the exact original image/config/mount/resource/readiness and all original attempts are contained. Restoring overlay bytes alone is never rollback proof. Conflicting ownership, changed source, missing proof or failed restoration stays recovery_required, with original evidence and fences retained.
+
+Only actual applied or fully contained original helper evidence enters the existing maintenance final/SQL/ACK/root-closure flow. Late recovery is observation/settlement-only; it does not renew a forward budget. Retention uses the existing later control/ACK floor and whole-family verification; unknown handoffs remain pinned. No legacy helper/startup mutation is re-enabled until this installed workflow and original source validators are used by its actual production entrypoints.
+
+## Required verification
+
+Keep task C3's exact API/domain/transaction/rollback/restart/capacity and same-image tests. Add actual production API -> agent -> detached helper process tests for a new pinned image, unchanged-image resource changes, original process exit, old/new helper death/restart, lost launch and terminal responses, delayed helper write versus staged DM, unknown/failed restore, release-store/configuration-writer ordering and exact SQL/ACK/root release. No old cached-image workaround, synthetic signed authority, public-status containment, callback-selected verifier, or permanent unsupported release control qualifies the final PR.

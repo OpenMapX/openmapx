@@ -2,6 +2,11 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { execa } from "execa";
+import {
+  beginLegacyCatalogPreflight,
+  markLegacyCatalogFetchAttempt,
+  rejectLegacyMissingCatalog,
+} from "../execution/legacy-mutation.js";
 
 /**
  * Minimal command-runner seam so the resolver can be unit-tested without
@@ -54,8 +59,10 @@ export async function resolveCatalogBumpCandidate(
   const branch = opts.branch?.trim() || "main";
   const runner = opts.runner ?? defaultRunner;
   const { catalogDir } = opts;
+  await beginLegacyCatalogPreflight();
 
   if (!existsSync(join(catalogDir, ".git"))) {
+    await rejectLegacyMissingCatalog(catalogDir);
     throw new CatalogBumpError(
       "catalog-not-cloned",
       `Transitous catalog not found at ${catalogDir}; run a sync first to clone it.`,
@@ -63,6 +70,7 @@ export async function resolveCatalogBumpCandidate(
   }
 
   try {
+    await markLegacyCatalogFetchAttempt();
     await runner("git", ["-C", catalogDir, "fetch", "origin", branch]);
   } catch (err) {
     throw new CatalogBumpError("git-fetch-failed", (err as Error).message);

@@ -4,13 +4,26 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
+import {
+  buildControlTestServer as buildOpsAgentServer,
+  controlTestKey,
+} from "./__fixtures__/server";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import type { OpsExecutionContext } from "./runtime";
-import { buildOpsAgentServer, OPS_AGENT_RETENTION_LIMITS, type OpsAuditEvent } from "./server";
+import { OPS_AGENT_RETENTION_LIMITS, type OpsAuditEvent } from "./server";
 
 const apiToken = Buffer.alloc(32, 21).toString("base64url");
 const dataManagerToken = Buffer.alloc(32, 22).toString("base64url");
-const baseTime = Date.parse("2026-08-23T18:00:00.000Z");
+const baseTime = Date.now();
+const deadlineAt = baseTime + 3_600_000;
+const key = (label: string) => controlTestKey(label, deadlineAt);
+const pullResult = {
+  changed: true as const,
+  revisionId: `cfg1_${"a".repeat(43)}`,
+  imageReference: "example/redis:1",
+  imageId: `sha256:${"b".repeat(64)}`,
+  releaseSelectionDigest: null,
+};
 
 const allowAllResources: OpsResourcePolicy = {
   allowGlobal: () => true,
@@ -26,14 +39,15 @@ const allowAllResources: OpsResourcePolicy = {
 };
 
 function auth(token = apiToken) {
-  return { authorization: `Bearer ${token}` };
+  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
 }
 
 function request(operation: OpsOperation, requestId: string, operationKey: string) {
   return {
-    version: 1,
+    version: 2,
     requestId,
     operationKey,
+    execution: { requestedDeadlineAt: deadlineAt },
     issuedAt: new Date(baseTime).toISOString(),
     expiresAt: new Date(baseTime + 20_000).toISOString(),
     operation,
@@ -63,17 +77,21 @@ describe("ops-agent async foundation", () => {
     });
     const dispatch = vi.fn(async (operation: OpsOperation) => {
       await blocked;
-      return operation.kind === "service.pull" ? { changed: true } : { reachable: true };
+      return operation.kind === "service.pull" ? pullResult : { reachable: true };
     });
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, 23),
       dispatch,
     });
-    const operationKey = "opk1_stableTransportRetry";
-    const operation = { kind: "service.pull", serviceId: "redis" } as const;
+    const operationKey = key("opk1_stableTransportRetry");
+    const operation = {
+      kind: "service.pull",
+      serviceId: "redis",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+    } as const;
     const admitted = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -98,7 +116,11 @@ describe("ops-agent async foundation", () => {
       url: "/v1/operations",
       headers: auth(),
       payload: request(
-        { kind: "service.pull", serviceId: "motis" },
+        {
+          kind: "service.pull",
+          serviceId: "motis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+        },
         "ops1_conflictRequest000",
         operationKey,
       ),
@@ -157,6 +179,7 @@ describe("ops-agent async foundation", () => {
         "x-ops-operation-fingerprint": opsOperationFingerprint({
           kind: "service.pull",
           serviceId: "motis",
+          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
         }),
       },
     });
@@ -173,7 +196,7 @@ describe("ops-agent async foundation", () => {
         }),
       (response) => response.json().result.state === "succeeded",
     );
-    expect(succeeded.json().result.result).toEqual({ changed: true });
+    expect(succeeded.json().result.result).toEqual(pullResult);
 
     const terminalLookup = await app.inject({
       method: "GET",
@@ -197,7 +220,7 @@ describe("ops-agent async foundation", () => {
   });
 
   it("rejects resource and option mismatches for an exact retained terminal key", async () => {
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
@@ -210,7 +233,7 @@ describe("ops-agent async foundation", () => {
       tail: 20,
       maxDurationSeconds: 900,
     } as const;
-    const operationKey = "opk1_terminalExactLookup00";
+    const operationKey = key("opk1_terminalExactLookup00");
     const admitted = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -280,7 +303,7 @@ describe("ops-agent async foundation", () => {
         });
       },
     );
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
@@ -294,7 +317,7 @@ describe("ops-agent async foundation", () => {
       tail: 20,
       maxDurationSeconds: 300,
     } as const;
-    const operationKey = "opk1_cancelFollow00000";
+    const operationKey = key("opk1_cancelFollow00000");
     const admitted = await app.inject({
       method: "POST",
       url: "/v1/operations",
@@ -314,7 +337,7 @@ describe("ops-agent async foundation", () => {
     const canceled = await app.inject({
       method: "DELETE",
       url: `/v1/operations/${operationId}`,
-      headers: auth(),
+      headers: { ...auth(), "x-ops-operation-fingerprint": admitted.json().result.fingerprint },
     });
     expect(canceled.statusCode).toBe(200);
     expect(canceled.json().result).toMatchObject({
@@ -349,7 +372,7 @@ describe("ops-agent async foundation", () => {
         payload: request(
           { kind: "service.restart", serviceId: "redis" },
           `ops1_restartAttempt${String(restartAttempt).padStart(4, "0")}`,
-          "opk1_restartAdmission00",
+          key("opk1_restartAdmission00"),
         ),
       });
       if (lastRestartResponse.statusCode === 202) {
@@ -367,7 +390,10 @@ describe("ops-agent async foundation", () => {
     const migratedCancel = await app.inject({
       method: "DELETE",
       url: `/v1/operations/${restartId}`,
-      headers: auth(),
+      headers: {
+        ...auth(),
+        "x-ops-operation-fingerprint": restartAdmission.json().result.fingerprint,
+      },
     });
     expect(migratedCancel.statusCode).toBe(200);
     expect(migratedCancel.json().result.state).toBe("termination_pending");
@@ -417,7 +443,7 @@ describe("ops-agent async foundation", () => {
           return { lines: 0, truncated: false };
         },
       );
-      const app = buildOpsAgentServer({
+      const app = await buildOpsAgentServer({
         tokens: { api: apiToken, "data-manager": dataManagerToken },
         resourcePolicy: allowAllResources,
         journal,
@@ -438,14 +464,14 @@ describe("ops-agent async foundation", () => {
             maxDurationSeconds: 300,
           },
           `ops1_cancelPersist${behavior === "abort-respecting" ? "Respect" : "Ignore"}00`,
-          `opk1_cancelPersist${behavior === "abort-respecting" ? "Respect" : "Ignore"}00`,
+          key(`opk1_cancelPersist${behavior === "abort-respecting" ? "Respect" : "Ignore"}00`),
         ),
       });
       const operationId = admitted.json().result.operationId as string;
       const canceled = await app.inject({
         method: "DELETE",
         url: `/v1/operations/${operationId}`,
-        headers: auth(),
+        headers: { ...auth(), "x-ops-operation-fingerprint": admitted.json().result.fingerprint },
       });
       expect(canceled.statusCode).toBe(500);
       expect(aborted).toBe(true);
@@ -458,7 +484,7 @@ describe("ops-agent async foundation", () => {
           payload: request(
             { kind: "service.restart", serviceId: "redis" },
             "ops1_cancelPersistBusy00",
-            "opk1_cancelPersistBusy00",
+            key("opk1_cancelPersistBusy00"),
           ),
         });
         expect(busy.statusCode).toBe(429);
@@ -483,7 +509,7 @@ describe("ops-agent async foundation", () => {
     });
     let calls = 0;
     const audits: OpsAuditEvent[] = [];
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
@@ -503,7 +529,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "docker.status" },
         "ops1_timedOutRequest000",
-        "opk1_timedOutOperation0",
+        key("opk1_timedOutOperation0"),
       ),
     });
     expect(first.statusCode).toBe(504);
@@ -515,7 +541,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "docker.status" },
         "ops1_busyAfterTimeout0",
-        "opk1_busyAfterTimeout00",
+        key("opk1_busyAfterTimeout00"),
       ),
     });
     expect(stillBusy.statusCode).toBe(429);
@@ -532,7 +558,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "docker.status" },
         "ops1_afterSettlement0",
-        "opk1_afterSettlement00",
+        key("opk1_afterSettlement00"),
       ),
     });
     expect(afterSettlement.statusCode).toBe(200);
@@ -540,7 +566,7 @@ describe("ops-agent async foundation", () => {
   });
 
   it("accepts only bounded UTF-8 log events from the typed execution context", async () => {
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
@@ -560,7 +586,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "service.logs.follow", serviceId: "redis", tail: 10, maxDurationSeconds: 1 },
         "ops1_followRequest00000",
-        "opk1_followOperation000",
+        key("opk1_followOperation000"),
       ),
     });
     const operationId = admitted.json().result.operationId as string;
@@ -597,8 +623,8 @@ describe("ops-agent async foundation", () => {
     await app.close();
   });
 
-  it("rejects validated sync and async results that exceed their per-kind byte budgets", async () => {
-    const app = buildOpsAgentServer({
+  it("rejects oversized sync output and retains the maximum build-all receipt", async () => {
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
@@ -623,7 +649,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "service.logs", serviceId: "redis", tail: 300 },
         "ops1_syncOverflow00000",
-        "opk1_syncOverflow00000",
+        key("opk1_syncOverflow00000"),
       ),
     });
     expect(sync.statusCode).toBe(500);
@@ -636,35 +662,46 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "services.buildAll" },
         "ops1_asyncOverflow0000",
-        "opk1_asyncOverflow0000",
+        key("opk1_asyncOverflow0000"),
       ),
     });
     const operationId = admitted.json().result.operationId as string;
-    const failed = await eventually(
+    const completed = await eventually(
       async () =>
         app.inject({ method: "GET", url: `/v1/operations/${operationId}`, headers: auth() }),
-      (response) => response.json().result.state === "failed",
+      (response) => response.json().result.state === "succeeded",
     );
-    expect(failed.json().result.errorClass).toBe("runtime");
+    expect(completed.json().result.result.completedServiceIds).toHaveLength(256);
+    expect(Buffer.byteLength(JSON.stringify(completed.json().result.result))).toBeGreaterThan(
+      16 * 1024,
+    );
     await app.close();
   });
 
   it("retains terminal idempotency through bounded result retrieval, then prunes by TTL", async () => {
     let nowMs = baseTime;
     let randomValue = 30;
-    const app = buildOpsAgentServer({
+    const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAllResources,
       now: () => new Date(nowMs),
       randomBytes: () => Buffer.alloc(18, randomValue++),
       maxJobEntries: 1,
       jobRetentionMs: 1_000,
-      dispatch: async () => ({ changed: true }),
+      dispatch: async (operation) =>
+        operation.kind === "service.logs.follow"
+          ? { lines: 0, truncated: false }
+          : { changed: true },
     });
     const firstPayload = request(
-      { kind: "service.pull", serviceId: "redis" },
+      {
+        kind: "service.logs.follow",
+        serviceId: "redis",
+        tail: 10,
+        maxDurationSeconds: 300,
+      },
       "ops1_retainedFirst0000",
-      "opk1_retainedFirst0000",
+      key("opk1_retainedFirst0000"),
     );
     const first = await app.inject({
       method: "POST",
@@ -684,7 +721,7 @@ describe("ops-agent async foundation", () => {
       payload: request(
         { kind: "service.restart", serviceId: "redis" },
         "ops1_retainedFull00000",
-        "opk1_retainedSecond000",
+        key("opk1_retainedSecond000"),
       ),
     });
     expect(full.statusCode).toBe(429);
@@ -698,16 +735,21 @@ describe("ops-agent async foundation", () => {
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result.operationId).toBe(firstId);
 
-    nowMs += 1_001;
+    nowMs += 72 * 3600_000 + 1;
     const afterTtl = await app.inject({
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: request(
-        { kind: "service.restart", serviceId: "redis" },
-        "ops1_afterRetention000",
-        "opk1_retainedSecond000",
-      ),
+      payload: {
+        ...request(
+          { kind: "service.restart", serviceId: "redis" },
+          "ops1_afterRetention000",
+          controlTestKey("after-retention", nowMs + 3600_000),
+        ),
+        issuedAt: new Date(nowMs).toISOString(),
+        expiresAt: new Date(nowMs + 20_000).toISOString(),
+        execution: { requestedDeadlineAt: nowMs + 3600_000 },
+      },
     });
     expect(afterTtl.statusCode).toBe(202);
     expect(afterTtl.json().result.operationId).not.toBe(firstId);

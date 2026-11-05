@@ -6,13 +6,15 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpsOperation } from "@openmapx/core/ops";
-import { services } from "@openmapx/core/server";
+import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
+import { services as coreServices, services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { testExecution } from "./__fixtures__/execution";
 import {
   createAdministrativeRuntime,
   createAgentHandoffBindings,
@@ -28,6 +30,7 @@ import {
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
+  OpsExecutionFailure,
   OpsHostUpdateRequiredError,
 } from "./runtime";
 
@@ -55,8 +58,10 @@ function temporaryRoot(): string {
 
 function context(kind: string) {
   return {
+    execution: testExecution(),
     signal: new AbortController().signal,
     emitLog: vi.fn(),
+    checkpointServiceBatch: vi.fn(async (_result: ServiceBatchResult) => {}),
     claim: {
       fingerprint: "f".repeat(64),
       operation: { kind } as never,
@@ -71,7 +76,59 @@ afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 
+describe("default fixed CLI live output", () => {
+  it.each(["visibility", "volume"])("streams live bounded output: %s", async (check) => {
+    const root = temporaryRoot();
+    const release = join(root, "release");
+    const ready = join(root, "ready");
+    writeFileSync(
+      join(root, "cli.mjs"),
+      `
+      import { existsSync, writeFileSync } from 'node:fs';
+      import { setTimeout } from 'node:timers/promises';
+      console.log('phase-one');
+      writeFileSync(${JSON.stringify(ready)}, 'ready');
+      while (!existsSync(${JSON.stringify(release)})) await setTimeout(5);
+      for (let i = 0; i < 2048; i++) {
+        if (!process.stdout.write('x'.repeat(1024) + '\\n'))
+          await new Promise(resolve => process.stdout.once('drain', resolve));
+      }
+      console.log('last-diagnostic');
+    `,
+      { mode: 0o644 },
+    );
+    const seen: string[] = [];
+    const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: (_stream, message) => seen.push(message),
+    });
+    // Attach immediately: the volume regression may reject before the assertion.
+    void completion.catch(() => undefined);
+    try {
+      await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+      if (check === "visibility") {
+        await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
+      }
+      writeFileSync(release, "go", { mode: 0o644 });
+      await expect(completion).resolves.toBeUndefined();
+      expect(seen).toContain("last-diagnostic");
+    } finally {
+      writeFileSync(release, "go", { mode: 0o644 });
+      await completion.catch(() => undefined);
+    }
+  });
+});
+
 describe("administrative backup runtime", () => {
+  it("refuses a stale scheduled retention value before dispatching the CLI", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    const run = vi.fn();
+    await expect(pruneBackupRetention(temporaryRoot(), 5, run)).rejects.toThrow(
+      /retention.*changed/i,
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
   it("runs scheduled retention through the fixed CLI under validated bounds", async () => {
     const calls: string[][] = [];
     await pruneBackupRetention(temporaryRoot(), 30, async (args) => {
@@ -368,6 +425,7 @@ describe("the fixed CLI", () => {
     writeFileSync(
       join(entryDirectory, "cli.mjs"),
       'const { argv, env } = process;\nconsole.log([...argv.slice(2), env.DATA_MANAGER_URL, env.OPENMAPX_FIXED_CLI_PROBE].join(" "));\n',
+      { mode: 0o644 },
     );
     vi.stubEnv("DATA_MANAGER_URL", "http://localhost:4000");
     vi.stubEnv("OPENMAPX_FIXED_CLI_PROBE", "inherited");
@@ -380,7 +438,7 @@ describe("the fixed CLI", () => {
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(lines).toEqual(["stdout: data link http://data-manager:4000 inherited"]);
+    expect(lines).toEqual(["stdout: data link http://data-manager:4000/ inherited"]);
   });
 });
 
@@ -427,7 +485,7 @@ describe("administrative data runtime", () => {
     ).toThrow("Resource authority configuration rejected");
   });
 
-  it("maps every typed variant to fixed agent-owned CLI arguments", async () => {
+  it("requires owned data workflows and maps only the remaining legacy CLI leaves", async () => {
     const rootDir = temporaryRoot();
     const calls: string[][] = [];
     const runtime = createUnavailableRuntime();
@@ -451,62 +509,80 @@ describe("administrative data runtime", () => {
       { kind: "data.clean", dataTypeId: "osm" },
       { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
       { kind: "data.overtureSync", regionId: "europe/germany" },
+      { kind: "data.overturePull", regionId: "europe/germany" },
+      { kind: "data.overtureIngest", regionId: "europe/germany" },
+      { kind: "data.overtureExtract", regionId: "europe/germany" },
       { kind: "data.overtureConflate", regionId: "europe/germany", restart: true },
       { kind: "data.searchIndexBuild", regionId: "europe/germany" },
     ];
+    const owned = new Set([
+      "data.downloadOsm",
+      "data.downloadFonts",
+      "data.update",
+      "data.convertOverpass",
+      "data.overtureSync",
+      "data.overturePull",
+      "data.overtureIngest",
+      "data.overtureExtract",
+      "data.overtureConflate",
+      "data.searchIndexBuild",
+    ]);
     for (const operation of operations) {
-      await dispatchOpsOperation(runtime, operation, context(operation.kind));
+      if (owned.has(operation.kind))
+        await expect(
+          dispatchOpsOperation(runtime, operation, context(operation.kind)),
+        ).rejects.toThrow("Host update required");
+      else if (operation.kind === "data.generateApiKeys")
+        await expect(
+          dispatchOpsOperation(runtime, operation, context(operation.kind)),
+        ).rejects.toThrow("Typed adapter is not wired");
+      else await dispatchOpsOperation(runtime, operation, context(operation.kind));
     }
     expect(calls).toEqual([
-      ["data", "download", "osm", "europe/germany"],
-      ["data", "download", "fonts"],
-      ["data", "update", "europe/germany", "--countries", "DE,AT", "--fail-fast"],
-      ["data", "convert", "overpass", "europe/germany"],
       ["data", "link"],
       ["data", "clean", "osm"],
-      ["data", "generate-api-keys"],
-      ["data", "overture-sync", "europe/germany"],
-      ["data", "overture-conflate", "europe/germany", "--restart"],
-      ["data", "search-index", "build", "europe/germany"],
     ]);
     expect(calls.flat()).not.toContain("transitous-fixed-v1");
   });
 
-  it.runIf(process.platform === "linux")(
-    "returns bounded data inventory from the agent-owned root without a host path",
-    async () => {
-      const rootDir = temporaryRoot();
-      const dataRoot = join(rootDir, "infra", "docker", "data");
-      mkdirSync(join(dataRoot, "osm"), { recursive: true, mode: 0o755 });
-      mkdirSync(join(dataRoot, "valhalla"), { recursive: true, mode: 0o755 });
-      writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
-      const runtime = createUnavailableRuntime();
-      createAdministrativeRuntime(runtime, {
-        rootDir,
-        runFixedCli: async () => undefined,
-      });
+  it("returns bounded data inventory from the agent-owned root without a host path", async () => {
+    const rootDir = temporaryRoot();
+    const dataRoot = join(rootDir, "infra", "docker", "data");
+    mkdirSync(join(dataRoot, "osm"), { recursive: true, mode: 0o700 });
+    mkdirSync(join(dataRoot, "valhalla"), { recursive: true, mode: 0o700 });
+    writeFileSync(join(dataRoot, "osm", "germany-latest.osm.pbf"), "pbf", { mode: 0o600 });
+    const runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir,
+      runFixedCli: async () => undefined,
+    });
 
-      const result = await dispatchOpsOperation(
-        runtime,
-        { kind: "data.inspect" },
-        context("data.inspect"),
-      );
-      expect(result.osm).toMatchObject({
-        found: true,
-        filename: "germany-latest.osm.pbf",
-        sizeBytes: 3,
-        region: "germany",
-      });
-      expect(result.builds).toContainEqual(
-        expect.objectContaining({ target: "valhalla", built: true }),
-      );
-      expect(result.motisTransitous).toMatchObject({
-        configFound: false,
-        capabilityState: "missing",
-      });
-      expect(JSON.stringify(result)).not.toContain(rootDir);
-    },
-  );
+    const result = await dispatchOpsOperation(
+      runtime,
+      { kind: "data.inspect" },
+      context("data.inspect"),
+    );
+    expect(result.osm).toMatchObject({
+      items: [
+        {
+          filename: "germany-latest.osm.pbf",
+          sizeBytes: 3,
+          region: null,
+          fingerprintState: "missing",
+        },
+      ],
+      total: 1,
+      unavailable: false,
+    });
+    expect(result.builds).toContainEqual(
+      expect.objectContaining({ target: "valhalla", built: false, readiness: "unknown" }),
+    );
+    expect(result.motisTransitous).toMatchObject({
+      configFound: false,
+      capabilityState: "missing",
+    });
+    expect(JSON.stringify(result)).not.toContain(rootDir);
+  });
 });
 
 describe("administrative build runtime", () => {
@@ -538,6 +614,35 @@ describe("administrative build runtime", () => {
     expect(calls).toEqual([["services", "build", "valhalla", "--region", "europe/germany"]]);
   });
 
+  it("passes MOTIS import only to the actual MOTIS build and refuses unsupported selections before effects", async () => {
+    const calls: string[][] = [],
+      runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir: temporaryRoot(),
+      loadBuildAuthority: async () => [
+        ...buildAuthority,
+        { serviceId: "motis", enabled: true, isBuiltIn: true, buildCommand: "motis" },
+      ],
+      runFixedCli: async (args) => {
+        calls.push([...args]);
+      },
+    });
+    await dispatchOpsOperation(
+      runtime,
+      { kind: "service.build", serviceId: "motis", motisImport: true },
+      context("service.build"),
+    );
+    expect(calls).toEqual([["services", "build", "motis", "--import"]]);
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        { kind: "service.build", serviceId: "valhalla", motisImport: true },
+        context("service.build"),
+      ),
+    ).rejects.toThrow(/MOTIS/);
+    expect(calls).toHaveLength(1);
+  });
+
   it("derives build-all IDs inside the agent and preserves continue semantics", async () => {
     const calls: string[][] = [];
     const runtime = createUnavailableRuntime();
@@ -555,9 +660,16 @@ describe("administrative build runtime", () => {
         { kind: "services.buildAll", regionId: "europe/germany" },
         context("services.buildAll"),
       ),
-    ).resolves.toEqual({
-      completedServiceIds: ["nominatim"],
-      failedServiceIds: ["valhalla"],
+    ).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      failureResult: {
+        serviceBatch: {
+          outcome: "partial",
+          completedServiceIds: ["nominatim"],
+          failedServiceIds: ["valhalla"],
+          skippedServiceIds: [],
+        },
+      },
     });
     expect(calls).toEqual([
       ["services", "build", "nominatim", "--region", "europe/germany"],
@@ -582,7 +694,17 @@ describe("administrative build runtime", () => {
         { kind: "services.buildAll", failFast: true },
         context("services.buildAll"),
       ),
-    ).rejects.toThrow("injected build failure");
+    ).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      failureResult: {
+        serviceBatch: {
+          outcome: "failed",
+          completedServiceIds: [],
+          failedServiceIds: ["nominatim"],
+          skippedServiceIds: ["valhalla"],
+        },
+      },
+    });
     expect(calls).toHaveLength(1);
     for (const serviceId of ["redis", "disabled", "community", "unknown"]) {
       await expect(
@@ -601,7 +723,113 @@ describe("administrative build runtime", () => {
     });
     await expect(
       dispatchOpsOperation(empty, { kind: "services.buildAll" }, context("services.buildAll")),
-    ).resolves.toEqual({ completedServiceIds: [], failedServiceIds: [] });
+    ).rejects.toMatchObject({
+      failureResult: {
+        serviceBatch: {
+          outcome: "failed",
+          completedServiceIds: [],
+          failedServiceIds: [],
+          skippedServiceIds: [],
+        },
+      },
+    });
+  });
+  it.each(["continue", "fail-fast", "all-failed", "unknown", "cancel"] as const)(
+    "retains ordered batch evidence and stops uncertain work: %s",
+    async (mode) => {
+      const calls: string[] = [];
+      const controller = new AbortController();
+      const runtime = createUnavailableRuntime();
+      createAdministrativeRuntime(runtime, {
+        rootDir: temporaryRoot(),
+        loadBuildAuthority: async () =>
+          ["gamma", "beta", "alpha"].map((serviceId) => ({
+            serviceId,
+            enabled: true,
+            isBuiltIn: true,
+            buildCommand: serviceId,
+          })),
+        runFixedCli: async (args) => {
+          const id = args[2]!;
+          calls.push(id);
+          if (mode === "all-failed") throw Error("build failed");
+          if (id === "beta") {
+            if (mode === "unknown") throw new OpsExecutionFailure("recovery_required", {});
+            if (mode === "cancel") {
+              controller.abort();
+              throw new DOMException("Aborted", "AbortError");
+            }
+            throw Error("build failed");
+          }
+        },
+      });
+      const ctx = { ...context("services.buildAll"), signal: controller.signal };
+      const failure = await dispatchOpsOperation(
+        runtime,
+        { kind: "services.buildAll", ...(mode === "fail-fast" ? { failFast: true } : {}) },
+        ctx,
+      ).catch((error) => error);
+      expect(failure).toBeInstanceOf(OpsExecutionFailure);
+      expect(failure.failureResult.serviceBatch).toEqual({
+        outcome: mode === "all-failed" ? "failed" : "partial",
+        completedServiceIds:
+          mode === "all-failed" ? [] : mode === "continue" ? ["alpha", "gamma"] : ["alpha"],
+        failedServiceIds:
+          mode === "all-failed"
+            ? ["alpha", "beta", "gamma"]
+            : mode === "unknown" || mode === "cancel"
+              ? []
+              : ["beta"],
+        skippedServiceIds:
+          mode === "unknown" || mode === "cancel"
+            ? ["gamma"]
+            : mode === "fail-fast"
+              ? ["gamma"]
+              : [],
+      });
+      expect(calls).toEqual(
+        mode === "continue" || mode === "all-failed"
+          ? ["alpha", "beta", "gamma"]
+          : ["alpha", "beta"],
+      );
+      expect(ctx.checkpointServiceBatch).toHaveBeenCalledTimes(calls.length);
+      expect(ctx.checkpointServiceBatch.mock.calls.at(-1)?.[0]).toEqual(
+        failure.failureResult.serviceBatch,
+      );
+    },
+  );
+
+  it("does not start another build when its completed prefix cannot be journaled", async () => {
+    const runtime = createUnavailableRuntime();
+    const calls: string[] = [];
+    createAdministrativeRuntime(runtime, {
+      rootDir: temporaryRoot(),
+      loadBuildAuthority: async () =>
+        ["alpha", "beta"].map((serviceId) => ({
+          serviceId,
+          enabled: true,
+          isBuiltIn: true,
+          buildCommand: serviceId,
+        })),
+      runFixedCli: async (args) => {
+        calls.push(args[2]!);
+      },
+    });
+    const ctx = context("services.buildAll");
+    ctx.checkpointServiceBatch.mockRejectedValueOnce(Error("journal unavailable"));
+    await expect(
+      dispatchOpsOperation(runtime, { kind: "services.buildAll" }, ctx),
+    ).rejects.toMatchObject({
+      errorClass: "recovery_required",
+      failureResult: {
+        serviceBatch: {
+          completedServiceIds: ["alpha"],
+          failedServiceIds: [],
+          skippedServiceIds: ["beta"],
+        },
+      },
+    });
+    expect(calls).toEqual(["alpha"]);
   });
 });
 
@@ -621,6 +849,21 @@ describe("administrative diagnostics runtime", () => {
     expect(calls).toEqual([["check"]]);
   });
 });
+
+async function appliedInspectionFixture(rootDir: string) {
+  const infraDir = join(rootDir, "infra", "docker");
+  await coreServices.commitConfigurationGeneration({
+    infraDir,
+    services: [],
+    input: {
+      domain: "localhost",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+  });
+}
 
 describe("administrative release runtime", () => {
   it("stores immutable canonical release IDs with exact-content idempotency and bounded pre-reads", async () => {
@@ -657,7 +900,11 @@ describe("administrative release runtime", () => {
       }
       return "";
     };
-    const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+    const context = {
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    };
     const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
       runDocker: docker,
     });
@@ -730,11 +977,16 @@ describe("administrative release runtime", () => {
         if (args[0] === "pull") return `Digest: sha256:${String(attempt).repeat(64)}`;
         if (args[0] === "image") return `sha256:${"e".repeat(64)}`;
         if (args[0] === "create") return "a".repeat(64);
-        if (args[0] === "cp") writeFileSync(args.at(-1) as string, JSON.stringify(manifest()));
+        if (args[0] === "cp")
+          writeFileSync(args.at(-1) as string, JSON.stringify(manifest()), { mode: 0o644 });
         return "";
       },
     });
-    const context = { signal: new AbortController().signal, emitLog: vi.fn() };
+    const context = {
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    };
     expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-1`);
     attempt = 2;
     expect(await runtime.resolve(context)).toBe(`${sourceRevision}-123-2`);
@@ -791,6 +1043,7 @@ describe("administrative release runtime", () => {
       });
       // Constructing the effects reads nothing: the new store is still empty.
       expect(readdirSync(releaseState(rootDir).store)).toEqual([]);
+      await effects.initialize?.();
       await expect(effects.runtimeInspect?.()).resolves.toEqual({ releaseId: "release-legacy" });
       expect(migrations).toEqual([
         expect.objectContaining({ outcome: "migrated", overlay: "regenerated", problems: [] }),
@@ -854,7 +1107,7 @@ describe("administrative release runtime", () => {
     expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
   });
 
-  it("gives the self-update helper the release state's store, overlay and evidence", async () => {
+  it("lets the legacy self-update helper read checked pins but refuses unguarded overlay mutation", async () => {
     const rootDir = temporaryRoot();
     const { store, overlay, evidence } = releaseState(rootDir);
     mkdirSync(store, { recursive: true, mode: 0o700 });
@@ -880,11 +1133,13 @@ describe("administrative release runtime", () => {
     expect(() => bindings.releasePins("release-helper", "0".repeat(64))).toThrow(
       "Release authority rejected",
     );
-    await bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest));
-    expect(readFileSync(overlay, "utf8")).toContain("file: ../../releases/evidence/");
-    expect(readdirSync(evidence)).toHaveLength(1);
-    expect(bindings.stackArgs()).toEqual(expect.arrayContaining(["-f", overlay]));
-    await bindings.withStoreLock(() => bindings.restoreOverlay(null));
+    await expect(
+      bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest)),
+    ).rejects.toThrow("Typed adapter is not wired");
+    await expect(bindings.withStoreLock(() => bindings.restoreOverlay(null))).rejects.toThrow(
+      "Typed adapter is not wired",
+    );
+    expect(existsSync(evidence)).toBe(false);
     expect(existsSync(overlay)).toBe(false);
     expect(bindings.stackArgs()).not.toContain(overlay);
   });
@@ -989,7 +1244,7 @@ describe("administrative release runtime", () => {
           if (joined.startsWith("create")) return "c".repeat(64);
           if (joined.startsWith("cp")) {
             const destination = args[2] as string;
-            writeFileSync(destination, stored(release));
+            writeFileSync(destination, stored(release), { mode: 0o644 });
             copied = true;
             // Yield so the sibling resolution interleaves here.
             await new Promise((resolve) => setTimeout(resolve, 5));
@@ -1003,8 +1258,16 @@ describe("administrative release runtime", () => {
     };
 
     const results = await Promise.allSettled([
-      resolveFor("release-a").resolve({ signal: new AbortController().signal, emitLog: vi.fn() }),
-      resolveFor("release-b").resolve({ signal: new AbortController().signal, emitLog: vi.fn() }),
+      resolveFor("release-a").resolve({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
+      resolveFor("release-b").resolve({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
     ]);
 
     const stayed = readdirSync(directory).filter((name) => name.endsWith(".json")).length;
@@ -1062,7 +1325,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           "job-recovery",
         ),
       ).rejects.toThrow("injected crash");
@@ -1128,7 +1391,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           "job-recovery",
         ),
       ).rejects.toThrow("injected crash");
@@ -1178,6 +1441,7 @@ describe("administrative release runtime", () => {
     });
     await expect(
       first.apply(releaseId, ["app-api"], {
+        execution: testExecution(),
         signal: new AbortController().signal,
         emitLog: vi.fn(),
       }),
@@ -1241,7 +1505,7 @@ describe("administrative release runtime", () => {
         first.apply(
           releaseId,
           ["app-api"],
-          { signal: new AbortController().signal, emitLog: vi.fn() },
+          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
           `job-${crashPhase}`,
         ),
       ).rejects.toThrow("injected crash");
@@ -1262,9 +1526,7 @@ describe("administrative release runtime", () => {
     const rootDir = temporaryRoot();
     const releaseDirectory = releaseState(rootDir).store;
     mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
-    mkdirSync(join(rootDir, "infra", "docker", services.CURRENT_CONFIGURATION), {
-      recursive: true,
-    });
+    await appliedInspectionFixture(rootDir);
     writeFileSync(
       join(
         rootDir,
@@ -1274,6 +1536,7 @@ describe("administrative release runtime", () => {
         "docker-compose.generated.yml",
       ),
       "services:{}\n",
+      { mode: 0o644 },
     );
     const releaseId = "release-123";
     const manifest = {
@@ -1325,7 +1588,11 @@ describe("administrative release runtime", () => {
     });
 
     await expect(
-      effects.inspectSystem({ signal: new AbortController().signal, emitLog: vi.fn() }),
+      effects.inspectSystem({
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+      }),
     ).resolves.toMatchObject({
       dockerReachable: true,
       services: [
@@ -1340,16 +1607,14 @@ describe("administrative release runtime", () => {
   });
 
   describe("system inspection fails closed on unusable observations", () => {
-    function systemFixture(
+    async function systemFixture(
       compose: "file" | "directory" | "missing",
       runDocker: (args: readonly string[]) => Promise<string>,
     ) {
       const rootDir = temporaryRoot();
       const releaseDirectory = releaseState(rootDir).store;
       mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
-      mkdirSync(join(rootDir, "infra", "docker", services.CURRENT_CONFIGURATION), {
-        recursive: true,
-      });
+      await appliedInspectionFixture(rootDir);
       const composePath = join(
         rootDir,
         "infra",
@@ -1357,8 +1622,9 @@ describe("administrative release runtime", () => {
         services.CURRENT_CONFIGURATION,
         "docker-compose.generated.yml",
       );
-      if (compose === "file") writeFileSync(composePath, "services:{}\n");
-      if (compose === "directory") mkdirSync(composePath);
+      rmSync(composePath);
+      if (compose === "file") writeFileSync(composePath, "services:{}\n", { mode: 0o600 });
+      if (compose === "directory") mkdirSync(composePath, { mode: 0o700 });
       const releaseId = "release-123";
       writeFileSync(
         join(releaseDirectory, `${releaseId}.json`),
@@ -1386,10 +1652,14 @@ describe("administrative release runtime", () => {
       return createDefaultReleaseEffects(rootDir, async () => undefined, { runDocker });
     }
 
-    const context = () => ({ signal: new AbortController().signal, emitLog: vi.fn() });
+    const context = () => ({
+      execution: testExecution(),
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+    });
 
     it("reports unknown rather than stopped when a per-service observation throws", async () => {
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) return "";
@@ -1427,7 +1697,7 @@ describe("administrative release runtime", () => {
         "transitous-runner": "f",
       };
       const calls: string[][] = [];
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         calls.push([...args]);
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
@@ -1458,7 +1728,7 @@ describe("administrative release runtime", () => {
     });
 
     it("rejects a non-file Compose path instead of reporting it ready", async () => {
-      const effects = systemFixture("directory", async (args) => {
+      const effects = await systemFixture("directory", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         return "";
@@ -1470,7 +1740,7 @@ describe("administrative release runtime", () => {
     });
 
     it("rejects a Compose document the Compose boundary cannot parse", async () => {
-      const effects = systemFixture("file", async (args) => {
+      const effects = await systemFixture("file", async (args) => {
         const joined = args.join(" ");
         if (joined.startsWith("info ")) return "28.0.0\n";
         if (joined.endsWith(" config -q")) throw new Error("invalid compose project");
@@ -1523,7 +1793,7 @@ describe("administrative release runtime", () => {
       effects.apply(
         releaseId,
         ["app-api"],
-        { signal: new AbortController().signal, emitLog: vi.fn() },
+        { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
         "job-1",
       ),
     ).rejects.toThrow("injected update failure");
@@ -1702,6 +1972,227 @@ describe("administrative release runtime", () => {
   });
 });
 
+describe("fixed CLI execution context", () => {
+  it("uses the original long deadline and clears inherited control authority", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const root = temporaryRoot();
+    const ready = join(root, "ready");
+    const release = join(root, "release");
+    const execution = testExecution();
+    execution.deadlineAt = Date.now() + 12 * 3600_000;
+    writeFileSync(
+      join(root, "cli.mjs"),
+      `import{writeFileSync,existsSync}from'node:fs';import{setTimeout}from'node:timers/promises';if(process.env.OPENMAPX_CONTROL_DELEGATION||process.env.OPENMAPX_PARENT_EXECUTION)process.exit(2);const execution=JSON.parse(process.env.OPENMAPX_CONTROL_EXECUTION);writeFileSync(${JSON.stringify(ready)},JSON.stringify(execution));while(!existsSync(${JSON.stringify(release)}))await setTimeout(5);console.log('completed');`,
+      { mode: 0o644 },
+    );
+    vi.stubEnv("OPENMAPX_CONTROL_DELEGATION", "untrusted-inherited");
+    vi.stubEnv("OPENMAPX_PARENT_EXECUTION", "untrusted-parent");
+    let settled = false;
+    const completion = createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+      execution,
+      operationKind: "service.build",
+      signal: new AbortController().signal,
+      emitLog: () => undefined,
+    });
+    void completion
+      .finally(() => {
+        settled = true;
+      })
+      .catch(() => undefined);
+    try {
+      await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
+      expect(JSON.parse(readFileSync(ready, "utf8"))).toEqual(execution);
+      await vi.advanceTimersByTimeAsync(31 * 60_000);
+      expect(settled).toBe(false);
+      writeFileSync(release, "go", { mode: 0o644 });
+      await expect(completion).resolves.toBeUndefined();
+      await expect(
+        createDefaultFixedCli(root, join(root, "agent.mjs"))([], {
+          execution: { ...execution, deadlineAt: Date.now() - 1 },
+          signal: new AbortController().signal,
+          emitLog: () => undefined,
+        }),
+      ).rejects.toMatchObject({ errorClass: "timeout" });
+    } finally {
+      writeFileSync(release, "go", { mode: 0o644 });
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+      await completion.catch(() => undefined);
+    }
+  });
+});
+
+it("never gives release recovery a fresh execution budget after restart expiry", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const rootDir = temporaryRoot();
+  const releaseId = "release-expired-recovery";
+  const directory = releaseState(rootDir).store;
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(directory, `${releaseId}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      release: releaseId,
+      images: Object.fromEntries(
+        [
+          "api",
+          "web",
+          "data-manager",
+          "ops-agent",
+          "privacy-backup",
+          "transitous-runner",
+          "transitous-tools",
+        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+      ),
+      privacyReleaseValidation,
+    }),
+    { mode: 0o600 },
+  );
+  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
+  const runFixedCli = vi.fn(async () => undefined);
+  try {
+    const first = createDefaultReleaseEffects(rootDir, runFixedCli, {
+      afterReleasePhase: (phase) => {
+        if (phase === "overlay_written") throw Error("crash");
+      },
+    });
+    await expect(
+      first.apply(releaseId, ["app-api"], {
+        signal: new AbortController().signal,
+        emitLog: () => undefined,
+        execution,
+      }),
+    ).rejects.toThrow("crash");
+    vi.setSystemTime(Date.now() + 2000);
+    const recovered = createDefaultReleaseEffects(rootDir, runFixedCli);
+    await expect(recovered.initialize?.()).rejects.toMatchObject({
+      name: "OpsExecutionFailure",
+      errorClass: "timeout",
+    });
+    expect(runFixedCli).not.toHaveBeenCalled();
+    expect(existsSync(join(directory, "transaction.json"))).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("fix1 legacy release recovery", () => {
+  it.each(["overlay_written", "rollback_services"])(
+    "refuses legacy %s effects without a retained deadline",
+    async (phase) => {
+      const rootDir = temporaryRoot();
+      const releaseId = "release-legacy-unknown";
+      const directory = releaseState(rootDir).store;
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      writeFileSync(
+        join(directory, `${releaseId}.json`),
+        JSON.stringify({
+          schemaVersion: 1,
+          release: releaseId,
+          images: Object.fromEntries(
+            [
+              "api",
+              "web",
+              "data-manager",
+              "ops-agent",
+              "privacy-backup",
+              "transitous-runner",
+              "transitous-tools",
+            ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+          ),
+          privacyReleaseValidation,
+        }),
+        { mode: 0o600 },
+      );
+      const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
+        afterReleasePhase: (p) => {
+          if (p === "overlay_written") throw Error("fixture crash");
+        },
+      });
+      await expect(
+        first.apply(releaseId, ["app-api"], {
+          signal: new AbortController().signal,
+          emitLog: () => undefined,
+        }),
+      ).rejects.toThrow("fixture crash");
+      const transaction = join(directory, "transaction.json");
+      const record = JSON.parse(readFileSync(transaction, "utf8"));
+      record.phase = phase;
+      writeFileSync(transaction, JSON.stringify(record), { mode: 0o644 });
+      const overlay = releaseState(rootDir).overlay;
+      writeFileSync(overlay, "operator-state\n", { mode: 0o644 });
+      const run = vi.fn(async () => undefined);
+      const recovered = createDefaultReleaseEffects(rootDir, run, {
+        verifyAppliedRelease: async () => true,
+      });
+      await expect(recovered.initialize?.()).rejects.toMatchObject({
+        name: "OpsExecutionFailure",
+        errorClass: "recovery_required",
+      });
+      expect(run).not.toHaveBeenCalled();
+      expect(readFileSync(overlay, "utf8")).toBe("operator-state\n");
+      expect(existsSync(transaction)).toBe(true);
+    },
+  );
+});
+
+it("fix1 recovery cannot publish after verification consumes the remaining deadline", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const rootDir = temporaryRoot();
+  const releaseId = "release-verification-expiry";
+  const directory = releaseState(rootDir).store;
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(directory, `${releaseId}.json`),
+    JSON.stringify({
+      schemaVersion: 1,
+      release: releaseId,
+      images: Object.fromEntries(
+        [
+          "api",
+          "web",
+          "data-manager",
+          "ops-agent",
+          "privacy-backup",
+          "transitous-runner",
+          "transitous-tools",
+        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
+      ),
+      privacyReleaseValidation,
+    }),
+    { mode: 0o600 },
+  );
+  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
+  try {
+    const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
+      afterReleasePhase: (phase) => {
+        if (phase === "overlay_written") throw Error("fixture crash");
+      },
+    });
+    await expect(
+      first.apply(releaseId, ["app-api"], {
+        execution,
+        signal: new AbortController().signal,
+        emitLog: () => undefined,
+      }),
+    ).rejects.toThrow("fixture crash");
+    const path = join(directory, "transaction.json");
+    const record = JSON.parse(readFileSync(path, "utf8"));
+    record.phase = "services_applied";
+    writeFileSync(path, JSON.stringify(record), { mode: 0o644 });
+    const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
+      verifyAppliedRelease: async () => {
+        vi.setSystemTime(Date.now() + 2000);
+        return true;
+      },
+    });
+    await expect(recovered.initialize?.()).rejects.toMatchObject({ errorClass: "timeout" });
+    expect(existsSync(join(directory, "current.json"))).toBe(false);
+    expect(existsSync(path)).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 describe("release selection held by an earlier release's overlay", () => {
   it("refuses to resolve or apply a release, naming the reason, until one is chosen", async () => {
     const rootDir = temporaryRoot();

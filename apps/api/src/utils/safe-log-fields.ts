@@ -23,7 +23,7 @@ const ORIGIN_FORM_QUERY_PATTERN = /(^|[\s("'])\/[^\s"'<>]*[?#][^\s"'<>]*/gu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/giu;
 const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
 const SENSITIVE_KEY_PATTERN =
-  /(authorization|cookie|token|password|secret|apikey|credential|session|url|user.?id|email)/iu;
+  /(authorization|cookie|token|password|secret|apikey|credential|session|url|user.?id|email|challenge|nonce)/iu;
 const URL_KEY_PATTERN = /url/iu;
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 

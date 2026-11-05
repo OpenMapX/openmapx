@@ -5,6 +5,7 @@ export type ApiResponseContract =
   | { kind: "json"; schema: z.ZodType; headers?: z.ZodType }
   | { kind: "text"; schema: z.ZodType<string>; mediaType: string; headers?: z.ZodType }
   | { kind: "empty"; headers?: z.ZodType }
+  | { kind: "bytes"; mediaType: string; headers?: z.ZodType; nativeDownload?: true }
   | { kind: "stream"; mediaType: string; headers?: z.ZodType }
   | {
       kind: "text-download";
@@ -15,8 +16,9 @@ export type ApiResponseContract =
 export interface ApiOperation {
   method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
   path: `/api/${string}`;
-  auth: "public" | "session" | "service" | "admin";
+  auth: "public" | "session" | "service" | "admin" | "privacy_admin";
   request?: { body?: z.ZodType; query?: z.ZodType; params?: z.ZodType; headers?: z.ZodType };
+  requestBody?: { kind: "bytes"; mediaType: "application/octet-stream" };
   responses: Record<number, ApiResponseContract>;
 }
 

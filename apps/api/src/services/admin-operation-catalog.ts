@@ -23,7 +23,9 @@ export type AdminOperationId =
   | "convert-overpass"
   | "link"
   | "clean"
-  | "generate-api-keys"
+  | "overture-pull"
+  | "overture-ingest"
+  | "overture-extract"
   | "overture-sync"
   | "overture-conflate"
   | "search-index-build"
@@ -106,8 +108,6 @@ const requiredRegionField = (helpText: string): AdminOperationField => ({
 
 const withRegion = (label: string, regionId: string | undefined) =>
   regionId ? `${label} ${regionId}` : `${label} (configured default region)`;
-
-const TRANSITOUS_API_KEY_CATALOG_REVISION = "transitous-fixed-v1";
 
 export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
   defineOperation({
@@ -242,24 +242,6 @@ export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
     ],
   }),
   defineOperation({
-    id: "generate-api-keys",
-    version: 1,
-    group: "transit",
-    title: "Generate Transitous API-Key Template",
-    description: "Writes the API-key template for the pinned Transitous catalog revision.",
-    risk: "normal",
-    input: z.strictObject({}),
-    fields: [],
-    defaults: {},
-    effect: () => ({
-      kind: "data.generateApiKeys",
-      catalogRevisionId: TRANSITOUS_API_KEY_CATALOG_REVISION,
-    }),
-    preview: () => [
-      `Generate the API-key template for catalog revision ${TRANSITOUS_API_KEY_CATALOG_REVISION}`,
-    ],
-  }),
-  defineOperation({
     id: "overture-sync",
     version: 1,
     group: "overture",
@@ -274,12 +256,85 @@ export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
     preview: (input) => [`Sync Overture Places for ${input.region}`],
   }),
   defineOperation({
-    id: "overture-conflate",
+    id: "overture-pull",
     version: 1,
+    group: "overture",
+    title: "Download release partition",
+    description:
+      "Download the current release partition for this region without changing installed Places.",
+    risk: "normal",
+
+    input: z.strictObject({ region: regionSchema }),
+    fields: [requiredRegionField("Region for this recovery step.")],
+    defaults: { region: "" },
+    example: { region: "europe/germany" },
+    effect: (input) => ({ kind: "data.overturePull", regionId: input.region }),
+    preview: (input) => [
+      "Download the current release partition for this region without changing installed Places.",
+      `Region: ${input.region}`,
+      "Prerequisites are rechecked under the existing Overture operation lease at execution.",
+    ],
+  }),
+  defineOperation({
+    id: "overture-ingest",
+    version: 1,
+    group: "overture",
+    title: "Ingest downloaded partition",
+    description:
+      "Validate and atomically install the latest completed local release partition for this region.",
+    risk: "destructive",
+    confirmation: {
+      title: "Ingest downloaded partition",
+      message:
+        "Validate and atomically install the latest completed local release partition for this region.",
+    },
+    input: z.strictObject({ region: regionSchema }),
+    fields: [requiredRegionField("Region for this recovery step.")],
+    defaults: { region: "" },
+    example: { region: "europe/germany" },
+    effect: (input) => ({ kind: "data.overtureIngest", regionId: input.region }),
+    preview: (input) => [
+      "Validate and atomically install the latest completed local release partition for this region.",
+      `Region: ${input.region}`,
+      "Prerequisites are rechecked under the existing Overture operation lease at execution.",
+    ],
+  }),
+  defineOperation({
+    id: "overture-extract",
+    version: 1,
+    group: "overture",
+    title: "Extract OSM features",
+    description:
+      "Replace the OSM extraction workspace for the installed region using its downloaded PBF.",
+    risk: "destructive",
+    confirmation: {
+      title: "Extract OSM features",
+      message:
+        "Replace the OSM extraction workspace for the installed region using its downloaded PBF.",
+    },
+    input: z.strictObject({ region: regionSchema }),
+    fields: [requiredRegionField("Region for this recovery step.")],
+    defaults: { region: "" },
+    example: { region: "europe/germany" },
+    effect: (input) => ({ kind: "data.overtureExtract", regionId: input.region }),
+    preview: (input) => [
+      "Replace the OSM extraction workspace for the installed region using its downloaded PBF.",
+      `Region: ${input.region}`,
+      "Prerequisites are rechecked under the existing Overture operation lease at execution.",
+    ],
+  }),
+  defineOperation({
+    id: "overture-conflate",
+    version: 2,
     group: "overture",
     title: "Overture Conflation",
     description: "Links Overture places to OSM features for a region.",
-    risk: "normal",
+    risk: "destructive",
+    confirmation: {
+      title: "Rebuild Overture links",
+      message:
+        "Resume or restart the selected region's leased link workspace. Restart discards its saved progress; published Places remain installed.",
+    },
     input: z.strictObject({ region: regionSchema, restart: z.boolean().default(false) }),
     fields: [
       requiredRegionField("Region whose Overture data is conflated."),

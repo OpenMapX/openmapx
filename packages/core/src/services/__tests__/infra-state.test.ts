@@ -23,6 +23,7 @@ import {
   currentConfigurationGeneration,
   migrateLegacyServiceSelection,
   readAppliedConfiguration,
+  retainedContainerComposeFile,
   withConfigurationGenerationWriter,
 } from "../configuration-generation";
 import {
@@ -111,6 +112,53 @@ async function legacyDeployment(infraDir: string) {
 }
 
 describe("the agent's configuration state", () => {
+  it("retains legacy container generations while committing with read-only infra/docker", async () => {
+    const { infraDir } = checkout();
+    const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
+    const containerId = "a".repeat(64);
+    const legacy = `${JSON.stringify({ conservative: [], containers: { [containerId]: [first.revisionId] } })}\n`;
+    writeFileSync(join(infraDir, ".owned-service-generations.json"), legacy, { mode: 0o600 });
+    rmSync(join(infraDir, "state/ops-agent/configuration/.owned-service-generations.json"), {
+      force: true,
+    });
+    retireLegacyConfigurationWriter(infraDir);
+    chmodSync(infraDir, 0o555);
+    try {
+      await commitConfigurationGeneration({
+        infraDir,
+        services,
+        input: input({ domain: "next.example.test" }),
+        ownedServiceGenerations: [],
+        observedServiceContainerIds: [containerId],
+      });
+      expect(retainedContainerComposeFile(infraDir, containerId)).toBe(
+        join(infraDir, CONFIGURATION_GENERATIONS, first.revisionId, "docker-compose.generated.yml"),
+      );
+      expect(readFileSync(join(infraDir, ".owned-service-generations.json"), "utf8")).toBe(legacy);
+    } finally {
+      chmodSync(infraDir, 0o775);
+    }
+  });
+
+  it("refuses malformed current retention evidence instead of falling back to legacy evidence", async () => {
+    const { infraDir } = checkout();
+    const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
+    writeFileSync(
+      join(infraDir, ".owned-service-generations.json"),
+      `${JSON.stringify({ conservative: [first.revisionId], containers: {} })}\n`,
+      { mode: 0o600 },
+    );
+    writeFileSync(
+      join(infraDir, "state/ops-agent/configuration/.owned-service-generations.json"),
+      "{}\n",
+      { mode: 0o600 },
+    );
+    await expect(
+      commitConfigurationGeneration({ infraDir, services, input: input() }),
+    ).rejects.toThrow();
+    expect(currentConfigurationGeneration(infraDir)).toBe(first.revisionId);
+  });
+
   it("lives in the agent's state directory, and a group-writable infra/docker is left as it is", async () => {
     const { infraDir } = checkout();
     const { revisionId } = await commitConfigurationGeneration({

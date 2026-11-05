@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createCandidateManifest } from "../src/jobs/transitous/candidate.js";
 import { resolveTransitOverlayPath } from "../src/jobs/transitous/internal.js";
 import { safeOriginUrl } from "../src/jobs/transitous/source-manifest.js";
 import {
@@ -9,6 +11,7 @@ import {
   prepareAddTransitSource,
   prepareEnableTransitSource,
   prepareRemoveTransitSource,
+  prepareSetTransitSourceEnabled,
 } from "../src/transit-sources.js";
 
 let tmp: string | undefined;
@@ -22,7 +25,7 @@ function fixture() {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-transit-sources-"));
   const catalogDir = join(tmp, ".transitous-catalog");
   const overlayPath = join(tmp, "overrides", "feeds-overlay.json");
-  mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+  mkdirSync(join(catalogDir, "feeds"), { mode: 0o700, recursive: true });
   writeFileSync(
     join(catalogDir, "feeds", "de.json"),
     JSON.stringify({
@@ -43,8 +46,9 @@ function fixture() {
         },
       ],
     }),
+    { mode: 0o600 },
   );
-  mkdirSync(join(tmp, "motis", "live"), { recursive: true });
+  mkdirSync(join(tmp, "motis", "live"), { mode: 0o700, recursive: true });
   writeFileSync(
     join(tmp, "motis", "live", "transit-source-manifest.json"),
     JSON.stringify({
@@ -62,22 +66,33 @@ function fixture() {
           transformations: ["transitous-cleaning"],
           artifact: {
             relativePath: "de_active-feed.gtfs.zip",
-            sha256: "a".repeat(64),
-            sizeBytes: 42,
+            sha256: createHash("sha256").update("synthetic timetable").digest("hex"),
+            sizeBytes: Buffer.byteLength("synthetic timetable"),
             modifiedAt: "2026-07-29T12:00:00.000Z",
           },
         },
       ],
     }),
+    { mode: 0o600 },
   );
+  const live = join(tmp, "motis", "live");
+  mkdirSync(join(live, ".openmapx-feed-proxy", "conf"), { mode: 0o700, recursive: true });
   writeFileSync(
-    join(tmp, "motis", "live", "motis-candidate-manifest.json"),
+    join(live, "config.yml"),
     JSON.stringify({
-      schemaVersion: 1,
-      epoch: "epoch-live",
-      artifacts: { sourceManifest: { path: "transit-source-manifest.json" } },
+      timetable: { datasets: { "de-active-feed": { path: "de_active-feed.gtfs.zip" } } },
     }),
+    { mode: 0o600 },
   );
+  writeFileSync(join(live, "license.json"), "[]", { mode: 0o600 });
+  writeFileSync(join(live, "de_active-feed.gtfs.zip"), "synthetic timetable", { mode: 0o600 });
+  writeFileSync(
+    join(live, ".openmapx-feed-proxy", "conf", "default.conf"),
+    "# no realtime feeds\n",
+    { mode: 0o600 },
+  );
+  writeFileSync(join(live, ".openmapx-feed-proxy", "feed-proxy-vars.json"), "{}", { mode: 0o600 });
+  createCandidateManifest(live, "epoch-live", "2026-07-30T00:00:00.000Z");
   return { dataDir: tmp, catalogDir, overlayPath };
 }
 
@@ -142,8 +157,9 @@ describe("transit source lifecycle", () => {
   it("persists catalog disable/re-enable and operator removal as v3 state", () => {
     const fx = fixture();
     prepareAddTransitSource({ ...fx, source: operatorSource() }).persist();
-    prepareRemoveTransitSource({
+    prepareSetTransitSourceEnabled({
       ...fx,
+      enabled: false,
       sourceId: "catalog:de:active-feed",
     }).persist();
     expect(listTransitSources({ ...fx }).sources).toContainEqual(
@@ -203,6 +219,7 @@ describe("transit source lifecycle", () => {
           },
         ],
       }),
+      { mode: 0o600 },
     );
     const manifestPath = join(
       fx.dataDir as string,
@@ -214,7 +231,7 @@ describe("transit source lifecycle", () => {
       sources: Array<{ originUrl?: string }>;
     };
     manifest.sources[0].originUrl = safeOriginUrl(rawUrl);
-    writeFileSync(manifestPath, JSON.stringify(manifest));
+    writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
     expect(listTransitSources({ ...fx }).sources).toContainEqual(
       expect.objectContaining({ id: "catalog:de:active-feed", lifecycle: "active" }),
     );
@@ -229,6 +246,7 @@ describe("transit source lifecycle", () => {
           { name: "fr-feed", spec: "gtfs", type: "http", url: "https://catalog.example/fr.zip" },
         ],
       }),
+      { mode: 0o600 },
     );
     const scoped = listTransitSources({ ...fx, countries: ["de"] });
     expect(scoped.sources.some((source) => source.region === "fr")).toBe(false);
@@ -244,6 +262,6 @@ describe("transit source lifecycle", () => {
     ).toThrow(/country scope/);
     expect(() =>
       prepareEnableTransitSource({ ...fx, countries: ["de"], sourceId: "catalog:fr:fr-feed" }),
-    ).toThrow(/not found in the configured scope/);
+    ).toThrow(/outside the configured country scope/);
   });
 });

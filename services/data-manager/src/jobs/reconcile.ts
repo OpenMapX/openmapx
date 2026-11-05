@@ -1,5 +1,5 @@
 import { jobs } from "@openmapx/db-schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 
 /** Terminal status stamped on jobs orphaned in `running` by a process death. */
@@ -13,7 +13,7 @@ export const INTERRUPTED_STATUS = "interrupted";
  */
 export type JobReconcileWriter = {
   update: (table: typeof jobs) => {
-    set: (values: { status: string; finishedAt: Date }) => {
+    set: (values: { status: string; finishedAt: Date | null }) => {
       where: (predicate: unknown) => {
         returning: (columns: { id: typeof jobs.id }) => PromiseLike<Array<{ id: string }>>;
       };
@@ -28,31 +28,27 @@ export interface ReconcileOrphanedJobsOptions {
   now?: () => Date;
 }
 
-/**
- * Mark every job still in `running` as `interrupted`, returning the ids it
- * reconciled.
- *
- * The data-manager is a single instance whose "a sync is running" signal lives
- * only in process memory (the single-flight `inflight` flag). So any `running`
- * row found at startup is a zombie left by a previous process that died mid-run
- * — a restart / redeploy / OOM during a multi-hour Transitous sync (graceful
- * shutdown only waits 30s before forcing exit). Without this sweep those rows
- * stay `running` forever: the admin "Sync in progress" banner shows a phantom
- * job indefinitely and `lastSyncStatus` reads null.
- *
- * MUST run only at startup, before any new job is created. At that point nothing
- * is genuinely running, so a blanket sweep across every job kind sharing the
- * table is safe.
- */
+/** Startup marks legacy workers interrupted without asserting process/child
+ * containment. New versioned executions and logical guards have their own
+ * retained reconciler; unfinished legacy evidence continues to block writes. */
 export async function reconcileOrphanedJobs(
   opts: ReconcileOrphanedJobsOptions = {},
 ): Promise<string[]> {
-  const handle: JobReconcileWriter = opts.db ?? (defaultDb as unknown as JobReconcileWriter);
-  const finishedAt = opts.now ? opts.now() : new Date();
-  const updated = await handle
-    .update(jobs)
-    .set({ status: INTERRUPTED_STATUS, finishedAt })
-    .where(eq(jobs.status, "running"))
-    .returning({ id: jobs.id });
+  const predicate = and(
+    eq(jobs.status, "running"),
+    isNull(jobs.executionVersion),
+    ne(jobs.kind, "configuration-maintenance"),
+  );
+  const updated = opts.db
+    ? await opts.db
+        .update(jobs)
+        .set({ status: INTERRUPTED_STATUS, finishedAt: null })
+        .where(predicate)
+        .returning({ id: jobs.id })
+    : await defaultDb
+        .update(jobs)
+        .set({ status: INTERRUPTED_STATUS, finishedAt: null })
+        .where(predicate)
+        .returning({ id: jobs.id });
   return updated.map((row) => row.id);
 }

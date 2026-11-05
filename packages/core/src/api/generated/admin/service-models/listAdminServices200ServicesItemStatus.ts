@@ -11,4 +11,5 @@ export const ListAdminServices200ServicesItemStatus = {
   created: "created",
   paused: "paused",
   "not-running": "not-running",
+  unknown: "unknown",
 } as const;

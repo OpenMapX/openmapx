@@ -11,4 +11,5 @@ export const GetAdminService200Status = {
   created: "created",
   paused: "paused",
   "not-running": "not-running",
+  unknown: "unknown",
 } as const;

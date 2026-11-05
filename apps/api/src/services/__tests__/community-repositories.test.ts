@@ -12,8 +12,18 @@ vi.mock("../ops-client", () => ({
   ),
   executeAndWait: vi.fn(),
 }));
+vi.mock("../admin-job-ops", () => ({
+  executeAdminJobOperation: vi.fn((_ctx, operation, _namespace, options) =>
+    executeAndWait(createApiOpsClient(), operation, options.operationKey, { signal: undefined }),
+  ),
+}));
+vi.mock("../admin-job-projection", () => ({
+  readProjection: (result: { opsProjection: unknown }) => result.opsProjection,
+}));
 
-import { executeAndWait } from "../ops-client";
+import { executeAdminJobOperation } from "../admin-job-ops";
+import type { JobContext } from "../job-runner";
+import { createApiOpsClient, executeAndWait } from "../ops-client";
 
 let repositories: typeof import("../community-repositories.js");
 beforeAll(async () => {
@@ -152,8 +162,42 @@ describe("inspectServiceRepository", () => {
 });
 
 describe("publishServiceRepository", () => {
+  it("uses the original extension job broker before publishing a repository", async () => {
+    const ctx = {
+      jobId: "original-extension-job",
+      payload: {},
+      signal: new AbortController().signal,
+      checkpoint: vi.fn(),
+      log: vi.fn(),
+      setProgress: vi.fn(),
+    } satisfies JobContext;
+    const result = {
+      repository: repositories.hashUrl(URL),
+      commit: COMMIT,
+      transactionId: TRANSACTION,
+      serviceIds: ["svc-one"],
+    };
+    vi.mocked(executeAdminJobOperation).mockResolvedValueOnce(result as never);
+    const request = {
+      url: URL,
+      commit: COMMIT,
+      extensionId: "bundle-x",
+      recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
+    };
+    await repositories.publishServiceRepository(request, {
+      operationKey: "opk1_original_extension_publish",
+      ctx,
+    });
+    expect(executeAdminJobOperation).toHaveBeenCalledWith(
+      ctx,
+      { kind: "serviceRepository.publish", ...request },
+      "extension.repository.publish",
+      { operationKey: "opk1_original_extension_publish" },
+    );
+    expect(executeMock).not.toHaveBeenCalled();
+  });
   it("refuses an answer that installed a different commit", async () => {
-    executeMock.mockResolvedValueOnce({
+    vi.mocked(executeAdminJobOperation).mockResolvedValueOnce({
       repository: repositories.hashUrl(URL),
       commit: "e".repeat(40),
       transactionId: TRANSACTION,
@@ -172,7 +216,7 @@ describe("publishServiceRepository", () => {
             previouslyEnabledServiceIds: [],
           },
         },
-        { operationKey: "opk1_key" },
+        { operationKey: "opk1_key", ctx: context() },
       ),
     ).rejects.toThrow("installed a different repository");
   });
@@ -202,6 +246,29 @@ describe("readCommunityServices", () => {
   });
 });
 
+function context(): JobContext {
+  return {
+    jobId: "original-extension-job",
+    payload: {},
+    signal: new AbortController().signal,
+    log: vi.fn(),
+    setProgress: vi.fn(),
+    checkpoint: vi.fn(),
+    checkpointResult: {
+      opsProjection: {
+        steps: { original: { operationKey: "original" } },
+        operations: {
+          original: {
+            operationKey: "original",
+            kind: "serviceRepository.publish",
+            attempt: { apiJobId: "original-extension-job" },
+            operation: { kind: "serviceRepository.publish", url: URL, commit: COMMIT },
+          },
+        },
+      },
+    },
+  };
+}
 describe("reconcileCommunityRepositoryTransactions", () => {
   /** The settle requests sent to the agent, in order. */
   function settled() {
@@ -211,10 +278,38 @@ describe("reconcileCommunityRepositoryTransactions", () => {
       .map((operation) => `${operation.outcome}:${operation.repository}`);
   }
 
-  function agentAnswers(repositoriesList: unknown[]) {
+  let recoveryContext: JobContext;
+  function agentAnswers(repositoriesList: ReturnType<typeof pendingRepository>[]) {
+    recoveryContext = context();
+    const steps: Record<string, unknown> = {},
+      operations: Record<string, unknown> = {};
+    for (const entry of repositoriesList) {
+      const url = entry.repository === repositories.hashUrl(URL) ? URL : `${URL}-two`;
+      steps[entry.repository] = { operationKey: entry.repository };
+      operations[entry.repository] = {
+        operationKey: entry.repository,
+        kind: "serviceRepository.publish",
+        attempt: { apiJobId: recoveryContext.jobId },
+        operation: { kind: "serviceRepository.publish", url, commit: COMMIT },
+      };
+    }
+    recoveryContext.checkpointResult = { opsProjection: { steps, operations } };
     executeMock.mockImplementation(async (_client, operation) => {
-      const request = operation as { kind: string; repository?: string; outcome?: string };
+      const request = operation as {
+        kind: string;
+        repository?: string;
+        outcome?: string;
+        url?: string;
+      };
       if (request.kind === "communityServices.inspect") return snapshot(repositoriesList) as never;
+      if (request.kind === "serviceRepository.publish") {
+        const id = repositories.hashUrl(request.url!);
+        return {
+          repository: id,
+          transactionId: repositoriesList.find((entry) => entry.repository === id)!.pending
+            .transactionId,
+        } as never;
+      }
       return { repository: request.repository, outcome: request.outcome, changed: true } as never;
     });
   }
@@ -228,7 +323,10 @@ describe("reconcileCommunityRepositoryTransactions", () => {
     const restoreSelection = vi.fn();
 
     await expect(
-      repositories.reconcileCommunityRepositoryTransactions({ restoreSelection }),
+      repositories.reconcileCommunityRepositoryTransactions({
+        ctx: recoveryContext,
+        restoreSelection,
+      }),
     ).resolves.toEqual({
       runtimeRecoveryNeeded: false,
       orphanedServiceIds: [],
@@ -239,13 +337,14 @@ describe("reconcileCommunityRepositoryTransactions", () => {
   });
 
   it("commits a transaction the database recorded", async () => {
-    const repository = "1".repeat(16);
+    const repository = repositories.hashUrl(URL);
     agentAnswers([pendingRepository(repository, TRANSACTION)]);
     dbMock.queueSelect([{ lastTransactionId: TRANSACTION }]);
     const restoreSelection = vi.fn();
     const persistRuntimeRecovery = vi.fn();
 
     const result = await repositories.reconcileCommunityRepositoryTransactions({
+      ctx: recoveryContext,
       restoreSelection,
       persistRuntimeRecovery,
     });
@@ -257,8 +356,8 @@ describe("reconcileCommunityRepositoryTransactions", () => {
   });
 
   it("records runtime repair, rolls back, restores the selection, then releases", async () => {
-    const one = "1".repeat(16);
-    const two = "2".repeat(16);
+    const one = repositories.hashUrl(URL);
+    const two = repositories.hashUrl(`${URL}-two`);
     const otherTransaction = `txn1_${"c".repeat(24)}`;
     agentAnswers([pendingRepository(one, TRANSACTION), pendingRepository(two, otherTransaction)]);
     // The database still records an earlier install of the first repository.
@@ -273,6 +372,7 @@ describe("reconcileCommunityRepositoryTransactions", () => {
     });
 
     const result = await repositories.reconcileCommunityRepositoryTransactions({
+      ctx: recoveryContext,
       restoreSelection,
       persistRuntimeRecovery,
     });
@@ -297,11 +397,14 @@ describe("reconcileCommunityRepositoryTransactions", () => {
   });
 
   it("finishes a rollback whose selection restore failed earlier", async () => {
-    const repository = "1".repeat(16);
+    const repository = repositories.hashUrl(URL);
     agentAnswers([pendingRepository(repository, TRANSACTION, "rolledBack")]);
     const restoreSelection = vi.fn();
 
-    await repositories.reconcileCommunityRepositoryTransactions({ restoreSelection });
+    await repositories.reconcileCommunityRepositoryTransactions({
+      ctx: recoveryContext,
+      restoreSelection,
+    });
 
     // A rolled-back transaction is never committed, whatever the database says.
     expect(dbMock.db.select).not.toHaveBeenCalled();
@@ -310,12 +413,13 @@ describe("reconcileCommunityRepositoryTransactions", () => {
   });
 
   it("keeps the recovery note when restoring the selection fails, so recovery can retry", async () => {
-    const repository = "1".repeat(16);
+    const repository = repositories.hashUrl(URL);
     agentAnswers([pendingRepository(repository, TRANSACTION)]);
     dbMock.queueSelect([]);
 
     await expect(
       repositories.reconcileCommunityRepositoryTransactions({
+        ctx: recoveryContext,
         restoreSelection: vi.fn().mockRejectedValue(new Error("selection unavailable")),
       }),
     ).rejects.toThrow("selection unavailable");

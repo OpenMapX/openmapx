@@ -30,14 +30,40 @@
     }
   },
   "provides": ["tile-server"],
-  "produces": [{ "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" }],
-  "consumes": [
-    { "type": "tile-mbtiles", "mountAt": "/data/mbtiles", "readOnly": true, "required": true },
-    { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true }
+  "produces": [
+    {
+      "type": "tile-mbtiles",
+      "sourceDir": "data/tile-mbtiles"
+    }
   ],
-  "bindMounts": [{ "source": "config/config.json", "target": "/data/config.json" }],
+  "consumes": [
+    {
+      "type": "tile-mbtiles",
+      "mountAt": "/data/mbtiles",
+      "readOnly": true,
+      "required": true
+    },
+    {
+      "type": "tile-fonts",
+      "mountAt": "/data/fonts",
+      "readOnly": true,
+      "required": true
+    }
+  ],
+  "bindMounts": [
+    {
+      "source": "config/config.json",
+      "target": "/data/config.json"
+    }
+  ],
   "exposure": {
-    "hostPorts": [{ "container": 8080, "host": 8080, "bindAddress": "127.0.0.1" }],
+    "hostPorts": [
+      {
+        "container": 8080,
+        "host": 8080,
+        "bindAddress": "127.0.0.1"
+      }
+    ],
     "proxy": {
       "enabled": true,
       "pathPrefix": "/tiles",
@@ -45,5 +71,26 @@
       "middleware": ["tiles-cache@file"]
     }
   },
-  "ui": { "category": "tiles" }
+  "ui": {
+    "category": "tiles"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "OPENMAPX_MEMORY_MIB": {
+        "type": "integer",
+        "title": "Container memory limit (MiB)",
+        "minimum": 16,
+        "maximum": 1048576,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      },
+      "OPENMAPX_CPU_LIMIT": {
+        "type": "number",
+        "title": "Container CPU limit",
+        "minimum": 0.125,
+        "maximum": 256,
+        "description": "Optional Docker resource limit. Unset preserves the image manifest limit. Clear the field to restore the manifest limit."
+      }
+    }
+  }
 }

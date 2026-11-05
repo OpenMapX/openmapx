@@ -1,11 +1,15 @@
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
   parseMotisConfigExpectations,
+  sha256File,
   verifyCandidateManifest,
 } from "../../src/jobs/transitous/candidate.js";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
@@ -64,37 +68,57 @@ describe("candidate manifest", () => {
     writeFileSync(
       join(tmp, "config.yml"),
       "timetable:\n  datasets:\n    demo:\n      path: demo.gtfs.zip\n",
+      { mode: 0o600 },
     );
-    writeFileSync(join(tmp, "license.json"), "[]\n");
-    writeFileSync(join(tmp, "demo.gtfs.zip"), "GTFS");
-    writeFileSync(join(tmp, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n');
+    writeFileSync(join(tmp, "license.json"), "[]\n", { mode: 0o600 });
+    writeFileSync(join(tmp, "demo.gtfs.zip"), "GTFS", { mode: 0o600 });
+    writeFileSync(join(tmp, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n', {
+      mode: 0o600,
+    });
     const proxy = join(tmp, CANDIDATE_PROXY_DIRNAME);
-    mkdirSync(join(proxy, "conf"), { recursive: true });
-    writeFileSync(join(proxy, "conf", "default.conf"), "server { listen 80; }\n");
-    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n");
+    mkdirSync(join(proxy, "conf"), { mode: 0o700, recursive: true });
+    writeFileSync(join(proxy, "conf", "default.conf"), "server { listen 80; }\n", { mode: 0o600 });
+    writeFileSync(join(proxy, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
     return tmp;
   }
 
-  it("writes and verifies an immutable artifact tuple", () => {
+  it("writes and verifies an immutable artifact tuple", async () => {
     const dir = fixture();
     const manifest = createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z");
     expect(manifest.epoch).toBe("epoch-1");
+    expect(fs.statSync(join(dir, CANDIDATE_MANIFEST_FILENAME)).mode & 0o777).toBe(0o600);
     expect(manifest.artifacts.datasets).toHaveLength(1);
-    expect(verifyCandidateManifest(dir)).toEqual(manifest);
+    expect(await verifyCandidateManifest(dir)).toEqual(manifest);
   });
 
-  it("binds the resolved operations policy into the promoted candidate", () => {
+  it("binds the resolved operations policy into the promoted candidate", async () => {
     const dir = fixture();
     const policy = resolveOperationsProfile({ countries: ["de"], source: "mirror" });
     const manifest = createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z", policy);
     expect(manifest.operationsPolicy).toEqual(policy);
-    expect(verifyCandidateManifest(dir).operationsPolicy?.profile).toBe("regional-assisted");
+    expect((await verifyCandidateManifest(dir)).operationsPolicy?.profile).toBe(
+      "regional-assisted",
+    );
   });
 
-  it("detects mutation after the manifest is written", () => {
+  it("detects mutation after the manifest is written", async () => {
     const dir = fixture();
     createCandidateManifest(dir, "epoch-1", "2026-07-15T00:00:00.000Z");
-    writeFileSync(join(dir, "license.json"), '[{"changed":true}]\n');
-    expect(() => verifyCandidateManifest(dir)).toThrow(/hash mismatch: license\.json/);
+    writeFileSync(join(dir, "license.json"), '[{"changed":true}]\n', { mode: 0o600 });
+    await expect(verifyCandidateManifest(dir)).rejects.toThrow(/hash mismatch: license\.json/);
   });
+});
+
+vi.mock("node:fs", async (original) => {
+  const actual = await original<typeof import("node:fs")>();
+  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+});
+it("hashes datasets without loading a whole file into one buffer", () => {
+  tmp = mkdtempSync(join(tmpdir(), "omx-candidate-stream-"));
+  const file = join(tmp, "large.gtfs.zip"),
+    bytes = Buffer.alloc(8 * 1024 * 1024, 7);
+  writeFileSync(file, bytes, { mode: 0o600 });
+  vi.mocked(fs.readFileSync).mockClear();
+  expect(sha256File(file).sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+  expect(fs.readFileSync).not.toHaveBeenCalledWith(file);
 });

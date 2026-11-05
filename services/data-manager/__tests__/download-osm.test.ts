@@ -1,4 +1,12 @@
-import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -71,7 +79,7 @@ describe("downloadOsm publication", () => {
       async (_url, targetPath, options) => {
         events.push("download");
         const tempPath = `${targetPath}.test-temp`;
-        writeFileSync(tempPath, "validated-pbf");
+        writeFileSync(tempPath, "validated-pbf", { mode: 0o600 });
         await options.beforePublish?.(tempPath);
         events.push("validated");
         await options.withPublishLock?.(() => {
@@ -98,6 +106,7 @@ describe("downloadOsm publication", () => {
 
       expect(events).toEqual(["download", "validated", "lock-start", "publish", "lock-end"]);
       expect(result.sizeBytes).toBe(Buffer.byteLength("validated-pbf"));
+      expect(statSync(join(dataDir, "osm")).mode & 0o777).toBe(0o700);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }

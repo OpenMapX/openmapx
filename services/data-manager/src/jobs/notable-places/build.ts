@@ -8,6 +8,12 @@ import type {
 import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import {
+  assertDataPublication,
+  dataWorkerSignal,
+  publishDataChange,
+  retainDataPublication,
+} from "../execution/worker-scope.js";
+import {
   createNotablePlacesOperationLock,
   type SearchIndexOperationLock,
 } from "../search-index/operation-lock.js";
@@ -185,7 +191,11 @@ export async function buildNotablePlaces(
   const endpoint = opts.endpoint ?? DEFAULT_NOTABLE_PLACES_SPARQL_URL;
   const minSitelinks = opts.minSitelinks ?? DEFAULT_NOTABLE_MIN_SITELINKS;
   const lock = opts.operationLock ?? createNotablePlacesOperationLock(opts.sql);
-  const fetchOptions = { endpoint, signal: opts.signal, fetchImpl: opts.fetchImpl };
+  const fetchOptions = {
+    endpoint,
+    signal: dataWorkerSignal(opts.signal),
+    fetchImpl: opts.fetchImpl,
+  };
   return lock.run(async () => {
     // Bound as text: the client is shared with drizzle, which replaces its
     // date serializers.
@@ -319,23 +329,27 @@ export async function buildNotablePlaces(
       const live = await opts.sql.unsafe<{ exists: boolean }[]>(
         `SELECT to_regnamespace('notable_places') IS NOT NULL AS exists`,
       );
-      await opts.sql.begin(async (transaction) => {
-        await transaction.unsafe(
-          `UPDATE notable_places__staging.index_state
+      assertDataPublication();
+      await publishDataChange(() =>
+        opts.sql.begin(async (transaction) => {
+          await transaction.unsafe(
+            `UPDATE notable_places__staging.index_state
               SET status='ready', place_count=$1, name_count=$2, published_at=NOW(),
                   updated_at=NOW(), last_error=NULL
             WHERE singleton=1`,
-          [placeCount, nameCount],
-        );
-        await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
-        if (live[0]?.exists) {
-          await transaction.unsafe(
-            `ALTER SCHEMA notable_places RENAME TO notable_places__previous`,
+            [placeCount, nameCount],
           );
-        }
-        await transaction.unsafe(`ALTER SCHEMA notable_places__staging RENAME TO notable_places`);
-        await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
-      });
+          await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
+          if (live[0]?.exists) {
+            await transaction.unsafe(
+              `ALTER SCHEMA notable_places RENAME TO notable_places__previous`,
+            );
+          }
+          await transaction.unsafe(`ALTER SCHEMA notable_places__staging RENAME TO notable_places`);
+          await transaction.unsafe(`DROP SCHEMA IF EXISTS notable_places__previous CASCADE`);
+        }),
+      );
+      await retainDataPublication();
       progress("complete", `Published ${placeCount} places and ${nameCount} names`);
       return { epoch, source: endpoint, minSitelinks, placeCount, nameCount };
     } catch (error) {

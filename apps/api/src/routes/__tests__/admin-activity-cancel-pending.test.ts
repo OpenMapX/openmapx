@@ -4,11 +4,20 @@ import { adminJobStreamEventSchemas } from "@openmapx/core/api-contracts";
 import { getTableColumns } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import Fastify from "fastify";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { adminJob } from "../../db/schema";
 import { installAdminRouteMocks } from "./admin-test-helpers";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
+const authSecret = vi.hoisted(() => {
+  const previous = process.env.BETTER_AUTH_SECRET;
+  process.env.BETTER_AUTH_SECRET ??= "cancel-pending-unit-only-secret";
+  return { previous };
+});
+afterAll(() => {
+  if (authSecret.previous === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = authSecret.previous;
+});
 installAdminRouteMocks();
 const cancelOperations = vi.fn();
 vi.mock("../../services/admin-job-ops", () => ({
@@ -38,10 +47,12 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
   // runner, event bus, routes, serializers and generated SDK all execute.
   const database = drizzle(async (sql, params) => {
     if (sql.startsWith('update "admin_job"')) {
-      if (sql.includes("returning")) return { rows: [] }; // The row is running, not queued.
+      if (params[0] === "canceled") return { rows: [] }; // The row is running, not queued.
       if (params[0] !== "cancel_pending") throw new Error(`Unexpected update: ${sql}`);
       row.status = "cancel_pending";
-      return { rows: [] };
+      return {
+        rows: [Object.keys(getTableColumns(adminJob)).map((key) => row[key as keyof typeof row])],
+      };
     }
     if (sql.startsWith('select "status", "result"')) return { rows: [[row.status, row.result]] };
     if (sql.includes("union all")) {
@@ -110,6 +121,7 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
         status: 200,
         data: {
           ...row,
+          result: {}, // Internal operation/authority state is never public Activity data.
           createdAt: "2026-10-19T10:00:00.000Z",
           startedAt: "2026-10-19T10:00:00.000Z",
           source: "application",

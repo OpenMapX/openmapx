@@ -1,10 +1,20 @@
-import { and, desc, isNotNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, desc, isNotNull, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "../db";
-import { adminAuditLog, adminJob, appLog, dataManagerJobs, verification } from "../db/schema";
+import {
+  adminAuditLog,
+  adminJob,
+  appLog,
+  dataManagerJobs,
+  platformConfigurationPreview,
+  verification,
+} from "../db/schema";
 import {
   preservationAllowsDeletion,
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
+import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
+import { prunePlatformConfigurationPreviews } from "./platform-preview-store";
+import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -66,12 +76,18 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   // adminJobLog has ON DELETE CASCADE so deleting parent rows clears logs.
-  const result = await withPreservationRetentionLock(db, (tx) =>
-    tx
+  const result = await withPreservationRetentionLock(db, async (tx) => {
+    await pruneTransitCredentialPreviews(tx);
+    await prunePlatformConfigurationPreviews(tx);
+    return tx
       .delete(adminJob)
       .where(
         and(
           lt(adminJob.finishedAt, cutoff),
+          noPendingReceiptDelivery(),
+          noUnsettledManagedOperation(),
+          sql`NOT EXISTS (SELECT 1 FROM ${platformConfigurationPreview} WHERE ${platformConfigurationPreview.consumedByJobId}::text = ${adminJob.id})`,
+          sql`(coalesce(${adminJob.result}->'opsProjection'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamp)`,
           preservationAllowsDeletion({
             registrationId: "admin-jobs-attribution",
             candidateTimestamp: adminJob.createdAt,
@@ -79,8 +95,8 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
           }),
         ),
       )
-      .returning({ id: adminJob.id }),
-  );
+      .returning({ id: adminJob.id });
+  });
   return result.length;
 }
 
@@ -105,15 +121,22 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   const result = await withPreservationRetentionLock(db, (tx) => {
+    // Managed execution receipts belong to the all-role proof GC, including
+    // finished rows still referenced by an original owner awaiting recovery.
+    const legacyPipelineJob = and(
+      isNull(dataManagerJobs.executionVersion),
+      ne(dataManagerJobs.kind, "configuration-maintenance"),
+    );
     const newestFinishedOfEachKind = tx
       .selectDistinctOn([dataManagerJobs.kind], { id: dataManagerJobs.id })
       .from(dataManagerJobs)
-      .where(isNotNull(dataManagerJobs.finishedAt))
+      .where(and(legacyPipelineJob, isNotNull(dataManagerJobs.finishedAt)))
       .orderBy(dataManagerJobs.kind, desc(dataManagerJobs.startedAt));
     return tx
       .delete(dataManagerJobs)
       .where(
         and(
+          legacyPipelineJob,
           lt(dataManagerJobs.finishedAt, cutoff),
           notInArray(dataManagerJobs.id, newestFinishedOfEachKind),
           preservationAllowsDeletion({

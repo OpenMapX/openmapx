@@ -4,22 +4,63 @@ import { join } from "node:path";
 import type { IntegrationManifest } from "@openmapx/integration-framework";
 import { afterEach, expect, it, vi } from "vitest";
 
-const database = { apiKey: "synthetic-db" };
-vi.mock("../db", () => ({
-  db: {
-    select: () => ({
-      from: () => ({ where: () => ({ limit: async () => [{ config: database }] }) }),
-    }),
+import {
+  closeAdministrativeConfigurationRead,
+  openAdministrativeConfigurationRead,
+  withAdministrativeConfigurationReadScope,
+} from "./administrative-configuration-context";
+import { encrypt } from "./secrets";
+
+let installed: { id: string; directory: string; manifest: IntegrationManifest };
+vi.mock("./administrative-configuration-writer-owner", () => ({
+  withAdministrativeConfigurationRead: async (
+    _options: unknown,
+    run: (context: ReturnType<typeof openAdministrativeConfigurationRead>) => Promise<unknown>,
+  ) => {
+    const date = new Date("2026-10-20T00:00:00Z"),
+      context = openAdministrativeConfigurationRead({
+        services: [],
+        integrations: [
+          {
+            ...installed,
+            enabled: true,
+            isBuiltIn: true,
+            config: {},
+            strings: {},
+            providers: new Map(),
+            shutdownHandlers: [],
+          },
+        ],
+        env: { ...process.env },
+        serviceRows: [],
+        serviceSecretRows: [],
+        integrationRows: [
+          {
+            id: "row",
+            integrationId: "fixture",
+            config: { apiKey: "synthetic-db" },
+            createdAt: date,
+            updatedAt: date,
+          },
+        ],
+        integrationSecretRows: [
+          {
+            id: "secret",
+            integrationId: "fixture",
+            key: "apiKey",
+            ...encrypt("synthetic-vault"),
+            updatedAt: date,
+            createdAt: date,
+            updatedBy: "fixture-actor",
+          },
+        ],
+      });
+    try {
+      return await withAdministrativeConfigurationReadScope(context, () => run(context));
+    } finally {
+      closeAdministrativeConfigurationRead(context);
+    }
   },
-}));
-vi.mock("../services/secrets", () => ({
-  resolveVaultSecrets: async () => ({ apiKey: "synthetic-vault" }),
-  listSecrets: async () => [
-    { key: "apiKey", updatedAt: new Date("2026-10-20T00:00:00Z"), updatedBy: "fixture-actor" },
-  ],
-}));
-vi.mock("../integration-host", async () => ({
-  resolveConfigWithSources: (await import("../integration-config")).resolveConfigWithSources,
 }));
 const { computeCredentialStatus } = await import("./integration-credential-status");
 const roots: string[] = [];
@@ -43,6 +84,8 @@ it("uses the actual env > file > vault cascade and keeps separate vault audit wi
       },
     } as IntegrationManifest,
   };
+  installed = integration;
+  vi.stubEnv("OPENMAPX_SECRETS_KEY", "71".repeat(32));
   vi.stubEnv("INTEGRATION_FIXTURE_APIKEY", "synthetic-env");
   writeFileSync(join(directory, "config.json"), JSON.stringify({ apiKey: "synthetic-file" }));
   expect((await computeCredentialStatus(integration))[0]).toMatchObject({

@@ -11,11 +11,13 @@ import { OfflinePackageGenerator } from "../src/offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "../src/offline-packages/postgres-accounting.js";
 import { OfflinePackageStorage } from "../src/offline-packages/storage.js";
 import type { OfflinePackageJobRecord } from "../src/offline-packages/types.js";
+import { installDisposableDataAdmission } from "./helpers/data-admission-fixture.js";
 
 const principal = "a".repeat(64);
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 let container: StartedPostgreSqlContainer;
 let sql: Sql;
+let closeAdmission: (() => void) | undefined;
 
 const artifacts = new Map<string, OfflineMapPackageManifest>();
 const artifactOptions = { readManifest: async (id: string) => artifacts.get(id) };
@@ -134,6 +136,7 @@ integration("PostgreSQL offline-package accounting", () => {
       "utf8",
     ).replaceAll("--> statement-breakpoint", "");
     await sql.unsafe(migration);
+    closeAdmission = await installDisposableDataAdmission(sql);
   }, 120_000);
 
   afterEach(async () => {
@@ -145,6 +148,7 @@ integration("PostgreSQL offline-package accounting", () => {
   });
 
   afterAll(async () => {
+    closeAdmission?.();
     await sql?.end();
     await container?.stop();
   });

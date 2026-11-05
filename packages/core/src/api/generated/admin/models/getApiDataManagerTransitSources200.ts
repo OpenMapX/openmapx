@@ -3,6 +3,8 @@
 import type { GetApiDataManagerTransitSources200SourcesItem } from "./getApiDataManagerTransitSources200SourcesItem";
 
 export type GetApiDataManagerTransitSources200 = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  sourceRevision: string;
   sources: GetApiDataManagerTransitSources200SourcesItem[];
   /** @minimum 0 */
   total: number;

@@ -45,6 +45,7 @@ export const RUNTIME_BUNDLES = {
     entries: {
       agent: "apps/ops-agent/src/index.ts",
       "agent-handoff-main": "apps/ops-agent/src/agent-handoff-main.ts",
+      "configuration-handoff-main": "apps/ops-agent/src/configuration-handoff-main.ts",
       cli: "packages/cli/src/index.ts",
     },
     // The agent and its fixed CLI take built-in service manifests, and the

@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { execa } from "execa";
+import { dataWorkerSignal } from "../execution/worker-scope.js";
 import { withOsmiumLocationIndex } from "../osm-resources.js";
 
 export { withOsmiumLocationIndex } from "../osm-resources.js";
@@ -135,6 +136,7 @@ export async function extractSearchPlaces(
       opts.onProgress?.(`Filtering named OSM features from ${pbfPath}`);
       await execa("osmium", ["tags-filter", pbfPath, "nwr/name", "-o", filteredPbf, "-O"], {
         stdio: "inherit",
+        cancelSignal: dataWorkerSignal(),
       });
       const process = execa(
         "osmium",
@@ -148,6 +150,7 @@ export async function extractSearchPlaces(
           filteredPbf,
         ],
         {
+          cancelSignal: dataWorkerSignal(),
           stdout: "pipe",
           stderr: "inherit",
           buffer: false,

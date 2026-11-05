@@ -1,24 +1,15 @@
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
-import { refuseAgentSwitchOrExit } from "../lib/agent-layout";
-import { API_SERVICE_ID, migrateBeforeApiUpdate } from "../lib/api-migrations";
+import { cliControlContext, completeCliCommand } from "../lib/control-context";
+
 import { dockerComposeStream } from "../lib/docker";
-import {
-  applyGeneratedHardlinks,
-  applyGeneratedHardlinksBeforeStart,
-  logAppliedHardlinks,
-} from "../lib/hardlinks";
+import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
-import {
-  ensureReleaseOverlay,
-  releaseStatusLines,
-  touchesReleasePinnedServices,
-  unpinnedReleaseWarning,
-} from "../lib/release";
 import { buildServices } from "../lib/service-builds";
+import { runCliServiceLifecycle, ServiceLifecycleCommandError } from "../lib/service-lifecycle";
 import {
   applyServiceSelection,
   disableSelectedServices,
@@ -187,7 +178,7 @@ function mergeIdsWithPresets(ids: string[], preset: string | undefined): string[
   } catch (err) {
     if (err instanceof UnknownPresetError) {
       log.err(err.message);
-      process.exit(1);
+      completeCliCommand(1);
     }
     throw err;
   }
@@ -208,7 +199,7 @@ export function registerServicesCommands(program: Command): void {
         for (const warning of applied.selection.warnings) log.warn(warning);
       } catch (err) {
         log.err((err as Error).message);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -227,7 +218,7 @@ export function registerServicesCommands(program: Command): void {
         if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
           log.dim(`Selection file was not changed.`);
         }
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -246,7 +237,7 @@ export function registerServicesCommands(program: Command): void {
         if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
           log.dim(`Selection file was not changed.`);
         }
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -279,7 +270,7 @@ export function registerServicesCommands(program: Command): void {
       const svc = list.find((s) => s.manifest.id === id);
       if (!svc) {
         log.err(`Service not found: ${id}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
       console.log(JSON.stringify(svc.manifest, null, 2));
     });
@@ -300,9 +291,7 @@ export function registerServicesCommands(program: Command): void {
           continueOnError: options.failFast !== true,
         });
         if (result.completedIds.length > 0) {
-          const rendered = await renderComposeForRepo({
-            domain: process.env.DOMAIN ?? "localhost",
-          });
+          const rendered = await renderComposeForRepo({});
           for (const warning of rendered.selectionWarnings) log.warn(warning);
           logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
         }
@@ -310,11 +299,11 @@ export function registerServicesCommands(program: Command): void {
           log.err(
             `build-all completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
           );
-          process.exit(1);
+          completeCliCommand(1);
         }
       } catch (err) {
         log.err(`build-all failed: ${(err as Error).message}`);
-        process.exit(1);
+        completeCliCommand(1);
       }
     });
 
@@ -347,9 +336,7 @@ export function registerServicesCommands(program: Command): void {
             motisImport: options.import === true,
           });
           if (result.completedIds.length > 0) {
-            const rendered = await renderComposeForRepo({
-              domain: process.env.DOMAIN ?? "localhost",
-            });
+            const rendered = await renderComposeForRepo({});
             for (const warning of rendered.selectionWarnings) log.warn(warning);
             logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
           }
@@ -357,11 +344,11 @@ export function registerServicesCommands(program: Command): void {
             log.err(
               `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
             );
-            process.exit(1);
+            completeCliCommand(1);
           }
         } catch (err) {
           log.err(`build failed: ${(err as Error).message}`);
-          process.exit(1);
+          completeCliCommand(1);
         }
       },
     );
@@ -375,47 +362,37 @@ export function registerServicesCommands(program: Command): void {
       "--preset <names>",
       "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
-    .action(async (ids: string[], options: { preset?: string }) => {
-      const allIds = mergeIdsWithPresets(ids, options.preset);
-      if (allIds.length === 0) {
-        log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
-      }
-      try {
-        // Don't pass `services: allIds` — that would narrow the persisted
-        // compose YAML to just the start target list and drop every other
-        // enabled service. Render the full enabled selection (env /
-        // service-selection.json) and then `up -d` only the requested
-        // subset. Same rationale as the `update` branch below.
-        const rendered = await renderComposeForRepo({
-          domain: process.env.DOMAIN ?? "localhost",
-        });
-        for (const warning of rendered.selectionWarnings) log.warn(warning);
-        await applyGeneratedHardlinksBeforeStart();
-      } catch (err) {
-        log.err(`prepare/start failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-      if (touchesReleasePinnedServices(allIds)) {
-        const overlay = await ensureReleaseOverlay();
-        if (overlay.status === "resolved") {
-          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
-        } else if (overlay.status === "present") {
-          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
-        } else if (overlay.status === "unpinned") {
-          log.err(unpinnedReleaseWarning(overlay.reason));
-          process.exit(1);
-        } else if (overlay.status === "held") {
-          log.err(overlay.reason);
-          process.exit(1);
-        } else if (overlay.status === "disabled") {
-          log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
+    .option(
+      "--expected-configuration-revision <revision>",
+      "Require this applied configuration generation",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { preset?: string; expectedConfigurationRevision?: string },
+      ) => {
+        const allIds = mergeIdsWithPresets(ids, options.preset);
+        if (allIds.length === 0) {
+          log.err("No services selected. Pass <ids...> or --preset.");
+          completeCliCommand(1);
         }
-      }
-      await refuseAgentSwitchOrExit(allIds);
-      const code = await dockerComposeStream(["up", "-d", ...allIds]);
-      process.exit(code);
-    });
+        try {
+          await runCliServiceLifecycle({
+            action: "start",
+            serviceIds: allIds,
+            expectedConfigurationRevisionId: options.expectedConfigurationRevision,
+          });
+        } catch (error) {
+          log.err(
+            cliControlContext()
+              ? "Service Start failed; inspect the original operation status."
+              : `prepare/start failed: ${(error as Error).message}`,
+          );
+          completeCliCommand(error instanceof ServiceLifecycleCommandError ? error.exitCode : 1);
+        }
+        completeCliCommand(0);
+      },
+    );
 
   services
     .command("stop [ids...]")
@@ -425,10 +402,10 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       const code = await dockerComposeStream(["stop", ...allIds]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -441,10 +418,10 @@ export function registerServicesCommands(program: Command): void {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
+        completeCliCommand(1);
       }
       const code = await dockerComposeStream(["restart", ...allIds]);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -454,78 +431,39 @@ export function registerServicesCommands(program: Command): void {
     )
     .option("--preset <names>", "Comma/space-separated preset names")
     .option("--no-deps", "Replace only selected services without starting their dependencies")
-    .action(async (ids: string[], options: { preset?: string; deps?: boolean }) => {
-      const allIds = mergeIdsWithPresets(ids, options.preset);
-      if (allIds.length === 0) {
-        log.err("No services selected. Pass <ids...> or --preset.");
-        process.exit(1);
-      }
-      try {
-        // Render the operator's selection (env / service-selection.json), NOT
-        // one scoped to allIds: that would apply a generation holding only
-        // the update targets and drop every other enabled service.
-        const rendered = await renderComposeForRepo({
-          domain: process.env.DOMAIN ?? "localhost",
-        });
-        for (const warning of rendered.selectionWarnings) log.warn(warning);
-        await applyGeneratedHardlinksBeforeStart();
-      } catch (err) {
-        log.err(`prepare/update failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-
-      let releasePinned = false;
-      if (touchesReleasePinnedServices(allIds)) {
-        // Retain existing release pins, or resolve a complete release once.
-        const overlay = await ensureReleaseOverlay();
-        releasePinned = overlay.status === "present" || overlay.status === "resolved";
-        if (overlay.status === "resolved") {
-          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
-        } else if (overlay.status === "present") {
-          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
-        } else if (overlay.status === "unpinned") {
-          log.err(unpinnedReleaseWarning(overlay.reason));
-          process.exit(1);
-        } else if (overlay.status === "held") {
-          log.err(overlay.reason);
-          process.exit(1);
-        } else if (overlay.status === "disabled") {
-          log.warn(
-            "Release pinning is disabled (OPENMAPX_RELEASE=local); this update uses the manifest image tags instead of a digest-pinned release.",
-          );
+    .option(
+      "--expected-configuration-revision <revision>",
+      "Require this applied configuration generation",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { preset?: string; deps?: boolean; expectedConfigurationRevision?: string },
+      ) => {
+        const allIds = mergeIdsWithPresets(ids, options.preset);
+        if (allIds.length === 0) {
+          log.err("No services selected. Pass <ids...> or --preset.");
+          completeCliCommand(1);
         }
-      }
 
-      const pullCode = await dockerComposeStream(["pull", ...allIds]);
-      if (pullCode !== 0) {
-        if (releasePinned) {
-          log.err("Could not pull the pinned release images; refusing to recreate services.");
-          process.exit(pullCode);
-        }
-        log.warn("Some images could not be pulled (service may be locally built). Continuing.");
-      }
-
-      // With its dependencies, the agent may be recreated too.
-      await refuseAgentSwitchOrExit(options.deps === false ? allIds : "all");
-      if (allIds.includes(API_SERVICE_ID)) {
-        let migrationCode: number;
         try {
-          migrationCode = await migrateBeforeApiUpdate({ deps: options.deps !== false });
-        } catch (err) {
-          log.err(`Database migration step failed: ${(err as Error).message}`);
-          process.exit(1);
+          await runCliServiceLifecycle({
+            action: "update",
+            serviceIds: allIds,
+            noDeps: options.deps === false,
+            expectedConfigurationRevisionId: options.expectedConfigurationRevision,
+          });
+        } catch (error) {
+          log.err(
+            cliControlContext()
+              ? "Service Update failed; inspect the original operation status."
+              : `prepare/update failed: ${(error as Error).message}`,
+          );
+          completeCliCommand(error instanceof ServiceLifecycleCommandError ? error.exitCode : 1);
         }
-        if (migrationCode !== 0) process.exit(migrationCode);
-      }
-      const code = await dockerComposeStream([
-        "up",
-        "-d",
-        "--force-recreate",
-        ...(options.deps === false ? ["--no-deps"] : []),
-        ...allIds,
-      ]);
-      process.exit(code);
-    });
+        completeCliCommand(0);
+      },
+    );
 
   services
     .command("status [id]")
@@ -533,7 +471,7 @@ export function registerServicesCommands(program: Command): void {
     .action(async (id?: string) => {
       const args = id ? ["ps", id] : ["ps"];
       const code = await dockerComposeStream(args);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services
@@ -546,7 +484,7 @@ export function registerServicesCommands(program: Command): void {
       if (options.follow) args.push("-f");
       args.push(id);
       const code = await dockerComposeStream(args);
-      process.exit(code);
+      completeCliCommand(code);
     });
 
   services

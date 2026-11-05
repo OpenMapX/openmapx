@@ -4,6 +4,10 @@ import { assertAllowedGitUrl, services as coreServices } from "@openmapx/core/se
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceRepository } from "../db/schema";
+import { JobObservationPending } from "./admin-job-failure";
+import { executeAdminJobOperation } from "./admin-job-ops";
+import { readProjection } from "./admin-job-projection";
+import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 
 /**
@@ -43,23 +47,22 @@ export interface RepositoryInspection {
   services: InspectedRepositoryService[];
 }
 
-export interface CommunityServicesSnapshot {
-  revisionId: string;
-  repositories: OpsResultFor<"communityServices.inspect">["repositories"];
-  services: Array<{
-    repository: string;
-    directory: string;
-    manifest: coreServices.ServiceManifest;
-  }>;
-  /** Reported services the API's own manifest rules reject. */
-  problems: string[];
-  /** Ids of every service the agent reported, including rejected ones. */
-  reportedServiceIds: string[];
-}
+export {
+  type CommunityServicesSnapshot,
+  readCommunityServices,
+} from "./community-service-inventory";
+
+import { readCommunityServices } from "./community-service-inventory";
 
 interface OperationOptions {
+  ctx?: JobContext;
   operationKey: string;
   signal?: AbortSignal;
+}
+
+function originalOwner(options: OperationOptions): JobContext {
+  if (!options.ctx) throw new JobObservationPending("recovery_required");
+  return options.ctx;
 }
 
 /** Fetch and validate a repository at `ref` without installing it. */
@@ -113,11 +116,11 @@ export async function publishServiceRepository(
   },
   options: OperationOptions,
 ): Promise<OpsResultFor<"serviceRepository.publish">> {
-  const result = await executeAndWait(
-    createApiOpsClient(),
+  const result = await executeAdminJobOperation(
+    originalOwner(options),
     { kind: "serviceRepository.publish", ...request },
-    options.operationKey,
-    { signal: options.signal },
+    "extension.repository.publish",
+    { operationKey: options.operationKey },
   );
   if (result.repository !== hashUrl(request.url) || result.commit !== request.commit) {
     throw new Error("The operations agent installed a different repository");
@@ -133,11 +136,11 @@ export function settleServiceRepository(
   },
   options: OperationOptions,
 ): Promise<OpsResultFor<"serviceRepository.settle">> {
-  return executeAndWait(
-    createApiOpsClient(),
+  return executeAdminJobOperation(
+    originalOwner(options),
     { kind: "serviceRepository.settle", ...request },
-    options.operationKey,
-    { signal: options.signal },
+    "extension.repository.settle",
+    { operationKey: options.operationKey },
   );
 }
 
@@ -145,49 +148,12 @@ export function removeServiceRepository(
   request: { repository: string; extensionId: string },
   options: OperationOptions,
 ): Promise<OpsResultFor<"serviceRepository.remove">> {
-  return executeAndWait(
-    createApiOpsClient(),
+  return executeAdminJobOperation(
+    originalOwner(options),
     { kind: "serviceRepository.remove", ...request },
-    options.operationKey,
-    { signal: options.signal },
+    "extension.repository.remove",
+    { operationKey: options.operationKey },
   );
-}
-
-/** Installed community services and repositories, validated again with the community manifest rules. */
-export async function readCommunityServices(
-  options: { signal?: AbortSignal } = {},
-): Promise<CommunityServicesSnapshot> {
-  const result = await executeAndWait(
-    createApiOpsClient(),
-    { kind: "communityServices.inspect" },
-    createDurableOpsKey("community.services.inspect", randomUUID()),
-    { signal: options.signal },
-  );
-  const problems: string[] = [];
-  const services: CommunityServicesSnapshot["services"] = [];
-  for (const entry of result.services) {
-    const manifestProblems = coreServices.communityServiceManifestProblems(entry.manifest);
-    if (manifestProblems.length > 0) {
-      problems.push(
-        `Community service in repository ${entry.repository} was rejected: ${manifestProblems.join("; ")}`,
-      );
-      continue;
-    }
-    services.push({
-      repository: entry.repository,
-      directory: entry.directory,
-      manifest: entry.manifest as unknown as coreServices.ServiceManifest,
-    });
-  }
-  return {
-    revisionId: result.revisionId,
-    repositories: result.repositories,
-    services,
-    problems,
-    reportedServiceIds: result.services.flatMap((entry) =>
-      typeof entry.manifest.id === "string" ? [entry.manifest.id] : [],
-    ),
-  };
 }
 
 export interface ServiceRuntimeRecovery {
@@ -210,6 +176,7 @@ export interface ServiceRuntimeRecovery {
  */
 export async function reconcileCommunityRepositoryTransactions(
   options: {
+    ctx?: JobContext;
     restoreSelection?: (roots: string[], recoveryId: string) => Promise<void>;
     persistRuntimeRecovery?: (recovery: ServiceRuntimeRecovery) => Promise<void>;
     signal?: AbortSignal;
@@ -221,6 +188,31 @@ export async function reconcileCommunityRepositoryTransactions(
   );
   if (pending.length === 0) {
     return { runtimeRecoveryNeeded: false, orphanedServiceIds: [], restartServiceIds: [] };
+  }
+  if (!options.ctx) throw new JobObservationPending("recovery_required");
+  const projection = readProjection(options.ctx.checkpointResult);
+  for (const entry of pending) {
+    const original = Object.values(projection.operations).find(
+      (operation) =>
+        operation.kind === "serviceRepository.publish" &&
+        operation.attempt?.apiJobId === options.ctx!.jobId &&
+        operation.operation?.kind === "serviceRepository.publish" &&
+        hashUrl(operation.operation.url) === entry.repository,
+    );
+    if (!original?.operation || original.operation.kind !== "serviceRepository.publish")
+      throw new JobObservationPending("recovery_required");
+    const step = Object.entries(projection.steps).find(
+      ([, value]) => value.operationKey === original.operationKey,
+    )?.[0];
+    if (!step) throw new JobObservationPending("recovery_required");
+    const publication = await executeAdminJobOperation(
+      options.ctx,
+      original.operation,
+      "extension.repository.publish",
+      { operationKey: step },
+    );
+    if (publication.transactionId !== entry.pending.transactionId)
+      throw new JobObservationPending("recovery_required");
   }
   const incidentId = `recovery_${createHash("sha256")
     .update(
@@ -238,6 +230,7 @@ export async function reconcileCommunityRepositoryTransactions(
     settleServiceRepository(
       { repository, transactionId, outcome },
       {
+        ctx: options.ctx,
         operationKey: createDurableOpsKey(
           `community.repository.${outcome}`,
           `${incidentId}:${repository}:${transactionId}`,

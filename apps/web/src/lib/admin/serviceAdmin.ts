@@ -1,6 +1,10 @@
 import { type ApiClient, ApiClientError } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import {
+  ADMIN_COMPOSE_REVISION_HEADER,
+  adminComposePreviewHeadersSchema,
+} from "@openmapx/core/api-contracts";
+import {
   matchQuery,
   type QueryClient,
   type QueryFilters,
@@ -73,10 +77,10 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
         queryKey: [...key, "backups"],
         queryFn: ({ signal }) => serviceOrThrow(sdk.listAdminServiceBackups(options(signal))),
       }),
-    data: () =>
+    data: (page: { osmLimit?: number; osmOffset?: number } = {}) =>
       queryOptions({
-        queryKey: [...key, "data"],
-        queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminServiceData(options(signal))),
+        queryKey: [...key, "data", String(page.osmLimit ?? 50), String(page.osmOffset ?? 0)],
+        queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminServiceData(page, options(signal))),
       }),
     policy: () =>
       queryOptions({
@@ -92,6 +96,25 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
       queryOptions({
         queryKey: [...key, "compose"],
         queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminComposePreview(options(signal))),
+      }),
+    composeDocument: () =>
+      queryOptions({
+        queryKey: [...key, "compose", "document"],
+        queryFn: async ({ signal }) => {
+          try {
+            const response = await sdk.getAdminComposePreview(options(signal));
+            const yaml = await serviceOrThrow(Promise.resolve(response));
+            const metadata = adminComposePreviewHeadersSchema.safeParse({
+              [ADMIN_COMPOSE_REVISION_HEADER]: response.headers.get(ADMIN_COMPOSE_REVISION_HEADER),
+            });
+            const revision = metadata.success
+              ? metadata.data[ADMIN_COMPOSE_REVISION_HEADER]
+              : undefined;
+            return { yaml, expectedCurrentRevisionId: revision === "none" ? null : revision };
+          } catch (error) {
+            throw new Error(serviceErrorMessage(error), { cause: error });
+          }
+        },
       }),
     deployment: () =>
       queryOptions({
@@ -148,4 +171,27 @@ export async function invalidateServiceAdministration(
   await queryClient.cancelQueries(filters);
   // Default active-only refetch preserves invalidation for inactive queries too.
   await queryClient.invalidateQueries(filters);
+}
+
+/** Display the same decision used by the server, without inferring permission from status. */
+export function serviceActionReason(
+  decision: import("@openmapx/core/ops").ServiceActionDecision | undefined,
+): string | null {
+  if (decision?.available) return null;
+  switch (decision?.reason) {
+    case "disabled":
+      return "Enable this service before using this action.";
+    case "not_owned":
+      return "No owned container is available for this action.";
+    case "not_running":
+      return "This service is not running.";
+    case "control_plane":
+      return "Use System Maintenance for core updates; stopping the control plane requires host access.";
+    case "host_only":
+      return "This action requires host access.";
+    case "not_buildable":
+      return "This service does not prepare build artifacts.";
+    default:
+      return "This action is currently unavailable. Check the operations agent.";
+  }
 }

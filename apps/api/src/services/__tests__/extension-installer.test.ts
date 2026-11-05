@@ -48,7 +48,7 @@ vi.mock("../trusted-config-operations", () => ({
 }));
 
 vi.mock("../admin-ops", () => ({
-  renderAndPersistCompose: vi.fn().mockResolvedValue(undefined),
+  renderAndPersistCompose: vi.fn().mockResolvedValue({ revisionId: `cfg1_${"a".repeat(43)}` }),
   serviceStart: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -80,6 +80,47 @@ vi.mock("../community-repositories", () => ({
   settleServiceRepository: vi.fn(),
   removeServiceRepository: vi.fn(),
 }));
+
+// Business orchestration fixture only. Authenticated cursor/SQL ownership are
+// exercised independently by extension-workflow tests, not weakened here.
+vi.mock("../extension-workflow", () => {
+  const cursors = new WeakMap<object, Map<string, unknown>>();
+  return {
+    openExtensionWorkflow: vi.fn(async (ctx: object) => {
+      if (!cursors.has(ctx)) cursors.set(ctx, new Map());
+      return ctx;
+    }),
+    hasExtensionPublications: vi.fn((ctx: object) =>
+      [...(cursors.get(ctx)?.keys() ?? [])].some(
+        (name) => name.startsWith("repository.publish:") || name.startsWith("integration.publish:"),
+      ),
+    ),
+    completedExtensionStep: vi.fn((ctx: object, name: string) => cursors.get(ctx)?.get(name)),
+    extensionStep: vi.fn(
+      async (ctx: object, name: string, _input: unknown, work: () => Promise<unknown>) => {
+        const cursor = cursors.get(ctx)!;
+        if (cursor.has(name)) return cursor.get(name);
+        const result = await work();
+        cursor.set(name, result ?? null);
+        return result;
+      },
+    ),
+    extensionDatabaseStep: vi.fn(
+      async (
+        ctx: object,
+        name: string,
+        _input: unknown,
+        work: (tx: unknown) => Promise<unknown>,
+      ) => {
+        const cursor = cursors.get(ctx)!;
+        if (cursor.has(name)) return cursor.get(name);
+        const result = await (dbMock.db.transaction as (fn: typeof work) => Promise<unknown>)(work);
+        cursor.set(name, result ?? null);
+        return result;
+      },
+    ),
+  };
+});
 
 vi.mock("../extension-recovery", () => ({
   withExtensionChangeLock: vi.fn((work: () => Promise<unknown>) => work()),
@@ -692,7 +733,7 @@ describe("installExtension", () => {
 
     await expect(
       installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
-    ).resolves.toEqual({ id: "bundle-x", components: 1 });
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
     // Recovery commits the pending transaction the row records.
     expect(settleIntegrationMock).toHaveBeenCalledTimes(1);
@@ -700,8 +741,8 @@ describe("installExtension", () => {
       expect.objectContaining({ outcome: "rollback" }),
       expect.anything(),
     );
-    expect(ctx.log).toHaveBeenCalledWith(
-      expect.stringContaining("could not settle integration intg-one"),
+    expect(ctx.log).not.toHaveBeenCalledWith(
+      expect.stringContaining("agent unavailable"),
       "stderr",
     );
   });
@@ -711,7 +752,9 @@ describe("installExtension", () => {
     settleIntegrationMock.mockRejectedValueOnce(new Error(secret));
     const ctx = makeCtx();
 
-    await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+    await expect(
+      installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
     expect(JSON.stringify(vi.mocked(ctx.log).mock.calls)).not.toMatch(
       /sentinel-|example\.test|\/private/,
@@ -743,10 +786,10 @@ describe("installExtension", () => {
 
     await expect(
       installExtension(makeCtx(), { manifest: TWO_REPO_MANIFEST, sourceTrust: "community" }),
-    ).resolves.toEqual({ id: "bundle-x", components: 2 });
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
     // Recovery commits a pending transaction the database records.
-    expect(settleMock).toHaveBeenCalledTimes(2);
+    expect(settleMock).toHaveBeenCalledTimes(1);
     expect(settleMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ outcome: "rollback" }),
       expect.anything(),
@@ -882,17 +925,17 @@ describe("installExtension", () => {
     expect(renderMock).toHaveBeenCalled();
   });
 
-  it("continues the rollback when the agent cannot undo a repository yet", async () => {
+  it("retains the original rollback when the agent cannot undo a repository yet", async () => {
     serviceStartMock.mockRejectedValueOnce(new Error("start failed"));
     settleMock.mockRejectedValueOnce(new Error("agent unavailable"));
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow("start failed");
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
     expect(settleMock).toHaveBeenCalledTimes(1);
-    expect(writeSelectionMock).toHaveBeenCalledTimes(2);
-    expect(renderMock).toHaveBeenCalledTimes(2);
+    expect(writeSelectionMock).toHaveBeenCalledTimes(1);
+    expect(renderMock).toHaveBeenCalledTimes(1);
   });
 
   it("rolls back repositories newest first", async () => {
@@ -925,7 +968,7 @@ describe("installExtension", () => {
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow("start failed");
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
     expect(settleMock.mock.calls.map(([request]) => request.outcome)).toEqual(["rollback"]);
   });
@@ -1063,19 +1106,15 @@ describe("installExtension", () => {
     );
   });
 
-  it("keeps rolling back when the agent cannot undo an integration yet", async () => {
+  it("keeps the original rollback pending when the agent cannot undo an integration yet", async () => {
     reloadMock.mockRejectedValueOnce(new Error("reload-fail"));
     settleIntegrationMock.mockRejectedValueOnce(new Error("agent unavailable"));
 
     await expect(
       installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
-    ).rejects.toThrow(/reload-fail/);
+    ).rejects.toMatchObject({ reason: "recovery_required" });
 
-    // Recovery rolls the integration back later; the services are still undone.
-    expect(settleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ repository: REPO_ONE, outcome: "rollback" }),
-      expect.anything(),
-    );
+    expect(settleMock).not.toHaveBeenCalled();
   });
 
   it("update/re-install re-writes the component links (delete + insert)", async () => {
@@ -1252,4 +1291,53 @@ describe("removeExtension", () => {
     expect(renderMock).not.toHaveBeenCalled();
     expect(dbMock.db.delete).not.toHaveBeenCalled();
   });
+});
+
+it("rejoins a completed original catalog workflow without republishing or rewriting bookkeeping", async () => {
+  const ctx = makeCtx();
+  publishIntegrationMock.mockResolvedValue({
+    integrationId: "intg-one",
+    transactionId: INTEGRATION_TRANSACTION,
+    manifestSha256: "f".repeat(64),
+  });
+  readInstalledMock.mockResolvedValue(installedSnapshot([]));
+  settleIntegrationMock.mockResolvedValue({
+    integrationId: "intg-one",
+    outcome: "commit",
+    changed: true,
+  });
+  await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+  await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+  expect(publishIntegrationMock).toHaveBeenCalledTimes(1);
+  expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+});
+
+it("finishes original committed bookkeeping despite a later revocation without rollback or rewriting rows", async () => {
+  const ctx = makeCtx();
+  publishIntegrationMock.mockResolvedValue({
+    integrationId: "intg-one",
+    transactionId: INTEGRATION_TRANSACTION,
+    manifestSha256: "f".repeat(64),
+  });
+  readInstalledMock.mockResolvedValue(installedSnapshot([]));
+  settleIntegrationMock.mockResolvedValue({
+    integrationId: "intg-one",
+    outcome: "commit",
+    changed: true,
+  });
+  await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+  vi.mocked(getKillSwitch).mockResolvedValue({
+    removed: new Map(),
+    critical: new Map([["bundle-x", { reason: "later advisory" }]]),
+    stale: false,
+  });
+  await expect(
+    installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+  ).resolves.toEqual({ id: "bundle-x", components: 1 });
+  expect(publishIntegrationMock).toHaveBeenCalledTimes(1);
+  expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+  expect(settleIntegrationMock).not.toHaveBeenCalledWith(
+    expect.objectContaining({ outcome: "rollback" }),
+    expect.anything(),
+  );
 });

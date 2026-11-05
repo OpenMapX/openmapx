@@ -1,4 +1,6 @@
+import type { CatalogPinSet } from "@openmapx/core/catalog-pins/types";
 import type { TransitousLock, TransitSource } from "@openmapx/transitous-core";
+
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import type { OperatorFeedRelayStore } from "./operator-feed-relay.js";
@@ -117,6 +119,7 @@ export interface JobState {
   proxyTransaction?: ProxyTransactionState;
   /** The catalog lock prepare enforced; the capability snapshot records it. */
   transitousLock?: TransitousLock;
+  catalogPins?: CatalogPinSet;
   gbfsCompilation?: {
     output: string;
     healthy: number;
@@ -137,6 +140,8 @@ export interface ProxyTransactionState {
 }
 
 export interface JobContext {
+  executionContext?: import("../execution/runtime.js").DataExecutionContext;
+  reviewedCatalog?: import("./catalog-selection.js").ReviewedCatalogSelection;
   /** ULID/UUID */
   jobId: string;
   /** Absolute path, typically `infra/docker/data`. */

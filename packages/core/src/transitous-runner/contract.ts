@@ -148,3 +148,13 @@ out = Path("out")
 out.mkdir(parents=True, exist_ok=True)
 (out / "feed-proxy-vars.json").write_text(json.dumps(feed_vars, indent=2, sort_keys=True) + "\\n")
 `;
+
+/** Authenticated lookup/cancel only returns the exact previously consumed
+ * capability's process. Absence after runner restart is unknown. */
+export const transitousRunnerStatusSchema = z
+  .strictObject({
+    version: z.literal(1),
+    state: z.enum(["running", "cancel_pending", "terminal"]),
+    result: transitousRunnerResultSchema.optional(),
+  })
+  .refine((value) => (value.state === "terminal") === (value.result !== undefined));

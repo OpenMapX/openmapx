@@ -13,8 +13,36 @@ const insertCalls: InsertCall[] = [];
 const updateCalls: UpdateCall[] = [];
 let returnedRows: Array<{ id: string }> = [];
 let insertError: Error | null = null;
+let admissionError: Error | null = null;
+let admissionChecks = 0;
+vi.mock("../src/jobs/execution/admission.js", () => ({
+  assertDataMutationAdmission: async () => {
+    admissionChecks++;
+    if (admissionError) throw admissionError;
+  },
+}));
 
 vi.mock("../src/db/index.js", () => ({
+  rawSql: {
+    begin: async (run: (tx: unknown) => Promise<unknown>) => {
+      const tx = Object.assign(
+        async (_query: TemplateStringsArray, ...values: unknown[]) => {
+          insertCalls.push({
+            values: {
+              kind: values[0],
+              status: "running",
+              triggeredBy: values[1],
+              metadata: typeof values[2] === "string" ? JSON.parse(values[2]) : values[2],
+            },
+          });
+          if (insertError) throw insertError;
+          return returnedRows;
+        },
+        { json: (value: unknown) => value },
+      );
+      return run(tx);
+    },
+  },
   db: {
     insert: () => ({
       values: (values: Record<string, unknown>) => {
@@ -54,6 +82,8 @@ beforeEach(() => {
   updateCalls.length = 0;
   returnedRows = [];
   insertError = null;
+  admissionError = null;
+  admissionChecks = 0;
 });
 
 describe("job persistence", () => {
@@ -68,12 +98,22 @@ describe("job persistence", () => {
         metadata: { sourceId: "example" },
       }),
     ).resolves.toBe("job-1");
+    expect(admissionChecks).toBe(1);
     expect(insertCalls[0]?.values).toEqual({
       kind: "example-sync",
       status: "running",
       triggeredBy: "cron",
       metadata: { sourceId: "example" },
     });
+  });
+
+  it("checks the durable maintenance admission before any legacy insertion", async () => {
+    const { createJobRow } = await import("../src/jobs/persistence.js");
+    admissionError = Error("configuration_maintenance_busy");
+    await expect(createJobRow({ kind: "example-sync" })).rejects.toThrow(
+      "configuration_maintenance_busy",
+    );
+    expect(insertCalls).toEqual([]);
   });
 
   it("fails when no job row is returned", async () => {

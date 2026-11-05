@@ -30,6 +30,31 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
+vi.mock("@/lib/admin/transitPinHooks", () => ({
+  transitPinExecutionPending: () => false,
+  useTransitPins: () => ({
+    data: {
+      allowedCountries: ["de"],
+      active: {
+        transitous: {
+          ref: "abc123def4567890",
+          submodules: { "transitland-atlas": "atlas-active" },
+        },
+        gbfs: { commit: "gbfs-active" },
+      },
+      page: { proposals: [], total: 0, nextOffset: null },
+    },
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+  useProposeTransitPins: () => ({ isPending: false }),
+  useValidateTransitPins: () => ({ isPending: false }),
+  useActivateTransitPins: () => ({ isPending: false }),
+  useCancelTransitPinExecution: () => ({ isPending: false }),
+  useTransitPinExecution: () => ({ data: undefined }),
+}));
+
 const sampleState: TransitStateSummary = {
   transitousRef: "abc123def4567890",
   transitousLockedAt: "2026-05-21T12:00:00.000Z",
@@ -139,7 +164,7 @@ describe("TransitPipelinePage", () => {
     const { TransitPipelinePage } = await import("../TransitPipelinePage");
     const markup = renderToStaticMarkup(<TransitPipelinePage />);
     expect(markup).toContain("Transit pipeline");
-    expect(markup).toContain("Transitous lock");
+    expect(markup).toContain("Catalog pins");
     expect(markup).toContain("Pipeline idle");
     expect(markup).toContain("Feeds breakdown");
     expect(markup).toContain("Recent jobs");
@@ -147,11 +172,13 @@ describe("TransitPipelinePage", () => {
     expect(markup).toContain("Provider health");
   });
 
-  it("renders the locked ref + last-sync status from state", async () => {
+  it("renders the active paired catalogs and last-sync status", async () => {
     const { TransitPipelinePage } = await import("../TransitPipelinePage");
     const markup = renderToStaticMarkup(<TransitPipelinePage />);
     expect(markup).toContain("abc123def4567890");
-    expect(markup).toContain("admin@example.com");
+    expect(markup).toContain("atlas-active");
+    expect(markup).toContain("gbfs-active");
+    expect(markup).toContain("Active pair");
     // The success chip's label is what surfaces "last sync status".
     expect(markup).toContain("success");
   });

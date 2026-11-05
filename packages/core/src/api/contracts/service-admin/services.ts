@@ -1,8 +1,9 @@
 import { credentialSetupSchema } from "@openmapx/extension-contracts/integration";
-
 import { serviceManifestSchema } from "@openmapx/extension-contracts/service";
 import z from "zod/v4";
+import { serviceActionsSchema } from "../../../ops/service-results";
 import { adminCountSchema, adminJsonValueSchema, adminTimestampSchema } from "../admin";
+import { configurationOwnershipSchema } from "../configuration-ownership";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
 import {
   adminServiceAcceptedSchema,
@@ -53,6 +54,11 @@ export const adminServiceStatusSchema = z.enum([
   "created",
   "paused",
   "not-running",
+  "unknown",
+]);
+export const adminServiceAcquisitionSchema = z.union([
+  z.strictObject({ state: z.literal("available"), reason: z.null() }),
+  z.strictObject({ state: z.literal("unavailable"), reason: z.literal("ops_unavailable") }),
 ]);
 export const adminServiceSummarySchema = z.strictObject({
   id: serviceManifestSchema.shape.id,
@@ -66,23 +72,52 @@ export const adminServiceSummarySchema = z.strictObject({
   enabled: z.boolean(),
   isBuiltIn: z.boolean(),
   status: adminServiceStatusSchema,
+  actions: serviceActionsSchema,
+});
+export const adminServiceCapabilityInventorySchema = z.strictObject({
+  recognized: z.array(z.string().max(256)).max(256),
+  unrecognized: z
+    .array(
+      z.strictObject({
+        capability: z.string().max(256),
+        serviceIds: z.array(z.string().max(64)).max(256),
+      }),
+    )
+    .max(4096),
+});
+export const adminServicePresetsSchema = z.strictObject({
+  presets: z
+    .array(
+      z.strictObject({
+        id: z.string().max(64),
+        rootIds: z.array(z.string().max(64)).max(256),
+        effectiveIds: z.array(z.string().max(64)).max(256),
+        missingIds: z.array(z.string().max(64)).max(256),
+      }),
+    )
+    .max(64),
 });
 export const adminServicesSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   services: z.array(adminServiceSummarySchema),
+  capabilityInventory: adminServiceCapabilityInventorySchema,
   summary: z.strictObject({
     running: adminCountSchema,
     stopped: adminCountSchema,
+    unknown: adminCountSchema,
     total: adminCountSchema,
   }),
 });
 export const adminServiceDetailSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   manifest: adminServiceManifestSchema,
   directory: z.string(),
   isBuiltIn: z.boolean(),
   enabled: z.boolean(),
   status: adminServiceStatusSchema,
+  actions: serviceActionsSchema,
 });
-export const adminServiceConfigSourceSchema = z.enum(["default", "database", "env"]);
+export const adminServiceConfigSourceSchema = z.enum(["default", "database", "vault", "env"]);
 export const adminServiceResolvedConfigSchema = z.record(
   z.string(),
   z.strictObject({ value: adminJsonValueSchema, source: adminServiceConfigSourceSchema }),
@@ -91,6 +126,7 @@ export const adminServiceConfigSchema = z.strictObject({
   schema: adminServiceJsonObjectSchema.nullable(),
   resolvedConfig: adminServiceResolvedConfigSchema,
   envPrefix: z.string(),
+  ownership: z.record(z.string(), configurationOwnershipSchema).optional(),
 });
 export const adminServiceConfigUpdateSchema = z.strictObject({
   config: adminServiceJsonObjectSchema,
@@ -103,8 +139,9 @@ export const adminServiceCredentialSchema = z.strictObject({
   title: z.string(),
   description: z.string().optional(),
   setup: adminServiceCredentialSetupSchema.optional(),
-  source: z.enum(["vault", "missing"]),
-  managedBy: z.literal("dawarich-provisioning").optional(),
+  source: z.enum(["default", "database", "vault", "config.json", "env", "missing"]),
+  ownership: configurationOwnershipSchema.optional(),
+  managedBy: z.enum(["dawarich-provisioning", "transit.credentials"]).optional(),
   updatedAt: adminTimestampSchema.optional(),
   updatedBy: z.string().nullable(),
 });
@@ -121,37 +158,61 @@ export const adminServiceCredentialChangedSchema = z.union([
   z.strictObject({ ok: z.literal(true), needsRender: z.literal(true) }),
 ]);
 export const adminServiceCredentialManagedSchema = z.strictObject({
-  code: z.literal("DAWARICH_CREDENTIAL_MANAGED"),
+  code: z.enum(["DAWARICH_CREDENTIAL_MANAGED", "transit_credentials_managed"]),
   error: z.string(),
 });
 export const adminServiceActionSchema = z.strictObject({
-  action: z.enum(["start", "stop", "restart"]),
+  action: z.enum(["start", "stop", "restart", "apply"]),
 });
-const build = z.strictObject({
-  action: z.literal("build"),
+const selection = {
   serviceIds: adminServiceIdListSchema.optional(),
-  all: z.boolean().optional(),
-  region: z.string().trim().optional(),
-  continueOnError: z.boolean().optional(),
-});
+  presetIds: z.array(z.string().min(1).max(64)).max(64).optional(),
+};
+const hasSelection = (value: { serviceIds?: string[]; presetIds?: string[] }) =>
+  Boolean(value.serviceIds?.length || value.presetIds?.length);
 export const adminServicesBulkActionSchema = z.union([
-  z.strictObject({
-    action: z.enum(["start", "stop", "restart", "update"]),
-    serviceIds: adminServiceIdListSchema.min(1),
-    continueOnError: z.boolean().optional(),
-  }),
-  build.refine(
-    (value) => value.all === true || Boolean(value.serviceIds?.length),
-    "Build requires serviceIds or all: true",
-  ),
+  z
+    .strictObject({
+      action: z.enum(["start", "stop", "restart"]),
+      ...selection,
+      continueOnError: z.boolean().optional(),
+    })
+    .refine(hasSelection, "A service or preset selection is required"),
+  z
+    .strictObject({
+      action: z.literal("update"),
+      ...selection,
+      noDeps: z.boolean().optional(),
+      continueOnError: z.boolean().optional(),
+    })
+    .refine(hasSelection, "A service or preset selection is required"),
+  z
+    .strictObject({
+      action: z.literal("build"),
+      ...selection,
+      all: z.boolean().optional(),
+      region: z.string().trim().optional(),
+      continueOnError: z.boolean().optional(),
+      motisImport: z.boolean().optional(),
+    })
+    .refine(
+      (value) => value.all === true || hasSelection(value),
+      "Build requires a selection or all: true",
+    ),
 ]);
 export const adminServicesCheckedSchema = z.strictObject({
+  acquisition: adminServiceAcquisitionSchema,
   statuses: z.array(z.strictObject({ service: z.string(), state: adminServiceStatusSchema })),
   checkedAt: adminTimestampSchema,
 });
-// Producer retains its existing numeric conversion/clamping policy for lines.
-export const adminServiceLogsQuerySchema = z.object({
-  lines: z.union([z.string(), z.number()]).optional(),
+export const adminServiceLogsQuerySchema = z.strictObject({
+  lines: z
+    .union([z.number().int().min(1).max(1000), z.string().regex(/^(?:[1-9]\d{0,2}|1000)$/)])
+    .optional(),
+  follow: z.union([z.boolean(), z.enum(["true", "false"])]).optional(),
+  maxDurationSeconds: z
+    .union([z.number().int().min(1).max(900), z.string().regex(/^(?:[1-9]\d?|[1-8]\d{2}|900)$/)])
+    .optional(),
 });
 
 export type AdminServiceManifest = z.infer<typeof adminServiceManifestSchema>;

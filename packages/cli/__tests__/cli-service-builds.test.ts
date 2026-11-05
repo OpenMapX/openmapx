@@ -145,6 +145,46 @@ describe("buildServices", () => {
     expect(result.failures).toEqual([{ id: "beta", message: "beta broke" }]);
   });
 
+  it.each(["all", "explicit", "empty", "cancel"] as const)(
+    "retains batch outcomes with the existing CLI contract: %s",
+    async (mode) => {
+      const calls: string[] = [];
+      const handlers: Record<string, ServiceBuildHandler> = Object.fromEntries(
+        ["alpha", "beta", "gamma"].map((id) => [
+          id,
+          async () => {
+            calls.push(id);
+            if (id === "beta") {
+              if (mode === "cancel") throw new DOMException("Aborted", "AbortError");
+              throw Error("beta broke");
+            }
+            return { summary: `Built ${id}` };
+          },
+        ]),
+      );
+      if (mode !== "empty")
+        for (const id of Object.keys(handlers))
+          writeManifest(id, { ...baseManifest, id, buildCommand: `openmapx services build ${id}` });
+      const result = await buildServices({
+        rootDir: tmp,
+        mode: mode === "explicit" ? "explicit" : "all",
+        serviceIds: ["alpha", "beta", "gamma"],
+        handlers,
+      }).catch((error) => error);
+      const batch = mode === "all" ? result.serviceBatch : result.result?.serviceBatch;
+      expect(batch).toEqual({
+        outcome: mode === "empty" ? "failed" : "partial",
+        completedServiceIds:
+          mode === "empty" ? [] : mode === "all" ? ["alpha", "gamma"] : ["alpha"],
+        failedServiceIds: mode === "empty" || mode === "cancel" ? [] : ["beta"],
+        skippedServiceIds: mode === "cancel" ? ["gamma"] : mode === "explicit" ? ["gamma"] : [],
+      });
+      expect(calls).toEqual(
+        mode === "empty" ? [] : mode === "all" ? ["alpha", "beta", "gamma"] : ["alpha", "beta"],
+      );
+    },
+  );
+
   it("uses service-specific region env defaults when no --region is passed", async () => {
     process.env.OSRM_REGION = "europe/germany";
     process.env.OTP_REGION = "europe/france";

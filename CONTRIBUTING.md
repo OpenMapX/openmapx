@@ -112,7 +112,7 @@ affected tests or run a hidden full-suite fallback. Documentation-only changes
 normally need formatting and the affected documentation build; record any
 checks left to CI in the PR.
 
-CI runs lint, types, node/web/mobile tests, three isolated database groups, and
+CI runs lint, types, node/web/mobile tests, five isolated database groups, and
 production builds as parallel jobs on every push and PR. Pull requests also
 build each affected deployable Docker target without publishing it. These jobs are
 aggregated under the required `lint / types / test` check; repo-wide coverage
@@ -151,7 +151,9 @@ pnpm exec vitest run packages/core   # scope by path or test-name substring
 pnpm test:database api-privacy       # migrated disposable PostGIS + Docker required
 pnpm test:database ingestion         # isolated ingestion fixtures + Docker required
 pnpm test:database export-restore    # also requires retained-backup fixture below
-pnpm test:database                   # all three groups, serially
+pnpm test:database configuration-recovery # native configuration recovery
+pnpm test:database coordinator-recovery   # native coordinator recovery
+pnpm test:database                   # all five groups, serially
 pnpm build                           # production app/service/package outputs
 pnpm check-packed-packages           # clean tarball consumer smoke test
 pnpm test:coverage                   # V8 coverage report (written to coverage/)
@@ -161,7 +163,8 @@ The normal suite skips database tests. `test:database` enables them explicitly,
 including restore replay for `export-restore` and the all-groups command. Each CI
 group owns a separate runner and PostGIS service with the full production Drizzle
 migrations. Suites stay serial within a group because some fixtures mutate shared
-state. Missing databases, schemas, Docker or required backup input fail the run.
+state. The launcher stops at the first failing test so native recovery failures
+report promptly; successful groups run every selected test. Missing databases, schemas, Docker or required backup input fail the run.
 
 For a local run, use an owned disposable PostgreSQL 18 / PostGIS 3.6 database,
 export its `DATABASE_URL`, and apply production migrations first. API/privacy,
@@ -169,6 +172,13 @@ export/restore and all-groups runs require that variable explicitly:
 
 ```bash
 pnpm --filter @openmapx/api exec drizzle-kit migrate
+```
+
+The ingestion group runs the Transitous Python worker directly. In a Python
+environment, install its production dependencies first:
+
+```bash
+python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
 ```
 
 The export group and all-groups command also require the real retained-backup

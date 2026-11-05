@@ -17,10 +17,13 @@ import { join } from "node:path";
 import type { OpsJobState, OpsOperation } from "@openmapx/core/ops";
 import {
   acquireTrustedConfigurationQueueLock,
+  inspectPreparedConfigurationRecord,
   inspectTrustedConfigurationSnapshot,
+  isTrustedConfigurationApplyOperation,
   OPS_TRUSTED_CONFIG_MAX_BYTES,
   OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME,
   openTrustedConfigurationSnapshot,
+  opsOperationFingerprint,
   trustedConfigurationQueueFits,
 } from "@openmapx/core/ops";
 import type { OpsClaimOwner, TrustedOpsDataSource } from "./policy";
@@ -35,6 +38,21 @@ const SNAPSHOT_NAME = /^cfg1_[A-Za-z0-9_-]{43}\.json$/;
 const TEMPORARY_NAME = /^\.cfg1_[A-Za-z0-9_-]{43}\.nonce_[A-Za-z0-9_-]{16,96}\.tmp$/;
 const ABORT_NAME = /^\.cfg1_[A-Za-z0-9_-]{43}\.[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.abort$/;
 const HARDLINK_ABORT_NAME = /^\.(cfg1_[A-Za-z0-9_-]{43})\.(terminal|rollback)\.abort$/;
+
+declare const terminalCleanupBrand: unique symbol;
+export type VerifiedTerminalClaimCleanup = Readonly<{ [terminalCleanupBrand]: true }>;
+const terminalCleanups = new WeakMap<object, ReadonlySet<string>>();
+/** Nominal proof from the fixed authenticated, inode-checked startup cleanup. */
+export function verifiesTerminalClaimCleanup(
+  proof: VerifiedTerminalClaimCleanup | undefined,
+  operation: OpsOperation,
+  terminalAt: string,
+): boolean {
+  return (
+    !!proof &&
+    terminalCleanups.get(proof)?.has(`${opsOperationFingerprint(operation)}:${terminalAt}`) === true
+  );
+}
 
 export interface TrustedSnapshotDirectoryPolicy {
   allowedUids: readonly number[];
@@ -92,7 +110,7 @@ function journalRevisionIds(policy: TrustedSnapshotDirectoryPolicy): {
   for (const record of records) {
     const isTerminal = ["succeeded", "failed", "timed_out"].includes(record.state);
     if (isTerminal !== (record.terminalAt !== undefined)) throw new Error(DIRECTORY_REJECTED);
-    if (!("revisionId" in record.operation)) continue;
+    if (!isTrustedConfigurationApplyOperation(record.operation)) continue;
     if (!/^cfg1_[A-Za-z0-9_-]{43}$/.test(record.operation.revisionId)) {
       throw new Error(DIRECTORY_REJECTED);
     }
@@ -168,6 +186,7 @@ function validateQueueFile(
   path: string,
   policy: TrustedSnapshotDirectoryPolicy,
   expectedLinks = 1,
+  maxBytes = OPS_TRUSTED_CONFIG_MAX_BYTES,
 ): QueueFileIdentity {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
@@ -181,7 +200,7 @@ function validateQueueFile(
       !policy.allowedUids.includes(stats.uid) ||
       stats.gid !== policy.expectedGid ||
       (stats.mode & 0o777) !== SNAPSHOT_MODE ||
-      stats.size > OPS_TRUSTED_CONFIG_MAX_BYTES
+      stats.size > maxBytes
     ) {
       throw new Error(DIRECTORY_REJECTED);
     }
@@ -208,6 +227,7 @@ function validateQueue(
 ): QueueCleanupPlan[] {
   const cleanup = new Map<string, QueueCleanupEntry>();
   const revisions = new Set<string>();
+  const retainedRevisions = new Set<string>();
   const nowMs = policy.nowMs ?? Date.now();
   let entries = 0;
   let bytes = 0;
@@ -277,6 +297,7 @@ function validateQueue(
   }
   for (const name of directoryNames) {
     if (name === ".claimed") continue;
+    if (name === ".candidates") continue;
     if (name === OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME) continue;
     if (!SNAPSHOT_NAME.test(name) && !TEMPORARY_NAME.test(name) && !ABORT_NAME.test(name)) {
       throw new Error(DIRECTORY_REJECTED);
@@ -325,6 +346,7 @@ function validateQueue(
       else {
         retainedEntries += 1;
         retainedBytes += metadata.size;
+        retainedRevisions.add(revisionId);
       }
     }
   }
@@ -350,7 +372,36 @@ function validateQueue(
     else {
       retainedEntries += 1;
       retainedBytes += metadata.size;
+      retainedRevisions.add(revisionId);
     }
+  }
+  if (directoryNames.includes(".candidates")) {
+    const directoryPath = join(directory, ".candidates");
+    const candidateDirectoryIdentity = captureQueueDirectory(directoryPath, policy);
+    const names = readdirSync(directoryPath);
+    if (names.length > 128) throw new Error(DIRECTORY_REJECTED);
+    const candidateRevisions = new Set<string>();
+    for (const name of names) {
+      if (!/^opk1_[A-Za-z0-9_-]{16,64}\.json$/.test(name)) throw new Error(DIRECTORY_REJECTED);
+      const metadata = validateQueueFile(join(directoryPath, name), policy, 1, 768 * 1024);
+      const inspected = inspectPreparedConfigurationRecord(metadata.bytes, policy.token);
+      if (
+        `${inspected.record.operationKey}.json` !== name ||
+        candidateRevisions.has(inspected.snapshot.revisionId)
+      )
+        throw new Error(DIRECTORY_REJECTED);
+      candidateRevisions.add(inspected.snapshot.revisionId);
+      entries++;
+      bytes += metadata.size;
+      if (retainedRevisions.has(inspected.snapshot.revisionId))
+        retainedBytes += metadata.size - inspected.sealed.length;
+      else {
+        retainedEntries++;
+        retainedBytes += metadata.size;
+        retainedRevisions.add(inspected.snapshot.revisionId);
+      }
+    }
+    captureQueueDirectory(directoryPath, policy, candidateDirectoryIdentity);
   }
   if (
     entries > MAX_SCAN_ENTRIES ||
@@ -435,6 +486,13 @@ export async function initializeTrustedSnapshotDirectory(
   directory: string,
   policy: TrustedSnapshotDirectoryPolicy,
 ): Promise<void> {
+  await initializeTerminalClaimCleanup(directory, policy);
+}
+/** Fixed agent startup additionally retains the verified terminal-cleanup capability. */
+export async function initializeTerminalClaimCleanup(
+  directory: string,
+  policy: TrustedSnapshotDirectoryPolicy,
+): Promise<VerifiedTerminalClaimCleanup> {
   let queueLock: Awaited<ReturnType<typeof acquireTrustedConfigurationQueueLock>> | undefined;
   try {
     if (!directoryIsSafe(directory, policy)) throw new Error(DIRECTORY_REJECTED);
@@ -489,6 +547,21 @@ export async function initializeTrustedSnapshotDirectory(
         syncDirectoryNow(plan.second.parent);
       }
     }
+    const proof = Object.freeze({}) as VerifiedTerminalClaimCleanup;
+    terminalCleanups.set(
+      proof,
+      new Set(
+        (policy.journalRecords ?? [])
+          .filter(
+            (record) =>
+              "revisionId" in record.operation &&
+              ["succeeded", "failed", "timed_out"].includes(record.state) &&
+              record.terminalAt !== undefined,
+          )
+          .map((record) => `${opsOperationFingerprint(record.operation)}:${record.terminalAt}`),
+      ),
+    );
+    return proof;
   } catch {
     throw new Error(DIRECTORY_REJECTED);
   } finally {
@@ -511,7 +584,7 @@ async function syncDirectory(path: string): Promise<void> {
 }
 
 function revisionFor(operation: Parameters<TrustedOpsDataSource["claim"]>[0]): string | null {
-  if (!("revisionId" in operation) || typeof operation.revisionId !== "string") return null;
+  if (!isTrustedConfigurationApplyOperation(operation)) return null;
   return /^cfg1_[A-Za-z0-9_-]{43}$/.test(operation.revisionId) ? operation.revisionId : null;
 }
 

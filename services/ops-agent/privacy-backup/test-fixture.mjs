@@ -47,6 +47,10 @@ function psql(database, sql) {
       database,
       "-v",
       "ON_ERROR_STOP=1",
+      // -f makes stdin a script so -1 encloses every migration/seed in a
+      // transaction, including locks that must span its later statements.
+      "--single-transaction",
+      "--file=-",
     ],
     { input: sql },
   );

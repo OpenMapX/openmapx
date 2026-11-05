@@ -103,3 +103,23 @@ export type OvertureStatus = z.infer<typeof overtureStatusSchema>;
 export type OvertureSyncResult = z.infer<typeof overtureSyncResultSchema>;
 export type OvertureConflateEvent = z.infer<typeof overtureConflateEventSchema>;
 export type OvertureConflateResult = Extract<OvertureConflateEvent, { event: "done" }>;
+
+const recoveryActionSchema = z.strictObject({
+  allowed: z.boolean(),
+  reason: z.string().nullable(),
+});
+export const overtureRecoverySchema = z.strictObject({
+  region: z.string(),
+  busy: z.boolean(),
+  osmAvailable: z.boolean(),
+  downloadedRelease: z.string().nullable(),
+  installedRelease: z.string().nullable(),
+  actions: z.strictObject({
+    "overture-pull": recoveryActionSchema,
+    "overture-ingest": recoveryActionSchema,
+    "overture-extract": recoveryActionSchema,
+    "overture-conflate": recoveryActionSchema,
+    "overture-restart": recoveryActionSchema,
+  }),
+});
+export type OvertureRecoveryStatus = z.infer<typeof overtureRecoverySchema>;

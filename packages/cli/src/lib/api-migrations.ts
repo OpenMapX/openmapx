@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
+import { cliControlContext } from "./control-context";
 import { dockerCompose, dockerComposeStream } from "./docker";
 import { log } from "./output";
 import { repoPaths } from "./paths";
@@ -104,8 +105,12 @@ export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promis
       stdio: "ignore",
     }).unref();
   };
-  process.once("SIGTERM", stopOnSignal);
-  process.once("SIGINT", stopOnSignal);
+  // Managed commands retain their original owner and unknown fence on interruption.
+  // Their cancellation must not create a detached Docker effect after that owner exits.
+  if (!cliControlContext()) {
+    process.once("SIGTERM", stopOnSignal);
+    process.once("SIGINT", stopOnSignal);
+  }
 
   log.dim("Applying database migrations before replacing app-api…");
   let code: number;

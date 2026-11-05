@@ -8,6 +8,7 @@ import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
 import { registerDataManagerRoute } from "../../route-contract.js";
+import { withLegacyDataMutation } from "../execution/legacy-mutation.js";
 import {
   buildAmbientPlaces,
   discardPlanetPlaces,
@@ -106,16 +107,21 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       accept = resolve;
       reject = rejectPromise;
     });
-    void job(
-      () => {
-        claimed = true;
-        accept();
-      },
-      {
-        onProgress: (value) => {
-          if (building === attempt) progress = value;
-        },
-      },
+    void withLegacyDataMutation(
+      "ambient-publication",
+      () =>
+        job(
+          () => {
+            claimed = true;
+            accept();
+          },
+          {
+            onProgress: (value) => {
+              if (building === attempt) progress = value;
+            },
+          },
+        ),
+      sql,
     )
       .catch((error) => {
         if (!claimed) {
@@ -164,7 +170,11 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
           );
         if (building) return reply.code(409).send({ error: "An ambient build is already running" });
         try {
-          await discardPlanetPlaces(sql, generation);
+          await withLegacyDataMutation(
+            "ambient-publication",
+            () => discardPlanetPlaces(sql, generation),
+            sql,
+          );
           return { ok: true };
         } catch (error) {
           return reply.code(409).send({ error: (error as Error).message });
@@ -174,7 +184,11 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   }
   registerDataManagerRoute(app, "setAmbientPlacesEnabled", async (request, reply) => {
     try {
-      await setAmbientEnabled(sql, request.body.enabled);
+      await withLegacyDataMutation(
+        "ambient-publication",
+        () => setAmbientEnabled(sql, request.body.enabled),
+        sql,
+      );
       return { ok: true };
     } catch (error) {
       return reply.code(409).send({ error: (error as Error).message });
@@ -182,7 +196,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
   });
   registerDataManagerRoute(app, "rollbackAmbientPlaces", async (_request, reply) => {
     try {
-      await rollbackAmbientPlaces(sql);
+      await withLegacyDataMutation("ambient-publication", () => rollbackAmbientPlaces(sql), sql);
       return { ok: true };
     } catch (error) {
       return reply.code(409).send({ error: (error as Error).message });
