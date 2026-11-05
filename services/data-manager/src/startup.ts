@@ -12,6 +12,7 @@ export interface RequiredStartupDependencies {
   setupCronSchedulers: () => CronHandles;
   controlInstallation?: ControlInstallation;
   onRetentionError?: (error: unknown) => void;
+  onRetentionStarted?: (stop: () => Promise<void>) => void;
 }
 
 export interface RequiredStartupResult {
@@ -32,12 +33,16 @@ export async function initializeRequiredSubsystems(
     dependencies.readiness.setPhase("job-reconciliation");
     const interruptedJobIds = await dependencies.reconcileJobs();
 
-    if (dependencies.controlInstallation)
-      stopControlRetention = await startControlRetentionMaintenance(
+    if (dependencies.controlInstallation) {
+      const maintenance = startControlRetentionMaintenance(
         dependencies.controlInstallation,
         dependencies.onRetentionError ??
           (() => console.warn("Control retention cleanup requires attention")),
       );
+      stopControlRetention = maintenance.stop;
+      dependencies.onRetentionStarted?.(stopControlRetention);
+      await maintenance.ready;
+    }
 
     dependencies.readiness.setPhase("cron-schedulers");
     const cronHandles = dependencies.setupCronSchedulers();

@@ -2270,11 +2270,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
-    if (options.controlInstallation)
-      stopControlRetention = await startControlRetentionMaintenance(
-        options.controlInstallation,
-        (err) => app.log.warn({ err }, "Control retention cleanup requires attention"),
+    if (options.controlInstallation) {
+      const maintenance = startControlRetentionMaintenance(options.controlInstallation, (err) =>
+        app.log.warn({ err }, "Control retention cleanup requires attention"),
       );
+      stopControlRetention = maintenance.stop;
+      await maintenance.ready;
+    }
   });
 
   app.post(

@@ -48,6 +48,7 @@ import { StateStore } from "./state.js";
 const app = Fastify({ loggerInstance: rootLogger });
 let executionReceiver: DataExecutionReceiver | undefined;
 let stopControlRetention: (() => Promise<void>) | undefined;
+let shuttingDown = false;
 app.addHook("onClose", async () => {
   await stopControlRetention?.();
 });
@@ -219,6 +220,10 @@ async function start(): Promise<void> {
     controlInstallation: controlStartup.installation ?? undefined,
     onRetentionError: (err) =>
       app.log.warn({ err }, "Control retention cleanup requires attention"),
+    onRetentionStarted: (stop) => {
+      stopControlRetention = stop;
+      if (shuttingDown) void stop();
+    },
     initializeOfflineStorage: async () => {
       await offlinePackages.initialize();
       app.log.info("offline package storage reconciled");
@@ -299,6 +304,7 @@ async function start(): Promise<void> {
 }
 
 void start().catch(async (err) => {
+  if (shuttingDown) return;
   readiness.markFailed();
   app.log.error({ err, readiness: readiness.snapshot() }, "data-manager startup failed");
   cronHandles?.stop();
@@ -311,6 +317,8 @@ void start().catch(async (err) => {
 // path during `docker compose restart data-manager`; without it, a bounce
 // during a multi-hour sync would truncate the catalog write.
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   // Synchronous stderr write first: pino may not flush if the process is killed
   // mid-shutdown, and we want the signal recorded no matter what.
   process.stderr.write(`data-manager: shutdown signal=${signal}\n`);

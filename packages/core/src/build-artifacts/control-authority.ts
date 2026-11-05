@@ -574,7 +574,7 @@ export function retainedExecutionOrigin(
 export function reconcileControlRetention(
   installation: ControlInstallation,
   options?: { signal?: AbortSignal; maxFamilies?: number },
-): Promise<{ retired: number; pending: number }> {
+): Promise<{ retired: number; pending: number; busy?: true }> {
   return reconcileRetentionFamilies(installationState(installation), options);
 }
 /** No effect authority: binds the agent's retained API receipt dependency only. */

@@ -464,6 +464,8 @@ host CLI mutations also make a bounded cleanup pass. Cleanup requires the
 original completed-operation proofs, participating roles' acknowledgements, origin
 expiry and the retention floor (at least 72 hours). Pending or unverifiable work
 is preserved; expiry alone never authorizes deleting a lock or replaying an effect.
+Two consecutive passes blocked by the same role's collector guard produce a
+warning; the collector never removes that guard automatically.
 
 The agent handles SIGTERM and SIGINT by closing its listener and awaiting close
 hooks, including any running retention pass. Its shutdown deadline is 30 seconds;

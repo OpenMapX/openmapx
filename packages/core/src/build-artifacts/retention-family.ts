@@ -5163,7 +5163,7 @@ async function step(f: Family): Promise<boolean> {
 export async function reconcileRetentionFamilies(
   state: InstallationState,
   options: { signal?: AbortSignal; maxFamilies?: number } = {},
-): Promise<{ retired: number; pending: number }> {
+): Promise<{ retired: number; pending: number; busy?: true }> {
   const max = options.maxFamilies ?? 16;
   if (!Number.isSafeInteger(max) || max < 1 || max > 64)
     throw Error("Invalid retention maxFamilies");
@@ -5172,7 +5172,8 @@ export async function reconcileRetentionFamilies(
     mkdirSync(state.privateRoot.name(".retention-reconcile-writer"), { mode: 0o700 });
     fsyncSync(state.privateRoot.fd);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return { retired: 0, pending: 1 };
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      return { retired: 0, pending: 1, busy: true };
     throw error;
   }
   const held = state.privateRoot.directory(".retention-reconcile-writer"),
