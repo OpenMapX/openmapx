@@ -132,6 +132,15 @@ Both sides support protocols **v3 through v4**. The constants in
 range leaves navigation disabled and requires an update. Protocol negotiation
 alone does not establish that a command is implemented.
 
+Bridge requests use runtime timers by default. Preparation has a 15-second budget
+and ordinary reads have a five-second budget. Start's web request budget is ten
+minutes plus 15 seconds to accommodate permission screens and a settings round
+trip; a person can still keep native permission UI open longer. A start timeout
+requests a fresh snapshot without delaying the reported failure. The deadline
+does not cancel the native operation, and an authoritative snapshot can still
+show the trip as active later. A timed-out initial handshake requires a page
+reload to negotiate again.
+
 ### Rollout order
 
 Before changing the protocol, identify the actually deployed shell and web

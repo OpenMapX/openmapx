@@ -107,13 +107,22 @@ describe("NativeNavigationCommands start", () => {
     expect(calls.map((call) => call.type)).toEqual(["session.prepare"]);
   });
 
-  it("gives prepare the slow-path budget and start the read budget", async () => {
-    const { client, calls } = fakeClient();
+  it("reconciles a timed-out start without holding the caller on the snapshot", async () => {
+    const { client, calls, answers, reply } = fakeClient();
+    const snapshot = deferred<unknown>();
+    answers.set("session.start", async () => {
+      throw new BridgeError("timeout");
+    });
+    answers.set("snapshot.request", () => snapshot.promise);
+    const commands = new NativeNavigationCommands(client, acknowledged());
 
-    await new NativeNavigationCommands(client, acknowledged()).start({});
-
-    expect(calls[0].options.timeoutMs).toBe(15_000);
-    expect(calls[1].options.timeoutMs).toBeUndefined();
+    await expect(commands.start({})).rejects.toMatchObject({ code: "timeout" });
+    expect(calls.map((call) => call.type)).toEqual([
+      "session.prepare",
+      "session.start",
+      "snapshot.request",
+    ]);
+    snapshot.settle(reply("snapshot.update"));
   });
 
   it("reports an unexpected answer as a refusal rather than a session", async () => {

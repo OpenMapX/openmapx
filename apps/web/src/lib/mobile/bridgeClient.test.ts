@@ -1,5 +1,6 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { describe, expect, it, vi } from "vitest";
+import { SAMPLE_TRANSIT_ITINERARY } from "@/components/panels/directions/TransitRouteView.fixtures";
 import {
   BridgeClient,
   BridgeError,
@@ -648,4 +649,65 @@ it("uses real browser timer defaults for deadlines and cancellation", async () =
     cancel.mockRestore();
     vi.useRealTimers();
   }
+});
+
+describe("navigation Start with production timers", () => {
+  it("allows the native permission dialog to outlast the ordinary read deadline", async () => {
+    vi.useFakeTimers();
+    const shell = shellScope();
+    const client = new BridgeClient({ webBuildId: "production", scope: shell.scope });
+    client.attach();
+    const hello = client.hello();
+    shell.deliver(helloReply(JSON.parse(shell.sent[0]).messageId));
+    await hello;
+    const commands = new NativeNavigationCommands(client, () => ({
+      sessionId: null,
+      revision: null,
+    }));
+    let outcome: unknown;
+    const pending = commands
+      .start({
+        kind: "transit",
+        itinerary: SAMPLE_TRANSIT_ITINERARY,
+        captures: [],
+        locale: "en",
+        units: "metric",
+        itineraryFingerprint: "selected-trip",
+        settings: { voiceEnabled: true, keepScreenOn: true, alightAlertsEnabled: true },
+      })
+      .then(
+        (result) => {
+          outcome = result;
+        },
+        (error) => {
+          outcome = error;
+        },
+      );
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const preparedFor = JSON.parse(shell.sent.at(-1) ?? "").messageId;
+      shell.deliver({
+        ...helloReply(preparedFor),
+        type: "session.prepared",
+        payload: { sessionId: "s1", revision: 1, forMessageId: preparedFor },
+      });
+      // A person can legitimately spend half a minute granting Android's
+      // location permission. That must not make a healthy Start look refused.
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(outcome).toBeUndefined();
+      const startedFor = JSON.parse(shell.sent.at(-1) ?? "").messageId;
+      shell.deliver({
+        ...helloReply(startedFor),
+        type: "session.started",
+        payload: { sessionId: "s1", revision: 2, forMessageId: startedFor },
+      });
+      await pending;
+      expect(outcome).toEqual({ sessionId: "s1", revision: 2 });
+      expect(client.pendingCount).toBe(0);
+    } finally {
+      client.close();
+      await pending;
+      vi.useRealTimers();
+    }
+  });
 });

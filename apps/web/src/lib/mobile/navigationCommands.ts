@@ -21,6 +21,8 @@ import { BridgeError } from "./bridgeClient";
 
 /** How long a prepare may take, matching the client's slow-path budget. */
 export const PREPARE_TIMEOUT_MS = 15_000;
+/** Native may wait ten minutes for a settings round trip; allow its reply time. */
+const START_TIMEOUT_MS = 10 * 60_000 + PREPARE_TIMEOUT_MS;
 
 export interface StartedSession {
   sessionId: string;
@@ -111,12 +113,13 @@ export class NativeNavigationCommands {
   /**
    * Prepares and then starts a session.
    *
-   * `onPrepared` runs between the two, which is where the OS permission prompt
-   * belongs: asking before the shell has accepted the package would spend the
-   * user's one prompt on a trip that might not start.
+   * `onPrepared` runs after the shell accepts the package and before start is
+   * requested. Native start can then show its own permission screens, so it has
+   * a separate budget from ordinary reads.
    */
   start(startPackage: unknown, onPrepared?: () => Promise<void> | void): Promise<StartedSession> {
     return this.serialize(async () => {
+      let startRequested = false;
       try {
         const prepared = await this.client.request(
           "session.prepare",
@@ -127,12 +130,21 @@ export class NativeNavigationCommands {
 
         await onPrepared?.();
 
-        const started = await this.client.request("session.start", {}, {});
+        startRequested = true;
+        const started = await this.client.request(
+          "session.start",
+          {},
+          { timeoutMs: START_TIMEOUT_MS },
+        );
         if (started.type !== "session.started") throw new CommandError("rejected");
         const payload = started.payload as { sessionId: string; revision: number };
         return { sessionId: payload.sessionId, revision: payload.revision };
       } catch (error) {
-        throw asCommandError(error);
+        const failure = asCommandError(error);
+        // A deadline is not proof that native stopped. Its eventual snapshot
+        // remains authoritative, including a start completed after permission UI.
+        if (startRequested && failure.code === "timeout") void this.requestSnapshot();
+        throw failure;
       }
     });
   }
