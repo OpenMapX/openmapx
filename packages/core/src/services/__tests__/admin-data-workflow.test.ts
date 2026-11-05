@@ -1,5 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -104,8 +112,13 @@ it("rejects a byte-identical private progress file copied onto another inode", a
         `data-workflow-${f.execution.operationKey}.json`,
       ),
       bytes = readFileSync(path);
-    unlinkSync(path);
-    writeFileSync(path, bytes, { mode: 0o600 });
+    const originalInode = statSync(path).ino;
+    const replacement = `${path}.replacement`;
+    // Allocate while the original still exists so its inode cannot be reused.
+    writeFileSync(replacement, bytes, { mode: 0o600, flag: "wx" });
+    renameSync(replacement, path);
+    expect(statSync(path).ino).not.toBe(originalInode);
+    expect(readFileSync(path)).toEqual(bytes);
     expect(() => store.read()).toThrow();
   } finally {
     closeControlInstallation(f.installation);

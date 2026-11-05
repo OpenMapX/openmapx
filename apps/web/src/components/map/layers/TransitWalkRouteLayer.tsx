@@ -8,7 +8,7 @@ import {
 } from "@openmapx/mobility-core/contributors";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useMemo, useRef } from "react";
-import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useRenderedMapAttributions } from "@/integration-api/overlay/useRenderedMapAttributions";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
@@ -78,29 +78,36 @@ export function TransitWalkRouteLayer({
           },
         },
       },
+      // Above the itinerary, with distinct ranks from the car preview at 10.
       layers: [
         {
           id: CASING,
+          type: "line",
+          source: SOURCE,
+          slot: "route-active",
+          order: 11,
           paint: { "line-color": ROUTE_COLORS.casing, "line-width": ROUTE_WIDTHS.nav.casing },
-          order: 8,
+          layout: { "line-cap": "round", "line-join": "round" },
         },
         {
           id: TRAVELED,
+          type: "line",
+          source: SOURCE,
+          slot: "route-active",
+          order: 12,
           paint: { "line-color": ROUTE_COLORS.traveled, "line-width": ROUTE_WIDTHS.nav.traveled },
-          order: 9,
+          layout: { "line-cap": "round", "line-join": "round" },
         },
         {
           id: REMAINING,
+          type: "line",
+          source: SOURCE,
+          slot: "route-active",
+          order: 13,
           paint: { "line-color": ROUTE_COLORS.active, "line-width": ROUTE_WIDTHS.nav.line },
-          order: 10,
+          layout: { "line-cap": "round", "line-join": "round" },
         },
-      ].map((layer) => ({
-        ...layer,
-        type: "line",
-        source: SOURCE,
-        slot: "route-active",
-        layout: { "line-cap": "round", "line-join": "round" },
-      })) as SlottedLayer[],
+      ],
     };
   }, [leg, line]);
   useRenderedMapAttributions("transit-navigation-walk", LAYERS, !!group, ATTRIBUTION);
