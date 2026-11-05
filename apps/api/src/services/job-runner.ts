@@ -228,7 +228,7 @@ function hasRetainedQueuedCoordinator(job: {
   const ordinal =
     job.type === "service.apply" &&
     payload.service === "data-manager" &&
-    Object.keys(payload).every((k) => k === "service")
+    Object.keys(payload).every((k) => k === "service" || k === "_maintenanceRequest")
       ? null
       : job.type === "service.bulk" &&
           payload.action === "update" &&
@@ -464,15 +464,7 @@ class AdminJobRunner {
       if (
         !["running", "cancel_pending"].includes(job.status) ||
         !checkpoint._configurationCandidate ||
-        ![
-          "service.apply",
-          "configuration.apply",
-          "platform.apply",
-          "integration.config.import",
-          "integration.binding.apply",
-          "configuration.migration.apply",
-          "credential.import",
-        ].includes(options.type)
+        !IMMEDIATE_CONFIGURATION_JOB_TYPES.some((type) => type === options.type)
       )
         throw new JobObservationPending("recovery_required");
       const claimed = await claimAdminJob(job, {}, true);

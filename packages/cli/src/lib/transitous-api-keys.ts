@@ -32,7 +32,7 @@ import {
   TRANSITOUS_CATALOG_DIR,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import { cliControlContext } from "./control-context";
+import { cliControlContext, collectHostControlRetention } from "./control-context";
 import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 import {
@@ -488,6 +488,7 @@ export async function generateTransitousApiKeys(
   let began = false;
   let replacement: PreparedPlatformFileReplacement | undefined;
   try {
+    await collectHostControlRetention(installation);
     const operation = {
       kind: "transit.credentials.template",
       catalogRevisionId: pins.generationId,

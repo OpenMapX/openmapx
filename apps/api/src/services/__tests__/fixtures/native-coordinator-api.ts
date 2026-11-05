@@ -1,5 +1,7 @@
 /** Actual queued API producer/reconciler. Only its owning test controls HTTP
  * reply delivery and kills this native process; no DB/service/authority mocks. */
+
+import { randomUUID } from "node:crypto";
 import { constants, writeFileSync } from "node:fs";
 import filesystem from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -129,16 +131,19 @@ try {
     } else {
       if (input.action !== "apply" && input.action !== "update")
         throw Error("Invalid fixture action");
-      id = await jobRunner.enqueue(
-        input.action === "apply" ? "service.apply" : "service.bulk",
+      id =
         input.action === "apply"
-          ? { service: "data-manager" }
-          : {
+          ? await jobRunner.enqueueMaintenance(
+              "service.apply",
+              { service: "data-manager" },
+              "loopback",
+              randomUUID(),
+            )
+          : await jobRunner.enqueue("service.bulk", {
               action: "update",
               serviceIds: input.serviceIds ?? ["data-manager"],
               ...(input.noDeps ? { noDeps: true } : {}),
-            },
-      );
+            });
     }
     process.stdout.write(JSON.stringify({ event: "queued", jobId: id }) + "\n");
     const until = Date.now() + 240000;

@@ -6,9 +6,11 @@ import * as control from "@openmapx/core/build-artifacts";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
 import { OpsClient } from "@openmapx/core/ops";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { setupCron } from "../../cron";
 import { db, rawSql } from "../../db";
 import { resetOpsClient, runOpsOperation } from "../../ops-client";
 import { StateStore } from "../../state";
+import { bakePredicted } from "../traffic/bake-predicted";
 import { resolveCatalogBumpCandidate } from "../transitous/catalog-bump";
 import { createSingleFlightController } from "../transitous/single-flight";
 import { installDataMutationAdmission } from "./admission";
@@ -241,7 +243,11 @@ import { createDataExecutionReceiver } from "./receiver";
 import { createDataExecutionRuntime } from "./runtime";
 import { createPostgresDataExecutionStore } from "./store";
 
-async function legacyFixture(held = false, realDispatch = false) {
+async function legacyFixture(
+  held = false,
+  realDispatch = false,
+  predictedBake?: () => ReturnType<typeof bakePredicted>,
+) {
   let workerError: unknown;
   const journal = control.createDataExecutionControlJournal(installation, rawSql);
   const store = createPostgresDataExecutionStore(rawSql, {
@@ -302,6 +308,7 @@ async function legacyFixture(held = false, realDispatch = false) {
     operationsPolicy: policy,
     executionReceiver: receiver,
     searchIndexSql: rawSql,
+    ...(predictedBake ? { bakePredicted: predictedBake } : {}),
   });
   const before = new Set(
     (await rawSql`SELECT id FROM data_manager.jobs`).map((row) => String(row.id)),
@@ -328,6 +335,97 @@ async function legacyFixture(held = false, realDispatch = false) {
   };
 }
 const headers = { authorization: "Bearer fix1-synthetic-token" };
+
+it.skipIf(!enabled).each([
+  ["manual", "profiles"],
+  ["manual", "covered-ways"],
+  ["manual", "after-write"],
+  ["cron", "profiles"],
+  ["cron", "covered-ways"],
+  ["cron", "after-write"],
+] as const)(
+  "predicted input %s/%s failure distinguishes no-effect refusal from uncertain writes",
+  async (adapter, failure) => {
+    const upstream = Fastify();
+    upstream.get("/segments/profiles.json", async (_request, reply) => {
+      if (failure === "profiles") return reply.code(503).send({ error: "Unavailable" });
+      return [];
+    });
+    upstream.get("/segments/speed.csv", async (_request, reply) => {
+      if (failure === "covered-ways") return reply.code(503).send("Unavailable");
+      return "way_id,dir,current_kph,free_flow_kph,los\n";
+    });
+    upstream.get("/segments/conditions.json", async () => ({ conditions: [] }));
+    const url = await upstream.listen({ host: "127.0.0.1", port: 0 }),
+      marker = join(root, "predicted-local-write"),
+      run = () =>
+        bakePredicted({
+          openConditionsUrl: url,
+          csvDir: join(root, "predicted-csv"),
+          refreshWaysToEdges: async () => {
+            writeFileSync(marker, "original map writer reached");
+            throw Error("Actual local writer interrupted");
+          },
+        }),
+      f = await legacyFixture(false, false, run);
+    let cron: ReturnType<typeof setupCron> | undefined;
+    try {
+      if (adapter === "manual") {
+        expect(
+          (await f.app.inject({ method: "POST", url: "/traffic/predicted/bake", headers }))
+            .statusCode,
+        ).toBe(202);
+      } else {
+        cron = setupCron({
+          dataDir: join(root, "data"),
+          countries: ["de"],
+          store: new StateStore(join(root, "data")),
+          singleFlight: createSingleFlightController({ db, admissionSql: rawSql }),
+          logger: { info() {}, warn() {}, error() {} },
+          openConditionsUrl: url,
+          bakePredicted: run,
+          syncCronExpression: "",
+          feedProxyReloadCronExpression: "",
+          stalenessCheckCronExpression: "",
+          trafficExtractCronExpression: "",
+          trafficLiveCronExpression: "",
+          trafficPredictedCronExpression: "",
+          overtureEnabled: false,
+        });
+        await cron.runTrafficPredictedNow();
+      }
+      await expect
+        .poll(async () => {
+          const [row] =
+            await rawSql`SELECT status FROM data_manager.jobs WHERE kind='traffic-predicted' ORDER BY started_at DESC LIMIT 1`;
+          return row?.status;
+        })
+        .toBe(failure === "after-write" ? "interrupted" : "error");
+      const [row] =
+        await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE kind='traffic-predicted' ORDER BY started_at DESC LIMIT 1`;
+      if (failure === "after-write") {
+        expect(fs.readFileSync(marker, "utf8")).toBe("original map writer reached");
+        expect(row!.finished_at).toBeNull();
+        await expect(
+          withLegacyDataMutation("traffic-maintenance", async () => "next", rawSql),
+        ).rejects.toThrow();
+      } else {
+        expect(fs.existsSync(marker)).toBe(false);
+        expect(row!.finished_at).not.toBeNull();
+        await expect(
+          withLegacyDataMutation("traffic-maintenance", async () => "next", rawSql),
+        ).resolves.toBe("next");
+      }
+    } finally {
+      cron?.stop();
+      await cron?.closeTrafficWriter();
+      await f.close();
+      await upstream.close();
+      rmSync(marker, { force: true });
+    }
+  },
+  30000,
+);
 it.skipIf(!enabled)(
   "I1 preserves the documented duplicate response for an original pre-upgrade job",
   async () => {

@@ -5,6 +5,7 @@ import type postgres from "postgres";
 import { rawSql } from "../../db/index.js";
 import { AmbientPublicationBusyError } from "../ambient-places/schema.js";
 import { createJobRow } from "../persistence.js";
+import { PredictedTrafficInputError } from "../traffic/predicted-input-error.js";
 
 const current = new AsyncLocalStorage<{
   id: string;
@@ -116,6 +117,9 @@ export async function startLegacyDataMutation<T>(
     } catch (error) {
       if (
         (kind === "ambient-publication" && error instanceof AmbientPublicationBusyError) ||
+        (kind === "traffic-predicted" &&
+          error instanceof PredictedTrafficInputError &&
+          context.operations.length === 0) ||
         (kind === "transit-proposal" &&
           context.catalogPhase === "missing" &&
           context.operations.length === 0)

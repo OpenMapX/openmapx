@@ -40,7 +40,11 @@ import {
   opsExecutionBudget,
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
-import { cliControlContext, withHostDataControlContext } from "./control-context";
+import {
+  cliControlContext,
+  collectHostControlRetention,
+  withHostDataControlContext,
+} from "./control-context";
 import { cliAcquisitionOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 export async function executeDurableDataStep(
@@ -255,6 +259,7 @@ export async function runCliDataStep(
       role: "host-cli",
       serviceIds: ["data-manager"],
     });
+  await collectHostControlRetention(installation);
   const normalized = normalizeExecutionAdmission({
       kind: operation.kind,
       operationKey,

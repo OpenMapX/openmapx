@@ -12,6 +12,13 @@ requests return the original job on an exact retry. Other legacy entrypoints
 still require reviewing Activity before submitting another request. Uncertain
 operations keep their writer fences until their original outcomes can be verified.
 
+The operations agent and Data Manager collect eligible control records at startup
+and every five minutes. The agent handles normal stop signals with a 30-second
+shutdown window; its Compose manifest now allows 45 seconds before forced
+termination. Re-render and recreate the agent to adopt that setting. Forced
+crashes can still require supervised recovery; see the service-administration
+runbook before clearing a stale writer guard.
+
 The API migrations add account-policy, integration ownership, artifact-transfer
 and privacy-workflow storage alongside durable execution records. Existing auth
 settings are activated explicitly through the account-policy workflow.

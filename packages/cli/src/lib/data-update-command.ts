@@ -7,7 +7,11 @@ import type { DataManagerTransport } from "@openmapx/core/data-manager-sdk";
 import * as ops from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { renderComposeWithWriter } from "../commands/compose";
-import { cliControlContext, withHostDataControlContext } from "./control-context";
+import {
+  cliControlContext,
+  collectHostControlRetention,
+  withHostDataControlContext,
+} from "./control-context";
 import { ensureCliCoordinatorReady } from "./coordinator-ready";
 import { runOwnedDataStep } from "./data-execution";
 import { DataUpdateFailure, runDataUpdate } from "./data-update";
@@ -41,6 +45,7 @@ export async function runCliDataUpdate(options: {
       role: "host-cli",
       serviceIds: targets,
     });
+    await collectHostControlRetention(installation);
     const operation = {
         kind: "data.update" as const,
         ...(options.region ? { regionId: options.region } : {}),

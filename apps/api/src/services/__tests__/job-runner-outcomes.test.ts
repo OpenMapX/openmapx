@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AdminJobFailure } from "../admin-job-failure";
 import { claimAdminJob, jobOwnership } from "../admin-job-state";
+import { coordinatorLifecycleOperationKey } from "../coordinator-lifecycle";
 import { jobEventBus } from "../job-events";
 import { OpsObservationPending } from "../ops-client";
 
@@ -214,5 +215,30 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
     );
     expect(handler).toHaveBeenCalledTimes(1);
     expect(store.writes.at(-1)?.values).toMatchObject({ status: "success" });
+  },
+);
+
+it.each([false, true])(
+  "routes a keyed coordinator Apply recovery without accepting extra business fields (%s)",
+  async (extra) => {
+    const handler = vi.fn(async () => ({ continued: true }));
+    jobRunner.register("service.apply", handler);
+    store.rows = [{ id: jobId, status: "running", result: { _execution: execution } }];
+    await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
+      jobId,
+      "service.apply",
+      {
+        service: "data-manager",
+        _maintenanceRequest: { authorization: "a".repeat(64) },
+        ...(extra ? { unexpected: true } : {}),
+      },
+      {
+        _execution: execution,
+        _configurationCandidate: { operationKey: coordinatorLifecycleOperationKey(jobId, null) },
+      },
+      new AbortController().signal,
+      true,
+    );
+    expect(handler).toHaveBeenCalledTimes(extra ? 0 : 1);
   },
 );

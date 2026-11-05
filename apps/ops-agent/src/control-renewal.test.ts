@@ -76,6 +76,7 @@ it("retains the exact API terminal dependency until ack, retires it, and dischar
         ...(execution ? { execution } : {}),
       },
     });
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   try {
     expect((await request(operation, "opk1_oldclientabcdefghijkl")).statusCode).toBe(409);
     expect(dispatch).not.toHaveBeenCalled();
@@ -199,11 +200,10 @@ it("retains the exact API terminal dependency until ack, retires it, and dischar
       (await request(ack, "opk1_ackrequest123456", { authorization: `Bearer ${dmToken}` }))
         .statusCode,
     ).toBe(403);
-    expect(await c.reconcileControlRetention(installation, { maxFamilies: 1 })).toMatchObject({
-      retired: 1,
-      pending: 0,
-    });
-    expect(journal.records()).toHaveLength(0);
+    // No admission or direct collector call: the actual server's periodic
+    // maintenance must finish the now-acknowledged family's retirement.
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await vi.waitFor(() => expect(journal.records()).toHaveLength(0), { timeout: 15000 });
     clock.mockReturnValue(wall);
     expect((await request(ack, "opk1_ackrequest123456")).statusCode).toBe(200);
     expect(
@@ -220,6 +220,7 @@ it("retains the exact API terminal dependency until ack, retires it, and dischar
   } finally {
     vi.restoreAllMocks();
     await app.close();
+    vi.useRealTimers();
     c.closeControlInstallation(installation);
     rmSync(root, { recursive: true, force: true });
   }

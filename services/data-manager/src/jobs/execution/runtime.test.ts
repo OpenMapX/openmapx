@@ -8,6 +8,8 @@ import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
+import { DataManagerReadiness } from "../../readiness.js";
+import { initializeRequiredSubsystems } from "../../startup.js";
 import { StateStore } from "../../state.js";
 import { preserveTransitPending } from "../transitous/owned-ops.js";
 import { buildJobContext } from "../transitous/pipeline.js";
@@ -588,90 +590,108 @@ describe.skipIf(
       rmSync(root, { recursive: true, force: true });
     }
   }, 60000);
-  it("retires the indexed unbound phase cells with the original completed family after its expiry floor", async () => {
-    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
-    if (!url) throw Error("Owned PostgreSQL required");
-    const sql = postgres(url, { max: 4 });
-    drizzle(sql);
-    const root = mkdtempSync(join(tmpdir(), "omx-phase-retirement-")),
-      data = join(root, "data");
-    mkdirSync(data, { mode: 0o700 });
-    await control.provisionControlInstallation(root);
-    const installation = control.openControlInstallation({
-        infraDir: root,
-        role: "data-manager",
-        serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
-      }),
-      journal = control.createDataExecutionControlJournal(installation, sql),
-      store = createPostgresDataExecutionStore(sql, {
-        controlJournal: journal,
-        now: () => Date.now(),
-      }),
-      runtime = createDataExecutionRuntime({
-        store,
-        dispatch: async () => ({
-          kind: "transit-sync",
-          finalStatus: "ok",
-          sourceRevision: "public-fixture",
-          countries: ["de"],
+  it.each(["startup", "periodic"] as const)(
+    "retires the indexed unbound phase cells through production %s maintenance",
+    async (phase) => {
+      const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+      if (!url) throw Error("Owned PostgreSQL required");
+      const sql = postgres(url, { max: 4 });
+      drizzle(sql);
+      const root = mkdtempSync(join(tmpdir(), "omx-phase-retirement-")),
+        data = join(root, "data");
+      mkdirSync(data, { mode: 0o700 });
+      await control.provisionControlInstallation(root);
+      const installation = control.openControlInstallation({
+          infraDir: root,
+          role: "data-manager",
+          serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
         }),
-      });
-    let id: string | undefined, clock: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const deadline = Date.now() + 60000,
-        key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
-        admitted = await runtime.admit(
-          { kind: "transit-sync", countries: ["de"] },
-          { operationKey: key, requestedDeadlineAt: deadline },
+        journal = control.createDataExecutionControlJournal(installation, sql),
+        store = createPostgresDataExecutionStore(sql, {
+          controlJournal: journal,
+          now: () => Date.now(),
+        }),
+        runtime = createDataExecutionRuntime({
+          store,
+          dispatch: async () => ({
+            kind: "transit-sync",
+            finalStatus: "ok",
+            sourceRevision: "public-fixture",
+            countries: ["de"],
+          }),
+        });
+      let id: string | undefined, clock: ReturnType<typeof vi.spyOn> | undefined;
+      let stopRetention: (() => Promise<void>) | undefined;
+      try {
+        const deadline = Date.now() + 60000,
+          key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
+          admitted = await runtime.admit(
+            { kind: "transit-sync", countries: ["de"] },
+            { operationKey: key, requestedDeadlineAt: deadline },
+          );
+        id = admitted.id;
+        await expect
+          .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
+          .toBe("ok");
+        await expect
+          .poll(
+            async () =>
+              !(await import("node:fs")).existsSync(
+                join(data, ".admin-target-control/locks/data-manager"),
+              ),
+            { timeout: 15000 },
+          )
+          .toBe(true);
+        await runtime.close();
+        const record = await store.inspect(id);
+        expect(record?.reservations).toHaveLength(8);
+        const cells = record!.reservations.map((slot) =>
+          join(
+            root,
+            "control-private/data-manager/observations",
+            `phase-${key}-${slot.ordinal}.json`,
+          ),
         );
-      id = admitted.id;
-      await expect
-        .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
-        .toBe("ok");
-      await expect
-        .poll(
-          async () =>
-            !(await import("node:fs")).existsSync(
-              join(data, ".admin-target-control/locks/data-manager"),
-            ),
-          { timeout: 15000 },
-        )
-        .toBe(true);
-      await runtime.close();
-      const record = await store.inspect(id);
-      expect(record?.reservations).toHaveLength(8);
-      const cells = record!.reservations.map((slot) =>
-        join(
-          root,
-          "control-private/data-manager/observations",
-          `phase-${key}-${slot.ordinal}.json`,
-        ),
-      );
-      expect(cells.every((path) => requireExists(path))).toBe(true);
-      clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
-      let retired = 0;
-      for (let n = 0; n < 64 && retired === 0; n++)
-        retired += (await control.reconcileControlRetention(installation, { maxFamilies: 1 }))
-          .retired;
-      expect(retired).toBe(1);
-      expect(await store.inspect(id)).toBeNull();
-      expect(cells.every((path) => !requireExists(path))).toBe(true);
-      await expect(
-        store.admit(
-          { kind: "transit-sync", countries: ["de"] },
-          { operationKey: key, requestedDeadlineAt: deadline },
-        ),
-      ).rejects.toThrow(/fresh dated|expired/i);
-    } finally {
-      clock?.mockRestore();
-      await runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-      journal.close();
-      control.closeControlInstallation(installation);
-      await sql.end();
-      rmSync(root, { recursive: true, force: true });
-    }
-  }, 60000);
+        expect(cells.every((path) => requireExists(path))).toBe(true);
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        if (phase === "startup")
+          clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
+        const startup = await initializeRequiredSubsystems({
+          readiness: new DataManagerReadiness(),
+          controlInstallation: installation,
+          initializeOfflineStorage: async () => {},
+          reconcileJobs: async () => [],
+          setupCronSchedulers: () => ({ stop() {} }) as never,
+        });
+        stopRetention = startup.stopControlRetention;
+        if (phase === "periodic") {
+          expect(await store.inspect(id)).not.toBeNull();
+          clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
+          await vi.advanceTimersByTimeAsync(5 * 60_000);
+          await stopRetention?.();
+        }
+        expect(await store.inspect(id)).toBeNull();
+        expect(cells.every((path) => !requireExists(path))).toBe(true);
+        await expect(
+          store.admit(
+            { kind: "transit-sync", countries: ["de"] },
+            { operationKey: key, requestedDeadlineAt: deadline },
+          ),
+        ).rejects.toThrow(/fresh dated|expired/i);
+      } finally {
+        await stopRetention?.();
+        vi.useRealTimers();
+        clock?.mockRestore();
+        await runtime.close();
+        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        journal.close();
+        control.closeControlInstallation(installation);
+        await sql.end();
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    60000,
+  );
 });
 
 describe.skipIf(

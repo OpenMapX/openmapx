@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { canonicalJson } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import { and, eq } from "drizzle-orm";
@@ -124,18 +125,6 @@ function normalizedInstallOptions(opts: InstallExtensionOptions): InstallExtensi
 
 function safeDiagnostic(error: unknown): string {
   return sanitizeExtensionOutputString(error instanceof Error ? error.message : String(error));
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function buildExtensionInstallPreview(

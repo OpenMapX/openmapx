@@ -1,4 +1,5 @@
 export { DataExecutionPartialResult } from "./data-execution-outcome";
+export { startControlRetentionMaintenance } from "./retention-maintenance";
 // Server-only surface: intentionally absent from core's browser barrels.
 
 export * from "./archive";

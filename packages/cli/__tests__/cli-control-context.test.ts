@@ -11,10 +11,32 @@ import {
 import { services } from "@openmapx/core/server";
 import { expect, it, vi } from "vitest";
 import {
+  admittedRoot,
+  terminalWithoutEffect,
+} from "../../core/src/build-artifacts/test-fixtures/authority";
+import {
   cliControlContext,
+  collectHostControlRetention,
   completeCliCommand,
   withCliControlContext,
 } from "../src/lib/control-context";
+
+it("reclaims an expired host-command family before another standalone command", async () => {
+  const root = mkdtempSync(join(tmpdir(), "omx-host-retention-"));
+  mkdirSync(join(root, "data"), { mode: 0o700 });
+  await c.provisionControlInstallation(root);
+  const owner = admittedRoot(root);
+  terminalWithoutEffect(owner.authority);
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
+  try {
+    await collectHostControlRetention(owner.installation);
+    expect(() => c.restoreAdmittedControlExecution(owner.installation, owner.execution)).toThrow();
+  } finally {
+    clock.mockRestore();
+    c.closeControlInstallation(owner.installation);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 it("settles successful explicit CLI exits once through the real control context", async () => {
   const repo = mkdtempSync(join(tmpdir(), "omx-fixed-cli-entry-"));

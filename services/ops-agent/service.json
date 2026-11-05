@@ -14,6 +14,7 @@
   "container": {
     "image": "ghcr.io/openmapx/ops-agent",
     "tag": "main",
+    "stopGracePeriod": "45s",
     "expose": [4300],
     "user": "${UID:?UID must be set, run pnpm openmapx compose render}:${GID:?GID must be set, run pnpm openmapx compose render}",
     "environment": {

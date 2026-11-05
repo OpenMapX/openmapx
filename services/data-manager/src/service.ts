@@ -47,6 +47,10 @@ import { StateStore } from "./state.js";
 
 const app = Fastify({ loggerInstance: rootLogger });
 let executionReceiver: DataExecutionReceiver | undefined;
+let stopControlRetention: (() => Promise<void>) | undefined;
+app.addHook("onClose", async () => {
+  await stopControlRetention?.();
+});
 registerAuth(app, resolveAuthToken(app), { executionReceiver: () => executionReceiver });
 const readiness = new DataManagerReadiness();
 const controlStartup = loadControlStartup({
@@ -212,6 +216,9 @@ async function start(): Promise<void> {
   const countries = transitAllowedCountries(operationsPolicy);
   const initialized = await initializeRequiredSubsystems({
     readiness,
+    controlInstallation: controlStartup.installation ?? undefined,
+    onRetentionError: (err) =>
+      app.log.warn({ err }, "Control retention cleanup requires attention"),
     initializeOfflineStorage: async () => {
       await offlinePackages.initialize();
       app.log.info("offline package storage reconciled");
@@ -244,6 +251,7 @@ async function start(): Promise<void> {
       }),
   });
   cronHandles = initialized.cronHandles;
+  stopControlRetention = initialized.stopControlRetention;
   if (initialized.interruptedJobIds.length > 0) {
     app.log.warn(
       {
@@ -309,6 +317,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
   notablePlacesSchedule?.stop();
+  await stopControlRetention?.();
   await offlinePackages.close();
   await executionRuntime.close();
   await cronHandles?.closeTrafficWriter();

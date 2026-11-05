@@ -1,5 +1,7 @@
+import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
@@ -7,6 +9,83 @@ import { expect, it, vi } from "vitest";
 import { testExecution } from "./__fixtures__/execution";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
 import { startOpsAgentServer } from "./bootstrap";
+
+it.each(["SIGTERM", "SIGINT"] as const)(
+  "production bootstrap drains an accepted request on %s",
+  async (signal) => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-shutdown-")),
+      loader = createRequire(import.meta.url).resolve("tsx/esm"),
+      child = fork(new URL("./__fixtures__/shutdown.ts", import.meta.url), [root], {
+        execArgv: ["--import", loader],
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      });
+    const ready = Promise.withResolvers<number>(),
+      working = Promise.withResolvers<void>();
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("message", (message) => {
+      const value = message as { event: string; port?: number };
+      if (value.event === "ready") ready.resolve(value.port!);
+      if (value.event === "working") working.resolve();
+    });
+    const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => {
+          resolve({ code, signal });
+        });
+      },
+    );
+    const failed = exit.then((result) => {
+      throw Error(`Fixture exited ${JSON.stringify(result)}: ${stderr}`);
+    });
+    let request: Promise<unknown> | undefined;
+    try {
+      const port = await Promise.race([ready.promise, failed]),
+        now = Date.now();
+      request = fetch(`http://127.0.0.1:${port}/v1/operations`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer shutdown-fixture-token",
+          "content-type": "application/json",
+          "x-ops-protocol-version": "1",
+        },
+        body: JSON.stringify({
+          version: 1,
+          requestId: "ops1_shutdown0000000000",
+          operationKey: "opk1_shutdown0000000000",
+          issuedAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + 15000).toISOString(),
+          operation: { kind: "docker.status" },
+        }),
+      })
+        .then(async (response) => ({ status: response.status, body: await response.json() }))
+        .catch((error: unknown) => error);
+      await Promise.race([
+        working.promise,
+        failed,
+        request.then((result) => {
+          throw Error(`Dispatch not reached: ${JSON.stringify(result)}`);
+        }),
+      ]);
+      child.kill(signal);
+      child.send("release");
+      expect(await exit).toEqual({ code: 0, signal: null });
+      expect(readFileSync(join(root, "completed"), "utf8")).toBe("drained");
+      expect(await request).toMatchObject({ status: 200 });
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await exit;
+      await request;
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+  // Allow the production 30-second shutdown deadline to produce an exit
+  // result before the test harness terminates the fixture.
+  60000,
+);
 
 it.each(["legacy", "expired"])(
   "fix1 production bootstrap retains health and observation with %s release recovery",

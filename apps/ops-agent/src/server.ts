@@ -25,7 +25,6 @@ import {
   publishConfigurationSettlementReservationProjection,
   controlHeaders as readControlHeaders,
   reconcileConfigurationPreEffectRoot,
-  reconcileControlRetention,
   registerControlRetentionJournal,
   releaseArtifactTargetLease,
   repairControlJournalTerminal,
@@ -47,6 +46,7 @@ import {
   retainFixedSingleDataPlan,
   retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
+  startControlRetentionMaintenance,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
@@ -555,6 +555,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const jobsByKey = new Map<string, JobRecord>();
   const activeControllers = new Map<string, AbortController>();
   const activeSettlements = new Map<string, Promise<void>>();
+  let stopControlRetention: (() => Promise<void>) | undefined;
+  app.addHook("preClose", async () => {
+    await stopControlRetention?.();
+  });
   const stickyRecoveryRequired = new Set<string>();
   const configurationResultsSettling = new Set<string>();
   let active = 0;
@@ -2267,7 +2271,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
     if (options.controlInstallation)
-      await reconcileControlRetention(options.controlInstallation).catch(() => undefined);
+      stopControlRetention = await startControlRetentionMaintenance(
+        options.controlInstallation,
+        (err) => app.log.warn({ err }, "Control retention cleanup requires attention"),
+      );
   });
 
   app.post(
@@ -2589,13 +2596,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             return reply
               .code(202)
               .send(opsSuccess(parsed.requestId, admissionFor(existing, parsed.version)));
-          }
-          if (options.controlInstallation) {
-            try {
-              await reconcileControlRetention(options.controlInstallation, { maxFamilies: 1 });
-            } catch {
-              throw new RequestGuardError("recovery_required", 409);
-            }
           }
           if (jobsById.size + historicalPulls.length >= maxJobEntries) {
             throw new RequestGuardError("busy", 429);
