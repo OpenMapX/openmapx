@@ -127,7 +127,7 @@ export function PrivacySetupPage() {
       <Paper component="nav" aria-label={t("stepNavigation")} variant="outlined" sx={{ p: 1 }}>
         <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: "wrap" }}>
           {STEP_IDS.map((id) => (
-            <Button key={id} component={Link} href={`#${id}`} size="small">
+            <Button key={id} component="a" href={`#${id}`} size="small">
               {t(`steps.${id}.title`)}
             </Button>
           ))}
