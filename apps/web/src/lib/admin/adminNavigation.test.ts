@@ -39,12 +39,21 @@ it("keeps hosted System tools and restricts privacy administrators to casework",
   ).toEqual(["/admin/privacy"]);
   expect(adminDestinations({ role: "user", selfHosted: true })).toEqual([]);
 });
-it("registers only existing B-stage Data topics and assigns one active workspace", () => {
+it("registers the final Data topics and assigns one active workspace", () => {
   expect(
     adminDestinations({ role: "admin", selfHosted: true })
       .filter((entry) => entry.workspace === "data")
       .map((entry) => entry.href),
-  ).toEqual(["/admin/data", "/admin/data/transit", "/admin/data/coverage"]);
+  ).toEqual([
+    "/admin/data",
+    "/admin/data/osm",
+    "/admin/data/overture",
+    "/admin/data/search",
+    "/admin/data/transit",
+    "/admin/data/coverage",
+    "/admin/data/transfers",
+    "/admin/data/operations",
+  ]);
   for (const path of [
     "/admin/services/api",
     "/admin/system/services/api",

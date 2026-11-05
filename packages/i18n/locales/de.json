@@ -4940,7 +4940,7 @@
         "description": "Erweiterungen entdecken und verwalten"
       },
       "data": {
-        "label": "Datenabläufe",
+        "label": "Daten",
         "description": "Kartendaten beschaffen, erstellen und pflegen"
       },
       "transit": {
@@ -5014,6 +5014,26 @@
       "configuration-transfer": {
         "label": "Konfiguration übertragen",
         "description": "Konfiguration exportieren, importieren und migrieren"
+      },
+      "osm": {
+        "label": "OSM",
+        "description": "Extrakte, Builds und OpenStreetMap-Daten"
+      },
+      "overture": {
+        "label": "Overture",
+        "description": "Places-Version, Abgleich und Wiederherstellung"
+      },
+      "search": {
+        "label": "Suche & Orte",
+        "description": "Suchindex, Umgebungsdaten und bekannte Orte"
+      },
+      "transfers": {
+        "label": "Vorbereitete Transfers",
+        "description": "Datenartefakte prüfen, vorbereiten und übertragen"
+      },
+      "operations": {
+        "label": "Erweiterte Aktionen",
+        "description": "Gesamtaktualisierung, Hardlink-Abgleich und Bereinigung"
       }
     },
     "applicationUrlHelp": "Die öffentliche Anwendungs-URL bestimmt von der Anwendung erzeugte Links. Die Bereitstellung verwaltet den Host-Ursprung und Zertifikate.",
@@ -5030,6 +5050,21 @@
     "chooseTopic": "Thema auswählen",
     "authorityChanged": "Der Administratorzugriff hat sich geändert. Lade die Seite neu, um Konto und Berechtigungen zu bestätigen.",
     "reload": "Neu laden",
+    "privacyDue": "Frist: {date}",
+    "privacyAvailable": "Verfügbare Aufgaben",
+    "privacyOlderEvents": "Ältere Ereignisse anzeigen",
+    "privacySections": {
+      "identity": "Identität",
+      "tasks": "Aufgaben",
+      "decisions": "Entscheidungen",
+      "attachments": "Anhänge",
+      "backups": "Backup-Prüfung",
+      "delivery": "Erstellung & Zustellung",
+      "events": "Ereignisse"
+    },
+    "transitSourceOwner": "Transit-Quellen verwalten",
+    "privacyReadinessReady": "Die Datenschutz-Bereitschaftsprüfungen sind bestanden.",
+    "privacyReadinessBlocked": "Die Datenschutz-Bereitschaft muss geprüft werden.",
     "hostedData": "Hostverwaltete Datenaktionen sind in dieser gehosteten Bereitstellung nicht verfügbar. Transit und Abdeckung bleiben verfügbar.",
     "buildAll": {
       "title": "Alle aktivierten Dienste bauen",

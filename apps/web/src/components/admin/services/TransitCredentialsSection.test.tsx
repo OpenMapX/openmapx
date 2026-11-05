@@ -1,7 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
-import { TransitCredentialsSection } from "./TransitCredentialsSection";
+import {
+  readTransitCredentialContinuation,
+  TransitCredentialsSection,
+} from "./TransitCredentialsSection";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -35,7 +38,7 @@ vi.mock("../users/AdminReauthenticationDialog", () => ({
     </button>
   ),
 }));
-const reply = (data: unknown) => ({ status: 200, data, headers: new Headers() });
+const reply = <T,>(data: T) => ({ status: 200, data, headers: new Headers() });
 const view = {
   catalogRevisionId: "a".repeat(64),
   credentialsRevision: "b".repeat(64),
@@ -175,4 +178,32 @@ it("discards a late preview response when the actor changes", async () => {
   );
   expect(screen.getByLabelText("New value for de/A")).toHaveValue("");
   expect(sessionStorage.length).toBe(0);
+});
+
+it("restores only a completed actor-scoped matching credential review", () => {
+  const preview = reviewedReply().data;
+  const reviewKey = `openmapx-transit-credential-preview:${JSON.stringify([mocks.apiUrl, mocks.actorId])}`;
+  sessionStorage.setItem(
+    reviewKey,
+    JSON.stringify({ preview, operationKey: "opk1_aaaaaaaaaaaaaaaaaaaa" }),
+  );
+  sessionStorage.setItem(
+    `openmapx-admin-reauth:${mocks.apiUrl}`,
+    JSON.stringify({
+      phase: "completed",
+      requests: [
+        {
+          purpose: "transit.credentials",
+          targetId: preview.catalogRevisionId,
+          intentFingerprint: preview.intentFingerprint,
+        },
+      ],
+      challengeIds: ["11111111-1111-4111-8111-111111111111"],
+      expiresAt: preview.expiresAt,
+      returnPath: "/admin/transit",
+    }),
+  );
+  expect(readTransitCredentialContinuation(mocks.apiUrl, mocks.actorId)).toEqual({});
+  expect(readTransitCredentialContinuation(mocks.apiUrl, "other-actor")).toBeNull();
+  expect(readTransitCredentialContinuation("http://other.test", mocks.actorId)).toBeNull();
 });

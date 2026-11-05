@@ -31,7 +31,7 @@ import {
   useTransitPins,
   useValidateTransitPins,
 } from "@/lib/admin/transitPinHooks";
-export function LockfileCard(_props: { state: TransitStateSummary }) {
+export function LockfileCard(_props: { state?: TransitStateSummary } = {}) {
   const { apiUrl, actorId } = useAccountAdmin();
   return <CatalogPinView key={JSON.stringify([apiUrl, actorId])} />;
 }

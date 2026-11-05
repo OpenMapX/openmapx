@@ -1,4 +1,5 @@
 import { SCORE_CUTOFF, scoreCommand } from "@openmapx/command-palette";
+import { adminDataOperationHref } from "./adminDataNavigation";
 import { type AdminNavigationAccess, adminDestinations } from "./adminNavigation";
 export interface AdminSearchEntry {
   id: string;
@@ -57,14 +58,13 @@ export function buildAdminSearchEntries(
     href: "/admin/settings/email?field=smtpHost",
     keywords: ["mail server", "email", "E-Mail"],
   });
-  if (access.selfHosted !== false)
-    entries.push({
-      id: "transit-sources",
-      title: "GTFS",
-      description: "Transit source acquisition",
-      href: "/admin/data#transit-sources",
-      keywords: ["transit feeds", "sources", "Fahrplandaten"],
-    });
+  entries.push({
+    id: "transit-sources",
+    title: "GTFS",
+    description: "Transit source acquisition",
+    href: "/admin/data/transit?tab=sources",
+    keywords: ["transit feeds", "sources", "Fahrplandaten"],
+  });
   if (access.selfHosted !== false)
     entries.push(
       {
@@ -115,7 +115,7 @@ export function buildAdminSearchEntries(
       id: `operation:${entry.id}`,
       title: entry.title,
       description: entry.description,
-      href: `/admin/data#operation-${encodeURIComponent(entry.id)}`,
+      href: adminDataOperationHref(entry.id),
       keywords: [entry.id, ...(entry.fields ?? []).map((field) => field.label)],
     });
   return entries;

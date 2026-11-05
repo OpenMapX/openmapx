@@ -3,6 +3,7 @@
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -16,6 +17,7 @@ import Switch from "@mui/material/Switch";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { CoverageDomain, CoverageSourceRow, UsageAssessment } from "@openmapx/core/coverage";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -57,6 +59,7 @@ function numberParam(value: string | null, fallback: number): number {
 
 export function CoveragePage() {
   const t = useTranslations("adminCoverage");
+  const transitSourceLabel = useTranslations("adminNavigation")("transitSourceOwner");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -189,18 +192,25 @@ export function CoveragePage() {
         title={t("title")}
         subtitle={t("subtitle")}
         actions={
-          <Tooltip title={t("refresh.label")}>
-            <span>
-              <IconButton
-                size="small"
-                onClick={refresh}
-                disabled={isFetching}
-                aria-label={t("refresh.label")}
-              >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <>
+            {domain === "transit" && (
+              <Button component={Link} href="/admin/data/transit?tab=sources">
+                {transitSourceLabel}
+              </Button>
+            )}
+            <Tooltip title={t("refresh.label")}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={refresh}
+                  disabled={isFetching}
+                  aria-label={t("refresh.label")}
+                >
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </>
         }
       />
 
