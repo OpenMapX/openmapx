@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
+import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitSyncDialog } from "@/components/admin/services/TransitSyncDialog";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
@@ -65,6 +66,7 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 
   return (
     <Stack spacing={1.25}>
+      <AdminJobLink id={jobId} source="data-manager" />
       <LinearProgress />
       <Stack
         direction="row"
@@ -96,6 +98,7 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
   const showToast = useAdminToast();
   const [syncReview, setSyncReview] = useState(false);
+  const [queuedJobId, setQueuedJobId] = useState<string | null>(null);
   const { apiUrl } = useEnv();
   const qc = useQueryClient();
   const restartMutation = useRestartMotis();
@@ -122,6 +125,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           apiUrl={apiUrl}
           onClose={() => setSyncReview(false)}
           onQueued={(jobId) => {
+            setQueuedJobId(jobId);
             setSyncReview(false);
             showToast(`Sync queued (${jobId.slice(0, 8)}…)`, "success");
             void qc.invalidateQueries({ queryKey: ["admin", "transit"] });
@@ -207,6 +211,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           </SummaryMetric>
         </Stack>
       )}
+      {queuedJobId && <AdminJobLink id={queuedJobId} source="data-manager" />}
       {state.lastSyncStatus === "failed" && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
           Last sync run failed. Inspect the job detail below for the failing stage.

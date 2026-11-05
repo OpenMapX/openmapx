@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import {
   artifactFileSinkSupported,
   createArtifactFileSink,
@@ -72,9 +73,11 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
       ),
   });
   const refresh = () => qc.invalidateQueries({ queryKey: scope });
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const queued = (jobId: string, label: string) => {
     register({ client, apiUrl, jobId, onSettled: refresh });
     if (owner.active) {
+      setLastAcceptedJobId(jobId);
       setMessage(`Queued ${label}. Track its result in Activity (${jobId}).`);
       void refresh();
     }
@@ -388,7 +391,15 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
             </Stack>
           </Paper>
         ))}
-        <Button component={Link} href="/admin/activity" sx={{ alignSelf: "start" }}>
+        <Button
+          component={Link}
+          href={
+            lastAcceptedJobId
+              ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+              : "/admin/activity"
+          }
+          sx={{ alignSelf: "start" }}
+        >
           Open Activity
         </Button>
       </Stack>

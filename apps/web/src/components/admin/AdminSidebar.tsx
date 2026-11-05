@@ -28,6 +28,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -292,6 +293,7 @@ export function AdminSidebar({
   role = "admin",
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const desktop = useMediaQuery("(min-width:900px)");
   const onNavigate = (event: React.MouseEvent) => {
     if (
       !event.defaultPrevented &&
@@ -428,7 +430,7 @@ export function AdminSidebar({
       {/* Mobile drawer */}
       <Drawer
         variant="temporary"
-        open={open}
+        open={open && !desktop}
         onClose={onClose}
         ModalProps={{ keepMounted: true }}
         sx={{
@@ -441,7 +443,7 @@ export function AdminSidebar({
       {/* Desktop permanent drawer */}
       <Drawer
         variant="persistent"
-        open={open}
+        open={open && desktop}
         sx={{
           display: { xs: "none", md: "block" },
           "& .MuiDrawer-paper": {

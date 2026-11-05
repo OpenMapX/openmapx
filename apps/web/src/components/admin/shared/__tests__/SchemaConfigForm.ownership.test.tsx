@@ -85,3 +85,32 @@ it("retains an ordinary draft across tab disposal and requires review of a serve
   expect(screen.getByRole("textbox")).toHaveValue("theirs");
   expect(screen.queryByDisplayValue("never")).not.toBeInTheDocument();
 });
+
+it("offers Apply saved configuration after saving without another dirty edit", async () => {
+  const saves: Record<string, unknown>[] = [];
+  const apply = vi.fn();
+  const schema = { properties: { region: { type: "string" } } };
+  render(
+    <SchemaConfigForm
+      schema={schema}
+      resolvedConfig={{ region: { value: "old", source: "database" } }}
+      onSave={async (diff) => {
+        saves.push(diff);
+      }}
+      onSaveAndApply={async () => {}}
+      onApplySaved={async () => {
+        apply();
+      }}
+    />,
+  );
+  const input = screen.getByRole("textbox");
+  await userEvent.clear(input);
+  await userEvent.type(input, "new");
+  await userEvent.click(screen.getByRole("button", { name: /^Save \(/ }));
+  expect(
+    await screen.findByRole("button", { name: "Apply saved configuration" }),
+  ).not.toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Apply saved configuration" }));
+  expect(saves).toEqual([{ region: "new" }]);
+  expect(apply).toHaveBeenCalledTimes(1);
+});

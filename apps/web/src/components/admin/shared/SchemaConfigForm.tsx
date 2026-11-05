@@ -150,6 +150,14 @@ export function extractConfigFields(
     }));
 }
 
+export class SavedConfigurationApplyError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "Configuration saved. Service application could not be confirmed. Inspect Activity before trying again.",
+      { cause },
+    );
+  }
+}
 export interface SchemaConfigFormProps {
   /** Stable ordinary draft identity, scoped by the root administrator authority. */
   draftId?: string;
@@ -166,6 +174,9 @@ export interface SchemaConfigFormProps {
   onSave: (diff: Record<string, unknown>) => Promise<void>;
   /** Optional second action that also applies the change. */
   onSaveAndApply?: (diff: Record<string, unknown>) => Promise<void>;
+  onApplySaved?: () => Promise<void>;
+  applySavedLabel?: string;
+  applyPending?: boolean;
   /** Label for the apply button (default "Save & apply"). */
   applyLabel?: string;
   /** Feature-specific acknowledgement: an accepted job is not completed work. */
@@ -185,6 +196,9 @@ export function SchemaConfigForm({
   ownership,
   onSave,
   onSaveAndApply,
+  onApplySaved,
+  applySavedLabel = "Apply saved configuration",
+  applyPending = false,
   applyLabel = "Save & apply",
   applySuccessMessage = "Configuration saved and applied.",
   preserveDirtyValuesOnRefresh: _preserveDirtyValuesOnRefresh = false,
@@ -218,24 +232,32 @@ export function SchemaConfigForm({
     signature: "schema-config-v1",
   });
   const { values, setValues } = draft;
-  const [pending, setPending] = useState<"save" | "apply" | null>(null);
+  const [pending, setPending] = useState<"save" | "apply" | "apply-saved" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
   const changedKeys = draft.dirtyKeys.filter((key) => Object.hasOwn(originalValues, key));
 
-  const saving = pending !== null;
+  const saving = pending !== null || applyPending;
 
-  async function run(kind: "save" | "apply", fn: (diff: Record<string, unknown>) => Promise<void>) {
+  async function run(
+    kind: "save" | "apply" | "apply-saved",
+    fn: (diff: Record<string, unknown>) => Promise<void>,
+  ) {
+    if (saving || draft.conflicts.length > 0) return;
     setError(null);
     setSaved(null);
     setPending(kind);
+    const submitted = Object.fromEntries(changedKeys.map((key) => [key, values[key]]));
     try {
-      const submitted = Object.fromEntries(changedKeys.map((key) => [key, values[key]]));
       const diff = buildConfigDiff(fields, values, changedKeys);
       await fn(diff);
       draft.acknowledge(submitted);
-      setSaved(kind === "apply" ? "applied" : "saved");
+      setSaved(kind === "save" ? "saved" : "applied");
     } catch (err) {
+      if (err instanceof SavedConfigurationApplyError) {
+        draft.acknowledge(submitted);
+        setSaved("saved");
+      }
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setPending(null);
@@ -272,7 +294,12 @@ export function SchemaConfigForm({
       )}
       {saved === "saved" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved.{onSaveAndApply ? " Use Save & apply to take effect." : ""}
+          Configuration saved.
+          {onApplySaved
+            ? " Apply the saved configuration when ready."
+            : onSaveAndApply
+              ? " Runtime application is still pending."
+              : ""}
         </Alert>
       )}
       {saved === "applied" && (
@@ -453,15 +480,28 @@ export function SchemaConfigForm({
         >
           Save{changedKeys.length > 0 ? ` (${changedKeys.length} changed)` : ""}
         </Button>
-        {onSaveAndApply && (
+        {(onSaveAndApply || onApplySaved) && (
           <Button
             variant="contained"
             size="small"
-            startIcon={pending === "apply" ? <CircularProgress size={14} /> : <RestartAltIcon />}
-            onClick={() => run("apply", onSaveAndApply)}
-            disabled={saving || changedKeys.length === 0 || draft.conflicts.length > 0}
+            startIcon={
+              pending === "apply" || pending === "apply-saved" ? (
+                <CircularProgress size={14} />
+              ) : (
+                <RestartAltIcon />
+              )
+            }
+            onClick={() => {
+              if (changedKeys.length > 0 && onSaveAndApply) void run("apply", onSaveAndApply);
+              else if (onApplySaved) void run("apply-saved", async () => onApplySaved());
+            }}
+            disabled={
+              saving ||
+              draft.conflicts.length > 0 ||
+              (changedKeys.length > 0 ? !onSaveAndApply : !onApplySaved)
+            }
           >
-            {applyLabel}
+            {changedKeys.length > 0 ? applyLabel : applySavedLabel}
           </Button>
         )}
       </Stack>

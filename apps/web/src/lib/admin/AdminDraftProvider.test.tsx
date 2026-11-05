@@ -81,8 +81,8 @@ function ManyForm({ id }: { id: string }) {
 it("still accepts an edit after an old clean entry is evicted from the cache", () => {
   render(
     <AdminDraftProvider>
-      {Array.from({ length: 40 }, (_, id) => (
-        <ManyForm key={id} id={`form-${id}`} />
+      {Array.from({ length: 40 }, (_, id) => `form-${id}`).map((id) => (
+        <ManyForm key={id} id={id} />
       ))}
     </AdminDraftProvider>,
   );

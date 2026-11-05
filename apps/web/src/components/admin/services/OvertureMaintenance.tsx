@@ -22,6 +22,7 @@ import type { OvertureRecoveryStatus, OvertureStatus } from "@openmapx/core/api-
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -134,6 +135,7 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
 }
 function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const register = useServiceJobRegistration();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
@@ -208,6 +210,7 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         const request = operationRequest(operationName, prepared.region);
         const jobId = await runAdminOperation(client, request.id, prepared.input);
         register({ client, apiUrl, jobId, effect });
+        if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
           showToast(`Queued ${operationName} (${jobId})`);
           setPrepared(null);
@@ -271,7 +274,15 @@ function OvertureMaintenanceView({ apiUrl }: { apiUrl: string }) {
         >
           Refresh
         </Button>
-        <Button component={Link} href="/admin/activity" variant="text">
+        <Button
+          component={Link}
+          href={
+            lastAcceptedJobId
+              ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+              : "/admin/activity"
+          }
+          variant="text"
+        >
           View jobs
         </Button>
       </Stack>

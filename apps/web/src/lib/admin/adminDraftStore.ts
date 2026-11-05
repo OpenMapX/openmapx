@@ -34,6 +34,9 @@ export class AdminDraftStore {
       fn();
     });
   }
+  get authority() {
+    return this.owner;
+  }
   get scopeKey() {
     return this.owner ? JSON.stringify([this.owner.actorId, this.owner.role]) : null;
   }

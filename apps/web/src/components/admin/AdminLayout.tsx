@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useCallback, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useBindAdminDraftOwner } from "@/lib/admin/AdminDraftProvider";
@@ -31,22 +32,26 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
   const { apiUrl } = useEnv();
   useBindAdminDraftOwner({ apiUrl, actorId: user.id, role: user.role ?? "admin" });
   const hydrated = useHydrated();
-  const [sidebarOverride, setSidebarOpen] = useState<boolean | null>(null);
-  const sidebarOpen =
-    sidebarOverride ?? (!hydrated || window.matchMedia("(min-width:900px)").matches);
-  const toggleSidebar = useCallback(() => setSidebarOpen(!sidebarOpen), [sidebarOpen]);
+  const desktop = useMediaQuery("(min-width:900px)");
+  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const sidebarOpen = desktop ? desktopOpen : mobileOpen;
+  const toggleSidebar = useCallback(() => {
+    if (desktop) setDesktopOpen((value) => !value);
+    else setMobileOpen((value) => !value);
+  }, [desktop]);
 
   return (
     <AdminThemeProvider>
       <AdminToastProvider>
-        <AdminJobEffectsProvider>
+        <AdminJobEffectsProvider enabled={user.role === "admin"}>
           <Box
             className="omx-admin"
             sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
           >
             <AdminSidebar
               open={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
+              onClose={() => setMobileOpen(false)}
               selfHosted={selfHosted}
               role={user.role}
             />

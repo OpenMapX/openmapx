@@ -23,6 +23,9 @@ interface ServiceConfigFormProps {
    * land in the rendered compose environment at container creation time.
    */
   onSaveAndApply?: (values: Record<string, unknown>) => Promise<void>;
+  onApplySaved?: () => Promise<void>;
+  applySavedLabel?: string;
+  applyPending?: boolean;
 }
 
 /**
@@ -38,6 +41,9 @@ export function ServiceConfigForm({
   ownership,
   onSave,
   onSaveAndApply,
+  onApplySaved,
+  applySavedLabel,
+  applyPending,
 }: ServiceConfigFormProps) {
   const { apiUrl } = useActivityClient();
   const withResourceResets = (values: Record<string, unknown>) =>
@@ -61,6 +67,9 @@ export function ServiceConfigForm({
       onSaveAndApply={
         onSaveAndApply ? (values) => onSaveAndApply(withResourceResets(values)) : undefined
       }
+      onApplySaved={onApplySaved}
+      applySavedLabel={applySavedLabel}
+      applyPending={applyPending}
       applyLabel="Save & apply"
       emptyMessage="No editable configuration fields declared for this service."
     />

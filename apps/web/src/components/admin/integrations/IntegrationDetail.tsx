@@ -41,6 +41,7 @@ import {
 } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
+import { AdminJobLink } from "../activity/AdminJobLink";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -1090,6 +1091,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   });
 
   const reloadMutation = useIntegrationReload(id);
+  const [reloadJobId, setReloadJobId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -1184,9 +1186,11 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
               onClick={() =>
                 reloadMutation.mutate(undefined, {
-                  onSuccess: () =>
-                    owner.active &&
-                    showToast("Reload job queued — check Activity for status", "info"),
+                  onSuccess: (result) => {
+                    if (!owner.active) return;
+                    setReloadJobId(result.jobId);
+                    showToast("Reload job queued — check Activity for status", "info");
+                  },
                   onError: () => {
                     if (owner.active) showToast("Failed to queue reload job", "error");
                   },
@@ -1209,6 +1213,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           </Typography>
         )}
       </Stack>
+      {reloadJobId && <AdminJobLink id={reloadJobId} source="application" />}
       <Divider />
       <Box>
         <Tabs

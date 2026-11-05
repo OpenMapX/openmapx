@@ -4,6 +4,7 @@ import type { ApiClient } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useAdminJobRegistration } from "./adminJobEffects";
+import { safeAdminJobReturn } from "./adminJobNavigation";
 import { invalidateServiceAdministration, type ServiceAdministrationEffect } from "./serviceAdmin";
 
 export interface AcceptedServiceJob {
@@ -18,14 +19,24 @@ export type RegisterServiceJob = (accepted: AcceptedServiceJob) => void;
 export function useServiceJobRegistration(): RegisterServiceJob {
   const register = useAdminJobRegistration();
   const qc = useQueryClient();
+  const tab =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
+  const returnTo =
+    typeof window === "undefined"
+      ? undefined
+      : (safeAdminJobReturn(
+          window.location.pathname + (tab ? `?${new URLSearchParams({ tab }).toString()}` : ""),
+        ) ?? undefined);
   return useCallback(
     ({ client, apiUrl, jobId, effect }) =>
       register({
         client,
         apiUrl,
         jobId,
+        label: "serviceId" in effect ? `${effect.serviceId} · ${effect.kind}` : effect.kind,
+        returnTo,
         onSettled: () => invalidateServiceAdministration(qc, apiUrl, effect),
       }),
-    [register, qc],
+    [register, qc, returnTo],
   );
 }

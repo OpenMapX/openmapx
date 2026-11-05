@@ -38,6 +38,7 @@ import {
   useServicesBulkAction,
   useServicesList,
 } from "@/hooks/useServices";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
@@ -176,6 +177,7 @@ function ServiceCatalogView() {
   const { client, apiUrl } = useActivityClient();
   const owner = useAdminMutationOwner(client);
   const showToast = useAdminToast();
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useServicesList();
 
   const [search, setSearch] = useState("");
@@ -271,6 +273,7 @@ function ServiceCatalogView() {
     const execution = owner;
     try {
       const result = await stageMutation.mutateAsync(stageIntent);
+      if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active) {
         setStageIntent(null);
         showToast(`Queued image staging (${result.jobId})`);
@@ -322,6 +325,7 @@ function ServiceCatalogView() {
     const execution = owner;
     try {
       const result = await bulkMutation.mutateAsync(payload);
+      if (execution.active) setLastAcceptedJobId(result.jobId);
       if (execution.active) showToast(`Queued ${payload.action} (${result.jobId})`);
     } catch (error) {
       if (execution.active)
@@ -714,7 +718,16 @@ function ServiceCatalogView() {
             >
               Build All
             </Button>
-            <Button component={Link} href="/admin/activity" size="small" variant="text">
+            <Button
+              component={Link}
+              href={
+                lastAcceptedJobId
+                  ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+                  : "/admin/activity"
+              }
+              size="small"
+              variant="text"
+            >
               View Jobs
             </Button>
           </Stack>

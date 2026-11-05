@@ -15,6 +15,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
@@ -75,6 +76,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
           }}
         >
           {jobId}
+          <AdminJobLink id={jobId} source="data-manager" />
         </Typography>
 
         {isLoading && (

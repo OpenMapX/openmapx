@@ -18,6 +18,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { SERVICE_READ_TIMEOUT_MS } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -53,6 +54,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
   const t = useTranslations("adminSearchIndex");
   const locale = useLocale();
   const showToast = useAdminToast();
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const register = useServiceJobRegistration();
   const client = useMemo(
     () => createApiClient({ baseUrl: apiUrl, credentials: "include" }),
@@ -92,6 +94,7 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
           region: effectiveRegion,
         });
         register({ client, apiUrl, jobId, effect });
+        if (execution.active) setLastAcceptedJobId(jobId);
         if (execution.active) {
           showToast(t("queued", { jobId }));
           setConfirmOpen(false);
@@ -138,7 +141,15 @@ function SearchIndexMaintenanceView({ apiUrl }: { apiUrl: string }) {
         <Button startIcon={<RefreshIcon />} onClick={() => statusQuery.refetch()}>
           {t("refresh")}
         </Button>
-        <Button component={Link} href="/admin/activity" variant="text">
+        <Button
+          component={Link}
+          href={
+            lastAcceptedJobId
+              ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+              : "/admin/activity"
+          }
+          variant="text"
+        >
           {t("viewJobs")}
         </Button>
       </Stack>

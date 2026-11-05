@@ -5,7 +5,13 @@ import { cleanup, render, screen } from "@/test";
 import { AdminSidebar } from "./AdminSidebar";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/services" }));
-beforeEach(() => vi.stubGlobal("matchMedia", () => ({ matches: false })));
+beforeEach(() =>
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })),
+);
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

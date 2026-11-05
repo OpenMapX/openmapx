@@ -115,3 +115,16 @@ export function useAdminDraftExit() {
   const request = useContext(ExitContext);
   return request ?? (() => Promise.resolve(true));
 }
+
+const noopSubscribe = () => () => {};
+const emptySnapshot = () => 0;
+/** Also fences accepted work when a confirmed session/role replacement retires drafts. */
+export function useAdminDraftAuthority() {
+  const store = useContext(AdminDraftContext);
+  useSyncExternalStore(
+    store?.subscribe ?? noopSubscribe,
+    store?.snapshot ?? emptySnapshot,
+    store?.snapshot ?? emptySnapshot,
+  );
+  return { present: !!store, owner: store?.authority, generation: store?.generation ?? 0 };
+}

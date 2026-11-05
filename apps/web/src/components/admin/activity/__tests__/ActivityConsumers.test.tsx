@@ -418,3 +418,49 @@ it("uses server cancellation capability for an interrupted retained execution", 
   mount(<JobDetail jobId="job-1" source="data-manager" />);
   expect(await screen.findByRole("button", { name: "Cancel" })).not.toBeDisabled();
 });
+
+it("opens a direct source-qualified job even when the filtered list fails", async () => {
+  const { adminTestHistory } = await import("@/test/adminNavigation");
+  adminTestHistory.reset(
+    "/admin/activity?tab=jobs&job=not-on-page&source=data-manager&status=failed&page=2",
+  );
+  vi.stubGlobal("fetch", async (input: string) =>
+    input.includes("?limit=")
+      ? Response.json({ error: "List unavailable" }, { status: 503 })
+      : Response.json(
+          job({
+            id: "not-on-page",
+            source: "data-manager",
+            status: "success",
+            cancelable: false,
+            result: { retained: "exact job evidence" },
+          }),
+        ),
+  );
+  mount(<JobList />);
+  expect(await screen.findByText(/exact job evidence/)).toBeInTheDocument();
+  expect(await screen.findByText("Failed to load jobs")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close job details" }));
+  expect(screen.queryByText(/exact job evidence/)).not.toBeInTheDocument();
+});
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+
+it.each(["id", "source"])("rejects a direct detail response with the wrong %s", async (field) => {
+  vi.stubGlobal("fetch", async () =>
+    Response.json(
+      job({
+        id: field === "id" ? "wrong" : "selected",
+        source: field === "source" ? "data-manager" : "application",
+        status: "success",
+        cancelable: false,
+        result: { leak: "mismatched evidence" },
+      }),
+    ),
+  );
+  mount(<JobDetail jobId="selected" source="application" />);
+  expect(await screen.findByText("Failed to load job details.")).toBeInTheDocument();
+  expect(screen.queryByText(/mismatched evidence/)).not.toBeInTheDocument();
+});

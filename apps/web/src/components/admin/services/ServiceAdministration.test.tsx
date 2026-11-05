@@ -2,6 +2,7 @@ import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
+import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { RequiredServicesPanel } from "../integrations/RequiredServicesPanel";
@@ -309,7 +310,7 @@ describe("service administration visible behavior with the generated SDK", () =>
     await config();
     fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
     expect(
-      await screen.findByText("Start denied; saved configuration retained"),
+      await screen.findByText(/Configuration saved.*application could not be confirmed/),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("spinbutton")).toHaveValue(2));
     expect(qc.getQueryData(["admin", "services", apiUrl, "config", "demo"])).toMatchObject({
@@ -1012,3 +1013,41 @@ vi.mock(
   "next/navigation",
   async () => (await import("@/test/adminNavigation")).adminNavigationMock,
 );
+
+it("applies the saved service configuration without posting another save and links its exact job", async () => {
+  const requests = setup();
+  mount(<ServiceDetail id="demo" />);
+  await config();
+  fireEvent.click(screen.getByRole("button", { name: /^Save \(/ }));
+  await screen.findByText(/Configuration saved\./);
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "Start" }).length).toBe(2));
+  fireEvent.click(screen.getAllByRole("button", { name: "Start" })[1]);
+  expect(await screen.findByRole("link", { name: "View job" })).toHaveAttribute(
+    "href",
+    "/admin/activity?tab=jobs&job=job-1&source=application",
+  );
+  expect(
+    requests.filter(
+      (request) => request.url.pathname.endsWith("/config") && request.init.method === "POST",
+    ),
+  ).toHaveLength(1);
+  expect(
+    requests.filter(
+      (request) => request.url.pathname.endsWith("/action") && request.init.method === "POST",
+    ),
+  ).toHaveLength(1);
+});
+it("retains ordinary service fields through Credentials tab disposal", async () => {
+  setup();
+  mount(
+    <AdminDraftProvider>
+      <ServiceDetail id="demo" />
+    </AdminDraftProvider>,
+  );
+  await config();
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "9" } });
+  fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
+  await screen.findByText("Demo token");
+  fireEvent.click(screen.getByRole("tab", { name: "Configuration" }));
+  expect(await screen.findByRole("spinbutton")).toHaveValue(9);
+});
