@@ -1,5 +1,6 @@
 import { createPrivateKey, type KeyObject, randomUUID } from "node:crypto";
 import { fsyncSync, mkdirSync } from "node:fs";
+import { basename } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
@@ -724,6 +725,13 @@ function writeBounded(
 export class ArtifactTargetJournalBusyError extends Error {
   constructor(cause: unknown) {
     super("Lease journal writer is busy or requires supervised recovery", { cause });
+  }
+}
+/** Only initial adoption observation failed to acquire its family writer,
+ * before any adoption record was written. Never permits reclaiming a guard. */
+export class ArtifactTargetAdoptionObservationBusyError extends Error {
+  constructor(cause: unknown) {
+    super("Lease adoption observation is busy or requires supervised recovery", { cause });
   }
 }
 function guarded<T>(s: State, run: () => T, checkTargets = true): T {
@@ -1630,7 +1638,20 @@ export async function adoptArtifactTargetLease(options: {
   const s = openState(options.dataRoot, assertion.leaseId, peer.installation);
   try {
     return await guarded(s, () => {
-      const t = tree(s);
+      let t: LeaseTree;
+      try {
+        t = tree(s);
+      } catch (cause) {
+        const io = cause as NodeJS.ErrnoException | undefined;
+        if (
+          io?.code === "EEXIST" &&
+          io.syscall === "mkdir" &&
+          typeof io.path === "string" &&
+          basename(io.path) === ".family-writer"
+        )
+          throw new ArtifactTargetAdoptionObservationBusyError(cause);
+        throw cause;
+      }
       const grant = t.grants.get(assertion.delegationId);
       if (
         !grant ||
