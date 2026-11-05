@@ -247,9 +247,6 @@
     "parkingWalkToDestination": "{minutes, plural, =1 {1 min} other {# min}} walk · {dist}",
     "exitNumber": "Exit {number}",
     "toward": "toward {places}",
-    "junctionViewLabel": "Junction view",
-    "junctionLaneSummary": "Use lane {lane} of {total}",
-    "junctionPhotoDate": "Captured {date}",
     "confirmBoard": "I'm on board",
     "confirmAlight": "I've got off",
     "undoTransitAction": "Undo",
@@ -2625,11 +2622,7 @@
     "persistentStorageOn": "Protected — the browser won't evict your downloaded map packages or the offline app between sessions.",
     "persistentStorageOff": "Not protected — the browser may delete cached tiles, downloaded map packages, and the offline app when storage runs low. This can stop the app from opening offline.",
     "enablePersistentStorage": "Protect offline storage",
-    "back": "Back to map",
-    "junctionView": "Junction view",
-    "junctionViewHint": "Show a schematic of motorway exits and forks while navigating.",
-    "junctionPhotos": "Junction photos",
-    "junctionPhotosHint": "Prefetch a street-level photo of the exit approach, with its author and licence."
+    "back": "Back to map"
   },
   "pwa": {
     "updateAvailable": "A new version is available",

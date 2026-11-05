@@ -99,7 +99,8 @@ function copyStep(step: RouteStep): RouteStep {
     ...(step.lanes && {
       lanes: step.lanes.map((lane) => ({
         indications: [...lane.indications],
-        valid: lane.valid,
+        ...(lane.valid !== undefined && { valid: lane.valid }),
+        ...(lane.preferred !== undefined && { preferred: lane.preferred }),
         ...(lane.active !== undefined && { active: lane.active }),
       })),
     }),
@@ -189,7 +190,8 @@ function validateLanes(value: unknown): value is ManeuverLane[] {
       (lane) =>
         isPlainObject(lane) &&
         isStringArray(lane.indications) &&
-        typeof lane.valid === "boolean" &&
+        (lane.valid === undefined || typeof lane.valid === "boolean") &&
+        (lane.preferred === undefined || typeof lane.preferred === "boolean") &&
         isOptionalString(lane.active),
     )
   );

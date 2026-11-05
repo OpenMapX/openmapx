@@ -13,6 +13,7 @@
  *   pnpm check-routing-canaries
  *
  * Override ROUTING_BASE_URL to probe another deployment.
+ * Endpoints are public railway stations selected as synthetic controls.
  */
 
 export interface RoutingCanaryRoute {
@@ -34,14 +35,14 @@ export interface RoutingCanary {
 
 export const ROUTING_CANARIES: readonly RoutingCanary[] = [
   {
-    name: "Aachen → Orsoy (short alternate control)",
-    waypoints: "6.0839,50.7753;6.6833,51.5167",
+    name: "Regional alternate control",
+    waypoints: "13.3694,52.5251;13.0666,52.3914",
     minimumRoutes: 2,
     requireBaseline: true,
   },
   {
-    name: "Aachen → Berlin (long-route regression control)",
-    waypoints: "6.0839,50.7753;13.4050,52.5200",
+    name: "Intercity long-route regression control",
+    waypoints: "13.3694,52.5251;10.0067,53.5528",
     minimumRoutes: 1,
     requireBaseline: true,
   },

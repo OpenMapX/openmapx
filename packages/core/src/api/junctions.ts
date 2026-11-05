@@ -4,12 +4,12 @@ import { API_ENDPOINTS } from "./endpoints";
 
 /**
  * Client for `POST /api/integrations/routing/navigation/junctions` — the
- * per-lane gantry tags behind the junction view. One request per batch (≤ 40
+ * per-lane OSM tags used to enrich maneuver arrows. One request per batch (≤ 40
  * points).
  */
 
 /**
- * Fetch the gantry ways for decision points; `null` when the request failed,
+ * Fetch the lane-tagged ways for decision points; `null` when the request failed,
  * so the caller can ask again instead of settling on an empty answer.
  */
 export async function fetchJunctionLookups(

@@ -214,6 +214,10 @@ const corruptions: [string, Corrupt][] = [
   ["lanes holding a string", onStep("lanes", ["right"])],
   ["lane indications as an object", onStep("lanes", [{ indications: {}, valid: true }])],
   ["lane indications holding numbers", onStep("lanes", [{ indications: [1], valid: true }])],
+  [
+    "lane preference as a string",
+    onStep("lanes", [{ indications: [], valid: true, preferred: "yes" }]),
+  ],
   ["lane validity as a string", onStep("lanes", [{ indications: [], valid: "yes" }])],
   [
     "a lane active indication as a number",
@@ -504,4 +508,31 @@ it("retains validated cycling preferences and rejects corrupt saved values", () 
   const corrupt = structuredClone(snapshot);
   Object.assign(corrupt.routeOptions, { bikeProfile: "car" });
   expect(parseNavigationSessionSnapshot(corrupt)).toBeNull();
+});
+
+describe("lane evidence in saved navigation", () => {
+  it("round trips unknown, initially usable, preferred and rejected lanes", () => {
+    const lanes = [
+      { indications: ["through"] },
+      { indications: ["through"], valid: true, preferred: false },
+      { indications: ["through"], valid: true, preferred: true, active: "through" },
+      { indications: ["right"], valid: false, preferred: false },
+    ];
+    const base = route();
+    const storedRoute = {
+      ...base,
+      steps: base.steps.map((step, i) => (i === 0 ? { ...step, lanes } : step)),
+      legs: base.legs.map((leg) => ({
+        ...leg,
+        steps: leg.steps.map((step) => ({ ...step, lanes })),
+      })),
+    };
+    const snapshot = createNavigationSessionSnapshot(
+      input({ route: storedRoute, routes: [storedRoute] }),
+    );
+    const restored = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored?.route.steps[0].lanes).toEqual(lanes);
+    expect(restored?.route.legs[0].steps[0].lanes).toEqual(lanes);
+    expect(restored?.routes[0].steps[0].lanes).toEqual(lanes);
+  });
 });

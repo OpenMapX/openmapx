@@ -94,13 +94,10 @@ export type { I18nToken, MoneyValue, Translatable, WallClockValue } from "./i18n
 export type { Identified, Ids } from "./identified";
 export { makeId, parseId, withId } from "./identified";
 export type {
-  GantryModel,
-  GantryPanel,
   JunctionDecisionPoint,
   JunctionKind,
   JunctionLookupPoint,
   JunctionLookupResult,
-  JunctionSchematic,
   JunctionWay,
   LaneDestinations,
   OsmLaneTags,

@@ -22,19 +22,13 @@ import { NavigationSettingsDialog } from "@/components/settings/NavigationSettin
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { NAV_CHROME_TOP, NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
-import {
-  useMobilePanelClearance,
-  useMobilePanelOccupiedHeight,
-  useWindowHeight,
-} from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
-import { useJunctionPreviewBudget } from "@/lib/navigation/useJunctionPreviewBudget";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
 import { useSheetFollowTrack } from "@/lib/sheetFollow";
 import { ArrivalCard } from "./ArrivalCard";
 import { ARRIVAL_WAYPOINT_MATCH_TOLERANCE_METERS } from "./arrivalHandoffState";
 import { FasterRouteBanner } from "./FasterRouteBanner";
-import { JunctionViewSlot } from "./JunctionViewSlot";
 import { NavAlertSlot } from "./NavAlertSlot";
 import { NavBottomBarSlot } from "./NavBottomBarSlot";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
@@ -83,11 +77,6 @@ export function GroundNavigationChrome({ coverage }: Props) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const [shellEl, setShellEl] = useState<HTMLDivElement | null>(null);
-  const [bottomEl, setBottomEl] = useState<HTMLDivElement | null>(null);
-  const [junctionEl, setJunctionEl] = useState<HTMLDivElement | null>(null);
-  const [speedLimitEl, setSpeedLimitEl] = useState<HTMLDivElement | null>(null);
-  const [bottomHeaderEl, setBottomHeaderEl] = useState<HTMLDivElement | null>(null);
   const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
   useNavChromeObstructions("ground", { isMobile, arrived: status === "arrived", bannerEl });
 
@@ -106,21 +95,6 @@ export function GroundNavigationChrome({ coverage }: Props) {
   const vh = useWindowHeight();
   const sheetClearance = useMobilePanelClearance(vh);
   const followTrack = useSheetFollowTrack();
-  const sheetOccupiedHeight = useMobilePanelOccupiedHeight();
-  const junctionAvailableHeight = useJunctionPreviewBudget({
-    shell: shellEl,
-    banner: bannerEl,
-    junction: junctionEl,
-    bottom: bottomEl,
-    speedLimit: speedLimitEl,
-    bottomHeader: bottomHeaderEl,
-    isMobile,
-    sheetClearance,
-    // Matches NavSpeedLimitSlot: the badge rides a driving sheet by translation.
-    speedLimitRidesSheet: isMobile && followTrack !== null,
-    sheetOccupiedHeight,
-    mobilePanelPending: isMobile && !!route && sheetOccupiedHeight === 0,
-  });
 
   const rerouting = status === "rerouting";
 
@@ -173,7 +147,6 @@ export function GroundNavigationChrome({ coverage }: Props) {
 
   return (
     <Box
-      ref={setShellEl}
       data-testid="ground-nav-chrome"
       sx={{
         position: "fixed",
@@ -236,7 +209,6 @@ export function GroundNavigationChrome({ coverage }: Props) {
             }}
           >
             <NavManeuverSlot />
-            <JunctionViewSlot availableHeight={junctionAvailableHeight} panelRef={setJunctionEl} />
             <NavOfflineBannerSlot coverage={coverage} />
             <NavAlertSlot />
             {rerouting && (
@@ -263,7 +235,6 @@ export function GroundNavigationChrome({ coverage }: Props) {
 
           {/* Bottom region: speed limit sits just above the panel, on the left. */}
           <Box
-            ref={setBottomEl}
             data-testid="ground-nav-bottom"
             sx={{
               display: "flex",
@@ -273,18 +244,14 @@ export function GroundNavigationChrome({ coverage }: Props) {
               ...(isMobile ? {} : { minHeight: 0 }),
             }}
           >
-            <NavSpeedLimitSlot
-              isMobile={isMobile}
-              sheetClearance={sheetClearance}
-              elementRef={setSpeedLimitEl}
-            />
+            <NavSpeedLimitSlot isMobile={isMobile} sheetClearance={sheetClearance} />
             {route &&
               (isMobile ? (
                 <NavSwipeSheet
                   expanded={menuOpen}
                   onExpandedChange={setMenuOpen}
                   header={
-                    <Box ref={setBottomHeaderEl} data-testid="ground-nav-bottom-header">
+                    <Box data-testid="ground-nav-bottom-header">
                       <NavBottomBarSlot />
                     </Box>
                   }
@@ -313,11 +280,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
                     overflow: "hidden",
                   }}
                 >
-                  <Box
-                    ref={setBottomHeaderEl}
-                    data-testid="ground-nav-bottom-header"
-                    sx={{ flexShrink: 0 }}
-                  >
+                  <Box data-testid="ground-nav-bottom-header" sx={{ flexShrink: 0 }}>
                     <NavBottomBarSlot menuToggle={desktopMenuToggle} />
                   </Box>
                   {/* Header stays pinned; the expanded menu scrolls. */}

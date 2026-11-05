@@ -2,7 +2,6 @@
 
 import Box from "@mui/material/Box";
 import { isOverSpeed, useNavigationStore, useSettingsStore } from "@openmapx/core";
-import type { Ref } from "react";
 import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
@@ -10,7 +9,6 @@ interface Props {
   isMobile: boolean;
   /** Live height of the fixed-position mobile sheet, to lift the badge above it. */
   sheetClearance: number;
-  elementRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -19,7 +17,7 @@ interface Props {
  * otherwise a fix that only nudges the speed (with the limit unchanged) would
  * still have to re-render whatever owns the layout around it.
  */
-export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Props) {
+export function NavSpeedLimitSlot({ isMobile, sheetClearance }: Props) {
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
   const units = useSettingsStore((s) => s.units);
@@ -29,11 +27,8 @@ export function NavSpeedLimitSlot({ isMobile, sheetClearance, elementRef }: Prop
   const follow =
     isMobile && followTrack ? planSheetFollow(followTrack, { offset: 0, min: 0 }) : null;
 
-  // Keep the measured element stable: publishing its first ref from a GPS
-  // fix would re-render the cold chrome that owns the junction budget.
   return (
     <Box
-      ref={elementRef}
       data-testid="nav-speed-limit"
       sx={{
         display: currentSpeedLimit === null ? "none" : undefined,

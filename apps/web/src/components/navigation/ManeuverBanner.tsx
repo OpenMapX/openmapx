@@ -67,6 +67,7 @@ export interface ManeuverBannerProps {
   lanes?: ManeuverLane[];
   /** OSM destinations per lane on the approach, to pick the lanes toward the sign. */
   laneDestinations?: LaneDestinations[];
+  laneSource?: "engine" | "osm";
   /** Interchange signage for the upcoming maneuver, when the engine supplies it. */
   sign?: ManeuverSign;
   /** Country of the route origin, for the sign palette. */
@@ -82,6 +83,7 @@ export function ManeuverBanner({
   nextManeuver,
   lanes,
   laneDestinations,
+  laneSource,
   sign,
   country,
   units,
@@ -102,6 +104,7 @@ export function ManeuverBanner({
       maneuver={maneuver}
       sign={sign}
       laneDestinations={laneDestinations}
+      source={laneSource}
     />
   ) : hasNext ? (
     <>

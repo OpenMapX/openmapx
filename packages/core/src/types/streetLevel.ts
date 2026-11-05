@@ -82,7 +82,7 @@ export type StreetLevelCoverage =
       maxzoom: number;
     };
 
-/** Query for the provider `/search` surface (navigation photo prefetch). */
+/** Query for the provider `/search` surface. */
 export interface StreetLevelSearchQuery {
   /** Search centre. */
   lngLat: LngLat;
@@ -110,8 +110,7 @@ export interface StreetLevelCapabilities {
   coverage: StreetLevelCoverage;
   /**
    * Whether the provider's terms allow showing its imagery during real-time
-   * navigation. The junction photo only searches providers that do; the
-   * street-level viewer is unaffected.
+   * navigation. This capability does not affect the street-level viewer.
    */
   allowsNavigationUse: boolean;
   /** What the provider's `/search` route can filter server-side. */

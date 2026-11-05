@@ -12,7 +12,8 @@ vi.mock("next-intl", () => ({
     return key;
   },
 }));
-vi.mock("@openmapx/core", () => ({
+vi.mock("@openmapx/core", async () => ({
+  ...(await import("../../../../../packages/core/src/navigation/signFormat")),
   formatDistance: (m: number) => `${m} m`,
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,

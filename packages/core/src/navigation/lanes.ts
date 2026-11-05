@@ -25,23 +25,6 @@ export function guidanceApproachMeters(mode: TravelMode, currentSpeedMps: number
   return Math.max(g.minMeters, Math.max(currentSpeedMps, 0) * leadSeconds);
 }
 
-/** Lead time for the junction photo, seconds, and the floor it never drops below. */
-const PHOTO_LEAD_SECONDS = 30;
-const PHOTO_MIN_METERS = 300;
-
-/**
- * Distance at which the junction photo is worth showing. The gantry goes up
- * with the rest of the guidance, minutes ahead on the motorway, but a picture
- * of a junction that far off shows a road you cannot place yet — and it holds
- * a large part of the screen. Half a minute of travel puts it up when what it
- * shows is about to appear through the windscreen, never beyond the guidance
- * window that carries it.
- */
-export function junctionPhotoApproachMeters(mode: TravelMode, currentSpeedMps: number): number {
-  const lead = Math.max(Math.max(currentSpeedMps, 0) * PHOTO_LEAD_SECONDS, PHOTO_MIN_METERS);
-  return Math.min(lead, guidanceApproachMeters(mode, currentSpeedMps));
-}
-
 /**
  * Whether to preview the maneuver *after* the upcoming one ("Then …"). Two
  * conditions: we're inside the approach window for the current maneuver (so it's
@@ -65,62 +48,40 @@ export function shouldPreviewNextStep(
   return (nextStepDistanceMeters ?? Number.POSITIVE_INFINITY) <= g.chainSeconds * voice.refSpeedMps;
 }
 
-/** Normalize a lane/turn token: trim, lowercase, underscores → spaces. */
-function norm(token: string): string {
-  return token.trim().toLowerCase().replace(/_/g, " ");
+export interface ResolvedLaneGuidance {
+  lanes: ManeuverLane[];
+  usableLanes: number[];
+  preferredLanes: number[];
+  state: "known" | "partial" | "unknown" | "conflict";
 }
 
-/** Mark a lane valid (and set its active indication) when one of its indications matches. */
-function markIfMatch(lane: ManeuverLane, matches: (indication: string) => boolean): ManeuverLane {
-  const hit = lane.indications.find((i) => matches(norm(i)));
-  if (!hit) return { ...lane, valid: false };
-  return { ...lane, valid: true, active: hit };
+/** Preserve reported meaning; a turn arrow alone does not identify a routed branch. */
+export function resolveLaneGuidance(lanes: ManeuverLane[] | undefined): ResolvedLaneGuidance {
+  const values = lanes ?? [];
+  const conflict = values.some((lane) => lane.preferred === true && lane.valid === false);
+  const reported = values.filter((lane) => lane.valid !== undefined).length;
+  return {
+    lanes: values,
+    usableLanes: values.flatMap((lane, i) => (lane.valid === true ? [i] : [])),
+    preferredLanes: values.flatMap((lane, i) =>
+      lane.valid === true && lane.preferred === true ? [i] : [],
+    ),
+    state: conflict
+      ? "conflict"
+      : reported === 0
+        ? "unknown"
+        : reported === values.length
+          ? "known"
+          : "partial",
+  };
 }
 
-/**
- * Decide which lanes to highlight for an upcoming maneuver. When the routing
- * engine already marked a lane valid we trust it; otherwise we recommend lanes
- * ourselves from the maneuver. A `keep` instruction first prefers through
- * lanes because the named side describes the branch to stay on, not a turn to
- * make. Other maneuvers use exact direction → same side → unrestricted. Pure.
- */
+/** Retained API: unknown or rejected lanes never become guessed recommendations. */
 export function resolveRecommendedLanes(
   lanes: ManeuverLane[] | undefined,
-  maneuver: LaneManeuver | undefined,
+  _maneuver: LaneManeuver | undefined,
 ): ManeuverLane[] {
-  if (!lanes || lanes.length === 0) return lanes ?? [];
-  if (lanes.some((l) => l.valid)) return lanes; // engine already decided
-
-  const mod = maneuver?.modifier ? norm(maneuver.modifier) : "";
-
-  // "Keep left/right to stay on …" commonly means remaining in the through
-  // carriageway while an exit peels away on the other side. Highlight the
-  // through lanes instead of looking for a literal left/right turn arrow.
-  if (maneuver?.type === "keep") {
-    const through = lanes.map((l) =>
-      markIfMatch(l, (i) => i === "through" || i === "straight" || i === "none" || i === ""),
-    );
-    if (through.some((l) => l.valid)) return through;
-  }
-
-  // Going straight (or no modifier): a through/straight/unmarked lane keeps you on-route.
-  if (mod === "" || mod === "straight") {
-    return lanes.map((l) =>
-      markIfMatch(l, (i) => i === "through" || i === "straight" || i === "none" || i === ""),
-    );
-  }
-
-  const exact = lanes.map((l) => markIfMatch(l, (i) => i === mod));
-  if (exact.some((l) => l.valid)) return exact;
-
-  const side = mod.includes("left") ? "left" : mod.includes("right") ? "right" : null;
-  if (side) {
-    const approx = lanes.map((l) => markIfMatch(l, (i) => i.includes(side)));
-    if (approx.some((l) => l.valid)) return approx;
-  }
-
-  // Last resort: an unrestricted lane is usable for any maneuver.
-  return lanes.map((l) => markIfMatch(l, (i) => i === "none" || i === ""));
+  return resolveLaneGuidance(lanes).lanes;
 }
 
 /** What else is known about where the lanes lead, beyond the engine's arrows. */
@@ -135,10 +96,7 @@ export interface LaneGuidanceEvidence {
  * The lanes to highlight in turn-lane guidance. The engine's own choice wins.
  * Without it, lanes whose OSM destinations name the maneuver's sign come next:
  * at a split tagged `through` on every lane, they are the only thing telling
- * the branches apart. Then `resolveRecommendedLanes`, except where it lights
- * every lane for a maneuver to one side through arrows that do not point that
- * way: all four `through` lanes before a split say nothing about which two
- * keep left, so none is highlighted rather than all. Pure.
+ * the branches apart. Arrow direction alone never identifies a routed branch.
  */
 export function resolveGuidanceLanes(
   lanes: ManeuverLane[] | undefined,
@@ -146,18 +104,13 @@ export function resolveGuidanceLanes(
   evidence: LaneGuidanceEvidence = {},
 ): ManeuverLane[] {
   if (!lanes || lanes.length === 0) return lanes ?? [];
-  if (lanes.some((l) => l.valid)) return lanes;
+  if (lanes.some((l) => l.valid !== undefined)) return lanes;
 
   const side = sideOf(maneuver);
   const signed = lanesTowardSign(lanes, side, evidence);
   if (signed) return signed;
 
-  const resolved = resolveRecommendedLanes(lanes, maneuver);
-  const uninformative =
-    side !== null &&
-    resolved.every((l) => l.valid) &&
-    !resolved.some((l) => l.active !== undefined && norm(l.active).includes(side));
-  return uninformative ? lanes : resolved;
+  return lanes;
 }
 
 function sideOf(maneuver: LaneManeuver | undefined): "left" | "right" | null {
@@ -186,9 +139,9 @@ function lanesTowardSign(
     ) ?? distinguishing(laneDestinations.map((l) => l.refs.some((r) => refs.has(refKey(r)))));
   if (!hits) return null;
   return lanes.map((lane, i) => {
-    if (!hits[i]) return { ...lane, valid: false };
+    if (!hits[i]) return { ...lane, valid: false, preferred: false };
     const toward = side ? lane.indications.find((ind) => norm(ind).includes(side)) : undefined;
-    return { ...lane, valid: true, ...(toward ? { active: toward } : {}) };
+    return { ...lane, valid: true, preferred: true, ...(toward ? { active: toward } : {}) };
   });
 }
 
@@ -205,4 +158,8 @@ function placeKey(place: string): string {
 /** "A44" and "A 44" name the same road. */
 function refKey(ref: string): string {
   return ref.normalize("NFC").toLowerCase().replace(/\s+/g, "");
+}
+
+function norm(value: string): string {
+  return value.toLowerCase().replace(/[-\s]/g, "_");
 }

@@ -3,6 +3,24 @@ import { describe, expect, it } from "vitest";
 import { LaneGuidance } from "./LaneGuidance";
 
 describe("LaneGuidance", () => {
+  it.each(["banner", "standalone"] as const)(
+    "uses the same %s highlighting for preferred and usable lanes",
+    (variant) => {
+      const preferred = renderToStaticMarkup(
+        <LaneGuidance
+          variant={variant}
+          lanes={[{ indications: ["left"], valid: true, preferred: true }]}
+        />,
+      );
+      const usable = renderToStaticMarkup(
+        <LaneGuidance
+          variant={variant}
+          lanes={[{ indications: ["left"], valid: true, preferred: false }]}
+        />,
+      );
+      expect(preferred).toBe(usable);
+    },
+  );
   it("renders nothing when there are no lanes", () => {
     expect(renderToStaticMarkup(<LaneGuidance lanes={undefined} />)).toBe("");
   });
@@ -20,7 +38,7 @@ describe("LaneGuidance", () => {
   });
 
   it("lights the lanes the OSM destinations send toward the sign at an all-through split", () => {
-    const through = { indications: ["through"], valid: false };
+    const through = { indications: ["through"], valid: undefined };
     const lanes = [through, through, through, through];
     const keepLeft = { type: "keep", modifier: "left" };
     const unlit = renderToStaticMarkup(<LaneGuidance lanes={lanes} maneuver={keepLeft} />);
@@ -79,19 +97,19 @@ describe("LaneGuidance", () => {
       />,
     );
     expect(notChosen).toContain('data-empty="true"');
-    // Without any engine choice the lanes are our own recommendation: no guessed arrow.
-    const guessed = renderToStaticMarkup(
+    // Missing route evidence must not turn a maneuver direction into a lane choice.
+    const unknown = renderToStaticMarkup(
       <LaneGuidance
         maneuver={maneuver}
         lanes={[
-          { indications: ["none"], valid: false },
-          { indications: ["right"], valid: false },
+          { indications: ["none"], valid: undefined },
+          { indications: ["right"], valid: undefined },
         ]}
       />,
     );
-    expect(guessed).toContain('data-valid="true"');
-    expect(guessed).not.toContain('data-inferred="true"');
-    expect(guessed).toContain('data-empty="true"');
+    expect(unknown).not.toContain('data-valid="true"');
+    expect(unknown).not.toContain('data-inferred="true"');
+    expect(unknown).toContain('data-empty="true"');
   });
 
   it("keeps a chosen unmarked lane blank for a maneuver without a lane direction", () => {
@@ -120,7 +138,7 @@ describe("LaneGuidance", () => {
     expect(html).toContain('data-active="true"');
   });
 
-  it("highlights through lanes for a keep-left instruction", () => {
+  it("preserves explicit rejection for a keep-left instruction", () => {
     const html = renderToStaticMarkup(
       <LaneGuidance
         maneuver={{ type: "keep", modifier: "left" }}
@@ -131,7 +149,7 @@ describe("LaneGuidance", () => {
         ]}
       />,
     );
-    expect(html.match(/data-valid="true"/g)?.length).toBe(2);
-    expect(html.match(/data-valid="false"/g)?.length).toBe(1);
+    expect(html.match(/data-valid="true"/g)?.length ?? 0).toBe(0);
+    expect(html.match(/data-valid="false"/g)?.length).toBe(3);
   });
 });

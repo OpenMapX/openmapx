@@ -3,6 +3,7 @@ import { useNavigationStore } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -12,17 +13,22 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 }));
 
 const { NavManeuverSlot } = await import("./NavManeuverSlot");
+const { useNavLaneGuidanceStore } = await import("@/lib/navigation/laneGuidanceStore");
 
 const route = {
+  distance: 1500,
+  duration: 110,
+  legs: [],
   mode: "driving",
   geometry: [
     [6.67, 51.17],
     [6.68, 51.18],
   ],
   steps: [
-    { instruction: "Drive on", distance: 1000, duration: 60 },
+    { instruction: "Drive on", distance: 1000, duration: 60, coordinates: [] },
     {
       instruction: "Take exit 20 toward Neuss-Zentrum",
+      coordinates: [],
       distance: 400,
       duration: 30,
       maneuver: { type: "turn", modifier: "right" },
@@ -32,7 +38,7 @@ const route = {
         exitToward: ["Neuss-Zentrum"],
       },
     },
-    { instruction: "Arrive", distance: 100, duration: 20 },
+    { instruction: "Arrive", distance: 100, duration: 20, coordinates: [] },
   ],
 } as unknown as Route;
 
@@ -70,12 +76,100 @@ describe("NavManeuverSlot", () => {
   afterEach(() => {
     cleanup();
     useNavigationStore.getState().stopNavigation();
+    useNavLaneGuidanceStore.getState().reset();
   });
 
   it("passes the upcoming step's sign to the banner", () => {
     const view = mount();
     expect(view.getByTestId("exit-sign-strip")).toBeTruthy();
     expect(view.container.textContent).toContain("Neuss-Zentrum");
+  });
+  it("keeps OSM-only unmarked lanes blank instead of inferring an engine arrow", () => {
+    useNavLaneGuidanceStore.setState({
+      routeIdentity: route,
+      guidanceByStep: new Map([
+        [
+          1,
+          {
+            lanes: [
+              { indications: ["none"], valid: true, preferred: true },
+              { indications: ["right"], valid: false },
+            ],
+            usableLanes: [0],
+            preferredLanes: [0],
+            state: "known",
+            source: "osm",
+          },
+        ],
+      ]),
+    });
+    const view = mount();
+    expect(view.container.querySelector('[data-inferred="true"]')).toBeNull();
+    expect(view.container.querySelector('[data-empty="true"]')).not.toBeNull();
+  });
+  it("credits displayed OSM lane evidence and releases that credit on unmount", () => {
+    useMapAttributionStore.setState({ byLayer: {} });
+    useNavLaneGuidanceStore.setState({
+      routeIdentity: route,
+      guidanceByStep: new Map([
+        [
+          1,
+          {
+            lanes: [{ indications: ["through"], valid: true, preferred: true }],
+            usableLanes: [0],
+            preferredLanes: [0],
+            state: "known",
+            source: "osm",
+          },
+        ],
+      ]),
+    });
+    const view = mount();
+    expect(JSON.stringify(useMapAttributionStore.getState().byLayer)).toContain("OpenStreetMap");
+    view.unmount();
+    expect(useMapAttributionStore.getState().byLayer).toEqual({});
+  });
+  it("does not paint the previous route's lane choice during the reroute render", () => {
+    useNavLaneGuidanceStore.setState({
+      routeIdentity: route,
+      guidanceByStep: new Map([
+        [
+          1,
+          {
+            source: "osm",
+            lanes: [
+              { indications: ["through"], valid: true, preferred: true },
+              { indications: ["right"], valid: false },
+            ],
+            usableLanes: [0],
+            preferredLanes: [0],
+            state: "known",
+          },
+        ],
+      ]),
+    });
+    useNavigationStore.setState({
+      route: {
+        ...route,
+        steps: route.steps.map((step, i) =>
+          i === 1
+            ? {
+                ...step,
+                lanes: [
+                  { indications: ["through"], valid: false },
+                  { indications: ["right"], valid: true, preferred: true },
+                ],
+              }
+            : step,
+        ),
+      },
+    });
+    const view = mount();
+    expect(
+      [...view.container.querySelectorAll("[data-valid]")].map((cell) =>
+        cell.getAttribute("data-valid"),
+      ),
+    ).toEqual(["false", "true"]);
   });
 
   it("colours the sign by the country the exit stands in, not the origin's", () => {

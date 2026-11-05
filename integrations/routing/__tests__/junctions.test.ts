@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import holz from "../../../packages/core/src/navigation/__fixtures__/junction/a44-kreuz-holz-a46.json";
 
 const overpassQuerySafe = vi.fn();
 
@@ -123,7 +124,7 @@ describe("buildJunctionsQuery", () => {
     expect(query).toBe(
       `[out:json][timeout:25];(way(around:20,${TRACE.map(([lng, lat]) => `${lat},${lng}`).join(
         ",",
-      )})["highway"~"^(motorway|trunk|motorway_link|trunk_link)$"];);out tags geom;`,
+      )})["highway"~"^(motorway|trunk|motorway_link|trunk_link)$"];);out body geom;`,
     );
     expect((query.match(/around:/g) ?? []).length).toBe(1);
   });
@@ -146,6 +147,13 @@ describe("junctionCacheKey", () => {
 });
 
 describe("mapJunctionWays", () => {
+  it("preserves travel-direction geometry for matching the incoming lane layout", () => {
+    const result = mapJunctionWays([APPROACH_WAY], point());
+    expect(result.approach[0].geometry).toEqual([
+      [6.6785, 51.1786],
+      [6.6768301, 51.1788713],
+    ]);
+  });
   const mapped = () => parseJunctionPoints({ points: [point()] })?.[0] as ReturnType<typeof point>;
 
   it("reads the bearing at the node nearest the point, splits ramps off, and signs the end distance", () => {
@@ -195,7 +203,7 @@ describe("mapJunctionWays", () => {
     expect(mapJunctionWays([DOWNSTREAM_WAY], mapped()).onMotorway).toBe(true);
   });
 
-  it("counts an untagged trunk carriageway as the road, but never draws it as a gantry", () => {
+  it("recognizes an untagged trunk carriageway without inventing lane tags", () => {
     const untagged: OverpassWayElement = {
       type: "way",
       id: 55,
@@ -209,6 +217,35 @@ describe("mapJunctionWays", () => {
     const result = mapJunctionWays([untagged], mapped());
     expect(result.onMotorway).toBe(true);
     expect(result.approach).toEqual([]);
+  });
+
+  it("returns approach lane counts even without destination or turn tags", () => {
+    const result = mapJunctionWays(
+      [{ ...APPROACH_WAY, tags: { highway: "motorway", oneway: "yes", lanes: "4" } }],
+      mapped(),
+    );
+    expect(result.approach[0]?.tags).toEqual({ lanes: 4 });
+    expect(result.onMotorway).toBe(true);
+  });
+
+  it.each(["4.5", "0", "-2", "unknown"])(
+    "does not admit lane-only geometry for invalid count %s",
+    (lanes) => {
+      const result = mapJunctionWays(
+        [{ ...APPROACH_WAY, tags: { highway: "motorway", oneway: "yes", lanes } }],
+        mapped(),
+      );
+      expect(result.approach).toEqual([]);
+    },
+  );
+
+  it("does not use both directions' lane total on a two-way trunk approach", () => {
+    const result = mapJunctionWays(
+      [{ ...APPROACH_WAY, tags: { highway: "trunk", lanes: "4" } }],
+      mapped(),
+    );
+    expect(result.approach).toEqual([]);
+    expect(result.onMotorway).toBe(true);
   });
 
   it("does not put an on-ramp's surface street on the motorway", () => {
@@ -231,55 +268,6 @@ describe("mapJunctionWays", () => {
       geometry: [...(DOWNSTREAM_WAY.geometry ?? [])].reverse(),
     };
     expect(mapJunctionWays([oncoming], mapped()).onMotorway).toBe(false);
-  });
-
-  describe("where the exit lanes already exist", () => {
-    // The real OSM chain into exit 20: four lanes, then a fifth added 41 m
-    // before the split.
-    const way = (id: number, lanes: string, nodes: [number, number][]): OverpassWayElement => ({
-      type: "way",
-      id,
-      tags: { highway: "motorway", oneway: "yes", lanes },
-      geometry: nodes.map(([lon, lat]) => ({ lat, lon })),
-    });
-    const FOUR_LANES_FAR = way(314653470, "4", [
-      [6.6819535, 51.1781486],
-      [6.6795424, 51.1784787],
-    ]);
-    const FOUR_LANES = way(314653467, "4", [
-      [6.6795424, 51.1784787],
-      [6.6774012, 51.1787881],
-    ]);
-    const FIVE_LANES = way(314653466, "5", [
-      [6.6774012, 51.1787881],
-      [6.6768301, 51.1788713],
-    ]);
-    const atSplit = () =>
-      point({ lng: 6.6768301, lat: 51.1788713, bearing: 283 }) as ReturnType<typeof point>;
-
-    it("measures from where the lane count at the split begins", () => {
-      const result = mapJunctionWays(
-        [FOUR_LANES_FAR, FOUR_LANES, FIVE_LANES, DOWNSTREAM_WAY, RAMP_WAY],
-        atSplit(),
-      );
-      expect(result.fullLanesFromMeters).toBe(41);
-    });
-
-    it("follows the carriageway across ways cut for other reasons", () => {
-      const bridge = way(9, "5", [
-        [6.6795424, 51.1784787],
-        [6.6774012, 51.1787881],
-      ]);
-      const result = mapJunctionWays([FOUR_LANES_FAR, bridge, FIVE_LANES], atSplit());
-      expect(result.fullLanesFromMeters).toBe(194);
-    });
-
-    it("is absent when the way at the split has no lane count", () => {
-      const untagged: OverpassWayElement = { ...FIVE_LANES, tags: { highway: "motorway" } };
-      expect(mapJunctionWays([FOUR_LANES, untagged], atSplit()).fullLanesFromMeters).toBe(
-        undefined,
-      );
-    });
   });
 
   it("keeps the downstream continuation out of the approach set", () => {
@@ -407,4 +395,57 @@ describe("POST /navigation/junctions", () => {
     await handler({ body: { points: [point(), farPoint()] }, query: {} }, createRoutingTestReply());
     expect(overpassQuerySafe).not.toHaveBeenCalled();
   });
+});
+
+describe("connected outgoing roads at Kreuz Holz", () => {
+  it("includes the continuing motorway and the routed ramp at their shared OSM node", () => {
+    const result = mapJunctionWays(
+      holz.osmTopology as unknown as OverpassWayElement[],
+      holz.lookupPoint,
+    );
+    expect(result.outgoing?.map((way) => way.wayId).sort()).toEqual([168452743, 971245022]);
+    expect(result.outgoing?.find((way) => way.wayId === 971245022)?.tags.destination).toBe(
+      "Heinsberg;Venlo;Mönchengladbach",
+    );
+  });
+
+  it("rejects a nearby road with a different start node, even at the same coordinates", () => {
+    const adjacent = {
+      ...holz.osmTopology[2],
+      id: 987,
+      nodes: [999, ...holz.osmTopology[2].nodes.slice(1)],
+    };
+    const result = mapJunctionWays(
+      [...holz.osmTopology, adjacent] as unknown as OverpassWayElement[],
+      holz.lookupPoint,
+    );
+    expect(result.outgoing?.some((way) => way.wayId === 987)).toBe(false);
+  });
+
+  it("uses travel node order for a reversed one-way outgoing road", () => {
+    const forward = holz.osmTopology[2];
+    const reverse = {
+      ...forward,
+      tags: { ...forward.tags, oneway: "-1" },
+      nodes: [...forward.nodes].reverse(),
+      geometry: [...forward.geometry].reverse(),
+    };
+    const result = mapJunctionWays(
+      [holz.osmTopology[0], holz.osmTopology[1], reverse] as unknown as OverpassWayElement[],
+      holz.lookupPoint,
+    );
+    expect(result.outgoing?.map((way) => way.wayId).sort()).toEqual([168452743, 971245022]);
+  });
+});
+
+it("binds outgoing topology to its approach way and rejects incomplete node arrays", () => {
+  const elements = holz.osmTopology as unknown as OverpassWayElement[];
+  const result = mapJunctionWays(elements, holz.lookupPoint);
+  expect(result.outgoingApproachWayId).toBe(971245021);
+  const malformed = elements.map((entry) =>
+    entry.id === 971245022 ? { ...entry, nodes: entry.nodes?.slice(0, 1) } : entry,
+  );
+  expect(
+    mapJunctionWays(malformed, holz.lookupPoint).outgoing?.some((road) => road.wayId === 971245022),
+  ).toBe(false);
 });

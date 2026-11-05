@@ -7,7 +7,6 @@ interface Fixture {
   manifest: { capturedAt: string; synthetic: string[] };
   route: Route;
   ways: { wayId: number; tags: Record<string, string> }[];
-  images: { id: string; properties: Record<string, unknown>; providers?: unknown }[];
 }
 
 const fixture = JSON.parse(
@@ -32,22 +31,5 @@ describe("A57 Neuss exit 20 golden fixture", () => {
     expect(exitStep.motorway).toBeUndefined();
     expect(exitStep.bearingBefore).toBe(283);
     expect(exitStep.bearingAfter).toBe(300);
-  });
-
-  it("holds imagery from 2019 and 2025 in the live item shape", () => {
-    expect(fixture.images.length).toBeGreaterThanOrEqual(6);
-    const in2019 = fixture.images.filter((i) => String(i.properties.datetime).startsWith("2019"));
-    const in2025 = fixture.images.filter((i) => String(i.properties.datetime).startsWith("2025"));
-    expect(in2019.length).toBeGreaterThanOrEqual(3);
-    expect(in2025.length).toBeGreaterThanOrEqual(2);
-    // Live Panoramax items carry providers at the Feature top level and the
-    // producer as a plain string, never under properties.
-    for (const image of fixture.images) {
-      expect(Array.isArray(image.providers)).toBe(true);
-      expect(image.properties.providers).toBeUndefined();
-    }
-    expect(fixture.images.every((i) => typeof i.properties["geovisio:producer"] === "string")).toBe(
-      true,
-    );
   });
 });

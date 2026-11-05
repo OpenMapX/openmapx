@@ -1,10 +1,11 @@
 import type { Route } from "../types/routing";
+import { prepareManeuverPositions } from "./maneuverPosition";
 import type { ProgressResult } from "./types";
 
 /**
  * Map a distance traveled along the route to the current step, the distance to
  * the next maneuver, and the remaining distance/duration to the destination.
- * Step boundaries are derived from per-step `distance` (cumulative).
+ * Step boundaries use the same ordered geometry occurrences as route snapping.
  *
  * `forcedStepIndex` overrides which step is treated as current — passed by the
  * step-advance gate so the displayed/announced step only advances once the
@@ -40,43 +41,29 @@ export function computeProgress(
       durationRemaining,
     };
   }
-  const total = route.distance;
+  const positions = prepareManeuverPositions(route);
+  const total = positions.total;
   const along = Math.max(0, Math.min(alongMeters, total));
-
-  // The geometric step the snapped position is actually in — drives the
-  // distance/duration remaining (ETA), which must stay independent of the gate.
   let rawIdx = steps.length - 1;
-  let cumEnd = 0;
   for (let i = 0; i < steps.length; i++) {
-    cumEnd += steps[i].distance;
-    if (along <= cumEnd) {
+    if (along <= positions.ends[i]) {
       rawIdx = i;
       break;
     }
   }
-
-  // The displayed/announced step: the gate may hold an earlier one until the
-  // maneuver is completed.
   const idx =
     forcedStepIndex != null ? Math.min(Math.max(forcedStepIndex, 0), steps.length - 1) : rawIdx;
-
-  // Distance to the next maneuver is to the end of the DISPLAY step.
-  let endOfDisplay = 0;
-  for (let i = 0; i <= idx; i++) endOfDisplay += steps[i].distance;
-  const distanceToNextManeuver = Math.max(0, endOfDisplay - along);
-
-  const distanceRemaining = Math.max(0, total - along);
-
-  // Duration remaining is geometric: pro-rate the RAW current step by how much of
-  // it is left, then add every later step — so a lagging display gate can't add
-  // the already-driven part of the current step back into the ETA.
-  let endOfRaw = 0;
-  for (let i = 0; i <= rawIdx; i++) endOfRaw += steps[i].distance;
-  const rawCurrent = steps[rawIdx];
-  const rawDistanceToEnd = Math.max(0, endOfRaw - along);
-  const fractionLeft = rawCurrent.distance > 0 ? rawDistanceToEnd / rawCurrent.distance : 0;
-  let durationRemaining = rawCurrent.duration * fractionLeft;
-  for (let i = rawIdx + 1; i < steps.length; i++) durationRemaining += steps[i].duration;
+  const distanceToNextManeuver = Math.max(0, positions.ends[idx] - along);
+  const rawLength = positions.ends[rawIdx] - positions.starts[rawIdx];
+  const fractionLeft =
+    rawLength > 0 ? Math.min(1, Math.max(0, (positions.ends[rawIdx] - along) / rawLength)) : 0;
+  // Convert the physical fraction back into provider travel-distance and ETA units.
+  let distanceRemaining = steps[rawIdx].distance * fractionLeft;
+  let durationRemaining = steps[rawIdx].duration * fractionLeft;
+  for (let i = rawIdx + 1; i < steps.length; i++) {
+    distanceRemaining += steps[i].distance;
+    durationRemaining += steps[i].duration;
+  }
 
   return { currentStepIndex: idx, distanceToNextManeuver, distanceRemaining, durationRemaining };
 }
@@ -97,11 +84,7 @@ export function upcomingManeuverIndex(currentStepIndex: number, stepCount: numbe
   return Math.min(currentStepIndex + 1, stepCount - 1);
 }
 
-/**
- * Along-route distance at which `steps[stepIndex]` begins — the point where its
- * maneuver happens, in the same metric `computeProgress` uses for
- * `distanceToNextManeuver` (summed step distances, not geometry).
- */
+/** Legacy engine-distance metric; use maneuverStartMeters(route, index) for geometry positions. */
 export function stepStartMeters(steps: readonly { distance: number }[], stepIndex: number): number {
   let along = 0;
   for (let i = 0; i < stepIndex && i < steps.length; i += 1) along += steps[i].distance;

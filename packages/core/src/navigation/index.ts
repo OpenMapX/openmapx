@@ -91,19 +91,18 @@ export {
   sameJunction,
 } from "./junctionDetect";
 export { junctionLookupPoints } from "./junctionLookup";
-export { type SelectJunctionPhotoOptions, selectJunctionPhoto } from "./junctionPhoto";
-export { buildJunctionSchematic } from "./junctionSchematic";
 export {
   guidanceApproachMeters,
-  junctionPhotoApproachMeters,
+  type ResolvedLaneGuidance,
   resolveGuidanceLanes,
+  resolveLaneGuidance,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "./lanes";
 export {
+  type ApproachLaneGuidance,
   laneDestinationsAt,
-  mergeExitPanel,
-  parseLaneTags,
+  resolveApproachLaneGuidance,
   selectApproachWay,
   selectRampWay,
 } from "./laneTags";
@@ -114,6 +113,11 @@ export {
   maneuverArrowSpans,
   maneuverArrowTipBearing,
 } from "./maneuverArrow";
+export {
+  type ManeuverPositions,
+  maneuverStartMeters,
+  prepareManeuverPositions,
+} from "./maneuverPosition";
 export {
   type CarDestination,
   type CarDestinations,
@@ -179,15 +183,6 @@ export {
   parseNavigationSessionSnapshot,
 } from "./offlineSession";
 export { navOptionsForMode } from "./options";
-export {
-  type ApproachCamera,
-  approachCamera,
-  type PhotoCropWindow,
-  type PhotoPathPoint,
-  type PhotoProjectionOptions,
-  type PhotoRoutePath,
-  projectRoutePath,
-} from "./photoProjection";
 export { processFix } from "./processFix";
 export {
   DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -279,7 +274,13 @@ export {
   routeAheadBounds,
   routeSearchChunks,
 } from "./searchAlongRoute";
-export { refKind, signHeadline, visibleToward } from "./signFormat";
+export {
+  cleanSignTexts,
+  exitNumberLabel,
+  refKind,
+  signHeadline,
+  visibleToward,
+} from "./signFormat";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
