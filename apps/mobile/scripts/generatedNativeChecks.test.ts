@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { AndroidManifestLike } from "../plugins/nativeConfigTransforms";
 import { REQUIRED_ANDROID_PERMISSIONS } from "../plugins/nativeConfigTransforms";
 import {
+  intakeDocumentTypes,
+  intakeReceiverDeclaration,
+  intakeShareInfo,
+} from "../plugins/withNativeIntake";
+import {
   checkGeneratedNativeSurface,
   type ExpectedNativeSurface,
   type GeneratedNativeSurface,
@@ -53,6 +58,7 @@ function androidManifest(): AndroidManifestLike {
             "android:allowBackup": "false",
             "android:networkSecurityConfig": "@xml/network_security_config",
           },
+          activity: [intakeReceiverDeclaration()],
           "meta-data": [
             { $: { "android:name": "expo.modules.updates.ENABLED", "android:value": "false" } },
           ],
@@ -64,12 +70,31 @@ function androidManifest(): AndroidManifestLike {
 
 function surface(): GeneratedNativeSurface {
   return {
+    shareExtension: {
+      infoPlist: intakeShareInfo("org.openmapx.app"),
+      entitlements: { "com.apple.security.application-groups": ["group.org.openmapx.app.intake"] },
+      privacy: {
+        NSPrivacyAccessedAPITypes: [
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+            NSPrivacyAccessedAPITypeReasons: ["C617.1", "3B52.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategorySystemBootTime",
+            NSPrivacyAccessedAPITypeReasons: ["35F9.1"],
+          },
+        ],
+      },
+    },
     navigationExtension: {
       NSExtension: { NSExtensionPointIdentifier: "com.apple.widgetkit-extension" },
       CFBundleVersion: "$(CURRENT_PROJECT_VERSION)",
       CFBundleShortVersionString: "$(MARKETING_VERSION)",
     },
     infoPlist: {
+      LSSupportsOpeningDocumentsInPlace: true,
+      CFBundleDocumentTypes: intakeDocumentTypes(),
+      OpenMapXIntakeAppGroup: "group.org.openmapx.app.intake",
       NSMicrophoneUsageDescription:
         "OpenMapX uses the microphone for voice search when you tap the microphone button.",
       NSSpeechRecognitionUsageDescription:
@@ -94,13 +119,14 @@ function surface(): GeneratedNativeSurface {
       NSFileProtectionKey: "NSFileProtectionCompleteUntilFirstUserAuthentication",
     },
     entitlements: {
+      "com.apple.security.application-groups": ["group.org.openmapx.app.intake"],
       "com.apple.developer.associated-domains": [
         "applinks:openmapx.com",
         "webcredentials:openmapx.com",
       ],
     },
     pbxproj:
-      "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app;\nPRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.NavigationSurface;\nIPHONEOS_DEPLOYMENT_TARGET = 16.4;\nAPPLICATION_EXTENSION_API_ONLY = YES;\nOpenMapXNavigationSurface.appex in Copy Files\n",
+      "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app;\nPRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.NavigationSurface;\nPRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.ShareExtension;\nOpenMapXShareExtension.appex in Copy Files\nOpenMapXShareExtension/ShareExtension.entitlements\nIPHONEOS_DEPLOYMENT_TARGET = 16.4;\nAPPLICATION_EXTENSION_API_ONLY = YES;\nOpenMapXNavigationSurface.appex in Copy Files\n",
     podfileProperties: { "ios.deploymentTarget": "16.4" },
     androidManifest: androidManifest(),
     networkSecurityConfig: '<base-config cleartextTrafficPermitted="false">',
@@ -144,7 +170,7 @@ describe("iOS policy", () => {
         value.pbxproj += "PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.extra;\n";
       }),
     ).toContainEqual(
-      expect.stringContaining("exactly app and navigation extension bundle identifiers"),
+      expect.stringContaining("exactly app, navigation and share extension bundle identifiers"),
     );
   });
 
@@ -375,7 +401,7 @@ describe("storage and component exposure", () => {
     ).toContainEqual(expect.stringContaining("NSFileProtectionComplete"));
   });
 
-  it.each(["UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"])(
+  it.each(["UIFileSharingEnabled", "UISupportsDocumentBrowser"])(
     "rejects %s, which would expose the session database",
     (key) => {
       expect(
@@ -431,6 +457,7 @@ describe("storage and component exposure", () => {
           activity?: Array<{ $: Record<string, string>; "intent-filter"?: unknown[] }>;
         };
         application.activity = [
+          ...(application.activity ?? []),
           {
             $: { "android:name": ".MainActivity", "android:exported": "true" },
             "intent-filter": [{}],
@@ -446,6 +473,82 @@ it("requires the generated ActivityKit support flag", () => {
   delete value.infoPlist.NSSupportsLiveActivities;
   expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
     expect.stringContaining("NSSupportsLiveActivities"),
+  );
+});
+
+it("rejects intake groups leaking to the navigation widget or broad extension entitlements", () => {
+  const widget = surface();
+  widget.pbxproj +=
+    "\nbuildSettings = { PRODUCT_BUNDLE_IDENTIFIER = org.openmapx.app.NavigationSurface; CODE_SIGN_ENTITLEMENTS = Other.entitlements; };";
+  expect(checkGeneratedNativeSurface(widget, EXPECTED)).toContainEqual(
+    expect.stringContaining("navigation extension must not receive"),
+  );
+  const broad = surface();
+  if (!broad.shareExtension) throw new Error("missing fixture");
+  broad.shareExtension.entitlements["aps-environment"] = "development";
+  expect(checkGeneratedNativeSurface(broad, EXPECTED)).toContainEqual(
+    expect.stringContaining("exactly the intake App Group"),
+  );
+});
+it("requires explicit opening-in-place true and a real extension privacy manifest", () => {
+  const allowed = surface();
+  expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toEqual([]);
+  allowed.infoPlist.LSSupportsOpeningDocumentsInPlace = false;
+  expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toContainEqual(
+    expect.stringContaining("explicitly true"),
+  );
+  const missing = surface();
+  if (!missing.shareExtension) throw new Error("missing fixture");
+  missing.shareExtension.privacy = {};
+  expect(checkGeneratedNativeSurface(missing, EXPECTED)).toContainEqual(
+    expect.stringContaining("privacy manifest"),
+  );
+});
+it("rejects missing selected-file metadata or deadline privacy reasons", () => {
+  const value = surface();
+  if (!value.shareExtension) throw new Error("missing fixture");
+  value.shareExtension.privacy = {
+    NSPrivacyAccessedAPITypes: [
+      {
+        NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+        NSPrivacyAccessedAPITypeReasons: ["C617.1"],
+      },
+    ],
+  };
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("privacy manifest"),
+  );
+});
+it("rejects broad share activation rules", () => {
+  const value = surface();
+  if (!value.shareExtension) throw new Error("missing fixture");
+  value.shareExtension.infoPlist.NSExtension = {
+    NSExtensionPointIdentifier: "com.apple.share-services",
+    NSExtensionAttributes: { NSExtensionActivationRule: "TRUEPREDICATE" },
+  };
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("bounded geographic activation"),
+  );
+});
+
+it("keeps intake out of the React task and receiver out of history", () => {
+  const value = surface();
+  const app = value.androidManifest.manifest.application?.[0];
+  if (!app) throw new Error("missing fixture");
+  const activities = app.activity as Array<{
+    $: Record<string, string>;
+    "intent-filter"?: unknown[];
+  }>;
+  activities[0].$["android:noHistory"] = "false";
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("nonhistorical activity"),
+  );
+  activities.push({
+    $: { "android:name": ".MainActivity", "android:exported": "true" },
+    "intent-filter": [{ action: [{ $: { "android:name": "android.intent.action.SEND" } }] }],
+  });
+  expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
+    expect.stringContaining("never the React task"),
   );
 });
 

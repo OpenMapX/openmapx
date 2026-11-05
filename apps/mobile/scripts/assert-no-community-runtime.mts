@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { hasIosOnDeviceGuard } from "./voiceCapturePolicy.ts";
 import { hasWebViewCaptureDenial } from "./webViewCapturePolicy.ts";
+import { hasWebViewDocumentStartPolicy } from "./webViewDocumentPolicy.ts";
 
 const repoRoot = resolve(import.meta.dirname, "../../..");
 
@@ -159,6 +160,16 @@ if (!hasWebViewCaptureDenial(readFileSync(webViewSource, "utf8"))) {
     problem: "installed WebView capture-denial patch is missing",
   });
 }
+
+const documentSource = join(
+  dirname(require.resolve("react-native-webview/package.json")),
+  "android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java",
+);
+if (!hasWebViewDocumentStartPolicy(readFileSync(documentSource, "utf8")))
+  findings.push({
+    file: documentSource,
+    problem: "installed WebView document-start patch is missing",
+  });
 
 const speechSource = join(
   dirname(require.resolve("expo-speech-recognition/package.json")),

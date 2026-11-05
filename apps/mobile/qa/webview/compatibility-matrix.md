@@ -1,10 +1,9 @@
 # Web / native protocol matrix
 
-The committed shell, web protocol constants and release descriptor support v3
-only. This repository matrix does not establish live deployment history. A page advertising any other range must fail
-honestly, and no refused pairing may ever let the browser start a second
-navigation engine. A future release may introduce an overlap window once an
-older deployed binary actually exists.
+The shell and new web client support protocols 3–4. Navigation retains protocol 3;
+intake requires selected protocol 4 plus `nativeIntake`. This source matrix does
+not establish deployed build history. A non-overlapping pairing disables native
+navigation without allowing a second browser engine.
 
 ## Where this is enforced
 
@@ -17,37 +16,33 @@ The protocol contracts are covered by:
 - `packages/core/src/navigation/mobileProtocol.test.ts` covers the current vocabulary
   and exact request/reply correlation contract.
 
-Run the manual checks on a composed virtual-device build when changing the
-protocol. A compatible handshake does not establish that navigation is available:
-`src/App.tsx` currently reports every navigation capability false.
+The composed shell reports actual navigation and optional module capabilities.
 
 ## The matrix
 
-| Native | Web             | Handshake   | Notes                                                   |
-| ------ | --------------- | ----------- | ------------------------------------------------------- |
-| v3     | v3              | Negotiates  | Navigation also requires composed capabilities.         |
-| v3     | Previous-only   | **Refused** | Update required. No browser engine, no partial session. |
-| v3     | Future-only     | **Refused** | Update required. No browser engine, no partial session. |
-| v3     | Malformed hello | **Refused** | Channel stays unhandshaken rather than half-open.       |
+| Native | Web             | Handshake | Behavior                                                                    |
+| ------ | --------------- | --------- | --------------------------------------------------------------------------- |
+| 3      | 3–4             | 3         | Existing navigation; no intake commands.                                    |
+| 3–4    | 3               | 3         | Navigation and pre-hello snapshots/events use 3; intake capability omitted. |
+| 3–4    | 3–4             | 4         | Navigation plus bounded intake when the module is available.                |
+| 3–4    | No overlap      | Refused   | Update required; no browser navigation fallback.                            |
+| 3–4    | Malformed hello | Refused   | Channel stays unhandshaken.                                                 |
 
-## Future version changes
-
-Do not add compatibility machinery speculatively. Once a v3 binary is deployed,
-a later protocol change must define its concrete overlap window, tests, and
-deployment order from the capabilities of those real releases.
+Deploy compatible web first, then ship rebuilt native apps. Older web builds
+retain navigation and receive a native notice about pending content. They do not
+drain the inbox. Unopened items expire after 24 hours.
 
 ## Manual checks on a virtual device
 
 Run these when the protocol changes. Use a development identity for alternate
 local origins; the official release identity is bound to the official origin.
-Active-session checks require a composed dispatcher and remain blocked in the
-current app.
+Active-session checks require the normal composed dispatcher.
 
 - [ ] Point the app at a web build advertising a range below v3. Confirm the
       update-required copy appears and that Start is disabled.
-- [ ] Point it at the current v3 web build. Confirm v3 is selected and the advertised capabilities match actual
-      composition. The current app must report navigation unavailable.
-- [ ] Point it at a web build advertising a range above v3. Confirm the
+- [ ] Point it at the current v3–4 web build. Confirm v3 is selected and the advertised capabilities match actual
+      composition. Capabilities must reflect the composed runtime.
+- [ ] Point it at a web build advertising a range above v4. Confirm the
       update-required copy appears, that Start is disabled, and that browsing and
       route planning still work.
 - [ ] Reload the WebView during an active session. Confirm a fresh handshake,
@@ -57,3 +52,8 @@ current app.
       then reload. Confirm the session survives and renegotiates cleanly.
 - [ ] Confirm that in every refused case above, no browser geolocation watch, no
       browser voice, and no browser session record appears.
+
+- [ ] With protocol 3, share nine items: existing navigation remains usable,
+      content quota stays at eight, and overflow has an explanatory native notice.
+- [ ] With protocol 4, reload during a chunk transfer: content remains pending,
+      stale replies do not reach the next document, and explicit import can retry.

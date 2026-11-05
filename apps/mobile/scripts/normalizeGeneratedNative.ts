@@ -28,6 +28,7 @@ export interface NormalizedNativeSurface {
     exceptionDomains: string[];
     dataProtection: unknown;
     sharingKeys: string[];
+    openingDocumentsInPlace: boolean | null;
   };
   android: {
     permissions: string[];
@@ -97,10 +98,14 @@ export function normalizeGeneratedNativeSurface(
         Object.keys((transport.NSExceptionDomains ?? {}) as Record<string, unknown>),
       ),
       dataProtection: plist.NSFileProtectionKey ?? null,
-      // Present only if something regressed; tracked so it would change the hash.
+      openingDocumentsInPlace:
+        typeof plist.LSSupportsOpeningDocumentsInPlace === "boolean"
+          ? plist.LSSupportsOpeningDocumentsInPlace
+          : null,
+      // These keys expose app documents, unlike opening a user-selected file.
       sharingKeys: sortedUnique(
         Object.keys(plist).filter(
-          (key) => key === "UIFileSharingEnabled" || key === "LSSupportsOpeningDocumentsInPlace",
+          (key) => key === "UIFileSharingEnabled" || key === "UISupportsDocumentBrowser",
         ),
       ),
     },

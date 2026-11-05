@@ -173,6 +173,7 @@ export {
   type SessionParseResult,
   type TransitMobileSession,
 } from "./mobileSession";
+export * from "./nativeIntake";
 export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,

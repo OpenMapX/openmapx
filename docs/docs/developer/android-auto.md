@@ -155,12 +155,14 @@ those outcomes.
 
 ### Destinations, planning and start policy
 
-The phone page publishes `destinations.update` only after protocol v3 negotiation
+The phone page publishes `destinations.update` only after phone-bridge negotiation
 reports the optional `carDestinations` capability. The schema permits at most 20
 recent coordinate-bearing selections and 50 saved places, IDs up to 128 characters,
 labels up to 160, finite WGS84 `[longitude, latitude]` coordinates, locale/units and
 captured routing/voice preferences. The destinations payload has a 64 KiB ceiling.
-Query-only recent searches are not given invented coordinates.
+New shells advertise this capability to protocol-4 peers; protocol-3 navigation
+stays compatible with older strict hello schemas. Query-only recent searches
+are not given invented coordinates.
 
 Saved places are account-keyed; recent selections are scoped to the current
 account. The shell stores **one current instance/account projection** in SQLite,
@@ -226,7 +228,7 @@ and speaker routing cannot be accepted from DHU alone.
 ## Car surface protocol
 
 Every JSON message has `{ v: 1, type, ... }`. This is separate from the nested
-phone bridge's protocol v3. The page sends through
+phone bridge's negotiated protocol 3/4. The page sends through
 `OpenMapXCar.postMessage(JSON.stringify(message))`; native replies through
 `JavaScriptReplyProxy`, delivered to `OpenMapXCar.onmessage`.
 

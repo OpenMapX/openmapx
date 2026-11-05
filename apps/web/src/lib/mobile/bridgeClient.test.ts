@@ -1,5 +1,5 @@
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BridgeClient,
   BridgeError,
@@ -580,4 +580,72 @@ describe("BridgeError", () => {
     expect(error.code).toBe("timeout");
     expect(error.name).toBe("BridgeError");
   });
+});
+
+describe("older native protocol negotiation", () => {
+  it("accepts version 3 and uses it for subsequent navigation requests", async () => {
+    const context = harness();
+    context.client.attach();
+    const promise = context.client.hello();
+    const sent = JSON.parse(context.sent[0]);
+    const reply = helloReply(sent.messageId, {
+      selectedProtocolVersion: 3,
+      minProtocolVersion: 3,
+      maxProtocolVersion: 3,
+    });
+    reply.protocolVersion = 3;
+    context.deliver(reply);
+    await expect(promise).resolves.toMatchObject({ selectedProtocolVersion: 3 });
+    const pending = context.client.request("snapshot.request", {});
+    expect(JSON.parse(context.sent[1]).protocolVersion).toBe(3);
+    context.client.close();
+    await expect(pending).rejects.toBeInstanceOf(BridgeError);
+  });
+});
+
+it("accepts a null selection using the incompatible native's declared envelope version", async () => {
+  const context = harness();
+  context.client.attach();
+  const pending = context.client.hello();
+  const sent = JSON.parse(context.sent[0]);
+  const reply = helloReply(sent.messageId, {
+    selectedProtocolVersion: null,
+    minProtocolVersion: 2,
+    maxProtocolVersion: 2,
+  });
+  reply.protocolVersion = 2;
+  context.deliver(reply);
+  await expect(pending).resolves.toMatchObject({ selectedProtocolVersion: null });
+  context.client.close();
+});
+
+it("uses real browser timer defaults for deadlines and cancellation", async () => {
+  vi.useFakeTimers();
+  const schedule = vi.spyOn(globalThis, "setTimeout");
+  const cancel = vi.spyOn(globalThis, "clearTimeout");
+  const shell = shellScope();
+  const client = new BridgeClient({ webBuildId: "production-timers", scope: shell.scope });
+  try {
+    client.attach();
+    const ready = client.hello();
+    const hello = JSON.parse(shell.sent[0]);
+    shell.deliver(helloReply(hello.messageId));
+    await ready;
+    expect(cancel).toHaveBeenCalledTimes(1);
+    const timedOut = client.request("intake.list", {}).catch((error: unknown) => error);
+    expect(schedule).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS);
+    expect(await timedOut).toMatchObject({ code: "timeout" });
+    expect(client.pendingCount).toBe(0);
+    const cancelled = client.request("intake.list", {}).catch((error: unknown) => error);
+    expect(schedule).toHaveBeenCalledTimes(3);
+    client.close();
+    expect(await cancelled).toMatchObject({ code: "channel-reset" });
+    expect(cancel).toHaveBeenCalledTimes(2);
+  } finally {
+    client.close();
+    schedule.mockRestore();
+    cancel.mockRestore();
+    vi.useRealTimers();
+  }
 });

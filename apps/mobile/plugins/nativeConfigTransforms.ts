@@ -71,7 +71,7 @@ export const FORBIDDEN_IOS_ENTITLEMENTS = ["aps-environment"] as const;
  */
 export const FORBIDDEN_IOS_SHARING_KEYS = [
   "UIFileSharingEnabled",
-  "LSSupportsOpeningDocumentsInPlace",
+  "UISupportsDocumentBrowser",
 ] as const;
 
 /**
@@ -87,6 +87,7 @@ export function applyDataProtection(plist: InfoPlistLike): InfoPlistLike {
   const next: InfoPlistLike = {
     ...plist,
     NSFileProtectionKey: IOS_DATA_PROTECTION_CLASS,
+    LSSupportsOpeningDocumentsInPlace: true,
   };
   for (const key of FORBIDDEN_IOS_SHARING_KEYS) delete next[key];
   return next;

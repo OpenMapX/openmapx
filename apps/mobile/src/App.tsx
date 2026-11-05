@@ -24,6 +24,8 @@ import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge"
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
+import { IntakeController } from "./intake/IntakeController";
+import { createNativeIntakePort, NativeIntakeError } from "./intake/nativeIntakeModule";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
@@ -114,6 +116,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       subscription.remove();
     };
   }, [voiceIntent]);
+  const webSource = useMemo(() => ({ uri: new URL(config.webOrigin).href }), [config.webOrigin]);
   const handleNavigationStateChange = useHardwareBack(webViewRef);
   useEffect(() => {
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibility));
@@ -142,7 +145,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     navigatingRef.current = navigating;
     dispatchShell({ type: navigating ? "session-started" : "session-ended" });
   }, []);
+  const intakePort = useMemo(() => createNativeIntakePort(), []);
   const { shell, navigation, voice } = useMemo(() => {
+    let intake: IntakeController;
     let navigation: Promise<ForegroundNavigation | null> = Promise.resolve(null);
     const voice = new VoiceInputController({
       module: ExpoSpeechRecognitionModule,
@@ -161,6 +166,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       // answers the one-shot location, settings and sign-in requests. A build
       // without it (the feasibility probe) answers only those.
       dispatch: async (message) => {
+        if (message.type.startsWith("intake.")) {
+          await intake.dispatch(message);
+          return;
+        }
         if (message.type === "voice.probe") {
           composed.bridge.send(
             "voice.availability",
@@ -200,7 +209,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
           composed.bridge.send(type, payload, options),
         );
       },
-      capabilities: async () => (await navigation)?.capabilities() ?? NO_NAVIGATION,
+      capabilities: async () => ({
+        ...((await navigation)?.capabilities() ?? NO_NAVIGATION),
+        nativeIntake: await intakePort.available(),
+      }),
       permission: () => services.permission(),
       activeSession: async () => (await navigation)?.activeSession() ?? null,
     });
@@ -215,8 +227,26 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         onNavigatingChanged: setNavigating,
       }).catch(() => null);
     }
-    return { shell: composed, navigation, voice };
-  }, [config, locale, prompter, services, setNavigating, voiceIntent]);
+    intake = new IntakeController({
+      port: intakePort,
+      scheme: config.scheme,
+      currentNonce: () => composed.registry.current()?.nonce,
+      send: (type, payload) => composed.bridge.send(type, payload),
+      canApply: async () => {
+        const runtime = await navigation;
+        if (runtime === null) {
+          if (config.feasibilityMode) return true;
+          throw new NativeIntakeError("navigation-unavailable");
+        }
+        try {
+          return (await runtime.activeSession()) === null;
+        } catch {
+          throw new NativeIntakeError("navigation-unavailable");
+        }
+      },
+    });
+    return { shell: composed, navigation, intake, voice };
+  }, [config, locale, prompter, services, setNavigating, intakePort, voiceIntent]);
   useEffect(() => {
     if (visibility !== "active") voice.suspend();
   }, [visibility, voice]);
@@ -280,20 +310,33 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   /**
    * The nonce the document-start script currently publishes.
    *
-   * It is rotated only after a load finishes, never while one is in flight: the
+   * It is rotated after a load finishes or fails, never while one is in flight: the
    * script that carries it runs as the document is created, so changing it
    * mid-navigation would hand the page a value the shell no longer accepts.
    */
   const [publishedNonce, setPublishedNonce] = useState(() => shell.registry.mintNonce());
+  const documentInFlight = useRef(true);
+  const missingDocumentTagReported = useRef(false);
 
   const handleLoadStart = useCallback(
-    (event?: { nativeEvent?: { loading?: boolean } }) => {
-      // Android also reports every same-document history change (`pushState`,
-      // `replaceState`) as a load start, from `doUpdateVisitedHistory`, with
-      // `loading: false` because the document has already finished. That is not
-      // a new document: adopting the next nonce there would orphan the page's
-      // negotiated channel and put the loading screen back over a working page.
-      if (event?.nativeEvent?.loading === false) return;
+    (event?: { nativeEvent?: { url?: string; openmapxDocumentStart?: boolean } }) => {
+      // Android history callbacks can report loading=true even after a finish.
+      // Only the patched native onPageStarted event identifies a new document.
+      // A stale development APK must fail closed, never guess from progress.
+      if (Platform.OS === "android" && event?.nativeEvent?.openmapxDocumentStart !== true) {
+        if (
+          __DEV__ &&
+          event?.nativeEvent?.openmapxDocumentStart === undefined &&
+          !missingDocumentTagReported.current
+        ) {
+          missingDocumentTagReported.current = true;
+          console.error(
+            "OpenMapX document-start tag missing; rebuild the Android development app.",
+          );
+        }
+        return;
+      }
+      documentInFlight.current = true;
       // A real top-level navigation or reload.
       //
       // Navigation and its location driver survive a reload. Voice input is
@@ -308,6 +351,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   );
 
   const handleLoadEnd = useCallback(() => {
+    // iOS emits load-end for pushState/replaceState too. Only the first end
+    // after an actual start prepares the next document's bootstrap nonce.
+    if (!documentInFlight.current) return;
+    documentInFlight.current = false;
     // A load can finish while backgrounded; lifecycle delivery to the previous
     // document must not leave this document thinking the app is visible.
     webViewRef.current?.injectJavaScript(buildWebVisibilityScript(visibilityRef.current));
@@ -317,13 +364,66 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   }, [shell]);
 
   const handleLoadFailure = useCallback(() => {
+    documentInFlight.current = false;
     voice.cancel();
     dispatchShell({ type: "document-load-failed", offline: connectivity.displayed === "offline" });
     incomingLinks.documentStarted();
     shell.registry.invalidate();
     shell.bridge.discardQueue();
+    // A retry must not reuse the failed document's nonce.
+    setPublishedNonce(shell.registry.mintNonce());
   }, [shell, connectivity.displayed, incomingLinks, voice]);
 
+  const legacyNoticed = useRef("");
+  const announceIntake = useCallback(async () => {
+    try {
+      if (!(await intakePort.available())) return;
+      const items = await intakePort.list();
+      if (shell.registry.handshake()?.protocolVersion === 4) {
+        shell.bridge.send("intake.changed", { pendingCount: items.length });
+      } else if (items.length && visibilityRef.current === "active" && shell.registry.handshake()) {
+        const key = items.map((item) => item.id).join(",");
+        if (legacyNoticed.current === key) return;
+        legacyNoticed.current = key;
+        const failed = items.some((item) => item.kind === "error");
+        const overflow = items.some(
+          (item) => item.kind === "error" && item.errorCode === "inbox-full",
+        );
+        Alert.alert(
+          failed
+            ? locale === "de"
+              ? "Inhalt konnte nicht hinzugefügt werden"
+              : "Shared item could not be added"
+            : locale === "de"
+              ? "Geteilte Inhalte gespeichert"
+              : "Shared items saved",
+          overflow
+            ? locale === "de"
+              ? "Der Eingang ist voll. Die Webansicht aktualisieren und gespeicherte Inhalte öffnen oder verwerfen. Danach erneut teilen. Die Navigation läuft weiter."
+              : "The inbox is full. Update the web view, open or discard saved items, then share again. Navigation continues."
+            : failed
+              ? locale === "de"
+                ? "Einen Ort oder bis zu fünf GPX-, GeoJSON- oder KML-Dateien mit jeweils höchstens 5 MiB teilen. Die Webansicht für die Inhaltsprüfung aktualisieren. Die Navigation läuft weiter."
+                : "Share a location or up to five GPX, GeoJSON or KML files of at most 5 MiB each. Update the web view to review saved items. Navigation continues."
+              : locale === "de"
+                ? "Die Webansicht benötigt ein Update. Gespeicherte Inhalte bleiben bis zu 24 Stunden auf diesem Gerät. Die Navigation läuft weiter."
+                : "The web view needs an update. Saved items stay on this device for up to 24 hours. Navigation continues.",
+        );
+      }
+    } catch {
+      /* Optional module absence cannot interrupt navigation. */
+    }
+  }, [intakePort, shell, locale]);
+  useEffect(
+    () =>
+      intakePort.listen(() => {
+        void announceIntake();
+      }),
+    [intakePort, announceIntake],
+  );
+  useEffect(() => {
+    if (visibility === "active") void announceIntake();
+  }, [visibility, announceIntake]);
   const handleMessage = useCallback(
     (event: { nativeEvent: { url?: string; data?: string } }) => {
       // Rejections are silent by design: an error reply to an unauthenticated
@@ -337,11 +437,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
             shell.registry.handshake()
           ) {
             incomingLinks.bridgeReady();
+            void announceIntake();
           }
         })
         .catch(() => undefined);
     },
-    [shell, incomingLinks],
+    [shell, incomingLinks, announceIntake],
   );
 
   const openExternally = useCallback((url: string) => {
@@ -446,7 +547,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       <WebView
         key={loadAttempt}
         ref={webViewRef}
-        source={{ uri: config.webOrigin }}
+        source={webSource}
         style={styles.webView}
         // Exact origin, both as a navigation allowlist and as the WebKit
         // App-Bound Domain set generated into Info.plist.

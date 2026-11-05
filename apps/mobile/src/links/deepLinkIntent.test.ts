@@ -46,6 +46,8 @@ describe("parseDeepLinkIntent refuses", () => {
     { label: "plain HTTP on the right host", link: "http://openmapx.com/?q=cafe" },
     { label: "an unknown scheme", link: "openmapx-evil://?q=cafe" },
     { label: "a javascript URL", link: "javascript:alert(1)" },
+    { label: "an iOS document URL", link: "file:///private/var/mobile/Documents/Inbox/route.gpx" },
+    { label: "an Android content URI", link: "content://provider/route.gpx" },
     { label: "a data URL", link: "data:text/html,<script>x</script>" },
     { label: "not a URL at all", link: "just some text" },
     { label: "an empty string", link: "" },

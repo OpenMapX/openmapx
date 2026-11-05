@@ -3,6 +3,7 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { NativeIntakeHandler } from "@/components/pwa/NativeIntakeHandler";
 import "@photo-sphere-viewer/core/index.css";
 import "@photo-sphere-viewer/virtual-tour-plugin/index.css";
 import "maplibre-theme/icons.default.css";
@@ -87,6 +88,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   <InstallPromptCapture />
                   <PersistentStorageRequest />
                   <FileOpenHandler />
+                  <NativeIntakeHandler />
                 </PhoneOnly>
               </Providers>
             </EnvProvider>

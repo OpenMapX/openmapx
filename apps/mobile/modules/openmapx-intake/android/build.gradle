@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'org.openmapx.intake'
+version = '1.0.0'
+android {
+  namespace "expo.modules.openmapxintake"
+  defaultConfig { versionCode 1; versionName "1.0.0" }
+  testOptions { unitTests { returnDefaultValues = false; includeAndroidResources = true } }
+}
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.16.1'
+}

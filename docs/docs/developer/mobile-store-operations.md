@@ -203,3 +203,20 @@ with higher version/build values; a halt does not restore an older binary.
   dependency changes; test with compatibility mode disabled.
 - Derive protocol changes from the deployed-version matrix.
 - Revalidate association files and device links after service or signing changes.
+
+## Share Extension provisioning
+
+Register both `<appId>.ShareExtension` and `group.<appId>.intake` in the Apple
+Developer account, and enable that exact App Group for the host and Share
+Extension provisioning profiles. The navigation widget must not receive the group.
+The extension inherits host versions and the configured Apple team. Rebuild native
+projects through CNG; do not edit generated targets or entitlements. Automatic
+App Store export still requires all App IDs and profiles to exist. Simulator
+builds do not establish production signing or App Store acceptance.
+
+Reviewers can share a location or GPX/GeoJSON/KML file, choose OpenMapX, tap
+Add, finish the extension, then open the app to review/import it. The extension
+does not auto-launch the containing app. Test both this path and Files Open In,
+including cold delivery and an active trip. Shared items are local, bounded and
+expire after 24 hours. Import confirmation can initiate ordinary map/search
+requests; no sender URL is fetched or used to select a backend.

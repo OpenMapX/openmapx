@@ -1,6 +1,13 @@
 import { parseContributors } from "@openmapx/mobility-core/contributors";
 import { parseGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
 import { z } from "zod";
+import {
+  INTAKE_CHUNK_BYTES,
+  intakeChunkSchema,
+  intakeIdSchema,
+  intakeItemSchema,
+  MAX_INTAKE_FILE_BYTES,
+} from "./nativeIntake";
 
 /**
  * The complete wire contract between the OpenMapX web UI and the installed
@@ -42,7 +49,7 @@ const MAX_TEXT_LENGTH = 512;
 // Versions.
 
 export const MOBILE_PROTOCOL_MIN = 3;
-export const MOBILE_PROTOCOL_MAX = 3;
+export const MOBILE_PROTOCOL_MAX = 4;
 
 export interface ProtocolRange {
   min: number;
@@ -64,6 +71,9 @@ export function negotiateMobileProtocol(web: ProtocolRange, native: ProtocolRang
 
 export const WEB_TO_NATIVE_TYPES = [
   "web.hello",
+  "intake.list",
+  "intake.read",
+  "intake.complete",
   "destinations.update",
   "session.prepare",
   "session.start",
@@ -86,6 +96,10 @@ export const WEB_TO_NATIVE_TYPES = [
 
 export const NATIVE_TO_WEB_TYPES = [
   "native.hello",
+  "intake.items",
+  "intake.chunk",
+  "intake.completed",
+  "intake.changed",
   "permission.state",
   "session.prepared",
   "session.started",
@@ -335,6 +349,7 @@ export const nativeCapabilitiesSchema = z
     backgroundLocation: z.boolean(),
     localNotifications: z.boolean(),
     speech: z.boolean(),
+    nativeIntake: z.boolean().optional(),
     carDestinations: z.boolean().optional(),
   })
   .strict();
@@ -396,6 +411,25 @@ export type CarDestination = z.infer<typeof carDestinationSchema>;
 export type CarDestinations = z.infer<typeof carDestinationsSchema>;
 
 export const webToNativeSchema = z.discriminatedUnion("type", [
+  envelope("intake.list", z.object({}).strict()),
+  envelope(
+    "intake.read",
+    z
+      .object({
+        id: intakeIdSchema,
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .max(MAX_INTAKE_FILE_BYTES)
+          .refine((n) => n % INTAKE_CHUNK_BYTES === 0),
+      })
+      .strict(),
+  ),
+  envelope(
+    "intake.complete",
+    z.object({ id: intakeIdSchema, disposition: z.enum(["opened", "discarded"]) }).strict(),
+  ),
   envelope("destinations.update", carDestinationsSchema),
   envelope("voice.probe", z.object({}).strict()),
   envelope(
@@ -541,6 +575,20 @@ export const voiceEventSchema = z
 export type VoiceEvent = z.infer<typeof voiceEventSchema>;
 
 export const nativeToWebSchema = z.discriminatedUnion("type", [
+  envelope(
+    "intake.items",
+    z
+      .object({
+        items: z.array(intakeItemSchema).max(10),
+        canApply: z.boolean(),
+        scheme: z.string().regex(/^[a-z][a-z0-9+.-]{0,100}$/),
+        forMessageId: boundedId,
+      })
+      .strict(),
+  ),
+  envelope("intake.chunk", intakeChunkSchema.extend({ forMessageId: boundedId })),
+  envelope("intake.completed", z.object({ id: intakeIdSchema, forMessageId: boundedId }).strict()),
+  envelope("intake.changed", z.object({ pendingCount: z.number().int().min(0).max(10) }).strict()),
   envelope(
     "voice.availability",
     z.object({ forMessageId: boundedId, available: z.boolean() }).strict(),

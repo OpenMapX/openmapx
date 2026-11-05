@@ -116,6 +116,17 @@ describe("normalizeGeneratedNativeSurface stability", () => {
 });
 
 describe("normalizeGeneratedNativeSurface sensitivity", () => {
+  it("hashes the Files-opening value, not only the key's presence", () => {
+    expect(
+      hashOf((v) => {
+        v.infoPlist.LSSupportsOpeningDocumentsInPlace = true;
+      }),
+    ).not.toBe(
+      hashOf((v) => {
+        v.infoPlist.LSSupportsOpeningDocumentsInPlace = false;
+      }),
+    );
+  });
   it.each([
     [
       "an added permission",

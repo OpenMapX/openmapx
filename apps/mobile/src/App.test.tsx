@@ -4,10 +4,12 @@ jest.mock("expo-speech-recognition", () => ({
 
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { Alert, AppState, BackHandler, Linking } from "react-native";
+import { Alert, AppState, BackHandler, Linking, Platform } from "react-native";
 import { z } from "zod";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
+import { IntakeController } from "./intake/IntakeController";
+import * as intakeModule from "./intake/nativeIntakeModule";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
 import { VoiceInputController } from "./voice/VoiceInputController";
 
@@ -120,7 +122,7 @@ describe("App WebView policy", () => {
   it("renders exactly one WebView pointed at the compiled origin", async () => {
     const view = await renderApp();
     expect(view.getByTestId("product-webview")).toBeTruthy();
-    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com/" });
   });
 
   it("forwards app visibility and reapplies it when a document finishes loading", async () => {
@@ -253,7 +255,7 @@ describe("App bridge channel", () => {
     const warm = decodedMessages().filter((m) => m.type === "deep-link.open");
     expect(warm).toHaveLength(2);
     expect(new URLSearchParams(warm[1].payload?.query as string).get("at")).toBe("52.52,13.405");
-    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com" });
+    expect(mockWebViewProps.source).toEqual({ uri: "https://openmapx.com/" });
   });
 
   it("does not deliver a pending link to an incompatible bridge", async () => {
@@ -310,9 +312,12 @@ describe("App bridge channel", () => {
   });
 
   it("keeps the negotiated channel across Android's same-document history reports", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
     await renderApp();
     const nonce = nonceIn(bootstrap());
-    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: true } });
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: true },
+    });
     await post(nonce, {
       type: "web.hello",
       payload: {
@@ -322,20 +327,205 @@ describe("App bridge channel", () => {
       },
     });
     await emitAsync(mockWebViewProps.onLoadEnd);
+    // An allowed request may produce a download/204 and never commit.
+    await emitAsync(mockWebViewProps.onShouldStartLoadWithRequest, {
+      url: "https://openmapx.com/download",
+    });
 
     // `replaceState` after the page finished: Android reports it as a load
     // start with `loading: false`.
-    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: false } });
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: false },
+    });
     await post(nonce, {
-      messageId: "prepare-after-history",
-      type: "session.prepare",
-      payload: { startPackage: groundSessionFixture().payload.startPackage },
+      messageId: "probe-after-history",
+      type: "voice.probe",
+      payload: {},
     });
 
     // Still the page's channel: the command reaches dispatch and is answered,
     // rather than being dropped as coming from an unknown document.
-    const error = decodedMessages().find((message) => message.type === "native.error");
-    expect(error?.payload).toMatchObject({ forMessageId: "prepare-after-history" });
+    const reply = decodedMessages().find((message) => message.type === "voice.availability");
+    expect(reply?.payload).toMatchObject({ forMessageId: "probe-after-history" });
+  });
+
+  it("ignores duplicate Android start/end reports without losing the page channel", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: true },
+    });
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "lifecycle-test",
+        minProtocolVersion: 3,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    // Android can report history while the real document is still loading.
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: false },
+    });
+    await post(nonce, {
+      messageId: "probe-after-duplicate-start",
+      type: "voice.probe",
+      payload: {},
+    });
+    expect(
+      decodedMessages().some(
+        (message) =>
+          message.type === "voice.availability" &&
+          message.payload?.forMessageId === "probe-after-duplicate-start",
+      ),
+    ).toBe(true);
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    const next = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: false },
+    });
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    expect(nonceIn(bootstrap())).toBe(next);
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    expect(nonceIn(bootstrap())).toBe(next);
+    await emitAsync(mockWebViewProps.onLoadStart, {
+      nativeEvent: { loading: true, openmapxDocumentStart: true },
+    });
+    await post(next, {
+      messageId: "hello-real-reload",
+      type: "web.hello",
+      payload: {
+        webBuildId: "reloaded",
+        minProtocolVersion: 3,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    expect(
+      decodedMessages().some(
+        (message) =>
+          message.type === "native.hello" && message.payload?.forMessageId === "hello-real-reload",
+      ),
+    ).toBe(true);
+  });
+
+  it.each(["android", "ios"] as const)(
+    "resets document state for an allowed %s navigation during an unfinished load",
+    async (platform) => {
+      jest.replaceProperty(Platform, "OS", platform);
+      const cancel = jest
+        .spyOn(VoiceInputController.prototype, "cancel")
+        .mockImplementation(() => {});
+      const nonce = await hello();
+      cancel.mockClear();
+      await emitAsync(mockWebViewProps.onShouldStartLoadWithRequest, {
+        url: "https://openmapx.com/settings",
+        isTopFrame: true,
+      });
+      await emitAsync(mockWebViewProps.onLoadStart, {
+        nativeEvent: { loading: false, openmapxDocumentStart: true },
+      });
+      expect(cancel).toHaveBeenCalledTimes(1);
+      await post(nonce, { messageId: "obsolete-document", type: "voice.probe", payload: {} });
+      expect(decodedMessages().some((m) => m.payload?.forMessageId === "obsolete-document")).toBe(
+        false,
+      );
+      // The in-flight script still has its published nonce, but its old
+      // handshake and dedupe state must be gone. A fresh hello can reuse its ID.
+      await post(nonce, {
+        type: "web.hello",
+        payload: {
+          webBuildId: "replacement",
+          minProtocolVersion: 3,
+          maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+        },
+      });
+      expect(decodedMessages().filter((m) => m.type === "native.hello")).toHaveLength(2);
+    },
+  );
+
+  it("does not suppress iOS document starts even without an Android navigation flag", async () => {
+    jest.replaceProperty(Platform, "OS", "ios");
+    const cancel = jest
+      .spyOn(VoiceInputController.prototype, "cancel")
+      .mockImplementation(() => {});
+    const nonce = await hello();
+    cancel.mockClear();
+    await emitAsync(mockWebViewProps.onLoadStart);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await post(nonce, { messageId: "old-ios-document", type: "voice.probe", payload: {} });
+    expect(decodedMessages().some((m) => m.payload?.forMessageId === "old-ios-document")).toBe(
+      false,
+    );
+  });
+
+  it("rejects the previous document nonce after a completed load and real reload", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    const oldNonce = await hello();
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    const nextNonce = nonceIn(bootstrap());
+    expect(nextNonce).not.toBe(oldNonce);
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { openmapxDocumentStart: true } });
+    await post(nextNonce, {
+      messageId: "reload-hello",
+      type: "web.hello",
+      payload: {
+        webBuildId: "new-document",
+        minProtocolVersion: 3,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    await post(oldNonce, { messageId: "old-nonce", type: "voice.probe", payload: {} });
+    expect(decodedMessages().some((m) => m.payload?.forMessageId === "old-nonce")).toBe(false);
+    await post(nextNonce, { messageId: "new-nonce", type: "voice.probe", payload: {} });
+    expect(decodedMessages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.availability",
+        payload: { forMessageId: "new-nonce", available: false },
+      }),
+    );
+  });
+
+  it("fails closed when Android JS is paired with a stale APK, logging only once", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    const error = jest.spyOn(console, "error").mockImplementation(() => {});
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: true } });
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { loading: true } });
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "stale-apk",
+        minProtocolVersion: 3,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+    expect(decodedMessages()).toEqual([]);
+    expect(error).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a history finish erase a failed load or rotate its nonce", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    const view = await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { openmapxDocumentStart: true } });
+    await emitAsync(mockWebViewProps.onError);
+    const retryNonce = nonceIn(bootstrap());
+    expect(retryNonce).not.toBe(nonce);
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    expect(nonceIn(bootstrap())).toBe(retryNonce);
+    expect(view.queryByTestId("shell-loading")).toBeNull();
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
+  });
+
+  it("uses a defensive canonical source object across shell renders", async () => {
+    await renderApp();
+    const source = mockWebViewProps.source;
+    expect(source).toEqual({ uri: "https://openmapx.com/" });
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await emitAsync(mockWebViewProps.onLoadEnd);
+    expect(mockWebViewProps.source).toBe(source);
   });
 
   it("ignores a message from outside the compiled origin", async () => {
@@ -408,27 +598,98 @@ describe("App bridge channel", () => {
   });
 
   let shellView: Awaited<ReturnType<typeof renderApp>>;
-  const hello = async () => {
+  const hello = async (maxProtocolVersion = MOBILE_PROTOCOL_MAX) => {
     shellView = await renderApp();
     const nonce = nonceIn(bootstrap());
-    await emitAsync(mockWebViewProps.onLoadStart);
+    await emitAsync(mockWebViewProps.onLoadStart, { nativeEvent: { openmapxDocumentStart: true } });
     await post(nonce, {
       type: "web.hello",
+      protocolVersion: maxProtocolVersion,
       payload: {
         webBuildId: "web-build-1",
         minProtocolVersion: 1,
-        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+        maxProtocolVersion,
       },
     });
     return nonce;
   };
 
-  it("advertises what the composed navigation graph reports", async () => {
+  it.each(["failed", "feasibility", "idle", "active", "storage-failed"])(
+    "checks intake authority when navigation is %s",
+    async (state) => {
+      const complete = jest.fn();
+      jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+        available: async () => true,
+        list: async () => [
+          {
+            id: "f386e706-b728-40a3-9554-881d0ff0958a",
+            kind: "text",
+            name: "Shared location",
+            createdAtMs: 1,
+            byteLength: 6,
+          },
+        ],
+        read: jest.fn(),
+        complete,
+        listen: () => () => undefined,
+      });
+      if (state === "feasibility")
+        mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
+      if (["idle", "active", "storage-failed"].includes(state))
+        mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+      if (state === "active")
+        mockNavigation.activeSession.mockResolvedValue({ sessionId: "active-trip" });
+      const nonce = await hello();
+      if (state === "storage-failed")
+        mockNavigation.activeSession.mockRejectedValue(new Error("storage unavailable"));
+      await post(nonce, { messageId: "list-authority", type: "intake.list", payload: {} });
+      const reply = decodedMessages().find((m) => m.payload?.forMessageId === "list-authority");
+      if (state === "failed" || state === "storage-failed") {
+        expect(reply).toMatchObject({
+          type: "native.error",
+          payload: { code: "navigation-unavailable" },
+        });
+      } else {
+        expect(reply).toMatchObject({
+          type: "intake.items",
+          payload: { canApply: state !== "active" },
+        });
+      }
+      if (["failed", "storage-failed", "active"].includes(state)) {
+        await post(nonce, {
+          messageId: "complete-authority",
+          type: "intake.complete",
+          payload: { id: "f386e706-b728-40a3-9554-881d0ff0958a", disposition: "opened" },
+        });
+        expect(complete).not.toHaveBeenCalled();
+      }
+      await shellView.unmount();
+    },
+  );
+
+  it("keeps an empty inbox quiet when navigation initialization failed", async () => {
+    jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+      available: async () => true,
+      list: async () => [],
+      read: jest.fn(),
+      complete: jest.fn(),
+      listen: () => () => undefined,
+    });
+    const nonce = await hello();
+    await post(nonce, { messageId: "empty-unavailable", type: "intake.list", payload: {} });
+    expect(
+      decodedMessages().find((m) => m.payload?.forMessageId === "empty-unavailable"),
+    ).toMatchObject({ type: "intake.items", payload: { items: [], canApply: false } });
+    await shellView.unmount();
+  });
+
+  it("keeps the deployed v3 capability schema while advertising the navigation graph", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
-    await hello();
+    await hello(3);
 
     const reply = decodedMessages().find((message) => message.type === "native.hello");
-    // origin/main capability fixture: deployed web rejects every unknown key.
+    expect(reply?.payload?.selectedProtocolVersion).toBe(3);
+    // Deployed v3 web rejects every unknown capability key.
     const oldCapabilities = z
       .object({
         groundNavigation: z.boolean(),
@@ -447,6 +708,24 @@ describe("App bridge channel", () => {
     expect(mockCreateForegroundNavigation.mock.calls[0]?.[0]).toMatchObject({
       apiOrigin: "https://openmapx.com",
     });
+  });
+
+  it("dispatches intake and voice independently of the navigation command queue", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const intake = jest.spyOn(IntakeController.prototype, "dispatch").mockResolvedValue();
+    jest.spyOn(VoiceInputController.prototype, "isAvailable").mockReturnValue(false);
+    const nonce = await hello();
+    mockNavigation.coordinator.dispatch.mockImplementation(() => new Promise(() => {}));
+    await post(nonce, { messageId: "intake-1", type: "intake.list", payload: {} });
+    await post(nonce, { messageId: "probe-after-intake", type: "voice.probe", payload: {} });
+    expect(intake).toHaveBeenCalledWith(expect.objectContaining({ type: "intake.list" }));
+    expect(decodedMessages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.availability",
+        payload: { forMessageId: "probe-after-intake", available: false },
+      }),
+    );
+    expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
   });
 
   it.each([true, false])(
@@ -626,12 +905,13 @@ describe("App load states", () => {
     expect(view.queryByTestId("shell-loading")).toBeNull();
   });
 
-  it("does not cover a loaded page again for a same-document history change", async () => {
+  it("does not cover a loaded Android page again for a same-document history change", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
     const view = await renderApp();
     await emit(mockWebViewProps.onLoadEnd);
     await act(async () => {
       (mockWebViewProps.onLoadStart as (event: unknown) => void)({
-        nativeEvent: { loading: false },
+        nativeEvent: { loading: false, openmapxDocumentStart: false },
       });
     });
     expect(view.queryByTestId("shell-loading")).toBeNull();
