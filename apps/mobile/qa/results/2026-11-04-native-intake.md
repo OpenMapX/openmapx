@@ -38,6 +38,13 @@ Still unqualified: actual active-trip deferral; process-death/Recents replay inc
 
 ## Release prerequisites
 
+Final Claude review approved the runtime corrections with no blocking correctness
+or security findings. The expiration handler now ends its background assertion
+synchronously when already on the main thread. Two low-severity limits remain:
+the ten-second budget includes serial queue waiting, and cancellation racing the
+final rename can produce a completed item alongside an unreadable notice. The
+item remains reviewable; no source file is changed.
+
 Deploy compatible web first; protocol 3 retains navigation and protocol 4 enables intake. Rebuild native apps. Register/provision `<appId>.ShareExtension` and `group.<appId>.intake` for host and Share Extension only; the navigation widget has no group. Simulator local ad-hoc signing does not establish Apple team, provisioning or App Store acceptance.
 
 Local HTTP was used only for development runtime QA. Afterward, two clean HTTPS generations and reviewed generated-permission checks passed. The installed local-HTTP Simulator build is not a release transport artifact. Production signing and final release binaries still require their release gates.

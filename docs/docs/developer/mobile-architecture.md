@@ -429,6 +429,11 @@ symlinks or blocking on FIFOs, checked with `fstat`, and rejected if its resolve
 path is in the app's data container or intake App Group. The private inbox commit
 runs after the external accessor exits.
 
+The ten-second budget starts when the OS delivers a URL and includes waiting on
+the serial host queue, so an item behind a slow provider can expire before reading.
+A cancellation racing the final private rename can leave a completed inbox item
+alongside an unreadable notice; the immutable item remains available for review.
+
 For non-in-place OS copies, only regular, non-symlink direct children of
 `Documents/Inbox` are accepted; the temporary OS copy is removed after handling, and abandoned
 copies expire on launch. `UIFileSharingEnabled` and `UISupportsDocumentBrowser`

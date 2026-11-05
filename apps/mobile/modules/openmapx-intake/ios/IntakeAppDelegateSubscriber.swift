@@ -33,7 +33,11 @@ public final class IntakeAppDelegateSubscriber: ExpoAppDelegateSubscriber {
     let cancellation = HostDocumentCancellation()
     let lifetime = IntakeBackgroundLease(invalid: UIBackgroundTaskIdentifier.invalid,
       begin: { expiration in application.beginBackgroundTask(withName: "OpenMapX document intake", expirationHandler: expiration) },
-      end: { id in DispatchQueue.main.async { application.endBackgroundTask(id) } })
+      end: { id in
+        // Expiration runs on the main thread: end the assertion before returning.
+        if Thread.isMainThread { application.endBackgroundTask(id) }
+        else { DispatchQueue.main.async { application.endBackgroundTask(id) } }
+      })
     lifetime.begin { cancellation.cancel() }
     Self.queue.async {
       defer { cancellation.install(nil); lifetime.end() }
