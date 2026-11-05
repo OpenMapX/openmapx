@@ -3,11 +3,19 @@ import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+const platform = vi.hoisted(() => ({
+  browserAuthority: true,
+  capabilities: { transitActions: true },
+}));
+vi.mock("@/lib/mobile/useMobileRuntime", () => ({ useMobileRuntime: () => platform }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 import { TransitJourneyControls } from "./TransitJourneyControls";
 
-afterEach(() => useNavigationStore.getState().stopNavigation());
+afterEach(() => {
+  useNavigationStore.getState().stopNavigation();
+  platform.browserAuthority = true;
+});
 it("requires explicit boarding, then provides alighting and undo", async () => {
   const itinerary = {
     legs: [
@@ -84,3 +92,55 @@ it("does not suggest boarding while walking correctly toward a distant stop", ()
   render(<TransitJourneyControls onAlternatives={() => {}} />);
   expect(screen.queryByText("navigation.boardPrompt")).toBeNull();
 });
+
+it.each([
+  {
+    realtime: true,
+    unavailable: false,
+    token: undefined,
+    label: "navigation.departureLive",
+    native: true,
+  },
+  { realtime: true, unavailable: true, token: "refresh", label: "navigation.departureLastKnown" },
+  { realtime: true, unavailable: false, token: "refresh", label: "navigation.departureLive" },
+  { realtime: false, unavailable: true, token: "refresh", label: "navigation.departureScheduled" },
+  { realtime: true, unavailable: false, token: undefined, label: "navigation.departureLastKnown" },
+])(
+  "labels departure freshness honestly: $label / unavailable=$unavailable",
+  ({ realtime, unavailable, token, label, native }) => {
+    platform.browserAuthority = !native;
+    useNavigationStore.getState().startTransitNavigation({
+      duration: 1200,
+      startTime: "",
+      endTime: "",
+      transfers: 0,
+      walkDistance: 0,
+      refreshToken: token,
+      legs: [
+        {
+          mode: "bus",
+          tripId: "bus",
+          realtime,
+          route: { shortName: "12" },
+          from: { name: "Stop", lat: 0, lng: 0 },
+          to: { name: "End", lat: 0, lng: 0.01 },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [0.01, 0],
+            ],
+          },
+          startTime: new Date(Date.now() + 300000).toISOString(),
+          endTime: "",
+        },
+      ],
+    } as TripItinerary);
+    useNavigationStore.getState().setLiveDataUnavailable(unavailable);
+    render(<TransitJourneyControls onAlternatives={() => {}} />);
+    expect(screen.getByText(label)).toBeTruthy();
+    if (label !== "navigation.departureLive")
+      expect(screen.queryByText("navigation.departureLive")).toBeNull();
+    expect(!!screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBe(unavailable);
+  },
+);

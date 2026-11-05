@@ -405,6 +405,93 @@ describe("MobileRuntimeProvider store integration", () => {
     expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
   });
 
+  it("updates displayed walking progress in order and heals a revision gap with a full snapshot", async () => {
+    function WalkSubscriber() {
+      const p = useNavigationStore((s) => s.transitProgress);
+      return (
+        <span data-testid="walking-readout">
+          {p?.currentWalkStepIndex}:{p?.distanceToNextStepMeters}:{p?.position?.[0]}
+        </span>
+      );
+    }
+    const shell = shellScope();
+    render(
+      <MobileRuntimeProvider webBuildId="web-build-1" scope={shell.scope}>
+        <Probe />
+        <WalkSubscriber />
+      </MobileRuntimeProvider>,
+    );
+    deliverHello(shell);
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    const p = {
+      currentLegIndex: 0,
+      currentWalkStepIndex: 0,
+      distanceToNextStepMeters: 100,
+      phase: "walking",
+      position: [8, 50],
+      snapped: [8, 50],
+      fractionAlongLeg: 0,
+      deviationMeters: 0,
+      arrived: false,
+    };
+    const transit = (overrides: Record<string, unknown>) =>
+      snapshot({
+        kind: "transit",
+        routeFingerprint: undefined,
+        itineraryFingerprint: "trip",
+        itinerary: { legs: [] },
+        transitProgress: p,
+        ...overrides,
+      });
+    shell.deliver(transit({}));
+    await waitFor(() => expect(text("walking-readout")).toBe("0:100:8"));
+    shell.deliver(
+      transit({
+        type: "progress",
+        revision: 5,
+        transitProgress: { ...p, distanceToNextStepMeters: 60, position: [8.001, 50] },
+      }),
+    );
+    await waitFor(() => expect(text("walking-readout")).toBe("0:60:8.001"));
+    shell.deliver(
+      transit({
+        type: "progress",
+        revision: 6,
+        transitProgress: {
+          ...p,
+          currentWalkStepIndex: 1,
+          distanceToNextStepMeters: 90,
+          position: [8.002, 50],
+        },
+      }),
+    );
+    await waitFor(() => expect(text("walking-readout")).toBe("1:90:8.002"));
+    shell.sent.length = 0;
+    shell.deliver(
+      transit({
+        type: "progress",
+        revision: 8,
+        transitProgress: { ...p, currentWalkStepIndex: 2 },
+      }),
+    );
+    await waitFor(() =>
+      expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(true),
+    );
+    expect(text("walking-readout")).toBe("1:90:8.002");
+    shell.deliver(
+      transit({
+        revision: 8,
+        transitProgress: {
+          ...p,
+          currentWalkStepIndex: 2,
+          distanceToNextStepMeters: 40,
+          position: [8.003, 50],
+        },
+      }),
+    );
+    await waitFor(() => expect(text("walking-readout")).toBe("2:40:8.003"));
+  });
+
   it("reconciles once when the app returns to the foreground", async () => {
     const shell = shellScope();
     mount(shell.scope);

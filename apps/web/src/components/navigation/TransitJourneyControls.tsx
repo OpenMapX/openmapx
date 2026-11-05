@@ -65,6 +65,7 @@ export function TransitJourneyControls({
     }
   };
   const departure = ride?.startTime ? new Date(ride.startTime).getTime() : NaN;
+  const liveDeparture = !liveUnavailable && (!runtime.browserAuthority || !!itinerary.refreshToken);
   const departurePassed =
     !riding && canBoard && Number.isFinite(departure) && now > departure + 120000;
   const uncertain = p?.confidence === "uncertain" || p?.confidence === "stale";
@@ -132,7 +133,13 @@ export function TransitJourneyControls({
               color="text.secondary"
               sx={{ display: "block", lineHeight: 1.4 }}
             >
-              {t(ride.realtime ? "departureLive" : "departureScheduled")}
+              {t(
+                ride.realtime
+                  ? liveDeparture
+                    ? "departureLive"
+                    : "departureLastKnown"
+                  : "departureScheduled",
+              )}
             </Typography>
           </Box>
         </Box>
@@ -169,7 +176,13 @@ export function TransitJourneyControls({
         >
           <GpsNotFixedIcon sx={{ fontSize: 18, flexShrink: 0, mt: 0.15 }} />
           <Typography variant="caption">
-            {t(p?.confidence === "stale" ? "transitGpsStale" : "transitProgressUncertain")}
+            {t(
+              p?.confidence === "stale"
+                ? "transitGpsStale"
+                : walking
+                  ? "transitWalkPositionUncertain"
+                  : "transitProgressUncertain",
+            )}
           </Typography>
         </Box>
       )}

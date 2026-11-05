@@ -55,6 +55,7 @@ const HOT_FIELDS = [
   "reroute",
   "currentLegIndex",
   "currentWalkStepIndex",
+  "transitProgress",
   "phase",
   "confidence",
   "liveStatus",
@@ -135,6 +136,16 @@ export function applyNativeSnapshot(
 
   const merged: Record<string, unknown> = { ...current.snapshot };
   for (const field of HOT_FIELDS) {
+    // A replacement can publish an empty tick before its next fix. Keep the
+    // last authoritative position rather than resetting the walking banner.
+    if (
+      field === "transitProgress" &&
+      (current.kind !== "transit" ||
+        !incoming.data[field] ||
+        typeof incoming.data[field] !== "object" ||
+        Array.isArray(incoming.data[field]))
+    )
+      continue;
     if (field in incoming.data) merged[field] = incoming.data[field];
   }
 

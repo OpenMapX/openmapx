@@ -251,6 +251,8 @@
     "confirmAlight": "I've got off",
     "undoTransitAction": "Undo",
     "selectedConnection": "Your selected connection",
+    "departureLastKnown": "Last known departure",
+    "transitWalkPositionUncertain": "Walking position uncertain. Your selected connection is kept.",
     "departureLive": "Live departure",
     "departureScheduled": "Scheduled departure",
     "timeUnknown": "Time unavailable",
@@ -261,7 +263,7 @@
     "transitProgressUncertain": "Stop progress uncertain. Following your selected connection.",
     "alightedElsewhere": "You may be away from the planned stop. Check the next boarding point or find alternatives.",
     "transitActionsUpdateRequired": "Update the installed app to confirm boarding and alighting.",
-    "transitActionFailed": "Could not confirm this action. Your journey has been kept; please try again.",
+    "transitActionFailed": "Could not confirm this action. Your journey has been kept. Please try again.",
     "nextStopLabel": "Next stop",
     "transitAlternativesShort": "Alternatives",
     "findTransitAlternatives": "Find alternatives",
@@ -282,10 +284,10 @@
     "stopsRemaining": "{count, plural, one {# stop left} other {# stops left}}",
     "transitWalkRepair": {
       "repairing": "Updating walking directions to your selected stop…",
-      "unavailable": "Walking directions could not be updated. Your selected connection is kept; find alternatives if needed.",
+      "unavailable": "Walking directions could not be updated. Your selected connection is kept. Find alternatives if needed.",
       "accessibility": "Off the walking path. Use alternatives to keep your step-free travel requirement."
     },
-    "transitLiveUpdatesUnavailable": "Live updates unavailable. Times may be out of date; your selected journey is kept."
+    "transitLiveUpdatesUnavailable": "Live updates unavailable. Times may be out of date. Your selected journey is kept."
   },
   "common": {
     "close": "Close",
