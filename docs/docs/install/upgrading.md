@@ -521,7 +521,7 @@ Recreate Traefik when a few seconds without the proxy suit you:
 pnpm openmapx services update traefik
 ```
 
-or **Recreate** on **Admin → Services → Traefik**. OpenMapX does not recreate
+or **Recreate** on **Admin → System → Services → Traefik**. OpenMapX does not recreate
 it for you. Once no container mounts the checkout's directory, render stops
 writing there and leaves the last `generated-routes.yml` in place for a
 rollback. See [where Traefik reads its configuration](../guides/supporting-infrastructure.md#where-traefik-reads-its-configuration).

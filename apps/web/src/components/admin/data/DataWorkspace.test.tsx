@@ -1,3 +1,7 @@
+import { en } from "@openmapx/i18n";
+import { NextIntlClientProvider } from "next-intl";
+import { AdminNavigationContext } from "../shared/AdminNavigationContext";
+
 vi.mock(
   "next/navigation",
   async () => (await import("@/test/adminNavigation")).adminNavigationMock,
@@ -47,9 +51,11 @@ afterEach(() => {
 });
 it("uses only the aggregate read for the directory and links every owned domain", async () => {
   render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <DataWorkspace />
-    </QueryClientProvider>,
+    <NextIntlClientProvider locale="en" messages={en}>
+      <QueryClientProvider client={createTestQueryClient()}>
+        <DataWorkspace />
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
   );
   await screen.findByText(/7 extracts/);
   expect(reads).toEqual(["aggregate"]);
@@ -67,11 +73,29 @@ it("uses only the aggregate read for the directory and links every owned domain"
 });
 it("mounts only the selected domain's status family", () => {
   render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <DataWorkspace topic="search" />
-    </QueryClientProvider>,
+    <NextIntlClientProvider locale="en" messages={en}>
+      <QueryClientProvider client={createTestQueryClient()}>
+        <DataWorkspace topic="search" />
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
   );
   expect(screen.getByText("Search family")).toBeInTheDocument();
   expect(screen.getByText("Notable family")).toBeInTheDocument();
   expect(reads).toEqual(["search"]);
+});
+
+it("offers hosted admins only Transit and Coverage without an ops inventory request", () => {
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <QueryClientProvider client={createTestQueryClient()}>
+        <AdminNavigationContext.Provider value={{ role: "admin", selfHosted: false }}>
+          <DataWorkspace />
+        </AdminNavigationContext.Provider>
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+  expect(document.querySelector('a[href="/admin/data/osm"]')).toBeNull();
+  expect(document.querySelector('a[href="/admin/data/transit"]')).not.toBeNull();
+  expect(screen.getAllByRole("heading", { name: "Data" })).toHaveLength(1);
+  expect(reads).toEqual([]);
 });

@@ -150,17 +150,32 @@ function AdminLayoutContent({ children, user, selfHosted = false }: AdminLayoutP
                           ) : hostUnavailable && destination ? (
                             <Stack sx={{ gap: 2, maxWidth: 800 }}>
                               <AdminPageHeader title={t(`destinations.${destination.id}.label`)} />
-                              <Alert severity="info">{t("hostUnavailable")}</Alert>
+                              <Alert severity="info">
+                                {t(workspace === "data" ? "hostedData" : "hostUnavailable")}
+                              </Alert>
                               <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
-                                <Button component={Link} href="/admin/system/cache">
-                                  {t("destinations.cache.label")}
-                                </Button>
-                                <Button
-                                  component={Link}
-                                  href="/admin/system/configuration-transfer"
-                                >
-                                  {t("destinations.configuration-transfer.label")}
-                                </Button>
+                                {workspace === "data" ? (
+                                  <>
+                                    <Button component={Link} href="/admin/data/transit">
+                                      {t("destinations.transit.label")}
+                                    </Button>
+                                    <Button component={Link} href="/admin/data/coverage">
+                                      {t("destinations.coverage.label")}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button component={Link} href="/admin/system/cache">
+                                      {t("destinations.cache.label")}
+                                    </Button>
+                                    <Button
+                                      component={Link}
+                                      href="/admin/system/configuration-transfer"
+                                    >
+                                      {t("destinations.configuration-transfer.label")}
+                                    </Button>
+                                  </>
+                                )}
                               </Stack>
                             </Stack>
                           ) : (

@@ -57,6 +57,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     "Extracts, builds and OpenStreetMap acquisition",
     "/admin/data/osm",
     "data",
+    true,
   ),
   destination(
     "overture",
@@ -64,6 +65,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     "Places release, conflation and recovery",
     "/admin/data/overture",
     "data",
+    true,
   ),
   destination(
     "search",
@@ -71,6 +73,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     "Search index, ambient and notable places",
     "/admin/data/search",
     "data",
+    true,
   ),
   destination(
     "transit",
@@ -92,6 +95,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     "Review, stage and transfer data artifacts",
     "/admin/data/transfers",
     "data",
+    true,
   ),
   destination(
     "operations",
@@ -99,6 +103,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     "Full updates, hardlink sync and destructive cleanup",
     "/admin/data/operations",
     "data",
+    true,
   ),
   destination("users", "Users", "Accounts, sessions and recovery", "/admin/users", "users"),
   {

@@ -392,7 +392,7 @@ installation does not prove that their database and feed credentials are valid.
 
 ### Configuring the OpenConditions services
 
-1. Open **Services → openconditions-ingest** and
+1. Open **System → Services → openconditions-ingest** and
    **openconditions-contributions-api**. Read each installed manifest's fields
    and setup guides.
 2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the API

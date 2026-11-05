@@ -276,7 +276,7 @@ is configurable in Admin Settings → Map; `BASEMAP_PROVIDER` overrides admin. S
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
 | `NEXT_PUBLIC_STYLE_PROVIDER`                | Selects the style. `openmapx` (default) uses the bundled light/dark styles. `maptiler` loads a complete hosted style only when MapTiler is the resolved vector provider. Self-hosted and OpenFreeMap vectors always use the owned styles.              | Default `openmapx`  |
 | `BASEMAP_PROVIDER`                          | Hosted vector preference: `auto` (MapTiler with a configured key, OpenFreeMap without one), `openfreemap`, or `maptiler`. Valid env > admin > auto; invalid env does not lock admin editing. Self-hosted tiles always win. Reload after admin changes. | Optional. Commented |
-| `MAPTILER_KEY`                              | MapTiler Cloud API key for the hosted style/tile fallback and MapTiler layers. Also settable in `/admin/settings → Map`. Leave commented to manage from the admin UI; uncomment to lock a value (env wins).                                            | Optional. Commented |
+| `MAPTILER_KEY`                              | MapTiler Cloud API key for the hosted style/tile fallback and MapTiler layers. Also settable in `/admin/settings/map`. Leave commented to manage from the admin UI; uncomment to lock a value (env wins).                                              | Optional. Commented |
 | `NEXT_PUBLIC_MAP_STYLE_URL`                 | Glyph server base URL; the owned style appends `/fonts/{fontstack}/{range}.pbf`. Built-in TileServer GL supplies this automatically. Does not select the vector provider.                                                                              | Optional. Commented |
 | `NEXT_PUBLIC_TILES_URL`                     | Self-hosted TileJSON URL used as the vector source by the OpenMapX style. Always wins over hosted selection. If omitted, enabled TileServer GL is discovered on the web origin (not the API origin), otherwise the selected hosted source is used.     | Optional. Commented |
 | `NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE`     | Override URL template for the traffic raster layer.                                                                                                                                                                                                    | Optional. Commented |
@@ -442,7 +442,7 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 
 Used for email verification, 2FA, and email-change flows. The provider is
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
-settable in `/admin/settings → Email / SMTP`; env always wins.
+settable in `/admin/settings/email`; env always wins.
 
 | Variable                 | Description                                                                      | Required / Default          |
 | ------------------------ | -------------------------------------------------------------------------------- | --------------------------- |
@@ -561,7 +561,7 @@ The legal fields are optional but required for complete production
 Each data source declares whether it may be used commercially. By default the
 default permits all source classes. Commercial operators should review and
 exclude sources whose terms do not permit their use. These are resolved
-env-first, then the admin toggle at `/admin/settings`, then the default, and have
+env-first, then the admin toggle at `/admin/settings/data-use`, then the default, and have
 no entry in `.env.example`; set them only if you need to restrict. See
 [Data-use policy](../administration/integrations-administration.md#data-use-policy)
 for what each class covers.
@@ -608,7 +608,7 @@ are no place to go to (events, languages, historical states, sports clubs,
 craters on the Moon) are left out. It builds the index once when none is
 published and refreshes it on a schedule; a failed refresh keeps the previous
 snapshot, and a busy endpoint is retried for a few minutes first.
-**Admin → Data workflows → Notable places** shows the snapshot and rebuilds it
+**Admin → Data → Search & places → Notable places** shows the snapshot and rebuilds it
 on demand.
 
 | Variable                       | Description                                                                                                         | Required / Default                                            |
@@ -668,7 +668,7 @@ environment override only when you want to pin it at deployment level:
 - `/admin/integrations/bulk`: every integration on one page, plus a generated
   catalogue (Copy config / Copy credentials / Copy all) you can paste into
   `.env`.
-- `/admin/services/<id>`: per-service config, exposed as
+- `/admin/system/services/<id>`: per-service config, exposed as
   `SERVICE_<ID>_<KEY>` (for example `SERVICE_VALHALLA_BUILD_ELEVATION=false`).
 
 Nothing in these override blocks is required at deploy time. Paste only the
@@ -692,8 +692,8 @@ The default remains `main` before the first named preview exists. For deliberate
 ### Generating configuration from the admin panel
 
 Saving settings and generating a configuration are separate from replacing
-containers. The Compose page's **Generate configuration** checks the preview
+containers. **Generate configuration** in **System → Deployment → Compose and host recovery** checks the preview
 revision, commits the current desired settings and prepares hardlinks without
-starting services. Use the guarded service Apply/Update or protected Settings
+starting services. Use the guarded service Apply/Update or protected **System → Deployment** or **System → Updates**
 workflow when container replacement is required. Host environment overrides retain
 their ownership and cannot be overwritten through this generation action.

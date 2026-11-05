@@ -87,7 +87,7 @@ and route the Dawarich hostname without a path prefix.
 
 Provision the bundle before attempting to start it:
 
-1. Open **Admin → Services** and the **Dawarich Timeline** detail.
+1. Open **Admin → System → Services** and the **Dawarich Timeline** detail.
 2. In **Managed Dawarich setup**, enter a public hostname if the default is not
    suitable, then choose **Provision/reconcile**.
 3. Resolve any reported conflict before continuing. Provisioning creates or

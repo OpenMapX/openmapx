@@ -30,6 +30,7 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
   const tab = TABS.find((value) => value === raw) ?? "sources";
   const restored = useRef(false);
   const [proposalId, setProposalId] = useState<string>();
+  const [proposalFinished, setProposalFinished] = useState(false);
   useEffect(() => {
     if (!actorId || restored.current) return;
     restored.current = true;
@@ -39,6 +40,12 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
       update({ tab: "credentials" }, "replace");
     }
   }, [apiUrl, actorId, update]);
+  useEffect(() => {
+    if (tab !== "credentials" && proposalFinished) {
+      setProposalId(undefined);
+      setProposalFinished(false);
+    }
+  }, [tab, proposalFinished]);
   return (
     <Stack sx={{ gap: 2 }}>
       <AdminPageHeader
@@ -69,7 +76,12 @@ function TransitView({ apiUrl, actorId }: { apiUrl: string; actorId: string }) {
           </div>
         )}
         {tab === "catalog" && <LockfileCard />}
-        {tab === "credentials" && <TransitCredentialsSection proposalId={proposalId} />}
+        {tab === "credentials" && (
+          <TransitCredentialsSection
+            proposalId={proposalId}
+            onReviewFinished={() => setProposalFinished(true)}
+          />
+        )}
         {tab === "pipeline" && <TransitPipelinePage showHeader={false} />}
         {tab === "mobility" && <MobilityView />}
       </div>

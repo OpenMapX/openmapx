@@ -205,7 +205,7 @@ until it is recreated. Render keeps writing the routes there while any
 container still mounts that directory, and render, check and **Run
 diagnostics** say so. Recreate Traefik when a few seconds without the proxy
 suit you: `pnpm openmapx services update traefik`, or **Recreate** on
-**Admin → Services → Traefik**.
+**Admin → System → Services → Traefik**.
 
 | Public path         | Target                       |
 | ------------------- | ---------------------------- |

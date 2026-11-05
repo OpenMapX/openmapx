@@ -5071,7 +5071,9 @@
       "targets": "Build these {count} captured targets: {ids}. The server enforces each service’s build prerequisites. Newly enabled services will not be added to this request.",
       "cancel": "Cancel",
       "confirm": "Build reviewed targets"
-    }
+    },
+    "extractCount": "{count, plural, one {# extract} other {# extracts}}",
+    "openToInspect": "Open to inspect"
   },
   "adminDrafts": {
     "title": "Discard unsaved administration changes?",

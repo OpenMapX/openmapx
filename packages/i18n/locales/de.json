@@ -5071,7 +5071,9 @@
       "targets": "Diese {count} erfassten Ziele bauen: {ids}. Der Server prüft die Build-Voraussetzungen jedes Dienstes. Später aktivierte Dienste werden diesem Auftrag nicht hinzugefügt.",
       "cancel": "Abbrechen",
       "confirm": "Geprüfte Ziele bauen"
-    }
+    },
+    "extractCount": "{count, plural, one {# Extrakt} other {# Extrakte}}",
+    "openToInspect": "Zur Prüfung öffnen"
   },
   "adminDrafts": {
     "title": "Nicht gespeicherte Verwaltungsänderungen verwerfen?",

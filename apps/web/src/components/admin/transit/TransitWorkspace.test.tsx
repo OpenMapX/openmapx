@@ -16,8 +16,19 @@ vi.mock("../services/TransitSourcesSection", () => ({
 }));
 vi.mock("../services/TransitCredentialsSection", () => ({
   readTransitCredentialContinuation: () => continuation.current,
-  TransitCredentialsSection: ({ proposalId }: { proposalId?: string }) => (
-    <div>Credential editor {proposalId}</div>
+  TransitCredentialsSection: ({
+    proposalId,
+    onReviewFinished,
+  }: {
+    proposalId?: string;
+    onReviewFinished?: () => void;
+  }) => (
+    <>
+      <div>Credential editor {proposalId}</div>
+      <button type="button" onClick={onReviewFinished}>
+        Finish review
+      </button>
+    </>
   ),
 }));
 vi.mock("./LockfileCard", () => ({ LockfileCard: () => <div>Pin editor</div> }));
@@ -41,4 +52,28 @@ it("restores a completed matching credential continuation once, then permits exp
   expect(screen.getByText("Credential editor reviewed-proposal")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
   expect(screen.getByText("Source editor")).toBeInTheDocument();
+});
+
+it("returns Credentials to the active catalog after the reviewed continuation finishes", () => {
+  continuation.current = { proposalId: "reviewed-proposal" };
+  render(<TransitWorkspace />);
+  expect(screen.getByText("Credential editor reviewed-proposal")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Finish review" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
+  expect(screen.getByText("Credential editor")).toBeInTheDocument();
+  expect(screen.queryByText("Credential editor reviewed-proposal")).toBeNull();
+});
+
+it("retires a finished proposal when history leaves and returns to Credentials", () => {
+  continuation.current = { proposalId: "reviewed-proposal" };
+  render(<TransitWorkspace />);
+  fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
+  fireEvent.click(screen.getByRole("button", { name: "Finish review" }));
+  act(() => adminTestHistory.back());
+  expect(screen.getByText("Source editor")).toBeInTheDocument();
+  act(() => adminTestHistory.push("/admin/data/transit?tab=credentials"));
+  expect(screen.getByText("Credential editor")).toBeInTheDocument();
+  expect(screen.queryByText("Credential editor reviewed-proposal")).toBeNull();
 });

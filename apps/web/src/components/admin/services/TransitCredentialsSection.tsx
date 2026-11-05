@@ -93,7 +93,13 @@ export function readTransitCredentialContinuation(
   }
   return null;
 }
-export function TransitCredentialsSection({ proposalId }: { proposalId?: string } = {}) {
+export function TransitCredentialsSection({
+  proposalId,
+  onReviewFinished,
+}: {
+  proposalId?: string;
+  onReviewFinished?: () => void;
+} = {}) {
   const { apiUrl, actorId } = useAccountAdmin();
   return (
     <TransitCredentialView
@@ -101,6 +107,7 @@ export function TransitCredentialsSection({ proposalId }: { proposalId?: string 
       apiUrl={apiUrl}
       actorId={actorId}
       proposalId={proposalId}
+      onReviewFinished={onReviewFinished}
     />
   );
 }
@@ -108,10 +115,12 @@ function TransitCredentialView({
   apiUrl,
   actorId,
   proposalId,
+  onReviewFinished,
 }: {
   apiUrl: string;
   actorId: string;
   proposalId?: string;
+  onReviewFinished?: () => void;
 }) {
   const client = useMemo(
     () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
@@ -251,6 +260,7 @@ function TransitCredentialView({
       } catch {
         /* No secret is stored; private drafts still clear. */
       }
+      onReviewFinished?.();
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["admin", "transit", "credentials", apiUrl, actorId],
@@ -438,7 +448,13 @@ function TransitCredentialView({
                 </Typography>
               ))}
               <Stack direction="row" spacing={1}>
-                <Button disabled={busy} onClick={invalidateReview}>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    invalidateReview();
+                    onReviewFinished?.();
+                  }}
+                >
                   Cancel review
                 </Button>
                 <Button disabled={busy || Boolean(stale)} onClick={() => setProving(true)}>

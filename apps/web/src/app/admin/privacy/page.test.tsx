@@ -199,7 +199,9 @@ describe("privacy admin case selection", () => {
 
     expect(await screen.findByText("adminNavigation.privacyReadinessBlocked")).toBeInTheDocument();
     expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
-    expect(screen.queryByText("privacySetup.readiness.checks.controller-contact.title")).toBeNull();
+    expect(
+      screen.getByText(/privacySetup.readiness.checks.controller-contact.title/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /controller-contact/ })).not.toBeInTheDocument();
     expect(screen.queryByText("controller-contact")).not.toBeInTheDocument();
   });
@@ -291,3 +293,25 @@ it.each([403, 404])(
     expect(screen.queryByText(/registration-for-case-b/)).not.toBeInTheDocument();
   },
 );
+
+it("names a blocked encryption readiness check for privacy operators without a setup link", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  adminTestHistory.reset("/admin/privacy");
+  installFetch();
+  const fetchFixture = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith("/privacy/admin/readiness")
+      ? Promise.resolve(
+          json({
+            ...privacyReadiness(),
+            checks: [{ id: "encryption-key", status: "fail", detailCode: "unavailable" }],
+          }),
+        )
+      : fetchFixture(input, init),
+  );
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/privacySetup.readiness.checks.encryption-key.title/);
+  expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
+  expect(document.querySelector('a[href="/admin/privacy-setup"]')).toBeNull();
+});

@@ -59,7 +59,7 @@ the correct region. Inspect the generated hardlink plan when several inputs exis
 
 The extract's own header says when its data is current to, which can be well
 before the download. Data-manager records it, and the admin panel's
-**Data workflows** page shows it with its age on the OSM card, flagged once it
+**Data → OSM** page shows it with its age on the OSM card, flagged once it
 is more than 30 days old. The card also shows the diff feed the extract names,
 which is the feed to give Nominatim (below).
 
@@ -243,7 +243,7 @@ covers checkpoints, capacity, and recovery.
 
 ## Inspecting prepared data
 
-**Services → Data workflows** lists every local OSM extract with pagination,
+**Data → OSM** lists every local OSM extract with pagination,
 its recorded region, size and source fingerprint. Downloads record SHA-256
 evidence during their checksum pass. Builds and imports record their output
 hashes and local file identities; refreshing this page does not hash datasets.

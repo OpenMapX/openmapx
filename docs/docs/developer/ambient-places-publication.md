@@ -46,7 +46,7 @@ sources and credits. A late reply is ignored, and a remount rediscovers.
 2. Optionally complete Overture Places ingestion and conflation for the installed
    release. An absent or empty, uninitialized Overture source permits OSM-only
    publication; populated, unfinished, mismatched or stale sources fail closed.
-3. In **Admin → Services → Data workflows → Nearby places**, select **Planet**, **Germany**
+3. In **Admin → Data → Search & places → Nearby places**, select **Planet**, **Germany**
    or **Custom region**. Germany requires the ready OSM snapshot for
    `europe/germany` and, when Overture is initialized, the completed
    `europe/germany` Overture snapshot. A ready state for a smaller region is
@@ -212,7 +212,7 @@ snapshots need rebuilding; merely widening region bounds does not establish
 worldwide coverage. Absent/empty uninitialized Overture allows explicit OSM-only
 fallback. A populated invalid Overture snapshot fails closed.
 
-In **Admin → Services → Data workflows → Nearby places**, select **Planet**,
+In **Admin → Data → Search & places → Nearby places**, select **Planet**,
 then **Publish planet snapshot**. The authenticated build body is:
 
 ```json

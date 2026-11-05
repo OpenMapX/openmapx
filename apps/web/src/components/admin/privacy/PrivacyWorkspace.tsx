@@ -36,6 +36,7 @@ import {
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { PrivacyCaseView } from "./PrivacyCaseView";
+import { privacyReadinessCheckTitle } from "./PrivacyReadinessChecklist";
 export function PrivacyWorkspace() {
   const binding = usePrivacyAdmin();
   return <Workspace key={`${binding.apiOrigin}\0${binding.actorId}`} binding={binding} />;
@@ -109,6 +110,22 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
           }
         >
           {readiness.data.ready ? nav("privacyReadinessReady") : nav("privacyReadinessBlocked")}
+          {readiness.data.checks.some((check) => check.status !== "pass") && (
+            <Stack component="ul" sx={{ m: 0, pl: 2, overflowWrap: "anywhere" }}>
+              {readiness.data.checks
+                .filter((check) => check.status !== "pass")
+                .map((check) => (
+                  <Typography component="li" variant="body2" key={check.id}>
+                    {setup(privacyReadinessCheckTitle(check.id))} —{" "}
+                    {setup(
+                      check.status === "warning"
+                        ? "readiness.status.warning"
+                        : "readiness.status.fail",
+                    )}
+                  </Typography>
+                ))}
+            </Stack>
+          )}
           {!readiness.data.ready && session?.user.role !== "admin" && (
             <Typography variant="body2">{setup("readiness.contactFullAdmin")}</Typography>
           )}

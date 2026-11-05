@@ -7,13 +7,14 @@ import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import {
   ADVANCED_OPERATION_IDS,
   adminDataOperationHref,
   OSM_OPERATION_IDS,
 } from "@/lib/admin/adminDataNavigation";
-import { ADMIN_DESTINATIONS } from "@/lib/admin/adminNavigation";
+import { ADMIN_DESTINATIONS, adminDestinations } from "@/lib/admin/adminNavigation";
 import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { useActivityClient } from "../activity/activityQueries";
@@ -25,11 +26,14 @@ import { NotablePlacesMaintenance } from "../services/NotablePlacesMaintenance";
 import { OsmExtractDetails } from "../services/OsmExtractDetails";
 import { OvertureMaintenance } from "../services/OvertureMaintenance";
 import { SearchIndexMaintenance } from "../services/SearchIndexMaintenance";
+import { useAdminNavigationAccess } from "../shared/AdminNavigationContext";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
+import { HostedDataTopics } from "../shared/HostedDataTopics";
 
 export type DataTopic = "overview" | "osm" | "overture" | "search" | "transfers" | "operations";
 export function DataWorkspace({ topic = "overview" }: { topic?: DataTopic }) {
   const { apiUrl } = useActivityClient();
+  const t = useTranslations("adminNavigation");
   const router = useRouter();
   useEffect(() => {
     if (topic !== "overview") return;
@@ -45,7 +49,10 @@ export function DataWorkspace({ topic = "overview" }: { topic?: DataTopic }) {
   );
   return (
     <Stack key={`${apiUrl}:${topic}`} sx={{ gap: 2 }}>
-      <AdminPageHeader title={destination?.label ?? "Data"} subtitle={destination?.description} />
+      <AdminPageHeader
+        title={t(`destinations.${destination?.id ?? "data"}.label`)}
+        subtitle={t(`destinations.${destination?.id ?? "data"}.description`)}
+      />
       {topic === "overview" && <DataDirectory />}
       {topic === "osm" && <OsmWorkspace />}
       {topic === "overture" && (
@@ -77,7 +84,13 @@ export function DataWorkspace({ topic = "overview" }: { topic?: DataTopic }) {
 function DataDirectory() {
   const { client, apiUrl } = useActivityClient();
   // No domain-specific status subscriptions or polling on the directory.
-  const query = useQuery(serviceAdminQueries(client, apiUrl).data());
+  const access = useAdminNavigationAccess();
+  const t = useTranslations("adminNavigation");
+  const query = useQuery({
+    ...serviceAdminQueries(client, apiUrl).data(),
+    enabled: access.role === "admin" && access.selfHosted !== false,
+  });
+  if (access.selfHosted === false) return <HostedDataTopics showHeader={false} />;
   return (
     <Stack sx={{ gap: 1 }}>
       {query.isError && (
@@ -88,8 +101,9 @@ function DataDirectory() {
           Inventory summary is unavailable. Open a workspace to inspect its own status.
         </Alert>
       )}
-      {ADMIN_DESTINATIONS.filter((entry) => entry.workspace === "data" && entry.id !== "data").map(
-        (entry) => (
+      {adminDestinations(access)
+        .filter((entry) => entry.workspace === "data" && entry.id !== "data")
+        .map((entry) => (
           <Paper variant="outlined" key={entry.id} sx={{ p: 2 }}>
             <Stack
               direction={{ xs: "column", sm: "row" }}
@@ -97,23 +111,22 @@ function DataDirectory() {
             >
               <Stack sx={{ flex: 1 }}>
                 <Typography component={Link} href={entry.href} sx={{ fontWeight: 650 }}>
-                  {entry.label}
+                  {t(`destinations.${entry.id}.label`)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {entry.description}
+                  {t(`destinations.${entry.id}.description`)}
                 </Typography>
               </Stack>
               <Typography variant="caption" color="text.secondary">
                 {entry.id === "osm" && query.data
                   ? query.data.osm.unavailable
                     ? "Inventory unavailable"
-                    : `${query.data.osm.total} extract${query.data.osm.total === 1 ? "" : "s"}`
-                  : "Open to inspect"}
+                    : t("extractCount", { count: query.data.osm.total })
+                  : t("openToInspect")}
               </Typography>
             </Stack>
           </Paper>
-        ),
-      )}
+        ))}
     </Stack>
   );
 }

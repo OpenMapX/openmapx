@@ -35,6 +35,11 @@ it("keeps hosted System tools and restricts privacy administrators to casework",
       .map((entry) => entry.id),
   ).toEqual(["cache", "configuration-transfer"]);
   expect(
+    adminDestinations({ role: "admin", selfHosted: false })
+      .filter((entry) => entry.workspace === "data")
+      .map((entry) => entry.id),
+  ).toEqual(["data", "transit", "coverage"]);
+  expect(
     adminPrimaryNavigation({ role: "privacy_admin", selfHosted: null }).map((entry) => entry.href),
   ).toEqual(["/admin/privacy"]);
   expect(adminDestinations({ role: "user", selfHosted: true })).toEqual([]);
