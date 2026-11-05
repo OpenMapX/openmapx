@@ -678,12 +678,17 @@ it
           }) + "\n",
         );
         const lines = createInterface({ input: child.stdout! });
+        let markCrashReady!: () => void;
+        const crashReady = new Promise<void>((resolve) => {
+          markCrashReady = resolve;
+        });
         const ready = new Promise<string>((resolve, reject) => {
           child.once("exit", (code) => reject(Error(`Native DM exited ${code}: ${stderr}`)));
           void (async () => {
             for await (const line of lines) {
               const event = JSON.parse(line);
               if (event.event === "ready") resolve(event.url);
+              else if (event.event === "crash-ready") markCrashReady();
               else stderr += line + "\n";
             }
           })().catch(reject);
@@ -697,6 +702,7 @@ it
         return {
           child,
           url,
+          crashReady,
           get stderr() {
             return stderr;
           },
@@ -861,6 +867,26 @@ it
           expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
         }
         if (nativeDm) {
+          // Freeze between lifecycle writes before injecting the pin-pointer crash.
+          nativeDm.child.kill("SIGUSR2");
+          await Promise.race([
+            nativeDm.crashReady,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(Error(`Native DM crash boundary timeout: ${nativeDm?.stderr ?? ""}`)),
+                10000,
+              ).unref(),
+            ),
+          ]);
+          expect(
+            existsSync(
+              join(
+                data,
+                ".admin-target-control/executions/data-manager",
+                `${activation.operationKey}.writer`,
+              ),
+            ),
+          ).toBe(false);
           nativeDm.child.kill("SIGKILL");
           await new Promise((resolve) => nativeDm!.child.once("exit", resolve));
         }

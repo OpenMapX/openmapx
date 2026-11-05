@@ -1,4 +1,5 @@
 /** Native owning DM assembly. Only exact pinned public CSV acquisition is fixture IO. */
+import { writeSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const lines = createInterface({ input: process.stdin });
@@ -87,4 +88,10 @@ registerApi(app, {
 });
 await runtime.reconcile();
 const url = await app.listen({ host: "127.0.0.1", port: input.listenPort ?? 0 });
+// The pin-pointer crash fixture stops between synchronous lifecycle writes.
+// Signal callbacks run after the current JavaScript stack has unwound.
+process.once("SIGUSR2", () => {
+  writeSync(1, JSON.stringify({ event: "crash-ready" }) + "\n");
+  process.kill(process.pid, "SIGSTOP");
+});
 process.stdout.write(JSON.stringify({ event: "ready", url }) + "\n");
