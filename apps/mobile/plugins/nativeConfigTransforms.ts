@@ -305,9 +305,12 @@ export function applyAndroidApplicationSecurity(
  * lint fails a release build over them (`ExtraTranslation`) — correctly, since a
  * translated string with no default-locale entry crashes when looked up on any
  * other locale. They are stripped rather than given a default, because a default
- * would mean shipping two meaningless Android strings.
+ * would mean shipping meaningless Android strings. Every key in
+ * `IOS_USAGE_DESCRIPTIONS` must be listed; the plugin tests enforce that.
  */
 export const IOS_ONLY_STRING_RESOURCE_KEYS = [
+  "NSMicrophoneUsageDescription",
+  "NSSpeechRecognitionUsageDescription",
   "NSLocationWhenInUseUsageDescription",
   "NSLocationAlwaysAndWhenInUseUsageDescription",
   "NSLocationAlwaysUsageDescription",
