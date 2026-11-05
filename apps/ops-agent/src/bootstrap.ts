@@ -5,6 +5,13 @@ import { type BuildOpsAgentServerOptions, buildOpsAgentServer } from "./server";
 function installGracefulShutdown(app: ReturnType<typeof buildOpsAgentServer>) {
   let closing = false,
     deadline: ReturnType<typeof setTimeout> | undefined;
+  // A request active at server.close() can otherwise become an idle keep-alive
+  // connection afterwards and outlive the shutdown deadline. Finish its body
+  // normally, then close the connection rather than retaining it for reuse.
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (closing) reply.header("connection", "close");
+    return payload;
+  });
   const stop = () => {
     if (closing) return;
     closing = true;

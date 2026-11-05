@@ -17,5 +17,9 @@ const app = await startOpsAgentServer({
   },
 }, { initialize: async () => {} }, { host: "127.0.0.1", port: 0 });
 const address = app.server.address();
+// Installed after bootstrap: its shutdown listener has set closing before this
+// observation lets the parent release the already accepted request.
+for (const signal of ["SIGTERM", "SIGINT"] as const)
+  process.on(signal, () => process.send?.({ event: "stopping" }));
 if (!address || typeof address === "string") throw Error("Listener missing");
 process.send?.({ event: "ready", port: address.port });

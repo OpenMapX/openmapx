@@ -20,7 +20,8 @@ it.each(["SIGTERM", "SIGINT"] as const)(
         stdio: ["ignore", "ignore", "pipe", "ipc"],
       });
     const ready = Promise.withResolvers<number>(),
-      working = Promise.withResolvers<void>();
+      working = Promise.withResolvers<void>(),
+      stopping = Promise.withResolvers<void>();
     let stderr = "";
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -29,6 +30,7 @@ it.each(["SIGTERM", "SIGINT"] as const)(
       const value = message as { event: string; port?: number };
       if (value.event === "ready") ready.resolve(value.port!);
       if (value.event === "working") working.resolve();
+      if (value.event === "stopping") stopping.resolve();
     });
     const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
       (resolve, reject) => {
@@ -61,7 +63,11 @@ it.each(["SIGTERM", "SIGINT"] as const)(
           operation: { kind: "docker.status" },
         }),
       })
-        .then(async (response) => ({ status: response.status, body: await response.json() }))
+        .then(async (response) => ({
+          status: response.status,
+          connection: response.headers.get("connection"),
+          body: await response.json(),
+        }))
         .catch((error: unknown) => error);
       await Promise.race([
         working.promise,
@@ -71,10 +77,11 @@ it.each(["SIGTERM", "SIGINT"] as const)(
         }),
       ]);
       child.kill(signal);
+      await Promise.race([stopping.promise, failed]);
       child.send("release");
-      expect(await exit).toEqual({ code: 0, signal: null });
+      expect(await request).toMatchObject({ status: 200, connection: "close" });
+      expect(await exit, stderr).toEqual({ code: 0, signal: null });
       expect(readFileSync(join(root, "completed"), "utf8")).toBe("drained");
-      expect(await request).toMatchObject({ status: 200 });
     } finally {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       await exit;
