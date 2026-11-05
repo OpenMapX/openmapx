@@ -23,7 +23,9 @@ export function useAdminDraft({
   useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
   const generation = store.generation;
   const entryId = JSON.stringify([id, signature]);
-  const baselineKey = JSON.stringify(baseline),
+  const baselineKey = JSON.stringify(baseline, (_key, value) =>
+      value === undefined ? null : value,
+    ),
     keys = JSON.stringify(editableKeys);
   useLayoutEffect(() => {
     if (!ready) return;

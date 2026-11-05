@@ -32,3 +32,10 @@ it("keeps both source and id, never treating source as a list filter", () => {
     returnTo: null,
   });
 });
+
+it.each(["", " ", "\n", "x".repeat(257)])(
+  "falls back to Activity for an unaddressable server job %s",
+  (id) => {
+    expect(adminJobHref({ id, source: "application" })).toBe("/admin/activity?tab=jobs");
+  },
+);

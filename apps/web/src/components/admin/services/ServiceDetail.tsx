@@ -40,7 +40,10 @@ import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
 import { MetaRow } from "../shared/MetaRow";
-import { SavedConfigurationApplyError } from "../shared/SchemaConfigForm";
+import {
+  AdminActionNotStartedError,
+  SavedConfigurationApplyError,
+} from "../shared/SchemaConfigForm";
 import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceConfigForm } from "./ServiceConfigForm";
@@ -393,10 +396,14 @@ function ConfigTab({
   data,
   onApplySaved,
   applyPending,
+  onConfigurationSaved,
+  applyOwner,
 }: {
   data: ServiceDetailData;
   onApplySaved: () => Promise<void>;
   applyPending: boolean;
+  onConfigurationSaved: () => void;
+  applyOwner: ReturnType<typeof useAdminMutationOwner>;
 }) {
   const { manifest } = data;
   const startAction = data.status === "running" ? "apply" : "start";
@@ -406,8 +413,7 @@ function ConfigTab({
   // manifest itself so the config tab doesn't refetch the full LoadedService).
   const configQuery = useServiceConfig(manifest.id);
   const saveConfig = useServiceConfigSave(manifest.id);
-  const { client, apiUrl } = useActivityClient();
-  const owner = useAdminMutationOwner(client, JSON.stringify([manifest.id, manifest.configSchema]));
+  const { apiUrl } = useActivityClient();
 
   if (!manifest.configSchema) {
     return (
@@ -438,7 +444,9 @@ function ConfigTab({
           envPrefix={configQuery.data?.envPrefix}
           ownership={configQuery.data?.ownership}
           onSave={async (values) => {
+            const execution = applyOwner;
             await saveConfig.mutateAsync(values);
+            if (execution.active) onConfigurationSaved();
           }}
           onApplySaved={reason(startAction) ? undefined : onApplySaved}
           applySavedLabel={startAction === "start" ? "Start" : "Apply saved configuration"}
@@ -452,9 +460,10 @@ function ConfigTab({
                   // Persist first so a failed apply doesn't lose the edit.
                   if (reason(startAction))
                     throw new Error(reason(startAction) ?? "Action unavailable");
-                  const execution = owner;
+                  const execution = applyOwner;
                   await saveConfig.mutateAsync(values);
                   if (!execution.active) return;
+                  onConfigurationSaved();
                   try {
                     await onApplySaved();
                   } catch (error) {
@@ -517,7 +526,6 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
 function ServiceDetailView({ id }: ServiceDetailProps) {
   const { client } = useActivityClient();
-  const owner = useAdminMutationOwner(client, id);
   const [tab, setTab] = useAdminTab([
     "overview",
     "configuration",
@@ -530,6 +538,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   const showToast = useAdminToast();
 
   const { data, isLoading, isError, refetch } = useServiceDetail(id);
+  const owner = useAdminMutationOwner(client, JSON.stringify([id, data?.manifest.configSchema]));
   const actionMutation = useServiceAction(id);
 
   if (isLoading) {
@@ -561,7 +570,8 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   const isBusy = actionMutation.isPending;
 
   async function runAction(action: AdminServiceAction["action"]) {
-    if (reason(action)) throw new Error(reason(action) ?? "Action unavailable");
+    if (reason(action))
+      throw new AdminActionNotStartedError(reason(action) ?? "Action unavailable");
     const execution = owner;
     try {
       const result = await actionMutation.mutateAsync(action);
@@ -790,6 +800,8 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               data={data}
               onApplySaved={() => runAction(startAction)}
               applyPending={isBusy}
+              applyOwner={owner}
+              onConfigurationSaved={() => actionMutation.resetIntent?.()}
             />
           )}
           {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}

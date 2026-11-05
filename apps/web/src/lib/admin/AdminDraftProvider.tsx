@@ -5,6 +5,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import { authClient } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import {
   createContext,
   type PropsWithChildren,
@@ -19,28 +20,45 @@ import {
 import Dialog from "@/components/ui/Dialog";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { consumeAdminDocumentExitAllowance } from "./adminDocumentExit";
-import { type AdminDraftOwner, AdminDraftStore } from "./adminDraftStore";
+import {
+  type AdminDraftDiscardReason,
+  type AdminDraftOwner,
+  AdminDraftStore,
+} from "./adminDraftStore";
 export const AdminDraftContext = createContext<AdminDraftStore | null>(null);
-const ExitContext = createContext<((reason: string) => Promise<boolean>) | null>(null);
-export function AdminDraftProvider({ children }: PropsWithChildren) {
+type RequestExit = (message: string, reason?: AdminDraftDiscardReason) => Promise<boolean>;
+const ExitContext = createContext<RequestExit | null>(null);
+const DEFAULT_COPY = {
+  title: "Discard unsaved administration changes?",
+  ordinary: "Ordinary drafts will be discarded. Stay to review your work first.",
+  reauthentication: "The reviewed reauthentication continuation will be retained.",
+  stay: "Stay",
+  discard: "Discard and continue",
+};
+export function AdminDraftProvider({
+  children,
+  copy = DEFAULT_COPY,
+}: PropsWithChildren<{ copy?: typeof DEFAULT_COPY }>) {
   const [store] = useState(() => new AdminDraftStore());
   const [reason, setReason] = useState<string | null>(null);
-  const pending = useRef<((choice: boolean) => void) | null>(null);
-  useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
+  const pending = useRef<{
+    resolve: (choice: boolean) => void;
+    reason: AdminDraftDiscardReason;
+  } | null>(null);
   const requestExit = useCallback(
-    (message: string): Promise<boolean> => {
+    (message: string, reason: AdminDraftDiscardReason = "discard"): Promise<boolean> => {
       if (!store.dirty) return Promise.resolve(true);
       if (pending.current) return Promise.resolve(false);
       setReason(message);
       return new Promise((resolve) => {
-        pending.current = resolve;
+        pending.current = { resolve, reason };
       });
     },
     [store],
   );
   const choose = (discard: boolean) => {
-    if (discard) store.discard();
-    pending.current?.(discard);
+    if (discard) store.discard(undefined, undefined, pending.current?.reason);
+    pending.current?.resolve(discard);
     pending.current = null;
     setReason(null);
   };
@@ -53,7 +71,7 @@ export function AdminDraftProvider({ children }: PropsWithChildren) {
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
-      pending.current?.(false);
+      pending.current?.resolve(false);
     };
   }, [store]);
   return (
@@ -65,20 +83,19 @@ export function AdminDraftProvider({ children }: PropsWithChildren) {
           onClose={() => choose(false)}
           aria-labelledby="admin-draft-exit-title"
         >
-          <DialogTitle id="admin-draft-exit-title">
-            Discard unsaved administration changes?
-          </DialogTitle>
+          <DialogTitle id="admin-draft-exit-title">{copy.title}</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              {reason} Ordinary drafts will be discarded. Stay to save them first.
+              {reason} {copy.ordinary}{" "}
+              {pending.current?.reason === "reauthentication" && copy.reauthentication}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => choose(false)} autoFocus>
-              Stay
+              {copy.stay}
             </Button>
             <Button color="warning" onClick={() => choose(true)}>
-              Discard and continue
+              {copy.discard}
             </Button>
           </DialogActions>
         </Dialog>
@@ -98,8 +115,16 @@ function AuthorityObserver() {
 }
 /** Must stay outside SessionAuthorityBoundary, including its pending refresh gate. */
 export function AdminDraftRoot({ children }: PropsWithChildren) {
+  const t = useTranslations("adminDrafts");
+  const copy = {
+    title: t("title"),
+    ordinary: t("ordinary"),
+    reauthentication: t("reauthentication"),
+    stay: t("stay"),
+    discard: t("discard"),
+  };
   return (
-    <AdminDraftProvider>
+    <AdminDraftProvider copy={copy}>
       <AuthorityObserver />
       {children}
     </AdminDraftProvider>
@@ -117,14 +142,14 @@ export function useAdminDraftExit() {
 }
 
 const noopSubscribe = () => () => {};
-const emptySnapshot = () => 0;
+const emptySnapshot = () => "none";
 /** Also fences accepted work when a confirmed session/role replacement retires drafts. */
 export function useAdminDraftAuthority() {
   const store = useContext(AdminDraftContext);
   useSyncExternalStore(
     store?.subscribe ?? noopSubscribe,
-    store?.snapshot ?? emptySnapshot,
-    store?.snapshot ?? emptySnapshot,
+    store?.authoritySnapshot ?? emptySnapshot,
+    store?.authoritySnapshot ?? emptySnapshot,
   );
   return { present: !!store, owner: store?.authority, generation: store?.generation ?? 0 };
 }

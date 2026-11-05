@@ -464,3 +464,17 @@ it.each(["id", "source"])("rejects a direct detail response with the wrong %s", 
   expect(await screen.findByText("Failed to load job details.")).toBeInTheDocument();
   expect(screen.queryByText(/mismatched evidence/)).not.toBeInTheDocument();
 });
+
+it("clears the previous task return when selecting a different inventory job", async () => {
+  const { adminTestHistory } = await import("@/test/adminNavigation");
+  adminTestHistory.reset("/admin/activity?job=old&source=application&returnTo=%2Fadmin%2Fsettings");
+  vi.stubGlobal("fetch", async (input: string) => {
+    const { result, logs, stages, ...row } = job({ id: "next" });
+    return input.includes("?limit=")
+      ? Response.json({ jobs: [{ ...row, actor: null }], total: 1 })
+      : Response.json(job({ id: input.includes("/old") ? "old" : "next" }));
+  });
+  mount(<JobList />);
+  fireEvent.click(await screen.findByRole("button", { name: "Open job next" }));
+  expect(screen.queryByRole("link", { name: "Return to task" })).not.toBeInTheDocument();
+});

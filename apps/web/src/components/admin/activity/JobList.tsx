@@ -266,7 +266,9 @@ export function JobList() {
                   <JobRow
                     key={`${job.source}:${job.id}`}
                     job={job}
-                    onSelect={() => update({ tab: "jobs", job: job.id, source: job.source })}
+                    onSelect={() =>
+                      update({ tab: "jobs", job: job.id, source: job.source, returnTo: null })
+                    }
                   />
                 ))}
               </TableBody>

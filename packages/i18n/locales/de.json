@@ -4908,5 +4908,12 @@
     "failed": "Das Passwort konnte nicht gespeichert werden. Prüfe die Passwortanforderungen oder fordere einen neuen Link an.",
     "originChanged": "Die API hat sich geändert. Öffne den ursprünglichen Link erneut, bevor du dein Passwort festlegst.",
     "back": "Zurück zu OpenMapX"
+  },
+  "adminDrafts": {
+    "title": "Nicht gespeicherte Verwaltungsänderungen verwerfen?",
+    "ordinary": "Gewöhnliche Entwürfe werden verworfen. Bleiben Sie, um Ihre Arbeit zuerst zu prüfen.",
+    "reauthentication": "Die geprüfte Fortsetzung der erneuten Anmeldung bleibt erhalten.",
+    "stay": "Bleiben",
+    "discard": "Verwerfen und fortfahren"
   }
 }

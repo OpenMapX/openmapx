@@ -9,6 +9,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
@@ -211,7 +212,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
             Shutdown and recovery guidance
           </Button>
           <Button
-            component="a"
+            component={Link}
             href={
               lastAcceptedJobId
                 ? adminJobHref({ id: lastAcceptedJobId, source: "application" })

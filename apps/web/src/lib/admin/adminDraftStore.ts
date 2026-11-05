@@ -1,3 +1,5 @@
+export type AdminDraftDiscardReason = "discard" | "reauthentication";
+export type AdminDraftDiscard = { id?: string; reason: AdminDraftDiscardReason };
 export interface AdminDraftOwner {
   apiUrl: string;
   actorId: string;
@@ -16,6 +18,13 @@ const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b
 export class AdminDraftStore {
   private entries = new Map<string, Entry>();
   private listeners = new Set<() => void>();
+  private discardListeners = new Set<(event: AdminDraftDiscard) => void>();
+  subscribeDiscard = (listener: (event: AdminDraftDiscard) => void) => {
+    this.discardListeners.add(listener);
+    return () => {
+      this.discardListeners.delete(listener);
+    };
+  };
   private version = 0;
   private owner: AdminDraftOwner | null = null;
   private origin: string | undefined;
@@ -28,6 +37,7 @@ export class AdminDraftStore {
     };
   };
   snapshot = () => this.version;
+  authoritySnapshot = () => JSON.stringify([this.generation, this.scopeKey]);
   private emit() {
     this.version++;
     this.listeners.forEach((fn) => {
@@ -172,13 +182,16 @@ export class AdminDraftStore {
     this.trim();
     this.emit();
   }
-  discard(id?: string, keys?: readonly string[]) {
+  discard(id?: string, keys?: readonly string[], reason: AdminDraftDiscardReason = "discard") {
     for (const [key, entry] of this.entries)
       if (!id || id === key) {
         if (keys) for (const field of keys) entry.edits.delete(field);
         else entry.edits.clear();
       }
     this.trim();
+    this.discardListeners.forEach((listener) => {
+      listener({ id, reason });
+    });
     this.emit();
   }
   keepEdits(id: string, keys?: readonly string[]) {

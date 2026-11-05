@@ -110,3 +110,17 @@ it("retains a null baseline across repeated edits for conflict detection", () =>
   s.update("form", { x: "second" });
   expect(s.read("form").conflicts).toEqual(["x"]);
 });
+
+it("notifies metadata consumers of explicit discard separately from a reauthentication exit", () => {
+  const store = new AdminDraftStore();
+  const events: unknown[] = [];
+  const stop = store.subscribeDiscard((event) => events.push(event));
+  store.discard("form");
+  store.discard(undefined, undefined, "reauthentication");
+  stop();
+  store.discard();
+  expect(events).toEqual([
+    { id: "form", reason: "discard" },
+    { id: undefined, reason: "reauthentication" },
+  ]);
+});

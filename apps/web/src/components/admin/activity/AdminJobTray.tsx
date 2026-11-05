@@ -16,7 +16,10 @@ export function AdminJobTray() {
   const jobs = useAdminObservedJobs();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const active = jobs.filter((job) => !job.settled).length;
-  const recent = [...jobs].reverse().slice(0, 8);
+  const recent = [...jobs]
+    .reverse()
+    .sort((a, b) => Number(a.settled) - Number(b.settled))
+    .slice(0, 8);
   return (
     <>
       <IconButton

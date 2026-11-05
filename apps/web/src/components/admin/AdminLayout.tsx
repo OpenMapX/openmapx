@@ -32,7 +32,7 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
   const { apiUrl } = useEnv();
   useBindAdminDraftOwner({ apiUrl, actorId: user.id, role: user.role ?? "admin" });
   const hydrated = useHydrated();
-  const desktop = useMediaQuery("(min-width:900px)");
+  const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarOpen = desktop ? desktopOpen : mobileOpen;

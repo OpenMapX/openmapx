@@ -293,7 +293,7 @@ export function AdminSidebar({
   role = "admin",
 }: AdminSidebarProps) {
   const pathname = usePathname();
-  const desktop = useMediaQuery("(min-width:900px)");
+  const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
   const onNavigate = (event: React.MouseEvent) => {
     if (
       !event.defaultPrevented &&

@@ -13,6 +13,9 @@ export function useAdminMutationKey(client: ApiClient) {
         current.current = { client, intent, key: crypto.randomUUID() };
       return current.current.key;
     },
+    reset() {
+      current.current = null;
+    },
     complete(key: string) {
       if (current.current?.key === key) current.current = null;
     },

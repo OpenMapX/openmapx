@@ -285,3 +285,55 @@ it("does not observe broad application jobs when the administration role disable
   await act(async () => {});
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("keeps an older active job visible before newer completed jobs", async () => {
+  vi.stubGlobal("fetch", async (raw: string) => {
+    const id = new URL(raw).pathname.split("/").at(-1) ?? "";
+    return Response.json(job({ id, status: id === "old-active" ? "running" : "success" }));
+  });
+  function Register() {
+    const { client, apiUrl: origin } = useActivityClient();
+    const register = useAdminJobRegistration();
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          register({
+            client,
+            apiUrl: origin,
+            jobId: "old-active",
+            label: "Still running",
+            onSettled: () => {},
+          });
+          for (let i = 0; i < 8; i++)
+            register({
+              client,
+              apiUrl: origin,
+              jobId: `done-${i}`,
+              label: `Completed ${i}`,
+              onSettled: () => {},
+            });
+        }}
+      >
+        Queue mixed
+      </button>
+    );
+  }
+  const qc = createTestQueryClient();
+  caches.push(qc);
+  render(
+    <QueryClientProvider client={qc}>
+      <AdminJobEffectsProvider>
+        <Register />
+        <AdminJobTray />
+      </AdminJobEffectsProvider>
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByText("Queue mixed"));
+  await screen.findByRole("button", { name: "Administration jobs, 1 active" });
+  fireEvent.click(screen.getByRole("button", { name: "Administration jobs, 1 active" }));
+  expect(screen.getByRole("link", { name: "Still running" })).toHaveAttribute(
+    "href",
+    "/admin/activity?tab=jobs&job=old-active&source=application",
+  );
+});

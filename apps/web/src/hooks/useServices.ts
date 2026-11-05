@@ -47,7 +47,7 @@ function useServiceWrite<T extends object, V = void>(
   const qc = useQueryClient();
   const register = useServiceJobRegistration();
   const intent = useAdminMutationKey(client);
-  return useMutation({
+  const mutation = useMutation({
     mutationKey: ["service-write", apiUrl, effect],
     retry: false,
     mutationFn: async (values: V) => {
@@ -62,6 +62,7 @@ function useServiceWrite<T extends object, V = void>(
       return result;
     },
   });
+  return { ...mutation, resetIntent: intent.reset };
 }
 export function useServiceConfigSave(id: string) {
   return useServiceWrite(

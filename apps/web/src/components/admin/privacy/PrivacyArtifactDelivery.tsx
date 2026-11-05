@@ -85,6 +85,10 @@ function Artifact({
     Date.parse(artifact.expiresAt) > Date.now() &&
     authorized;
   const start = async () => {
+    if (
+      !(await requestExit("Administrator reauthentication leaves this page.", "reauthentication"))
+    )
+      return;
     const result = await client.execute("artifact-reauth-start", (c, h) =>
       privacyResult(
         sdk.startPrivacyAdminReauthentication(
@@ -107,8 +111,7 @@ function Artifact({
         expiresAt: result.expiresAt,
         channel,
       });
-      if (await requestExit("Administrator reauthentication leaves this page."))
-        navigateAdminDocument("/auth/privacy/admin", "reauthentication");
+      navigateAdminDocument("/auth/privacy/admin", "reauthentication");
     } catch {
       setNotice("resumeUnavailable");
     }

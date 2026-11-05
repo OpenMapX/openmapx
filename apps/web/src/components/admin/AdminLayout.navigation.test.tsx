@@ -1,5 +1,6 @@
 import { en } from "@openmapx/i18n";
 import { NextIntlClientProvider } from "next-intl";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, createQueryWrapper, fireEvent, render, screen } from "@/test";
 import { AdminLayout } from "./AdminLayout";
@@ -66,4 +67,21 @@ it("keeps the desktop sidebar preference independent of mobile drawer navigation
     for (const listener of listeners) listener();
   });
   expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+it("server-renders the desktop sidebar open without a hydration width shift", () => {
+  const Wrapper = createQueryWrapper();
+  const markup = renderToStaticMarkup(
+    <Wrapper>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <AdminLayout
+          user={{ id: "admin", name: "Example", email: "admin@example.test", role: "admin" }}
+          selfHosted={true}
+        >
+          <div>Page</div>
+        </AdminLayout>
+      </NextIntlClientProvider>
+    </Wrapper>,
+  );
+  expect(markup).toContain('aria-expanded="true"');
 });

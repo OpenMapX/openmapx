@@ -435,13 +435,14 @@ function SettingsGroupPanel({
     .filter(
       (setting) =>
         !setting.envOverride &&
+        isVisible(setting, renderedValues) &&
         (setting.secret
           ? Object.hasOwn(secretValues, setting.key) && secretValues[setting.key] !== setting.value
           : draft.dirtyKeys.includes(setting.key)),
     )
     .map((setting) => setting.key);
   const conflicts = draft.conflicts.filter((key) =>
-    group.settings.some((setting) => setting.key === key),
+    group.settings.some((setting) => setting.key === key && isVisible(setting, renderedValues)),
   );
 
   const save = useMutation({
@@ -1019,7 +1020,16 @@ export function SystemSettings({
   }
 
   if (!data) {
-    return <Alert severity="error">{text.loadFailed}</Alert>;
+    return draftStore && draftStore.scopeKey === null ? (
+      <Alert
+        severity="warning"
+        action={<Button onClick={() => window.location.reload()}>Reload</Button>}
+      >
+        Administrator access changed. Reload to confirm the current account and permissions.
+      </Alert>
+    ) : (
+      <Alert severity="error">{text.loadFailed}</Alert>
+    );
   }
 
   return (

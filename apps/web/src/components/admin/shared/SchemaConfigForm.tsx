@@ -15,6 +15,7 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { ApiClientError } from "@openmapx/core";
 import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
@@ -150,10 +151,18 @@ export function extractConfigFields(
     }));
 }
 
+export class AdminActionNotStartedError extends Error {}
 export class SavedConfigurationApplyError extends Error {
   constructor(cause: unknown) {
+    const status =
+      cause instanceof Error && cause.cause instanceof ApiClientError ? cause.cause.status : null;
+    const notStarted =
+      cause instanceof AdminActionNotStartedError ||
+      (status !== null && status >= 400 && status < 500 && status !== 408);
     super(
-      "Configuration saved. Service application could not be confirmed. Inspect Activity before trying again.",
+      notStarted
+        ? `Configuration saved. Service application was not started. ${cause instanceof Error ? cause.message : "The action was rejected."}`
+        : "Configuration saved. Service application could not be confirmed. Inspect Activity before trying again.",
       { cause },
     );
   }
@@ -181,8 +190,7 @@ export interface SchemaConfigFormProps {
   applyLabel?: string;
   /** Feature-specific acknowledgement: an accepted job is not completed work. */
   applySuccessMessage?: string;
-  /** Preserve edited fields when a background read refreshes the saved baseline. */
-  preserveDirtyValuesOnRefresh?: boolean;
+  applySavedSuccessMessage?: string;
   /** Shown when there are no editable (non-secret) fields. */
   emptyMessage?: string;
 }
@@ -201,7 +209,7 @@ export function SchemaConfigForm({
   applyPending = false,
   applyLabel = "Save & apply",
   applySuccessMessage = "Configuration saved and applied.",
-  preserveDirtyValuesOnRefresh: _preserveDirtyValuesOnRefresh = false,
+  applySavedSuccessMessage = "Saved configuration application queued.",
   emptyMessage = "No editable configuration fields. Credentials live on the Credentials tab.",
 }: SchemaConfigFormProps) {
   const fields = useMemo(() => extractConfigFields(schema, excludeKeys), [schema, excludeKeys]);
@@ -234,7 +242,7 @@ export function SchemaConfigForm({
   const { values, setValues } = draft;
   const [pending, setPending] = useState<"save" | "apply" | "apply-saved" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
+  const [saved, setSaved] = useState<"saved" | "applied" | "applied-saved" | null>(null);
   const changedKeys = draft.dirtyKeys.filter((key) => Object.hasOwn(originalValues, key));
 
   const saving = pending !== null || applyPending;
@@ -252,7 +260,7 @@ export function SchemaConfigForm({
       const diff = buildConfigDiff(fields, values, changedKeys);
       await fn(diff);
       draft.acknowledge(submitted);
-      setSaved(kind === "save" ? "saved" : "applied");
+      setSaved(kind === "save" ? "saved" : kind === "apply-saved" ? "applied-saved" : "applied");
     } catch (err) {
       if (err instanceof SavedConfigurationApplyError) {
         draft.acknowledge(submitted);
@@ -302,9 +310,9 @@ export function SchemaConfigForm({
               : ""}
         </Alert>
       )}
-      {saved === "applied" && (
+      {(saved === "applied" || saved === "applied-saved") && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          {applySuccessMessage}
+          {saved === "applied-saved" ? applySavedSuccessMessage : applySuccessMessage}
         </Alert>
       )}
       {envPrefix && (

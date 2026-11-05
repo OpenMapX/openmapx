@@ -128,7 +128,12 @@ export function AdminReauthenticationDialog(props: Props) {
             href="/auth/admin"
             onClick={async (event) => {
               event.preventDefault();
-              if (await requestExit("Administrator reauthentication leaves this page."))
+              if (
+                await requestExit(
+                  "Administrator reauthentication leaves this page.",
+                  "reauthentication",
+                )
+              )
                 navigateAdminDocument("/auth/admin", "reauthentication");
             }}
           >

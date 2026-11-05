@@ -28,14 +28,50 @@ const ALLOWED: Record<string, string[]> = {
   // Both are relative in-app deep links built from validated numeric
   // coordinates and enum modes; no third-party value reaches the binding.
   "app/s/[token]/SharedViewClient.tsx": ["placeAppUrl(place)", "openUrl"],
-  "components/admin/AdminSidebar.tsx": ["item.href"],
+  "components/admin/AdminSidebar.tsx": ["item.href", "entry.href"],
   "components/admin/AdminTopBar.tsx": ["crumb.href"],
   "components/admin/shared/AdminPageHeader.tsx": ["backHref"],
   "components/admin/shared/CompactAlertList.tsx": ["item.href"],
-  "components/admin/overview/AdminOverview.tsx": ["href"],
+  "components/admin/overview/AdminOverview.tsx": [
+    "href",
+    "adminJobHref({ id: job.id, source: job.source })",
+  ],
   // `actionHref` is read only from the module-local CHECK_ACTIONS constant,
   // whose values are fixed relative admin routes; no runtime URL enters it.
   "components/admin/privacy/PrivacyReadinessChecklist.tsx": ["actionHref"],
+  // Registry entries and validated job-return values are internal administration destinations.
+  "components/admin/data/DataWorkspace.tsx": ["entry.href"],
+  "components/admin/shared/AdminTopicNavigation.tsx": ["entry.href"],
+  "components/admin/activity/JobList.tsx": ["selection.returnTo"],
+  // adminJobHref validates the source/id and encodes every runtime part into an internal query.
+  "components/admin/activity/AdminJobLink.tsx": ["adminJobHref({ id, source, returnTo })"],
+  "components/admin/activity/AdminJobTray.tsx": [
+    "adminJobHref({ id: job.jobId, source: job.source, returnTo: job.returnTo })",
+  ],
+  "components/admin/services/ServiceCatalog.tsx": [
+    'adminJobHref({ id: lastAcceptedJobId, source: "application" })',
+  ],
+  "components/admin/services/TransitSourcesSection.tsx": [
+    'adminJobHref({ id: syncJob?.jobId ?? lastJobId ?? "", source: "data-manager" })',
+  ],
+  "components/admin/services/ArtifactTransfersSection.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
+  "components/admin/services/BackupsPage.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
+  "components/admin/services/ComposePreview.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
+  "components/admin/services/NotablePlacesMaintenance.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
+  "components/admin/services/OvertureMaintenance.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
+  "components/admin/services/SearchIndexMaintenance.tsx": [
+    `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
+  ],
   "components/auth/MangroveLocalAccountSection.tsx": ["MANGROVE_HOME_URL"],
   "components/panels/place/reviews/WriteReviewDialog.tsx": [
     "MANGROVE_HOME_URL",
@@ -118,7 +154,7 @@ function findUnsafeHrefs(file: string): string[] {
       expression.startsWith('"') ||
       expression.startsWith("'") ||
       expression.startsWith("`") ||
-      allowed.has(expression)
+      [...allowed].some((entry) => entry.replace(/\s+/g, " ") === expression.replace(/\s+/g, " "))
     ) {
       continue;
     }

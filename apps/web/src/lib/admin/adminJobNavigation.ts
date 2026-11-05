@@ -84,7 +84,7 @@ export function adminJobHref({
   returnTo?: string;
 }): string {
   if (!boundedId(id) || (source !== "application" && source !== "data-manager"))
-    throw new Error("Invalid administration job identity");
+    return "/admin/activity?tab=jobs";
   const params = new URLSearchParams({ tab: "jobs", job: id, source });
   const safeReturn = safeAdminJobReturn(returnTo);
   if (safeReturn) params.set("returnTo", safeReturn);

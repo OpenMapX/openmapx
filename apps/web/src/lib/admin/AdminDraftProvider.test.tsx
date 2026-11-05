@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@/test";
-import { AdminDraftProvider } from "./AdminDraftProvider";
+import { AdminDraftProvider, useAdminDraftAuthority } from "./AdminDraftProvider";
 import { allowAdminDocumentExit } from "./adminDocumentExit";
 import { useAdminDraft } from "./useAdminDraft";
 
@@ -89,4 +89,48 @@ it("still accepts an edit after an old clean entry is evicted from the cache", (
   fireEvent.change(screen.getByLabelText("form-0"), { target: { value: "edited after eviction" } });
   expect(screen.getByLabelText("form-0")).toHaveValue("edited after eviction");
   expect(exit()).toBe(true);
+});
+
+function OptionalField() {
+  const draft = useAdminDraft({
+    id: "optional",
+    baseline: { x: undefined },
+    editableKeys: ["x"],
+    signature: "v1",
+  });
+  return (
+    <input
+      aria-label="Optional"
+      value={String(draft.values.x ?? "")}
+      onChange={(event) => draft.setValues({ x: event.target.value })}
+    />
+  );
+}
+it("retains an edited optional field whose baseline was undefined", () => {
+  render(
+    <AdminDraftProvider>
+      <OptionalField />
+    </AdminDraftProvider>,
+  );
+  fireEvent.change(screen.getByLabelText("Optional"), { target: { value: "a" } });
+  expect(screen.getByLabelText("Optional")).toHaveValue("a");
+  expect(exit()).toBe(true);
+});
+
+it("does not notify authority consumers for ordinary keystrokes", () => {
+  let renders = 0;
+  function Authority() {
+    useAdminDraftAuthority();
+    renders++;
+    return <span>Authority</span>;
+  }
+  render(
+    <AdminDraftProvider>
+      <Form />
+      <Authority />
+    </AdminDraftProvider>,
+  );
+  const before = renders;
+  fireEvent.change(screen.getByLabelText("Label"), { target: { value: "ordinary edit" } });
+  expect(renders).toBe(before);
 });

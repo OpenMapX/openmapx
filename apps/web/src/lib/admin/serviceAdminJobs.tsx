@@ -2,6 +2,7 @@
 
 import type { ApiClient } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 import { useAdminJobRegistration } from "./adminJobEffects";
 import { safeAdminJobReturn } from "./adminJobNavigation";
@@ -19,14 +20,13 @@ export type RegisterServiceJob = (accepted: AcceptedServiceJob) => void;
 export function useServiceJobRegistration(): RegisterServiceJob {
   const register = useAdminJobRegistration();
   const qc = useQueryClient();
-  const tab =
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
-  const returnTo =
-    typeof window === "undefined"
-      ? undefined
-      : (safeAdminJobReturn(
-          window.location.pathname + (tab ? `?${new URLSearchParams({ tab }).toString()}` : ""),
-        ) ?? undefined);
+  const pathname = usePathname(),
+    params = useSearchParams();
+  const tab = params?.get("tab");
+  const returnTo = pathname
+    ? (safeAdminJobReturn(pathname + (tab ? `?${new URLSearchParams({ tab }).toString()}` : "")) ??
+      undefined)
+    : undefined;
   return useCallback(
     ({ client, apiUrl, jobId, effect }) =>
       register({
