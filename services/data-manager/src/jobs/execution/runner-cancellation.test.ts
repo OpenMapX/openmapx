@@ -18,7 +18,7 @@ import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { transitousRunnerRequestSchema } from "@openmapx/core/transitous-runner";
 import { build } from "esbuild";
 import postgres from "postgres";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { buildTransitousRunnerServer } from "../../../../../apps/transitous-runner/src/server";
 import { createTransitousScriptRunner } from "../transitous/script-runner";
 import { createDataExecutionRuntime } from "./runtime";
@@ -576,20 +576,35 @@ it.skipIf(
         serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
       }),
       journal = control.createDataExecutionControlJournal(installation, sql),
-      store = createPostgresDataExecutionStore(sql, { controlJournal: journal }),
-      runtime = createDataExecutionRuntime({
-        store,
-        dispatch: async (_input, context) => {
-          await run({ script: "garbage-collect" });
-          context.signal.throwIfAborted();
-          return {
-            kind: "transit-sync",
-            finalStatus: "ok",
-            sourceRevision: "public-fixture",
-            countries: ["de"],
-          };
-        },
+      store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+    let resumeCleanup = () => {},
+      terminalPublished = false;
+    const cleanupHeld = new Promise<void>((resolve) => {
+        resumeCleanup = resolve;
+      }),
+      publishTerminal = journal.publishTerminal.bind(journal);
+    // Keep the real terminal commit/signature, but hold the live worker before
+    // lease release. A terminal row must not masquerade as completed cleanup.
+    const publication = vi
+      .spyOn(journal, "publishTerminal")
+      .mockImplementation(async (execution) => {
+        await publishTerminal(execution);
+        terminalPublished = true;
+        await cleanupHeld;
       });
+    const runtime = createDataExecutionRuntime({
+      store,
+      dispatch: async (_input, context) => {
+        await run({ script: "garbage-collect" });
+        context.signal.throwIfAborted();
+        return {
+          kind: "transit-sync",
+          finalStatus: "ok",
+          sourceRevision: "public-fixture",
+          countries: ["de"],
+        };
+      },
+    });
     let id: string | undefined, operationKey: string | undefined;
     try {
       const deadline = Date.now() + 60000;
@@ -624,14 +639,38 @@ it.skipIf(
       await expect
         .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
         .toBe("canceled");
-      expect((await store.inspect(id))?.status.publication).toBe("not_started");
-      expect((await store.inspect(id))?.finishedAt).not.toBeNull();
+      await expect.poll(() => terminalPublished, { timeout: 15000 }).toBe(true);
+      const terminal = await store.inspect(id),
+        lock = join(root, "data/.admin-target-control/locks/motis");
+      if (!terminal) throw Error("Original terminal row missing");
+      expect(existsSync(lock)).toBe(true);
+      expect(() =>
+        control.verifyDataControlTerminalWitness(installation, terminal.execution, terminal.status),
+      ).toThrow(/ENOENT/);
+      expect(terminal.status.publication).toBe("not_started");
+      expect(terminal.finishedAt).not.toBeNull();
       expect(posts).toBe(1);
       expect(cancels).toBeGreaterThanOrEqual(1);
-      expect(existsSync(join(root, "data/.admin-target-control/locks/motis"))).toBe(false);
+      resumeCleanup();
+      // The signed contained-terminal witness is published only after lease
+      // release; the canceled database row above is visible before that point.
+      await expect
+        .poll(
+          () =>
+            control.verifyDataControlTerminalWitness(
+              installation,
+              terminal.execution,
+              terminal.status,
+            ).status,
+          { timeout: 15000 },
+        )
+        .toEqual(terminal.status);
+      expect(existsSync(lock)).toBe(false);
     } finally {
+      resumeCleanup();
       writeFileSync(released, "release");
       await runtime.close();
+      publication.mockRestore();
       runner.server.closeAllConnections();
       await runner.close();
       if (!id && operationKey) id = (await store.lookup(operationKey))?.status.id;
