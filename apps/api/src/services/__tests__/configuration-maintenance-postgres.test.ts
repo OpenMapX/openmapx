@@ -3074,7 +3074,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       60000,
     );
-    it.each(["source", "guard"] as const)(
+    it.each(["source", "guard", "lost-response"] as const)(
       "refreshes actual durable nonempty maintenance inspection from the original API job with drift=%s",
       async (drift) => {
         dm = await ownedDataManager({
@@ -3175,11 +3175,45 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               if (original) writeFileSync(envPath, original);
               else rmSync(envPath);
             }
-          } else {
+          } else if (drift === "guard") {
             await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid AND kind='configuration-maintenance'`;
             expect(await maintenance.inspectConfigurationMaintenance(identity)).toMatchObject({
               state: "prepared",
               preflight: "unavailable",
+              sequence: prepared.sequence,
+            });
+          } else {
+            const nativeFetch = globalThis.fetch;
+            let dropped = false;
+            const transport = vi
+              .spyOn(globalThis, "fetch")
+              .mockImplementation(async (input, options) => {
+                const response = await nativeFetch(input, options);
+                if (
+                  !dropped &&
+                  typeof options?.body === "string" &&
+                  JSON.parse(options.body).operation?.kind === "configurationMaintenance.inspect"
+                ) {
+                  expect(response.status).toBe(200);
+                  dropped = true;
+                  await response.arrayBuffer();
+                  throw new TypeError("Named inspection response loss");
+                }
+                return response;
+              });
+            try {
+              await expect(
+                maintenance.inspectConfigurationMaintenance(identity),
+              ).rejects.toBeInstanceOf(
+                (await import("../admin-job-failure")).JobObservationPending,
+              );
+              expect(dropped).toBe(true);
+            } finally {
+              transport.mockRestore();
+            }
+            expect(await maintenance.inspectConfigurationMaintenance(identity)).toMatchObject({
+              state: "prepared",
+              preflight: "current",
               sequence: prepared.sequence,
             });
           }

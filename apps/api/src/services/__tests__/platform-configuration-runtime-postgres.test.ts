@@ -446,6 +446,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-recovery",
       "launch-native-job",
       "launch-native-resource",
+      "launch-native-resource-inspection-loss",
       "launch-native-release",
       "launch-native-release-wrong-config",
       "launch-native-system-release",
@@ -458,7 +459,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-system-release-pull-failure",
     ])(
       "guards and retains helper mode %s through original ownership",
-      async (version) => {
+      async (mode) => {
+        const version =
+          mode === "launch-native-resource-inspection-loss" ? "launch-native-resource" : mode;
         const nativeAgents: Array<Awaited<ReturnType<typeof nativeReleaseAgent>>> = [];
         const nativeWorkers: Array<Awaited<ReturnType<typeof nativeReleaseWorker>>> = [];
         let nativeAgentExited = false;
@@ -718,10 +721,31 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           controlInstallation: installation,
         });
         let acknowledgementLost = false;
+        let inspectionReplyLost = false;
+        const rejectedRequests: Array<{ kind?: string; status: number; errorClass?: string }> = [];
         app.addHook("onSend", async (request, reply, payload) => {
           const operation = (
             request.body as { operation?: { kind?: string; operationKey?: string } } | undefined
           )?.operation;
+          if (
+            mode === "launch-native-resource-inspection-loss" &&
+            !inspectionReplyLost &&
+            operation?.kind === "configurationMaintenance.inspect" &&
+            reply.statusCode === 200 &&
+            typeof payload === "string" &&
+            JSON.parse(payload).result?.value?.generation === "committed"
+          ) {
+            inspectionReplyLost = true;
+            reply.raw.destroy();
+          }
+          if (reply.statusCode >= 400 && rejectedRequests.length < 16) {
+            const body = typeof payload === "string" ? JSON.parse(payload) : undefined;
+            rejectedRequests.push({
+              kind: operation?.kind,
+              status: reply.statusCode,
+              errorClass: body?.error?.class,
+            });
+          }
           if (
             version === "launch-native-system-release-ack-loss" &&
             !acknowledgementLost &&
@@ -1199,6 +1223,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 error: job.error?.split("\n")[0].slice(0, 200),
                 observation: (job.result as Record<string, unknown> | null)?.observation,
                 settled: !!(job.result as Record<string, unknown> | null)?._settled,
+                rejectedRequests,
                 candidate: (() => {
                   const value = (
                     job.result as {
@@ -1215,6 +1240,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 })),
               }),
             ).toBe("success");
+            if (mode === "launch-native-resource-inspection-loss")
+              expect(inspectionReplyLost).toBe(true);
             if (version === "launch-native-system-release-late-cancel")
               expect(
                 typeof (job.result as { _cancelRequestedAt?: unknown })._cancelRequestedAt,

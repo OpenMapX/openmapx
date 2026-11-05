@@ -29,6 +29,7 @@ import {
   createControlRootOperationKey,
   encodePreparedConfigurationRecord,
   inspectPreparedConfigurationRecord,
+  OpsClientError,
   type OpsOperation,
   opsOperationFingerprint,
   opsOperationSchema,
@@ -6160,12 +6161,24 @@ export async function inspectConfigurationMaintenance(
     });
   if (!attempt) throw Error("Original live API inspection owner required");
   await checkpointMaintenanceInspection(retained, { attempt, state: "attempted" }, transaction);
-  const response = await createApiOpsClient().execute(operation, {
-    operationKey: key,
-    signal: AbortSignal.any([job.signal, AbortSignal.timeout(15000)]),
-    execution: { requestedDeadlineAt: attempt.requestedDeadlineAt },
-    parentAssertion: await issueApiJobChildAssertion(attempt),
-  });
+  const response = await createApiOpsClient()
+    .execute(operation, {
+      operationKey: key,
+      signal: AbortSignal.any([job.signal, AbortSignal.timeout(15000)]),
+      execution: { requestedDeadlineAt: attempt.requestedDeadlineAt },
+      parentAssertion: await issueApiJobChildAssertion(attempt),
+    })
+    .catch((error: unknown) => {
+      // An unavailable inspection proves no terminal outcome. Retain the
+      // original candidate/fences for bounded observation, never replay effects.
+      if (error instanceof OpsClientError) {
+        if (["runtime", "timeout", "busy"].includes(error.errorClass))
+          throw new JobObservationPending("transport");
+        if (error.errorClass === "recovery_required")
+          throw new JobObservationPending("recovery_required");
+      }
+      throw error;
+    });
   if (response.execution !== "sync") throw Error("Original maintenance inspection unavailable");
   const receipt = configurationMaintenanceReceiptSchema.parse(response.value),
     { kind: _kind, ...binding } = prepared;
