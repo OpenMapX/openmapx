@@ -155,12 +155,13 @@ it("does not preview an empty adopted default region", async () => {
 });
 it("does not start a platform write after leaving during the fresh-baseline read", async () => {
   let resolve!: (value: unknown) => void;
-  mocks.get.mockResolvedValueOnce({ status: 200, data: { ...initial, pending: [] } });
-  mocks.get.mockImplementation(
-    () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
+  let reads = 0;
+  mocks.get.mockImplementation(() =>
+    ++reads === 1
+      ? Promise.resolve({ status: 200, data: { ...initial, pending: [] } })
+      : new Promise((done) => {
+          resolve = done;
+        }),
   );
   const view = mount("retention");
   fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
