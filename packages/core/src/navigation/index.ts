@@ -146,6 +146,8 @@ export {
   type TransitNavigationStartPackage,
   transitStartPackageSchema,
   transitStopAreaSchema,
+  type VoiceEvent,
+  voiceEventSchema,
   WEB_TO_NATIVE_TYPES,
   type WebToNativeMessage,
   webToNativeSchema,

@@ -19,7 +19,7 @@ import {
  *    fetch, no JavaScript to evaluate, no SQL, no file path, no arbitrary
  *    notification or speech text. A same-origin XSS in the page can reach
  *    whatever this protocol exposes, so it exposes only bounded navigation
- *    commands.
+ *    and shell commands.
  *  - **Bounds are checked before side effects.** Byte size first, then JSON,
  *    then a strict schema, then aggregate route limits. A message that fails any
  *    stage produces a typed error and changes nothing.
@@ -88,6 +88,10 @@ export const WEB_TO_NATIVE_TYPES = [
   "location.request",
   "settings.open",
   "auth.open",
+  "voice.probe",
+  "voice.start",
+  "voice.stop",
+  "voice.cancel",
 ] as const;
 
 export const NATIVE_TO_WEB_TYPES = [
@@ -108,6 +112,8 @@ export const NATIVE_TO_WEB_TYPES = [
   "settings.result",
   "deep-link.open",
   "auth.result",
+  "voice.availability",
+  "voice.event",
 ] as const;
 
 export type WebToNativeType = (typeof WEB_TO_NATIVE_TYPES)[number];
@@ -425,6 +431,23 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
     z.object({ id: intakeIdSchema, disposition: z.enum(["opened", "discarded"]) }).strict(),
   ),
   envelope("destinations.update", carDestinationsSchema),
+  envelope("voice.probe", z.object({}).strict()),
+  envelope(
+    "voice.start",
+    z
+      .object({
+        requestId: boundedId,
+        locale: z
+          .string()
+          .max(35)
+          // BCP 47 subtags are 1–8 alphanumerics; singletons ("u", "x")
+          // introduce extensions, as in a WebView's "de-DE-u-nu-latn".
+          .regex(/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$/),
+      })
+      .strict(),
+  ),
+  envelope("voice.stop", z.object({ requestId: boundedId }).strict()),
+  envelope("voice.cancel", z.object({ requestId: boundedId }).strict()),
   envelope(
     "web.hello",
     z
@@ -525,6 +548,32 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
   ),
 ]);
 
+export const voiceEventSchema = z
+  .object({
+    requestId: boundedId,
+    state: z.enum(["listening", "partial", "final", "ended", "error"]),
+    text: z.string().max(512).optional(),
+    error: z
+      .enum([
+        "not-allowed",
+        "language-not-supported",
+        "no-speech",
+        "audio-capture",
+        "busy",
+        "unavailable",
+        "aborted",
+        "generic",
+      ])
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (event) => event.text === undefined || event.state === "partial" || event.state === "final",
+    { message: "Text requires a transcript state" },
+  );
+
+export type VoiceEvent = z.infer<typeof voiceEventSchema>;
+
 export const nativeToWebSchema = z.discriminatedUnion("type", [
   envelope(
     "intake.items",
@@ -540,6 +589,11 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
   envelope("intake.chunk", intakeChunkSchema.extend({ forMessageId: boundedId })),
   envelope("intake.completed", z.object({ id: intakeIdSchema, forMessageId: boundedId }).strict()),
   envelope("intake.changed", z.object({ pendingCount: z.number().int().min(0).max(10) }).strict()),
+  envelope(
+    "voice.availability",
+    z.object({ forMessageId: boundedId, available: z.boolean() }).strict(),
+  ),
+  envelope("voice.event", voiceEventSchema),
   envelope(
     "native.hello",
     z

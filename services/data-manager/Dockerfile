@@ -35,6 +35,8 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# pnpm checks every patched dependency's file hash, installed here or not.
+COPY patches/ patches/
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/

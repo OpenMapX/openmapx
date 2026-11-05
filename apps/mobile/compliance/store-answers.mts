@@ -92,6 +92,7 @@ const REQUIRED_COVERAGE: { subject: string; practiceId: string }[] = [
   { subject: "WebView cookies and cache", practiceId: "webview-storage" },
   { subject: "map tile and imagery providers", practiceId: "map-and-media-providers" },
   { subject: "store distribution", practiceId: "store-operational-data" },
+  { subject: "on-device voice-search audio", practiceId: "voice-search-audio" },
 ];
 
 const byId = new Map(registry.practices.map((practice) => [practice.id, practice]));
@@ -114,6 +115,26 @@ const collectedForGoogle = generated.filter((practice) => practice.googleDataSaf
 const PREAMBLE = `<!-- Generated from data-practices.json by store-answers.mts. Do not edit by hand:
      update registry prose or this template and regenerate. --check verifies
      generated-file parity, not behavior, privacy classifications or approval. -->`;
+
+function voiceAudioSection(): string {
+  const practice = byId.get("voice-search-audio") as Practice;
+  return `## On-device voice-search audio
+
+${practice.purpose}
+
+${practice.retention.note}
+
+User control: ${practice.userControl}
+
+Proposed collection: Apple ${practice.appleLabel.collected ? "Yes" : "No"}; Google ${practice.googleDataSafety.collected ? "Yes" : "No"}.
+Proposed Google sharing: ${practice.googleDataSafety.shared ? "Yes" : "No"}.
+Purpose: ${(practice.googleDataSafety.purposes ?? []).join(", ")}.
+
+${practice.notes}
+
+These are design classifications, pending candidate device/privacy qualification.
+`;
+}
 
 function appleWorksheet(): string {
   const rows = collectedForApple
@@ -161,6 +182,7 @@ below remain pending review; omitted rows do not establish an exemption.
 | --- | --- | --- | --- | --- |
 ${rows}
 
+${voiceAudioSection()}
 ## Tracking
 
 Proposed answer: No. Verify the exact binary's dependencies and privacy manifests,
@@ -248,6 +270,7 @@ also be reviewed; their absence does not establish that data is not collected.
 | --- | --- | --- | --- | --- | --- |
 ${rows}
 
+${voiceAudioSection()}
 ## Security practices to verify
 
 - Verify HTTPS for the binary, served web code and every configured provider path.

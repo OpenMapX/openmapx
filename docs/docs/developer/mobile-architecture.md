@@ -37,17 +37,17 @@ records.
 
 ## The authority matrix
 
-| Concern                                                               | Browser or PWA                            | Installed shell                                                                        |
-| --------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                 |
-| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                       |
-| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                 |
-| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                             |
-| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                        |
-| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                         |
-| Deep-link delivery                                                    | Browser flows                             | OS URLs validated, queued through document loading, delivered after bridge negotiation |
-| Community frontend bundles                                            | Disabled                                  | Disabled                                                                               |
-| Microphone input                                                      | Subject to browser support and permission | Disabled                                                                               |
+| Concern                                                               | Browser or PWA                            | Installed shell                                                                                                 |
+| --------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                                          |
+| Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                                                |
+| Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                                          |
+| Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                                                      |
+| Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                                                 |
+| One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                                                  |
+| Deep-link delivery                                                    | Browser flows                             | OS URLs validated, queued through document loading, delivered after bridge negotiation                          |
+| Community frontend bundles                                            | Disabled                                  | Disabled                                                                                                        |
+| Microphone input                                                      | Subject to browser support and permission | Native on-device search on iOS and Android 13+ when the voice probe answers available; WebView capture disabled |
 
 The immutable descriptor is injected before page scripts run. Shell restrictions
 use that descriptor, so they apply during negotiation, incompatibility and errors.
@@ -144,6 +144,12 @@ messages are stamped only after negotiation, so a pre-handshake restore remains
 readable by the older page. Pending inbox items survive until a compatible page
 opens them, the user discards them, or their 24-hour expiry.
 
+Voice input uses a correlated `voice.probe` / `voice.availability` exchange after
+negotiation, without changing either strict hello payload or the protocol version.
+New APK + old web: hello is unchanged and old web never probes. Old APK + new web:
+the unknown probe is silently rejected and times out, keeping voice hidden while
+navigation remains negotiated. iOS and Android below API 33 answer unavailable.
+
 ### What crosses, and what does not
 
 The bridge carries bounded commands, route and itinerary data, snapshots and
@@ -165,6 +171,19 @@ only to its matching session, route and base revision; a gap requests a full
 snapshot. The snapshot reducer and tests implement this contract independently
 of the unfinished foreground composition.
 
+### Voice input messages
+
+- Web → native: `voice.probe` requests availability; native replies `voice.availability` with `forMessageId` and boolean `available`.
+- Web → native: `voice.start` carries `requestId` and `locale`.
+- Web → native: `voice.stop` finishes the matching utterance; `voice.cancel` aborts it.
+- Native → web: `voice.event` carries `requestId`, state and bounded transcript text or an error code.
+
+Start, stop and cancel are fire-and-forget; events are subscription broadcasts.
+The availability probe uses a correlated request with the default five-second read deadline.
+The native recogniser owns microphone capture and sends only text to the page.
+Guidance output uses `speech`; recognition uses the separate `voice.probe` availability check.
+See [On-device voice input](./voice-input.md) for the design and pending device qualification.
+
 ## Fixed origin
 
 `config/mobileConfig.ts` validates the origin at build time. Release origins must
@@ -173,7 +192,11 @@ use HTTPS and pass its public-host checks. The official application identifier
 There is no runtime server selector.
 
 `App.tsx` applies a navigation allowlist, App-Bound Domains on iOS, disabled
-WebView geolocation and denied media capture. Deep-link parsing reduces accepted
+WebView geolocation and denied media capture.
+The microphone boundary applies to browser capture, not native voice search.
+iOS denies capture with `mediaCapturePermissionGrantType="deny"`; the Android
+WebView patch denies audio and video capture. The web shell microphone flag
+remains false even when native voice input is available. Deep-link parsing reduces accepted
 links to a map query or an active-navigation intent; parser support does not
 establish end-to-end OS link delivery in the current app.
 

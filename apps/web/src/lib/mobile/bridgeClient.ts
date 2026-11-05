@@ -100,6 +100,7 @@ const EXPECTED_REPLY: Partial<Record<WebToNativeMessage["type"], NativeToWebMess
   "intake.read": "intake.chunk",
   "intake.complete": "intake.completed",
   "web.hello": "native.hello",
+  "voice.probe": "voice.availability",
   "session.prepare": "session.prepared",
   "session.start": "session.started",
   "session.replace": "session.replaced",

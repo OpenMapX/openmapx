@@ -34,8 +34,12 @@ there is no runtime server selector.
 
 ## The distribution boundary
 
-The installed WebView is restricted to the compiled origin. Camera, microphone
-and WebView geolocation are disabled. Community frontend runtime code is disabled
+The installed WebView is restricted to the compiled origin. WebView camera,
+microphone and geolocation access are disabled. Native on-device voice search
+is designed for iOS and Android 13+ with available on-device language support; it does not
+grant microphone access to the page. iOS uses our fail-closed recognizer patch; candidate device qualification is still required.
+See [On-device voice input](./voice-input.md) for the recognition boundary and
+open device checks. Community frontend runtime code is disabled
 in the app, ordinary web app and PWA. Declarative metadata and permitted static
 assets remain supported; built-in integrations are part of the reviewed host.
 
@@ -75,6 +79,11 @@ decision keeps it under that licence while it links the AGPL `@openmapx/i18n`
 package for shell strings and cue formatting. Shared `@openmapx/core` and
 `@openmapx/mobility-core` code is Apache-2.0, but that does not remove the i18n
 constraint.
+
+`expo-speech-recognition` 57.1.1 is a community dependency by jamsch under MIT.
+The mobile dependency inventory reports licences but does not distribute notices,
+and the web notice generator excludes mobile dependencies. A mobile distribution
+notice remains a release gap.
 
 ### The one decision required
 

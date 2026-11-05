@@ -500,6 +500,37 @@
       "legalSection": "third-parties",
       "notes": "Pending review of distributor handling, developer access and the exact binary SDK inventory. The retained not-collected values do not establish a real-time-processing exemption or prove that the operator receives no store diagnostics.",
       "encryptedInTransit": true
+    },
+    {
+      "id": "voice-search-audio",
+      "dataType": "Microphone audio for user-initiated on-device voice search",
+      "source": "device-sensor",
+      "leavesDevice": false,
+      "purpose": "Convert one user-initiated utterance into search text using the OS on-device recogniser on iOS and Android 13+; no network recogniser fallback is permitted.",
+      "linkedToAccount": false,
+      "retention": {
+        "kind": "ephemeral",
+        "note": "Audio is processed during the utterance only and is not retained by OpenMapX. Recording persistence is disabled. Transcripts are not logged by voice input; resulting search text follows normal search-request and search-history rules."
+      },
+      "shared": "none",
+      "userControl": "Tap the microphone to start and grant microphone permission and, on iOS, speech-recognition authorization; tap again to stop. Backgrounding or leaving the page cancels. Revoke permissions in platform settings.",
+      "appleLabel": {
+        "collected": false,
+        "category": "Audio Data",
+        "purposes": ["App Functionality"],
+        "linkedToIdentity": false,
+        "usedForTracking": false
+      },
+      "googleDataSafety": {
+        "collected": false,
+        "shared": false,
+        "category": "Audio files",
+        "ephemeral": true,
+        "optional": true,
+        "purposes": ["App functionality"]
+      },
+      "legalSection": "Voice Search (Microphone)",
+      "notes": "Design classification pending candidate device/privacy qualification. Android below API 33 is disabled. iOS requires locale-specific offline support and the fail-closed package patch; no app-triggered iOS model download is used. Model downloads require a network; recognition does not. Only transcript text crosses the bridge, then ordinary search may transmit it."
     }
   ]
 }

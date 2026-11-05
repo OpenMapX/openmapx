@@ -214,6 +214,7 @@ const sidebars: SidebarsConfig = {
           items: [
             'developer/mobile-architecture',
             'developer/android-auto',
+            'developer/voice-input',
             'developer/mobile-feasibility',
             'developer/mobile-release',
             'developer/mobile-store-operations',

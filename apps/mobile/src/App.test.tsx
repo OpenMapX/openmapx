@@ -1,9 +1,16 @@
+jest.mock("expo-speech-recognition", () => ({
+  ExpoSpeechRecognitionModule: { supportsOnDeviceRecognition: jest.fn(() => false) },
+}));
+
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { Alert, AppState, BackHandler, Linking } from "react-native";
+import { z } from "zod";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
+import { IntakeController } from "./intake/IntakeController";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
+import { VoiceInputController } from "./voice/VoiceInputController";
 
 /** Props of the most recently rendered WebView, captured by the mock below. */
 let mockWebViewProps: Record<string, unknown> = {};
@@ -401,31 +408,138 @@ describe("App bridge channel", () => {
     });
   });
 
-  const hello = async () => {
-    await renderApp();
+  let shellView: Awaited<ReturnType<typeof renderApp>>;
+  const hello = async (maxProtocolVersion = MOBILE_PROTOCOL_MAX) => {
+    shellView = await renderApp();
     const nonce = nonceIn(bootstrap());
     await emitAsync(mockWebViewProps.onLoadStart);
     await post(nonce, {
       type: "web.hello",
+      protocolVersion: maxProtocolVersion,
       payload: {
         webBuildId: "web-build-1",
         minProtocolVersion: 1,
-        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+        maxProtocolVersion,
       },
     });
     return nonce;
   };
 
-  it("advertises what the composed navigation graph reports", async () => {
+  it("keeps the deployed v3 capability schema while advertising the navigation graph", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
-    await hello();
+    await hello(3);
 
     const reply = decodedMessages().find((message) => message.type === "native.hello");
-    expect(reply?.payload?.capabilities).toMatchObject(NAVIGATION_CAPABILITIES);
+    expect(reply?.payload?.selectedProtocolVersion).toBe(3);
+    // Deployed v3 web rejects every unknown capability key.
+    const oldCapabilities = z
+      .object({
+        groundNavigation: z.boolean(),
+        transitNavigation: z.boolean(),
+        transitActions: z.boolean().optional(),
+        backgroundLocation: z.boolean(),
+        localNotifications: z.boolean(),
+        speech: z.boolean(),
+        carDestinations: z.boolean().optional(),
+      })
+      .strict();
+    expect(oldCapabilities.parse(reply?.payload?.capabilities)).toMatchObject(
+      NAVIGATION_CAPABILITIES,
+    );
     expect(mockCreateForegroundNavigation).toHaveBeenCalledTimes(1);
     expect(mockCreateForegroundNavigation.mock.calls[0]?.[0]).toMatchObject({
       apiOrigin: "https://openmapx.com",
     });
+  });
+
+  it("dispatches intake and voice independently of the navigation command queue", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const intake = jest.spyOn(IntakeController.prototype, "dispatch").mockResolvedValue();
+    jest.spyOn(VoiceInputController.prototype, "isAvailable").mockReturnValue(false);
+    const nonce = await hello();
+    mockNavigation.coordinator.dispatch.mockImplementation(() => new Promise(() => {}));
+    await post(nonce, { messageId: "intake-1", type: "intake.list", payload: {} });
+    await post(nonce, { messageId: "probe-after-intake", type: "voice.probe", payload: {} });
+    expect(intake).toHaveBeenCalledWith(expect.objectContaining({ type: "intake.list" }));
+    expect(decodedMessages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.availability",
+        payload: { forMessageId: "probe-after-intake", available: false },
+      }),
+    );
+    expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
+    "answers voice probes with availability %s outside navigation",
+    async (available) => {
+      mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+      jest.spyOn(VoiceInputController.prototype, "isAvailable").mockReturnValue(available);
+      const nonce = await hello();
+      mockNavigation.coordinator.dispatch.mockImplementation(() => new Promise(() => {}));
+      await post(nonce, { messageId: "probe-1", type: "voice.probe", payload: {} });
+      expect(decodedMessages()).toContainEqual(
+        expect.objectContaining({
+          type: "voice.availability",
+          payload: { forMessageId: "probe-1", available },
+        }),
+      );
+      expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("dispatches voice commands outside navigation serialization", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const start = jest.spyOn(VoiceInputController.prototype, "start").mockResolvedValue();
+    const stop = jest.spyOn(VoiceInputController.prototype, "stop").mockImplementation(() => {});
+    const cancel = jest
+      .spyOn(VoiceInputController.prototype, "cancel")
+      .mockImplementation(() => {});
+    const nonce = await hello();
+    mockNavigation.coordinator.dispatch.mockImplementation(() => new Promise(() => {}));
+    await fireEvent(shellView.getByTestId("product-shell"), "touchStart");
+    await post(nonce, {
+      messageId: "voice-1",
+      type: "voice.start",
+      payload: { requestId: "r", locale: "en-US" },
+    });
+    await post(nonce, { messageId: "voice-2", type: "voice.stop", payload: { requestId: "r" } });
+    await post(nonce, { messageId: "voice-3", type: "voice.cancel", payload: { requestId: "r" } });
+    expect(start).toHaveBeenCalledWith("r", "en-US");
+    expect(stop).toHaveBeenCalledWith("r");
+    expect(cancel).toHaveBeenCalledWith("r");
+    expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a voice start that no observed touch preceded, and admits one per touch", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const start = jest.spyOn(VoiceInputController.prototype, "start").mockResolvedValue();
+    const nonce = await hello();
+    await post(nonce, {
+      messageId: "voice-untouched",
+      type: "voice.start",
+      payload: { requestId: "r0", locale: "en-US" },
+    });
+    expect(start).not.toHaveBeenCalled();
+    expect(decodedMessages()).toContainEqual(
+      expect.objectContaining({
+        type: "voice.event",
+        payload: { requestId: "r0", state: "error", error: "generic" },
+      }),
+    );
+    await fireEvent(shellView.getByTestId("product-shell"), "touchStart");
+    await post(nonce, {
+      messageId: "voice-touched",
+      type: "voice.start",
+      payload: { requestId: "r1", locale: "en-US" },
+    });
+    await post(nonce, {
+      messageId: "voice-again",
+      type: "voice.start",
+      payload: { requestId: "r2", locale: "en-US" },
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith("r1", "en-US");
   });
 
   it("hands every page command to the navigation coordinator", async () => {
@@ -731,4 +845,25 @@ it("confirms a warm surface End without waiting for the web bridge", async () =>
   await act(async () => receiveUrl({ url: "openmapx:///navigation/end?sessionId=session-1" }));
   expect(alert.mock.calls.at(-1)?.[1]).toContain("End this");
   expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+});
+it("cancels voice on document replacement, load failure, visibility and teardown", async () => {
+  const cancel = jest.spyOn(VoiceInputController.prototype, "cancel").mockImplementation(() => {});
+  let change: ((status: "active" | "background" | "inactive") => void) | undefined;
+  jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
+    if (type === "change") change = handler;
+    return { remove: jest.fn() };
+  });
+  const view = await renderApp();
+  await act(async () => change?.("active"));
+  cancel.mockClear();
+  await act(async () => (mockWebViewProps.onLoadStart as () => void)());
+  expect(cancel).toHaveBeenCalledTimes(1);
+  await act(async () => (mockWebViewProps.onError as () => void)());
+  expect(cancel).toHaveBeenCalledTimes(2);
+  await act(async () => change?.("inactive"));
+  expect(cancel).toHaveBeenCalledTimes(3);
+  await act(async () => change?.("background"));
+  expect(cancel).toHaveBeenCalledTimes(4);
+  await view.unmount();
+  expect(cancel).toHaveBeenCalledTimes(5);
 });
