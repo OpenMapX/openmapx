@@ -63,7 +63,7 @@ attention list; see [Admin panel](./admin-panel.md) for that landing view.
 ## Coverage and freshness evidence
 
 Full administrators can open [Coverage & freshness](./coverage-freshness.md)
-at `/admin/coverage`. This is a read-only operator report, not a health probe
+at `/admin/data/coverage`. This is a read-only operator report, not a health probe
 or a legal/geographic completeness claim. It combines the data-manager's
 bounded publication observations with passive integration and provider-health
 observations. Opening or refreshing it does not acquire a provider probe lease,
@@ -82,7 +82,7 @@ workflows.
 :::note[Status vs. service catalog]
 The status dashboard reports whether the API can reach each dependency. It is not the Docker control plane. To start, stop, or
 inspect a container's lifecycle state, use the service catalog under
-`/admin/services`; see [Services administration](./services-administration.md).
+`/admin/system/services`; see [Services administration](./services-administration.md).
 :::
 
 ## Transit provider health
@@ -187,7 +187,7 @@ There are two log surfaces, and they answer different questions.
 ### Service container logs
 
 For "what is this backend service doing right now," open a service's **Logs** tab
-(or the **Logs** button) under `/admin/services/<id>`. It streams that container's
+(or the **Logs** button) under `/admin/system/services/<id>`. It streams that container's
 output live, tailing the most recent lines. It uses the same output as the equivalent
 `services logs` CLI command, in the browser. This is the place to watch a build
 finish or diagnose a container that won't come up. Full coverage is in

@@ -974,7 +974,7 @@ function ServiceCatalogView() {
                       >
                         <Typography
                           component={Link}
-                          href={`/admin/services/${svc.id}`}
+                          href={`/admin/system/services/${encodeURIComponent(svc.id)}`}
                           variant="body2"
                           sx={{
                             fontWeight: 600,

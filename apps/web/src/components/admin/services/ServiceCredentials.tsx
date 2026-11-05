@@ -17,6 +17,7 @@ import type {
   AdminServiceCredential,
   AdminServiceCredentialChanged,
 } from "@openmapx/core/api-contracts";
+import Link from "next/link";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import {
@@ -174,7 +175,9 @@ function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
                   </Typography>
                 )}
                 {cred.managedBy === "transit.credentials" && (
-                  <Button href="/admin/transit">Manage pinned feed credentials</Button>
+                  <Button component={Link} href="/admin/data/transit?tab=credentials">
+                    Manage pinned feed credentials
+                  </Button>
                 )}
                 {cred.updatedAt && (
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>

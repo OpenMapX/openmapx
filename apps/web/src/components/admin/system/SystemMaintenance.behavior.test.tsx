@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { job } from "../activity/__tests__/fixtures";
-import { SystemMaintenance } from "./SystemMaintenance";
+import { SystemMaintenance, SystemMaintenanceProvider } from "./SystemMaintenance";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
@@ -12,6 +12,36 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+it("keeps a queued update blocking Diagnostics across topic remounts", async () => {
+  vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    if (init?.method === "POST") return Response.json({ jobId: "check-job" });
+    if (input.includes("/check-job?source=application"))
+      return Response.json({ ...job({ id: "check-job" }), status: "running" });
+    return Response.json({ deployment: { maintenanceReady: true }, images: [] });
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = (section: "updates" | "diagnostics") => (
+    <QueryClientProvider client={client}>
+      <SystemMaintenanceProvider>
+        <SystemMaintenance key={section} section={section} />
+      </SystemMaintenanceProvider>
+    </QueryClientProvider>
+  );
+  const mounted = render(view("updates"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+  await screen.findByText("running");
+  mounted.rerender(view("diagnostics"));
+  expect(await screen.findByRole("button", { name: "Run diagnostics" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Check for updates" })).toBeNull();
+  expect(screen.getByRole("link", { name: /View job/ })).toHaveAttribute(
+    "href",
+    expect.stringContaining("job=check-job"),
+  );
 });
 
 it("continues maintenance polling through cancel_pending until terminal completion", async () => {

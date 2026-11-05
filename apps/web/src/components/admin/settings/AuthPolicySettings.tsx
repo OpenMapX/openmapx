@@ -11,7 +11,8 @@ import { authPolicySettingsSchema, type authPolicyViewSchema } from "@openmapx/c
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
-export function AuthPolicySettings() {
+import { useAdminFieldFocus } from "@/lib/admin/useAdminFieldFocus";
+export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   const scope = useAccountAdmin(),
     query = useQuery({
       queryKey: scope.keys.policy,
@@ -19,6 +20,7 @@ export function AuthPolicySettings() {
       enabled: !!scope.actorId,
       retry: false,
     });
+  useAdminFieldFocus(focusKey, !!query.data);
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="h6">Authentication policy</Typography>
@@ -145,6 +147,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
         </Stack>
       )}
       <FormControlLabel
+        id="setting-emailVerificationRequired"
         control={
           <Checkbox
             checked={email}
@@ -159,6 +162,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       )}
       <TextField
         sx={{ maxWidth: 480 }}
+        id="setting-sessionDurationHours"
         label="New session lifetime (hours)"
         type="number"
         value={hours}
@@ -168,6 +172,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
         helperText="1–8760 whole hours. Existing sessions keep their original expiry."
       />
       <FormControlLabel
+        id="setting-twoFaEnabled"
         control={
           <Checkbox
             checked={twoFa}
@@ -182,6 +187,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       </Typography>
       <TextField
         sx={{ maxWidth: 480 }}
+        id="setting-passwordMinLength"
         label="Minimum password length"
         type="number"
         value={length}

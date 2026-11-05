@@ -1,16 +1,12 @@
-import type { Metadata } from "next";
-import { ServiceDetail } from "@/components/admin/services/ServiceDetail";
-
-interface Props {
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  params,
+  searchParams,
+}: {
   params: Promise<{ id: string }>;
-}
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
-  return { title: `${id} — Services — Admin — OpenMapX` };
-}
-
-export default async function AdminServiceDetailPage({ params }: Props) {
-  const { id } = await params;
-  return <ServiceDetail id={id} />;
+  redirect(legacyAdminHref(`/admin/services/${encodeURIComponent(id)}`, await searchParams));
 }

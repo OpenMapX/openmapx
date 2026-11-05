@@ -13,6 +13,15 @@ const QUERY_KEYS = new Set([
   "filter",
   "region",
   "service",
+  "regionId",
+  "snapshotId",
+  "domain",
+  "attention",
+  "enabled",
+  "assessment",
+  "offset",
+  "limit",
+  "regionOffset",
 ]);
 export function adminQueryHref(
   pathname: string,

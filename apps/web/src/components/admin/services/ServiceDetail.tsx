@@ -768,7 +768,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
         </CompactAlert>
       )}
       {["app-api", "traefik", "ops-agent"].includes(manifest.id) && (
-        <Button component={Link} href="/admin/system" size="small">
+        <Button component={Link} href="/admin/system/updates" size="small">
           System Maintenance
         </Button>
       )}

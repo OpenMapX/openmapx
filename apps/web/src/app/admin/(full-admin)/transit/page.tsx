@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { TransitPipelinePage } from "./TransitPipelinePage";
-
-export const metadata: Metadata = { title: "Transit pipeline — Admin — OpenMapX" };
-
-export default function AdminTransitPage() {
-  return <TransitPipelinePage />;
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(legacyAdminHref("/admin/transit", await searchParams));
 }

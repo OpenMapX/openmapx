@@ -84,7 +84,7 @@ export function BackupPruneControls() {
         >
           Preview expired backups
         </Button>
-        <Button component={Link} href="/admin/settings#backup-retention">
+        <Button component={Link} href="/admin/system/deployment#backup-retention">
           Edit backup retention policy
         </Button>
       </Stack>

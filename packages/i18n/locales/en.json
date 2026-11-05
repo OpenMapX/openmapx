@@ -4566,12 +4566,12 @@
         "encryption-key": {
           "title": "Export encryption key",
           "description": "A usable encryption key ring must be available to protect export artifacts.",
-          "action": "Open system maintenance"
+          "action": "Open diagnostics"
         },
         "artifact-storage": {
           "title": "Export artifact storage",
           "description": "Private artifact storage must be healthy.",
-          "action": "Open system maintenance"
+          "action": "Open diagnostics"
         },
         "artifact-storage-backup": {
           "title": "Artifact backup exclusion",
@@ -4591,7 +4591,7 @@
         "request-sla-monitor": {
           "title": "Request deadline monitor",
           "description": "The service-level monitor must be healthy so requests do not miss deadlines.",
-          "action": "Open system maintenance"
+          "action": "Open diagnostics"
         },
         "notification-health": {
           "title": "Notification delivery",
@@ -4663,7 +4663,9 @@
         "invalid": "The review data is invalid. Check the scope, dates, decision, and findings digest.",
         "generic": "The review could not be recorded. The unchanged form can be retried safely."
       }
-    }
+    },
+    "notificationsOwner": "Email delivery is configured in Settings → Email. Its readiness is included in the review below.",
+    "openEmailSettings": "Open email settings"
   },
   "privacyAdmin": {
     "newAssistedRequest": "Record assisted request",
@@ -4908,6 +4910,123 @@
     "failed": "The password could not be saved. Check the password requirements or request a new link.",
     "originChanged": "The API changed. Open the original link again before setting your password.",
     "back": "Back to OpenMapX"
+  },
+  "adminNavigation": {
+    "administration": "Administration",
+    "topic": "Topic",
+    "topics": "{workspace} topics",
+    "primary": {
+      "overview": "Overview",
+      "integrations": "Integrations",
+      "extensions": "Extensions",
+      "data": "Data",
+      "users": "Users",
+      "privacy": "Privacy",
+      "activity": "Activity",
+      "settings": "Settings",
+      "system": "System"
+    },
+    "destinations": {
+      "overview": {
+        "label": "Overview",
+        "description": "Attention, health and current work"
+      },
+      "integrations": {
+        "label": "Integrations",
+        "description": "Providers, configuration and credentials"
+      },
+      "extensions": {
+        "label": "Extensions",
+        "description": "Discover and manage installed extensions"
+      },
+      "data": {
+        "label": "Data workflows",
+        "description": "Acquire, build and maintain map data"
+      },
+      "transit": {
+        "label": "Transit",
+        "description": "Pipeline, catalog and feed credentials"
+      },
+      "coverage": {
+        "label": "Coverage & freshness",
+        "description": "Inspect available data and its evidence"
+      },
+      "users": {
+        "label": "Users",
+        "description": "Accounts, sessions and recovery"
+      },
+      "privacy": {
+        "label": "Privacy requests",
+        "description": "Review and fulfil privacy cases"
+      },
+      "privacy-setup": {
+        "label": "Privacy setup",
+        "description": "Operator, policies and readiness reviews"
+      },
+      "activity": {
+        "label": "Activity",
+        "description": "Jobs, audit events and application logs"
+      },
+      "general": {
+        "label": "General",
+        "description": "Application identity and public instance URL"
+      },
+      "authentication": {
+        "label": "Authentication",
+        "description": "Sign-in, sessions and effective access policy"
+      },
+      "email": {
+        "label": "Email",
+        "description": "Senders, delivery providers and a test message"
+      },
+      "map": {
+        "label": "Map",
+        "description": "Map presentation and provider settings"
+      },
+      "data-use": {
+        "label": "Data use",
+        "description": "Application data-use policy"
+      },
+      "services": {
+        "label": "Services",
+        "description": "Inspect and operate application services"
+      },
+      "deployment": {
+        "label": "Deployment",
+        "description": "Persistent service selection, origin and host configuration"
+      },
+      "updates": {
+        "label": "Updates",
+        "description": "Check and update the OpenMapX release"
+      },
+      "backups": {
+        "label": "Backups",
+        "description": "Create, inspect and restore backups"
+      },
+      "diagnostics": {
+        "label": "Diagnostics",
+        "description": "Inspect host readiness and run deep checks"
+      },
+      "cache": {
+        "label": "Cache",
+        "description": "Inspect and clear application caches"
+      },
+      "configuration-transfer": {
+        "label": "Configuration transfer",
+        "description": "Export, import and migrate configuration"
+      }
+    },
+    "applicationUrlHelp": "The public application URL identifies links generated by the application. Deployment manages the host origin and certificates.",
+    "privacyPolicyLink": "Operator, legal and retention policy → Privacy setup",
+    "drafts": "{count, plural, one {# draft} other {# drafts}}",
+    "discardDraftsHelp": "Discard all unsaved ordinary administration drafts, including forms that are no longer available.",
+    "search": "Search administration",
+    "searchPlaceholder": "Find a setting, service or task",
+    "searchResults": "Administration destinations",
+    "retry": "Retry",
+    "partialSearch": "Some metadata could not be loaded. Page destinations are still available.",
+    "noSearchResults": "No matching administration destination.",
+    "hostedData": "Host-managed data operations are unavailable on this hosted deployment. Transit and Coverage remain available."
   },
   "adminDrafts": {
     "title": "Discard unsaved administration changes?",

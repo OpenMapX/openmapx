@@ -186,7 +186,7 @@ export function serviceActionReason(
     case "not_running":
       return "This service is not running.";
     case "control_plane":
-      return "Use System Maintenance for core updates; stopping the control plane requires host access.";
+      return "Use Updates for core updates. Stopping the control plane requires host access.";
     case "host_only":
       return "This action requires host access.";
     case "not_buildable":

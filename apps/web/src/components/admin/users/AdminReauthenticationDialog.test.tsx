@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   adminReauthStorageKey,
   completeStoredAdminReauthentication,
+  readStoredAdminReauthentication,
+  startStoredAdminReauthentication,
 } from "@/lib/admin/adminReauthentication";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { AdminReauthenticationDialog } from "./AdminReauthenticationDialog";
@@ -25,6 +27,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 const first = "11111111-1111-4111-8111-111111111111",
   second = "22222222-2222-4222-8222-222222222222";
 beforeEach(() => {
+  window.history.replaceState(null, "", "/admin");
   vi.clearAllMocks();
   sessionStorage.clear();
   mocks.complete.mockResolvedValue({
@@ -41,6 +44,28 @@ beforeEach(() => {
     status: 200,
     headers: new Headers(),
   }));
+});
+it.each([
+  "/admin/system/deployment",
+  "/admin/system/configuration-transfer",
+  "/admin/data/transit?tab=credentials",
+  "/admin/transit",
+])("preserves the reauthentication return route %s", async (path) => {
+  window.history.replaceState(null, "", path);
+  await startStoredAdminReauthentication("http://api.test", [
+    { purpose: "account.verify", targetId: "subject-a" },
+  ]);
+  expect(readStoredAdminReauthentication("http://api.test")?.returnPath).toBe(path);
+  await expect(completeStoredAdminReauthentication("http://api.test")).resolves.toBe(path);
+});
+it("captures the allowed tab while dropping unrelated public or private query keys", async () => {
+  window.history.replaceState(null, "", "/admin/data/transit?tab=credentials&token=private");
+  await startStoredAdminReauthentication("http://api.test", [
+    { purpose: "account.verify", targetId: "subject-a" },
+  ]);
+  expect(readStoredAdminReauthentication("http://api.test")?.returnPath).toBe(
+    "/admin/data/transit?tab=credentials",
+  );
 });
 afterEach(cleanup);
 function mount(child: React.ReactNode) {

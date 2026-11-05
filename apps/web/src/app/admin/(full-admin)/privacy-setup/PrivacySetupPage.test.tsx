@@ -122,9 +122,11 @@ it("groups setup fields, preserves environment locks, and links failed readiness
     screen.getByRole("heading", { name: /privacySetup.steps.retention.title/ }),
   ).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: /privacySetup.steps.notifications.title/ }));
-  const fromAddress = await screen.findByLabelText("privacySetup.settings.smtpFromAddress.label");
-  expect(fromAddress).toBeDisabled();
+  expect(screen.queryByLabelText("privacySetup.settings.smtpFromAddress.label")).toBeNull();
+  expect(screen.getByRole("link", { name: "privacySetup.openEmailSettings" })).toHaveAttribute(
+    "href",
+    "/admin/settings/email",
+  );
 
   expect(
     await screen.findByRole("link", {

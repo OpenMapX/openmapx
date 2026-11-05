@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # Coverage & freshness
 
-Open `/admin/coverage` with a full administrator account to check publication,
+Open `/admin/data/coverage` with a full administrator account to check publication,
 freshness, runtime and source-rights evidence for a region. The report is
 read-only. It cannot certify geographic completeness or the legal position of
 your deployment.

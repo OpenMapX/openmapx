@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { ServiceCatalog } from "@/components/admin/services/ServiceCatalog";
-
-export const metadata: Metadata = { title: "Services — Admin — OpenMapX" };
-
-export default function AdminServicesPage() {
-  return <ServiceCatalog />;
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(legacyAdminHref("/admin/services", await searchParams));
 }

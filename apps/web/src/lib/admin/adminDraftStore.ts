@@ -53,6 +53,7 @@ export class AdminDraftStore {
   get dirty() {
     return [...this.entries.values()].some((entry) => entry.edits.size > 0);
   }
+  dirtyCount = () => [...this.entries.values()].filter((entry) => entry.edits.size > 0).length;
   get cleanCount() {
     return [...this.entries.values()].filter((entry) => entry.edits.size === 0).length;
   }

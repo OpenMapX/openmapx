@@ -4566,12 +4566,12 @@
         "encryption-key": {
           "title": "Verschlüsselungsschlüssel für Exporte",
           "description": "Ein nutzbarer Schlüsselring muss Exportdateien schützen.",
-          "action": "Systemwartung öffnen"
+          "action": "Diagnose öffnen"
         },
         "artifact-storage": {
           "title": "Speicher für Exportdateien",
           "description": "Der private Speicher für Exportdateien muss funktionsfähig sein.",
-          "action": "Systemwartung öffnen"
+          "action": "Diagnose öffnen"
         },
         "artifact-storage-backup": {
           "title": "Ausschluss von Exportdateien aus Sicherungen",
@@ -4591,7 +4591,7 @@
         "request-sla-monitor": {
           "title": "Überwachung der Anfragefristen",
           "description": "Die Fristenüberwachung muss funktionieren, damit Antworten nicht verspätet erfolgen.",
-          "action": "Systemwartung öffnen"
+          "action": "Diagnose öffnen"
         },
         "notification-health": {
           "title": "Versand von Benachrichtigungen",
@@ -4663,7 +4663,9 @@
         "invalid": "Die Prüfdaten sind ungültig. Prüfen Sie Bereich, Daten, Entscheidung und Prüfsumme.",
         "generic": "Die Prüfung konnte nicht erfasst werden. Das unveränderte Formular kann sicher erneut gesendet werden."
       }
-    }
+    },
+    "notificationsOwner": "Der E-Mail-Versand wird unter Einstellungen → E-Mail konfiguriert. Seine Bereitschaft ist in der folgenden Prüfung enthalten.",
+    "openEmailSettings": "E-Mail-Einstellungen öffnen"
   },
   "privacyAdmin": {
     "newAssistedRequest": "Unterstützte Anfrage erfassen",
@@ -4908,6 +4910,123 @@
     "failed": "Das Passwort konnte nicht gespeichert werden. Prüfe die Passwortanforderungen oder fordere einen neuen Link an.",
     "originChanged": "Die API hat sich geändert. Öffne den ursprünglichen Link erneut, bevor du dein Passwort festlegst.",
     "back": "Zurück zu OpenMapX"
+  },
+  "adminNavigation": {
+    "administration": "Verwaltung",
+    "topic": "Thema",
+    "topics": "{workspace}: Themen",
+    "primary": {
+      "overview": "Übersicht",
+      "integrations": "Integrationen",
+      "extensions": "Erweiterungen",
+      "data": "Daten",
+      "users": "Benutzer",
+      "privacy": "Datenschutz",
+      "activity": "Aktivität",
+      "settings": "Einstellungen",
+      "system": "System"
+    },
+    "destinations": {
+      "overview": {
+        "label": "Übersicht",
+        "description": "Handlungsbedarf, Zustand und laufende Aufgaben"
+      },
+      "integrations": {
+        "label": "Integrationen",
+        "description": "Anbieter, Konfiguration und Zugangsdaten"
+      },
+      "extensions": {
+        "label": "Erweiterungen",
+        "description": "Erweiterungen entdecken und verwalten"
+      },
+      "data": {
+        "label": "Datenabläufe",
+        "description": "Kartendaten beschaffen, erstellen und pflegen"
+      },
+      "transit": {
+        "label": "Öffentlicher Verkehr",
+        "description": "Pipeline, Katalog und Feed-Zugangsdaten"
+      },
+      "coverage": {
+        "label": "Abdeckung & Aktualität",
+        "description": "Verfügbare Daten und ihre Nachweise prüfen"
+      },
+      "users": {
+        "label": "Benutzer",
+        "description": "Konten, Sitzungen und Wiederherstellung"
+      },
+      "privacy": {
+        "label": "Datenschutzanfragen",
+        "description": "Datenschutzfälle prüfen und bearbeiten"
+      },
+      "privacy-setup": {
+        "label": "Datenschutz einrichten",
+        "description": "Betreiber, Richtlinien und Freigaben"
+      },
+      "activity": {
+        "label": "Aktivität",
+        "description": "Aufträge, Prüfereignisse und Anwendungsprotokolle"
+      },
+      "general": {
+        "label": "Allgemein",
+        "description": "Anwendungsidentität und öffentliche Instanz-URL"
+      },
+      "authentication": {
+        "label": "Authentifizierung",
+        "description": "Anmeldung, Sitzungen und wirksame Zugriffsrichtlinie"
+      },
+      "email": {
+        "label": "E-Mail",
+        "description": "Absender, Versandanbieter und Testnachricht"
+      },
+      "map": {
+        "label": "Karte",
+        "description": "Kartendarstellung und Anbietereinstellungen"
+      },
+      "data-use": {
+        "label": "Datennutzung",
+        "description": "Richtlinie zur Datennutzung der Anwendung"
+      },
+      "services": {
+        "label": "Dienste",
+        "description": "Anwendungsdienste prüfen und bedienen"
+      },
+      "deployment": {
+        "label": "Bereitstellung",
+        "description": "Dauerhafte Dienstauswahl, Ursprung und Hostkonfiguration"
+      },
+      "updates": {
+        "label": "Aktualisierungen",
+        "description": "OpenMapX-Version prüfen und aktualisieren"
+      },
+      "backups": {
+        "label": "Sicherungen",
+        "description": "Sicherungen erstellen, prüfen und wiederherstellen"
+      },
+      "diagnostics": {
+        "label": "Diagnose",
+        "description": "Host-Bereitschaft prüfen und tiefgehende Tests ausführen"
+      },
+      "cache": {
+        "label": "Cache",
+        "description": "Anwendungs-Caches prüfen und leeren"
+      },
+      "configuration-transfer": {
+        "label": "Konfiguration übertragen",
+        "description": "Konfiguration exportieren, importieren und migrieren"
+      }
+    },
+    "applicationUrlHelp": "Die öffentliche Anwendungs-URL bestimmt von der Anwendung erzeugte Links. Die Bereitstellung verwaltet den Host-Ursprung und Zertifikate.",
+    "privacyPolicyLink": "Betreiber, rechtliche Angaben und Aufbewahrung → Datenschutz einrichten",
+    "drafts": "{count, plural, one {# Entwurf} other {# Entwürfe}}",
+    "discardDraftsHelp": "Alle ungespeicherten gewöhnlichen Verwaltungsentwürfe verwerfen, auch für nicht mehr verfügbare Formulare.",
+    "search": "Verwaltung durchsuchen",
+    "searchPlaceholder": "Einstellung, Dienst oder Aufgabe suchen",
+    "searchResults": "Verwaltungsziele",
+    "retry": "Erneut versuchen",
+    "partialSearch": "Einige Metadaten konnten nicht geladen werden. Die Seitenziele bleiben verfügbar.",
+    "noSearchResults": "Kein passendes Verwaltungsziel.",
+    "hostedData": "Hostverwaltete Datenaktionen sind in dieser gehosteten Bereitstellung nicht verfügbar. Transit und Abdeckung bleiben verfügbar."
   },
   "adminDrafts": {
     "title": "Nicht gespeicherte Verwaltungsänderungen verwerfen?",
