@@ -1,6 +1,4 @@
 import type {
-  GantryModel,
-  GantryPanel,
   JunctionDecisionPoint,
   JunctionLookupResult,
   JunctionWay,
@@ -8,245 +6,218 @@ import type {
   OsmLaneTags,
 } from "../types/junction";
 import { angularDifference } from "./bearing";
+import { type ResolvedLaneGuidance, resolveLaneGuidance } from "./lanes";
+import { prepareRouteMatcher, snapPreparedRoute } from "./routeMatcher";
+import { cleanSignTexts, refKind, signHeadline } from "./signFormat";
 
-/**
- * OSM per-lane destination tags → the gantry drawn in the junction panel.
- * OSM `:lanes` values run left to right in way direction — the same order as
- * the engines' lane arrays, so lane index 0 is the leftmost lane everywhere.
- */
+export interface ApproachLaneGuidance extends ResolvedLaneGuidance {
+  source: "engine" | "osm";
+}
 
-/** Split a `|`-delimited `:lanes` value into per-lane strings, trimmed. */
 function splitLaneValues(raw: string | undefined): string[] | undefined {
-  if (raw === undefined) return undefined;
-  return raw.split("|").map((v) => v.trim());
+  return raw?.split("|").map((value) => value.trim());
 }
-
-/**
- * A per-lane value list with exactly `laneCount` entries, or `undefined` when
- * the tag disagrees with the lane count. A trailing `|` (an untagged last
- * lane) splits into an empty entry and still counts, so `a|b|` fits three
- * lanes; a genuinely shorter or longer list is not guessed at.
- */
-function laneValues(values: string[] | undefined, laneCount: number): string[] | undefined {
-  if (values === undefined) return undefined;
-  return values.length === laneCount ? values : undefined;
+function laneValues(values: string[] | undefined, count: number): string[] | undefined {
+  return values?.length === count ? values : undefined;
 }
-
-/** Split one lane's value into its semicolon-separated parts, trimmed, empties dropped. */
 function splitParts(value: string): string[] {
-  return value
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  return cleanSignTexts(value.split(";"));
 }
-
-/**
- * Separate road refs from place names found in a `destination:ref` value. A
- * road ref always carries a number ("A 46", "L 381", "M25"); a town never
- * does, so a digit-free value is a destination tagged into the wrong key.
- */
-function splitRefParts(parts: string[]): { refs: string[]; places: string[] } {
-  const hasNumber = (part: string) => /\d/.test(part);
-  return { refs: parts.filter(hasNumber), places: parts.filter((part) => !hasNumber(part)) };
-}
-
-/** A uniform turn token across the panel's lanes, when every tagged lane agrees. */
-function uniformTurn(turns: string[]): string | undefined {
-  if (turns.length === 0) return undefined;
-  const first = turns[0];
-  if (!first || first === "none") return undefined;
-  return turns.every((t) => t === first) ? first : undefined;
-}
-
-/** Attach one lane's tags to the panel it belongs to, merging equal neighbours. */
-function groupAdjacent(
-  panels: LaneGroup[],
-  lane: number,
-  refs: string[],
-  destinations: string[],
-  symbol: string,
-  turn: string,
-  colour: string,
-): void {
-  const previous = panels.at(-1);
-  if (
-    previous &&
-    joinKeys(previous.refs) === joinKeys(refs) &&
-    joinKeys(previous.destinations) === joinKeys(destinations) &&
-    previous.symbol === symbol &&
-    previous.colour === colour
-  ) {
-    previous.lanes.push(lane);
-    previous.turns.push(turn);
-    return;
-  }
-  panels.push({
-    lanes: [lane],
-    destinations,
-    refs,
-    symbol,
-    turns: [turn],
-    colour,
-  });
-}
-
-/** Per-lane values collected before the adjacent-equal grouping pass. */
-interface LaneGroup {
-  lanes: number[];
-  refs: string[];
-  destinations: string[];
-  symbol: string;
-  turns: string[];
-  colour: string;
-}
-
-function joinKeys(values: string[]): string {
-  return values.join(";");
-}
-
-/**
- * Build a gantry model from one way's OSM tags. `null` when the tags carry no
- * per-lane destinations at all, or when a `:lanes` value disagrees with the
- * lane count and the fallback — a half-parsed gantry would lie about where
- * the lanes point.
- */
-export function parseLaneTags(tags: OsmLaneTags, fallbackLaneCount?: number): GantryModel | null {
-  const laneCount = tags.lanes ?? fallbackLaneCount;
-  if (!laneCount || laneCount < 1) return null;
-  const destinationLanes = laneValues(splitLaneValues(tags.destinationLanes), laneCount);
-  const destinationRefLanes = laneValues(splitLaneValues(tags.destinationRefLanes), laneCount);
-  if (destinationLanes === undefined && destinationRefLanes === undefined) return null;
-  if (
-    (tags.destinationLanes !== undefined && destinationLanes === undefined) ||
-    (tags.destinationRefLanes !== undefined && destinationRefLanes === undefined)
-  ) {
-    return null;
-  }
-  const turnLanes = laneValues(splitLaneValues(tags.turnLanes), laneCount);
-  const symbolLanes = laneValues(splitLaneValues(tags.destinationSymbolLanes), laneCount);
-  const colourLanes = laneValues(splitLaneValues(tags.destinationColourLanes), laneCount);
-
-  const panels: GantryPanel[] = [];
-  const groups: LaneGroup[] = [];
-  for (let lane = 0; lane < laneCount; lane += 1) {
-    const tagged = splitRefParts(splitParts(destinationRefLanes?.[lane] ?? ""));
-    const destinations = union(splitParts(destinationLanes?.[lane] ?? ""), tagged.places);
-    const refs = tagged.refs;
-    if (destinations.length === 0 && refs.length === 0) continue;
-    groupAdjacent(
-      groups,
-      lane,
-      refs,
-      destinations,
-      symbolLanes?.[lane] ?? "",
-      turnLanes?.[lane] ?? "",
-      colourLanes?.[lane] ?? "",
-    );
-  }
-  for (const group of groups) {
-    const turn = uniformTurn(group.turns);
-    panels.push({
-      lanes: group.lanes,
-      destinations: group.destinations,
-      refs: group.refs,
-      symbols: group.symbol ? [group.symbol] : [],
-      ...(group.colour ? { colour: group.colour } : {}),
-      ...(turn ? { turn } : {}),
-      isExit: false,
-    });
-  }
-  if (panels.length === 0) return null;
+function splitRefParts(values: string[]): { refs: string[]; places: string[] } {
   return {
-    laneCount,
-    panels,
-    activeLanes: [],
-    ...(turnLanes ? { laneTurns: turnLanes } : {}),
+    refs: values.filter((value) => refKind(value) !== "other"),
+    places: values.filter((value) => refKind(value) === "other"),
+  };
+}
+function union(first: string[], rest: string[]): string[] {
+  return cleanSignTexts([...first, ...rest]);
+}
+
+/** Lane evidence for the green maneuver arrows, scoped to the incoming route occurrence. */
+export function resolveApproachLaneGuidance(
+  result: JunctionLookupResult,
+  point: JunctionDecisionPoint,
+): ApproachLaneGuidance | undefined {
+  const approach =
+    result.outgoingApproachWayId !== undefined
+      ? result.approach.find((way) => way.wayId === result.outgoingApproachWayId)
+      : selectApproachWay([...result.approach, ...result.ramps], point);
+  const count = approach?.tags.lanes ?? point.laneCount;
+  const engine = point.laneGuidance;
+  const engineResult = engine
+    ? {
+        ...engine,
+        ...(engine.state === "conflict"
+          ? {
+              lanes: engine.lanes.map((lane) => ({
+                ...lane,
+                valid: undefined,
+                preferred: undefined,
+                active: undefined,
+              })),
+              usableLanes: [],
+              preferredLanes: [],
+            }
+          : {}),
+        source: "engine" as const,
+      }
+    : undefined;
+  if (
+    !approach ||
+    !count ||
+    !Number.isInteger(count) ||
+    count < 1 ||
+    (point.approachTrace && !incomingLayoutMatches(point, approach, count))
+  )
+    return engineResult;
+  const destinations = laneDestinationsAt(
+    { approach: [approach], ramps: [] },
+    { ...point, laneCount: count },
+  );
+  const turnValues = laneValues(splitLaneValues(approach.tags.turnLanes), count);
+  const unknownLanes = Array.from({ length: count }, (_, i) => ({
+    indications: (turnValues?.[i] ?? "").split(";").filter(Boolean),
+  }));
+  const ways = result.outgoing ?? [];
+  const routeWay = ways.length >= 2 ? selectOutgoingBySign(ways, point) : undefined;
+  const ramp = ways.length >= 2 ? routeWay : selectRampWay(result.ramps, point)[0];
+  const labels =
+    ramp && labelsAgree(ramp.tags, point)
+      ? branchLabels(ramp)
+      : { refs: point.sign?.exitBranches ?? [], destinations: signHeadline(point.sign) };
+  const key = (value: string) => value.normalize("NFC").toLowerCase().replace(/\s/g, "");
+  const wantedRefs = labels.refs.map(key);
+  const wantedPlaces = labels.destinations.map(key);
+  let selected =
+    ways.length >= 2 && !routeWay
+      ? []
+      : (destinations ?? []).flatMap((lane, i) => {
+          const refsMatch =
+            !wantedRefs.length || lane.refs.some((ref) => wantedRefs.includes(key(ref)));
+          const placesMatch =
+            !wantedPlaces.length ||
+            (wantedRefs.length > 0 && lane.destinations.length === 0) ||
+            lane.destinations.some((place) => wantedPlaces.includes(key(place)));
+          return refsMatch && placesMatch && (wantedRefs.length > 0 || wantedPlaces.length > 0)
+            ? [i]
+            : [];
+        });
+  // An outgoing subset cannot be inferred from a shared reference on every incoming lane.
+  if (
+    selected.length === count &&
+    (ways.length >= 2 || (ramp?.tags.lanes !== undefined && ramp.tags.lanes < count))
+  )
+    selected = [];
+  if (engine?.state === "conflict") return engineResult;
+  if (point.laneCount === count && engine && engine.state !== "unknown") {
+    const conflict =
+      engine.state === "known" &&
+      selected.length > 0 &&
+      (engine.preferredLanes.some((i) => !selected.includes(i)) ||
+        selected.some((i) => engine.lanes[i]?.valid === false)) &&
+      engine.usableLanes.length > 0;
+    return conflict
+      ? { ...resolveLaneGuidance(unknownLanes), state: "conflict", source: "osm" }
+      : engineResult;
+  }
+  if (!selected.length) return { ...resolveLaneGuidance(unknownLanes), source: "osm" };
+  return {
+    ...resolveLaneGuidance(
+      unknownLanes.map((lane, i) => ({
+        ...lane,
+        valid: selected.includes(i),
+        preferred: selected.includes(i),
+      })),
+    ),
     source: "osm",
   };
 }
 
-/**
- * Append (or mark) the exit panel: destination text from the ramp's
- * `destination`/`destination:ref`, else the engine sign; exit number from the
- * engine sign, else the ramp's `junction:ref`. When the gantry way's lane
- * count disagrees with the decision point's (a lane gain before or after the
- * way was tagged), the exit panel spans the single outermost lane on the
- * point's side, so the highlight never lands on a lane the drawn gantry
- * does not have.
- */
-export function mergeExitPanel(
-  model: GantryModel,
-  point: JunctionDecisionPoint,
-  rampTags?: OsmLaneTags,
-): GantryModel {
-  const exitNumber = point.sign?.exitNumbers?.[0] ?? rampTags?.junctionRef;
-  const rampRefs = rampTags?.destinationRef
-    ? splitRefParts(splitParts(rampTags.destinationRef))
-    : undefined;
-  const destinations = union(
-    rampTags?.destination ? splitParts(rampTags.destination) : (point.sign?.exitToward ?? []),
-    rampRefs?.places ?? [],
+function labelsAgree(tags: OsmLaneTags, point: JunctionDecisionPoint): boolean {
+  const key = (value: string) => value.toLowerCase().replace(/\s/g, "");
+  const refs = point.sign?.exitBranches?.map(key) ?? [];
+  const places = point.sign?.exitToward?.map(key) ?? [];
+  const labels = branchLabels({ tags });
+  return (
+    (!refs.length || !labels.refs.length || labels.refs.some((ref) => refs.includes(key(ref)))) &&
+    (!places.length ||
+      !labels.destinations.length ||
+      labels.destinations.some((place) => places.includes(key(place))))
   );
-  const refs = rampRefs ? rampRefs.refs : (point.sign?.exitBranches ?? []);
-  // The engine's own lanes win whenever it sent them for this gantry. Without
-  // them (a routing backend that omits `turn_lanes`), OSM's per-lane turn
-  // arrows name the exit lanes; only if neither speaks does the outermost lane
-  // on the exit's side stand in.
-  const engineLanes =
-    model.laneCount === point.laneCount && point.activeLanes.length > 0 ? point.activeLanes : null;
-  const taggedLanes = lanesTurningToward(model.laneTurns, point.side);
-  const panelLanes =
-    engineLanes ??
-    (taggedLanes.length > 0 ? taggedLanes : [point.side === "left" ? 0 : model.laneCount - 1]);
-  const carried = model.panels.filter((panel) => !panel.isExit);
-  // A gantry often already boards the exit lane on its own ("A 46 /
-  // Neuss-Zentrum"). Marking that board as the exit keeps one board lit per
-  // decision instead of two over the same lane.
-  const existing = carried.findIndex((panel) => sameLanes(panel.lanes, panelLanes));
-  const exitPanel: GantryPanel =
-    existing >= 0
-      ? {
-          ...carried[existing],
-          destinations: union(destinations, carried[existing].destinations),
-          refs: union(refs, carried[existing].refs),
-          isExit: true,
-          ...(exitNumber ? { exitNumber } : {}),
-        }
-      : {
-          lanes: panelLanes,
-          destinations,
-          refs,
-          symbols: [],
-          isExit: true,
-          ...(exitNumber ? { exitNumber } : {}),
-        };
-  const panels =
-    existing >= 0
-      ? carried.map((panel, index) => (index === existing ? exitPanel : panel))
-      : [...carried, exitPanel];
-  return { ...model, panels, activeLanes: [...panelLanes] };
 }
 
-function sameLanes(a: number[], b: number[]): boolean {
-  return a.length === b.length && a.every((lane, index) => lane === b[index]);
+function incomingLayoutMatches(
+  point: JunctionDecisionPoint,
+  approach: JunctionWay | undefined,
+  count: number,
+): boolean {
+  if (
+    !approach?.geometry ||
+    approach.geometry.length < 2 ||
+    approach.tags.lanes !== count ||
+    !point.approachTrace ||
+    point.approachTrace.length < 2
+  )
+    return false;
+  const matcher = prepareRouteMatcher(approach.geometry);
+  const snaps = point.approachTrace
+    .slice(-2)
+    .map((coordinate) => snapPreparedRoute(matcher, coordinate));
+  return snaps.every(
+    (snap, i) =>
+      snap.deviationMeters <= 8 && (i === 0 || snap.alongMeters > snaps[i - 1].alongMeters + 1),
+  );
 }
 
-/** `first` then whatever `rest` adds, each value once. */
-function union(first: string[], rest: string[]): string[] {
-  return [...new Set([...first, ...rest])];
+function branchLabels(way: Pick<JunctionWay, "tags">): { refs: string[]; destinations: string[] } {
+  const refs = splitRefParts(splitParts(way.tags.destinationRef ?? ""));
+  return {
+    refs: refs.refs,
+    destinations: union(splitParts(way.tags.destination ?? ""), refs.places),
+  };
 }
 
-/**
- * Lanes whose OSM turn arrow leaves the carriageway on the exit's side.
- * `merge_to_*` is left out: that marks a lane drop, not a turn-off.
- */
-function lanesTurningToward(laneTurns: string[] | undefined, side: "left" | "right"): number[] {
-  if (!laneTurns) return [];
-  const leaving =
-    side === "left"
-      ? ["left", "slight_left", "sharp_left"]
-      : ["right", "slight_right", "sharp_right"];
-  return laneTurns.flatMap((token, lane) => (leaving.includes(token.trim()) ? [lane] : []));
+function selectOutgoingBySign(
+  ways: JunctionWay[],
+  point: JunctionDecisionPoint,
+): JunctionWay | undefined {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/\s+/g, "");
+  const toward = signHeadline(point.sign).map(normalize);
+  const refs = (point.sign?.exitBranches ?? []).map(normalize);
+  const labeled = ways.map((way) => ({ way, ...branchLabels(way) }));
+  if ((point.departureTrace?.length ?? 0) >= 2 && ways.some((way) => way.geometry)) {
+    const matched = labeled.filter(({ way, refs: labels }) => {
+      if (!way.geometry || way.geometry.length < 2) return false;
+      if (refs.length && labels.length && !labels.some((ref) => refs.includes(normalize(ref))))
+        return false;
+      const matcher = prepareRouteMatcher(way.geometry);
+      const snaps = point.departureTrace!.map((coordinate) =>
+        snapPreparedRoute(matcher, coordinate),
+      );
+      return snaps.every(
+        (snap, i) =>
+          snap.deviationMeters <= 10 &&
+          (i === 0 || snap.alongMeters > snaps[i - 1].alongMeters + 1),
+      );
+    });
+    return matched.length === 1 ? matched[0].way : undefined;
+  }
+  const destinations = labeled.filter(
+    (entry) =>
+      entry.destinations.some((place) => toward.includes(normalize(place))) &&
+      (refs.length === 0 ||
+        entry.refs.length === 0 ||
+        entry.refs.some((ref) => refs.includes(normalize(ref)))),
+  );
+  if (destinations.length > 0) return destinations.length === 1 ? destinations[0].way : undefined;
+  // A reference alone may identify a destination-less road, but cannot override
+  // an explicit, different destination or resolve two same-ref roads.
+  const references = labeled.filter(
+    (entry) =>
+      (toward.length === 0 || entry.destinations.length === 0) &&
+      entry.refs.some((ref) => refs.includes(normalize(ref))),
+  );
+  return references.length === 1 ? references[0].way : undefined;
 }
 
 /** Keep approach ways heading the same way as the route, upstream of the point. */
@@ -258,10 +229,11 @@ export function selectApproachWay(
     (candidate) =>
       angularDifference(candidate.bearing, point.approachBearing) <= 35 &&
       candidate.endDistanceMeters >= 0 &&
-      candidate.endDistanceMeters <= 450,
+      candidate.endDistanceMeters <= 450 &&
+      (!point.approachTrace || incomingLayoutMatches(point, candidate, candidate.tags.lanes ?? 0)),
   );
   if (candidates.length === 0) return null;
-  // A way whose lane count matches the decision point is the gantry in use;
+  // Prefer a compatible incoming layout;
   // prefer it over a parallel carriageway or a differently-tagged neighbour.
   const laneMatch = candidates.filter(
     (candidate) =>
@@ -277,7 +249,7 @@ export function selectApproachWay(
 
 /**
  * Where each of the route's lanes leads per OSM, read off the way carrying
- * them into the split. Unlike the gantry's approach way this may be a ramp:
+ * them into the split. The approach may be a ramp:
  * a two-way split on a slip road happens on a `_link`. The way must head the
  * route's way, end at or before the point, and have exactly the engine's lane
  * count, so its `:lanes` values line up with the engine's lanes one to one.
@@ -295,13 +267,20 @@ export function laneDestinationsAt(
         candidate.tags.lanes === laneCount &&
         angularDifference(candidate.bearing, point.approachBearing) <= 35 &&
         candidate.endDistanceMeters >= 0 &&
-        candidate.endDistanceMeters <= 450,
+        candidate.endDistanceMeters <= 450 &&
+        (!point.approachTrace ||
+          incomingLayoutMatches(point, candidate, candidate.tags.lanes ?? 0)),
     )
     .sort((a, b) => a.endDistanceMeters - b.endDistanceMeters)[0];
   if (!way) return undefined;
   const destinationLanes = laneValues(splitLaneValues(way.tags.destinationLanes), laneCount);
   const destinationRefLanes = laneValues(splitLaneValues(way.tags.destinationRefLanes), laneCount);
-  if (!destinationLanes && !destinationRefLanes) return undefined;
+  if (
+    (way.tags.destinationLanes !== undefined && !destinationLanes) ||
+    (way.tags.destinationRefLanes !== undefined && !destinationRefLanes) ||
+    (!destinationLanes && !destinationRefLanes)
+  )
+    return undefined;
   return Array.from({ length: laneCount }, (_, lane) => {
     const tagged = splitRefParts(splitParts(destinationRefLanes?.[lane] ?? ""));
     return {

@@ -66,6 +66,7 @@ function features(): GeoJSON.Feature[] {
 }
 
 afterEach(() => {
+  navState.route = route;
   navState.progress = {
     currentStepIndex: 0,
     distanceToNextManeuver: 300,
@@ -100,6 +101,25 @@ describe("NavManeuverArrowLayer", () => {
     expect(typeof point?.properties?.bearing).toBe("number");
   });
 
+  it("centres the map arrow on the same physical maneuver as the countdown", () => {
+    navState.route = {
+      ...route,
+      steps: route.steps.map((step, i) => ({
+        ...step,
+        coordinates:
+          i === 0
+            ? [geometry[0], geometry[1]]
+            : i === 1
+              ? [geometry[1], geometry[2]]
+              : [geometry[2]],
+      })),
+    };
+    render(<NavManeuverArrowLayer />);
+    const line = features().find(
+      (feature) => feature.geometry.type === "LineString",
+    ) as GeoJSON.Feature<GeoJSON.LineString>;
+    expect(line.geometry.coordinates.some(([lng, lat]) => lng === 8 && lat === 50.01)).toBe(true);
+  });
   it("empties the source outside the approach window", () => {
     navState.progress = {
       currentStepIndex: 0,

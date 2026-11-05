@@ -174,11 +174,12 @@ export function presentGuidanceLanes(
   lanes: ManeuverLane[] | undefined,
   maneuver: LaneManeuver | undefined,
   evidence: LaneGuidanceEvidence = {},
+  source: "engine" | "osm" = "engine",
 ): GuidanceLaneCell[] {
   const resolved = resolveGuidanceLanes(lanes, maneuver, evidence);
   // Only the engine knows an unmarked lane leads into the maneuver; lanes we
   // recommended ourselves stay blank rather than gain a guessed arrow.
-  const engineChose = lanes?.some((l) => l.valid) ?? false;
+  const engineChose = source === "engine" && (lanes?.some((l) => l.valid) ?? false);
   const unmarkedIcon = engineChose ? unmarkedLaneIconName(maneuver) : null;
   return resolved.map((lane) => {
     const marked = lane.indications.flatMap((indication) => {
@@ -190,13 +191,13 @@ export function presentGuidanceLanes(
     const arrows = fallback ? [{ indication: "none", icon: fallback }] : marked;
     const activeNorm = lane.active && !inferred ? normalizeLaneToken(lane.active) : null;
     return {
-      valid: lane.valid,
+      valid: lane.valid === true,
       inferred,
       arrows: arrows.map(({ indication, icon }) => ({
         indication,
         icon,
         active:
-          lane.valid &&
+          lane.valid === true &&
           (activeNorm ? normalizeLaneToken(indication) === activeNorm : arrows.length === 1),
         stemShift: arrows.length > 1 ? laneArrowStemShift(icon) : 0,
       })),

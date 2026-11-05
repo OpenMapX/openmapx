@@ -108,7 +108,7 @@ export function createMapillaryProvider(options: {
         // browser never contacts the provider directly.
         endUserExposure: "server-only",
         // Mapillary's Terms forbid use "in connection with real-time navigation
-        // or route guidance", so the junction photo never draws on it.
+        // or route guidance", so this capability must remain disabled.
         allowsNavigationUse: false,
         coverage: {
           kind: "mvt",

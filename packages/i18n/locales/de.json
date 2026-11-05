@@ -247,9 +247,6 @@
     "parkingWalkToDestination": "{minutes, plural, =1 {1 Min.} other {# Min.}} zu Fuß · {dist}",
     "exitNumber": "Ausfahrt {number}",
     "toward": "Richtung {places}",
-    "junctionViewLabel": "Kreuzungsansicht",
-    "junctionLaneSummary": "Spur {lane} von {total} nutzen",
-    "junctionPhotoDate": "Aufgenommen {date}",
     "confirmBoard": "Ich bin eingestiegen",
     "confirmAlight": "Ich bin ausgestiegen",
     "undoTransitAction": "Rückgängig",
@@ -2621,11 +2618,7 @@
     "persistentStorageOn": "Geschützt – der Browser löscht deine heruntergeladenen Kartenpakete und die Offline-App nicht zwischen Sitzungen.",
     "persistentStorageOff": "Nicht geschützt – bei wenig Speicher kann der Browser zwischengespeicherte Kacheln, heruntergeladene Kartenpakete und die Offline-App löschen. Dann lässt sich die App offline nicht mehr öffnen.",
     "enablePersistentStorage": "Offline-Speicher schützen",
-    "back": "Zurück zur Karte",
-    "junctionView": "Kreuzungsansicht",
-    "junctionViewHint": "Zeigt während der Navigation eine schematische Ansicht von Autobahnabfahrten und Gabelungen.",
-    "junctionPhotos": "Abfahrtsfotos",
-    "junctionPhotosHint": "Lädt vorab ein Street-Level-Foto der Ausfahrtszufahrt, mit Urheber und Lizenz."
+    "back": "Zurück zur Karte"
   },
   "pwa": {
     "updateAvailable": "Eine neue Version ist verfügbar",

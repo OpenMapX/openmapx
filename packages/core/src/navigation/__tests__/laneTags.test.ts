@@ -1,260 +1,250 @@
 import { describe, expect, it } from "vitest";
-import type { GantryModel, JunctionWay } from "../../types/junction";
-import type { Route } from "../../types/routing";
-import fixture from "../__fixtures__/junction/a57-neuss-exit20.json";
-import { findJunctionDecisionPoints } from "../junctionDetect";
-import {
-  laneDestinationsAt,
-  mergeExitPanel,
-  parseLaneTags,
-  selectApproachWay,
-  selectRampWay,
-} from "../laneTags";
+import type {
+  JunctionDecisionPoint,
+  JunctionLookupResult,
+  JunctionWay,
+} from "../../types/junction";
+import { resolveLaneGuidance } from "../lanes";
+import * as laneTags from "../laneTags";
 
-const a57Point = findJunctionDecisionPoints(fixture.route as unknown as Route)[0];
-
-function way(partial: Partial<JunctionWay>): JunctionWay {
+const point: JunctionDecisionPoint = {
+  stepIndex: 1,
+  kind: "fork",
+  side: "left",
+  point: [0, 0.001],
+  alongMeters: 100,
+  approachBearing: 0,
+  divergenceDeg: -20,
+  laneCount: 2,
+  activeLanes: [],
+  approachTrace: [
+    [0, 0],
+    [0, 0.001],
+  ],
+  sign: { exitBranches: ["A 1"], exitToward: ["Target"] },
+};
+function way(patch: Partial<JunctionWay> = {}): JunctionWay {
   return {
     wayId: 1,
     highway: "motorway",
-    bearing: 283,
-    endDistanceMeters: 50,
-    startDistanceMeters: 0,
-    tags: {},
-    ...partial,
+    bearing: 0,
+    endDistanceMeters: 0,
+    startDistanceMeters: 100,
+    geometry: [
+      [0, 0],
+      [0, 0.001],
+    ],
+    tags: {
+      lanes: 2,
+      turnLanes: "through|slight_right",
+      destinationLanes: "Target|Other",
+      destinationRefLanes: "A1|A2",
+    },
+    ...patch,
   };
 }
+function lookup(approach = way()): JunctionLookupResult {
+  return { index: 0, onMotorway: true, approach: [approach], ramps: [] };
+}
 
-describe("parseLaneTags on fixture way 314653469", () => {
-  it("groups adjacent lanes into A 57 and A 46 panels", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationLanes:
-          "Krefeld;Düsseldorf Nord;Büttgen|Krefeld;Düsseldorf Nord;Büttgen|Krefeld;Düsseldorf Nord;Büttgen|Heinsberg;Aachen;Neuss-Holzheim|Heinsberg;Aachen;Neuss-Holzheim",
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46",
-        turnLanes: "none|none|none|none|slight_right",
-      },
-      5,
-    )!;
-    expect(model.laneCount).toBe(5);
-    expect(model.panels).toHaveLength(2);
-    expect(model.panels[0].lanes).toEqual([0, 1, 2]);
-    expect(model.panels[0].refs).toEqual(["A 57"]);
-    expect(model.panels[0].destinations).toEqual(["Krefeld", "Düsseldorf Nord", "Büttgen"]);
-    expect(model.panels[0].turn).toBeUndefined();
-    expect(model.panels[1].lanes).toEqual([3, 4]);
-    expect(model.panels[1].refs).toEqual(["A 46"]);
-    expect(model.panels[1].destinations).toEqual(["Heinsberg", "Aachen", "Neuss-Holzheim"]);
-    // The slight_right is not uniform across the panel, so no turn token.
-    expect(model.panels[1].turn).toBeUndefined();
+describe("approach lane evidence", () => {
+  it("uses a matched carriageway's per-lane destinations", () => {
+    expect(laneTags.resolveApproachLaneGuidance(lookup(), point)).toMatchObject({
+      preferredLanes: [0],
+      usableLanes: [0],
+      state: "known",
+      source: "osm",
+    });
   });
-
-  it("takes the exit lane from the OSM turn tags when the engine sent no lanes", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46",
-        turnLanes: "none|none|none|none|slight_right",
-      },
-      5,
-    )!;
-    // Stadia's hosted Valhalla sends no lanes at all; OSM names the exit lane.
-    const noEngineLanes = { ...a57Point, laneCount: undefined, activeLanes: [] };
-    const merged = mergeExitPanel(model, noEngineLanes, { destination: "Neuss-Zentrum" });
-    expect(merged.panels.at(-1)!.lanes).toEqual([4]);
-    expect(merged.activeLanes).toEqual([4]);
-  });
-
-  it("folds the exit into the board that already covers the exit lane", () => {
-    // Way 314653466: lane 4 has its own board. Appending a second exit board
-    // over the same lane lights two boards for one decision.
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationLanes:
-          "|||Heinsberg;Aachen;Neuss-Holzheim|Heinsberg;Aachen;Neuss-Holzheim;Neuss-Zentrum",
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46;Neuss-Zentrum",
-        turnLanes: "none|none|none|none|slight_right",
-      },
-      5,
-    )!;
-    const merged = mergeExitPanel(
-      model,
-      { ...a57Point, laneCount: undefined, activeLanes: [] },
-      {
-        destination: "Neuss-Zentrum",
-      },
+  it("keeps an unknown gap between equal destinations", () => {
+    const result = laneTags.resolveApproachLaneGuidance(
+      lookup(
+        way({
+          tags: { lanes: 3, destinationLanes: "Target||Target", destinationRefLanes: "A1||A1" },
+        }),
+      ),
+      { ...point, laneCount: 3 },
     );
-    expect(merged.panels.filter((panel) => panel.isExit)).toHaveLength(1);
-    expect(merged.panels).toHaveLength(model.panels.length);
-    const exitPanel = merged.panels.at(-1)!;
-    expect(exitPanel.lanes).toEqual([4]);
-    expect(exitPanel.exitNumber).toBe("20");
-    expect(exitPanel.destinations).toContain("Neuss-Zentrum");
-    expect(exitPanel.destinations).toContain("Heinsberg");
-    // Each text once across the whole board, however the ways were tagged.
-    const texts = [...exitPanel.refs, ...exitPanel.destinations];
-    expect(texts.filter((text) => text === "Neuss-Zentrum")).toHaveLength(1);
+    expect(result?.preferredLanes).toEqual([0, 2]);
   });
-
-  it("reads a place name tagged into destination:ref as a destination", () => {
-    // Way 314653466 carries "Neuss-Zentrum" in `destination:ref:lanes`; a road
-    // ref always has a number, a town never does.
-    const model = parseLaneTags({ lanes: 2, destinationRefLanes: "A 46|A 46;Neuss-Zentrum" }, 2)!;
-    expect(model.panels.at(-1)!.refs).toEqual(["A 46"]);
-    expect(model.panels.at(-1)!.destinations).toEqual(["Neuss-Zentrum"]);
+  it.each(["Target", "Target|Other|Extra"])(
+    "ignores malformed per-lane lists: %s",
+    (destinationLanes) => {
+      expect(
+        laneTags.resolveApproachLaneGuidance(
+          lookup(way({ tags: { lanes: 2, destinationLanes } })),
+          point,
+        )?.state,
+      ).toBe("unknown");
+    },
+  );
+  it("does not borrow destinations from a parallel carriageway", () => {
+    const result = laneTags.resolveApproachLaneGuidance(
+      lookup(
+        way({
+          geometry: [
+            [0.0002, 0],
+            [0.0002, 0.001],
+          ],
+        }),
+      ),
+      point,
+    );
+    expect(result).toBeUndefined();
   });
-
-  it("spans every lane the OSM tags send toward the exit", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 4,
-        destinationRefLanes: "A 1|A 1|A 2|A 2",
-        turnLanes: "none|none|slight_right|right",
-      },
-      4,
-    )!;
-    const merged = mergeExitPanel(model, { ...a57Point, laneCount: undefined, activeLanes: [] });
-    expect(merged.activeLanes).toEqual([2, 3]);
+  it("does not borrow lanes from the opposite direction", () => {
+    expect(
+      laneTags.resolveApproachLaneGuidance(
+        lookup(
+          way({
+            bearing: 180,
+            geometry: [
+              [0, 0.001],
+              [0, 0],
+            ],
+          }),
+        ),
+        point,
+      ),
+    ).toBeUndefined();
   });
-
-  it("keeps the engine's lanes when it sent them", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46",
-        // Mis-tagged: OSM says lane 0 exits, the engine says lane 4.
-        turnLanes: "slight_right|none|none|none|none",
-      },
-      5,
-    )!;
-    const merged = mergeExitPanel(model, { ...a57Point, laneCount: 5, activeLanes: [4] });
-    expect(merged.activeLanes).toEqual([4]);
-  });
-
-  it("falls back to the outermost lane when neither the engine nor OSM says", () => {
-    const model = parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 57|A 46|A 46" }, 5)!;
-    const merged = mergeExitPanel(model, { ...a57Point, laneCount: undefined, activeLanes: [] });
-    expect(merged.activeLanes).toEqual([4]);
-  });
-
-  it("appends the exit panel from the ramp tags and moves the active lanes", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46",
-      },
-      5,
-    )!;
-    const merged = mergeExitPanel(model, a57Point, { destination: "Neuss-Zentrum" });
-    expect(merged.panels.at(-1)).toEqual({
-      lanes: [4],
-      destinations: ["Neuss-Zentrum"],
-      refs: [],
-      symbols: [],
-      isExit: true,
-      exitNumber: "20",
-    });
-    expect(merged.activeLanes).toEqual([4]);
-  });
-
-  it("yields three panels for way 314653466 without the ramp", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationLanes:
-          "|||Heinsberg;Aachen;Neuss-Holzheim|Heinsberg;Aachen;Neuss-Holzheim;Neuss-Zentrum",
-        destinationRefLanes: "A 57|A 57|A 57|A 46|A 46;Neuss-Zentrum",
-      },
-      5,
-    )!;
-    expect(model.panels).toHaveLength(3);
-    expect(model.panels[2].destinations).toEqual([
-      "Heinsberg",
-      "Aachen",
-      "Neuss-Holzheim",
-      "Neuss-Zentrum",
+  it("does not transfer engine indices onto a different lane count", () => {
+    const laneGuidance = resolveLaneGuidance([
+      { indications: ["left"], valid: true, preferred: true },
+      { indications: ["right"], valid: false },
     ]);
-    // The town tagged into `destination:ref:lanes` is a destination, not a ref.
-    expect(model.panels[2].refs).toEqual(["A 46"]);
-    expect(model.panels[2].isExit).toBe(false);
+    const result = laneTags.resolveApproachLaneGuidance(
+      lookup(
+        way({
+          tags: {
+            lanes: 3,
+            destinationLanes: "Other|Other|Target",
+            destinationRefLanes: "A2|A2|A1",
+          },
+        }),
+      ),
+      { ...point, laneGuidance, activeLanes: [0] },
+    );
+    expect(result?.usableLanes).toEqual([2]);
+    expect(result?.source).toBe("osm");
+  });
+  it("preserves explicit engine rejection instead of guessing acceptance", () => {
+    const laneGuidance = resolveLaneGuidance([
+      { indications: ["through"], valid: false },
+      { indications: ["right"], valid: false },
+    ]);
+    expect(
+      laneTags.resolveApproachLaneGuidance(lookup(), { ...point, laneGuidance }),
+    ).toMatchObject({ usableLanes: [], preferredLanes: [], source: "engine" });
+  });
+  it("withholds conflicting engine and destination evidence", () => {
+    const laneGuidance = resolveLaneGuidance([
+      { indications: ["through"], valid: false },
+      { indications: ["right"], valid: true, preferred: true },
+    ]);
+    expect(
+      laneTags.resolveApproachLaneGuidance(lookup(), { ...point, laneGuidance, activeLanes: [1] }),
+    ).toMatchObject({ state: "conflict", usableLanes: [], preferredLanes: [] });
+  });
+  it("keeps initially usable lanes distinct from preferred lanes", () => {
+    const laneGuidance = resolveLaneGuidance([
+      { indications: ["through"], valid: true },
+      { indications: ["right"], valid: true },
+    ]);
+    expect(
+      laneTags.resolveApproachLaneGuidance(lookup(), {
+        ...point,
+        laneGuidance,
+        activeLanes: [0, 1],
+      }),
+    ).toMatchObject({ usableLanes: [0, 1], preferredLanes: [], source: "engine" });
+  });
+  it("withholds every lane when engine preference contradicts engine rejection", () => {
+    const laneGuidance = resolveLaneGuidance([
+      { indications: ["through"], valid: false, preferred: true },
+      { indications: ["right"], valid: true },
+    ]);
+    const result = laneTags.resolveApproachLaneGuidance(lookup(), { ...point, laneGuidance });
+    expect(result?.state).toBe("conflict");
+    expect(result?.lanes.some((lane) => lane.valid === true)).toBe(false);
+  });
+  it("ignores destination evidence when one of its lane lists has a different length", () => {
+    const result = laneTags.resolveApproachLaneGuidance(
+      lookup(
+        way({
+          tags: {
+            lanes: 2,
+            destinationLanes: "Target",
+            destinationRefLanes: "A1|A2",
+          },
+        }),
+      ),
+      point,
+    );
+    expect(result?.preferredLanes).toEqual([]);
+  });
+  it("does not infer lane selection from arrow direction alone", () => {
+    expect(
+      laneTags.resolveApproachLaneGuidance(
+        lookup(way({ tags: { lanes: 2, turnLanes: "left|right" } })),
+        point,
+      ),
+    ).toMatchObject({ state: "unknown", preferredLanes: [] });
+  });
+  it("does not assign all incoming lanes to an unresolved same-ref branch", () => {
+    const result = lookup(way({ tags: { lanes: 2, destinationRefLanes: "A1|A1" } }));
+    result.outgoing = [
+      way({ wayId: 11, tags: { destinationRef: "A1", destination: "Target" } }),
+      way({ wayId: 12, tags: { destinationRef: "A1", destination: "Other" } }),
+    ];
+    expect(laneTags.resolveApproachLaneGuidance(result, point)?.preferredLanes).toEqual([]);
+  });
+  it("does not use a nearer unconnected ramp to select lanes", () => {
+    const result = lookup(
+      way({ tags: { lanes: 2, destinationLanes: "Target|Other", destinationRefLanes: "A1|A2" } }),
+    );
+    result.outgoing = [
+      way({ wayId: 11, tags: { destinationRef: "A1", destination: "Elsewhere" } }),
+      way({ wayId: 12, tags: { destinationRef: "A2", destination: "Other" } }),
+    ];
+    expect(laneTags.resolveApproachLaneGuidance(result, point)?.preferredLanes).toEqual([]);
   });
 });
 
-describe("parseLaneTags lane-count mismatches", () => {
-  const fourLaneModel: GantryModel = {
-    laneCount: 4,
-    panels: [
-      { lanes: [0, 1, 2, 3], destinations: ["Köln"], refs: ["A 57"], symbols: [], isExit: false },
-    ],
-    activeLanes: [],
-    source: "osm",
-  };
-
-  it("maps the exit panel to the outermost right lane when the model is narrower", () => {
-    const merged = mergeExitPanel(fourLaneModel, { ...a57Point, activeLanes: [4] }, undefined);
-    const exitPanel = merged.panels.at(-1)!;
-    expect(exitPanel.lanes).toEqual([3]);
-    expect(merged.activeLanes).toEqual([3]);
-  });
-
-  it("maps the exit panel to lane 0 on the left side", () => {
-    const merged = mergeExitPanel(fourLaneModel, {
-      ...a57Point,
-      activeLanes: [0],
-      side: "left",
-    });
-    expect(merged.panels.at(-1)!.lanes).toEqual([0]);
-    expect(merged.activeLanes).toEqual([0]);
-  });
-});
-
-describe("parseLaneTags edge cases", () => {
-  it("tolerates a trailing empty lane value", () => {
-    const model = parseLaneTags({ lanes: 3, destinationRefLanes: "A 57|A 46|" }, 3)!;
-    expect(model.panels).toHaveLength(2);
-    expect(model.panels[0].refs).toEqual(["A 57"]);
-  });
-
-  it("returns null when the lanes tag disagrees", () => {
+describe("laneDestinationsAt", () => {
+  it("can read a same-count link carrying the route into a split", () => {
     expect(
-      parseLaneTags({ lanes: 4, destinationRefLanes: "A 57|A 57|A 46|A 46|A 46" }, 5),
-    ).toBeNull();
+      laneTags.laneDestinationsAt(
+        { approach: [], ramps: [way({ highway: "motorway_link" })] },
+        point,
+      ),
+    ).toEqual([
+      { destinations: ["Target"], refs: ["A1"] },
+      { destinations: ["Other"], refs: ["A2"] },
+    ]);
   });
-
-  it("does not invent destinations for lanes the tag leaves out", () => {
-    expect(parseLaneTags({ lanes: 5, destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)).toBeNull();
-    // The same short list is rejected when only the engine knows the lane count.
-    expect(parseLaneTags({ destinationRefLanes: "A 57|A 57|A 46|A 46" }, 5)).toBeNull();
-  });
-
-  it("returns null with only turn:lanes and no destination tags", () => {
+  it("requires the engine lane count and legal approach direction", () => {
+    expect(laneTags.laneDestinationsAt(lookup(), { ...point, laneCount: 3 })).toBeUndefined();
     expect(
-      parseLaneTags({ lanes: 5, turnLanes: "none|none|none|none|slight_right" }, 5),
-    ).toBeNull();
-  });
-
-  it("attaches destination:symbol:lanes to its lane", () => {
-    const model = parseLaneTags(
-      {
-        lanes: 5,
-        destinationRefLanes: "A 57|A 57|A 46|A 46|A 46",
-        destinationSymbolLanes: "||airport||",
-      },
-      5,
-    )!;
-    expect(model.panels[1].symbols).toEqual(["airport"]);
+      laneTags.laneDestinationsAt(lookup(way({ endDistanceMeters: -10 })), point),
+    ).toBeUndefined();
   });
 });
 
 describe("way selection", () => {
+  const westPoint = {
+    ...point,
+    approachBearing: 283,
+    divergenceDeg: 17,
+    laneCount: 5,
+    approachTrace: undefined,
+  };
   it("prefers a way whose bearing and lane count match over a reverse carriageway", () => {
     const candidates: JunctionWay[] = [
       way({ wayId: 2, bearing: 355, endDistanceMeters: 10, tags: { lanes: 5 } }),
       way({ wayId: 1, bearing: 285, endDistanceMeters: 100, tags: { lanes: 5 } }),
     ];
-    expect(selectApproachWay(candidates, a57Point)?.wayId).toBe(1);
+    expect(laneTags.selectApproachWay(candidates, westPoint)?.wayId).toBe(1);
   });
 
   it("keeps only _link ramps that start at the split within 60 degrees of the after bearing", () => {
@@ -265,7 +255,7 @@ describe("way selection", () => {
       way({ wayId: 5, highway: "motorway_link", bearing: 268, startDistanceMeters: 372 }),
       way({ wayId: 6, highway: "motorway", bearing: 300, startDistanceMeters: 0 }),
     ];
-    const selected = selectRampWay(ramps, a57Point);
+    const selected = laneTags.selectRampWay(ramps, westPoint);
     expect(selected.map((r) => r.wayId)).toEqual([3]);
   });
 
@@ -274,43 +264,6 @@ describe("way selection", () => {
       way({ wayId: 7, highway: "motorway_link", bearing: 295, startDistanceMeters: 40 }),
       way({ wayId: 8, highway: "motorway_link", bearing: 305, startDistanceMeters: 3 }),
     ];
-    expect(selectRampWay(ramps, a57Point).map((r) => r.wayId)).toEqual([8, 7]);
-  });
-});
-
-describe("laneDestinationsAt", () => {
-  const point = { ...a57Point, laneCount: 4 };
-  const split = way({
-    wayId: 152275743,
-    highway: "motorway_link",
-    bearing: 285,
-    endDistanceMeters: 2,
-    tags: {
-      lanes: 4,
-      destinationLanes: "Düsseldorf|Düsseldorf|Liège|Liège",
-      destinationRefLanes: "A 44|A 44|A 44|A 44",
-    },
-  });
-
-  it("reads the split's lanes off a link carrying the route into it", () => {
-    const mainline = way({ wayId: 1, bearing: 285, endDistanceMeters: 30, tags: { lanes: 3 } });
-    expect(laneDestinationsAt({ approach: [mainline], ramps: [split] }, point)).toEqual([
-      { destinations: ["Düsseldorf"], refs: ["A 44"] },
-      { destinations: ["Düsseldorf"], refs: ["A 44"] },
-      { destinations: ["Liège"], refs: ["A 44"] },
-      { destinations: ["Liège"], refs: ["A 44"] },
-    ]);
-  });
-
-  it("needs the engine's lane count, so the lanes line up one to one", () => {
-    expect(
-      laneDestinationsAt({ approach: [], ramps: [split] }, { ...point, laneCount: 3 }),
-    ).toBeUndefined();
-  });
-
-  it("skips a way leaving the split or heading elsewhere", () => {
-    const leaving = { ...split, endDistanceMeters: -60 };
-    const crossing = { ...split, bearing: 20 };
-    expect(laneDestinationsAt({ approach: [], ramps: [leaving, crossing] }, point)).toBeUndefined();
+    expect(laneTags.selectRampWay(ramps, westPoint).map((r) => r.wayId)).toEqual([8, 7]);
   });
 });

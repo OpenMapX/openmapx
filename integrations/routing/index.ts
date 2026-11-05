@@ -825,14 +825,14 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   /**
-   * POST /navigation/junctions — per-lane gantry tags for motorway decision
+   * POST /navigation/junctions — per-lane navigation tags for motorway decision
    * points, from OSM `destination:*:lanes` / `turn:lanes` on the approach way.
    * All uncached points of a request share ONE Overpass query (one polyline
    * `around` statement each over its route trace): the public instance allows
    * two concurrent slots per IP, so a per-point fan-out would rate-limit itself.
    * Results are cached per point for a week; a point Overpass could not answer
    * for comes back empty with `unavailable: true` and nothing cached, so the
-   * client asks again later while the panel falls back to the engine sign. A
+   * client asks again later while the banner keeps its engine-provided guidance. A
    * POST response is not HTTP-cacheable; the server cache is the cache.
    */
   ctx.registerRoute("POST", "/navigation/junctions", async (req, reply) => {

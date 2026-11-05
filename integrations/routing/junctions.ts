@@ -12,8 +12,7 @@ import { parseWgs84Point, parseWgs84PointList } from "@openmapx/integration-fram
 import { hashKey, round } from "./closure-exclusions.js";
 
 /**
- * `POST /navigation/junctions` — the per-lane gantry data behind the junction
- * view. All uncached decision points of a request share one Overpass query
+ * `POST /navigation/junctions` — the OSM lane data behind the maneuver arrows. All uncached decision points of a request share one Overpass query
  * (one polyline `around` statement per point over its route trace, never a fan
  * of extrapolated circles); the merged result is handed back out per point by
  * proximity to that point's trace. Cached per point for a week.
@@ -44,8 +43,8 @@ const END_ON_POINT_METERS = 5;
  * further out and runs the other way.
  */
 const ON_CARRIAGEWAY_METERS = 10;
-/** Keys that make a way worth drawing as a gantry or exit panel. */
-const GANTRY_TAG = /^(destination|turn)(:|$)/;
+/** Keys carrying lane directions or branch destinations. */
+const LANE_TAG = /^(destination|turn)(:|$)/;
 
 export const JUNCTION_CACHE_TTL_SECONDS = 7 * 86_400;
 
@@ -85,7 +84,7 @@ export function parseJunctionPoints(body: unknown): JunctionLookupPoint[] | null
 
 /** The per-point cache key: position to ~10 m, bearing to 10°. */
 export function junctionCacheKey(point: JunctionLookupPoint): string {
-  return hashKey("cache:nav:junction-ways", [
+  return hashKey("cache:nav:junction-ways:v4", [
     round(point.lng, 4),
     round(point.lat, 4),
     round(point.bearing / 10, 0) * 10,
@@ -107,21 +106,27 @@ export function buildJunctionsQuery(points: JunctionLookupPoint[]): string {
           .join(",")})["highway"~"^(motorway|trunk|motorway_link|trunk_link)$"];`,
     )
     .join("");
-  return `[out:json][timeout:25];(${statements});out tags geom;`;
+  return `[out:json][timeout:25];(${statements});out body geom;`;
 }
 
 export interface OverpassWayElement {
   type: string;
   id: number;
   tags?: Record<string, string>;
+  nodes?: number[];
   geometry?: { lat: number; lon: number }[];
 }
 
 /** Tags the route reads off an approach or ramp way. */
 function laneTags(tags: Record<string, string>): OsmLaneTags {
   const lanes = Number(tags.lanes);
+  // On two-way trunk roads `lanes` counts both directions. A travel-direction
+  // count needs separate tags, which this lookup does not currently resolve.
+  const oneWay =
+    ["yes", "1", "true", "-1"].includes(tags.oneway ?? "") ||
+    (tags.oneway === undefined && ["motorway", "motorway_link"].includes(tags.highway ?? ""));
   return {
-    ...(Number.isFinite(lanes) && lanes > 0 ? { lanes: Math.round(lanes) } : {}),
+    ...(oneWay && Number.isInteger(lanes) && lanes > 0 ? { lanes } : {}),
     ...(tags["turn:lanes"] ? { turnLanes: tags["turn:lanes"] } : {}),
     ...(tags["destination:lanes"] ? { destinationLanes: tags["destination:lanes"] } : {}),
     ...(tags["destination:ref:lanes"]
@@ -193,6 +198,18 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     endDistance < END_ON_POINT_METERS ||
     angularDifference(bearingBetween(end, centre), endBearing) <= 90;
 
+  const localSegments = nodes.flatMap((node, i) =>
+    i < nodes.length - 1 && distanceToPolyline(centre, [node, nodes[i + 1]]) <= 500
+      ? [i, i + 1]
+      : [],
+  );
+  const first = localSegments.length ? localSegments[0] : 0;
+  const last = localSegments.length ? localSegments[localSegments.length - 1] : nodes.length - 1;
+  const local = nodes.slice(first, last + 1);
+  const geometry =
+    local.length <= 128
+      ? local
+      : Array.from({ length: 128 }, (_, i) => local[Math.round((i * (local.length - 1)) / 127)]);
   return {
     wayId: element.id,
     highway: tags.highway ?? "",
@@ -202,6 +219,7 @@ function mapWay(element: OverpassWayElement, point: JunctionLookupPoint): Juncti
     endDistanceMeters: leadsIn ? endDistance : -endDistance,
     startDistanceMeters: haversineDistance(nodes[0], centre),
     tags: laneTags(tags),
+    geometry,
   };
 }
 
@@ -224,10 +242,17 @@ export function mapJunctionWays(
     if (!nearTrace) return [];
     const way = mapWay(element, point);
     if (!way) return [];
-    const tagged = Object.keys(element.tags ?? {}).some((key) => GANTRY_TAG.test(key));
+    const tagged = Object.keys(element.tags ?? {}).some((key) => LANE_TAG.test(key));
     const nodes = element.geometry.map((node) => [node.lon, node.lat] as LngLat);
     if (element.tags?.oneway === "-1") nodes.reverse();
-    return [{ way, tagged, nodes, pointDistance: distanceToPolyline(centre, nodes) }];
+    const nodeIds =
+      Array.isArray(element.nodes) &&
+      element.nodes.length === nodes.length &&
+      element.nodes.every((id) => Number.isSafeInteger(id) && id > 0)
+        ? [...element.nodes]
+        : [];
+    if (element.tags?.oneway === "-1") nodeIds.reverse();
+    return [{ way, tagged, nodeIds, pointDistance: distanceToPolyline(centre, nodes) }];
   });
   const carriageways = matched.filter(
     ({ way, pointDistance }) =>
@@ -236,65 +261,36 @@ export function mapJunctionWays(
       angularDifference(way.bearing, point.bearing) <= APPROACH_BEARING_TOLERANCE_DEG,
   );
   const onMotorway = carriageways.length > 0;
-  const fullLanesFromMeters = fullLanesFrom(matched, carriageways, point);
-  const drawable = matched.filter((entry) => entry.tagged).map((entry) => entry.way);
-  const approach = drawable.filter(
+  const laneWays = matched
+    .filter(
+      ({ way, tagged }) =>
+        tagged || (!way.highway.includes("_link") && way.tags.lanes !== undefined),
+    )
+    .map((entry) => entry.way);
+  const approach = laneWays.filter(
     (way) =>
       !way.highway.includes("_link") &&
       angularDifference(way.bearing, point.bearing) <= APPROACH_BEARING_TOLERANCE_DEG &&
       way.endDistanceMeters >= 0 &&
       way.endDistanceMeters <= APPROACH_MAX_UPSTREAM_METERS,
   );
-  const ramps = drawable.filter((way) => way.highway.includes("_link"));
+  const ramps = laneWays.filter((way) => way.highway.includes("_link"));
+  const nearestApproach = [...approach].sort(
+    (a, b) => a.endDistanceMeters - b.endDistanceMeters,
+  )[0];
+  const splitNode = matched.find(({ way }) => way.wayId === nearestApproach?.wayId)?.nodeIds.at(-1);
+  const outgoing =
+    splitNode === undefined
+      ? []
+      : matched
+          .filter(
+            ({ way, nodeIds }) => nodeIds[0] === splitNode && way.wayId !== nearestApproach?.wayId,
+          )
+          .map(({ way }) => way);
   return {
     approach,
     ramps,
     onMotorway,
-    ...(fullLanesFromMeters !== undefined ? { fullLanesFromMeters } : {}),
+    ...(outgoing.length > 0 ? { outgoing, outgoingApproachWayId: nearestApproach?.wayId } : {}),
   };
-}
-
-interface MatchedWay {
-  way: JunctionWay;
-  nodes: LngLat[];
-}
-
-/**
- * Metres before the decision point from which the carriageway already has the
- * lane count it has at the split. OSM splits a way wherever `lanes` changes,
- * so the chain of upstream ways keeping at least that many lanes ends where
- * the exit lanes were added. Walked node to node rather than read off the one
- * way at the split, which is often cut short by a bridge or a sign change.
- */
-function fullLanesFrom(
-  matched: MatchedWay[],
-  carriageways: MatchedWay[],
-  point: JunctionLookupPoint,
-): number | undefined {
-  const centre: LngLat = [point.lng, point.lat];
-  // The way carrying the route into the split, not one starting at it.
-  const atSplit = carriageways
-    .filter(({ way }) => way.startDistanceMeters > END_ON_POINT_METERS)
-    .sort((a, b) => Math.abs(a.way.endDistanceMeters) - Math.abs(b.way.endDistanceMeters))[0];
-  const lanes = atSplit?.way.tags.lanes;
-  if (!atSplit || lanes === undefined) return undefined;
-  let current = atSplit;
-  const visited = new Set([current.way.wayId]);
-  for (;;) {
-    const start = current.nodes[0];
-    const upstream = matched.find(
-      (entry) =>
-        !visited.has(entry.way.wayId) &&
-        !entry.way.highway.includes("_link") &&
-        (entry.way.tags.lanes ?? 0) >= lanes &&
-        // A motorway merging in at that node is not this carriageway.
-        angularDifference(entry.way.bearing, current.way.bearing) <=
-          APPROACH_BEARING_TOLERANCE_DEG &&
-        haversineDistance(entry.nodes[entry.nodes.length - 1], start) < 1,
-    );
-    if (!upstream) break;
-    visited.add(upstream.way.wayId);
-    current = upstream;
-  }
-  return Math.round(haversineDistance(current.nodes[0], centre));
 }

@@ -7,7 +7,7 @@ import {
   maneuverArrowLine,
   maneuverArrowSpans,
   maneuverArrowTipBearing,
-  stepStartMeters,
+  maneuverStartMeters,
   upcomingManeuverIndex,
   useNavigationStore,
 } from "@openmapx/core";
@@ -62,7 +62,7 @@ export function NavManeuverArrowLayer() {
     if (!step?.maneuver || NON_JUNCTION_TYPES.has(step.maneuver.type))
       return EMPTY_FEATURE_COLLECTION;
     const cum = cumulativeDistances(route.geometry);
-    const alongMeters = stepStartMeters(route.steps, upcomingIndex);
+    const alongMeters = maneuverStartMeters(route, upcomingIndex);
     const spans: ManeuverArrowSpans = maneuverArrowSpans(mode);
     const line = maneuverArrowLine(route.geometry, cum, alongMeters, spans);
     if (!line || line.length < 2) return EMPTY_FEATURE_COLLECTION;

@@ -3,16 +3,21 @@
 import {
   countryAtMeters,
   guidanceApproachMeters,
+  maneuverStartMeters,
   shouldPreviewNextStep,
-  stepStartMeters,
   upcomingManeuverIndex,
   useCountryFromCoordinates,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
 import { useMemo } from "react";
-import { useNavJunctionStore } from "@/lib/navigation/junctionStore";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { OSM_ATTRIBUTION } from "@/lib/map";
+import { useNavLaneGuidanceStore } from "@/lib/navigation/laneGuidanceStore";
 import { ManeuverBanner } from "./ManeuverBanner";
+
+const OSM_CREDIT = [OSM_ATTRIBUTION];
+const NO_CREDIT: typeof OSM_CREDIT = [];
 
 /**
  * The only piece of nav chrome that needs the upcoming-maneuver arithmetic on
@@ -25,6 +30,8 @@ export function NavManeuverSlot() {
   const mode = useNavigationStore((s) => s.mode);
   const units = useSettingsStore((s) => s.units);
   const routeCountries = useNavigationStore((s) => s.routeCountries);
+  const guidanceByStep = useNavLaneGuidanceStore((s) => s.guidanceByStep);
+  const guidanceRoute = useNavLaneGuidanceStore((s) => s.routeIdentity);
 
   // Show the nav chrome from the static route immediately on Start; live
   // position (progress) refines it once GPS fixes arrive. Without this, the
@@ -43,10 +50,9 @@ export function NavManeuverSlot() {
   // time before the maneuver that stretches on the motorway) — so on a long
   // stretch neither the lanes nor the "Then …" preview clutter the banner.
   const approaching = distanceToManeuver <= guidanceApproachMeters(mode, speedMps);
-  const showLanes = !!step?.lanes && approaching;
-  // Where each lane leads per OSM, from the junction lookup: at a split whose
-  // lanes all point straight on, the only way to tell the branches apart.
-  const laneDestinations = useNavJunctionStore((s) => s.laneDestinationsByStep.get(upcomingIndex));
+  const resolvedLanes =
+    (guidanceRoute === route ? guidanceByStep.get(upcomingIndex)?.lanes : undefined) ?? step?.lanes;
+  const showLanes = !!resolvedLanes?.length && approaching;
   // Preview the maneuver after this one only when it's both relevant (approaching)
   // and follows closely (a short gap), so back-to-back turns chain but far-apart
   // ones don't.
@@ -61,12 +67,16 @@ export function NavManeuverSlot() {
   const signCountry = useMemo(
     () =>
       route && routeCountries && hasSign
-        ? countryAtMeters(routeCountries, stepStartMeters(route.steps, upcomingIndex))
+        ? countryAtMeters(routeCountries, maneuverStartMeters(route, upcomingIndex))
         : undefined,
     [route, routeCountries, hasSign, upcomingIndex],
   );
   const { data: originCountry } = useCountryFromCoordinates(route?.geometry[0] ?? null, hasSign);
   const country = signCountry ?? originCountry;
+
+  const usesOsmLanes =
+    guidanceRoute === route && showLanes && guidanceByStep.get(upcomingIndex)?.source === "osm";
+  useMapAttributions("nav-lane-guidance", usesOsmLanes ? OSM_CREDIT : NO_CREDIT);
 
   if (!step) return null;
 
@@ -77,8 +87,8 @@ export function NavManeuverSlot() {
       maneuver={step.maneuver}
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
       nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
-      lanes={showLanes ? step.lanes : undefined}
-      laneDestinations={laneDestinations}
+      lanes={showLanes ? resolvedLanes : undefined}
+      laneSource={usesOsmLanes ? "osm" : "engine"}
       sign={step.sign}
       country={country}
       units={units}

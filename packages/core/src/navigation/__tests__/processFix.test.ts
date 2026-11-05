@@ -151,6 +151,58 @@ describe("processFix speed fallback", () => {
 });
 
 describe("processFix", () => {
+  it("keeps maneuver distance and gate timing on the same geometry despite provider distance drift", () => {
+    const physical: Route = {
+      ...route,
+      distance: 2640,
+      duration: 120,
+      geometry: [
+        [0, 0],
+        [0.00899320363724538, 0],
+        [0.01798640727449076, 0],
+      ],
+      steps: [
+        {
+          instruction: "Continue",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0, 0],
+            [0.00899320363724538, 0],
+          ],
+        },
+        {
+          instruction: "Keep left",
+          distance: 1320,
+          duration: 60,
+          coordinates: [
+            [0.00899320363724538, 0],
+            [0.01798640727449076, 0],
+          ],
+          maneuver: { type: "fork", modifier: "left" },
+        },
+      ],
+    };
+    let state = { ...emptyState };
+    for (const [index, meters] of [300, 500, 700, 900, 970, 1000, 1050].entries()) {
+      const r = processFix(
+        physical,
+        {
+          coords: [(0.00899320363724538 * meters) / 1000, 0],
+          accuracy: 3,
+          speed: 25,
+          heading: 90,
+          timestampMs: index * 1000,
+        },
+        state,
+        opts,
+      );
+      state = r.nextState;
+      expect(r.progress?.currentStepIndex).toBe(meters <= 1000 ? 0 : 1);
+      if (meters < 1000) expect(r.progress?.distanceToNextManeuver).toBeCloseTo(1000 - meters, 1);
+      expect(r.needsReroute).toBe(false);
+    }
+  });
   it("rejects fixes worse than the accuracy cap", () => {
     const r = processFix(
       route,

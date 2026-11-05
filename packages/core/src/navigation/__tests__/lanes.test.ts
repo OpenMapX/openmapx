@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ManeuverLane } from "../../types/routing";
 import {
   guidanceApproachMeters,
-  junctionPhotoApproachMeters,
   resolveGuidanceLanes,
+  resolveLaneGuidance,
   resolveRecommendedLanes,
   shouldPreviewNextStep,
 } from "../lanes";
@@ -11,45 +11,77 @@ import {
 const lane = (indications: string[], valid = false): ManeuverLane => ({ indications, valid });
 
 describe("resolveRecommendedLanes", () => {
+  it("does not turn unknown arrows into an invented recommendation", () => {
+    const result = resolveLaneGuidance([{ indications: ["left"] }, { indications: ["through"] }]);
+    expect(result.state).toBe("unknown");
+    expect(result.usableLanes).toEqual([]);
+    expect(result.preferredLanes).toEqual([]);
+  });
+  it("keeps initially usable and preferred sets distinct", () => {
+    const result = resolveLaneGuidance([
+      { indications: ["left"], valid: true, preferred: false },
+      { indications: ["left"], valid: true, preferred: true },
+      { indications: ["right"], valid: false, preferred: false },
+    ]);
+    expect(result.usableLanes).toEqual([0, 1]);
+    expect(result.preferredLanes).toEqual([1]);
+    expect(result.state).toBe("known");
+  });
+  it("preserves explicit engine rejection instead of guessing from turn arrows", () => {
+    const lanes = [lane(["left"], false), lane(["through"], false), lane(["right"], false)];
+    expect(
+      resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" }).map((l) => l.valid),
+    ).toEqual([false, false, false]);
+  });
   it("trusts the engine when a lane is already valid", () => {
     const lanes = [lane(["left"], true), lane(["through"])];
     expect(resolveRecommendedLanes(lanes, { type: "turn", modifier: "right" })).toBe(lanes);
   });
 
-  it("recommends an exact-match lane when the engine didn't decide", () => {
+  it("does not override rejection even for an exact turn match", () => {
     const lanes = [lane(["left"]), lane(["through"]), lane(["right"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([true, false, false]);
-    expect(out[0].active).toBe("left");
+    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
+    expect(out[0].active).toBeUndefined();
   });
 
-  it("falls back to the same side when there's no exact match", () => {
+  it("does not infer branch identity from the same side", () => {
     const lanes = [lane(["slight left"]), lane(["through"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out[0].valid).toBe(true); // slight left serves a left turn
+    expect(out[0].valid).toBe(false);
   });
 
-  it("marks through/straight lanes for a straight maneuver", () => {
+  it("retains rejected through lanes for a straight maneuver", () => {
     const lanes = [lane(["left"]), lane(["through"])];
     const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "straight" });
-    expect(out.map((l) => l.valid)).toEqual([false, true]);
+    expect(out.map((l) => l.valid)).toEqual([false, false]);
   });
 
   it("returns [] for no lanes", () => {
     expect(resolveRecommendedLanes(undefined, { type: "turn", modifier: "left" })).toEqual([]);
   });
 
-  it("highlights through lanes for keep-left when a right exit peels away", () => {
+  it("does not invent through recommendations for a keep maneuver", () => {
     const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
     const out = resolveRecommendedLanes(lanes, { type: "keep", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
   });
+});
+
+const unknownLane = (indications: string[], valid?: boolean): ManeuverLane => ({
+  indications,
+  valid,
 });
 
 describe("resolveGuidanceLanes", () => {
   // Kreuz Aachen, the 4-lane link toward A 44: every lane `through`, the left
   // two signed Düsseldorf and the right two Liège, all four "A 44".
-  const kreuzAachen = [lane(["through"]), lane(["through"]), lane(["through"]), lane(["through"])];
+  const kreuzAachen = [
+    unknownLane(["through"]),
+    unknownLane(["through"]),
+    unknownLane(["through"]),
+    unknownLane(["through"]),
+  ];
   const keepLeft = { type: "keep", modifier: "left" };
   const toDuesseldorf = { exitBranches: ["A 44"], exitToward: ["Düsseldorf"] };
   const splitDestinations = [
@@ -61,7 +93,7 @@ describe("resolveGuidanceLanes", () => {
 
   it("highlights no lane when every through lane would light up for a keep left", () => {
     const out = resolveGuidanceLanes(kreuzAachen, keepLeft);
-    expect(out.map((l) => l.valid)).toEqual([false, false, false, false]);
+    expect(out.map((l) => l.valid)).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it("highlights the lanes whose OSM destinations name the sign", () => {
@@ -74,7 +106,7 @@ describe("resolveGuidanceLanes", () => {
 
   it("falls back to refs when the places do not tell the lanes apart", () => {
     const out = resolveGuidanceLanes(
-      [lane(["through"]), lane(["through"]), lane(["through"])],
+      [unknownLane(["through"]), unknownLane(["through"]), unknownLane(["through"])],
       { type: "keep", modifier: "right" },
       {
         sign: { exitBranches: ["A44"], exitToward: ["Köln"] },
@@ -93,15 +125,15 @@ describe("resolveGuidanceLanes", () => {
       sign: toDuesseldorf,
       laneDestinations: splitDestinations.slice(0, 3),
     });
-    expect(out.map((l) => l.valid)).toEqual([false, false, false, false]);
+    expect(out.map((l) => l.valid)).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it("still trusts the engine over the lane destinations", () => {
     const lanes = [
-      lane(["through"]),
-      lane(["through"]),
-      lane(["through"]),
-      lane(["through"], true),
+      unknownLane(["through"]),
+      unknownLane(["through"]),
+      unknownLane(["through"]),
+      unknownLane(["through"], true),
     ];
     const out = resolveGuidanceLanes(lanes, keepLeft, {
       sign: toDuesseldorf,
@@ -110,46 +142,28 @@ describe("resolveGuidanceLanes", () => {
     expect(out).toBe(lanes);
   });
 
-  it("keeps the through lanes for a keep left when an exit peels away on the right", () => {
-    const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
+  it("does not infer routed lanes from through arrows before a keep-left", () => {
+    const lanes = [
+      unknownLane(["through"]),
+      unknownLane(["through"]),
+      unknownLane(["slight_right"]),
+    ];
     const out = resolveGuidanceLanes(lanes, keepLeft);
-    expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+    expect(out.map((l) => l.valid)).toEqual([undefined, undefined, undefined]);
   });
 
-  it("keeps every lane lit when each one turns the maneuver's way", () => {
-    const lanes = [lane(["left"]), lane(["left", "through"])];
+  it("keeps unknown lane selection even when both arrows turn the maneuver's way", () => {
+    const lanes = [unknownLane(["left"]), unknownLane(["left", "through"])];
     const out = resolveGuidanceLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([true, true]);
+    expect(out.map((l) => l.valid)).toEqual([undefined, undefined]);
   });
 
-  it("keeps every through lane lit for a straight maneuver", () => {
-    const out = resolveGuidanceLanes([lane(["through"]), lane(["through"])], {
+  it("does not infer lane selection for a straight maneuver", () => {
+    const out = resolveGuidanceLanes([unknownLane(["through"]), unknownLane(["through"])], {
       type: "continue",
       modifier: "straight",
     });
-    expect(out.map((l) => l.valid)).toEqual([true, true]);
-  });
-});
-
-describe("junctionPhotoApproachMeters", () => {
-  it("shows the photo about half a minute out, not the whole guidance window", () => {
-    // 30 s at ~120 km/h, where the gantry has already been up for 2970 m.
-    expect(junctionPhotoApproachMeters("driving", 33)).toBe(990);
-    expect(junctionPhotoApproachMeters("driving", 33)).toBeLessThan(
-      guidanceApproachMeters("driving", 33),
-    );
-  });
-
-  it("keeps a floor so a slow approach still shows the photo in time", () => {
-    expect(junctionPhotoApproachMeters("driving", 0)).toBe(300);
-  });
-
-  it("never outlasts the guidance window it sits inside", () => {
-    for (const speed of [0, 5, 14, 25, 33, 45]) {
-      expect(junctionPhotoApproachMeters("driving", speed)).toBeLessThanOrEqual(
-        guidanceApproachMeters("driving", speed),
-      );
-    }
+    expect(out.map((l) => l.valid)).toEqual([undefined, undefined]);
   });
 });
 
@@ -197,5 +211,34 @@ describe("shouldPreviewNextStep", () => {
     // 420 m = 30 s × 14 m/s reference.
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 200)).toBe(true);
     expect(shouldPreviewNextStep("driving", 14, 300, 0, 800)).toBe(false);
+  });
+});
+
+it("keeps contradictory preferred/rejected lane evidence in conflict", () => {
+  const result = resolveLaneGuidance([{ indications: ["through"], valid: false, preferred: true }]);
+  expect(result.state).toBe("conflict");
+  expect(result.preferredLanes).toEqual([]);
+  expect(result.usableLanes).toEqual([]);
+});
+
+describe("signed destinations and explicit engine evidence", () => {
+  it("does not replace explicitly rejected lanes with destination-derived advice", () => {
+    const lanes = [
+      { indications: ["through"], valid: false },
+      { indications: ["through"], valid: false },
+    ];
+    expect(
+      resolveGuidanceLanes(
+        lanes,
+        { type: "keep", modifier: "left" },
+        {
+          sign: { exitToward: ["Target"] },
+          laneDestinations: [
+            { destinations: ["Target"], refs: [] },
+            { destinations: ["Other"], refs: [] },
+          ],
+        },
+      ),
+    ).toEqual(lanes);
   });
 });

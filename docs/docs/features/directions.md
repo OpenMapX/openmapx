@@ -287,7 +287,8 @@ time:
   take and brightening the one to follow. Where every lane points straight on
   before a split, OpenStreetMap's per-lane destinations pick the lanes toward
   the signed destination; when nothing tells the lanes apart, none is
-  highlighted;
+  highlighted. Engine-reported lane rejection is never overridden by a guessed
+  turn direction;
 - a **speed-limit badge** when the road's limit is known;
 - an **arrival card** with the remaining distance and estimated time of arrival.
 
@@ -297,13 +298,6 @@ Both revert automatically after the maneuver, and a pinch or drag during the
 approach is never interrupted. Small speed changes keep the same maneuver in
 focus; the emphasis resets when the maneuver passes, the route changes, or you
 move back far enough to leave its approach.
-
-A junction view can appear for driving exits, forks, and splits. It uses engine
-and available OpenStreetMap lane/sign information, with fallback estimates when
-complete lane data is absent. With coverage, a Panoramax approach photo can also
-appear with author, license, and capture date. Mapillary is excluded from
-navigation imagery. Both junction view and photos can be disabled in navigation
-settings. Treat the road's actual signs and markings as authoritative.
 
 Navigation also speaks instructions aloud (voice guidance can be toggled off) and
 offers a **keep-screen-on** option that holds a wake lock so the display does not

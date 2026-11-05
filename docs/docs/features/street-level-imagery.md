@@ -55,8 +55,7 @@ Mapillary's imagery is openly licensed (CC BY-SA 4.0), but its **platform Terms*
 prohibit use "in connection with real-time navigation or route guidance" and
 require applications to materially supplement Mapillary rather than replicate it.
 OpenMapX is a navigation product, so Mapillary ships **disabled by default**,
-and even when enabled its imagery is never used for the junction photo shown
-while navigating. It remains available in the viewer and on place panels.
+and remains available only in the imagery viewer and on place panels when enabled.
 Review [Mapillary's terms](https://www.mapillary.com/terms) for your deployment before enabling it. Mapillary is
 API-only and has no self-hosted fallback.
 :::
@@ -105,17 +104,6 @@ depends on the instance you point at.
 The viewer uses provider-qualified image references, including links such as
 `?sli=panoramax:<id>`. A link can stop working if its source removes the image
 or the instance disables that provider.
-
-### During navigation
-
-The [junction view](./directions.md#turn-by-turn-navigation) can show an available
-approach photo while driving. Only providers permitted for navigation are
-searched, currently Panoramax. The caption retains author, license, and capture
-month. An old photo is not evidence of current lane layout or road conditions.
-
-Junction photos can be disabled in navigation settings. Where no suitable image
-exists, navigation keeps its schematic junction view. This is separate from
-opening the imagery viewer to browse photos.
 
 ### Navigation arrows
 

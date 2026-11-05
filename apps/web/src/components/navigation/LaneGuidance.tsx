@@ -19,6 +19,7 @@ export function LaneGuidance({
   maneuver,
   sign,
   laneDestinations,
+  source = "engine",
   variant = "standalone",
   size = "regular",
 }: {
@@ -28,6 +29,8 @@ export function LaneGuidance({
   sign?: ManeuverSign;
   /** OSM destinations per lane on the approach, when the junction lookup found them. */
   laneDestinations?: LaneDestinations[];
+  /** Only engine-selected unmarked lanes may inherit the maneuver arrow. */
+  source?: "engine" | "osm";
   /**
    * "standalone" = its own light card. "banner" = embedded in the maneuver
    * banner's darkened sub-row: transparent, white arrows keyed by opacity.
@@ -38,7 +41,7 @@ export function LaneGuidance({
 }) {
   // Shared with the Android Auto routing card: which lanes light up and which arrow
   // in each is recommended (see `presentGuidanceLanes`).
-  const cells = presentGuidanceLanes(lanes, maneuver, { sign, laneDestinations });
+  const cells = presentGuidanceLanes(lanes, maneuver, { sign, laneDestinations }, source);
   if (cells.length === 0) return null;
   const banner = variant === "banner";
   const cell = size === "compact" ? 28 : banner ? 38 : 36;
