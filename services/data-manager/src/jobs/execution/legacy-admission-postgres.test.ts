@@ -696,6 +696,12 @@ it.skipIf(!enabled)(
       });
       expect(actor.statusCode).toBe(409);
       expect(f.dispatches()).toBeLessThanOrEqual(1);
+      // Finish the held synthetic job before close() requests cancellation.
+      f.release();
+      await expect
+        .poll(async () => (await f.store.inspect(admitted.id))?.status.status, { timeout: 15000 })
+        .toBe("ok");
+      expect(f.dispatches()).toBe(1);
     } finally {
       await f.close();
     }
