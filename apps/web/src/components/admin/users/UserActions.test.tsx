@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { adminTestHistory } from "@/test/adminNavigation";
 import { BanUserDialog } from "./BanUserDialog";
 import { CreateUserDialog } from "./CreateUserDialog";
 import { UserDetail } from "./UserDetail";
@@ -52,8 +53,15 @@ vi.mock("@openmapx/core/api-admin-sdk", async () => ({
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://admin-a.test" }),
 }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+vi.mock("next/navigation", async () => ({
+  ...(await import("@/test/adminNavigation")).adminNavigationMock,
+  useRouter: () => ({
+    push: (url: string) => {
+      mocks.push(url);
+      adminTestHistory.push(url);
+    },
+    refresh: mocks.refresh,
+  }),
 }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => mocks.toast }));
 const caches: ReturnType<typeof createTestQueryClient>[] = [];

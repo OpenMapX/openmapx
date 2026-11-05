@@ -60,6 +60,7 @@ import {
   useUpdateExtension,
 } from "@/hooks/useExtensions";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -918,7 +919,7 @@ function SourcesTab() {
 }
 
 function ExtensionStoreContent() {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useAdminTab(["browse", "installed", "sources", "local"]);
   return (
     <Stack sx={{ gap: 2 }}>
       <AdminPageHeader
@@ -929,15 +930,17 @@ function ExtensionStoreContent() {
         <StandaloneInstallDialog />
       </Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="Extension management">
-        <Tab label="Browse" />
-        <Tab label="Installed" />
-        <Tab label="Sources" />
-        <Tab label="Local integrations" />
+        <Tab id="extensions-tab-0" aria-controls="extensions-panel-0" label="Browse" />
+        <Tab id="extensions-tab-1" aria-controls="extensions-panel-1" label="Installed" />
+        <Tab id="extensions-tab-2" aria-controls="extensions-panel-2" label="Sources" />
+        <Tab id="extensions-tab-3" aria-controls="extensions-panel-3" label="Local integrations" />
       </Tabs>
-      {tab === 0 && <BrowseTab />}
-      {tab === 1 && <InstalledTab />}
-      {tab === 2 && <SourcesTab />}
-      {tab === 3 && <StandaloneIntegrationsPanel />}
+      <div role="tabpanel" id={`extensions-panel-${tab}`} aria-labelledby={`extensions-tab-${tab}`}>
+        {tab === 0 && <BrowseTab />}
+        {tab === 1 && <InstalledTab />}
+        {tab === 2 && <SourcesTab />}
+        {tab === 3 && <StandaloneIntegrationsPanel />}
+      </div>
     </Stack>
   );
 }

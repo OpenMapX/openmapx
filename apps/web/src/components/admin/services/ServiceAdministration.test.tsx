@@ -1007,3 +1007,8 @@ it.each(["file", "env"])(
     }
   },
 );
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);

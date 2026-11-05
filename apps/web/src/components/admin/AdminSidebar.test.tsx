@@ -1,11 +1,15 @@
 import { en } from "@openmapx/i18n";
 import { NextIntlClientProvider } from "next-intl";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@/test";
 import { AdminSidebar } from "./AdminSidebar";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/services" }));
-afterEach(cleanup);
+beforeEach(() => vi.stubGlobal("matchMedia", () => ({ matches: false })));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 it.each([true, null])(
   "preserves troubleshooting navigation for admin deployment %s",
   (selfHosted) => {
@@ -63,4 +67,16 @@ it("does not offer privacy setup to privacy administrators", () => {
     </NextIntlClientProvider>,
   );
   expect(screen.queryByRole("link", { name: "Privacy setup" })).toBeNull();
+});
+
+it("closes mobile navigation on an ordinary destination selection", () => {
+  const close = vi.fn();
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <AdminSidebar open={true} onClose={close} selfHosted={true} />
+    </NextIntlClientProvider>,
+  );
+  document.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  screen.getAllByRole("link", { name: "Catalog" })[0].click();
+  expect(close).toHaveBeenCalledTimes(1);
 });

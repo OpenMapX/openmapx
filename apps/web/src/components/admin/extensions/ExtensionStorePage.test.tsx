@@ -567,3 +567,8 @@ describe("destructive target exclusion survives tab disposal", () => {
     },
   );
 });
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);

@@ -33,6 +33,7 @@ import {
 } from "@/hooks/useServices";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
@@ -501,7 +502,13 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 function ServiceDetailView({ id }: ServiceDetailProps) {
   const { client } = useActivityClient();
   const owner = useAdminMutationOwner(client, id);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useAdminTab([
+    "overview",
+    "configuration",
+    "credentials",
+    "logs",
+    "manifest",
+  ]);
   const [logsOpen, setLogsOpen] = useState(false);
   const showToast = useAdminToast();
 
@@ -739,44 +746,52 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TABS.map((label) => (
-            <Tab key={label} label={label} disabled={label === "Logs" && Boolean(reason("logs"))} />
+          {TABS.map((label, index) => (
+            <Tab
+              id={`service-tab-${index}`}
+              aria-controls={`service-panel-${index}`}
+              key={label}
+              label={label}
+              disabled={label === "Logs" && Boolean(reason("logs"))}
+            />
           ))}
         </Tabs>
 
-        {tab === 0 && <OverviewTab data={data} />}
-        {tab === 1 && <ConfigTab data={data} />}
-        {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
-        {tab === 3 && (
-          <Box
-            sx={{
-              py: 2,
-            }}
-          >
-            <Typography
-              variant="body2"
+        <div role="tabpanel" id={`service-panel-${tab}`} aria-labelledby={`service-tab-${tab}`}>
+          {tab === 0 && <OverviewTab data={data} />}
+          {tab === 1 && <ConfigTab data={data} />}
+          {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
+          {tab === 3 && (
+            <Box
               sx={{
-                color: "text.secondary",
+                py: 2,
               }}
             >
-              Click "Logs" or switch to this tab to open the live log stream.
-            </Typography>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<ArticleIcon />}
-              onClick={() => {
-                if (!reason("logs")) setLogsOpen(true);
-              }}
-              disabled={Boolean(reason("logs"))}
-              title={reason("logs") ?? undefined}
-              sx={{ mt: 1.5 }}
-            >
-              Open Logs Drawer
-            </Button>
-          </Box>
-        )}
-        {tab === 4 && <ManifestTab data={data} />}
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                Click "Logs" or switch to this tab to open the live log stream.
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ArticleIcon />}
+                onClick={() => {
+                  if (!reason("logs")) setLogsOpen(true);
+                }}
+                disabled={Boolean(reason("logs"))}
+                title={reason("logs") ?? undefined}
+                sx={{ mt: 1.5 }}
+              >
+                Open Logs Drawer
+              </Button>
+            </Box>
+          )}
+          {tab === 4 && <ManifestTab data={data} />}
+        </div>
       </Box>
       <ServiceLogsDrawer
         open={logsOpen && !reason("logs")}
