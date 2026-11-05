@@ -251,6 +251,8 @@
     "confirmAlight": "Ich bin ausgestiegen",
     "undoTransitAction": "Rückgängig",
     "selectedConnection": "Deine gewählte Verbindung",
+    "departureLastKnown": "Zuletzt bekannte Abfahrt",
+    "transitWalkPositionUncertain": "Position auf dem Fußweg unklar. Deine gewählte Verbindung bleibt bestehen.",
     "departureLive": "Live-Abfahrt",
     "departureScheduled": "Abfahrt nach Fahrplan",
     "timeUnknown": "Zeit nicht verfügbar",
@@ -261,7 +263,7 @@
     "transitProgressUncertain": "Haltestellenfortschritt unklar. Deine gewählte Verbindung bleibt aktiv.",
     "alightedElsewhere": "Du bist möglicherweise nicht am geplanten Halt. Prüfe den nächsten Einstieg oder suche Alternativen.",
     "transitActionsUpdateRequired": "Aktualisiere die installierte App, um Ein- und Ausstieg zu bestätigen.",
-    "transitActionFailed": "Die Aktion konnte nicht bestätigt werden. Deine Verbindung bleibt erhalten; versuche es erneut.",
+    "transitActionFailed": "Die Aktion konnte nicht bestätigt werden. Deine Verbindung bleibt erhalten. Versuche es erneut.",
     "nextStopLabel": "Nächster Halt",
     "transitAlternativesShort": "Alternativen",
     "findTransitAlternatives": "Alternativen suchen",
@@ -282,10 +284,10 @@
     "stopsRemaining": "{count, plural, one {Noch # Halt} other {Noch # Halte}}",
     "transitWalkRepair": {
       "repairing": "Gehweg zum gewählten Halt wird aktualisiert…",
-      "unavailable": "Der Gehweg konnte nicht aktualisiert werden. Deine Verbindung bleibt bestehen; suche bei Bedarf Alternativen.",
+      "unavailable": "Der Gehweg konnte nicht aktualisiert werden. Deine Verbindung bleibt bestehen. Suche bei Bedarf Alternativen.",
       "accessibility": "Du bist vom Gehweg abgewichen. Nutze die Alternativsuche, damit deine Anforderung an stufenfreies Reisen erhalten bleibt."
     },
-    "transitLiveUpdatesUnavailable": "Live-Updates sind nicht verfügbar. Zeiten können veraltet sein; deine gewählte Verbindung bleibt bestehen."
+    "transitLiveUpdatesUnavailable": "Live-Updates sind nicht verfügbar. Zeiten können veraltet sein. Deine gewählte Verbindung bleibt bestehen."
   },
   "common": {
     "close": "Schließen",

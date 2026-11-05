@@ -256,3 +256,77 @@ describe("projectionOf for transit", () => {
     expect(projectionOf(outcome.model, "full").transitProgress).toEqual(transitProgress);
   });
 });
+
+it("projects consecutive transit producer deltas without requiring a resume snapshot", () => {
+  const initial = {
+    currentLegIndex: 0,
+    currentWalkStepIndex: 0,
+    distanceToNextStepMeters: 100,
+    position: [8, 50],
+    phase: "walking",
+    fractionAlongLeg: 0,
+    deviationMeters: 0,
+    arrived: false,
+  };
+  const full = applyNativeSnapshot(
+    null,
+    envelope({
+      type: "full",
+      kind: "transit",
+      sessionId: "t",
+      revision: 1,
+      itineraryFingerprint: "trip",
+      status: "active",
+      transitProgress: initial,
+    }),
+  );
+  if (!full.ok) throw Error("full refused");
+  const nextProgress = {
+    ...initial,
+    currentWalkStepIndex: 1,
+    distanceToNextStepMeters: 70,
+    position: [8.001, 50],
+    fractionAlongLeg: 0.4,
+  };
+  // Same shape as transitProgressSnapshot, including the nested read model.
+  const next = applyNativeSnapshot(
+    full.model,
+    envelope({
+      version: 1,
+      type: "progress",
+      sessionId: "t",
+      revision: 2,
+      itineraryFingerprint: "trip",
+      status: "active",
+      currentLegIndex: 0,
+      currentWalkStepIndex: 1,
+      phase: "walking",
+      confidence: "live",
+      transitProgress: nextProgress,
+      connectivity: "online",
+      liveStatus: { refresh: "stale", hasLiveToken: true },
+      itinerary: { legs: ["must not replace the selected trip"] },
+    }),
+  );
+  if (!next.ok) throw Error("delta refused");
+  expect(projectionOf(next.model, "progress")).toMatchObject({
+    transitProgress: nextProgress,
+    liveDataUnavailable: true,
+    connectivity: "online",
+    confidence: "live",
+  });
+  expect(next.model.snapshot.itinerary).toBeUndefined();
+  const empty = applyNativeSnapshot(
+    next.model,
+    envelope({
+      type: "progress",
+      sessionId: "t",
+      revision: 3,
+      itineraryFingerprint: "trip",
+      status: "active",
+      transitProgress: null,
+    }),
+  );
+  if (!empty.ok) throw Error("empty delta refused");
+  expect(projectionOf(empty.model, "progress").transitProgress).toEqual(nextProgress);
+});

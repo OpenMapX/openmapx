@@ -1,5 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -20,6 +30,14 @@ const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+function readOpenedFile(path: string) {
+  const fd = openSync(path, "r");
+  try {
+    return { inode: fstatSync(fd).ino, bytes: readFileSync(fd) };
+  } finally {
+    closeSync(fd);
+  }
+}
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-update-store-"));
   roots.push(root);
@@ -103,9 +121,14 @@ it("rejects a byte-identical private progress file copied onto another inode", a
         "control-private/host-cli/observations",
         `data-workflow-${f.execution.operationKey}.json`,
       ),
-      bytes = readFileSync(path);
-    unlinkSync(path);
-    writeFileSync(path, bytes, { mode: 0o600 });
+      original = readOpenedFile(path);
+    const replacement = `${path}.replacement`;
+    // Allocate while the original still exists so its inode cannot be reused.
+    writeFileSync(replacement, original.bytes, { mode: 0o600, flag: "wx" });
+    renameSync(replacement, path);
+    const copied = readOpenedFile(path);
+    expect(copied.inode).not.toBe(original.inode);
+    expect(copied.bytes).toEqual(original.bytes);
     expect(() => store.read()).toThrow();
   } finally {
     closeControlInstallation(f.installation);

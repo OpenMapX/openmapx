@@ -54,6 +54,11 @@ retries. The coordinator commits before publishing or acknowledging; revisions
 order snapshots. Native capabilities advertise `transitActions` so unsupported
 shells cannot show apparently working controls.
 
+Progress snapshots must update the nested `transitProgress` read model as well
+as the envelope revision. The banner, position dot and camera subscribe to that
+object. An empty progress value retains the previous position. A revision gap
+requests a full snapshot rather than applying a partial update to the wrong base.
+
 Native live refresh runs outside the coordinator queue, in foreground and headless
 compositions. Its result re-enters through a generation/request/session guard and
 preserves current tick state. Prepared geometry and captured stop projections are
@@ -62,6 +67,24 @@ work to settle. A potentially spent token is not retried after ambiguity. Broken
 live updates retain the selected itinerary and are visible in the read model.
 Scheduled get-off backups arm only in the riding phase and are reconciled on
 alight/undo. Their text identifies them as time estimates.
+
+## Walking map and departure freshness
+
+The active walk uses the walking route palette: a blue remaining path with white
+casing and a grey traveled path. It follows the navigation itinerary, including
+repaired walking geometry and native-restored trips without a directions preview.
+Progress updates change the route paint without uploading its geometry again.
+
+Walking follows the actual GPS position in a close, flat view with more room
+ahead of the walker. Course-up uses the nearby walking geometry only when the
+position is trusted and respects the north-up setting. A pinch retains the
+user's zoom, and a pan releases follow. Fixes yield while a gesture is active.
+Waiting and riding return to the broader north-up transit view.
+
+An unavailable live feed labels a retained realtime estimate as the last known
+departure, never as a scheduled time or a live update. Browser journeys without
+a refresh token use the same last-known label. A broken one-time token chain
+remains unavailable rather than retrying a potentially consumed token.
 
 ## Walking recovery and alternatives
 

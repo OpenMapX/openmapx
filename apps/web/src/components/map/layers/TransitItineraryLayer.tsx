@@ -28,6 +28,7 @@ import { useRenderedMapAttributions } from "@/integration-api/overlay/useRendere
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { shouldRefineLegGeometry } from "./legGeometryRefine";
+import { TransitWalkRouteLayer } from "./TransitWalkRouteLayer";
 
 // Non-transit "street" legs (walk plus intermodal bike/car access) render as
 // dashed lines — like the panel's street-leg styling — vs solid transit lines.
@@ -113,6 +114,7 @@ function transitItineraryGroup(
   pointData: GeoJSON.FeatureCollection,
   navActive: boolean,
   navLegIndex: number,
+  activeWalkIndex: number | null,
 ): MapLayerGroup {
   // When following a transit trip, dim non-current legs; otherwise full opacity.
   const lineOpacity: ExpressionSpecification | number = navActive
@@ -150,7 +152,10 @@ function transitItineraryGroup(
         source: SOURCE_ID,
         slot: "route-active",
         order: 6,
-        filter: ["==", ["get", "isStreet"], true],
+        filter:
+          activeWalkIndex === null
+            ? ["==", ["get", "isStreet"], true]
+            : ["all", ["==", ["get", "isStreet"], true], ["!=", ["get", "index"], activeWalkIndex]],
         paint: {
           "line-color": ["get", "color"],
           "line-width": 4,
@@ -194,20 +199,30 @@ function transitItineraryGroup(
 export function TransitItineraryLayer() {
   const { mapReady, fitBounds } = useMap();
   const { mode, transitItineraries, activeItineraryIndex } = useDirectionsStore();
-
-  useRenderedMapAttributions(
-    "transit-itinerary",
-    [WALK_LAYER_ID, TRANSIT_LAYER_ID, POINTS_LAYER_ID],
-    mode === "transit" && transitItineraries.length > 0,
-  );
-
-  // During transit follow-along navigation, dim every leg except the one the
-  // traveller is currently on so the active segment stands out. When not
-  // navigating, all legs render at full opacity (normal itinerary preview).
   const navActive = useNavigationStore(
     (s) => s.status !== "idle" && s.status !== "arrived" && s.kind === "transit",
   );
   const navLegIndex = useNavigationStore((s) => s.transitProgress?.currentLegIndex ?? 0);
+  const navItinerary = useNavigationStore((s) => s.itinerary);
+  const candidate = navActive
+    ? navItinerary
+    : mode === "transit"
+      ? transitItineraries[activeItineraryIndex]
+      : undefined;
+  const itinerary = candidate && candidate.legs.length > 0 ? candidate : null;
+  const activeWalk =
+    navActive &&
+    itinerary?.legs[navLegIndex]?.mode === "walking" &&
+    itinerary.legs[navLegIndex].geometry.coordinates.length >= 2
+      ? itinerary.legs[navLegIndex]
+      : null;
+  const activeWalkIndex = activeWalk ? navLegIndex : null;
+
+  useRenderedMapAttributions(
+    "transit-itinerary",
+    [WALK_LAYER_ID, TRANSIT_LAYER_ID, POINTS_LAYER_ID],
+    !!itinerary,
+  );
 
   // Refined per-leg geometries fetched lazily from /leg-geometry after the
   // itinerary is selected. Keyed by tripId; replaces stopovers geometry when available.
@@ -219,48 +234,41 @@ export function TransitItineraryLayer() {
   // to 0, which a bare index comparison would miss.
   const fittedRef = useRef<{ list: typeof transitItineraries; index: number } | null>(null);
 
+  // A native restore can have no directions preview. Refine exactly the
+  // displayed trips, retaining results across equivalent full snapshots.
+  const refinementKey = JSON.stringify(
+    (itinerary?.legs ?? [])
+      .filter(shouldRefineLegGeometry)
+      .map((leg) => [leg.tripId, leg.from.stopId ?? null, leg.to.stopId ?? null]),
+  );
   useEffect(() => {
-    if (mode !== "transit") {
-      setLegGeometries({});
-      return;
-    }
-    const itinerary = transitItineraries[activeItineraryIndex];
-    if (!itinerary) return;
-
     const gen = ++fetchGenRef.current;
     setLegGeometries({});
-
-    // Only legs whose inline geometry is coarse (stop-connected) benefit from a
-    // `/leg-geometry` refinement. MOTIS already embeds the full track polyline
-    // and has no leg-geometry endpoint, so refining those would just 404.
-    const transitLegs = itinerary.legs.filter(shouldRefineLegGeometry);
-    if (transitLegs.length === 0) return;
-
+    const requests = JSON.parse(refinementKey) as Array<[string, string | null, string | null]>;
     void Promise.allSettled(
-      transitLegs.map(async (leg) => {
-        if (!leg.tripId) return;
-        const { tripId } = leg;
+      requests.map(async ([tripId, from, to]) => {
+        if (!tripId) return;
         try {
           const params: Record<string, string> = { trip_id: tripId };
-          if (leg.from.stopId) params.from_stop_id = leg.from.stopId;
-          if (leg.to.stopId) params.to_stop_id = leg.to.stopId;
+          if (from) params.from_stop_id = from;
+          if (to) params.to_stop_id = to;
           const env = await apiClient.get<MobilityEnvelope<GeoJSONLineString>>(
             API_ENDPOINTS.transitLegGeometry,
             params,
           );
           const geo = env.data;
-          if (fetchGenRef.current === gen && geo?.coordinates?.length >= 2) {
+          if (fetchGenRef.current === gen && geo?.coordinates?.length >= 2)
             setLegGeometries((prev) => ({ ...prev, [tripId]: geo }));
-          }
         } catch {
-          // geometry not available for this leg — stopovers geometry is used
+          /* Keep the captured inline geometry. */
         }
       }),
     );
-  }, [mode, transitItineraries, activeItineraryIndex]);
+    return () => {
+      fetchGenRef.current++;
+    };
+  }, [refinementKey]);
 
-  const candidate = mode === "transit" ? transitItineraries[activeItineraryIndex] : undefined;
-  const itinerary = candidate && candidate.legs.length > 0 ? candidate : null;
   const lineData = useMemo(
     () => (itinerary ? legLineFeatures(itinerary, legGeometries) : null),
     [itinerary, legGeometries],
@@ -273,9 +281,9 @@ export function TransitItineraryLayer() {
     useMemo(
       () =>
         lineData && pointData
-          ? transitItineraryGroup(lineData, pointData, navActive, navLegIndex)
+          ? transitItineraryGroup(lineData, pointData, navActive, navLegIndex, activeWalkIndex)
           : null,
-      [lineData, pointData, navActive, navLegIndex],
+      [lineData, pointData, navActive, navLegIndex, activeWalkIndex],
     ),
   );
 
@@ -283,7 +291,7 @@ export function TransitItineraryLayer() {
   // refined leg geometry arrives. Comparing the list reference catches new
   // searches that reset the index to 0 (a bare index check would miss them).
   useEffect(() => {
-    if (!mapReady || !itinerary) return;
+    if (!mapReady || !itinerary || navActive) return;
     const alreadyFitted =
       fittedRef.current?.list === transitItineraries &&
       fittedRef.current?.index === activeItineraryIndex;
@@ -305,7 +313,7 @@ export function TransitItineraryLayer() {
       ],
       80,
     );
-  }, [mapReady, itinerary, transitItineraries, activeItineraryIndex, fitBounds]);
+  }, [mapReady, itinerary, transitItineraries, activeItineraryIndex, fitBounds, navActive]);
 
-  return null;
+  return <TransitWalkRouteLayer leg={activeWalk} legIndex={navLegIndex} />;
 }
