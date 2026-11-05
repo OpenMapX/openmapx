@@ -1,9 +1,12 @@
 "use client";
+
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
+import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { type PrivacyCaseClient, privacyResult } from "@/lib/admin/privacyAdmin";
 import {
   consumePrivacyDownload,
@@ -41,6 +44,7 @@ function Artifact({
   detail: PrivacyAdminDetail;
   client: PrivacyCaseClient;
 }) {
+  const requestExit = useAdminDraftExit();
   const w = useTranslations("privacyAdmin.workflows");
   const [channel, setChannel] = useState<"assisted" | "representative">("assisted"),
     [reason, setReason] = useState(""),
@@ -103,7 +107,8 @@ function Artifact({
         expiresAt: result.expiresAt,
         channel,
       });
-      window.location.assign("/auth/privacy/admin");
+      if (await requestExit("Administrator reauthentication leaves this page."))
+        navigateAdminDocument("/auth/privacy/admin", "reauthentication");
     } catch {
       setNotice("resumeUnavailable");
     }
@@ -159,7 +164,7 @@ function Artifact({
       setCompleted(false);
       clearPendingPrivacyAdminDelivery();
       if (target.kind === "native") {
-        window.location.assign(target.target.url);
+        navigateAdminDocument(target.target.url, "download");
         setNotice("browserOwnsDownload");
       } else if (sink) {
         await consumePrivacyDownload({

@@ -34,6 +34,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -436,6 +437,7 @@ function AccountsTab() {
 }
 
 export function UserDetail({ userId }: { userId: string }) {
+  const requestExit = useAdminDraftExit();
   const [tab, setTab] = useAdminTab(["profile", "sessions", "accounts"]);
   const account = useAccountAdmin();
   const currentUserId = account.actorId;
@@ -527,7 +529,10 @@ export function UserDetail({ userId }: { userId: string }) {
               isSelf={isSelf}
               impersonate={{
                 ...impersonate,
-                mutate: () => impersonate.mutate((client) => client.impersonate(userId)),
+                mutate: async () => {
+                  if (await requestExit("Impersonation changes the active account."))
+                    impersonate.mutate((client) => client.impersonate(userId));
+                },
               }}
             />
           )}

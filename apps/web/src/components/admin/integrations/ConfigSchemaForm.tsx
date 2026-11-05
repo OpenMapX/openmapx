@@ -51,6 +51,7 @@ export function ConfigSchemaForm({
 
   return (
     <SchemaConfigForm
+      draftId={JSON.stringify([admin.apiUrl, "integration", integrationId])}
       key={JSON.stringify([admin.apiUrl, integrationId])}
       schema={schema}
       resolvedConfig={resolvedConfig}

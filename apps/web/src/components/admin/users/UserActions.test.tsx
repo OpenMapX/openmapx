@@ -1,5 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
+import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { adminTestHistory } from "@/test/adminNavigation";
 import { BanUserDialog } from "./BanUserDialog";
@@ -284,4 +286,42 @@ it("offers the privacy role for an existing administrator through the same canon
   await screen.findByText(subject.email);
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Role" }));
   expect(screen.getByRole("option", { name: "Privacy admin" })).toBeInTheDocument();
+});
+
+function DirtyControl() {
+  const draft = useAdminDraft({
+    id: "authority-test",
+    baseline: { label: "saved" },
+    editableKeys: ["label"],
+    signature: "v1",
+  });
+  return (
+    <button type="button" onClick={() => draft.setValues({ label: "draft" })}>
+      Mark admin draft
+    </button>
+  );
+}
+it("requires Stay or Discard before issuing impersonation with a dirty administration draft", async () => {
+  goodList();
+  mount(
+    <AdminDraftProvider>
+      <DirtyControl />
+      <UserList />
+    </AdminDraftProvider>,
+  );
+  await screen.findByText(subject.email);
+  fireEvent.click(screen.getByText("Mark admin draft"));
+  fireEvent.click(screen.getByLabelText("User actions"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Impersonate" }));
+  await screen.findByText("Discard unsaved administration changes?");
+  expect(mocks.impersonate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Stay" }));
+  await waitFor(() =>
+    expect(screen.queryByText("Discard unsaved administration changes?")).not.toBeInTheDocument(),
+  );
+  expect(mocks.impersonate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText("User actions"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Impersonate" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Discard and continue" }));
+  await waitFor(() => expect(mocks.impersonate).toHaveBeenCalledTimes(1));
 });

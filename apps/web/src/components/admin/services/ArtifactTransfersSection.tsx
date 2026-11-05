@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { useAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import {
   artifactFileSinkSupported,
@@ -138,7 +139,7 @@ function ArtifactTransfersView({ apiUrl }: { apiUrl: string }) {
           client,
         });
         if (owner.active) {
-          window.location.assign(target.url);
+          navigateAdminDocument(target.url, "download");
           setMessage(
             "Download handed to your browser. Use browser controls to monitor or cancel it.",
           );

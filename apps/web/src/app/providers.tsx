@@ -12,6 +12,7 @@ import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AdminDraftRoot } from "@/lib/admin/AdminDraftProvider";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
 import { ThemeColorSync } from "../components/pwa/ThemeColorSync";
@@ -97,22 +98,24 @@ function PhoneProviders({ children }: { children: React.ReactNode }) {
       */}
       <MangroveSignerSessionGuard />
       <PersonalTimelineSessionGuard />
-      <SessionAuthorityBoundary>
-        <KeypairSessionGuard />
-        <ImpersonationBanner />
-        <SavedPlacesMirror />
-        <MangroveTransportProvider>
-          {/*
+      <AdminDraftRoot>
+        <SessionAuthorityBoundary>
+          <KeypairSessionGuard />
+          <ImpersonationBanner />
+          <SavedPlacesMirror />
+          <MangroveTransportProvider>
+            {/*
             Mounted outside `IntegrationProvider` on purpose: the installed shell
             forbids executing administrator-installed frontend bundles, and that
             guard has to be answerable before the provider that would append them.
           */}
-          <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
-            <CarDestinationsPublisher />
-            <IntegrationProvider>{children}</IntegrationProvider>
-          </MobileRuntimeProvider>
-        </MangroveTransportProvider>
-      </SessionAuthorityBoundary>
+            <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
+              <CarDestinationsPublisher />
+              <IntegrationProvider>{children}</IntegrationProvider>
+            </MobileRuntimeProvider>
+          </MangroveTransportProvider>
+        </SessionAuthorityBoundary>
+      </AdminDraftRoot>
     </ThemeProvider>
   );
 

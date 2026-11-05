@@ -8,7 +8,9 @@ import DialogTitle from "@mui/material/DialogTitle";
 import type { AdminReauthProofRef } from "@openmapx/core/api-contracts";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import {
   type AdminReauthIntent,
   adminReauthStorageKey,
@@ -36,6 +38,7 @@ type Props = (
     }
 ) & { onCompleted: (proofs: AdminReauthProofRef[]) => void; onClose: () => void };
 export function AdminReauthenticationDialog(props: Props) {
+  const requestExit = useAdminDraftExit();
   const { apiUrl, actorId } = useAccountAdmin(),
     requests: AdminReauthIntent[] = props.purposes
       ? [...props.purposes]
@@ -120,7 +123,15 @@ export function AdminReauthenticationDialog(props: Props) {
             Continue with verified sign-in
           </Button>
         ) : stored ? (
-          <Button component="a" href="/auth/admin">
+          <Button
+            component="a"
+            href="/auth/admin"
+            onClick={async (event) => {
+              event.preventDefault();
+              if (await requestExit("Administrator reauthentication leaves this page."))
+                navigateAdminDocument("/auth/admin", "reauthentication");
+            }}
+          >
             Sign in again
           </Button>
         ) : (

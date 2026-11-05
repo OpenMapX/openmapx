@@ -49,6 +49,7 @@ export function ServiceConfigForm({
     );
   return (
     <SchemaConfigForm
+      draftId={JSON.stringify([apiUrl, "service", serviceId])}
       key={JSON.stringify([apiUrl, serviceId, schema])}
       preserveDirtyValuesOnRefresh
       applySuccessMessage="Configuration saved. Service apply queued."

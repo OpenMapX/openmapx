@@ -30,9 +30,13 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { AdminDraftContext } from "@/lib/admin/AdminDraftProvider";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
+import { useAdminDraft } from "@/lib/admin/useAdminDraft";
+import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AuthPolicySettings } from "./AuthPolicySettings";
 import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
@@ -351,6 +355,22 @@ function JsonSettingField({
 }) {
   const [draft, setDraft] = useState(() => JSON.stringify(value ?? null, null, 2));
   const [invalid, setInvalid] = useState(false);
+  const serialized = JSON.stringify(value ?? null);
+  const previousValue = useRef(serialized);
+  useEffect(() => {
+    if (previousValue.current === serialized) return;
+    previousValue.current = serialized;
+    setDraft((current) => {
+      try {
+        if (JSON.stringify(JSON.parse(current)) === serialized) return current;
+      } catch {
+        /* New server values replace an invalid clean baseline. */
+      }
+      return JSON.stringify(JSON.parse(serialized), null, 2);
+    });
+    setInvalid(false);
+    onValidityChange(true);
+  }, [serialized, onValidityChange]);
 
   return (
     <TextField
@@ -382,6 +402,7 @@ function JsonSettingField({
 
 function SettingsGroupPanel({
   group,
+  draft,
   onSaved,
   extra,
   description,
@@ -391,6 +412,7 @@ function SettingsGroupPanel({
   text,
 }: {
   group: SettingsGroup;
+  draft: ReturnType<typeof useAdminDraft>;
   onSaved: (msg: string) => void;
   extra?: ReactNode;
   description?: string;
@@ -400,59 +422,44 @@ function SettingsGroupPanel({
   text: SettingsEditorText;
 }) {
   const env = useEnv();
+  const { client } = useActivityClient();
+  const owner = useAdminMutationOwner(client, group.id);
   const qc = useQueryClient();
-  const serverSnapshot = useMemo(
-    () => ({
-      signature: JSON.stringify(
-        group.settings.map((setting) => ({
-          key: setting.key,
-          value: setting.value,
-          source: setting.source,
-          envOverride: setting.envOverride,
-          envVar: setting.envVar,
-          type: setting.type,
-          options: setting.options,
-          showWhen: setting.showWhen,
-        })),
-      ),
-      values: Object.fromEntries(group.settings.map((setting) => [setting.key, setting.value])),
-    }),
-    [group.settings],
+  const serverValues = Object.fromEntries(
+    group.settings.map((setting) => [setting.key, setting.value]),
   );
-  const [localValues, setLocalValues] = useState<Record<string, unknown>>(serverSnapshot.values);
+  const [secretValues, setSecretValues] = useState<Record<string, unknown>>({});
   const [invalidKeys, setInvalidKeys] = useState<Set<string>>(() => new Set());
-  const appliedServerSignature = useRef(serverSnapshot.signature);
-  const serverRevision = useRef({ signature: serverSnapshot.signature, count: 0 });
-  const serverChanged = serverRevision.current.signature !== serverSnapshot.signature;
-  if (serverChanged) {
-    serverRevision.current = {
-      signature: serverSnapshot.signature,
-      count: serverRevision.current.count + 1,
-    };
-  }
-  const renderedValues = serverChanged ? serverSnapshot.values : localValues;
-
-  // A parent rerender must not discard unsaved edits. Re-sync only when the
-  // effective values or server-enforced editing rules actually changed.
-  useEffect(() => {
-    if (appliedServerSignature.current === serverSnapshot.signature) return;
-    appliedServerSignature.current = serverSnapshot.signature;
-    setLocalValues(serverSnapshot.values);
-    setInvalidKeys(new Set());
-  }, [serverSnapshot]);
+  const renderedValues = { ...serverValues, ...draft.values, ...secretValues };
+  const dirtyKeys = group.settings
+    .filter(
+      (setting) =>
+        !setting.envOverride &&
+        (setting.secret
+          ? Object.hasOwn(secretValues, setting.key) && secretValues[setting.key] !== setting.value
+          : draft.dirtyKeys.includes(setting.key)),
+    )
+    .map((setting) => setting.key);
+  const conflicts = draft.conflicts.filter((key) =>
+    group.settings.some((setting) => setting.key === key),
+  );
 
   const save = useMutation({
+    retry: false,
     mutationFn: async () => {
+      const acknowledge = draft.acknowledge;
+      const execution = owner;
+      const executingApiUrl = env.apiUrl;
       const body: Record<string, unknown> = {};
       for (const s of group.settings) {
-        if (s.envOverride) continue;
+        if (s.envOverride || !dirtyKeys.includes(s.key)) continue;
         // Keep configured credentials unless the operator replaces or explicitly clears them.
-        if (s.secret && localValues[s.key] === "***") continue;
+        if (s.secret && renderedValues[s.key] === "***") continue;
         // Don't write fields hidden by their showWhen predicate — saving while
         // a field is hidden would clobber the stored value of the option that
         // isn't currently active.
-        if (!isVisible(s, localValues)) continue;
-        body[s.key] = localValues[s.key];
+        if (!isVisible(s, renderedValues)) continue;
+        body[s.key] = renderedValues[s.key];
       }
       const res = await fetch(`${env.apiUrl}/api/admin/settings`, {
         method: "PATCH",
@@ -461,10 +468,22 @@ function SettingsGroupPanel({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to save settings");
-      return res.json();
+      await res.json();
+      acknowledge(
+        Object.fromEntries(
+          Object.entries(body).filter(([key]) =>
+            group.settings.some((setting) => setting.key === key && !setting.secret),
+          ),
+        ),
+      );
+      return { body, execution, executingApiUrl };
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "settings"] });
+    onSuccess: ({ body, execution, executingApiUrl }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "settings", executingApiUrl] });
+      if (!execution.active) return;
+      setSecretValues((current) =>
+        Object.fromEntries(Object.entries(current).filter(([key, value]) => body[key] !== value)),
+      );
       onSaved(text.saved(group.label));
     },
   });
@@ -523,6 +542,22 @@ function SettingsGroupPanel({
             gap: 2.5,
           }}
         >
+          {conflicts.length > 0 && (
+            <Alert
+              severity="warning"
+              action={
+                <Button
+                  onClick={() => draft.keepEdits(group.settings.map((setting) => setting.key))}
+                  disabled={save.isPending}
+                >
+                  Keep my edits
+                </Button>
+              }
+            >
+              Saved values changed for {conflicts.join(", ")}. Review or discard your edits before
+              saving.
+            </Alert>
+          )}
           {groupBySubgroup(visibleSettings).map((section) => (
             <Stack
               key={section.subgroup ?? "__"}
@@ -576,10 +611,14 @@ function SettingsGroupPanel({
                       }}
                     >
                       <SettingField
-                        key={`${s.key}:${serverRevision.current.count}`}
+                        key={s.key}
                         setting={s}
                         value={renderedValues[s.key]}
-                        onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
+                        onChange={(v) =>
+                          s.secret
+                            ? setSecretValues((previous) => ({ ...previous, [s.key]: v }))
+                            : draft.setValues((previous) => ({ ...previous, [s.key]: v }))
+                        }
                         onValidityChange={(valid) =>
                           setInvalidKeys((current) => {
                             const next = new Set(current);
@@ -628,12 +667,27 @@ function SettingsGroupPanel({
               onClick={() => save.mutate()}
               disabled={
                 save.isPending ||
+                dirtyKeys.length === 0 ||
+                conflicts.length > 0 ||
                 invalidKeys.size > 0 ||
                 visibleSettings.every((s) => s.envOverride)
               }
             >
               {text.save(group.label)}
             </Button>
+            {dirtyKeys.length > 0 && (
+              <Button
+                size="small"
+                disabled={save.isPending}
+                onClick={() => {
+                  draft.discard(group.settings.map((setting) => setting.key));
+                  setSecretValues({});
+                  setInvalidKeys(new Set());
+                }}
+              >
+                Discard
+              </Button>
+            )}
             {extra}
             {save.isError && (
               <Typography variant="caption" color="error">
@@ -883,15 +937,28 @@ export function SystemSettings({
   onSettingsSaved?: () => void | Promise<void>;
 } = {}) {
   const env = useEnv();
+  const draftStore = useContext(AdminDraftContext);
   const [toast, setToast] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
 
   const { data, isLoading } = useQuery<{ groups: SettingsGroup[] }>({
-    queryKey: ["admin", "settings"],
+    queryKey: ["admin", "settings", env.apiUrl, draftStore?.scopeKey ?? "isolated"],
+    enabled: !draftStore || draftStore.scopeKey !== null,
     queryFn: async () => {
       const res = await fetch(`${env.apiUrl}/api/admin/settings`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load settings");
       return res.json();
     },
+  });
+
+  const ordinarySettings = (data?.groups ?? [])
+    .flatMap((group) => group.settings)
+    .filter((setting) => !setting.secret && !setting.envOverride && setting.source !== "env");
+  const draft = useAdminDraft({
+    id: "settings",
+    baseline: Object.fromEntries(ordinarySettings.map((setting) => [setting.key, setting.value])),
+    editableKeys: ordinarySettings.map((setting) => setting.key),
+    signature: "settings-v1",
+    ready: !!data,
   });
 
   const showToast = (msg: string, sev: "success" | "error" = "success") => setToast({ msg, sev });
@@ -968,6 +1035,7 @@ export function SystemSettings({
         <SettingsGroupPanel
           key={section?.id ?? group.id}
           group={group}
+          draft={draft}
           onSaved={handleSaved}
           anchorId={section?.id}
           description={section?.description}

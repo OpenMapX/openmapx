@@ -14,7 +14,7 @@ async function getAdminSession() {
 
   if (!res.ok) return null;
   return res.json() as Promise<{
-    user: { name: string; email: string; image?: string; role?: string };
+    user: { id: string; name: string; email: string; image?: string; role?: string };
   }>;
 }
 

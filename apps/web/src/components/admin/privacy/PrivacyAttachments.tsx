@@ -1,4 +1,5 @@
 "use client";
+
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
@@ -9,6 +10,7 @@ import {
 } from "@openmapx/core/privacy";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { type PrivacyCaseClient, privacyResult } from "@/lib/admin/privacyAdmin";
 import {
   consumePrivacyDownload,
@@ -101,7 +103,7 @@ export function PrivacyAttachments({
         client.client,
       );
       if (!executing.active) return;
-      if (capability.kind === "native") window.location.assign(capability.target.url);
+      if (capability.kind === "native") navigateAdminDocument(capability.target.url, "download");
       else if (capability.kind === "sink") {
         const sink = await createPrivacyFileSink(filename);
         if (!executing.active) {
