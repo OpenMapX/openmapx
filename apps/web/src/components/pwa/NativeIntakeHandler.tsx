@@ -53,6 +53,7 @@ export function NativeIntakeHandler() {
     [selected, setSelected] = useState("");
   const [visible, setVisible] = useState(false),
     [blocked, setBlocked] = useState(true);
+  const [listingUnavailable, setListingUnavailable] = useState("");
   const [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
@@ -76,6 +77,7 @@ export function NativeIntakeHandler() {
     try {
       const result = await client.list();
       if (generation.current !== current || version !== refreshVersion.current) return;
+      setListingUnavailable("");
       setItems(result.items);
       setScheme(result.scheme);
       setBlocked(!result.canApply);
@@ -88,8 +90,11 @@ export function NativeIntakeHandler() {
         setSelected(result.items.find((item) => !later.current.has(item.id))?.id ?? "");
         setVisible(true);
       }
-    } catch {
-      /* Pending items remain owned natively; foreground or the inbox button can retry. */
+    } catch (error) {
+      if (generation.current !== current || version !== refreshVersion.current) return;
+      setBlocked(true);
+      setListingUnavailable(error instanceof IntakeTransferError ? error.code : "unavailable");
+      // Owned items and edited drafts survive a failed authority check.
     }
   }, [client, localBlocked]);
   useEffect(() => {
@@ -168,7 +173,10 @@ export function NativeIntakeHandler() {
     } catch (error) {
       if (error instanceof IntakeTransferError && error.code === "navigation-active")
         setBlocked(true);
-      else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
+      else if (error instanceof IntakeTransferError && error.code === "navigation-unavailable") {
+        setBlocked(true);
+        setListingUnavailable(error.code);
+      } else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
     } finally {
       setBusy(false);
     }
@@ -222,12 +230,38 @@ export function NativeIntakeHandler() {
     } catch (error) {
       if (error instanceof IntakeTransferError && error.code === "navigation-active")
         setBlocked(true);
-      else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
+      else if (error instanceof IntakeTransferError && error.code === "navigation-unavailable") {
+        setBlocked(true);
+        setListingUnavailable(error.code);
+      } else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
     } finally {
       setBusy(false);
     }
   }
-  if (!client || !items.length) return null;
+  if (!client) return null;
+  if (listingUnavailable)
+    return (
+      <Alert
+        severity="warning"
+        sx={{
+          position: "fixed",
+          top: "calc(128px + var(--omx-safe-top, 0px))",
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "calc(100% - 32px)",
+          maxWidth: 520,
+          zIndex: 1301,
+        }}
+        action={<Button onClick={() => void refresh()}>{t("retry")}</Button>}
+      >
+        {t(
+          listingUnavailable === "navigation-unavailable"
+            ? "navigationUnavailable"
+            : "listingUnavailable",
+        )}
+      </Alert>
+    );
+  if (!items.length) return null;
   const waiting = blocked || localBlocked();
   const invalidText =
     selectedItem?.kind === "text" &&

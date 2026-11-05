@@ -163,10 +163,19 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
       );
     if (url.port) return { kind: "unsupported", reason: "unsupported" };
     if (url.hostname === "maps.apple.com") {
-      const q = url.searchParams.get("q") || url.searchParams.get("address");
+      const q =
+        url.searchParams.get("query") ||
+        url.searchParams.get("q") ||
+        url.searchParams.get("address");
+      const label = url.searchParams.get("name") || q || "";
       return (
-        point(url.searchParams.get("ll") || "", q || "") ??
-        (q ? (point(q) ?? search(q)) : { kind: "unsupported", reason: "unsupported" })
+        point(
+          url.searchParams.get("coordinate") ||
+            url.searchParams.get("center") ||
+            url.searchParams.get("ll") ||
+            "",
+          label,
+        ) ?? (q ? (point(q) ?? search(q)) : { kind: "unsupported", reason: "unsupported" })
       );
     }
     if (
@@ -177,6 +186,21 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     ) {
       const q = url.searchParams.get("query") || url.searchParams.get("q");
       if (q) return point(q) ?? search(q);
+      const place = /^\/maps\/place\/([^/]+)/.exec(url.pathname);
+      let name = "";
+      try {
+        if (place) name = decodeURIComponent(place[1].replaceAll("+", " "));
+      } catch {
+        return { kind: "unsupported", reason: "unsupported" };
+      }
+      // The explicit @ segment is a viewport, not necessarily the selected place.
+      // Retain its label and location without claiming a fetched place identity.
+      const center = /\/@([^/,]+),([^/,]+)(?:,|\/|$)/.exec(url.pathname);
+      if (center)
+        return (
+          point(`${center[1]},${center[2]}`, name) ?? { kind: "unsupported", reason: "unsupported" }
+        );
+      if (name) return search(name);
       const m = /^\/maps\/search\/([^/]+)\/?$/.exec(url.pathname);
       if (m) {
         try {

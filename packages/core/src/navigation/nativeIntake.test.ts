@@ -92,3 +92,37 @@ it.each([
 ])("does not let %s hide a later map link", (line) => {
   expect(params(`Café\n${line}\nhttps://maps.google.com/?q=52.5,13.4`).get("at")).toBe("52.5,13.4");
 });
+
+it.each([
+  [
+    "https://maps.apple.com/place?coordinate=48.137,11.575&name=Marienplatz",
+    "48.137,11.575",
+    "Marienplatz",
+  ],
+  ["https://maps.apple.com/frame?center=48.137,11.575", "48.137,11.575", "48.137,11.575"],
+  [
+    "https://www.google.com/maps/place/Marienplatz/@48.137,11.575,17z",
+    "48.137,11.575",
+    "Marienplatz",
+  ],
+])("recognizes current map URLs: %s", (url, at, name) => {
+  expect(params(url).get("at")).toBe(at);
+  expect(params(url).get("name")).toBe(name);
+});
+it("recognizes unified Apple search URLs", () => {
+  expect(params("https://maps.apple.com/search?query=coffee").get("q")).toBe("coffee");
+});
+it("uses a decoded Google place name when no explicit point is available", () => {
+  expect(params("https://www.google.com/maps/place/Caf%C3%A9+Central/").get("q")).toBe(
+    "Café Central",
+  );
+});
+it.each([
+  "https://maps.apple.com/place?coordinate=91,11&name=Station",
+  "https://www.google.com/maps/place/Station/@91,11,17z",
+  "https://www.google.com/maps/place/%ZZ/",
+  "https://maps.apple/p/example",
+  "https://maps.app.goo.gl/example",
+])("does not fetch short links or accept invalid map locations: %s", (url) => {
+  expect(classifySharedText(url, config).kind).toBe("unsupported");
+});

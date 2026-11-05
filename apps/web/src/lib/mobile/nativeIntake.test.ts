@@ -109,3 +109,13 @@ it("keeps closed native failure codes without exposing arbitrary native error te
   });
   await expect(client.list()).rejects.toMatchObject({ code: "unavailable" });
 });
+
+it("preserves unavailable navigation authority as a distinct bridge error", async () => {
+  const client = new NativeIntakeClient({
+    request: async () => ({
+      type: "native.error",
+      payload: { code: "navigation-unavailable", forMessageId: "request" },
+    }),
+  } as never);
+  await expect(client.list()).rejects.toMatchObject({ code: "navigation-unavailable" });
+});

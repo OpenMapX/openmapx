@@ -1,6 +1,7 @@
 import { useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { IntakeTransferError } from "@/lib/mobile/nativeIntake";
 import { NativeIntakeHandler } from "./NativeIntakeHandler";
 
 const f = vi.hoisted(() => ({
@@ -25,6 +26,11 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/mobile/nativeIntake", () => ({
+  IntakeTransferError: class extends Error {
+    constructor(readonly code: string) {
+      super(code);
+    }
+  },
   NativeIntakeClient: class {
     list = f.list;
     text = f.text;
@@ -172,4 +178,27 @@ it("offers postponed items again on a later foreground", async () => {
     if (previous) Object.defineProperty(document, "visibilityState", previous);
     else Reflect.deleteProperty(document, "visibilityState");
   }
+});
+
+it("reports unavailable authority instead of inventing an active trip, and can recheck", async () => {
+  f.list.mockRejectedValue(new IntakeTransferError("navigation-unavailable"));
+  render(<NativeIntakeHandler />);
+  await screen.findByText("navigationUnavailable");
+  expect(screen.queryByText("deferred")).toBeNull();
+  expect(screen.queryByText("import")).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+  f.list.mockResolvedValue({ items: [item], canApply: true, scheme: "openmapx" });
+  fireEvent.click(screen.getByText("retry"));
+  await screen.findByText("features");
+  expect(screen.queryByText("navigationUnavailable")).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+});
+it("keeps a previous preview blocked when an authority refresh fails", async () => {
+  render(<NativeIntakeHandler />);
+  await screen.findByText("features");
+  f.list.mockRejectedValue(new IntakeTransferError("navigation-unavailable"));
+  fireEvent.click(screen.getByText("import"));
+  await screen.findByText("navigationUnavailable");
+  expect(useImportedGeometryStore.getState().imported).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
 });

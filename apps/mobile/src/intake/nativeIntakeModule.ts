@@ -20,7 +20,7 @@ interface NativeIntake {
   addListener(name: "onInboxChanged", listener: () => void): { remove(): void };
 }
 export class NativeIntakeError extends Error {
-  constructor(readonly code: IntakeErrorCode) {
+  constructor(readonly code: IntakeErrorCode | "navigation-unavailable") {
     super(code);
   }
 }

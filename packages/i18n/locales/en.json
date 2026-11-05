@@ -2662,6 +2662,9 @@
       "import": "Import",
       "open": "Open",
       "partial": "Some shared items could not be added. Select an error entry to review it; successfully saved items remain available.",
+      "navigationUnavailable": "OpenMapX could not check your trip status. Close and reopen the app before importing. Shared items have been kept.",
+      "listingUnavailable": "Shared items are temporarily unavailable. Try again; your items have been kept.",
+      "retry": "Check again",
       "sharedLocation": "Shared location"
     }
   },

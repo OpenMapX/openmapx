@@ -25,7 +25,7 @@ import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { IntakeController } from "./intake/IntakeController";
-import { createNativeIntakePort } from "./intake/nativeIntakeModule";
+import { createNativeIntakePort, NativeIntakeError } from "./intake/nativeIntakeModule";
 import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
@@ -234,7 +234,15 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       send: (type, payload) => composed.bridge.send(type, payload),
       canApply: async () => {
         const runtime = await navigation;
-        return runtime !== null && (await runtime.activeSession()) === null;
+        if (runtime === null) {
+          if (config.feasibilityMode) return true;
+          throw new NativeIntakeError("navigation-unavailable");
+        }
+        try {
+          return (await runtime.activeSession()) === null;
+        } catch {
+          throw new NativeIntakeError("navigation-unavailable");
+        }
       },
     });
     return { shell: composed, navigation, intake, voice };

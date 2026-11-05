@@ -504,3 +504,10 @@ and [ContentResolver security guidance](https://developer.android.com/privacy-an
 define the Android receiving and provider authority boundaries.
 [Apple’s GeoJSON type](https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/geojson)
 confirms the `public.geojson` identifier.
+
+Intake resolves supported Apple unified and Google long map links locally without
+following short-link redirects. When native trip authority is unavailable, it
+fails closed with reopen/recheck guidance and keeps shared items. This differs
+from a known active trip, which remains deferred until navigation ends. The
+development feasibility mode intentionally omits normal navigation composition
+and allows intake.

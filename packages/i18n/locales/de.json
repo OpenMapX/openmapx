@@ -2662,6 +2662,9 @@
       "import": "Importieren",
       "open": "Öffnen",
       "partial": "Einige geteilte Inhalte konnten nicht hinzugefügt werden. Den Fehlereintrag zur Prüfung auswählen. Erfolgreich gespeicherte Inhalte bleiben verfügbar.",
+      "navigationUnavailable": "OpenMapX konnte den Navigationsstatus nicht prüfen. Schließe und öffne die App vor dem Import erneut. Geteilte Inhalte bleiben erhalten.",
+      "listingUnavailable": "Geteilte Inhalte sind vorübergehend nicht verfügbar. Versuche es erneut; die Inhalte bleiben erhalten.",
+      "retry": "Erneut prüfen",
       "sharedLocation": "Geteilter Ort"
     }
   },

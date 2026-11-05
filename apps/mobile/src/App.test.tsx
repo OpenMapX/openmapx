@@ -9,6 +9,7 @@ import { z } from "zod";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { IntakeController } from "./intake/IntakeController";
+import * as intakeModule from "./intake/nativeIntakeModule";
 import { groundSessionFixture } from "./storage/testing/sessionFixture";
 import { VoiceInputController } from "./voice/VoiceInputController";
 
@@ -612,6 +613,51 @@ describe("App bridge channel", () => {
     });
     return nonce;
   };
+
+  it.each(["failed", "feasibility", "idle", "active", "storage-failed"])(
+    "checks intake authority when navigation is %s",
+    async (state) => {
+      const complete = jest.fn();
+      jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+        available: async () => true,
+        list: async () => [],
+        read: jest.fn(),
+        complete,
+        listen: () => () => undefined,
+      });
+      if (state === "feasibility")
+        mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
+      if (["idle", "active", "storage-failed"].includes(state))
+        mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+      if (state === "active")
+        mockNavigation.activeSession.mockResolvedValue({ sessionId: "active-trip" });
+      const nonce = await hello();
+      if (state === "storage-failed")
+        mockNavigation.activeSession.mockRejectedValue(new Error("storage unavailable"));
+      await post(nonce, { messageId: "list-authority", type: "intake.list", payload: {} });
+      const reply = decodedMessages().find((m) => m.payload?.forMessageId === "list-authority");
+      if (state === "failed" || state === "storage-failed") {
+        expect(reply).toMatchObject({
+          type: "native.error",
+          payload: { code: "navigation-unavailable" },
+        });
+      } else {
+        expect(reply).toMatchObject({
+          type: "intake.items",
+          payload: { canApply: state !== "active" },
+        });
+      }
+      if (["failed", "storage-failed", "active"].includes(state)) {
+        await post(nonce, {
+          messageId: "complete-authority",
+          type: "intake.complete",
+          payload: { id: "f386e706-b728-40a3-9554-881d0ff0958a", disposition: "opened" },
+        });
+        expect(complete).not.toHaveBeenCalled();
+      }
+      await shellView.unmount();
+    },
+  );
 
   it("keeps the deployed v3 capability schema while advertising the navigation graph", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);

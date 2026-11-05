@@ -17,7 +17,9 @@ function rejectNativeError(reply: NativeToWebMessage): void {
   if (reply.type !== "native.error") return;
   const code = reply.payload.code;
   throw new IntakeTransferError(
-    (INTAKE_ERROR_CODES as readonly string[]).includes(code) || code === "navigation-active"
+    (INTAKE_ERROR_CODES as readonly string[]).includes(code) ||
+      code === "navigation-active" ||
+      code === "navigation-unavailable"
       ? code
       : "unavailable",
   );
