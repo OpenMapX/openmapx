@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readMobileConfig } from "../config/mobileConfig";
+import { IOS_USAGE_DESCRIPTIONS, MOBILE_LOCALES } from "../config/nativeCopy";
 import {
   type AndroidManifestLike,
   applyAndroidApplicationSecurity,
@@ -14,6 +15,7 @@ import {
   applyUrlSchemes,
   buildNetworkSecurityConfigXml,
   FORBIDDEN_IOS_SHARING_KEYS,
+  IOS_ONLY_STRING_RESOURCE_KEYS,
   type NativeConfigInput,
   REQUIRED_ANDROID_PERMISSIONS,
   removeUnusedUsageDescriptions,
@@ -268,6 +270,24 @@ describe("Android string resources", () => {
     expect(result).not.toBeNull();
     expect(result).toContain('<string name="app_name">OpenMapX</string>');
     expect(result).not.toContain("NSLocationWhenInUseUsageDescription");
+  });
+
+  it("strips every iOS usage description Expo's locales field writes", () => {
+    // A usage description added to the iOS copy without being listed here
+    // reaches Android's values-b+<locale> resources and fails lintVitalRelease.
+    for (const locale of MOBILE_LOCALES) {
+      for (const key of Object.keys(IOS_USAGE_DESCRIPTIONS[locale])) {
+        expect(IOS_ONLY_STRING_RESOURCE_KEYS).toContain(key);
+      }
+    }
+  });
+
+  it("deletes a locale file that held only voice search usage descriptions", () => {
+    const voiceStrings = `<resources>
+  <string name="NSMicrophoneUsageDescription">"mic"</string>
+  <string name="NSSpeechRecognitionUsageDescription">"speech"</string>
+</resources>`;
+    expect(stripIosOnlyStringResources(voiceStrings)).toBeNull();
   });
 
   it("leaves a file with no iOS keys untouched", () => {
