@@ -153,6 +153,23 @@ it("does not preview an empty adopted default region", async () => {
   expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
   expect(mocks.preview).not.toHaveBeenCalled();
 });
+it("does not start a platform write after leaving during the fresh-baseline read", async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.get.mockResolvedValueOnce({ status: 200, data: { ...initial, pending: [] } });
+  mocks.get.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const view = mount("retention");
+  fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
+  view.unmount();
+  resolve({ status: 200, data: { ...initial, pending: [] } });
+  await new Promise((done) => setTimeout(done, 0));
+  expect(mocks.preview).not.toHaveBeenCalled();
+});
 it("removes an old unscoped preview instead of loading it in a scoped owner", async () => {
   const key = "openmapx-platform-preview:http://admin.test:admin-a";
   sessionStorage.setItem(

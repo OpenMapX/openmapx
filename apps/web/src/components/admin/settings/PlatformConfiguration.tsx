@@ -250,6 +250,8 @@ function PlatformForm({
         "Platform state could not be refreshed. Reload before reviewing changes.",
       );
     }
+    if (!owner.active)
+      throw new PlatformScopeError("The configuration view changed. Reopen it before continuing.");
     if (fresh.expectedCurrentRevisionId !== view.expectedCurrentRevisionId)
       throw new PlatformScopeError(
         "Saved platform configuration changed. Reload and review your draft.",
