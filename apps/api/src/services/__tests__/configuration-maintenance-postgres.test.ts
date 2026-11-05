@@ -3156,15 +3156,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).rejects.toMatchObject({ errorClass: "authorization" });
           if (drift === "source") {
             const envPath = join(host.infraDir, ".env"),
-              original = existsSync(envPath) ? readFileSync(envPath) : undefined;
-            try {
-              writeFileSync(
+              descriptor = nodeFs.openSync(
                 envPath,
-                Buffer.concat([
-                  original ?? Buffer.alloc(0),
-                  Buffer.from("\nTASK012_INSPECTION_SOURCE_DRIFT=changed\n"),
-                ]),
-                { mode: 0o600 },
+                nodeFs.constants.O_RDWR | nodeFs.constants.O_NOFOLLOW | nodeFs.constants.O_NONBLOCK,
+              ),
+              originalSize = nodeFs.fstatSync(descriptor).size;
+            try {
+              nodeFs.writeSync(
+                descriptor,
+                "\nTASK012_INSPECTION_SOURCE_DRIFT=changed\n",
+                originalSize,
+                "utf8",
               );
               expect(await maintenance.inspectConfigurationMaintenance(identity)).toMatchObject({
                 state: "prepared",
@@ -3172,8 +3174,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 sequence: prepared.sequence,
               });
             } finally {
-              if (original) writeFileSync(envPath, original);
-              else rmSync(envPath);
+              try {
+                nodeFs.ftruncateSync(descriptor, originalSize);
+              } finally {
+                nodeFs.closeSync(descriptor);
+              }
             }
           } else if (drift === "guard") {
             await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid AND kind='configuration-maintenance'`;
