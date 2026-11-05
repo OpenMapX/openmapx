@@ -53,7 +53,7 @@ export interface GeneratedNativeSurface {
 
 /** Permissions that must never reach a generated manifest without removal. */
 export const FORBIDDEN_ANDROID_PERMISSIONS = [
-  "android.permission.RECORD_AUDIO",
+  "android.permission.FOREGROUND_SERVICE_MICROPHONE",
   "android.permission.CAMERA",
   "android.permission.READ_CONTACTS",
   "android.permission.READ_CALENDAR",
@@ -171,6 +171,8 @@ function checkIos(
   }
 
   for (const key of [
+    "NSMicrophoneUsageDescription",
+    "NSSpeechRecognitionUsageDescription",
     "NSLocationWhenInUseUsageDescription",
     "NSLocationAlwaysAndWhenInUseUsageDescription",
   ]) {
@@ -234,6 +236,22 @@ function checkAndroid(
   fail: (message: string) => void,
 ): void {
   const manifest = generated.androidManifest.manifest;
+  const queries = manifest.queries as
+    | Array<{
+        intent?: Array<{ action?: Array<{ $: Record<string, string> }> }>;
+      }>
+    | undefined;
+  if (
+    !queries?.some((query) =>
+      query.intent?.some((intent) =>
+        intent.action?.some(
+          (action) => action.$["android:name"] === "android.speech.RecognitionService",
+        ),
+      ),
+    )
+  ) {
+    fail("Android speech RecognitionService visibility query is missing");
+  }
   const permissionNodes = manifest["uses-permission"] ?? [];
 
   const counts = new Map<string, number>();

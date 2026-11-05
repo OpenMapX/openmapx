@@ -5,7 +5,7 @@
  * The app config states what the app should request; this reads what it actually
  * requests, after every config plugin and every transitive dependency has had
  * its say. Those are different things, and the gap between them is where an
- * unwanted permission arrives — a library adds `RECORD_AUDIO` to its manifest,
+ * unwanted permission arrives — a library adds `CAMERA` to its manifest,
  * the merge pulls it in, and nothing in the committed source mentions it.
  *
  * Run after `expo prebuild`:

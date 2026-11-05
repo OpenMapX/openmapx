@@ -61,13 +61,27 @@ The canonical name remains visible so you can check what a code resolved to.
 
 ### Voice search
 
-Use the microphone button where the browser supports speech recognition. Grant
-microphone permission, speak the query, and OpenMapX submits the final transcript
-through ordinary search. The button is hidden on unsupported browsers.
+On the website, use the microphone button where the browser supports speech
+recognition. Grant microphone permission and speak the query. Interim text fills
+the field, and the final transcript submits through ordinary search. The button
+is hidden on unsupported browsers. Browser recognition may send audio to the
+browser vendor's speech service; check its privacy settings before speaking.
 
-Audio processing belongs to the browser and operating system. It may use the
-browser vendor's speech service. Check that browser's privacy settings before
-speaking sensitive information.
+The installed app uses the same button and warning snackbar with native
+on-device recognition on iOS and Android 13+ when offline support is available. The first
+tap requests microphone permission and, on iOS, speech-recognition permission. If denied, the warning points to
+platform settings. There is no additional settings button or custom dialog.
+If the language model is missing, the warning explains this and Android's own
+model download is requested. Downloads need a network connection; recognition
+does not. iOS checks each requested language without an app-triggered model download;
+its warning suggests adding a keyboard and enabling Dictation in iPhone settings.
+Older Android versions do not offer app voice search.
+
+Tap again to finish an utterance. Leaving the page or backgrounding the app
+cancels listening. OpenMapX does not transmit or store app microphone audio.
+The transcript follows the usual search-request and search-history rules.
+See the [native voice-input design](../developer/voice-input.md) for limits and
+device qualification still required.
 
 ### Category and POI search
 

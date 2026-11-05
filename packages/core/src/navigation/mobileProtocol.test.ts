@@ -84,6 +84,123 @@ const parse = (value: unknown, options = {}) =>
 const errorCodeOf = (result: ReturnType<typeof parse>) =>
   result.ok ? undefined : result.error.code;
 
+describe("voice contract", () => {
+  it.each([
+    ["voice.probe", {}],
+    ["voice.availability", { forMessageId: "probe-1", available: true }],
+    ["voice.start", { requestId: "r", locale: "de-DE" }],
+    ["voice.stop", { requestId: "r" }],
+    ["voice.cancel", { requestId: "r" }],
+    ...["listening", "partial", "final", "ended", "error"].map(
+      (state): [string, Record<string, unknown>] => ["voice.event", { requestId: "r", state }],
+    ),
+  ])("round trips %s", (type, payload) => {
+    const input = message({ type, payload });
+    expect(parse(input)).toEqual({ ok: true, message: input });
+    expect(parse(message({ type, payload: { ...payload, extra: true } })).ok).toBe(false);
+  });
+
+  it("declares probe directions and requires a bounded correlation id and boolean answer", () => {
+    expect(WEB_TO_NATIVE_TYPES).toContain("voice.probe");
+    expect(NATIVE_TO_WEB_TYPES).toContain("voice.availability");
+    expect(NATIVE_TO_WEB_TYPES).not.toContain("voice.probe");
+    expect(WEB_TO_NATIVE_TYPES).not.toContain("voice.availability");
+    for (const payload of [
+      { available: true },
+      { forMessageId: "", available: true },
+      { forMessageId: "r".repeat(129), available: true },
+      { forMessageId: "r", available: "true" },
+    ])
+      expect(parse(message({ type: "voice.availability", payload })).ok).toBe(false);
+  });
+
+  it("bounds ids, locales and transcripts", () => {
+    for (const requestId of ["", "r".repeat(129)]) {
+      expect(parse(message({ type: "voice.stop", payload: { requestId } })).ok).toBe(false);
+    }
+    for (const locale of ["", "d", "de_DE", "de-", "abcd-DE", `de-${"a".repeat(33)}`]) {
+      expect(parse(message({ type: "voice.start", payload: { requestId: "r", locale } })).ok).toBe(
+        false,
+      );
+    }
+    for (const state of ["partial", "final"]) {
+      expect(
+        parse(
+          message({
+            type: "voice.event",
+            payload: { requestId: "r", state, text: "a".repeat(512) },
+          }),
+        ).ok,
+      ).toBe(true);
+      expect(
+        parse(
+          message({
+            type: "voice.event",
+            payload: { requestId: "r", state, text: "a".repeat(513) },
+          }),
+        ).ok,
+      ).toBe(false);
+    }
+    for (const state of ["listening", "ended", "error"]) {
+      expect(
+        parse(message({ type: "voice.event", payload: { requestId: "r", state, text: "hi" } })).ok,
+      ).toBe(false);
+    }
+    expect(
+      parse(
+        message({
+          type: "voice.event",
+          payload: { requestId: "r", state: "error", error: "network" },
+        }),
+      ).ok,
+    ).toBe(false);
+  });
+  it("accepts exact id and locale bounds and the closed error vocabulary", () => {
+    expect(
+      parse(
+        message({ type: "voice.start", payload: { requestId: "r", locale: "de-DE-u-nu-latn" } }),
+      ).ok,
+    ).toBe(true);
+    expect(
+      parse(
+        message({
+          type: "voice.start",
+          payload: {
+            requestId: "r".repeat(128),
+            locale: "de-abcdefgh-abcdefgh-abcdefgh-abcde",
+          },
+        }),
+      ).ok,
+    ).toBe(true);
+    expect(
+      parse(
+        message({
+          type: "voice.start",
+          payload: {
+            requestId: "r",
+            locale: "de-abcdefgh-abcdefgh-abcdefgh-abcdef",
+          },
+        }),
+      ).ok,
+    ).toBe(false);
+    for (const error of [
+      "not-allowed",
+      "language-not-supported",
+      "no-speech",
+      "audio-capture",
+      "busy",
+      "unavailable",
+      "aborted",
+      "generic",
+    ]) {
+      expect(
+        parse(message({ type: "voice.event", payload: { requestId: "r", state: "error", error } }))
+          .ok,
+      ).toBe(true);
+    }
+  });
+});
+
 describe("negotiateMobileProtocol", () => {
   it.each([
     [{ min: 3, max: 3 }, { min: 3, max: 3 }, 3],

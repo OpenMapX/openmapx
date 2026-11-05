@@ -19,6 +19,8 @@ export const MOBILE_LOCALES = ["en", "de"] as const;
 export type MobileLocale = (typeof MOBILE_LOCALES)[number];
 
 export interface IosUsageDescriptions {
+  NSMicrophoneUsageDescription: string;
+  NSSpeechRecognitionUsageDescription: string;
   NSLocationWhenInUseUsageDescription: string;
   NSLocationAlwaysAndWhenInUseUsageDescription: string;
 }
@@ -30,12 +32,22 @@ export interface IosUsageDescriptions {
  */
 export const IOS_USAGE_DESCRIPTIONS: Record<MobileLocale, IosUsageDescriptions> = {
   en: {
+    NSMicrophoneUsageDescription:
+      "OpenMapX uses the microphone for voice search when you tap the microphone button.",
+    NSSpeechRecognitionUsageDescription:
+      "OpenMapX uses on-device speech recognition to turn your voice into search text when you tap the microphone.",
+
     NSLocationWhenInUseUsageDescription:
       "OpenMapX uses your location to show where you are on the map and to guide you along a route you start.",
     NSLocationAlwaysAndWhenInUseUsageDescription:
       "OpenMapX uses your location in the background so navigation you have started keeps guiding you while the screen is locked or the app is not in use. Tracking stops when you end navigation.",
   },
   de: {
+    NSMicrophoneUsageDescription:
+      "OpenMapX verwendet das Mikrofon für die Sprachsuche, wenn du auf die Mikrofontaste tippst.",
+    NSSpeechRecognitionUsageDescription:
+      "OpenMapX verwendet die Spracherkennung auf dem Gerät, um deine Stimme beim Tippen auf die Mikrofontaste in Suchtext umzuwandeln.",
+
     NSLocationWhenInUseUsageDescription:
       "OpenMapX verwendet deinen Standort, um deine Position auf der Karte anzuzeigen und dich entlang einer von dir gestarteten Route zu führen.",
     NSLocationAlwaysAndWhenInUseUsageDescription:

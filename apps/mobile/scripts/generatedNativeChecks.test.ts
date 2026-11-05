@@ -33,9 +33,17 @@ function androidManifest(): AndroidManifestLike {
   return {
     manifest: {
       $: { "xmlns:android": "http://schemas.android.com/apk/res/android" },
+      queries: [
+        { intent: [{ action: [{ $: { "android:name": "android.speech.RecognitionService" } }] }] },
+      ],
       "uses-permission": [
         ...REQUIRED_ANDROID_PERMISSIONS.map((name) => ({ $: { "android:name": name } })),
-        { $: { "android:name": "android.permission.RECORD_AUDIO", "tools:node": "remove" } },
+        {
+          $: {
+            "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+            "tools:node": "remove",
+          },
+        },
       ],
       application: [
         {
@@ -62,6 +70,10 @@ function surface(): GeneratedNativeSurface {
       CFBundleShortVersionString: "$(MARKETING_VERSION)",
     },
     infoPlist: {
+      NSMicrophoneUsageDescription:
+        "OpenMapX uses the microphone for voice search when you tap the microphone button.",
+      NSSpeechRecognitionUsageDescription:
+        "OpenMapX links speech recognition for voice search; disabled on iOS.",
       NSSupportsLiveActivities: true,
       UIApplicationSceneManifest: {
         UIApplicationSupportsMultipleScenes: false,
@@ -263,10 +275,10 @@ describe("Android policy", () => {
     expect(
       failuresAfter((value) => {
         value.androidManifest.manifest["uses-permission"]?.push({
-          $: { "android:name": "android.permission.RECORD_AUDIO" },
+          $: { "android:name": "android.permission.FOREGROUND_SERVICE_MICROPHONE" },
         });
       }),
-    ).toContainEqual(expect.stringContaining("RECORD_AUDIO"));
+    ).toContainEqual(expect.stringContaining("FOREGROUND_SERVICE_MICROPHONE"));
   });
 
   it("rejects release cleartext traffic", () => {
@@ -435,4 +447,12 @@ it("requires the generated ActivityKit support flag", () => {
   expect(checkGeneratedNativeSurface(value, EXPECTED)).toContainEqual(
     expect.stringContaining("NSSupportsLiveActivities"),
   );
+});
+
+it("requires speech service visibility", () => {
+  expect(
+    failuresAfter((value) => {
+      delete value.androidManifest.manifest.queries;
+    }),
+  ).toContain("Android speech RecognitionService visibility query is missing");
 });

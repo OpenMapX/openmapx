@@ -1,7 +1,15 @@
+import type { NativeToWebMessage } from "@openmapx/core/navigation";
 import { describe, expect, it, vi } from "vitest";
+import { BROWSER_RUNTIME, type MobileRuntime } from "@/lib/mobile/MobileRuntimeProvider";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 import { act, fireEvent, render, screen, waitFor } from "@/test";
 import { VoiceSearchButton } from "./VoiceSearchButton";
+
+const runtime = vi.hoisted(() => ({ current: null as MobileRuntime | null }));
+vi.mock("@/lib/mobile/MobileRuntimeProvider", async (original) => {
+  const actual = await original<typeof import("@/lib/mobile/MobileRuntimeProvider")>();
+  return { ...actual, useMobileRuntimeContext: () => runtime.current ?? actual.BROWSER_RUNTIME };
+});
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -149,17 +157,208 @@ describe("VoiceSearchButton", () => {
 });
 
 describe("VoiceSearchButton inside the installed shell", () => {
-  it("offers no microphone even where the browser would support one", async () => {
-    installFakeRecognition();
+  it.each(["negotiating", "native-incompatible", "native-error", "native-compatible"] as const)(
+    "hides without capability in %s",
+    async (state) => {
+      installFakeRecognition();
+      runtime.current = {
+        ...BROWSER_RUNTIME,
+        state,
+        handshake:
+          state === "native-compatible"
+            ? null
+            : ({ capabilities: {} } as MobileRuntime["handshake"]),
+      };
+      (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
+      try {
+        const { queryByLabelText } = render(<VoiceSearchButton onResult={vi.fn()} />);
+        await waitFor(() => expect(queryByLabelText("search.voiceSearchAriaLabel")).toBeNull());
+      } finally {
+        runtime.current = null;
+        delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+        uninstall();
+      }
+    },
+  );
+
+  function nativeRuntime() {
+    const listeners = new Set<(event: NativeToWebMessage) => void>();
+    const send = vi.fn();
+    const request = vi
+      .fn()
+      .mockResolvedValue({ type: "voice.availability", payload: { available: true } });
+    runtime.current = {
+      ...BROWSER_RUNTIME,
+      state: "native-compatible",
+      isInstalledShell: true,
+      client: {
+        send,
+        request,
+        subscribe: (listener: (event: NativeToWebMessage) => void) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+      } as unknown as MobileRuntime["client"],
+      handshake: { capabilities: {} } as MobileRuntime["handshake"],
+    };
     (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
+    const emit = (state: string, text?: string, error?: string) => {
+      const requestId = (send.mock.calls[0]?.[1] as { requestId: string }).requestId;
+      for (const listener of listeners)
+        listener({
+          type: "voice.event",
+          payload: { requestId, state, text, error },
+        } as NativeToWebMessage);
+    };
+    if (!runtime.current.client) throw new Error("missing test client");
+    return { send, emit, listeners, client: runtime.current.client, request };
+  }
+
+  it("stays hidden until a positive probe, and probes again for a new client or handshake", async () => {
+    const h = nativeRuntime();
+    let resolve!: (value: unknown) => void;
+    h.request.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
     try {
-      const { queryByLabelText } = render(<VoiceSearchButton onResult={vi.fn()} />);
-      // A store build that asks for a permission it never declared is a
-      // rejection, so the control cannot exist at all.
-      await waitFor(() => expect(queryByLabelText("search.voiceSearchAriaLabel")).toBeNull());
+      const view = render(<VoiceSearchButton onResult={vi.fn()} />);
+      expect(screen.queryByLabelText("search.voiceSearchAriaLabel")).toBeNull();
+      expect(h.client.request).toHaveBeenCalledWith("voice.probe", {});
+      view.rerender(<VoiceSearchButton onResult={vi.fn()} />);
+      expect(h.client.request).toHaveBeenCalledTimes(1);
+      await act(async () => resolve({ type: "voice.availability", payload: { available: true } }));
+      await screen.findByLabelText("search.voiceSearchAriaLabel");
+      const next = nativeRuntime();
+      next.request.mockResolvedValue({
+        type: "voice.availability",
+        payload: { available: false },
+      } as NativeToWebMessage);
+      view.rerender(<VoiceSearchButton onResult={vi.fn()} />);
+      expect(screen.queryByLabelText("search.voiceSearchAriaLabel")).toBeNull();
+      await waitFor(() => expect(next.client.request).toHaveBeenCalledTimes(1));
+      if (!runtime.current?.handshake) throw new Error("missing test handshake");
+      runtime.current = { ...runtime.current, handshake: { ...runtime.current.handshake } };
+      view.rerender(<VoiceSearchButton onResult={vi.fn()} />);
+      await waitFor(() => expect(next.client.request).toHaveBeenCalledTimes(2));
     } finally {
+      runtime.current = null;
+      delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+    }
+  });
+
+  it("ignores a positive probe from a replaced client and never probes outside the shell", async () => {
+    const old = nativeRuntime();
+    let resolve!: (value: unknown) => void;
+    old.request.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    try {
+      const view = render(<VoiceSearchButton onResult={vi.fn()} />);
+      const next = nativeRuntime();
+      next.request.mockResolvedValue({
+        type: "voice.availability",
+        payload: { available: false },
+      } as NativeToWebMessage);
+      view.rerender(<VoiceSearchButton onResult={vi.fn()} />);
+      await act(async () => resolve({ type: "voice.availability", payload: { available: true } }));
+      expect(screen.queryByLabelText("search.voiceSearchAriaLabel")).toBeNull();
+      next.request.mockClear();
+      runtime.current = { ...(runtime.current as MobileRuntime), isInstalledShell: false };
+      view.rerender(<VoiceSearchButton onResult={vi.fn()} />);
+      expect(next.client.request).not.toHaveBeenCalled();
+    } finally {
+      runtime.current = null;
+      delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+    }
+  });
+
+  it.each(["false", "timeout", "rejection"])(
+    "keeps an old-APK-shaped hello hidden on probe %s",
+    async (outcome) => {
+      const h = nativeRuntime(); // Handshake has no voice field.
+      if (outcome === "false")
+        h.request.mockResolvedValue({
+          type: "voice.availability",
+          payload: { available: false },
+        } as NativeToWebMessage);
+      else h.request.mockRejectedValue(new Error(outcome));
+      try {
+        render(<VoiceSearchButton onResult={vi.fn()} />);
+        await waitFor(() => expect(h.client.request).toHaveBeenCalledTimes(1));
+        expect(screen.queryByLabelText("search.voiceSearchAriaLabel")).toBeNull();
+      } finally {
+        runtime.current = null;
+        delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
+      }
+    },
+  );
+
+  it("uses native interim/final results, stop preserves final, unmount cancels without browser capture", async () => {
+    const rec = installFakeRecognition();
+    const capture = vi.fn();
+    setMediaDevices(capture);
+    const h = nativeRuntime();
+    const onResult = vi.fn();
+    try {
+      const view = render(<VoiceSearchButton onResult={onResult} />);
+      const button = await screen.findByLabelText("search.voiceSearchAriaLabel");
+      fireEvent.click(button);
+      expect(h.send).toHaveBeenCalledWith("voice.start", {
+        requestId: expect.any(String),
+        locale: expect.stringContaining("-"),
+      });
+      act(() => h.emit("partial", "Berlin"));
+      expect(onResult).toHaveBeenLastCalledWith("Berlin", false);
+      fireEvent.click(button);
+      expect(h.send.mock.calls.at(-1)?.[0]).toBe("voice.stop");
+      act(() => h.emit("final", "Berlin Hbf"));
+      expect(onResult).toHaveBeenLastCalledWith("Berlin Hbf", true);
+      view.unmount();
+      expect(h.send.mock.calls.at(-1)?.[0]).toBe("voice.cancel");
+      act(() => h.emit("final", "late"));
+      expect(onResult).toHaveBeenCalledTimes(2);
+      expect(h.listeners.size).toBe(0);
+      expect(capture).not.toHaveBeenCalled();
+      expect(rec.current).toBeNull();
+    } finally {
+      runtime.current = null;
       delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
       uninstall();
+    }
+  });
+
+  it.each(
+    [
+      ["not-allowed", "voiceErrorNotAllowedApp"],
+      ["language-not-supported", "voiceErrorLanguageApp"],
+      ["audio-capture", "voiceErrorNoMicrophone"],
+      ["no-speech", "voiceErrorNoSpeech"],
+      ["busy", "voiceErrorGeneric"],
+      ["unavailable", "voiceErrorGeneric"],
+      ["aborted", "voiceErrorGeneric"],
+      ["generic", "voiceErrorGeneric"],
+    ].flatMap(([error, key]) => [
+      [error, key, "android"],
+      [error, key.endsWith("App") ? `${key}Ios` : key, "ios"],
+    ]),
+  )("maps native %s to %s on %s", async (error, key, platform) => {
+    const h = nativeRuntime();
+    if (runtime.current?.handshake)
+      runtime.current.handshake.platform = platform as "ios" | "android";
+    try {
+      render(<VoiceSearchButton onResult={vi.fn()} />);
+      fireEvent.click(await screen.findByLabelText("search.voiceSearchAriaLabel"));
+      act(() => h.emit("error", undefined, error));
+      await screen.findByText(`search.${key}`);
+    } finally {
+      runtime.current = null;
+      delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
     }
   });
 });

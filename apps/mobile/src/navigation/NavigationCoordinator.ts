@@ -252,6 +252,12 @@ export class NavigationCoordinator {
     switch (command.type) {
       case "destinations.update":
         return null;
+      case "voice.probe":
+      case "voice.start":
+      case "voice.stop":
+      case "voice.cancel":
+        // Voice commands are intercepted by the shell, outside this serial queue.
+        return null;
       case "web.hello":
         // Answered by the bridge during the handshake; nothing to coordinate.
         return null;

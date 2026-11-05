@@ -55,6 +55,21 @@ unit and Google Play car review are complete. The DHU screenshot slot in the
 runbook is reserved for inspected integration evidence, not synthetic browser
 fixtures.
 
+## Voice input qualification
+
+The [native voice-input design](./voice-input.md) uses iOS and Android 13+ on-device
+recognition behind the post-handshake `voice.probe` availability check. WebView microphone
+capture remains denied. Older Android versions keep voice input off. iOS requires locale-specific on-device support and our fail-closed package patch.
+Historical launch reports do not qualify this feature.
+
+On the candidate binary, test airplane-mode recognition with installed German
+and English models, missing-model download and subsequent readiness, permission
+grant/denial/permanent denial/revocation, and microphone release after stop,
+cancel, backgrounding, screen off and document replacement. Check guidance cue
+hold/release and WebView capture denial. Model downloads need a network even
+though recognition does not. Accuracy and latency on a consented recording set
+remain unmeasured.
+
 ## The automated gate
 
 Install the locked dependencies first. For native policy tests, use macOS with

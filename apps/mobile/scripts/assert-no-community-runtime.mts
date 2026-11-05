@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Fails when the shell could execute code a reviewer never saw.
  *
@@ -14,7 +15,10 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
+import { hasIosOnDeviceGuard } from "./voiceCapturePolicy.ts";
+import { hasWebViewCaptureDenial } from "./webViewCapturePolicy.ts";
 
 const repoRoot = resolve(import.meta.dirname, "../../..");
 
@@ -143,6 +147,39 @@ if (app) {
     findings.push({ file: APP, problem: "injects arbitrary JavaScript into the page" });
   }
 }
+
+const require = createRequire(import.meta.url);
+const webViewSource = join(
+  dirname(require.resolve("react-native-webview/package.json")),
+  "android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java",
+);
+if (!hasWebViewCaptureDenial(readFileSync(webViewSource, "utf8"))) {
+  findings.push({
+    file: webViewSource,
+    problem: "installed WebView capture-denial patch is missing",
+  });
+}
+
+const speechSource = join(
+  dirname(require.resolve("expo-speech-recognition/package.json")),
+  "android/src/main/java/expo/modules/speechrecognition/ExpoSpeechService.kt",
+);
+const speechCode = readFileSync(speechSource, "utf8");
+if (/log\([^\n]*(?:\$resultsList|\$nonEmptyStrings)/.test(speechCode)) {
+  findings.push({ file: speechSource, problem: "installed speech module logs transcripts" });
+}
+
+const speechRoot = dirname(require.resolve("expo-speech-recognition/package.json"));
+if (
+  !hasIosOnDeviceGuard(
+    readFileSync(join(speechRoot, "ios/ExpoSpeechRecognitionModule.swift"), "utf8"),
+    readFileSync(join(speechRoot, "ios/ExpoSpeechRecognizer.swift"), "utf8"),
+  )
+)
+  findings.push({
+    file: speechRoot,
+    problem: "installed iOS on-device fail-closed patch is missing",
+  });
 
 if (findings.length > 0) {
   console.error("[assert-no-community-runtime] the store distribution boundary is not intact:\n");

@@ -22,6 +22,17 @@ export interface PermissionEntry {
 
 export const IOS_USAGE_DESCRIPTION_KEYS: PermissionEntry[] = [
   {
+    id: "NSMicrophoneUsageDescription",
+    practiceId: "voice-search-audio",
+    reason: "Linked speech module usage description; voice input remains disabled on iOS.",
+  },
+  {
+    id: "NSSpeechRecognitionUsageDescription",
+    practiceId: "voice-search-audio",
+    reason: "Linked speech module usage description; voice input remains disabled on iOS.",
+  },
+
+  {
     id: "NSLocationWhenInUseUsageDescription",
     practiceId: "precise-location-active-navigation",
     reason: "Following the route while the app is open.",
@@ -52,6 +63,11 @@ export const ANDROID_PERMISSIONS: PermissionEntry[] = [
     id: "androidx.car.app.ACCESS_SURFACE",
     practiceId: "background-location-active-navigation",
     reason: "Map-only rendering on the Android Auto surface.",
+  },
+  {
+    id: "android.permission.RECORD_AUDIO",
+    practiceId: "voice-search-audio",
+    reason: "On-device voice search initiated by the microphone button.",
   },
   {
     id: "android.permission.INTERNET",
@@ -112,11 +128,11 @@ export const ANDROID_PERMISSIONS: PermissionEntry[] = [
  * Capabilities that must be absent, and why each would be a problem.
  *
  * Redundant with the allowlist by construction, and kept anyway: the message a
- * failing check prints is the useful artefact, and "RECORD_AUDIO is present"
+ * failing check prints is the useful artefact, and "CAMERA is present"
  * says much less than the reason it must not be.
  */
 export const FORBIDDEN_ANDROID_PERMISSIONS: Record<string, string> = {
-  "android.permission.RECORD_AUDIO": "The shell has no microphone feature and declares none.",
+  "android.permission.FOREGROUND_SERVICE_MICROPHONE": "Voice input is foreground only.",
   "android.permission.CAMERA": "The shell has no camera feature.",
   "android.permission.READ_CONTACTS": "Never requested.",
   "android.permission.READ_CALENDAR": "Never requested.",
@@ -142,7 +158,6 @@ export const FORBIDDEN_ANDROID_PERMISSIONS: Record<string, string> = {
 };
 
 export const FORBIDDEN_IOS_KEYS: Record<string, string> = {
-  NSMicrophoneUsageDescription: "The shell has no microphone feature.",
   NSCameraUsageDescription: "The shell has no camera feature.",
   NSContactsUsageDescription: "Never requested.",
   NSCalendarsUsageDescription: "Never requested.",

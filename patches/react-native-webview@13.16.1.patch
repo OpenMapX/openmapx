@@ -1,0 +1,20 @@
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+index 07f73fd00a083ebf5a03bffaa7bbadbd1f648505..0e50b1997e7775d2846081b7560e51868fa25ccb 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+@@ -145,6 +145,15 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+     @Override
+     public void onPermissionRequest(final PermissionRequest request) {
+ 
++        // OpenMapX: native voice input never authorizes WebView media capture.
++        for (String resource : request.getResources()) {
++            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)
++                    || PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
++                request.deny();
++                return;
++            }
++        }
++
+         grantedPermissions = new ArrayList<>();
+ 
+         ArrayList<String> requestedAndroidPermissions = new ArrayList<>();

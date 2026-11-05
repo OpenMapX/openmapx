@@ -125,6 +125,84 @@ function snapshotMessage(revision: number) {
   };
 }
 
+describe("voice dispatch", () => {
+  it("correlates availability to the probe, leaving unrelated requests pending", async () => {
+    const h = harness();
+    h.client.attach();
+    const ready = h.client.hello();
+    deliverHello(h); // Old APK hello has no voice capability.
+    await ready;
+    const first = h.client.request("voice.probe", {});
+    const firstId = JSON.parse(h.sent.at(-1) ?? "").messageId;
+    const second = h.client.request("voice.probe", {});
+    const secondId = JSON.parse(h.sent.at(-1) ?? "").messageId;
+    const reply = helloReply(firstId);
+    h.deliver({
+      ...reply,
+      type: "voice.availability",
+      payload: { forMessageId: secondId, available: false },
+    });
+    expect((await second).payload).toEqual({ forMessageId: secondId, available: false });
+    expect(h.timerCount()).toBe(1);
+    h.deliver({
+      ...reply,
+      type: "voice.availability",
+      payload: { forMessageId: firstId, available: true },
+    });
+    expect((await first).type).toBe("voice.availability");
+    expect(h.timerCount()).toBe(0);
+  });
+
+  it("times out an unanswered old-APK probe without losing negotiation", async () => {
+    const h = harness();
+    h.client.attach();
+    const ready = h.client.hello();
+    deliverHello(h);
+    const handshake = await ready;
+    const probe = h.client.request("voice.probe", {});
+    const rejected = expect(probe).rejects.toMatchObject({ code: "timeout" });
+    h.advance(READ_TIMEOUT_MS);
+    await rejected;
+    expect(h.client.negotiated).toBe(handshake);
+  });
+
+  it("validates fire-and-forget commands and broadcasts uncorrelated voice events", async () => {
+    const h = harness();
+    h.client.attach();
+    const ready = h.client.hello();
+    deliverHello(h);
+    expect((await ready).capabilities).not.toHaveProperty("speechInput");
+    const received: unknown[] = [];
+    const unsubscribe = h.client.subscribe((event) => received.push(event));
+    for (const type of ["voice.start", "voice.stop", "voice.cancel"] as const) {
+      h.client.send(type, {
+        requestId: "r",
+        ...(type === "voice.start" ? { locale: "de-DE" } : {}),
+      });
+      expect(JSON.parse(h.sent.at(-1) ?? "").type).toBe(type);
+    }
+    expect(h.client.pendingCount).toBe(0);
+    expect(() => h.client.send("voice.start", { requestId: "r", locale: "de_DE" })).toThrow(
+      BridgeError,
+    );
+    const event = {
+      ...snapshotMessage(1),
+      type: "voice.event",
+      payload: { requestId: "r", state: "partial", text: "Berlin" },
+    };
+    h.deliver({ ...event, channelNonce: "old" });
+    h.deliver({ ...event, protocolVersion: MOBILE_PROTOCOL_MAX + 1 });
+    h.deliver({ ...event, payload: { ...event.payload, extra: true } });
+    expect(received).toEqual([]);
+    h.deliver(event);
+    expect(received).toEqual([event]);
+    unsubscribe();
+    h.deliver(event);
+    expect(received).toHaveLength(1);
+    h.client.close();
+  });
+});
+
 describe("BridgeClient.attach", () => {
   it("attaches inside the shell", () => {
     const { client } = harness();

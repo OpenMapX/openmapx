@@ -6,7 +6,9 @@ import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
+import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
+import { isInstalledShell, shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
+import { useNativeVoiceInput } from "@/lib/mobile/useNativeVoiceInput";
 import { useHydrated } from "@/lib/useHydrated";
 
 interface SpeechRecognitionAlternativeLike {
@@ -97,7 +99,8 @@ export interface VoiceSearchButtonProps {
 }
 
 /**
- * Microphone button that drives voice search via the Web Speech API. Renders
+ * Microphone button using native on-device input in a capable shell and the
+ * Web Speech API in the browser. The browser path renders
  * nothing until the browser is confirmed to expose SpeechRecognition (resolved
  * in an effect, not during render, so the first client render matches the
  * server — which has no `window` — and avoids a hydration mismatch; the button
@@ -107,9 +110,9 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
   const t = useTranslations("search");
   const locale = useLocale();
 
-  // The installed shell declares no microphone use, so asking for one there is
-  // a store rejection rather than a feature. Defer the browser-only lookup
-  // until after hydration so the initial client render still matches SSR.
+  const nativeInput = useNativeVoiceInput();
+  const inShell = isInstalledShell();
+  // Browser capture remains forbidden in the shell, even before negotiation.
   const speechCtor =
     useHydrated() && shellFeatureBoundary().microphone ? getSpeechRecognition() : undefined;
 
@@ -121,6 +124,7 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
   const voiceSessionRef = useRef(0);
   // Surfaced when dictation fails (permission blocked, no network, etc.) so the
   // mic button reports the reason instead of silently doing nothing.
+  const platform = useMobileRuntimeContext().handshake?.platform;
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
   // Keep the latest onResult without re-creating startVoiceSearch each render.
@@ -130,6 +134,31 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
   }, [onResult]);
 
   const startVoiceSearch = useCallback(() => {
+    if (inShell) {
+      if (!nativeInput) return;
+      setVoiceError(null);
+      setListening(true);
+      nativeInput.start(speechLang(locale), {
+        onPartial: (text) => onResultRef.current(text, false),
+        onFinal: (text) => onResultRef.current(text, true),
+        onEnd: () => setListening(false),
+        onError: (error) => {
+          setListening(false);
+          const key =
+            error === "not-allowed"
+              ? platform === "ios"
+                ? "voiceErrorNotAllowedAppIos"
+                : "voiceErrorNotAllowedApp"
+              : error === "language-not-supported"
+                ? platform === "ios"
+                  ? "voiceErrorLanguageAppIos"
+                  : "voiceErrorLanguageApp"
+                : voiceErrorKey(error);
+          setVoiceError(t(key));
+        },
+      });
+      return;
+    }
     if (!speechCtor) return;
     setVoiceError(null);
     const session = ++voiceSessionRef.current;
@@ -209,17 +238,22 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
         if (voiceSessionRef.current !== session) return; // cancelled meanwhile
         beginRecognition();
       });
-  }, [speechCtor, locale, t]);
+  }, [speechCtor, locale, t, inShell, nativeInput, platform]);
 
   const toggleVoiceSearch = useCallback(() => {
     if (listening) {
+      if (inShell) {
+        nativeInput?.stop();
+        setListening(false);
+        return;
+      }
       voiceSessionRef.current++; // invalidate any pending getUserMedia preflight
       recognitionRef.current?.stop();
       setListening(false);
     } else {
       startVoiceSearch();
     }
-  }, [listening, startVoiceSearch]);
+  }, [listening, startVoiceSearch, inShell, nativeInput]);
 
   // Stop recognition if the component unmounts mid-listen (and invalidate any
   // in-flight getUserMedia preflight so it can't start recognition after unmount).
@@ -231,7 +265,7 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
     [],
   );
 
-  if (!speechCtor) return null;
+  if (inShell ? !nativeInput : !speechCtor) return null;
 
   return (
     <>

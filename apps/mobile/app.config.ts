@@ -74,6 +74,7 @@ const config: ExpoConfig = {
       backgroundColor: BRAND_COLOR,
     },
     permissions: [
+      "android.permission.RECORD_AUDIO",
       "android.permission.INTERNET",
       "android.permission.ACCESS_COARSE_LOCATION",
       "android.permission.ACCESS_FINE_LOCATION",
@@ -92,13 +93,13 @@ const config: ExpoConfig = {
       "android.permission.RECEIVE_BOOT_COMPLETED",
     ],
     // Permissions some bundled Expo modules declare by default but this app
-    // must not ship: no remote push, no exact alarms, no media/microphone
+    // must not ship: no remote push, no exact alarms, no media/background-microphone
     // capability.
     blockedPermissions: [
       "com.google.android.c2dm.permission.RECEIVE",
       "android.permission.SCHEDULE_EXACT_ALARM",
       "android.permission.USE_EXACT_ALARM",
-      "android.permission.RECORD_AUDIO",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
       "android.permission.CAMERA",
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -165,6 +166,13 @@ const config: ExpoConfig = {
         icon: "./assets/notification-icon.png",
         color: BRAND_COLOR,
         enableBackgroundRemoteNotifications: false,
+      },
+    ],
+    [
+      "expo-speech-recognition",
+      {
+        microphonePermission: IOS_USAGE_DESCRIPTIONS.en.NSMicrophoneUsageDescription,
+        speechRecognitionPermission: IOS_USAGE_DESCRIPTIONS.en.NSSpeechRecognitionUsageDescription,
       },
     ],
     "expo-system-ui",

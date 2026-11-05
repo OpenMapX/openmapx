@@ -3,7 +3,7 @@
  *
  * Deliberately synchronous and answerable on the very first render. Several
  * decisions depend on it that cannot wait for a handshake: whether to offer
- * microphone input and whether the browser navigation engine may start at all.
+ * browser microphone input and whether the browser navigation engine may start at all.
  *
  * So the descriptor the shell injects before any page script is the authority
  * here, not the handshake. A page that sees the descriptor is in the shell, even
@@ -63,7 +63,7 @@ export function isInstalledShell(scope: unknown = globalThis): boolean {
  * depend on the protocol version, so none of them wait for a handshake.
  */
 export interface ShellFeatureBoundary {
-  /** Browser microphone access, including voice search. */
+  /** Browser microphone access; native voice input is a separate capability. */
   microphone: boolean;
   /** The browser's own geolocation watch. */
   browserGeolocationWatch: boolean;
@@ -87,8 +87,7 @@ const BROWSER_BOUNDARY: ShellFeatureBoundary = {
 };
 
 const SHELL_BOUNDARY: ShellFeatureBoundary = {
-  // The shell declares no microphone use, and a store build that asks for one it
-  // never declared is a rejection.
+  // Native owns voice input. The embedded page never captures microphone audio.
   microphone: false,
   // Native owns the one location stream. A second producer would race it.
   browserGeolocationWatch: false,
