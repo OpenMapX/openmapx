@@ -5026,6 +5026,10 @@
     "retry": "Erneut versuchen",
     "partialSearch": "Einige Metadaten konnten nicht geladen werden. Die Seitenziele bleiben verfügbar.",
     "noSearchResults": "Kein passendes Verwaltungsziel.",
+    "hostUnavailable": "Host-Vorgänge sind bei dieser gehosteten Bereitstellung nicht verfügbar. Cache und Konfigurationsübertragung bleiben verfügbar.",
+    "chooseTopic": "Thema auswählen",
+    "authorityChanged": "Der Administratorzugriff hat sich geändert. Lade die Seite neu, um Konto und Berechtigungen zu bestätigen.",
+    "reload": "Neu laden",
     "hostedData": "Hostverwaltete Datenaktionen sind in dieser gehosteten Bereitstellung nicht verfügbar. Transit und Abdeckung bleiben verfügbar."
   },
   "adminDrafts": {

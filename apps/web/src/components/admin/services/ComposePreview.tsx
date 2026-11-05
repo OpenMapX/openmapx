@@ -123,7 +123,8 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         onCancel={() => setRenderIntent(null)}
       />
       <Typography
-        variant="h5"
+        component="h3"
+        variant="subtitle1"
         sx={{
           fontWeight: 700,
           mb: 2,

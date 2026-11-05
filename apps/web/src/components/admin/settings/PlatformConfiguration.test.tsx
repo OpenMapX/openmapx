@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { PlatformConfiguration } from "./PlatformConfiguration";
+import type { PlatformScope } from "./platformScope";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), preview: vi.fn(), apply: vi.fn(), job: vi.fn() }));
 vi.mock("@openmapx/core", async () => ({
@@ -77,12 +78,12 @@ const preview = {
   previewFingerprint: "b".repeat(64),
 };
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
-function mount() {
+function mount(scope: PlatformScope = "deployment") {
   const cache = createTestQueryClient();
   caches.push(cache);
   return render(
     <QueryClientProvider client={cache}>
-      <PlatformConfiguration />
+      <PlatformConfiguration scope={scope} />
     </QueryClientProvider>,
   );
 }
@@ -107,7 +108,7 @@ afterEach(() => {
   });
 });
 it("locks host fields until explicit adoption, previews without saving and binds apply to that preview", async () => {
-  mount();
+  mount("retention");
   const retention = await screen.findByLabelText("Backup retention (days)");
   expect(retention).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Manage Backup retention (days) in UI" }));
@@ -128,6 +129,92 @@ it("locks host fields until explicit adoption, previews without saving and binds
     confirmations,
   });
   expect(await screen.findByText("Job original-job")).toBeVisible();
+});
+it("exposes only the fields owned by retention and refuses a hidden domain change", async () => {
+  mocks.preview.mockResolvedValue({
+    status: 200,
+    data: {
+      preview: { ...preview, values: { ...values, domain: "unexpected.example.test" } },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  mount("retention");
+  await screen.findByLabelText("Backup retention (days)");
+  expect(screen.queryByLabelText("Domain")).toBeNull();
+  expect(screen.queryByLabelText("Release selector")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  await screen.findByText(/Preview unavailable/);
+  expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+});
+it("does not preview an empty adopted default region", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Manage Default region in UI" }));
+  expect(screen.getByLabelText("Default region")).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
+  expect(mocks.preview).not.toHaveBeenCalled();
+});
+it("removes an old unscoped preview instead of loading it in a scoped owner", async () => {
+  const key = "openmapx-platform-preview:http://admin.test:admin-a";
+  sessionStorage.setItem(
+    key,
+    JSON.stringify({ preview, expiresAt: new Date(Date.now() + 600000).toISOString() }),
+  );
+  mount("retention");
+  await screen.findByLabelText("Backup retention (days)");
+  expect(sessionStorage.getItem(key)).toBeNull();
+  expect(screen.queryByText("Review platform changes")).toBeNull();
+});
+it("reuses the same apply intent after an unconfirmed transport outcome", async () => {
+  mocks.apply.mockRejectedValueOnce(Error("offline"));
+  mount();
+  await screen.findByLabelText("Domain");
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Apply reviewed changes" }));
+  await screen.findByText(/Apply was not confirmed/);
+  fireEvent.click(screen.getByRole("button", { name: "Apply reviewed changes" }));
+  await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(2));
+  expect(mocks.apply.mock.calls[0][1]).toEqual(mocks.apply.mock.calls[1][1]);
+});
+it("copies the fresh full baseline before overlaying a retention edit", async () => {
+  const fresh = {
+    ...initial,
+    pending: [],
+    configuration: { version: 1, domain: { source: "database", value: "fresh.example.test" } },
+    values: { ...values, domain: "fresh.example.test" },
+    sources: { ...sources, domain: "database" },
+  };
+  let reads = 0;
+  mocks.get.mockImplementation(async () => ({
+    status: 200,
+    data: ++reads === 1 ? { ...initial, pending: [] } : fresh,
+  }));
+  mocks.preview.mockResolvedValue({
+    status: 200,
+    data: {
+      preview: {
+        ...preview,
+        ...fresh,
+        configuration: {
+          ...fresh.configuration,
+          backupRetentionDays: { source: "database", value: 60 },
+        },
+        oldOrigin: "https://fresh.example.test",
+        newOrigin: "https://fresh.example.test",
+      },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  mount("retention");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Manage Backup retention (days) in UI" }),
+  );
+  fireEvent.change(screen.getByLabelText("Backup retention (days)"), { target: { value: "60" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  await screen.findByText("Review platform changes");
+  expect((mocks.preview.mock.calls[0][0] as { changes: unknown }).changes).toEqual({
+    ...fresh.configuration,
+    backupRetentionDays: { source: "database", value: 60 },
+  });
 });
 it("invalidates a preview on edit and preserves the draft on conflict", async () => {
   mocks.preview.mockResolvedValue({ status: 409, data: { error: "changed" } });

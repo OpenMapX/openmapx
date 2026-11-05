@@ -39,10 +39,15 @@ export function AdminTopicNavigation({
         size="small"
         fullWidth
         label={t("topic")}
-        value={entries.find((entry) => entry.id === active)?.href ?? entries[0].href}
+        value={entries.find((entry) => entry.id === active)?.href ?? ""}
         onChange={(event) => router.push(event.target.value)}
         sx={{ display: { lg: "none" }, mb: 1 }}
       >
+        {!entries.some((entry) => entry.id === active) && (
+          <MenuItem value="" disabled>
+            {t("chooseTopic")}
+          </MenuItem>
+        )}
         {entries.map((entry) => (
           <MenuItem key={entry.id} value={entry.href}>
             {t(`destinations.${entry.id}.label`)}

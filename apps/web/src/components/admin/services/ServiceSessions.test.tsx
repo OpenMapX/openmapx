@@ -6,7 +6,7 @@ import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor
 import { job } from "../activity/__tests__/fixtures";
 import { ComposePreview } from "./ComposePreview";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
-import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
+import { ServiceLogsDrawer, ServiceLogsPanel } from "./ServiceLogsDrawer";
 
 let apiUrl = "http://admin.test";
 const toast = vi.fn();
@@ -211,6 +211,30 @@ describe("Compose generated consumers", () => {
   });
 });
 describe("generated log sessions", () => {
+  it("owns one inline stream, aborts on tab disposal and starts a fresh read on return", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      signals.push(init.signal as AbortSignal);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("inline output\n"));
+          },
+        }),
+        { headers: { "content-type": "text/plain" } },
+      );
+    });
+    const view = mount(<ServiceLogsPanel active serviceId="demo" serviceName="Demo" />);
+    await screen.findByText("inline output");
+    expect(signals).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    view.replace(<ServiceLogsPanel active={false} serviceId="demo" serviceName="Demo" />);
+    await waitFor(() => expect(signals[0].aborted).toBe(true));
+    expect(screen.queryByText("inline output")).toBeNull();
+    view.replace(<ServiceLogsPanel active serviceId="demo" serviceName="Demo" />);
+    await screen.findByText("inline output");
+    expect(signals).toHaveLength(2);
+  });
   it("decodes split UTF8/newlines, preserves blank output and keeps the last1000 lines", async () => {
     const encoder = new TextEncoder();
     const bytes = encoder.encode("α\n\nline\nlast😀");

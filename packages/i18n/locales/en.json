@@ -5026,6 +5026,10 @@
     "retry": "Retry",
     "partialSearch": "Some metadata could not be loaded. Page destinations are still available.",
     "noSearchResults": "No matching administration destination.",
+    "hostUnavailable": "Host operations are unavailable on this hosted deployment. Cache and configuration transfer remain available.",
+    "chooseTopic": "Choose a topic",
+    "authorityChanged": "Administrator access changed. Reload to confirm the current account and permissions.",
+    "reload": "Reload",
     "hostedData": "Host-managed data operations are unavailable on this hosted deployment. Transit and Coverage remain available."
   },
   "adminDrafts": {

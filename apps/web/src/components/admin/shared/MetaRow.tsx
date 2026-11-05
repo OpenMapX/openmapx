@@ -15,23 +15,26 @@ export function MetaRow({ label, value, labelWidth = 130 }: MetaRowProps) {
   if (value === null || value === undefined || value === "") return null;
   return (
     <Stack
-      direction="row"
+      component="dl"
+      direction={{ xs: "column", sm: "row" }}
       sx={{
-        gap: 1,
+        m: 0,
+        gap: { xs: 0.25, sm: 1 },
         alignItems: "flex-start",
       }}
     >
       <Typography
+        component="dt"
         variant="body2"
         sx={{
           color: "text.secondary",
-          minWidth: labelWidth,
+          minWidth: { sm: labelWidth },
           flexShrink: 0,
         }}
       >
         {label}
       </Typography>
-      <Box>
+      <Box component="dd" sx={{ m: 0, minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
         {typeof value === "string" ? <Typography variant="body2">{value}</Typography> : value}
       </Box>
     </Stack>

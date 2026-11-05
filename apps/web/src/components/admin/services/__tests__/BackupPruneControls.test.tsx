@@ -90,7 +90,7 @@ it("refuses an expired preview and links to the single source-aware policy edito
   setup(true);
   expect(screen.getByRole("link", { name: "Edit backup retention policy" })).toHaveAttribute(
     "href",
-    "/admin/system/deployment#backup-retention",
+    "/admin/system/backups#backup-retention",
   );
   fireEvent.click(screen.getByRole("button", { name: "Preview expired backups" }));
   await screen.findByText(/30 days.*database/);

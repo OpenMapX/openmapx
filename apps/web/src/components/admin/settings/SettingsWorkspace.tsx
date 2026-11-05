@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import type { SETTINGS_TOPICS } from "@/lib/admin/adminNavigation";
+import { useAdminNavigationAccess } from "../shared/AdminNavigationContext";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { SystemSettings } from "./SystemSettings";
 
@@ -19,6 +20,7 @@ const GROUPS = {
 };
 export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[number] }) {
   const t = useTranslations("adminNavigation");
+  const { selfHosted } = useAdminNavigationAccess();
   const params = useSearchParams();
   const field = params.get("field");
   return (
@@ -31,15 +33,18 @@ export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[n
         <Alert
           severity="info"
           action={
-            <Button component={Link} href="/admin/system/deployment">
-              {t("destinations.deployment.label")}
-            </Button>
+            selfHosted !== false ? (
+              <Button component={Link} href="/admin/system/deployment">
+                {t("destinations.deployment.label")}
+              </Button>
+            ) : undefined
           }
         >
           {t("applicationUrlHelp")}
         </Alert>
       )}
       <SystemSettings
+        flatSections
         key={topic}
         showHeader={false}
         showTransfer={false}
@@ -67,7 +72,7 @@ export function LegacySettingsRedirect() {
   useEffect(() => {
     router.replace(
       window.location.hash === "#backup-retention"
-        ? "/admin/system/deployment#backup-retention"
+        ? "/admin/system/backups#backup-retention"
         : "/admin/settings/general",
     );
   }, [router]);

@@ -187,7 +187,7 @@ There are two log surfaces, and they answer different questions.
 ### Service container logs
 
 For "what is this backend service doing right now," open a service's **Logs** tab
-(or the **Logs** button) under `/admin/system/services/<id>`. It streams that container's
+(or **More actions → Logs**) under `/admin/system/services/<id>`. It streams that container's
 output live, tailing the most recent lines. It uses the same output as the equivalent
 `services logs` CLI command, in the browser. This is the place to watch a build
 finish or diagnose a container that won't come up. Full coverage is in

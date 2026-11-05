@@ -40,6 +40,12 @@ import { useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AuthPolicySettings } from "./AuthPolicySettings";
 import { ConfigurationMigrationPanel } from "./ConfigurationMigrationPanel";
+import {
+  configuredEmailProvider,
+  EMAIL_PROVIDER_NAMES,
+  EmailSettingsSection,
+  savedEmailProvider,
+} from "./EmailSettingsSection";
 
 export interface ResolvedSetting {
   group: string;
@@ -409,6 +415,7 @@ function SettingsGroupPanel({
   anchorId,
   defaultExpanded,
   focusKey,
+  flat = false,
   subgroupMeta = SUBGROUP_META,
   text,
 }: {
@@ -420,6 +427,7 @@ function SettingsGroupPanel({
   anchorId?: string;
   defaultExpanded?: boolean;
   focusKey?: string;
+  flat?: boolean;
   subgroupMeta?: Record<string, { label: string; description?: string }>;
   text: SettingsEditorText;
 }) {
@@ -502,6 +510,8 @@ function SettingsGroupPanel({
     },
   });
 
+  const emailGroup = group.settings.some((setting) => setting.group === "email");
+  const emailProvider = savedEmailProvider(serverValues);
   const visibleSettings = group.settings.filter((s) => isVisible(s, renderedValues));
   // Reflect only the settings the operator can actually see: a setting hidden
   // by its showWhen predicate (e.g. the MapTiler key while the provider is
@@ -509,6 +519,201 @@ function SettingsGroupPanel({
   // contradicts an otherwise-editable field.
   const hasEnvOverrides = visibleSettings.some((s) => s.envOverride);
 
+  const contents = (
+    <>
+      {focusKey &&
+        group.settings.some(
+          (setting) => setting.key === focusKey && !isVisible(setting, renderedValues),
+        ) && (
+          <Alert severity="info">
+            This setting is hidden by the current policy or provider selection. Change that
+            selection only if you intend to change the effective configuration.
+          </Alert>
+        )}
+      <Stack
+        sx={{
+          gap: 2.5,
+        }}
+      >
+        {conflicts.length > 0 && (
+          <Alert
+            severity="warning"
+            action={
+              <Button
+                onClick={() => draft.keepEdits(group.settings.map((setting) => setting.key))}
+                disabled={save.isPending}
+              >
+                Keep my edits
+              </Button>
+            }
+          >
+            Saved values changed for {conflicts.join(", ")}. Review or discard your edits before
+            saving.
+          </Alert>
+        )}
+        {emailGroup && (
+          <Typography variant="body2" color="text.secondary">
+            Saved provider: {EMAIL_PROVIDER_NAMES[emailProvider]}. Priority: EmailLabs → Lettermint
+            → SMTP. Other configured providers remain available as fallbacks; send a test message to
+            check delivery.
+          </Typography>
+        )}
+        {groupBySubgroup(visibleSettings).map((section) => (
+          <EmailSettingsSection
+            key={section.subgroup ?? "__"}
+            provider={emailGroup ? section.subgroup : undefined}
+            label={section.subgroup ? subgroupMeta[section.subgroup]?.label : undefined}
+            description={section.subgroup ? subgroupMeta[section.subgroup]?.description : undefined}
+            focused={section.settings.some((setting) => setting.key === focusKey)}
+            selected={emailGroup && section.subgroup === emailProvider}
+            configured={configuredEmailProvider(section.subgroup, serverValues)}
+          >
+            {(!emailGroup ||
+              !["emaillabs", "lettermint", "smtp"].includes(section.subgroup ?? "")) &&
+              section.subgroup &&
+              subgroupMeta[section.subgroup] && (
+                <Stack
+                  sx={{
+                    gap: 0.25,
+                  }}
+                >
+                  <Typography
+                    variant="overline"
+                    sx={{
+                      color: "text.secondary",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {subgroupMeta[section.subgroup].label}
+                  </Typography>
+                  {subgroupMeta[section.subgroup].description && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
+                      {subgroupMeta[section.subgroup].description}
+                    </Typography>
+                  )}
+                </Stack>
+              )}
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(280px, 420px))" },
+                gap: 2,
+                alignItems: "start",
+              }}
+            >
+              {section.settings.map((s) => (
+                <Stack
+                  id={`setting-${s.key}`}
+                  key={s.key}
+                  sx={{ gap: 0.5, minWidth: 0, scrollMarginTop: 80 }}
+                >
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <SettingField
+                      key={s.key}
+                      setting={s}
+                      value={renderedValues[s.key]}
+                      onChange={(v) =>
+                        s.secret
+                          ? setSecretValues((previous) => ({ ...previous, [s.key]: v }))
+                          : draft.setValues((previous) => ({ ...previous, [s.key]: v }))
+                      }
+                      onValidityChange={(valid) =>
+                        setInvalidKeys((current) => {
+                          const next = new Set(current);
+                          if (valid) next.delete(s.key);
+                          else next.add(s.key);
+                          return next;
+                        })
+                      }
+                      text={text}
+                    />
+                    {s.envOverride && s.envVar && (
+                      <EnvOverrideBadge envVar={s.envVar} text={text} />
+                    )}
+                  </Stack>
+                  {s.source === "database" && !s.envOverride && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        pl: 0.5,
+                      }}
+                    >
+                      {text.databaseSource}
+                    </Typography>
+                  )}
+                </Stack>
+              ))}
+            </Box>
+          </EmailSettingsSection>
+        ))}
+
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={
+              save.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
+            }
+            onClick={() => save.mutate()}
+            disabled={
+              save.isPending ||
+              dirtyKeys.length === 0 ||
+              conflicts.length > 0 ||
+              invalidKeys.size > 0 ||
+              visibleSettings.every((s) => s.envOverride)
+            }
+          >
+            {text.save(group.label)}
+          </Button>
+          {dirtyKeys.length > 0 && (
+            <Button
+              size="small"
+              disabled={save.isPending}
+              onClick={() => {
+                draft.discard(group.settings.map((setting) => setting.key));
+                setSecretValues({});
+                setInvalidKeys(new Set());
+              }}
+            >
+              Discard
+            </Button>
+          )}
+          {extra}
+          {save.isError && (
+            <Typography variant="caption" color="error">
+              {text.saveFailed}
+            </Typography>
+          )}
+        </Stack>
+      </Stack>
+    </>
+  );
+  if (flat)
+    return (
+      <Box component="section" id={anchorId} sx={{ maxWidth: 760 }}>
+        {contents}
+      </Box>
+    );
   return (
     <Accordion
       id={anchorId}
@@ -552,178 +757,7 @@ function SettingsGroupPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails sx={{ px: 2, pt: 1.5, pb: 2, borderTop: 1, borderColor: "divider" }}>
-        {focusKey &&
-          group.settings.some(
-            (setting) => setting.key === focusKey && !isVisible(setting, renderedValues),
-          ) && (
-            <Alert severity="info">
-              This setting is hidden by the current policy or provider selection. Change that
-              selection only if you intend to change the effective configuration.
-            </Alert>
-          )}
-        <Stack
-          sx={{
-            gap: 2.5,
-          }}
-        >
-          {conflicts.length > 0 && (
-            <Alert
-              severity="warning"
-              action={
-                <Button
-                  onClick={() => draft.keepEdits(group.settings.map((setting) => setting.key))}
-                  disabled={save.isPending}
-                >
-                  Keep my edits
-                </Button>
-              }
-            >
-              Saved values changed for {conflicts.join(", ")}. Review or discard your edits before
-              saving.
-            </Alert>
-          )}
-          {groupBySubgroup(visibleSettings).map((section) => (
-            <Stack
-              key={section.subgroup ?? "__"}
-              sx={{
-                gap: 1.25,
-              }}
-            >
-              {section.subgroup && subgroupMeta[section.subgroup] && (
-                <Stack
-                  sx={{
-                    gap: 0.25,
-                  }}
-                >
-                  <Typography
-                    variant="overline"
-                    sx={{
-                      color: "text.secondary",
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {subgroupMeta[section.subgroup].label}
-                  </Typography>
-                  {subgroupMeta[section.subgroup].description && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      {subgroupMeta[section.subgroup].description}
-                    </Typography>
-                  )}
-                </Stack>
-              )}
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(280px, 420px))" },
-                  gap: 2,
-                  alignItems: "start",
-                }}
-              >
-                {section.settings.map((s) => (
-                  <Stack
-                    id={`setting-${s.key}`}
-                    key={s.key}
-                    sx={{ gap: 0.5, minWidth: 0, scrollMarginTop: 80 }}
-                  >
-                    <Stack
-                      direction="row"
-                      sx={{
-                        alignItems: "center",
-                        gap: 1,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <SettingField
-                        key={s.key}
-                        setting={s}
-                        value={renderedValues[s.key]}
-                        onChange={(v) =>
-                          s.secret
-                            ? setSecretValues((previous) => ({ ...previous, [s.key]: v }))
-                            : draft.setValues((previous) => ({ ...previous, [s.key]: v }))
-                        }
-                        onValidityChange={(valid) =>
-                          setInvalidKeys((current) => {
-                            const next = new Set(current);
-                            if (valid) next.delete(s.key);
-                            else next.add(s.key);
-                            return next;
-                          })
-                        }
-                        text={text}
-                      />
-                      {s.envOverride && s.envVar && (
-                        <EnvOverrideBadge envVar={s.envVar} text={text} />
-                      )}
-                    </Stack>
-                    {s.source === "database" && !s.envOverride && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: "text.secondary",
-                          pl: 0.5,
-                        }}
-                      >
-                        {text.databaseSource}
-                      </Typography>
-                    )}
-                  </Stack>
-                ))}
-              </Box>
-            </Stack>
-          ))}
-
-          <Stack
-            direction="row"
-            sx={{
-              alignItems: "center",
-              gap: 1,
-              flexWrap: "wrap",
-            }}
-          >
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={
-                save.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
-              }
-              onClick={() => save.mutate()}
-              disabled={
-                save.isPending ||
-                dirtyKeys.length === 0 ||
-                conflicts.length > 0 ||
-                invalidKeys.size > 0 ||
-                visibleSettings.every((s) => s.envOverride)
-              }
-            >
-              {text.save(group.label)}
-            </Button>
-            {dirtyKeys.length > 0 && (
-              <Button
-                size="small"
-                disabled={save.isPending}
-                onClick={() => {
-                  draft.discard(group.settings.map((setting) => setting.key));
-                  setSecretValues({});
-                  setInvalidKeys(new Set());
-                }}
-              >
-                Discard
-              </Button>
-            )}
-            {extra}
-            {save.isError && (
-              <Typography variant="caption" color="error">
-                {text.saveFailed}
-              </Typography>
-            )}
-          </Stack>
-        </Stack>
+        {contents}
       </AccordionDetails>
     </Accordion>
   );
@@ -956,6 +990,7 @@ export function SystemSettings({
   text = DEFAULT_TEXT,
   onSettingsSaved,
   focusKey,
+  flatSections = false,
 }: {
   sections?: readonly SettingsEditorSection[];
   showHeader?: boolean;
@@ -965,6 +1000,7 @@ export function SystemSettings({
   text?: SettingsEditorText;
   onSettingsSaved?: () => void | Promise<void>;
   focusKey?: string;
+  flatSections?: boolean;
 } = {}) {
   const env = useEnv();
   const draftStore = useContext(AdminDraftContext);
@@ -1082,6 +1118,7 @@ export function SystemSettings({
           description={section?.description}
           defaultExpanded={section?.defaultExpanded}
           focusKey={focusKey}
+          flat={flatSections}
           subgroupMeta={subgroupMeta}
           text={text}
           extra={

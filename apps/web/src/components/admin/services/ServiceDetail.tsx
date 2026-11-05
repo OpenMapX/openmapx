@@ -1,10 +1,10 @@
 "use client";
 
-import ArticleIcon from "@mui/icons-material/Article";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import StopIcon from "@mui/icons-material/Stop";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -12,6 +12,8 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
+import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
@@ -25,6 +27,7 @@ import type {
 } from "@openmapx/core/api-contracts";
 import Link from "next/link";
 import { useState } from "react";
+import Menu from "@/components/ui/Menu";
 import {
   useServiceAction,
   useServiceConfig,
@@ -37,6 +40,7 @@ import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminJobLink } from "../activity/AdminJobLink";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
 import { MetaRow } from "../shared/MetaRow";
@@ -48,7 +52,7 @@ import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 import { ServiceCredentials } from "./ServiceCredentials";
-import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
+import { ServiceLogsPanel } from "./ServiceLogsDrawer";
 
 function OverviewTab({ data }: { data: ServiceDetailData }) {
   const { manifest } = data;
@@ -56,20 +60,12 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
-      <Card variant="outlined">
-        <CardContent>
-          <Typography
-            variant="subtitle2"
-            gutterBottom
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Manifest
-          </Typography>
+      <Accordion variant="outlined" disableGutters>
+        <AccordionSummary>Technical metadata</AccordionSummary>
+        <AccordionDetails>
           <Stack
             sx={{
               gap: 1,
@@ -139,24 +135,8 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
               }
             />
           </Stack>
-        </CardContent>
-      </Card>
-      {manifest.description && (
-        <Card variant="outlined">
-          <CardContent>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Description
-            </Typography>
-            <Typography variant="body2">{manifest.description}</Typography>
-          </CardContent>
-        </Card>
-      )}
+        </AccordionDetails>
+      </Accordion>
       {manifest.provides && manifest.provides.length > 0 && (
         <Card variant="outlined">
           <CardContent>
@@ -239,17 +219,9 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
         </Card>
       )}
       {manifest.envVars && manifest.envVars.length > 0 && (
-        <Card variant="outlined">
-          <CardContent>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Environment Variables
-            </Typography>
+        <Accordion variant="outlined" disableGutters>
+          <AccordionSummary>Environment variables</AccordionSummary>
+          <AccordionDetails>
             <Stack
               sx={{
                 gap: 0.75,
@@ -258,7 +230,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
               {manifest.envVars.map((v) => (
                 <Stack
                   key={v.name}
-                  direction="row"
+                  direction={{ xs: "column", sm: "row" }}
                   sx={{
                     gap: 1,
                     alignItems: "flex-start",
@@ -269,7 +241,8 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                     sx={{
                       fontFamily: "monospace",
                       fontWeight: 500,
-                      minWidth: 200,
+                      minWidth: { sm: 200 },
+                      overflowWrap: "anywhere",
                       flexShrink: 0,
                     }}
                   >
@@ -311,8 +284,8 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 </Stack>
               ))}
             </Stack>
-          </CardContent>
-        </Card>
+          </AccordionDetails>
+        </Accordion>
       )}
       {manifest.exposure && (
         <Card variant="outlined">
@@ -533,7 +506,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
     "logs",
     "manifest",
   ]);
-  const [logsOpen, setLogsOpen] = useState(false);
+  const [actionMenu, setActionMenu] = useState<HTMLElement | null>(null);
   const [lastActionJobId, setLastActionJobId] = useState<string | null>(null);
   const showToast = useAdminToast();
 
@@ -588,162 +561,86 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
 
   function handleTabChange(_: React.SyntheticEvent, value: number) {
     setTab(value);
-    // Auto-open the logs drawer when the Logs tab is selected.
-    if (TABS[value] === "Logs" && !reason("logs")) {
-      setLogsOpen(true);
-    }
   }
 
   return (
     <Stack
       sx={{
-        gap: 3,
+        gap: 2,
       }}
     >
-      <Stack sx={{ gap: 1 }}>
-        <Stack
-          direction="row"
-          sx={{
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 1.5,
-          }}
-        >
-          <Stack
-            direction="row"
-            sx={{
-              alignItems: "center",
-              gap: 1.5,
-              flexWrap: "wrap",
-              minWidth: 0,
-              flexGrow: 1,
-            }}
-          >
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {manifest.name}
-            </Typography>
+      <AdminPageHeader
+        title={manifest.name}
+        subtitle={`${manifest.id} · v${manifest.version}`}
+        badges={
+          <>
             <StatusBadge quality={manifest.quality} />
             <Tooltip title={`Container status: ${statusLabel(data.status)}`}>
               <Chip
                 label={statusLabel(data.status)}
                 size="small"
                 color={statusColor(data.status)}
-                variant={data.status === "running" ? "filled" : "outlined"}
-                sx={{ fontSize: "0.7rem" }}
-              />
-            </Tooltip>
-            {!data.enabled && (
-              <Chip
-                label="Disabled"
-                size="small"
-                color="default"
                 variant="outlined"
-                sx={{ fontSize: "0.7rem" }}
               />
-            )}
-          </Stack>
-          <Stack
-            direction="row"
-            sx={{
-              gap: 1,
-              flexWrap: "wrap",
-              alignItems: "center",
-              flexShrink: 1,
-              minWidth: 0,
-              maxWidth: "100%",
-              width: { xs: "100%", sm: "auto" },
-            }}
-          >
-            <Tooltip
-              title={
-                reason(startAction) ??
-                "Apply the latest configuration and hardlink plan to this service."
-              }
-            >
-              <span>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="success"
-                  startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
-                  onClick={() => {
-                    void runAction(startAction).catch(() => {});
-                  }}
-                  disabled={isBusy || Boolean(reason(startAction))}
-                >
-                  {data.status === "running" ? "Apply changes" : "Start"}
-                </Button>
-              </span>
             </Tooltip>
+            {!data.enabled && <Chip label="Disabled" size="small" variant="outlined" />}
+          </>
+        }
+        actions={
+          <>
             <Button
+              variant="contained"
               size="small"
-              variant="outlined"
-              color="error"
-              startIcon={isBusy ? <CircularProgress size={14} /> : <StopIcon />}
-              onClick={() => {
-                void runAction("stop").catch(() => {});
-              }}
-              disabled={isBusy || Boolean(reason("stop"))}
-              title={reason("stop") ?? undefined}
+              startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
+              title={reason(startAction) ?? undefined}
+              disabled={isBusy || !!reason(startAction)}
+              onClick={() => void runAction(startAction).catch(() => {})}
             >
-              Stop
+              {data.status === "running" ? "Apply changes" : "Start"}
             </Button>
-            <Tooltip title={reason("restart") ?? "Restart the existing owned container."}>
-              <span>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-                  onClick={() => {
-                    void runAction("restart").catch(() => {});
-                  }}
-                  disabled={isBusy || Boolean(reason("restart"))}
-                >
-                  Restart
-                </Button>
-              </span>
-            </Tooltip>
             <Button
-              size="small"
               variant="outlined"
-              startIcon={<ArticleIcon />}
-              onClick={() => {
-                if (!reason("logs")) setLogsOpen(true);
-              }}
-              disabled={Boolean(reason("logs"))}
-              title={reason("logs") ?? undefined}
+              size="small"
+              aria-haspopup="menu"
+              aria-expanded={!!actionMenu}
+              aria-controls={actionMenu ? "service-actions" : undefined}
+              onClick={(event) => setActionMenu(event.currentTarget)}
             >
-              Logs
+              More actions
             </Button>
             {lastActionJobId && <AdminJobLink id={lastActionJobId} source="application" />}
-          </Stack>
-        </Stack>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "text.secondary",
-            fontFamily: "monospace",
-          }}
-        >
-          {manifest.id} · v{manifest.version}
+          </>
+        }
+      />
+      {manifest.description && (
+        <Typography variant="body2" color="text.secondary">
+          {manifest.description}
         </Typography>
-        {manifest.description && (
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
+      )}
+      <Menu
+        id="service-actions"
+        anchorEl={actionMenu}
+        open={!!actionMenu}
+        onClose={() => setActionMenu(null)}
+      >
+        {(["stop", "restart", "logs"] as const).map((action) => (
+          <MenuItem
+            key={action}
+            disabled={isBusy || !!reason(action)}
+            onClick={() => {
+              setActionMenu(null);
+              if (action === "logs") setTab(3);
+              else void runAction(action).catch(() => {});
             }}
           >
-            {manifest.description}
-          </Typography>
-        )}
-      </Stack>
+            <ListItemText
+              primary={action === "logs" ? "Logs" : action === "stop" ? "Stop" : "Restart"}
+              secondary={reason(action) ?? undefined}
+              slotProps={{ secondary: { sx: { maxWidth: 320, whiteSpace: "normal" } } }}
+            />
+          </MenuItem>
+        ))}
+      </Menu>
       {[
         ...new Set(
           [reason(startAction), reason("stop"), reason("restart"), reason("logs")].filter(Boolean),
@@ -805,44 +702,15 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
             />
           )}
           {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
-          {tab === 3 && (
-            <Box
-              sx={{
-                py: 2,
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                Click "Logs" or switch to this tab to open the live log stream.
-              </Typography>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<ArticleIcon />}
-                onClick={() => {
-                  if (!reason("logs")) setLogsOpen(true);
-                }}
-                disabled={Boolean(reason("logs"))}
-                title={reason("logs") ?? undefined}
-                sx={{ mt: 1.5 }}
-              >
-                Open Logs Drawer
-              </Button>
-            </Box>
-          )}
+          {tab === 3 &&
+            (reason("logs") ? (
+              <CompactAlert severity="warning">{reason("logs")}</CompactAlert>
+            ) : (
+              <ServiceLogsPanel active serviceId={id} serviceName={manifest.name} />
+            ))}
           {tab === 4 && <ManifestTab data={data} />}
         </div>
       </Box>
-      <ServiceLogsDrawer
-        open={logsOpen && !reason("logs")}
-        onClose={() => setLogsOpen(false)}
-        serviceId={id}
-        serviceName={manifest.name}
-      />
     </Stack>
   );
 }

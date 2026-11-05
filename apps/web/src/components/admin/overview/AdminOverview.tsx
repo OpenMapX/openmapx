@@ -25,6 +25,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -217,215 +218,6 @@ export function AdminOverview() {
         }
       />
 
-      {/* Summary cards */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/status">
-            <Typography
-              variant="h4"
-              color={
-                data.systemHealth.status === "pass"
-                  ? "success.main"
-                  : data.systemHealth.status === "degraded"
-                    ? "warning.main"
-                    : "error.main"
-              }
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {data.systemHealth.status === "pass" ? "OK" : data.systemHealth.unhealthyCount}
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {data.systemHealth.status === "pass"
-                ? "All systems operational"
-                : `${data.systemHealth.unhealthyCount} unhealthy`}
-            </Typography>
-          </StatCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Users" icon={<GroupIcon />} href="/admin/users">
-            <Typography
-              variant="h4"
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {data.users.total}
-            </Typography>
-            <Stack
-              direction="row"
-              sx={{
-                gap: 0.5,
-                flexWrap: "wrap",
-                mt: 0.5,
-              }}
-            >
-              <Chip
-                label={`${data.users.active24h} active`}
-                size="small"
-                color="success"
-                variant="outlined"
-              />
-              {data.users.banned > 0 && (
-                <Chip
-                  label={`${data.users.banned} banned`}
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                />
-              )}
-            </Stack>
-          </StatCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Integrations" icon={<ExtensionIcon />} href="/admin/integrations">
-            <Typography
-              variant="h4"
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {data.integrations.total}
-            </Typography>
-            <Stack
-              direction="row"
-              sx={{
-                gap: 0.5,
-                flexWrap: "wrap",
-                mt: 0.5,
-              }}
-            >
-              <Chip
-                label={`${data.integrations.enabled} enabled`}
-                size="small"
-                color="success"
-                variant="outlined"
-              />
-              {data.integrations.unhealthy > 0 && (
-                <Chip
-                  label={`${data.integrations.unhealthy} unhealthy`}
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                />
-              )}
-              {data.integrations.unconfigured > 0 && (
-                <Chip
-                  label={`${data.integrations.unconfigured} unconfigured`}
-                  size="small"
-                  color="warning"
-                  variant="outlined"
-                />
-              )}
-            </Stack>
-          </StatCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          {data.services ? (
-            <StatCard title="Services" icon={<DnsIcon />} href="/admin/system/services">
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                }}
-              >
-                {data.services.running}
-              </Typography>
-              <Stack
-                direction="row"
-                sx={{
-                  gap: 0.5,
-                  flexWrap: "wrap",
-                  mt: 0.5,
-                }}
-              >
-                <Chip
-                  label={`${data.services.running} running`}
-                  size="small"
-                  color="success"
-                  variant="outlined"
-                />
-                <Chip label={`${data.services.stopped} stopped`} size="small" variant="outlined" />
-                {data.services.unhealthy > 0 && (
-                  <Chip
-                    label={`${data.services.unhealthy} unhealthy`}
-                    size="small"
-                    color="error"
-                    variant="outlined"
-                  />
-                )}
-              </Stack>
-            </StatCard>
-          ) : (
-            <StatCard title="Services" icon={<DnsIcon />} href="/status">
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                  color: "text.secondary",
-                }}
-              >
-                N/A
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                Cloud deployment
-              </Typography>
-            </StatCard>
-          )}
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
-          <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
-            <Typography
-              variant="h4"
-              color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {totalMissingCredentials}
-            </Typography>
-            <Stack
-              direction="row"
-              sx={{
-                gap: 0.5,
-                flexWrap: "wrap",
-                mt: 0.5,
-              }}
-            >
-              <Chip
-                label={`${credentials.length} integration${credentials.length === 1 ? "" : "s"}`}
-                size="small"
-                variant="outlined"
-              />
-              <Chip
-                label={
-                  totalMissingCredentials > 0
-                    ? `${missingCredentialIntegrations.length} missing`
-                    : "all configured"
-                }
-                size="small"
-                color={totalMissingCredentials > 0 ? "warning" : "success"}
-                variant="outlined"
-              />
-            </Stack>
-          </StatCard>
-        </Grid>
-      </Grid>
       {/* Attention list */}
       {generalAttention.length > 0 && (
         <Box>
@@ -620,7 +412,13 @@ export function AdminOverview() {
                     variant="outlined"
                     sx={{ fontSize: 10, height: 18, minWidth: 60 }}
                   />
-                  <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                  <Typography
+                    component={Link}
+                    href={adminJobHref({ id: job.id, source: job.source })}
+                    variant="body2"
+                    noWrap
+                    sx={{ flex: 1 }}
+                  >
                     {job.type}
                   </Typography>
                   {job.status === "running" && job.progress != null && (
@@ -646,6 +444,216 @@ export function AdminOverview() {
           <Button component={Link} href="/admin/activity" size="small" sx={{ mt: 1 }}>
             View All Jobs
           </Button>
+        </Grid>
+      </Grid>
+      <Divider />
+      {/* Summary cards */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
+          <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/status">
+            <Typography
+              variant="h5"
+              color={
+                data.systemHealth.status === "pass"
+                  ? "success.main"
+                  : data.systemHealth.status === "degraded"
+                    ? "warning.main"
+                    : "error.main"
+              }
+              sx={{
+                fontWeight: 700,
+              }}
+            >
+              {data.systemHealth.status === "pass" ? "OK" : data.systemHealth.unhealthyCount}
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              {data.systemHealth.status === "pass"
+                ? "All systems operational"
+                : `${data.systemHealth.unhealthyCount} unhealthy`}
+            </Typography>
+          </StatCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
+          <StatCard title="Users" icon={<GroupIcon />} href="/admin/users">
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
+              {data.users.total}
+            </Typography>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
+              <Chip
+                label={`${data.users.active24h} active`}
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+              {data.users.banned > 0 && (
+                <Chip
+                  label={`${data.users.banned} banned`}
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                />
+              )}
+            </Stack>
+          </StatCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
+          <StatCard title="Integrations" icon={<ExtensionIcon />} href="/admin/integrations">
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
+              {data.integrations.total}
+            </Typography>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
+              <Chip
+                label={`${data.integrations.enabled} enabled`}
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+              {data.integrations.unhealthy > 0 && (
+                <Chip
+                  label={`${data.integrations.unhealthy} unhealthy`}
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                />
+              )}
+              {data.integrations.unconfigured > 0 && (
+                <Chip
+                  label={`${data.integrations.unconfigured} unconfigured`}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                />
+              )}
+            </Stack>
+          </StatCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
+          {data.services ? (
+            <StatCard title="Services" icon={<DnsIcon />} href="/admin/system/services">
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 700,
+                }}
+              >
+                {data.services.running}
+              </Typography>
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 0.5,
+                  flexWrap: "wrap",
+                  mt: 0.5,
+                }}
+              >
+                <Chip
+                  label={`${data.services.running} running`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                />
+                <Chip label={`${data.services.stopped} stopped`} size="small" variant="outlined" />
+                {data.services.unhealthy > 0 && (
+                  <Chip
+                    label={`${data.services.unhealthy} unhealthy`}
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                  />
+                )}
+              </Stack>
+            </StatCard>
+          ) : (
+            <StatCard title="Services" icon={<DnsIcon />} href="/status">
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 700,
+                  color: "text.secondary",
+                }}
+              >
+                N/A
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                Cloud deployment
+              </Typography>
+            </StatCard>
+          )}
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
+          <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
+            <Typography
+              variant="h5"
+              color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
+              sx={{
+                fontWeight: 700,
+              }}
+            >
+              {totalMissingCredentials}
+            </Typography>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
+              <Chip
+                label={`${credentials.length} integration${credentials.length === 1 ? "" : "s"}`}
+                size="small"
+                variant="outlined"
+              />
+              <Chip
+                label={
+                  totalMissingCredentials > 0
+                    ? `${missingCredentialIntegrations.length} missing`
+                    : "all configured"
+                }
+                size="small"
+                color={totalMissingCredentials > 0 ? "warning" : "success"}
+                variant="outlined"
+              />
+            </Stack>
+          </StatCard>
         </Grid>
       </Grid>
     </Stack>

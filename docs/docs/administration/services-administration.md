@@ -58,6 +58,7 @@ Container state is not a functional health check. Use **Run Service Check** or
 
 ### Service selection
 
+Open **System → Deployment** (`/admin/system/deployment`) to edit persistent roots.
 The selection contains the requested root services and their expanded
 dependencies. It is shared with `openmapx services selected` and the CLI's
 `services enable` workflow.
@@ -81,7 +82,7 @@ Choose an **action preset** to select the same root group as the CLI `--preset`
 option. Presets show missing installed members and never save selection by themselves.
 The server expands and validates preset roots; normal action restrictions still apply.
 
-Each row identifies an enabled root, a required dependency, or a disabled service.
+The Deployment editor’s **Services and root controls** disclosure identifies each enabled root, required dependency or disabled service.
 **Enable** adds only that service to the existing roots; **Remove root** removes only
 its explicit root entry. It may remain enabled when another root requires it. Required
 dependencies cannot be removed independently, and host-controlled selections stay
@@ -91,8 +92,11 @@ locked. Selection writes use the same reviewed generation producer as the root e
 
 Tick the checkboxes beside one or more services and the bulk-action bar lets you
 **Start**, **Stop**, **Restart**, **Update**, or **Build** the selection in one
-go, plus **Build All** and a **Run Service Check** that refreshes container
-states. Updates offer **without dependency recreation**, corresponding to `--no-deps`.
+go. Choose the action first; its Build or Update options appear alongside it.
+**Run Service Check** stays available in the inventory header. **Build All** opens
+a separate review with a captured list of enabled, buildable services and its build
+options. Confirmation submits those exact IDs; a later inventory refresh cannot add
+new targets to the request. Updates offer **without dependency recreation**, corresponding to `--no-deps`.
 Builds take an optional region, a "continue on errors" toggle, and MOTIS-only import
 (`--import`) for a selected MOTIS build or Build All with enabled, buildable MOTIS.
 Other actions cannot carry these options. Whole-stack starts explicitly name the
@@ -121,12 +125,14 @@ request. Apply an update separately when you want services to use newer images.
 ## A single service in detail
 
 Open `/admin/system/services/<id>`. Its header shows container state, selection and
-lifecycle actions. The detail page has **Overview**, **Configuration**, **Credentials**,
+a primary Start/Apply action and a labeled **More actions** menu for Stop, Restart
+and Logs. The detail page has **Overview**, **Configuration**, **Credentials**,
 **Logs** and **Manifest** tabs.
 
 ### Overview
 
-Review the service ID, version, author, licence, platform and source directory.
+Open **Technical metadata** to inspect the ID, version, author, licence, platform
+and source directory. Environment variables have a separate disclosure.
 The page also shows:
 
 | Field                 | Operator use                                           |
@@ -182,7 +188,7 @@ Opening the Logs tab (or the **Logs** button) shows the service's container
 output. Choose the last **100, 200, 500, or 1000 lines**, then use **Snapshot**
 for a completed read or **Follow** for live output. Follow duration ranges from
 30 seconds to 15 minutes. Pause stops the current reader; Resume and Reconnect
-start a fresh read with the selected options. Closing the drawer stops its reader.
+start a fresh read with the selected options. Switching away from the Logs tab or closing the legacy drawer stops its reader.
 
 The browser retains at most **1000 lines and 256 KiB**, including an incomplete
 line, and reports when earlier output is discarded. Snapshot output also has a
@@ -213,7 +219,7 @@ rather than trying to update the running API as an ordinary service job.
 
 ## Compose preview
 
-Open `/admin/system/deployment` to inspect the generated Compose YAML for the
+Open **Compose and host recovery** on `/admin/system/deployment` to inspect the generated Compose YAML for the
 current selection and resolved configuration. Do not edit generated files.
 Use the form or source configuration, then render again.
 
@@ -495,3 +501,19 @@ If cleanup reports a busy or unrecoverable writer after a crash:
 Clock rollback, mismatched signed files or missing completion evidence need
 separate supervised recovery. Do not repair those by editing signatures, copying
 records onto new inodes or repeatedly deleting guards.
+
+## Platform configuration topics
+
+Deployment owns domain, ACME contact and the default acquisition region. Updates
+owns the release selector; Backups owns backup retention. Each editor overlays
+only its edited fields onto freshly read full configuration and rejects a preview
+that changes another topic's ownership, effective values or origin. Host-owned
+values require explicit adoption. Returning a field to the host keeps its current
+host source; an empty managed region is invalid.
+
+Previewing does not save or restart services. Review the affected services and
+origin, then satisfy any required acknowledgments and alternate-login proof.
+Pending platform work blocks every topic. Unknown outcomes retain the original
+job and request identity; inspect Activity and the disclosed host recovery commands
+before retrying. Ordinary drafts survive topic changes; confirmations and proof do
+not transfer between topics.
