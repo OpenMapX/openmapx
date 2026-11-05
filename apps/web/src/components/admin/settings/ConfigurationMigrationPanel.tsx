@@ -145,8 +145,8 @@ export function ConfigurationMigrationPanel() {
         <Typography>
           Export portable database configuration. Host overrides, credentials and bootstrap secrets
           require separate preparation. Authentication settings are staged for explicit policy
-          Apply. A file may contain up to1,000 fields,512 change groups and128 keys per group. The
-          full resulting configuration, including retained values, must fit512KiB.
+          Apply. A file may contain up to 1,000 fields, 512 change groups and 128 keys per group.
+          The full resulting configuration, including retained values, must fit 512 KiB.
         </Typography>
         {error && <Alert severity="error">{error}</Alert>}
         {inventory.isError && (
@@ -192,7 +192,7 @@ export function ConfigurationMigrationPanel() {
                 setPreview(null);
                 if (!file) return;
                 if (file.size > 1048576) {
-                  setError("Configuration file must be at most1MiB.");
+                  setError("Configuration file must be at most 1 MiB.");
                   return;
                 }
                 void run(async (signal) => {

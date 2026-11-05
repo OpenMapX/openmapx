@@ -297,7 +297,7 @@ export function CredentialTransferDialog({
                       setEnvelope(null);
                       if (!file) return;
                       if (file.size > 1048576) {
-                        setError("Encrypted file must be at most1MiB.");
+                        setError("Encrypted file must be at most 1 MiB.");
                         return;
                       }
                       const owner = epoch.current;

@@ -49,7 +49,7 @@ it("rejects a large encrypted file before reading and requires explicit selectio
   if (!input) throw Error("File input missing");
   const text = vi.fn();
   fireEvent.change(input, { target: { files: [{ size: 1048577, text }] } });
-  expect(await screen.findByText("Encrypted file must be at most1MiB.")).toBeVisible();
+  expect(await screen.findByText("Encrypted file must be at most 1 MiB.")).toBeVisible();
   expect(text).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("checkbox", { name: "integration/example/TOKEN" }));
   fireEvent.change(screen.getByLabelText("Transfer passphrase"), {

@@ -38,7 +38,7 @@ it("checks file size before reading and never admits an oversized migration", as
   const text = vi.fn(),
     file = { size: 1048577, text };
   fireEvent.change(input, { target: { files: [file] } });
-  expect(await screen.findByText("Configuration file must be at most1MiB.")).toBeVisible();
+  expect(await screen.findByText("Configuration file must be at most 1 MiB.")).toBeVisible();
   expect(text).not.toHaveBeenCalled();
   expect(mocks.preview).not.toHaveBeenCalled();
   expect(mocks.apply).not.toHaveBeenCalled();
