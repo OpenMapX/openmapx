@@ -232,18 +232,24 @@ The wider package/release baseline is handled separately.
 
 ## Database groups
 
-Database validation runs in three jobs on separate GitHub-hosted runners:
+Database validation runs in five jobs on separate GitHub-hosted runners:
 
-| Group            | Coverage                                                                         | Additional prerequisites                                |
-| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `api-privacy`    | Authentication, API routes, privacy lifecycle, core database and migration tests | Migrated PostGIS                                        |
-| `ingestion`      | Data-manager accounting, search, Overture and ambient publication                | Test-owned PostGIS containers                           |
-| `export-restore` | Controller-wide export and backup restore replay                                 | Exact-image Dawarich export and retained-backup archive |
+| Group                    | Coverage                                                                                      | Additional prerequisites                                |
+| ------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `api-privacy`            | Authentication, API routes, privacy lifecycle, migrations and native platform-helper recovery | Migrated PostGIS                                        |
+| `ingestion`              | Data-manager accounting, search, Overture and ambient publication                             | Test-owned PostGIS containers                           |
+| `configuration-recovery` | Native configuration-maintenance recovery                                                     | Test-owned PostGIS containers                           |
+| `coordinator-recovery`   | Native coordinator lifecycle and crash recovery                                               | Test-owned PostGIS containers                           |
+| `export-restore`         | Controller-wide export and backup restore replay                                              | Exact-image Dawarich export and retained-backup archive |
 
 Each runner gets the same pinned PostgreSQL 18 / PostGIS 3.6 service and applies
 all production migrations. Testcontainers, Compose fixtures and archive paths are
 owned by that runner. No database or archive is shared between jobs. Within each
 group Vitest uses one worker; increasing that can corrupt shared fixture state.
+
+The four groups with native recovery suites have a 90-minute runner budget;
+`export-restore` has 30 minutes. These limits include setup and the serial suites.
+Individual test timeouts and runtime execution deadlines remain independent.
 
 The matrix does not cancel other groups when one fails. The required
 `lint / types / test` aggregate still requires the database matrix to succeed;
@@ -258,7 +264,7 @@ for disposable-database setup and archive preparation. The checked-in inventory
 is validated against discovered opt-in tests and actual Vitest file selection.
 Dawarich's exact-image test remains a separate explicit command in the export job.
 
-The groups run concurrently and repeat runner setup three times. Compare normal-run gate time, queue delay and summed runner seconds before
+The groups run concurrently and repeat runner setup five times. Compare normal-run gate time, queue delay and summed runner seconds before
 claiming an overall improvement. Local correctness checks do not establish CI
 latency or cost; the ten-run comparison remains required.
 

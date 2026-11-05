@@ -62,7 +62,7 @@ describe("required database test gate", () => {
       "DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test",
     );
     expect(databaseJob).toContain(
-      `contains(fromJSON('["ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30`,
+      `contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30`,
     );
     expect(databaseJob).toContain("ghcr.io/baosystems/postgis:18-3.6@sha256:");
     expect(databaseJob).toContain(

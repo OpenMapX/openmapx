@@ -341,9 +341,10 @@ jobs:
   database:
     name: test (database, ${{ matrix.group }})
     runs-on: ubuntu-latest
-    # Native recovery suites run independently with real ownership/staging deadlines.
-    # Retain ingestion's existing budget while gathering its reduced runtime.
-    timeout-minutes: ${{ contains(fromJSON('["ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30 }}
+    # API/privacy includes the full native platform-helper recovery matrix.
+    # Give native recovery groups headroom for setup and all serial suites;
+    # individual test and execution deadlines remain independently enforced.
+    timeout-minutes: ${{ contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30 }}
     strategy:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.
