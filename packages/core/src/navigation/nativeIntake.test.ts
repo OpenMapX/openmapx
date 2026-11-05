@@ -126,3 +126,17 @@ it.each([
 ])("does not fetch short links or accept invalid map locations: %s", (url) => {
   expect(classifySharedText(url, config).kind).toBe("unsupported");
 });
+
+it("does not turn a Google route viewport into a place", () => {
+  expect(
+    classifySharedText("https://www.google.com/maps/dir/Berlin/Munich/@50,11,7z", config).kind,
+  ).toBe("unsupported");
+});
+it("keeps the Google search term beside a viewport", () => {
+  expect(params("https://www.google.com/maps/search/coffee/@48.137,11.575,15z").get("q")).toBe(
+    "coffee",
+  );
+});
+it("recognizes a standalone Google map viewport", () => {
+  expect(params("https://www.google.com/maps/@48.137,11.575,15z").get("at")).toBe("48.137,11.575");
+});

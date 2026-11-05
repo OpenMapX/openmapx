@@ -93,7 +93,13 @@ export function NativeIntakeHandler() {
     } catch (error) {
       if (generation.current !== current || version !== refreshVersion.current) return;
       setBlocked(true);
-      setListingUnavailable(error instanceof IntakeTransferError ? error.code : "unavailable");
+      setListingUnavailable(
+        error instanceof IntakeTransferError && error.code === "navigation-unavailable"
+          ? error.code
+          : selectedItemRef.current
+            ? "unavailable"
+            : "",
+      );
       // Owned items and edited drafts survive a failed authority check.
     }
   }, [client, localBlocked]);
@@ -189,12 +195,12 @@ export function NativeIntakeHandler() {
     try {
       const current = await client.list();
       if (generation.current !== documentGeneration) return;
-      if (!current.canApply || localBlocked()) {
-        setBlocked(true);
-        return;
-      }
       if (!current.items.some((item) => item.id === selectedItem.id)) {
         setError("expired");
+        return;
+      }
+      if (!current.canApply || localBlocked()) {
+        setBlocked(true);
         return;
       }
       // No await between the final local authority check and synchronous map application.

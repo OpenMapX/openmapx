@@ -620,7 +620,15 @@ describe("App bridge channel", () => {
       const complete = jest.fn();
       jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
         available: async () => true,
-        list: async () => [],
+        list: async () => [
+          {
+            id: "f386e706-b728-40a3-9554-881d0ff0958a",
+            kind: "text",
+            name: "Shared location",
+            createdAtMs: 1,
+            byteLength: 6,
+          },
+        ],
         read: jest.fn(),
         complete,
         listen: () => () => undefined,
@@ -658,6 +666,22 @@ describe("App bridge channel", () => {
       await shellView.unmount();
     },
   );
+
+  it("keeps an empty inbox quiet when navigation initialization failed", async () => {
+    jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+      available: async () => true,
+      list: async () => [],
+      read: jest.fn(),
+      complete: jest.fn(),
+      listen: () => () => undefined,
+    });
+    const nonce = await hello();
+    await post(nonce, { messageId: "empty-unavailable", type: "intake.list", payload: {} });
+    expect(
+      decodedMessages().find((m) => m.payload?.forMessageId === "empty-unavailable"),
+    ).toMatchObject({ type: "intake.items", payload: { items: [], canApply: false } });
+    await shellView.unmount();
+  });
 
   it("keeps the deployed v3 capability schema while advertising the navigation graph", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);

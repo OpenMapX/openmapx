@@ -196,12 +196,12 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
       // The explicit @ segment is a viewport, not necessarily the selected place.
       // Retain its label and location without claiming a fetched place identity.
       const center = /\/@([^/,]+),([^/,]+)(?:,|\/|$)/.exec(url.pathname);
-      if (center)
+      if (center && (place || url.pathname.startsWith("/maps/@")))
         return (
           point(`${center[1]},${center[2]}`, name) ?? { kind: "unsupported", reason: "unsupported" }
         );
       if (name) return search(name);
-      const m = /^\/maps\/search\/([^/]+)\/?$/.exec(url.pathname);
+      const m = /^\/maps\/search\/([^/]+)(?:\/@[^/]*)?\/?$/.exec(url.pathname);
       if (m) {
         try {
           const value = decodeURIComponent(m[1]);

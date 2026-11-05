@@ -202,3 +202,46 @@ it("keeps a previous preview blocked when an authority refresh fails", async () 
   expect(useImportedGeometryStore.getState().imported).toBeNull();
   expect(f.complete).not.toHaveBeenCalled();
 });
+
+it("keeps a transient listing failure silent when no shared items are known", async () => {
+  f.list.mockRejectedValue(new Error("temporary bridge timeout"));
+  render(<NativeIntakeHandler />);
+  await waitFor(() => expect(f.list).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+});
+it("shows a generic listing failure when shared items are known", async () => {
+  render(<NativeIntakeHandler />);
+  await screen.findByText("features");
+  f.list.mockRejectedValue(new Error("temporary bridge timeout"));
+  await act(async () => {
+    for (const listener of listeners) listener({ type: "intake.changed" } as never);
+  });
+  await screen.findByText("listingUnavailable");
+  expect(f.complete).not.toHaveBeenCalled();
+});
+
+it("shows no notice for an empty inbox without apply authority", async () => {
+  f.list.mockResolvedValue({ items: [], canApply: false, scheme: "openmapx" });
+  render(<NativeIntakeHandler />);
+  await waitFor(() => expect(f.list).toHaveBeenCalled());
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("pending")).toBeNull();
+});
+
+it("reports an item gone from the empty inbox as expired rather than an active trip", async () => {
+  render(<NativeIntakeHandler />);
+  await screen.findByText("features");
+  f.list.mockResolvedValue({ items: [], canApply: false, scheme: "openmapx" });
+  fireEvent.click(screen.getByText("import"));
+  await screen.findByText("expired");
+  expect(screen.queryByText("deferred")).toBeNull();
+  expect(useImportedGeometryStore.getState().imported).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+});

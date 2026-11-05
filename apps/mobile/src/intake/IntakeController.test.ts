@@ -13,15 +13,17 @@ function fixture() {
     listen: () => () => undefined,
   } as NativeIntakePort;
   const send = jest.fn();
+  const canApply = jest.fn(async () => true);
   const controller = new IntakeController({
     port,
     currentNonce: () => nonce,
     send,
-    canApply: async () => true,
+    canApply,
     scheme: "openmapx",
   });
   return {
     controller,
+    canApply,
     port,
     send,
     reset: () => {
@@ -44,12 +46,12 @@ const message = (type: string, payload = {}) => ({
   protocolVersion: 4,
   sentAtMs: 0,
 });
-it("correlates list and preserves compiled scheme and authority", async () => {
+it("correlates an empty list without claiming apply authority", async () => {
   const f = fixture();
   await f.controller.dispatch(message("intake.list") as never);
   expect(f.send).toHaveBeenCalledWith("intake.items", {
     items: [],
-    canApply: true,
+    canApply: false,
     scheme: "openmapx",
     forMessageId: "request1",
   });
@@ -79,4 +81,15 @@ it("never dispatches a command from an obsolete document", async () => {
     message("intake.complete", { id, disposition: "discarded" }) as never,
   );
   expect(f.port.complete).not.toHaveBeenCalled();
+});
+
+it("does not query unavailable navigation authority for an empty inbox", async () => {
+  const f = fixture();
+  f.canApply.mockRejectedValue(new Error("startup failed"));
+  await f.controller.dispatch(message("intake.list") as never);
+  expect(f.canApply).not.toHaveBeenCalled();
+  expect(f.send).toHaveBeenCalledWith(
+    "intake.items",
+    expect.objectContaining({ items: [], canApply: false }),
+  );
 });

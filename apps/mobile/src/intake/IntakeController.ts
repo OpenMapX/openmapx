@@ -21,7 +21,7 @@ export class IntakeController {
       switch (message.type) {
         case "intake.list": {
           const items = await this.deps.port.list();
-          const canApply = await this.deps.canApply();
+          const canApply = items.length > 0 ? await this.deps.canApply() : false;
           reply("intake.items", { items, canApply, scheme: this.deps.scheme });
           break;
         }
