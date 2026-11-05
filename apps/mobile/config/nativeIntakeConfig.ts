@@ -1,3 +1,5 @@
+import { THEME_COLORS, THEME_CORNER_RADIUS } from "../../../packages/core/src/theme.ts";
+
 export const TARGET = "OpenMapXShareExtension";
 const TYPES = ["com.topografix.gpx", "public.geojson", "com.google.earth.kml"];
 const MIMES = [
@@ -58,6 +60,8 @@ export function intakeShareInfo(appId: string) {
     CFBundleShortVersionString: "$(MARKETING_VERSION)",
     CFBundleVersion: "$(CURRENT_PROJECT_VERSION)",
     OpenMapXIntakeAppGroup: `group.${appId}.intake`,
+    OpenMapXTheme: THEME_COLORS,
+    OpenMapXCornerRadius: THEME_CORNER_RADIUS,
     UTImportedTypeDeclarations: intakeImportedTypes(),
     NSExtension: {
       NSExtensionPointIdentifier: "com.apple.share-services",

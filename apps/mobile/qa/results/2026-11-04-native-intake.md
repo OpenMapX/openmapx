@@ -48,3 +48,7 @@ item remains reviewable; no source file is changed.
 Deploy compatible web first; protocol 3 retains navigation and protocol 4 enables intake. Rebuild native apps. Register/provision `<appId>.ShareExtension` and `group.<appId>.intake` for host and Share Extension only; the navigation widget has no group. Simulator local ad-hoc signing does not establish Apple team, provisioning or App Store acceptance.
 
 Local HTTP was used only for development runtime QA. Afterward, two clean HTTPS generations and reviewed generated-permission checks passed. The installed local-HTTP Simulator build is not a release transport artifact. Production signing and final release binaries still require their release gates.
+
+## Share Extension theme correction
+
+The extension now receives both palettes and the corner radius from the shared core theme through generated Info.plist metadata. It uses a top-aligned, scrollable layout, content-type/name summary, filled primary action, Dynamic Type and distinct saving/success/error presentation. The system appearance controls light/dark colors; no host theme preference or extra App Group data is read. The Simulator Release build was inspected in light, dark and accessibility-large text size. Add produced the success state and Done dismissed the extension. Native config/generated-policy tests passed 48 tests, mobile types and generated checks passed, and the host plus both extensions built. This visual revision was self-reviewed; the earlier Claude approval covers the preceding intake/runtime corrections.

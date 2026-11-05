@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { THEME_COLORS, THEME_CORNER_RADIUS } from "../../../packages/core/src/theme";
 import { intakeReceiverDeclaration } from "../config/nativeIntakeConfig";
 import {
   intakeAndroidFilters,
@@ -18,6 +19,8 @@ describe("native intake CNG", () => {
     expect(intakeImportedTypes().map((t) => t.UTTypeIdentifier)).toContain("public.geojson");
     const info = intakeShareInfo("net.example.maps");
     expect(info.OpenMapXIntakeAppGroup).toBe("group.net.example.maps.intake");
+    expect(info.OpenMapXTheme).toEqual(THEME_COLORS);
+    expect(info.OpenMapXCornerRadius).toBe(THEME_CORNER_RADIUS);
     const rule = info.NSExtension.NSExtensionAttributes.NSExtensionActivationRule;
     expect(rule).toContain("SUBQUERY");
     expect(rule).toContain("public.file-url");
