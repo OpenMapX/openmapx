@@ -823,9 +823,12 @@ it.skipIf(!enabled)(
       expect(f.workerError()).toMatchObject({ code: "preflight_stale" });
       expect(f.dispatches()).toBe(1);
       expect((await f.runtime.inspect(id))?.publication).toBe("not_started");
-      expect(
-        (await import("node:fs")).existsSync(join(root, "data/.admin-target-control/locks/motis")),
-      ).toBe(false);
+      // Terminal status is published before asynchronous lease settlement finishes.
+      await expect
+        .poll(() => fs.existsSync(join(root, "data/.admin-target-control/locks/motis")), {
+          timeout: 10000,
+        })
+        .toBe(false);
     } finally {
       f.release();
       await f.close();
