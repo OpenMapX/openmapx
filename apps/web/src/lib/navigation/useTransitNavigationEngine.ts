@@ -15,7 +15,7 @@ import {
   transitItineraryFingerprint,
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
@@ -26,6 +26,13 @@ export function useTransitNavigationEngine(): void {
   const currentLegIndex = useNavigationStore((s) => s.transitProgress?.currentLegIndex ?? 0);
   const captureVersion = useRef("");
   const active = useNavigationStore((s) => s.kind === "transit" && s.status === "navigating");
+  const connectivity = useNavigationStore((s) => s.connectivity);
+  const awaitingRecovery = useNavigationStore((s) => s.liveDataUnavailable);
+  const queryClient = useQueryClient();
+  const recoveryBaseline = useRef<{
+    owner: string;
+    queries: { data: number; settled: number; pending: boolean }[];
+  } | null>(null);
   const prepared = useMemo(
     () => (itinerary ? prepareTransitProgress(itinerary) : null),
     [itinerary],
@@ -57,14 +64,28 @@ export function useTransitNavigationEngine(): void {
       queryFn: () => fetchVehicleJourney({ tripId }, undefined, { timeoutMs: 8000 }),
       enabled: active,
       staleTime: 30000,
+      refetchOnReconnect: "always" as const,
+      refetchInterval: awaitingRecovery ? 30000 : (false as const),
       retry: 1,
     })),
   });
+  const queryStates = trips.map(
+    (id) =>
+      queryClient
+        .getQueryCache()
+        .find({ queryKey: ["vehicle-journey", id, undefined], exact: true })?.state,
+  );
+  // Reading isFetching below subscribes these observers to fetch completion,
+  // including structurally shared responses with identical timestamps.
+  const updateCounts = queryStates.map((state) => state?.dataUpdateCount ?? 0);
+  const settledCounts = queryStates.map(
+    (state) => (state?.dataUpdateCount ?? 0) + (state?.errorUpdateCount ?? 0),
+  );
   const captured = useNavigationStore((s) => s.transitCaptures);
   const ready = journeys.every((j) => j.isSuccess || j.isError);
   useEffect(() => {
     if (!itinerary || !active || !ready || trips.length === 0) return;
-    const version = `${requestId}:${trips.join(",")}:${journeys.map((j) => j.dataUpdatedAt).join(":")}`;
+    const version = `${requestId}:${trips.join(",")}:${updateCounts.join(":")}`;
     if (captureVersion.current === version) return;
     captureVersion.current = version;
     const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i].data?.data?.stops]));
@@ -75,7 +96,89 @@ export function useTransitNavigationEngine(): void {
           ? captureTransitLegStops(itinerary.legs, byTrip, Date.now())
           : refreshTransitCaptures(captured, itinerary.legs, byTrip, Date.now()),
       );
-  }, [itinerary, active, ready, captured, trips, journeys, requestId]);
+  }, [itinerary, active, ready, captured, trips, journeys, requestId, updateCounts]);
+  useEffect(() => {
+    const store = useNavigationStore.getState();
+    if (
+      !active ||
+      store.navigationAuthority !== "browser" ||
+      store.status !== "navigating" ||
+      store.kind !== "transit" ||
+      store.transitRequestId !== requestId ||
+      store.itinerary !== itinerary ||
+      !itinerary
+    )
+      return;
+    if (connectivity === "online" && awaitingRecovery && trips.length === 0) {
+      store.setLiveDataUnavailable(false);
+      return;
+    }
+    const owner = JSON.stringify([requestId, trips]);
+    const counts = updateCounts;
+    const baseline = recoveryBaseline.current;
+    // Cached data on mount, a new session, and offline completions establish
+    // a baseline; only subsequent successful observations prove recovery.
+    // A request already in flight belongs to that baseline too.
+    if (!baseline || baseline.owner !== owner || connectivity === "offline" || !awaitingRecovery) {
+      recoveryBaseline.current = {
+        owner,
+        queries: counts.map((data, i) => ({
+          data,
+          settled: settledCounts[i],
+          pending: journeys[i].isFetching,
+        })),
+      };
+      return;
+    }
+    // Cancellation can settle without increasing either query counter.
+    baseline.queries.forEach((query, i) => {
+      if (!journeys[i].isFetching && settledCounts[i] === query.settled) query.pending = false;
+    });
+    if (
+      !journeys.every(
+        (q, i) =>
+          q.isSuccess &&
+          !q.isFetching &&
+          q.data?.data &&
+          q.data.freshness?.hasRealtimeData &&
+          !q.data.freshness?.isStale &&
+          !q.data.freshness?.isPartial &&
+          counts[i] > baseline.queries[i].data &&
+          (!baseline.queries[i].pending || settledCounts[i] > baseline.queries[i].settled + 1),
+      )
+    )
+      return;
+    const byTrip = Object.fromEntries(trips.map((id, i) => [id, journeys[i].data?.data?.stops]));
+    const fresh = captureTransitLegStops(itinerary.legs, byTrip, Date.now()).filter((c) =>
+      trips.includes(c.tripId),
+    );
+    if (
+      !fresh.length ||
+      fresh.some((c) => {
+        const held = store.transitCaptures.find(
+          (old) => old.legIndex === c.legIndex && old.tripId === c.tripId,
+        );
+        return (
+          c.status !== "captured" ||
+          held?.status !== "captured" ||
+          JSON.stringify(c.stops.map((s) => s.stopId)) !==
+            JSON.stringify(held.stops.map((s) => s.stopId))
+        );
+      })
+    )
+      return;
+    store.setLiveDataUnavailable(false);
+  }, [
+    active,
+    itinerary,
+    requestId,
+    trips,
+    journeys,
+    connectivity,
+    awaitingRecovery,
+    updateCounts,
+    settledCounts,
+  ]);
   const tick = useCallback(
     (fix?: FixInput) => {
       const store = useNavigationStore.getState();

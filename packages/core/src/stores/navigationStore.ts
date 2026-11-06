@@ -273,6 +273,8 @@ interface NavigationState {
   rerouteUnavailable: boolean;
   /** True when live incidents/traffic/alerts are not known to be current. */
   liveDataUnavailable: boolean;
+  /** Browser itinerary refresh is single-use; recovery of vehicle data cannot repair its chain. */
+  transitRefreshUnavailable: boolean;
   /** Monotonic UI intent consumed by the web navigation engine for one retry. */
   rerouteRetryNonce: number;
   /** Start time for the bounded local route-session snapshot. */
@@ -350,6 +352,7 @@ interface NavigationState {
   setConnectivity: (value: NavigationConnectivity) => void;
   setRerouteUnavailable: (value: boolean) => void;
   setLiveDataUnavailable: (value: boolean) => void;
+  markTransitRefreshUnavailable: (requestId: string | null) => void;
   requestRerouteRetry: () => void;
   restoreGroundNavigation: (snapshot: NavigationSessionSnapshot) => void;
   proposeFasterRoute: (proposal: FasterRouteProposal) => void;
@@ -496,6 +499,7 @@ const INITIAL = {
   connectivity: "online" as NavigationConnectivity,
   rerouteUnavailable: false,
   liveDataUnavailable: false,
+  transitRefreshUnavailable: false,
   rerouteRetryNonce: 0,
   navigationStartedAtMs: null as number | null,
 };
@@ -600,7 +604,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   startTransitNavigation: (itinerary, replanOptions) => {
     if (refuseBrowserStart(get().navigationAuthority, "startTransitNavigation")) return;
     clearRoadConditionLeaseTimer();
-    set({
+    set((current) => ({
       ...INITIAL,
       status: "navigating",
       kind: "transit",
@@ -610,7 +614,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       progress: null,
       transitProgress: null,
       transitReplanOptions: replanOptions ?? null,
-    });
+      connectivity: current.connectivity,
+      liveDataUnavailable: current.connectivity === "offline",
+    }));
   },
   applyTransitProgress: (transitProgress) => set({ transitProgress }),
   setTransitCaptures: (transitCaptures) => set({ transitCaptures }),
@@ -673,16 +679,17 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   },
   setTransitRerouteNeeded: (transitRerouteNeeded) => set({ transitRerouteNeeded }),
   replaceItinerary: (itinerary) =>
-    set({
+    set((current) => ({
       itinerary,
       transitRequestId: String(++nextTransitRequestId),
       transitProgress: null,
       transitTickState: null,
       transitCaptures: [],
       transitStopAreas: undefined,
-      liveDataUnavailable: false,
+      liveDataUnavailable: current.connectivity === "offline",
+      transitRefreshUnavailable: false,
       transitRerouteNeeded: false,
-    }),
+    })),
   updateItinerary: (itinerary) => {
     const s = get();
     const current = s.itinerary;
@@ -695,7 +702,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
         )
       : { itinerary, resetWalk: false };
     if (!merged) {
-      set({ liveDataUnavailable: true });
+      set({ liveDataUnavailable: true, transitRefreshUnavailable: true });
       return;
     }
     set({
@@ -765,6 +772,17 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     }),
   setRerouteUnavailable: (rerouteUnavailable) => set({ rerouteUnavailable }),
   setLiveDataUnavailable: (liveDataUnavailable) => set({ liveDataUnavailable }),
+  markTransitRefreshUnavailable: (requestId) => {
+    const s = get();
+    if (
+      requestId !== null &&
+      s.transitRequestId === requestId &&
+      s.navigationAuthority === "browser" &&
+      s.kind === "transit" &&
+      s.status === "navigating"
+    )
+      set({ transitRefreshUnavailable: true, liveDataUnavailable: true });
+  },
   requestRerouteRetry: () => set((s) => ({ rerouteRetryNonce: s.rerouteRetryNonce + 1 })),
   restoreGroundNavigation: (snapshot) => {
     if (
@@ -849,6 +867,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       status: "arrived",
       rerouteUnavailable: false,
       liveDataUnavailable: false,
+      transitRefreshUnavailable: false,
       roadConditionImpact: null,
     });
   },

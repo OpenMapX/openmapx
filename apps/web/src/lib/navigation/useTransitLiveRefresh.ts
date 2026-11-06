@@ -1,6 +1,7 @@
 "use client";
 
 import { useNavigationStore, useRefreshTransitItinerary } from "@openmapx/core";
+import { onlineManager } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 /** How often to pull a fresh itinerary (delays/platforms/cancellations). */
@@ -22,7 +23,7 @@ export function useTransitLiveRefresh(active: boolean): void {
   // (unstable) mutation object, which would otherwise reset the timer.
   const mutateRef = useRef(refresh.mutateAsync);
   mutateRef.current = refresh.mutateAsync;
-  const inFlightRef = useRef<{ requestId: string | null } | null>(null);
+  const inFlightRef = useRef<{ requestId: string | null; token: string } | null>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -30,21 +31,30 @@ export function useTransitLiveRefresh(active: boolean): void {
     let cancelled = false;
     const tick = async () => {
       const store = useNavigationStore.getState();
-      if (store.status !== "navigating" || store.kind !== "transit") return;
+      if (
+        store.status !== "navigating" ||
+        store.kind !== "transit" ||
+        store.navigationAuthority !== "browser"
+      )
+        return;
       const requestId = store.transitRequestId;
       if (inFlightRef.current?.requestId === requestId) return;
-      if (store.transitRerouteNeeded || store.liveDataUnavailable) return;
+      if (
+        store.transitRerouteNeeded ||
+        store.transitRefreshUnavailable ||
+        store.connectivity === "offline" ||
+        !onlineManager.isOnline()
+      )
+        return;
       const token = store.itinerary?.refreshToken;
       if (!token) return;
 
-      const flight = { requestId };
+      const flight = { requestId, token };
       inFlightRef.current = flight;
       try {
         const response = await mutateRef.current(token);
         const next = response.data?.itinerary;
         const cur = useNavigationStore.getState();
-        if (!cancelled && cur.transitRequestId === requestId && !next?.refreshToken)
-          cur.setLiveDataUnavailable(true);
         // Apply only if we're still on the same transit trip and no replan is
         // pending (a replan will swap the itinerary itself).
         if (
@@ -54,13 +64,18 @@ export function useTransitLiveRefresh(active: boolean): void {
           cur.itinerary?.refreshToken === token &&
           cur.status === "navigating" &&
           cur.kind === "transit" &&
+          cur.navigationAuthority === "browser" &&
           !cur.transitRerouteNeeded
         ) {
           cur.updateItinerary(next);
+          if (!next.refreshToken) cur.markTransitRefreshUnavailable(requestId);
+        } else if (!cancelled && cur.itinerary?.refreshToken === token) {
+          cur.markTransitRefreshUnavailable(requestId);
         }
       } catch {
-        if (!cancelled && useNavigationStore.getState().transitRequestId === requestId)
-          useNavigationStore.getState().setLiveDataUnavailable(true);
+        const cur = useNavigationStore.getState();
+        if (!cancelled && cur.itinerary?.refreshToken === token)
+          cur.markTransitRefreshUnavailable(requestId);
         // Keep the last itinerary; the vehicle-journey poll still updates the
         // current leg. A broken token chain simply means no more live refreshes.
       } finally {
@@ -76,10 +91,11 @@ export function useTransitLiveRefresh(active: boolean): void {
       if (
         flight &&
         store.transitRequestId === flight.requestId &&
+        store.itinerary?.refreshToken === flight.token &&
         store.kind === "transit" &&
         store.status === "navigating"
       )
-        store.setLiveDataUnavailable(true);
+        store.markTransitRefreshUnavailable(flight.requestId);
       inFlightRef.current = null;
       clearInterval(id);
     };
