@@ -16,15 +16,24 @@ import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerComposeCommands } from "../src/commands/compose";
 import {
-  clearReleaseSelection,
+  clearReleaseSelection as clearReleaseSelectionFromCli,
   ensureReleaseOverlay,
   type ReleaseDockerRunner,
   releaseStatusLines,
   resolveReleaseManifest,
-  selectRelease,
+  selectRelease as selectReleaseFromCli,
   touchesReleasePinnedServices,
   writeReleaseOverlay,
 } from "../src/lib/release";
+
+// Direct command-entry tests have no Docker daemon; other tests supply their
+// explicit registry/container runner. Never probe the developer's real daemon.
+vi.mock("execa", async (original) => ({
+  ...(await original<typeof import("execa")>()),
+  execa: vi.fn(async () => {
+    throw Error("Docker unavailable in the command fixture");
+  }),
+}));
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const manifestJson = JSON.stringify({
@@ -53,16 +62,42 @@ const manifestJson = JSON.stringify({
 
 function fakeDocker(manifest = manifestJson): ReleaseDockerRunner {
   return vi.fn(async (args: string[]) => {
-    if (args[0] === "pull")
+    if (
+      args.join(" ") ===
+      `container ls --all --no-trunc --filter label=com.docker.compose.project=${services.STACK_PROJECT} --filter label=com.docker.compose.service=data-manager --format {{.ID}}`
+    )
+      return { stdout: "", stderr: "", exitCode: 0 };
+    if (args[0] === "pull" && args.length === 2)
       return { stdout: `Digest: sha256:${"1".repeat(64)}`, stderr: "", exitCode: 0 };
-    if (args[0] === "image") return { stdout: `sha256:${"2".repeat(64)}`, stderr: "", exitCode: 0 };
-    if (args[0] === "create") return { stdout: "f".repeat(64), stderr: "", exitCode: 0 };
-    if (args[0] === "cp") {
+    if (
+      args.length === 5 &&
+      args.slice(0, 4).join(" ") === "image inspect --format {{.Id}}" &&
+      args[4]?.endsWith(`@sha256:${"1".repeat(64)}`)
+    )
+      return { stdout: `sha256:${"2".repeat(64)}`, stderr: "", exitCode: 0 };
+    if (args.join(" ") === `create sha256:${"2".repeat(64)} true`)
+      return { stdout: "f".repeat(64), stderr: "", exitCode: 0 };
+    if (
+      args.length === 3 &&
+      args[0] === "cp" &&
+      args[1] === `${"f".repeat(64)}:/release-manifest.json`
+    ) {
       const { writeFileSync } = await import("node:fs");
       writeFileSync(args[2], manifest);
+      return { stdout: "", stderr: "", exitCode: 0 };
     }
-    return { stdout: "", stderr: "", exitCode: 0 };
+    if (args[0] === "rm" && args[1] === "-f" && args[2] === "f".repeat(64))
+      return { stdout: "", stderr: "", exitCode: 0 };
+    throw Error(`Unexpected Docker command: ${JSON.stringify(args)}`);
   });
+}
+
+// A named zero-container Docker fixture, never a production-policy bypass.
+function selectRelease(opts: Parameters<typeof selectReleaseFromCli>[0] = {}) {
+  return selectReleaseFromCli({ ...opts, docker: opts.docker ?? fakeDocker() });
+}
+function clearReleaseSelection(opts: Parameters<typeof clearReleaseSelectionFromCli>[0] = {}) {
+  return clearReleaseSelectionFromCli({ ...opts, docker: opts.docker ?? fakeDocker() });
 }
 
 let temp: string | null = null;
@@ -408,7 +443,7 @@ describe("clearReleaseSelection", () => {
   });
 });
 
-it("clears through the command without registry access even with a malformed channel", async () => {
+it("retains the selected pin when the command cannot inspect the coordinator", async () => {
   temp = mkdtempSync(join(tmpdir(), "omx-release-clear-command-"));
   const directory = join(temp, "infra", "docker");
   mkdirSync(directory, { recursive: true });
@@ -425,9 +460,19 @@ it("clears through the command without registry access even with a malformed cha
   try {
     const program = new Command();
     registerComposeCommands(program);
-    await program.parseAsync(["compose", "release", "--clear"], { from: "user" });
-    expect(existsSync(path)).toBe(false);
-    expect(output.mock.calls.flat().join("\n")).toContain("next start/update");
+    const outcome = await program
+      .parseAsync(["compose", "release", "--clear"], { from: "user" })
+      .then(
+        () => "accepted",
+        (error) => String(error),
+      );
+    expect({
+      outcome,
+      overlayPresent: existsSync(path),
+      output: output.mock.calls.flat(),
+      errors: errors.mock.calls.flat(),
+    }).toMatchObject({ outcome: "Error: unexpected CLI failure", overlayPresent: true });
+    expect(errors.mock.calls.flat().join("\n")).toContain("Release lockfile operation failed");
     expect(process.env.OPENMAPX_RELEASE).toBe("invalid");
   } finally {
     output.mockRestore();

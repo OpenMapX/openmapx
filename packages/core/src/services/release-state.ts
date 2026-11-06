@@ -170,6 +170,17 @@ export function readReleaseStateFile(
   maximum: number,
   options: ReleaseStateOptions = {},
 ): string {
+  return new TextDecoder("utf-8", { fatal: true }).decode(
+    readReleaseStateBytes(path, maximum, options),
+  );
+}
+
+/** Bounded owned bytes, including malformed UTF-8 during conditional recovery. */
+export function readReleaseStateBytes(
+  path: string,
+  maximum: number,
+  options: ReleaseStateOptions = {},
+): Buffer {
   let descriptor: number;
   try {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -192,7 +203,7 @@ export function readReleaseStateFile(
     if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
       throw new Error(`${path} changed while it was read`);
     }
-    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    return buffer;
   } finally {
     closeSync(descriptor);
   }

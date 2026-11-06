@@ -322,6 +322,7 @@ export {
   type ReleaseStatePaths,
   readReleaseOverlay,
   readReleaseOverlayFile,
+  readReleaseStateBytes,
   readReleaseStateFile,
   releaseEvidenceReference,
   releaseStateFileProblem,

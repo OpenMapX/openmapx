@@ -168,7 +168,17 @@ describe("services update pull failures", () => {
   });
   it("validates pins and pulls before full generation preparation, hardlinks and recreation", async () => {
     const events: string[] = [];
-    vi.mocked(ensureReleaseOverlay).mockImplementation(async () => {
+    vi.mocked(ensureReleaseOverlay).mockImplementation(async (options) => {
+      expect(options?.releaseStoreLock).toEqual(
+        expect.objectContaining({ release: expect.any(Function) }),
+      );
+      await expect(
+        services.acquireReleaseStoreLock(
+          services.releaseStatePaths(join(root, "infra/docker")).store,
+          {},
+          { failIfBusy: true },
+        ),
+      ).rejects.toThrow(/busy/);
       events.push("pins");
       return { status: "present", path: "release.yml" };
     });
