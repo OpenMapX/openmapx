@@ -1,5 +1,6 @@
 import { useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { onlineManager } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +26,8 @@ afterEach(() => {
   vi.useRealTimers();
   api.refresh.mockReset();
   useNavigationStore.getState().stopNavigation();
+  useNavigationStore.getState().setConnectivity("online");
+  onlineManager.setOnline(true);
 });
 describe("transit live refresh ownership", () => {
   it.each(["new trip", "replacement", "unmount"])(
@@ -188,4 +191,76 @@ it("starts a new token chain only after explicit journey replacement", async () 
   await act(async () => vi.advanceTimersByTime(30000));
   expect(api.refresh).toHaveBeenCalledWith("new");
   expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("rotated");
+});
+
+it.each(["failure", "missing successor"])(
+  "ignores an obsolete %s after journey replacement",
+  async (outcome) => {
+    vi.useFakeTimers();
+    const flight = deferred();
+    api.refresh.mockReturnValue(flight.promise);
+    useNavigationStore.getState().startTransitNavigation(trip("old"));
+    renderHook(() => useTransitLiveRefresh(true));
+    act(() => vi.advanceTimersByTime(30000));
+    act(() => useNavigationStore.getState().replaceItinerary(trip("new")));
+    await act(async () => {
+      if (outcome === "failure") flight.reject(new Error("offline"));
+      else flight.resolve({ data: { itinerary: trip("") } });
+    });
+    expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("new");
+    expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(false);
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
+  },
+);
+
+it.each(["store", "query manager"])(
+  "does not spend an untouched token while %s is offline",
+  async (source) => {
+    vi.useFakeTimers();
+    if (source === "store") useNavigationStore.getState().setConnectivity("offline");
+    else onlineManager.setOnline(false);
+    useNavigationStore.getState().startTransitNavigation(trip("unused"));
+    api.refresh.mockResolvedValue({ data: { itinerary: trip("next") } });
+    renderHook(() => useTransitLiveRefresh(true));
+    await act(async () => vi.advanceTimersByTime(30000));
+    expect(api.refresh).not.toHaveBeenCalled();
+    act(() => {
+      useNavigationStore.getState().setConnectivity("online");
+      onlineManager.setOnline(true);
+    });
+    await act(async () => vi.advanceTimersByTime(30000));
+    expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("next");
+  },
+);
+
+it("keeps a failed token disabled after vehicle recovery, reconnect and remount", async () => {
+  vi.useFakeTimers();
+  useNavigationStore.getState().startTransitNavigation(trip("spent"));
+  api.refresh.mockRejectedValue(new Error("HTTP 409"));
+  const view = renderHook(() => useTransitLiveRefresh(true));
+  await act(async () => vi.advanceTimersByTime(30000));
+  act(() => {
+    useNavigationStore.getState().setConnectivity("offline");
+    useNavigationStore.getState().setConnectivity("online");
+    useNavigationStore.getState().setLiveDataUnavailable(false);
+  });
+  view.unmount();
+  renderHook(() => useTransitLiveRefresh(true));
+  await act(async () => vi.advanceTimersByTime(90000));
+  expect(api.refresh).toHaveBeenCalledTimes(1);
+});
+
+it("breaks the chain when a consumed response cannot be applied during rerouting", async () => {
+  vi.useFakeTimers();
+  const flight = deferred();
+  api.refresh.mockReturnValue(flight.promise);
+  useNavigationStore.getState().startTransitNavigation(trip("initial"));
+  renderHook(() => useTransitLiveRefresh(true));
+  act(() => vi.advanceTimersByTime(30000));
+  act(() => useNavigationStore.getState().setTransitRerouteNeeded(true));
+  await act(async () => flight.resolve({ data: { itinerary: trip("successor") } }));
+  act(() => useNavigationStore.getState().setTransitRerouteNeeded(false));
+  await act(async () => vi.advanceTimersByTime(30000));
+  expect(api.refresh).toHaveBeenCalledTimes(1);
+  expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(true);
 });

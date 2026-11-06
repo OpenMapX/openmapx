@@ -84,7 +84,28 @@ Waiting and riding return to the broader north-up transit view.
 An unavailable live feed labels a retained realtime estimate as the last known
 departure, never as a scheduled time or a live update. Browser journeys without
 a refresh token use the same last-known label. A broken one-time token chain
-remains unavailable rather than retrying a potentially consumed token.
+remains disabled rather than retrying a potentially consumed token. The browser
+tracks this separately from the general live-updates warning: fresh vehicle
+journey data can clear that warning while the itinerary departure remains
+last-known. Tokens expire after 15 minutes without rotation; an expired or
+ambiguous request requires explicit journey replacement to start a new chain.
+
+After a connection interruption, the browser requires a new complete realtime
+response for every tracked remaining vehicle journey before clearing the warning.
+Cached success, partial or stale responses and responses received while offline
+do not establish recovery. Query update counters preserve this distinction even
+when timestamps repeat or the device clock changes. Recovery refetches run every
+30 seconds only while needed, in addition to the current leg's normal polling.
+A final walking leg with no remaining trip IDs can clear the connectivity warning
+on reconnect. Starting or replacing a journey preserves the browser's offline
+state. Native snapshots retain their own live-status authority.
+
+A refresh-chain failure can briefly raise the general warning again until new
+vehicle responses independently verify recovery. If a diversion changes the
+captured stop sequence, the warning remains conservative: fresh data alone does
+not replace the rider's selected stop occurrences. Use explicit alternatives to
+adopt a changed journey. Native and live-provider field travel require separate
+verification from the browser recovery tests.
 
 ## Walking recovery and alternatives
 

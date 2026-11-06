@@ -29,6 +29,7 @@ export function TransitJourneyControls({
   const fmt = useDateTimeFormat();
   const now = useNow(5000);
   const liveUnavailable = useNavigationStore((s) => s.liveDataUnavailable);
+  const refreshUnavailable = useNavigationStore((s) => s.transitRefreshUnavailable);
   const itinerary = useNavigationStore((s) => s.itinerary);
   const p = useNavigationStore((s) => s.transitProgress);
   const act = useTransitRiderAction();
@@ -65,7 +66,9 @@ export function TransitJourneyControls({
     }
   };
   const departure = ride?.startTime ? new Date(ride.startTime).getTime() : NaN;
-  const liveDeparture = !liveUnavailable && (!runtime.browserAuthority || !!itinerary.refreshToken);
+  const liveDeparture =
+    !liveUnavailable &&
+    (!runtime.browserAuthority || (!!itinerary.refreshToken && !refreshUnavailable));
   const departurePassed =
     !riding && canBoard && Number.isFinite(departure) && now > departure + 120000;
   const uncertain = p?.confidence === "uncertain" || p?.confidence === "stale";

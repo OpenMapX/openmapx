@@ -144,3 +144,34 @@ it.each([
     expect(!!screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBe(unavailable);
   },
 );
+
+it("keeps the departure last-known after vehicle data recovers a broken itinerary chain", () => {
+  useNavigationStore.getState().startTransitNavigation({
+    duration: 600,
+    startTime: "",
+    endTime: "",
+    transfers: 0,
+    walkDistance: 0,
+    refreshToken: "spent",
+    legs: [
+      {
+        mode: "bus",
+        tripId: "bus",
+        realtime: true,
+        route: { shortName: "12" },
+        from: { name: "A", lat: 0, lng: 0 },
+        to: { name: "B", lat: 0, lng: 0.01 },
+        startTime: new Date(Date.now() + 300000).toISOString(),
+        endTime: "",
+      },
+    ],
+  } as TripItinerary);
+  useNavigationStore
+    .getState()
+    .markTransitRefreshUnavailable(useNavigationStore.getState().transitRequestId);
+  useNavigationStore.getState().setLiveDataUnavailable(false);
+  render(<TransitJourneyControls onAlternatives={() => {}} />);
+  expect(screen.getByText("navigation.departureLastKnown")).toBeTruthy();
+  expect(screen.queryByText("navigation.departureLive")).toBeNull();
+  expect(screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBeNull();
+});
