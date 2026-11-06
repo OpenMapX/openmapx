@@ -96,7 +96,9 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   ),
   LegBadge: () => <span />,
   LegRemarks: () => null,
-  LiveStopTime: ({ scheduledTime }: { scheduledTime: string }) => <span>{scheduledTime}</span>,
+  LiveStopTime: ({ time }: { time: { scheduledAt?: string; expectedAt?: string } }) => (
+    <span>{time.expectedAt ?? time.scheduledAt}</span>
+  ),
   TransitEmissionsBadge: () => null,
   TransitLiveBadge: () => null,
 }));

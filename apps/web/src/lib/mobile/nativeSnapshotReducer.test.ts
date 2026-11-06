@@ -330,3 +330,34 @@ it("projects consecutive transit producer deltas without requiring a resume snap
   if (!empty.ok) throw Error("empty delta refused");
   expect(projectionOf(empty.model, "progress").transitProgress).toEqual(nextProgress);
 });
+
+it("never rolls a transit timetable back when an older full snapshot arrives late", () => {
+  const full = (revision: number, departure: string, fingerprint = "selected") =>
+    envelope(
+      fullSnapshot({
+        kind: "transit",
+        routeFingerprint: undefined,
+        itineraryFingerprint: fingerprint,
+        revision,
+        itinerary: { legs: [{ startTime: departure, scheduledStartTime: "2026-11-06T08:44:00Z" }] },
+        captures: [
+          { stops: [{ expectedDeparture: departure, scheduledDeparture: "2026-11-06T08:44:00Z" }] },
+        ],
+        liveStatus: { refresh: "broken", hasLiveToken: true },
+      }),
+    );
+  const delayed = applyNativeSnapshot(null, full(8, "2026-11-06T08:45:00Z"));
+  if (!delayed.ok) throw Error("fixture");
+  expect(applyNativeSnapshot(delayed.model, full(7, "2026-11-06T08:44:00Z"))).toEqual({
+    ok: false,
+    reason: "stale",
+  });
+  expect(applyNativeSnapshot(delayed.model, full(7, "2026-11-06T08:44:00Z", "older-trip"))).toEqual(
+    { ok: false, reason: "stale" },
+  );
+  const onTime = applyNativeSnapshot(delayed.model, full(9, "2026-11-06T08:44:00Z"));
+  expect(onTime.ok && onTime.model.revision).toBe(9);
+  const newSession = { ...full(1, "2026-11-06T08:44:00Z"), sessionId: "new-session" };
+  expect(applyNativeSnapshot(delayed.model, newSession).ok).toBe(true);
+  expect(applyNativeSnapshot(null, full(1, "2026-11-06T08:44:00Z")).ok).toBe(true);
+});

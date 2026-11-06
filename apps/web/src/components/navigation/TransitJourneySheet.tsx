@@ -8,29 +8,27 @@ import Typography from "@mui/material/Typography";
 import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { DepartureTime } from "@/components/panels/transit/DepartureTime";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import {
   TransitDataStatus,
   TransitQueryNotice,
 } from "@/components/panels/transit/TransitDataStatus";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
+import { legTransitTime, stopTransitTime } from "@/lib/transitTime";
 import { useNow } from "@/lib/useNow";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
-/** Best available time for a stop: realtime departure/arrival, else scheduled. */
-function stopTime(stop: VehicleJourneyStop): string | undefined {
-  return (
-    stop.expectedDeparture ??
-    stop.expectedArrival ??
-    stop.scheduledDeparture ??
-    stop.scheduledArrival
-  );
-}
-
-function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx: number }) {
-  const fmt = useDateTimeFormat();
+function StopTimeline({
+  stops,
+  nextIdx,
+  leg,
+}: {
+  stops: VehicleJourneyStop[];
+  nextIdx: number;
+  leg: TripLeg;
+}) {
   const t = useTranslations("navigation");
   return (
     <Box sx={{ px: 2, py: 0.5 }}>
@@ -40,8 +38,11 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
         const isNext = i === nextIdx;
         const passed = i < nextIdx;
         const emphasized = isFirst || isLast || isNext;
-        const delayMin = Math.round((stop.delaySeconds ?? 0) / 60);
-        const time = stopTime(stop);
+        const time = isFirst
+          ? legTransitTime(leg, "departure", stop)
+          : isLast
+            ? legTransitTime(leg, "arrival", stop)
+            : stopTransitTime(stop);
         const dotColor = isNext ? "primary.main" : passed ? "text.disabled" : "text.secondary";
         return (
           <Box
@@ -58,30 +59,13 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
                 pt: "1px",
               }}
             >
-              <Typography
+              <DepartureTime
+                {...time}
+                canceled={stop.canceled}
                 variant="caption"
-                sx={{
-                  fontVariantNumeric: "tabular-nums",
-                  whiteSpace: "nowrap",
-                  fontWeight: emphasized ? 700 : 400,
-                  color: delayMin > 0 ? "error.main" : passed ? "text.secondary" : "text.primary",
-                }}
-              >
-                {time ? fmt.time(time) : ""}
-              </Typography>
-              {delayMin > 0 && !stop.canceled && (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    color: "error.main",
-                    fontWeight: 600,
-                    fontSize: "0.6rem",
-                  }}
-                >
-                  +{delayMin}m
-                </Typography>
-              )}
+                fontWeight={emphasized ? 700 : 400}
+                muted={passed}
+              />
             </Box>
             <Box
               sx={{
@@ -158,19 +142,13 @@ function StopTimeline({ stops, nextIdx }: { stops: VehicleJourneyStop[]; nextIdx
 
 /** One compact row per upcoming leg, shown under the current-ride timeline. */
 function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; now: number }) {
-  const fmt = useDateTimeFormat();
   const t = useTranslations("navigation");
   const tt = useTranslations("transit");
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
       <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
-        <Typography
-          variant="caption"
-          sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
-        >
-          {leg.startTime ? fmt.time(leg.startTime) : ""}
-        </Typography>
+        <DepartureTime {...legTransitTime(leg)} variant="caption" canceled={leg.cancelled} />
       </Box>
       {isWalk ? (
         <DirectionsWalkIcon sx={{ fontSize: 20, color: "text.secondary", flexShrink: 0 }} />
@@ -299,7 +277,7 @@ export function TransitJourneySheet({
           {t("stopCountUnavailable")}
         </Typography>
       )}
-      {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} />}
+      {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} leg={currentLeg} />}
       {upcomingLegs.length > 0 && (
         <>
           <Typography

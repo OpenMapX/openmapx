@@ -13,7 +13,8 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import { stopTransitTime } from "@/lib/transitTime";
+import { DepartureTime } from "./DepartureTime";
 
 interface TransitLegStopsProps {
   tripId?: string;
@@ -28,7 +29,6 @@ interface TransitLegStopsProps {
 export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: TransitLegStopsProps) {
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
-  const fmt = useDateTimeFormat();
   const [expanded, setExpanded] = useState(false);
   // Fetch eagerly — React Query deduplicates with any other useVehicleJourney(tripId) call
   const { data: journey } = useVehicleJourney(tripId ?? null);
@@ -96,46 +96,18 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
       <Collapse in={expanded}>
         <Box sx={{ mt: 0.25, mb: 0.25 }}>
           {intermediateStops.map((stop, i) => {
-            // Show realtime (delay-adjusted) time when available, fall back to scheduled
-            const time =
-              stop.expectedDeparture ??
-              stop.expectedArrival ??
-              stop.scheduledDeparture ??
-              stop.scheduledArrival;
-            const timeStr = time ? fmt.time(time) : "";
-            const delaySec = stop.delaySeconds ?? 0;
-            const delayMin = Math.round(delaySec / 60);
-
             return (
               <Box
                 // biome-ignore lint/suspicious/noArrayIndexKey: intermediate stops ordered by sequence
                 key={i}
                 sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.2 }}
               >
-                <Box sx={{ width: 48, textAlign: "right", flexShrink: 0 }}>
-                  <Typography
+                <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
+                  <DepartureTime
+                    {...stopTransitTime(stop)}
                     variant="caption"
-                    sx={{
-                      fontVariantNumeric: "tabular-nums",
-                      color: delayMin > 0 ? "error.main" : "text.primary",
-                      fontSize: "0.68rem",
-                    }}
-                  >
-                    {timeStr}
-                  </Typography>
-                  {delayMin > 0 && !stop.canceled && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "error.main",
-                        display: "block",
-                        fontSize: "0.6rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      +{delayMin}m
-                    </Typography>
-                  )}
+                    canceled={stop.canceled}
+                  />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>

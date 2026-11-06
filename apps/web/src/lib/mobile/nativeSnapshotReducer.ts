@@ -97,15 +97,22 @@ export function envelopeOf(snapshot: unknown): SnapshotEnvelope | null {
 /**
  * Folds one snapshot into the model.
  *
- * A full snapshot is authoritative by definition — it is what the session *is*,
- * and a reload legitimately produces one at any revision, including an older one
- * if the page had been running ahead on deltas it should not have had.
+ * A full snapshot establishes the baseline after a reload. Within an adopted
+ * transit session, a delayed command response must not undo a newer publication.
+ * Session revisions are monotonic even across itinerary replacements.
  */
 export function applyNativeSnapshot(
   current: NativeReadModel | null,
   incoming: SnapshotEnvelope,
 ): ApplyOutcome {
   if (incoming.type === "full") {
+    if (
+      current?.kind === "transit" &&
+      incoming.kind === "transit" &&
+      current.sessionId === incoming.sessionId &&
+      incoming.revision < current.revision
+    )
+      return { ok: false, reason: "stale" };
     return {
       ok: true,
       changed: current?.revision !== incoming.revision || current?.sessionId !== incoming.sessionId,

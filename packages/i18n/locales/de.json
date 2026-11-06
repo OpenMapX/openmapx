@@ -1724,6 +1724,8 @@
     "operator": "Betreiber",
     "platform": "Gl.",
     "canceled": "Ausgefallen",
+    "scheduledTimeLabel": "Planmäßig {time}",
+    "expectedTimeLabel": "Erwartet {time}",
     "occupancy": "Auslastung",
     "occupancyForecast": "Prognose",
     "lowOccupancy": "Geringe Auslastung",
