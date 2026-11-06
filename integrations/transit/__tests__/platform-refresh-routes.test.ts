@@ -51,7 +51,7 @@ function fixture() {
     await route.handler(req as never, reply as never);
     return { status, body };
   };
-  return { values, call };
+  return { values, call, ctx };
 }
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllEnvs());
@@ -105,4 +105,49 @@ it("retains a bound handle after 503, then replays its exact successor", async (
   expect(f.values.has(`transit-refresh:${id}`)).toBe(false);
   expect(await f.call("/plan/refresh", { body: { token } })).toEqual(success);
   expect(orchestrator.refreshTrip).toHaveBeenCalledTimes(2);
+});
+
+it("gates a cached response by its declared provider sources without exposing the binding", async () => {
+  const f = fixture();
+  let disabled = false;
+  Object.assign(f.ctx, {
+    getDisallowedSourceIds: async () => new Set(disabled ? ["source"] : []),
+    getIntegrationsByDomain: () => [
+      {
+        manifest: { dataSources: [{ sourceId: "source" }] },
+        providers: new Map([["transit", [{ id: "local", prefix: "ms:" }]]]),
+      },
+    ],
+  });
+  f.values.set("transit-refresh:policy", {
+    providerId: "local",
+    instance: "ms",
+    datasetEpoch: "e",
+    itineraryId: "original",
+    requestFingerprint: "f",
+    request: { modes: ["rail"] },
+  });
+  const token = signRefreshHandle(
+    "policy",
+    "route-test-secret",
+    Math.floor(Date.now() / 1000) + 600,
+  );
+  orchestrator.refreshTrip.mockResolvedValue({
+    status: "ok",
+    result: {
+      data: {
+        id: "next",
+        source: "transit-motis-local",
+        legs: [{ mode: "rail", from: { stopId: "a" }, to: { stopId: "b" } }],
+      },
+      attributions: [],
+      freshness: {},
+    },
+  });
+  const success = await f.call("/plan/refresh", { body: { token } });
+  expect(success.status).toBe(200);
+  expect(success.body).not.toHaveProperty("sourceIds");
+  disabled = true;
+  expect((await f.call("/plan/refresh", { body: { token } })).status).toBe(409);
+  expect(orchestrator.refreshTrip).toHaveBeenCalledTimes(1);
 });

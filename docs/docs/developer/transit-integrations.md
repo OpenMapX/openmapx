@@ -637,3 +637,9 @@ are unavailable, preserving the refresh handle. Apart from an explicit dataset
 epoch mismatch, only the pinned server's `400 {error:"no legs reconstructed"}`
 answer establishes a gone itinerary. See
 [MOTIS v2.11.4 reconstruction](https://github.com/motis-project/motis/blob/v2.11.4/src/itinerary_id.cc#L1055).
+
+Refresh policy is checked before acquisition and before publishing results.
+Missing, policy-disabled or unsupported providers are terminal; health cooldown
+and transport failures remain retryable. Replayed successes retain server-only
+source bindings and recheck current policy, even when supplier receipts are empty.
+Exact-reference refreshes never turn these terminal conditions into a search.

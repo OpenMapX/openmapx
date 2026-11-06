@@ -402,3 +402,64 @@ it("keeps a real SDK HTTP failure unavailable while the provider health cache is
     await orchestrator.refreshTrip(provider.id, { itineraryId: "bound-id", datasetEpoch: "epoch" }),
   ).toEqual({ status: "unavailable" });
 });
+
+it.each(["absent", "unsupported", "disabled"])(
+  "ends ordinary refresh when its provider is %s",
+  async (reason) => {
+    const refresh = vi.fn(async () => withAttribution(null, ATTR, freshnessNow()));
+    const provider = makeProvider({
+      capabilities: {
+        ...makeProvider({}).capabilities,
+        planningFeatures: { refresh: reason !== "unsupported" } as never,
+      },
+      refreshTrip: refresh,
+    });
+    const ctx = makeCtx(reason === "absent" ? [] : [provider], { isHealthy: async () => false });
+    if (reason === "disabled")
+      Object.assign(ctx, {
+        getDisallowedSourceIds: async () => new Set(["test"]),
+        getIntegrationsByDomain: () => [
+          {
+            manifest: { dataSources: [{ sourceId: "test" }] },
+            providers: new Map([["transit", [provider]]]),
+          },
+        ],
+      });
+    expect(
+      await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
+        itineraryId: "bound",
+        datasetEpoch: "e",
+      }),
+    ).toMatchObject({ status: "gone" });
+    expect(refresh).not.toHaveBeenCalled();
+  },
+);
+it("discards ordinary refresh data if the source becomes disallowed during acquisition", async () => {
+  let disabled = false;
+  const provider = makeProvider({
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: async () => {
+      disabled = true;
+      return withAttribution({ id: "trip" } as never, ATTR, freshnessNow());
+    },
+  });
+  const ctx = makeCtx([provider], { isHealthy: async () => true });
+  Object.assign(ctx, {
+    getDisallowedSourceIds: async () => new Set(disabled ? ["test"] : []),
+    getIntegrationsByDomain: () => [
+      {
+        manifest: { dataSources: [{ sourceId: "test" }] },
+        providers: new Map([["transit", [provider]]]),
+      },
+    ],
+  });
+  expect(
+    await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
+      itineraryId: "bound",
+      datasetEpoch: "e",
+    }),
+  ).toMatchObject({ status: "gone", result: { data: null } });
+});

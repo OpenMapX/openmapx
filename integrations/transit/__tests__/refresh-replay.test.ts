@@ -68,3 +68,47 @@ it("does not retire state when a result write was silently fenced or unavailable
   ).toMatchObject({ status: 503 });
   expect(del).not.toHaveBeenCalled();
 });
+
+it.each(["receipt", "binding"])(
+  "refuses cached replay after its %s source is disabled",
+  async (kind) => {
+    const ctx = createMockIntegrationContext();
+    const values = new Map<string, unknown>();
+    let disabled = false;
+    Object.assign(ctx, {
+      getDisallowedSourceIds: async () => new Set(disabled ? ["source"] : []),
+      cache: {
+        get: async (k: string) => values.get(k) ?? null,
+        set: async (k: string, v: unknown) => {
+          values.set(k, v);
+        },
+        del: async (k: string) => {
+          values.delete(k);
+        },
+      },
+    });
+    const replay = createRefreshReplay(ctx);
+    const work = vi.fn(async () => ({
+      status: 200,
+      body: { token: "next", attributions: kind === "receipt" ? [{ sourceId: "source" }] : [] },
+      sourceIds: kind === "binding" ? ["source"] : [],
+    }));
+    expect((await replay("id", work)).status).toBe(200);
+    disabled = true;
+    expect((await replay("id", work)).status).toBe(409);
+    expect(work).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("retains state when policy changes during acquisition", async () => {
+  const ctx = createMockIntegrationContext();
+  let disabled = false;
+  Object.assign(ctx, { getDisallowedSourceIds: async () => new Set(disabled ? ["source"] : []) });
+  const del = vi.spyOn(ctx.cache, "del");
+  const result = await createRefreshReplay(ctx)("id", async () => {
+    disabled = true;
+    return { status: 200, sourceIds: ["source"], body: { token: "next" } };
+  });
+  expect(result.status).toBe(409);
+  expect(del).not.toHaveBeenCalled();
+});

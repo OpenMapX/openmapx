@@ -17,6 +17,7 @@ import {
   parseWgs84Point,
   type SearchSuggestionProvider,
   scalarQueries,
+  type TransitProvider,
   type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -1030,6 +1031,21 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  function refreshSourceIds(
+    providerId: string | undefined,
+    tripIds: readonly string[] = [],
+  ): string[] {
+    return ctx.getIntegrationsByDomain("transit").flatMap((integration) => {
+      const providers = (integration.providers.get("transit") ?? []) as TransitProvider[];
+      const matches = providers.some((p) =>
+        providerId ? p.id === providerId : tripIds.some((id) => id.startsWith(p.prefix)),
+      );
+      return matches
+        ? (integration.manifest.dataSources ?? []).map((source) => source.sourceId)
+        : [];
+    });
+  }
+
   const replayRefresh = createRefreshReplay(ctx);
 
   // POST /plan/refresh — opaque, one-time, server-side-bound MOTIS refresh.
@@ -1054,6 +1070,10 @@ export function setup(ctx: IntegrationContext): void {
       if (state.kind === "reference") {
         try {
           // Keep imported exact trips bound to their reference; never search for a replacement.
+          const sourceIds = refreshSourceIds(
+            undefined,
+            state.request.reference.legs.map((leg) => leg.tripId),
+          );
           const exact = await orchestrator.resolveTrip(state.request);
           const itinerary = exact.data?.itineraries[0];
           if (!itinerary)
@@ -1061,6 +1081,7 @@ export function setup(ctx: IntegrationContext): void {
           itinerary.refreshToken = await issueReferenceRefreshToken(itinerary, state.request);
           return {
             status: 200,
+            sourceIds,
             body: envelope(
               { itinerary, fallbackOccurred: false },
               exact.attributions,
@@ -1082,6 +1103,7 @@ export function setup(ctx: IntegrationContext): void {
           throw error;
         }
       }
+      let sourceIds = refreshSourceIds(state.providerId);
       const outcome = await orchestrator.refreshTrip(state.providerId, {
         itineraryId: state.itineraryId,
         datasetEpoch: state.datasetEpoch,
@@ -1116,6 +1138,11 @@ export function setup(ctx: IntegrationContext): void {
           status: 409,
           body: { error: "Itinerary can no longer be refreshed or replanned" },
         };
+      if (fallbackOccurred)
+        sourceIds = refreshSourceIds(
+          undefined,
+          itinerary.legs.flatMap((leg) => (leg.tripId ? [leg.tripId] : [])),
+        );
       if (itinerary.source === "transit-motis-local") {
         itinerary.refreshToken = await issueRefreshToken(
           itinerary,
@@ -1128,6 +1155,7 @@ export function setup(ctx: IntegrationContext): void {
       }
       return {
         status: 200,
+        sourceIds,
         body: envelope({ itinerary, fallbackOccurred }, resultAttributions, resultFreshness),
       };
     });
