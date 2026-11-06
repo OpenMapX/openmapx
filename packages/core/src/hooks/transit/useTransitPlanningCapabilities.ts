@@ -14,6 +14,7 @@ export interface TransitPlanningCapabilityProvider {
     detailedTransfers: boolean;
     paging: boolean;
     refresh: boolean;
+    resolveTrip?: boolean;
   };
   metadata?: {
     source: string;
@@ -23,13 +24,19 @@ export interface TransitPlanningCapabilityProvider {
   };
 }
 
-export function useTransitPlanningCapabilities() {
-  return useQuery({
-    queryKey: ["transit-planning-capabilities"],
-    queryFn: () =>
+export function transitPlanningCapabilitiesQueryOptions() {
+  return {
+    queryKey: ["transit-planning-capabilities"] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       apiClient.get<{ providers: TransitPlanningCapabilityProvider[] }>(
         API_ENDPOINTS.transitPlanningCapabilities,
+        undefined,
+        { signal },
       ),
     staleTime: 60_000,
-  });
+  };
+}
+
+export function useTransitPlanningCapabilities() {
+  return useQuery(transitPlanningCapabilitiesQueryOptions());
 }

@@ -72,6 +72,7 @@ export const API_ENDPOINTS = {
   transitRouteAlerts: "/api/integrations/transit/routes/:id/alerts",
   transitRouteLive: "/api/integrations/transit/routes/:id/live",
   transitPlan: "/api/integrations/transit/plan",
+  transitPlanResolve: "/api/integrations/transit/plan/resolve",
   transitPlanChain: "/api/integrations/transit/plan/chain",
   transitPlanRefresh: "/api/integrations/transit/plan/refresh",
   transitPlanningCapabilities: "/api/integrations/transit/planning-capabilities",

@@ -22,12 +22,12 @@ function wireTimes(): (string | undefined)[] {
 function wireParams(index: number): Record<string, string> {
   return get.mock.calls[index][1] as Record<string, string>;
 }
-/** The time segment of every cached plan query key (index 3 of the key). */
+/** The shared canonical request in every cached search key carries its wire time. */
 function cachedKeyTimes(): unknown[] {
   return client
     .getQueryCache()
     .findAll({ queryKey: ["transit-plan"] })
-    .map((query) => query.queryKey[3]);
+    .map((query) => (query.queryKey[1] as Record<string, unknown>).time);
 }
 function setup(initialProps: Params) {
   return renderHook((props: Params) => useTransitPlan(props), {
@@ -165,3 +165,107 @@ describe("useTransitPlan paging time", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 });
+
+it("uses the shared canonical key for a provided normal plan, including persisted hills and epoch", async () => {
+  const { providerPlanSelection } = await import("../../../travel-plans/__fixtures__/providerPlan");
+  const { transitPlanQueryKey } = await import("../../../api/transit");
+  const selection = providerPlanSelection({ bikeHillPreference: "avoid" });
+  if (selection.query.kind !== "search") throw new Error("fixture");
+  client.setQueryData(transitPlanQueryKey(selection.query), selection.plan);
+  const params = selection.query.params;
+  const view = setup({
+    origin: params.origin,
+    destination: params.destination,
+    departAt: params.time,
+    numItineraries: params.numItineraries,
+    transferBuffer: params.transferBuffer,
+    wheelchairRequired: params.wheelchairRequired,
+    requireBikeTransport: params.requireBikeTransport,
+    bikeHillPreference: params.bikeHillPreference,
+    capabilityEpoch: params.capabilityEpoch,
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10);
+  });
+  expect(get).not.toHaveBeenCalled();
+  expect(view.result.current.data).toMatchObject(selection.plan.data);
+});
+
+it("refetches the same provider reference rather than asking for normal search alternatives", async () => {
+  const { providerPlanSelection } = await import("../../../travel-plans/__fixtures__/providerPlan");
+  const { transitPlanQueryKey } = await import("../../../api/transit");
+  const selection = providerPlanSelection();
+  const reference = {
+    reference: {
+      datasetEpoch: "E",
+      legs: [
+        {
+          tripId: "ms:10935",
+          fromStopId: "ms:a",
+          toStopId: "ms:b",
+          scheduledDeparture: "2026-11-06T20:18:00.000Z",
+          scheduledArrival: "2026-11-06T21:11:00.000Z",
+        },
+      ],
+    },
+  };
+  client.setQueryData(
+    transitPlanQueryKey({ kind: "reference", params: reference }),
+    selection.plan,
+  );
+  const post = vi.spyOn(apiClient, "post").mockResolvedValue(selection.plan as never);
+  const view = setup({ origin: [6.091, 50.768], destination: [6.959, 50.943], reference });
+  await act(async () => {
+    await view.result.current.refetch();
+  });
+  expect(get).not.toHaveBeenCalled();
+  expect(post).toHaveBeenCalledWith(
+    "/api/integrations/transit/plan/resolve",
+    reference,
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(view.result.current.data).toMatchObject(selection.plan.data);
+});
+
+it.each(["substitution", "stale", "partial", "requirements"])(
+  "retains the selected reference when refetch returns %s evidence",
+  async (kind) => {
+    const { providerPlanSelection } = await import(
+      "../../../travel-plans/__fixtures__/providerPlan"
+    );
+    const { transitPlanQueryKey } = await import("../../../api/transit");
+    const selection = providerPlanSelection();
+    const reference = {
+      reference: {
+        datasetEpoch: "E",
+        legs: [
+          {
+            tripId: "ms:10935",
+            fromStopId: "ms:a",
+            toStopId: "ms:b",
+            scheduledDeparture: "2026-11-06T20:18:00.000Z",
+            scheduledArrival: "2026-11-06T21:11:00.000Z",
+          },
+        ],
+      },
+      wheelchairRequired: true,
+    };
+    client.setQueryData(
+      transitPlanQueryKey({ kind: "reference", params: reference }),
+      selection.plan,
+    );
+    const changed = structuredClone(selection.plan);
+    if (kind === "substitution") changed.data.itineraries[0].legs[0].tripId = "ms:another";
+    if (kind === "stale") changed.freshness.isStale = true;
+    if (kind === "partial") changed.freshness.isPartial = true;
+    if (kind === "requirements") changed.data.itineraries[0].legs[0].wheelchairAccessible = false;
+    vi.spyOn(apiClient, "post").mockResolvedValue(changed as never);
+    const view = setup({ origin: ORIGIN, destination: DESTINATION, reference });
+    await act(async () => {
+      await view.result.current.refetch();
+    });
+    await waitFor(() => expect(view.result.current.isError).toBe(true));
+    expect(view.result.current.data).toMatchObject(selection.plan.data);
+    expect(get).not.toHaveBeenCalled();
+  },
+);

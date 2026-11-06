@@ -119617,6 +119617,23 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
+    "/api/integrations/transit/plan/resolve": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitPlanResolve",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /plan/resolve (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
     "/api/integrations/transit/planning-capabilities": {
       "get": {
         "operationId": "getApiIntegrationsTransitPlanningCapabilities",

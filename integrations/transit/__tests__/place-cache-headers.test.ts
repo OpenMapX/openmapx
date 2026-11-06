@@ -151,3 +151,37 @@ describe("transit place response caching", () => {
     expect(res.headers["Cache-Control"]).toBeUndefined();
   });
 });
+
+it("rejects malformed anchored departure times before provider acquisition", async () => {
+  const handlers = routes([]);
+  const handler = handlers.get("GET /stops/:id/departures")!;
+  for (const time of [
+    "tomorrow",
+    "2026-02-31T10:00:00Z",
+    "2026-11-06T25:00:00Z",
+    "2026-11-06T20:18:00Z".repeat(3),
+  ]) {
+    const r = reply();
+    await handler({ query: { time, minutes: "5" }, params: { id: "a:central" } }, r);
+    expect(r.statusCode).toBe(400);
+  }
+});
+it("canonicalizes anchored time and returns no-store; current-only providers return 501", async () => {
+  const p = answering();
+  p.getDeparturesAt = vi.fn(async () => withAttribution([], [], freshnessNow()));
+  const handler = routes([p]).get("GET /stops/:id/departures")!;
+  const r = reply();
+  await handler(
+    { query: { time: "2026-11-06T20:17:00Z", minutes: "5" }, params: { id: "a:central" } },
+    r,
+  );
+  expect(r.statusCode).toBe(200);
+  expect(r.headers["Cache-Control"]).toBe("no-store");
+  expect(p.getDeparturesAt).toHaveBeenCalledWith("a:central", 5, "2026-11-06T20:17:00.000Z");
+  const unsupported = reply();
+  await routes([answering()]).get("GET /stops/:id/departures")?.(
+    { query: { time: "2026-11-06T20:17:00Z", minutes: "5" }, params: { id: "a:central" } },
+    unsupported,
+  );
+  expect(unsupported.statusCode).toBe(501);
+});

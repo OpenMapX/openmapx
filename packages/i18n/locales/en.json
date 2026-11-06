@@ -2662,7 +2662,14 @@
       "navigationUnavailable": "OpenMapX could not check your trip status. Close and reopen the app before importing. Shared items have been kept.",
       "listingUnavailable": "Shared items are temporarily unavailable. Try again; your items have been kept.",
       "retry": "Check again",
-      "sharedLocation": "Shared location"
+      "sharedLocation": "Shared location",
+      "tripMissingText": "Share the full connection text from DB Navigator, including its date, trains and times. A booking link alone cannot identify the trip here.",
+      "tripInvalid": "This connection text is incomplete or uses an unsupported format. Check the date and every train leg, or share the full connection again.",
+      "tripUnavailable": "The exact connection could not be verified. Timetable coverage may be unavailable for this date. Your share has been kept; try again.",
+      "tripAmbiguous": "More than one station or train matches this connection. OpenMapX has kept the share rather than choosing one.",
+      "tripText": "Shared connection text",
+      "sharedTrip": "Shared trip",
+      "tripBikeRequirement": "This shared trip uses walking access. Turn off “Take bike aboard” in route options before retrying. Your share and current bike route have been kept."
     }
   },
   "offline": {

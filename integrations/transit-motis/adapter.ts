@@ -346,6 +346,14 @@ export function normalizeStoptime(
   const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
   const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
   const lineName = motisLineName(st);
+  // GTFS-backed MOTIS can expose "RE9" as displayName and "010935" only
+  // in tripShortName. Keep the operational number distinct from the line.
+  const nativeNumber = st.tripShortName?.trim();
+  const trainNumber =
+    lineName.trainNumber ??
+    (motisMode(st.mode) === "rail" && /^\d{1,8}$/.test(nativeNumber ?? "")
+      ? nativeNumber?.replace(/^0+(?=\d)/, "")
+      : undefined);
 
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
@@ -373,7 +381,7 @@ export function normalizeStoptime(
     platform,
     scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
-    ...(lineName.trainNumber ? { serviceInfo: { trainNumber: lineName.trainNumber } } : {}),
+    ...(trainNumber ? { serviceInfo: { trainNumber } } : {}),
     // A station's board includes its platforms' stop times, each naming its own stop.
     ...(place.stopId && place.name
       ? { stop: { id: `${instance.prefix}${place.stopId}`, name: place.name } }
@@ -491,6 +499,7 @@ export async function getDepartures(
   stopId: string,
   minutes: number,
   provenance?: { datasetEpoch?: string; realtimeEnabled?: boolean },
+  time?: string,
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
@@ -498,7 +507,7 @@ export async function getDepartures(
       client: instance.client,
       query: {
         stopId: id,
-        time: new Date().toISOString(),
+        time: time ?? new Date().toISOString(),
         n: Math.min(200, Math.max(20, minutes * 2)),
         window: minutes * 60,
         arriveBy: false,
@@ -920,7 +929,7 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
 }
 
 /** Map a single MOTIS Itinerary to our TripItinerary. */
-function mapItinerary(
+export function mapItinerary(
   instance: MotisInstance,
   it: Itinerary,
   datasetEpoch?: string,
