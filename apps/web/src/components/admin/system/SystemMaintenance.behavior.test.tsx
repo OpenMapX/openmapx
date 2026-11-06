@@ -185,6 +185,8 @@ it("keeps host instructions after a raced apply failure and clears them after a 
       expect(screen.getByRole("alert")).toHaveTextContent("Host update required"),
     );
     expect(screen.getByRole("alert")).toHaveTextContent("previous agent keeps running");
+    expect(screen.getByRole("alert")).toHaveTextContent("Inspect Activity and host diagnostics");
+    expect(screen.queryByRole("button", { name: "Copy commands" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
     // The failed job is no longer tracked, but its instructions remain visible.
     await waitFor(() =>

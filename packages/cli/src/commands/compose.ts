@@ -39,6 +39,7 @@ import {
 } from "../lib/platform-secret-files";
 import { combineServiceSelection } from "../lib/preset-selection";
 import {
+  checkRelease,
   clearReleaseSelection,
   ensureReleaseOverlay,
   releaseStatusLines,
@@ -383,7 +384,7 @@ export async function renderComposeWithWriter(
   let checkoutPosition: coreServices.CheckoutPosition | undefined;
   if (selected === "none") {
     log.dim(
-      "No release is selected yet: the services' files come from this checkout. `pnpm openmapx compose release` selects one.",
+      "No release is selected yet: the services' files come from this checkout. Bootstrap can select with `pnpm openmapx compose release`; existing installations use System → Updates or `system update`.",
     );
   } else if (selected) {
     // Before anything is imported: what the checkout holds that the release
@@ -604,14 +605,30 @@ export function registerComposeCommands(program: Command): void {
     .option("--status", "Show locally selected release and image pins without registry access")
     .addOption(
       new Option(
-        "--clear",
-        "Clear local release selection without changing running containers",
-      ).conflicts("status"),
+        "--check",
+        "Check and cache release metadata without changing selected pins",
+      ).conflicts(["status", "clear"]),
     )
-    .action(async (options: { status?: boolean; clear?: boolean }) => {
+    .addOption(
+      new Option(
+        "--clear",
+        "Clear an unused or mismatched release selection; refuses a matching Data Manager",
+      ).conflicts(["status", "check"]),
+    )
+    .action(async (options: { status?: boolean; clear?: boolean; check?: boolean }) => {
       try {
         if (options.status) {
           for (const line of releaseStatusLines()) log.info(line);
+          return;
+        }
+        if (options.check) {
+          const checked = await checkRelease();
+          log.ok(`Checked release: ${checked.manifest.release}`);
+          log.info(`Manifest digest: ${checked.manifestDigest}`);
+          log.info(`Metadata image digest: ${checked.ociDigest}`);
+          for (const name of coreServices.RELEASE_IMAGE_NAMES)
+            log.info(`${name}: ${checked.manifest.images[name]}`);
+          log.dim("Selected pins and running services were not changed.");
           return;
         }
         if (options.clear) {
@@ -634,7 +651,7 @@ export function registerComposeCommands(program: Command): void {
         const selected = await selectRelease({ report: log.info });
         log.ok(`Atomic release selection ${selected.release} → ${selected.path}`);
         log.dim(
-          "Apply it with `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner`.",
+          "Bootstrap: start the selected release with `pnpm openmapx compose up`. Existing installations: use System → Updates or authenticated `system update` after `compose release --check`.",
         );
       } catch (err) {
         log.err(`Release lockfile operation failed: ${(err as Error).message}`);

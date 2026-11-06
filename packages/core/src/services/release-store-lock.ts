@@ -9,7 +9,7 @@ import {
   readSync,
   rmSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { atomicWrite, durableUnlink, fsyncDirectory } from "../release-files";
 
 export const RELEASE_STORE_LOCK_NAME = ".release-store.lock";
@@ -58,6 +58,27 @@ function strictReadFile(path: string, maximum: number): string {
 export interface ReleaseStoreLock {
   release(): void;
 }
+const physicalLockOwners = new WeakMap<ReleaseStoreLock, string>();
+const liveReleaseLocks = new WeakMap<
+  ReleaseStoreLock,
+  { directory: string; dev: number; ino: number; owner: string }
+>();
+
+/** Object identity and the original physical owner, never a caller boolean. */
+export function assertReleaseStoreLock(lock: ReleaseStoreLock, directory: string): void {
+  const held = liveReleaseLocks.get(lock);
+  if (!held || held.directory !== resolve(directory)) throw Error("Release store lock is not held");
+  const path = join(directory, RELEASE_STORE_LOCK_NAME);
+  const stat = lstatSync(path);
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    stat.dev !== held.dev ||
+    stat.ino !== held.ino ||
+    strictReadFile(join(path, "owner.json"), MAX_RELEASE_STATE_BYTES) !== held.owner
+  )
+    throw Error("Release store lock ownership changed");
+}
 
 export interface ReleaseStoreLockHooks {
   afterLockDirectoryCreate?: () => void;
@@ -87,9 +108,10 @@ export async function acquireStoreLock(
       mkdirSync(lockPath, { mode: 0o700 });
       hooks.afterLockDirectoryCreate?.();
       hooks.beforeOwnerRecordWrite?.();
-      atomicWrite(ownerPath, JSON.stringify({ ...owner, acquiredAtMs: nowMs(), leaseMs }));
+      const ownerRecord = JSON.stringify({ ...owner, acquiredAtMs: nowMs(), leaseMs });
+      atomicWrite(ownerPath, ownerRecord);
       fsyncDirectory(lockPath);
-      return {
+      const lock: ReleaseStoreLock = {
         release() {
           durableUnlink(ownerPath);
           try {
@@ -101,6 +123,8 @@ export async function acquireStoreLock(
           }
         },
       };
+      physicalLockOwners.set(lock, ownerRecord);
+      return lock;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
@@ -153,10 +177,55 @@ export async function acquireStoreLock(
   }
 }
 
-export function acquireReleaseStoreLock(
+export async function acquireReleaseStoreLock(
   directory: string,
   hooks: ReleaseStoreLockHooks = {},
   options: { failIfBusy?: boolean } = {},
 ): Promise<ReleaseStoreLock> {
-  return acquireStoreLock(directory, RELEASE_STORE_LOCK_NAME, hooks, Date.now, options.failIfBusy);
+  const physical = await acquireStoreLock(
+    directory,
+    RELEASE_STORE_LOCK_NAME,
+    hooks,
+    Date.now,
+    options.failIfBusy,
+  );
+  try {
+    const path = join(directory, RELEASE_STORE_LOCK_NAME);
+    const stat = lstatSync(path);
+    const owner = strictReadFile(join(path, "owner.json"), MAX_RELEASE_STATE_BYTES);
+    if (owner !== physicalLockOwners.get(physical))
+      throw Error("Release store lock ownership changed");
+    const lock: ReleaseStoreLock = {
+      release() {
+        assertReleaseStoreLock(lock, directory);
+        try {
+          physical.release();
+        } finally {
+          liveReleaseLocks.delete(lock);
+        }
+      },
+    };
+    liveReleaseLocks.set(lock, {
+      directory: resolve(directory),
+      dev: stat.dev,
+      ino: stat.ino,
+      owner,
+    });
+    return lock;
+  } catch (error) {
+    // Never clean up a replacement owner. If observation remains unavailable,
+    // leave the guard fail-closed rather than guessing which process owns it.
+    let ours = false;
+    try {
+      ours =
+        strictReadFile(
+          join(directory, RELEASE_STORE_LOCK_NAME, "owner.json"),
+          MAX_RELEASE_STATE_BYTES,
+        ) === physicalLockOwners.get(physical);
+    } catch {
+      /* Ownership cannot be established. */
+    }
+    if (ours) physical.release();
+    throw error;
+  }
 }

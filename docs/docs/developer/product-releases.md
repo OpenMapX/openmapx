@@ -72,7 +72,7 @@ GitHub authorization errors remain errors. They are never treated as a missing d
 
 The optional trusted repository setting is `OPENMAPX_RELEASE_MANIFEST_REPOSITORY`, default `ghcr.io/openmapx/release-manifest`. No stable/latest channel or main fallback exists. After the first real publication, explicitly choose preview for named prereleases; installation never guesses whether it exists. See [configuration migration](../install/configuration.md#changing-release-selection).
 
-Use `pnpm openmapx compose release --status` to inspect deliberate pins and `pnpm openmapx compose release` to reselect. Normal service commands preserve an existing coherent overlay. Admin check stores the candidate ID/digest; apply uses exactly that stored candidate even if a pointer later advances. A configuration change requires a new check. The agent refuses to replace its own running image/helper; update these from the host first using [Upgrading](../install/upgrading.md).
+Use `pnpm openmapx compose release --status` to inspect deliberate pins. For existing installations, `compose release --check` caches a candidate without changing selected pins; System → Updates or authenticated `system update` applies the exact checked ID/digest through the coordinated producer. Bare `compose release` refuses to change a running Data Manager's pin and is limited to bootstrap or exact-match recovery. Normal service commands preserve an existing coherent overlay. A configuration change requires a new check. See [Upgrading](../install/upgrading.md).
 
 ## Verification boundaries
 

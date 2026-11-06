@@ -34,7 +34,7 @@ export async function selectedReleaseServiceFiles(
   if (!image) throw new Error("The release overlay pins no operations-agent image");
   const unreadable = (reason: string) =>
     new Error(
-      `The selected release's service files could not be read from its operations-agent image ${image}: ${reason}. Render uses the release's files, so it stops here. If the selected release predates this checkout, select this checkout's release: pnpm openmapx compose release.`,
+      `The selected release's service files could not be read from its operations-agent image ${image}: ${reason}. Render uses the release's files, so it stops here. If the selected release predates this checkout, use System → Updates or authenticated system update after compose release --check. Bootstrap can select with compose release.`,
     );
   const run = await execa(
     "docker",

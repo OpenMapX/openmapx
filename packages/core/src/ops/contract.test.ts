@@ -936,7 +936,11 @@ describe("ops contract", () => {
       dockerReachable: true,
       composeReady: true,
       maintenanceReady: true,
-      release: { currentReleaseId: "release-old", availableReleaseId: "release-new" },
+      release: {
+        currentReleaseId: "release-old",
+        selectedReleaseId: "release-selected",
+        availableReleaseId: "release-new",
+      },
       services: [
         {
           serviceId: "app-api",
@@ -966,6 +970,7 @@ describe("ops contract", () => {
     for (const invalid of [
       { ...result, services: [{ ...result.services[0], state: "up-to-date" }] },
       { ...result, services: [{ ...result.services[0], localImageId: null }] },
+      { ...result, release: { ...result.release, untrustedField: "unexpected" } },
       { ...result, containerName: "app-api-1" },
     ]) {
       expect(() => parseOpsResult("system.inspect", invalid)).toThrow();

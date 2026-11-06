@@ -845,7 +845,7 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
     "Update the API or CLI client to persist a timed control root before submitting this mutation.",
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
-    "Host update required: the operations agent or its backup helper could not be updated from the admin panel. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.",
+    "Host update required: the operations agent or its backup helper could not be verified or updated. Inspect Activity and host diagnostics, then follow the upgrading guide to resolve the prerequisite. Retrying the candidate through the CLI does not repair the host. Preserve the current release selection.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {
@@ -1292,6 +1292,7 @@ export const OPS_RESULT_SCHEMAS = {
     maintenanceReady: z.boolean(),
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
+      selectedReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
       configuredSelector: z.string().max(128).optional(),
       currentVersion: z.string().max(128).optional(),

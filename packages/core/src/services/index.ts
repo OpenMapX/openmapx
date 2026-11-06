@@ -1,4 +1,5 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
+export * from "./agent-handoff-record";
 export {
   type AgentMountLayout,
   generationAgentMountLayout,
@@ -39,6 +40,12 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export * from "./checked-configuration-release";
+export {
+  cacheCheckedReleaseManifest,
+  listReleaseStoreManifests,
+  releaseConfigurationIdentity,
+} from "./checked-release";
 export {
   type CheckoutDifference,
   checkoutDifferencesFromRelease,
@@ -322,6 +329,7 @@ export {
   type ReleaseStatePaths,
   readReleaseOverlay,
   readReleaseOverlayFile,
+  readReleaseStateBytes,
   readReleaseStateFile,
   releaseEvidenceReference,
   releaseStateFileProblem,
@@ -338,6 +346,7 @@ export {
 export {
   acquireReleaseStoreLock,
   acquireStoreLock,
+  assertReleaseStoreLock,
   RELEASE_STORE_LOCK_NAME,
   type ReleaseStoreLock,
   type ReleaseStoreLockHooks,

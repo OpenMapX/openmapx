@@ -119,7 +119,7 @@ you intend to manage through that surface, then recreate ops-agent. Setting
 ### Changing release selection
 
 `main` selects the development channel. `preview` selects the latest deliberately
-published named prerelease and fails if none exists. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then explicitly reselect with `pnpm openmapx compose release` or clear it when intentionally leaving release mode.
+published named prerelease and fails if none exists. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then use System → Updates or authenticated `system update` after `compose release --check`. Bare selection is for bootstrap or exact-match recovery; clearing refuses an overlay used by its matching Data Manager.
 
 ### Generated secret files and recovery
 
@@ -687,7 +687,7 @@ so the catalogue stays in sync with the live manifests.
 
 ### Changing release selection
 
-The default remains `main` before the first named preview exists. For deliberately published prereleases, set `preview` after the first publication. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then explicitly reselect with `pnpm openmapx compose release` or clear it when intentionally leaving release mode.
+The default remains `main` before the first named preview exists. For deliberately published prereleases, set `preview` after the first publication. Changing configuration does not silently replace an existing overlay: inspect `pnpm openmapx compose release --status`, then use System → Updates or authenticated `system update` after `compose release --check`. Bare selection is for bootstrap or exact-match recovery; clearing refuses an overlay used by its matching Data Manager.
 
 ### Generating configuration from the admin panel
 

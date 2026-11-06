@@ -32,4 +32,5 @@ export * from "./service-operation-records";
 export * from "./service-results";
 export * from "./standalone-integrations";
 export * from "./trusted-config";
+export * from "./trusted-config-outcome";
 export * from "./trusted-config-queue-lock";

@@ -1,4 +1,5 @@
 /** Selection metadata only. Does not modify images, running state or evidence. */
+import { createHash } from "node:crypto";
 import {
   closeSync,
   constants,
@@ -22,9 +23,12 @@ import { acquireReleaseStoreLock } from "./release-store-lock";
 export async function clearReleaseComposeSelection(opts: {
   path: string;
   expectedReleaseId?: string;
+  expectedOverlayDigest?: string | null;
   infraDir?: string;
   uid?: number;
 }): Promise<{ path: string; cleared: boolean }> {
+  if (opts.expectedOverlayDigest != null && !/^[a-f0-9]{64}$/.test(opts.expectedOverlayDigest))
+    throw Error("Invalid release selection digest");
   const path = resolve(opts.path);
   const parent = dirname(path);
   const infraDir = opts.infraDir ?? resolve(parent, "../../..");
@@ -48,10 +52,12 @@ export async function clearReleaseComposeSelection(opts: {
       selected = lstatSync(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      if (opts.expectedReleaseId !== undefined) throw Error("Release selection changed");
+      if (opts.expectedReleaseId !== undefined || typeof opts.expectedOverlayDigest === "string")
+        throw Error("Release selection changed");
       supersedeLegacyReleaseOverlay(infraDir, stateOptions);
       return { path, cleared: false };
     }
+    if (opts.expectedOverlayDigest === null) throw Error("Release selection changed");
     if (
       releaseStateFileProblem(selected, 128 * 1024, stateOptions) !== null ||
       !selected.isFile() ||
@@ -69,7 +75,7 @@ export async function clearReleaseComposeSelection(opts: {
         opened.size !== selected.size
       )
         throw Error("Release selection changed");
-      if (opts.expectedReleaseId !== undefined) {
+      if (opts.expectedReleaseId !== undefined || opts.expectedOverlayDigest !== undefined) {
         const bytes = Buffer.alloc(opened.size);
         let offset = 0;
         while (offset < bytes.length) {
@@ -77,8 +83,13 @@ export async function clearReleaseComposeSelection(opts: {
           if (!count) throw Error("Release selection changed");
           offset += count;
         }
-        const contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        if (parseReleaseComposeSelection(contents).release !== opts.expectedReleaseId)
+        if (
+          (opts.expectedReleaseId !== undefined &&
+            parseReleaseComposeSelection(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+              .release !== opts.expectedReleaseId) ||
+          (opts.expectedOverlayDigest !== undefined &&
+            createHash("sha256").update(bytes).digest("hex") !== opts.expectedOverlayDigest)
+        )
           throw Error("Release selection changed");
       }
       const after = lstatSync(path);

@@ -86,7 +86,7 @@ export function resolveTransitousToolsImage(rootDir?: string): string {
   }
   if (selection.kind !== "local")
     throw new Error(
-      "Select a coherent release with `pnpm openmapx compose release` before building transit data, or explicitly choose OPENMAPX_RELEASE=local",
+      "Before building transit data, bootstrap with `compose release` or update an existing installation through System → Updates / authenticated `system update`; alternatively explicitly choose OPENMAPX_RELEASE=local",
     );
   return fromEnv || DEFAULT_TRANSITOUS_TOOLS_IMAGE;
 }
@@ -293,7 +293,7 @@ async function assertTransitousToolsScript(
     );
   } catch {
     throw new Error(
-      `The transit tools image ${image} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Select the checkout's release with pnpm openmapx compose release, then build again.`,
+      `The transit tools image ${image} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Update through System → Updates or authenticated system update after compose release --check, then build again.`,
     );
   }
 }

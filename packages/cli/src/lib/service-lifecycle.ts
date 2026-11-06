@@ -84,7 +84,7 @@ export async function runCliServiceLifecycle(options: {
   if (options.action === "update" && options.serviceIds.includes("data-manager"))
     throw new ServiceLifecycleCommandError(
       1,
-      "Coordinator Update requires its guarded administrative workflow",
+      "Coordinator Update requires its guarded administrative workflow: use System → Updates or authenticated `pnpm openmapx system update` after `compose release --check`",
     );
   const { randomBytes, randomUUID } = await import("node:crypto");
   const { existsSync, mkdirSync } = await import("node:fs");
@@ -230,6 +230,7 @@ export async function runCliServiceLifecycle(options: {
   if (inherited && !inherited.lease)
     throw Error("Delegated lifecycle requires its original borrowed lease");
   let ownership: services.VerifiedLifecycleOwnership | undefined;
+  let releaseStoreLock: services.ReleaseStoreLock | undefined;
   let store: services.ServiceLifecycleReceiptStore | undefined;
   let receipt: services.ServiceLifecycleReceipt | undefined;
   let lease: TargetLeaseAuthority | undefined;
@@ -282,6 +283,7 @@ export async function runCliServiceLifecycle(options: {
                 {},
                 { failIfBusy: true },
               );
+              releaseStoreLock = lock;
               try {
                 store = await services.openServiceLifecycleReceipt({
                   dataRoot: join(paths.infraDir, "data"),
@@ -333,6 +335,7 @@ export async function runCliServiceLifecycle(options: {
                   throw error;
                 }
               } finally {
+                releaseStoreLock = undefined;
                 lock.release();
                 ownership = undefined;
               }
@@ -343,7 +346,8 @@ export async function runCliServiceLifecycle(options: {
     },
     async validatePins(selected) {
       if (release.touchesReleasePinnedServices(selected)) {
-        const overlay = await release.ensureReleaseOverlay();
+        if (!releaseStoreLock) throw Error("Lifecycle release-store ownership unavailable");
+        const overlay = await release.ensureReleaseOverlay({ releaseStoreLock });
         if (overlay.status === "held") throw new ServiceLifecycleCommandError(1, overlay.reason);
         if (overlay.status === "unpinned")
           throw new ServiceLifecycleCommandError(1, "Release selection unavailable");

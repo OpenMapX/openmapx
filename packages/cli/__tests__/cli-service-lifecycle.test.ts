@@ -247,9 +247,15 @@ describe("actual CLI service lifecycle preparation", () => {
     const infraDir = join(root, "infra/docker");
     const path = services.releaseStatePaths(infraDir).overlay;
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      await expect(selectRelease({ infraDir, resolve: async () => manifest })).rejects.toThrow(
-        "Release store is busy",
-      );
+      await expect(
+        selectRelease({
+          infraDir,
+          resolve: async () => manifest,
+          docker: async () => {
+            throw Error("Release inspection must not start without the lock");
+          },
+        }),
+      ).rejects.toThrow("Release store is busy");
       expect(existsSync(path)).toBe(false);
       return 0;
     });

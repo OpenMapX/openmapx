@@ -252,7 +252,7 @@ pnpm openmapx services update valhalla                 # pull images + replace c
 pnpm openmapx services status                          # container table (all services)
 pnpm openmapx services status valhalla                 # one service
 pnpm openmapx compose pull [ids...]                    # pull images without starting containers
-pnpm openmapx compose release                          # update release pin against release manifest
+pnpm openmapx compose release --check                  # check candidate without changing release pins
 pnpm openmapx compose rotate-redis-password --confirm-clients-stopped # rotate Redis ACL/secret
 ```
 
@@ -264,7 +264,7 @@ The distinction between `restart` and `start`/`update` matters:
 - **`start`** re-renders first, so it picks up compose-file changes.
 - **`update`** re-renders, pulls the selected images, and force-recreates the
   target containers. An existing release overlay remains pinned. Select a newer
-  application release with `compose release` first; see [Upgrading](./upgrading.md).
+  application release through System → Updates or authenticated `system update` after `compose release --check`; see [Upgrading](./upgrading.md).
   Use `--no-deps` to replace only the named containers when dependencies are already
   healthy.
 - **`compose rotate-redis-password`** rotates Redis credentials after clients

@@ -1,3 +1,4 @@
+import { HOST_MUTATING_JOB_TYPES } from "@openmapx/core/api-contracts";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { hostControlConfigured } from "../services/deployment-mode";
 import { jobRunner } from "../services/job-runner";
@@ -37,21 +38,6 @@ function isExactSystemUpdateBody(body: unknown): boolean {
     (value.createBackup === undefined || typeof value.createBackup === "boolean")
   );
 }
-
-const HOST_MUTATING_JOB_TYPES = [
-  "system.update",
-  "platform.apply",
-  "system.diagnostics",
-  "service.start",
-  "service.stop",
-  "service.restart",
-  "service.apply",
-  "service.bulk",
-  "data.operation",
-  "backup.operation",
-  "extension.install",
-  "extension.remove",
-] as const;
 
 async function deploymentState(durableIdentity: string) {
   try {
