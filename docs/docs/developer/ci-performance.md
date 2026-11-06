@@ -230,6 +230,15 @@ these private deployment-image changes do not need empty package notes. Source,
 package manifests and nested Dockerfile fixtures still participate in the gate.
 The wider package/release baseline is handled separately.
 
+## Linux deployment-user validation
+
+The Linux gate runs the complete agent, core, data-manager and deployment-user
+selection with one Vitest worker. Test files run one at a time to reduce contention
+between filesystem-heavy fixtures. Concurrency inside each case, test and hook
+timeouts, and runtime deadlines stay unchanged. Failures are not retried. The gate
+retains its pinned Node container, uid 1001 and umask `002`; the required CI
+aggregate still requires it to succeed.
+
 ## Database groups
 
 Database validation runs in five jobs on separate GitHub-hosted runners:

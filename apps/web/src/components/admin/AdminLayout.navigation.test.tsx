@@ -153,3 +153,27 @@ it("server-renders the desktop sidebar open without a hydration width shift", ()
   );
   expect(markup).toContain('aria-expanded="true"');
 });
+
+it("links hosted Data operators to available Data topics", () => {
+  adminTestHistory.reset("/admin/data/osm");
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <AdminLayout
+        user={{ id: "admin", name: "Example", email: "admin@example.test", role: "admin" }}
+        selfHosted={false}
+      >
+        <button type="button">Host mutation</button>
+      </AdminLayout>
+    </NextIntlClientProvider>,
+    { wrapper: createQueryWrapper() },
+  );
+  expect(screen.queryByRole("button", { name: "Host mutation" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Cache" })).toBeNull();
+  expect(screen.getAllByRole("link", { name: "Transit" })).toHaveLength(2);
+  expect(screen.getAllByRole("link", { name: "Coverage & freshness" })).toHaveLength(2);
+});

@@ -80,56 +80,37 @@ integrations, services and bundles. Review the exact service commit, effective
 host ports and security rating before confirming. A verified catalog entry is
 not a security audit. See [Community extensions](./community-extensions.md).
 
-### Services _(self-hosted only)_
+### System
 
-- **Catalog:** service selection, container state, configuration, credentials
-  and lifecycle actions.
-- **Compose preview:** generated Compose configuration and stack actions.
-- **Data workflows:** source acquisition, transit publication, engine builds,
-  Overture, search indexes and map-place publication. Forms and previews come
-  from the API's operation catalog; destructive operations require confirmation.
-- **Backups:** create, inspect, restore and delete retained snapshots.
+System groups operational topics without mixing them into application Settings:
 
-- **Catalog** — every installed service (built-in or extension-installed), its
-  capabilities and container state, with start/stop/restart.
-- **Compose preview** — the generated `docker-compose` file, so you can see what
-  the renderer will do before bringing the stack up. Generate configuration only,
-  start the selected stack, or copy host shutdown guidance from this page.
-- **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
-  feeds, glyph fonts), GTFS import controls, and Overture Places release and
-  durable OSM↔GERS link operations. The operation cards are rendered from a
-  server-side catalog: the API declares each operation's fields, defaults,
-  validation, and risk level, and the form only mirrors that contract. Queueing
-  an operation first asks the API for a preview of what it will do; destructive
-  operations add an explicit warning to that confirmation step.
-- **Backups** — the on-disk snapshot manager. See [Backup and
-  restore](./backup-and-restore.md).
+- **Services:** searchable inventory, configuration, credentials, logs and service actions. Bulk controls appear after selecting targets; presets change action targets only. Build All reviews a captured service list.
+- **Deployment:** persistent service roots and their required dependencies, domain, ACME contact and default region. Compose preview and stack actions are in a disclosure.
+- **Updates:** release selector, checked image updates and update progress.
+- **Backups:** create, inspect, restore and delete snapshots, with backup retention in the same topic.
+- **Diagnostics:** readiness evidence and deep service probes.
+- **Cache:** inspect and clear application caches.
+- **Configuration transfer:** export, import, migration and protected credential transfer.
 
-The full picture of services and the `openmapx` CLI that backs these pages is in
-[Services administration](./services-administration.md) and [Managing
-services](../install/managing-services.md).
+Services, Deployment, Updates, Backups and Diagnostics require self-hosted control. Cache and Configuration transfer remain available to hosted administrators.
 
-### Maintenance _(self-hosted only)_
+Release checks do not download application images. Updates can create a pre-update database backup, replace the operations agent and checkpoint progress before replacing the API. Updates and diagnostics share admission state; inspect the original job before retrying an interrupted or unknown outcome. Check and update throttles remain distinct. See [Upgrading](../install/upgrading.md).
 
-Check the selected release against running image digests, download an update,
-or run deep service probes. A release check does not download application images.
-Updates offer a pre-update database backup, replace the operations agent when
-needed, and checkpoint progress before replacing the API so the new process can
-finish after migrations. Inspect the job outcome before retrying an interrupted
-update. See [Upgrading](../install/upgrading.md).
+Platform previews preserve the fresh configuration owned by other topics. Applying an expired or conflicting preview requires a new review. Domain changes retain DNS/TLS, alternate-login, OAuth and passkey recovery checks. See [Services administration](./services-administration.md).
 
-You can start the update as soon as a check finishes. Checks have their own
-once-per-30-seconds throttle, separate from the one shared by updates and
-diagnostics. If the API rejects a request as too frequent, the page says so, keeps the update
-confirmation open with your choices, and re-enables the action when the server's wait
-is over. Nothing is retried automatically; press the button again when it is available.
+### Data
 
-### Transit
+`/admin/data` is a directory. It reads the aggregate inventory without polling every data family. Open a workspace to inspect its authoritative evidence:
 
-Inspect the Transitous catalog pin, feed/import state, provider health and
-pipeline jobs. Pin changes require review. See
-[MOTIS operations profiles](./motis-operations-profiles.md) and
-[Public transit](../features/public-transit.md).
+- **OSM:** extract age, paginated disk/build inventory, OSM and font downloads, and Overpass conversion.
+- **Overture:** release sync, durable linking and advanced recovery phases.
+- **Search & places:** search index, ambient data and notable-place publication.
+- **Transit:** Sources, Catalog, Credentials, Pipeline and Mobility tabs. Sources shows desired acquisition separately from active publication; Catalog retains paired pin review and validation. Credentials retains actor-scoped reauthentication without putting secrets in navigation state.
+- **Coverage & freshness:** geography, publication, freshness and rights evidence.
+- **Prepared transfers:** existing staged artifact import/export review.
+- **Advanced operations:** full update, hardlink sync and destructive cleanup.
+
+Launchers open one existing schema-driven operation form at a time. The API still owns fields, defaults, validation and preview. Destructive operations retain explicit confirmation. Hidden workspaces do not run their domain status queries. See [MOTIS operations profiles](./motis-operations-profiles.md) and [Public transit](../features/public-transit.md).
 
 ### Coverage & freshness
 
@@ -138,7 +119,7 @@ Fuel, Cameras and Traffic. Publication, freshness, runtime, geography and rights
 remain separate observations. **Unknown** means evidence is missing or cannot
 be verified. See [Coverage & freshness](./coverage-freshness.md).
 
-### Cache
+### Cache (System)
 
 The Redis/Valkey cache inspector — list the cache namespaces (geocoding
 results, provider responses, and the rest) with their key counts, and clear one
@@ -185,21 +166,20 @@ does not approve generation for the deployment. See
 
 ## CLI coverage and deliberate exclusions
 
-| Task                                                       | Admin location            |
-| ---------------------------------------------------------- | ------------------------- |
-| Service selection, status, lifecycle, builds and logs      | Services                  |
-| Release check/update and deep probes                       | Maintenance               |
-| Source downloads, transit sync, indexes, links and cleanup | Services → Data workflows |
-| Extension install/update/removal                           | Extensions                |
-| Account administration                                     | Users                     |
-| Snapshot create/list/restore/delete                        | Services → Backups        |
-| Application cache clearing                                 | Cache                     |
-| Transitous pin inspection and approval                     | Transit                   |
+| Task                                                       | Admin location                 |
+| ---------------------------------------------------------- | ------------------------------ |
+| Service selection, status, lifecycle, builds and logs      | System → Services / Deployment |
+| Release check/update and deep probes                       | System → Updates / Diagnostics |
+| Source downloads, transit sync, indexes, links and cleanup | Data workspaces                |
+| Extension install/update/removal                           | Extensions                     |
+| Account administration                                     | Users                          |
+| Snapshot create/list/restore/delete                        | System → Backups               |
+| Application cache clearing                                 | System → Cache                 |
+| Transitous pin inspection and approval                     | Data → Transit → Catalog       |
 
 Integration scaffolding, validation, building and packaging remain developer CLI
 workflows. The panel excludes `compose down --volumes`, unrestricted Redis flushes
-and individual low-level Overture phases. Use the documented orchestrated data
-operations for routine administration.
+and unrestricted destructive host commands. Overture advanced recovery retains its specialized pull, ingest and extraction controls; use orchestrated data operations for routine administration.
 
 ## Where to go next
 
@@ -232,3 +212,9 @@ workspace, retaining supported public navigation state. Ordinary unsaved drafts
 survive topic changes. The draft count in the top bar can discard all ordinary
 drafts after confirmation, including drafts for a removed service or integration.
 Draft values remain in this browser document's memory only.
+
+## Privacy case navigation
+
+Casework uses `?case=<id>&section=<section>` for direct, authorized detail access independently of queue membership. Identity, Tasks, Decisions, Attachments, Backup review, Generation & delivery and Events are addressable disclosures. Ordinary case form inputs survive section toggles; private delivery controls dispose when closed. Available work and denial reasons come from the server capabilities, and version conflicts require refresh.
+
+Changing cases, including browser Back, clears the previous pending delivery. A reauthentication return without a case restores its matching pending case. Casework shows a concise readiness status; the complete checklist and configuration stay in Privacy setup. Privacy administrators receive contact guidance without settings links. On narrow screens a case selector replaces the long side queue.

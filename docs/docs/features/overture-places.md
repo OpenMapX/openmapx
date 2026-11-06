@@ -70,8 +70,7 @@ Places snapshot. Link rebuilding is a separate resumable workflow; an incomplete
 rebuild does not establish readiness for nearby-place publication. Failed work
 preserves the prior published data at the relevant boundary.
 
-The admin panel offers these operations under **Services → Data workflows →
-Overture Places**. **Full sync** runs the complete refresh. **Resume links**
+The admin panel offers these operations under **Data → Overture**. **Full sync** runs the complete refresh. **Resume links**
 continues the installed release's durable rebuild; **Restart links from scratch**
 discards its resumable workspace while preserving published Places. Both show a
 server preview before confirmation. **Advanced recovery** exposes download,

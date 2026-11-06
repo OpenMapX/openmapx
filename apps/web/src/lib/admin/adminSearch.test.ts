@@ -12,7 +12,7 @@ it("addresses the owning legal section without creating a duplicate policy edito
 });
 it.each([
   ["SMTP", "/admin/settings/email?field=smtpHost"],
-  ["GTFS", "/admin/data#transit-sources"],
+  ["GTFS", "/admin/data/transit?tab=sources"],
   ["backup expiry", "/admin/system/backups#backup-retention"],
   ["release channel", "/admin/system/updates#release-selector"],
 ])("finds the current owning control for %s", (query, href) => {

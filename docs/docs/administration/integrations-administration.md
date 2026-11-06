@@ -209,7 +209,7 @@ OpenMapX lets an operator gate the two restrictive classes:
   are merely undocumented.
 
 Both are allowed by default. Review the terms for your deployment and disallow either class from
-`/admin/settings`, or with the `OPENMAPX_ALLOW_NONCOMMERCIAL` /
+`/admin/settings/data-use`, or with the `OPENMAPX_ALLOW_NONCOMMERCIAL` /
 `OPENMAPX_ALLOW_GREY_AREA` environment variables (environment takes precedence). The policy cache refreshes at a 30-second
 interval and is invalidated by relevant settings changes. Orchestrators use the
 excluded provider/source sets, and the response filter removes tagged excluded

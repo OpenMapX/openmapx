@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { TransitPipelinePage } from "@/components/admin/transit/TransitPipelinePage";
+import { TransitWorkspace } from "@/components/admin/transit/TransitWorkspace";
 export const metadata: Metadata = { title: "Transit — Admin — OpenMapX" };
 export default function Page() {
-  return <TransitPipelinePage />;
+  return <TransitWorkspace />;
 }

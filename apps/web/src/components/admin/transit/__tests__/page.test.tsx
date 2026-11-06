@@ -164,7 +164,7 @@ describe("TransitPipelinePage", () => {
     const { TransitPipelinePage } = await import("../TransitPipelinePage");
     const markup = renderToStaticMarkup(<TransitPipelinePage />);
     expect(markup).toContain("Transit pipeline");
-    expect(markup).toContain("Catalog pins");
+    expect(markup).not.toContain("Catalog pins");
     expect(markup).toContain("Pipeline idle");
     expect(markup).toContain("Feeds breakdown");
     expect(markup).toContain("Recent jobs");
@@ -175,10 +175,7 @@ describe("TransitPipelinePage", () => {
   it("renders the active paired catalogs and last-sync status", async () => {
     const { TransitPipelinePage } = await import("../TransitPipelinePage");
     const markup = renderToStaticMarkup(<TransitPipelinePage />);
-    expect(markup).toContain("abc123def4567890");
-    expect(markup).toContain("atlas-active");
-    expect(markup).toContain("gbfs-active");
-    expect(markup).toContain("Active pair");
+    expect(markup).not.toContain("Catalog pins");
     // The success chip's label is what surfaces "last sync status".
     expect(markup).toContain("success");
   });

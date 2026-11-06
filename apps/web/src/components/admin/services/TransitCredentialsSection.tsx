@@ -30,6 +30,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { readStoredAdminReauthentication } from "@/lib/admin/adminReauthentication";
 import { browserAdminApiBase } from "@/lib/admin/browserAdminApiBase";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
 
@@ -54,7 +55,51 @@ function restored(key: string): Reviewed | null {
     return null;
   }
 }
-export function TransitCredentialsSection({ proposalId }: { proposalId?: string } = {}) {
+/** Only restore the actor/origin-scoped, already reviewed intent; never apply automatically. */
+export function readTransitCredentialContinuation(
+  apiUrl: string,
+  actorId: string,
+): { proposalId?: string } | null {
+  const stored = readStoredAdminReauthentication(apiUrl);
+  const intent =
+    stored?.phase === "completed"
+      ? stored.requests.find((r) => r.purpose === "transit.credentials")
+      : null;
+  if (!intent || !actorId) return null;
+  try {
+    const prefix = "openmapx-transit-credential-preview:";
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key?.startsWith(prefix)) continue;
+      const identity = JSON.parse(key.slice(prefix.length));
+      if (
+        !Array.isArray(identity) ||
+        ![2, 3].includes(identity.length) ||
+        identity[0] !== apiUrl ||
+        identity[1] !== actorId
+      )
+        continue;
+      const value = restored(key);
+      if (
+        value &&
+        value.preview.catalogRevisionId === intent.targetId &&
+        value.preview.intentFingerprint === intent.intentFingerprint &&
+        (value.preview.proposalId ?? null) === (identity[2] ?? null)
+      )
+        return value.preview.proposalId ? { proposalId: value.preview.proposalId } : {};
+    }
+  } catch {
+    /* No matching retained review; let the operator start again. */
+  }
+  return null;
+}
+export function TransitCredentialsSection({
+  proposalId,
+  onReviewFinished,
+}: {
+  proposalId?: string;
+  onReviewFinished?: () => void;
+} = {}) {
   const { apiUrl, actorId } = useAccountAdmin();
   return (
     <TransitCredentialView
@@ -62,6 +107,7 @@ export function TransitCredentialsSection({ proposalId }: { proposalId?: string 
       apiUrl={apiUrl}
       actorId={actorId}
       proposalId={proposalId}
+      onReviewFinished={onReviewFinished}
     />
   );
 }
@@ -69,10 +115,12 @@ function TransitCredentialView({
   apiUrl,
   actorId,
   proposalId,
+  onReviewFinished,
 }: {
   apiUrl: string;
   actorId: string;
   proposalId?: string;
+  onReviewFinished?: () => void;
 }) {
   const client = useMemo(
     () => createApiClient({ baseUrl: browserAdminApiBase(apiUrl), credentials: "include" }),
@@ -212,6 +260,7 @@ function TransitCredentialView({
       } catch {
         /* No secret is stored; private drafts still clear. */
       }
+      onReviewFinished?.();
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["admin", "transit", "credentials", apiUrl, actorId],
@@ -399,7 +448,13 @@ function TransitCredentialView({
                 </Typography>
               ))}
               <Stack direction="row" spacing={1}>
-                <Button disabled={busy} onClick={invalidateReview}>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    invalidateReview();
+                    onReviewFinished?.();
+                  }}
+                >
                   Cancel review
                 </Button>
                 <Button disabled={busy || Boolean(stale)} onClick={() => setProving(true)}>

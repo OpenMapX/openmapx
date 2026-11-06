@@ -214,7 +214,7 @@ of the container's executable code.
 
 Use **Apply changes** after changing configuration, manifests or environment.
 A restart does not recreate the container. Administrative host operations have
-safety restrictions; use **Maintenance** for the coordinated core-release update
+safety restrictions; use **System → Updates** for the coordinated core-release update
 rather than trying to update the running API as an ordinary service job.
 
 ## Compose preview
@@ -233,7 +233,7 @@ A stale preview is refused; refresh before confirming another generation.
 **Compose Up** prepares the full selected generation and starts only that explicit
 closure. It preserves existing Data Manager and operations-agent containers with
 `--no-recreate`, then applies ordinary services with `--no-deps`. Apply or update
-Data Manager from its service page. Use Settings or System Maintenance to replace
+Data Manager from its service page. Use **System → Deployment** or **System → Updates** to replace
 the agent through the guarded helper. Up does not silently replace either
 protected container or start services mentioned only by a release overlay.
 
@@ -266,7 +266,7 @@ no platform credentials or arbitrary environment keys.
 
 ## Data inventory
 
-Open `/admin/data` to inspect OSM downloads, engine build directories,
+Open `/admin/data/osm` to inspect OSM downloads, engine build directories,
 transit source state and specialized publication workflows. Follow the linked
 jobs for failures and progress. Operation forms, previews and risk levels come
 from the API's operation catalog.
@@ -517,3 +517,5 @@ Pending platform work blocks every topic. Unknown outcomes retain the original
 job and request identity; inspect Activity and the disclosed host recovery commands
 before retrying. Ordinary drafts survive topic changes; confirmations and proof do
 not transfer between topics.
+
+Build All reviews the exact enabled, buildable targets captured when the dialog opens. It preserves the operations agent's canonical build order and submits those explicit IDs, so an inventory refresh cannot add newly enabled services. The audit records those IDs rather than a late-bound “all” target.

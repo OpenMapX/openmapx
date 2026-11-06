@@ -7,7 +7,7 @@ sidebar_position: 7
 # Backup & restore
 
 Use `pnpm openmapx backup` from the deployment checkout, or
-**Services → Backups** with a full administrator account. You need the generated
+**System → Backups** with a full administrator account. You need the generated
 Compose configuration, Docker access on the host or through the operations agent,
 and enough disk for the selected volumes.
 
@@ -257,7 +257,7 @@ pnpm openmapx backup create --name pre-upgrade-20261023
 pnpm openmapx backup list
 ```
 
-The Maintenance update dialog offers a database backup by default and permits
+The update dialog in **System → Updates** offers a database backup by default and permits
 opting out. Restoring data after an upgrade also requires a compatible runtime
 and schema; merely switching image tags does not reverse migrations. Follow
 [Upgrading](../install/upgrading.md) and test the recovery sequence before a

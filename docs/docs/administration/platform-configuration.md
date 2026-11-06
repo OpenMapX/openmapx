@@ -6,10 +6,12 @@ sidebar_position: 3
 
 # Platform configuration
 
-Open **Admin → Settings → Platform configuration**. The form shows effective values
-and their current source. Host-owned fields are locked. Choose **Manage … in UI**
+Open **Admin → System → Deployment** for domain, TLS contact and default region,
+**System → Updates** for the release selector, or **System → Backups** for retention.
+Each topic shows its effective values and their current source. Host-owned fields are locked. Choose **Manage … in UI**
 to adopt a supported field, or **Return … to host** to use the current host value
-again. Editing and previewing do not save or restart anything.
+again. Editing and previewing do not save or restart anything. These host topics are
+unavailable on hosted deployments. The hosted Data workspace offers Transit and Coverage.
 
 | Field              | Host default                                | When an applied change takes effect                                                            |
 | ------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -36,14 +38,14 @@ Confirm the listed acknowledgments and verify a fresh supported password login
 with the account's effective second factor. A passkey-only or OAuth session cannot
 authorize this change. Establish and prove the supported alternate login first.
 The sign-in confirmation is bound to the exact preview and cannot be reused for
-another domain or policy. Return to Settings after sign-in to complete the review.
+another domain or policy. Return to **System → Deployment** after sign-in to complete the domain review.
 
 After applying, reconnect at the reviewed admin address. Browser disconnection is
 an observation failure, not cancellation or evidence that the change failed.
 
 ## Operation status and recovery
 
-Accepted changes are durable jobs. Settings reconnects to retained platform jobs;
+Accepted changes are durable jobs. The owning System topic reconnects to retained platform jobs;
 Activity shows the original job, outcome and logs. The application coordinates the
 configuration generation, Data Manager guard, protected service helper and image
 verification before reporting completion. The agent is replaced last during a
@@ -66,7 +68,7 @@ mount paths, executable options or Docker socket access.
 
 ## Clear a selected release pin
 
-In System maintenance, **Selected pin** is separate from the running release.
+In **System → Updates**, **Selected pin** is separate from the running release.
 **Clear selected release pin** requires the exact `CLEAR RELEASE PIN` confirmation
 and queues an Activity job bound to that pin. A changed pin is refused. Clearing
 leaves images, running containers, release evidence and the configured channel

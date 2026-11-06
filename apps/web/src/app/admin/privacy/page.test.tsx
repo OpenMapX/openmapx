@@ -1,8 +1,18 @@
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+
 import { createApiClient } from "@openmapx/core";
 import {
   privacyDetail,
   privacyReadiness,
 } from "@/components/admin/privacy/privacyFixtures.test-support";
+import {
+  PRIVACY_ADMIN_RESUME_KEY,
+  savePendingPrivacyAdminDelivery,
+} from "@/lib/admin/privacyReauthentication";
+import { adminTestHistory } from "@/test/adminNavigation";
 import { createQueryWrapper, createTestQueryClient } from "@/test/query";
 
 const binding = vi.hoisted(() => ({ client: undefined as unknown }));
@@ -117,6 +127,8 @@ function installFetch() {
 
 describe("privacy admin case selection", () => {
   beforeEach(() => {
+    adminTestHistory.reset("/admin/privacy");
+    sessionStorage.clear();
     binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
     Object.defineProperty(globalThis.crypto, "randomUUID", {
       configurable: true,
@@ -185,10 +197,11 @@ describe("privacy admin case selection", () => {
     installFetch();
     render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
 
-    expect(
-      await screen.findByText("privacySetup.readiness.checks.controller-contact.title"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("adminNavigation.privacyReadinessBlocked")).toBeInTheDocument();
     expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
+    expect(
+      screen.getByText(/privacySetup.readiness.checks.controller-contact.title/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /controller-contact/ })).not.toBeInTheDocument();
     expect(screen.queryByText("controller-contact")).not.toBeInTheDocument();
   });
@@ -199,4 +212,106 @@ describe("privacy admin case selection", () => {
     expect(screen.getByLabelText("privacyAdmin.workflows.reasonableDoubtCode")).toBeInTheDocument();
     expect(screen.getByLabelText("privacyAdmin.workflows.extensionNotifiedAt")).toBeInTheDocument();
   });
+});
+
+function pendingDelivery(requestId = CASE_B) {
+  savePendingPrivacyAdminDelivery({
+    apiOrigin: "http://privacy.test",
+    actorId: "synthetic-worker",
+    requestId,
+    artifactId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    challengeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    channel: "assisted",
+    expiresAt: new Date(Date.now() + 300000).toISOString(),
+  });
+}
+it("restores a pending delivery on return without a case query", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  adminTestHistory.reset("/admin/privacy");
+  pendingDelivery();
+  installFetch();
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/registration-for-case-b/);
+  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).not.toBeNull();
+});
+it("loads an explicitly addressed case independently and clears another case's pending delivery", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  pendingDelivery();
+  adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
+  installFetch();
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/registration-for-case-a/);
+  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).toBeNull();
+});
+it("clears pending delivery on a history-driven case switch", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
+  installFetch();
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/registration-for-case-a/);
+  act(() => adminTestHistory.push(`/admin/privacy?case=${CASE_B}`));
+  await screen.findByText(/registration-for-case-b/);
+  pendingDelivery();
+  act(() => adminTestHistory.back());
+  await screen.findByText(/registration-for-case-a/);
+  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).toBeNull();
+});
+
+it("loads an addressed case that is outside the visible queue", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
+  installFetch();
+  const fetchFixture = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith("/privacy/admin/queue")
+      ? Promise.resolve(json({ requests: [detail(CASE_B).request] }))
+      : fetchFixture(input, init),
+  );
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/registration-for-case-a/);
+  expect(screen.queryByText(/registration-for-case-b/)).not.toBeInTheDocument();
+});
+it.each([403, 404])(
+  "does not substitute a queue case when an addressed case is refused (%s)",
+  async (status) => {
+    binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+    sessionStorage.clear();
+    adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
+    installFetch();
+    const fetchFixture = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith(`/privacy/admin/requests/${CASE_A}`)
+        ? Promise.resolve(Response.json({ error: "Unavailable" }, { status }))
+        : fetchFixture(input, init),
+    );
+    render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+    await screen.findByText("privacyAdmin.caseFailed");
+    expect(screen.queryByText(/registration-for-case-b/)).not.toBeInTheDocument();
+  },
+);
+
+it("names a blocked encryption readiness check for privacy operators without a setup link", async () => {
+  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+  sessionStorage.clear();
+  adminTestHistory.reset("/admin/privacy");
+  installFetch();
+  const fetchFixture = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith("/privacy/admin/readiness")
+      ? Promise.resolve(
+          json({
+            ...privacyReadiness(),
+            checks: [{ id: "encryption-key", status: "fail", detailCode: "unavailable" }],
+          }),
+        )
+      : fetchFixture(input, init),
+  );
+  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+  await screen.findByText(/privacySetup.readiness.checks.encryption-key.title/);
+  expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
+  expect(document.querySelector('a[href="/admin/privacy-setup"]')).toBeNull();
 });

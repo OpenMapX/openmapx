@@ -1,3 +1,8 @@
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+
 import { en } from "@openmapx/i18n";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { NextIntlClientProvider } from "next-intl";
@@ -17,8 +22,11 @@ import {
   waitFor,
   within,
 } from "@/test";
+import { DataWorkspace } from "../data/DataWorkspace";
 import { AdminOperationCard } from "../operations/AdminOperationCard";
 import type { AdminOperationContract } from "../operations/adminOperationsApi";
+import { DataOperationLauncher } from "../operations/DataOperationLauncher";
+import { TransitMobilityView } from "../transit/TransitWorkspace";
 import { BackupsPage } from "./BackupsPage";
 import { DataWorkflowsPage } from "./DataWorkflowsPage";
 import { NotablePlacesMaintenance } from "./NotablePlacesMaintenance";
@@ -925,7 +933,7 @@ describe("wire intent, validation, polling and policy", () => {
       fireEvent.click(screen.getByRole("button", { name: "Queue Update data" }));
       if (kind === "run") fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
     } else if (kind === "policy") {
-      mount(<DataWorkflowsPage />);
+      mount(<TransitMobilityView />);
       fireEvent.click((await screen.findAllByLabelText("Fan-out rollback"))[0] as HTMLElement);
     } else {
       mount(embedded(kind));
@@ -974,7 +982,7 @@ describe("wire intent, validation, polling and policy", () => {
         });
       return undefined;
     });
-    const { qc } = mount(<DataWorkflowsPage />);
+    const { qc } = mount(<TransitMobilityView />);
     await screen.findByText("1 schedule dataset(s)");
     expect(qc.getQueryData(["admin", "services", apiUrl, "data", "50", "0"])).toEqual(inventory);
     expect(await screen.findByText(/called motis; skipped fallback/)).toBeInTheDocument();
@@ -1165,8 +1173,14 @@ it("refreshes embedded status displayed on the data page after a catalogue opera
       });
     return undefined;
   });
-  const { qc } = mount(<DataWorkflowsPage />);
+  const { qc } = mount(
+    <>
+      <DataWorkspace topic="search" />
+      <DataOperationLauncher operationIds={["update"]} />
+    </>,
+  );
   await screen.findByText("catalogue-before");
+  fireEvent.click(await screen.findByRole("button", { name: "Update data" }));
   fireEvent.click(screen.getByRole("button", { name: "Queue Update data" }));
   fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
   await waitFor(() => expect(calls.some((r) => r.url.pathname.endsWith("/jobs/job-1"))).toBe(true));

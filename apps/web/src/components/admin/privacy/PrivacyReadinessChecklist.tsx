@@ -44,6 +44,9 @@ const CHECK_ACTIONS: Record<string, string> = {
 
 const KNOWN_CHECKS = new Set(Object.keys(CHECK_ACTIONS));
 
+export const privacyReadinessCheckTitle = (id: string) =>
+  KNOWN_CHECKS.has(id) ? `readiness.checks.${id}.title` : "readiness.unknown.title";
+
 function statusColor(status: string): "success" | "warning" | "error" {
   if (status === "pass") return "success";
   if (status === "warning") return "warning";

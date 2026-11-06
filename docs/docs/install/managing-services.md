@@ -209,10 +209,10 @@ start/render returns to the persisted selection. Prefer `services enable` for
 lasting changes. Presets on lifecycle commands target already-selected services;
 they do not enable them.
 
-The admin panel's Compose page also offers revision-checked **Generate
+**System → Deployment → Compose and host recovery** also offers revision-checked **Generate
 configuration** without container lifecycle effects. Nonempty hardlink plans need
 an already-running Data Manager. **Compose Up** preserves Data Manager and the
-executing agent; use their guarded Apply/Update or Settings/Maintenance workflows
+executing agent; use their guarded Apply/Update or **System → Deployment** or **System → Updates** workflows
 to replace them. Full shutdown uses the host command below because it removes the
 web control plane:
 
@@ -633,7 +633,7 @@ for setup, tuning, update behavior, fallback limits, and attribution.
 
 ## Move prepared data between instances
 
-The admin panel's **Data Workflows → Prepared data** section uploads, validates,
+The admin panel's **Data → Prepared transfers** section uploads, validates,
 previews and imports prepared tileserver, OSRM, OTP, Pelias and MOTIS bundles. It
 also exports verified prepared data into an authenticated, temporary download.
 The CLI's `data export` and `data import` commands use the same archive
