@@ -13,8 +13,8 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { atomicWrite, fsyncDirectory } from "../release-files";
-import { readAppliedReleaseSelection } from "./configuration-generation";
 import { canonicalReleaseManifest, type ReleaseManifest } from "./release-manifest";
+import type { ReleaseSelection } from "./release-selection";
 import {
   assertReleaseStateDirectory,
   parseReleaseSelectionReceipts,
@@ -35,11 +35,8 @@ import {
 
 const digest = (raw: string) => createHash("sha256").update(raw).digest("hex");
 
-export function releaseConfigurationIdentity(
-  infraDir: string,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string {
-  return digest(JSON.stringify(readAppliedReleaseSelection(infraDir, env)));
+export function releaseConfigurationIdentity(selection: ReleaseSelection): string {
+  return digest(JSON.stringify(selection));
 }
 
 /** Same bounded enumeration used by legacy resolution and inspection. */

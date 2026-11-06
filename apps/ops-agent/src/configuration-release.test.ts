@@ -290,7 +290,11 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
     }
     const before = readFileSync(legacy);
     const cliRead = () =>
-      services.readCheckedConfigurationRelease(infraDir, { releaseId, manifestDigest });
+      services.readCheckedConfigurationRelease(
+        infraDir,
+        { releaseId, manifestDigest },
+        services.readAppliedReleaseSelection(infraDir),
+      );
     if (kind === "consumed-handoff") expect(cliRead()).toMatchObject({ releaseId, manifestDigest });
     else expect(cliRead).toThrow(/legacy/i);
     const execFile = vi.fn(async (_file: string, args: readonly string[]) => ({

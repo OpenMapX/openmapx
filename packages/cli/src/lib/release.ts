@@ -248,12 +248,18 @@ export async function checkRelease(
   assertNoReleaseTransaction(paths.store);
   const selection = coreServices.readAppliedReleaseSelection(infraDir);
   if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
-  const configurationIdentity = coreServices.releaseConfigurationIdentity(infraDir);
+  const configurationIdentity = coreServices.releaseConfigurationIdentity(
+    coreServices.readAppliedReleaseSelection(infraDir),
+  );
   const candidate = await resolveReleaseCandidate(opts.docker, infraDir);
   const lock = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
   try {
     assertNoReleaseTransaction(paths.store);
-    if (coreServices.releaseConfigurationIdentity(infraDir) !== configurationIdentity)
+    if (
+      coreServices.releaseConfigurationIdentity(
+        coreServices.readAppliedReleaseSelection(infraDir),
+      ) !== configurationIdentity
+    )
       throw Error("Release configuration changed during check; check again");
     const cached = coreServices.cacheCheckedReleaseManifest({
       infraDir,

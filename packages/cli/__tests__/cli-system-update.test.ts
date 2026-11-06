@@ -40,7 +40,9 @@ async function fixture(mode = "success") {
     infraDir: root,
     manifest,
     ociDigest: `sha256:${"c".repeat(64)}`,
-    configurationIdentity: services.releaseConfigurationIdentity(root),
+    configurationIdentity: services.releaseConfigurationIdentity(
+      services.readAppliedReleaseSelection(root),
+    ),
     lock,
   });
   lock.release();

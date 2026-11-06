@@ -127,7 +127,9 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     actorId: actor.user.id,
     release: { releaseId: options.releaseId, manifestDigest: options.manifestDigest },
     configuredSelector: selection.selector,
-    configurationIdentity: services.releaseConfigurationIdentity(options.infraDir),
+    configurationIdentity: services.releaseConfigurationIdentity(
+      services.readAppliedReleaseSelection(options.infraDir),
+    ),
   };
   let receipt: SystemUpdateReceipt;
   if (options.resume) {
@@ -144,12 +146,24 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
           "Receipt actor, origin, release or configured selection changed; do not reuse it",
         );
   } else {
-    services.readCheckedConfigurationRelease(options.infraDir, identity.release);
+    services.readCheckedConfigurationRelease(
+      options.infraDir,
+      identity.release,
+      services.readAppliedReleaseSelection(options.infraDir),
+    );
     receipt = await store.create(identity);
   }
   async function guard() {
-    services.readCheckedConfigurationRelease(options.infraDir, identity.release);
-    if (services.releaseConfigurationIdentity(options.infraDir) !== identity.configurationIdentity)
+    services.readCheckedConfigurationRelease(
+      options.infraDir,
+      identity.release,
+      services.readAppliedReleaseSelection(options.infraDir),
+    );
+    if (
+      services.releaseConfigurationIdentity(
+        services.readAppliedReleaseSelection(options.infraDir),
+      ) !== identity.configurationIdentity
+    )
       throw Error("Configured release selection changed");
     const configuration = await get(
       "/api/admin/platform/configuration",

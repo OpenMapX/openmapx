@@ -91,9 +91,13 @@ describe("CLI checked candidates without selection", () => {
   it("normalizes unset and explicit default selectors identically", () => {
     const f = fixture();
     vi.stubEnv("OPENMAPX_RELEASE", undefined);
-    const implicit = services.releaseConfigurationIdentity(f.infraDir);
+    const implicit = services.releaseConfigurationIdentity(
+      services.readAppliedReleaseSelection(f.infraDir),
+    );
     vi.stubEnv("OPENMAPX_RELEASE", "main");
-    expect(services.releaseConfigurationIdentity(f.infraDir)).toBe(implicit);
+    expect(
+      services.releaseConfigurationIdentity(services.readAppliedReleaseSelection(f.infraDir)),
+    ).toBe(implicit);
   });
 
   it.each(["oversized", "symlink"])(

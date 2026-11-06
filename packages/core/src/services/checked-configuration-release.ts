@@ -6,12 +6,12 @@ import { z } from "zod";
 import { AnchoredDirectory } from "../build-artifacts/filesystem";
 import { type AgentHandoffRecord, parseAgentHandoffRecord } from "./agent-handoff-record";
 import { agentStatePaths } from "./agent-state";
-import { readAppliedReleaseSelection } from "./configuration-generation";
 import {
   canonicalReleaseManifest,
   parseReleaseManifest,
   ReleaseChannelDisabledError,
 } from "./release-manifest";
+import type { ReleaseSelection } from "./release-selection";
 import { readReleaseStateFile, releaseStatePaths } from "./release-state";
 
 function readPrivateHandoff(path: string): AgentHandoffRecord | null {
@@ -40,12 +40,12 @@ function immutable<T>(value: T): T {
 export function readCheckedConfigurationRelease(
   infraDir: string,
   input: { releaseId: string; manifestDigest: string },
+  channel: ReleaseSelection,
   readLegacyHandoff: () => AgentHandoffRecord | null = () =>
     readPrivateHandoff(agentStatePaths(infraDir).handoff) ??
     readPrivateHandoff(join(infraDir, "data", "ops-agent", "agent-handoff.json")),
 ) {
-  const selected = selectionSchema.parse(input),
-    channel = readAppliedReleaseSelection(infraDir);
+  const selected = selectionSchema.parse(input);
   if (channel.kind === "local") throw new ReleaseChannelDisabledError();
   const infra = new AnchoredDirectory(infraDir);
   try {

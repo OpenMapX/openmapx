@@ -8,6 +8,7 @@ export function readCheckedConfigurationRelease(
   return services.readCheckedConfigurationRelease(
     infraDir,
     input,
+    services.readAppliedReleaseSelection(infraDir),
     () =>
       readAgentHandoffFile(services.agentStatePaths(infraDir).handoff) ??
       readAgentHandoffFromInfra(infraDir),
