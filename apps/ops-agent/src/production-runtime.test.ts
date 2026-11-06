@@ -18,7 +18,11 @@ import {
   openControlInstallation,
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
-import { createControlRootOperationKey, type OpsOperation } from "@openmapx/core/ops";
+import {
+  createControlRootOperationKey,
+  type OpsOperation,
+  parseOpsResult,
+} from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
@@ -140,6 +144,13 @@ describe("assembled production service authority", () => {
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
     });
+    const inspection = await productionReleaseEffects(host.runtime).inspectSystem({
+      signal: new AbortController().signal,
+      emitLog() {},
+    });
+    expect(parseOpsResult("system.inspect", inspection).release.selectedReleaseId).toBe(
+      "checked-pin",
+    );
     const before = readFileSync(path, "utf8"),
       pointer = services.currentConfigurationGeneration(host.infraDir);
     const changed = { kind: "release.clear", releaseId: "different-pin" } as OpsOperation;

@@ -1292,6 +1292,7 @@ export const OPS_RESULT_SCHEMAS = {
     maintenanceReady: z.boolean(),
     release: z.strictObject({
       currentReleaseId: stableIdSchema.optional(),
+      selectedReleaseId: stableIdSchema.optional(),
       availableReleaseId: stableIdSchema.optional(),
       configuredSelector: z.string().max(128).optional(),
       currentVersion: z.string().max(128).optional(),
