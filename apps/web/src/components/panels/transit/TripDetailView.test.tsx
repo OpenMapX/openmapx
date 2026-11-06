@@ -249,3 +249,30 @@ it("shows the departure's train number while the trip lookup has none", () => {
     secondaryJourney.current = null;
   }
 });
+
+it("names cancellation in a stop row so it is available to screen readers", () => {
+  secondaryJourney.current = {
+    data: {
+      stops: [{ name: "Skipped stop", scheduledDeparture: "2026-11-06T08:44:00Z", canceled: true }],
+    },
+    isLoading: false,
+    isError: false,
+  };
+  try {
+    const markup = renderToStaticMarkup(
+      <TripDetailView
+        departure={{
+          tripId: "bus-21",
+          route: { id: "21", shortName: "21", longName: "Bus 21", mode: "bus" },
+          headsign: "Palenberg",
+          scheduledAt: "2026-11-06T08:44:00Z",
+          providers: [],
+        }}
+        onBack={() => {}}
+      />,
+    );
+    expect(markup).toContain(">canceled<");
+  } finally {
+    secondaryJourney.current = null;
+  }
+});

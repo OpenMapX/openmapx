@@ -54,6 +54,11 @@ retries. The coordinator commits before publishing or acknowledging; revisions
 order snapshots. Native capabilities advertise `transitActions` so unsupported
 shells cannot show apparently working controls.
 
+Once the page adopts a transit session, a full snapshot at a lower revision is
+ignored, including a delayed command response after a newer publication. A new
+page or session can establish its baseline at any revision. A newer prediction
+can still bring a delayed service back to its scheduled time.
+
 Progress snapshots must update the nested `transitProgress` read model as well
 as the envelope revision. The banner, position dot and camera subscribe to that
 object. An empty progress value retains the previous position. A revision gap
@@ -85,6 +90,20 @@ An unavailable live feed labels a retained realtime estimate as the last known
 departure, never as a scheduled time or a live update. Browser journeys without
 a refresh token use the same last-known label. A broken one-time token chain
 remains unavailable rather than retrying a potentially consumed token.
+
+Navigation, departure boards and journey details share the scheduled/expected
+clock display. A changed clock strikes the timetable and shows the prediction
+with a positive delay in minutes when late. Delay comes from explicit timestamp
+pairs, measured between their displayed minute boundaries. A numeric delay hint
+alone never creates a prediction. Arrival and departure pairs stay separate at
+stops with dwell time. The selected leg owns the navigation timeline's boarding
+and alighting clocks, with captured stops as fallback only for an invalid leg
+endpoint. Interior stops use their capture, which can refresh separately from
+the itinerary in a browser. A changed estimate without realtime evidence is
+labeled last known rather than scheduled.
+Directions can use a vehicle journey's explicit prediction at an endpoint. A
+timetable-only lookup retains the itinerary's prediction, and its supplier is
+not credited for a prediction it did not provide.
 
 ## Walking recovery and alternatives
 

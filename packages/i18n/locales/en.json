@@ -1724,6 +1724,8 @@
     "operator": "Operator",
     "platform": "Pl.",
     "canceled": "Canceled",
+    "scheduledTimeLabel": "Scheduled {time}",
+    "expectedTimeLabel": "Expected {time}",
     "occupancy": "Occupancy",
     "occupancyForecast": "Forecast",
     "lowOccupancy": "Low occupancy",
