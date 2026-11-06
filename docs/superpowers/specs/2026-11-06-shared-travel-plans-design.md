@@ -1,6 +1,6 @@
 # Shared travel plans: DB Navigator exact connections
 
-Date: 2026-11-06. Status: proposed for independent Claude Opus review.
+Date: 2026-11-06. Status: reviewed by Claude Opus; corrections below accepted for implementation.
 
 ## Intent and scope
 
@@ -11,13 +11,13 @@ all design decisions and implementation, requesting Opus reviews before and afte
 implementation; there is no additional human approval checkpoint.
 
 The first adapter supports the German plain-text format supplied in the request:
-route header, German weekday/date, repeated service / Nach / Ab / An blocks, and an
+optional route header, German weekday/date, repeated service / Nach / Ab / An blocks, and an
 optional `Verbindung ansehen: https://www.bahn.de/buchung/start?vbid=...` footer.
 The four supplied examples become regression fixtures. URL-only shares cannot
 prove a connection and explain that the full connection text is needed. Recognized
 but malformed plans never fall through to an ordinary map search.
 
-No new upstream, API route, credentials, native bridge version, or dependencies.
+No new upstream, route, credentials, native bridge version, or dependencies. The existing departures route gains an optional time query, backed by an explicitly optional provider method; unsupported providers never silently ignore the time.
 No automatic navigation start, ticket import, booking, persistence of raw shares,
 tracking, or background DB link resolution. Other languages, walking-only shares,
 cross-timezone journeys and other source apps are subsequent adapters, not guessed
@@ -93,32 +93,45 @@ An invalid recognized share is visible/editable, but cannot open as a map query.
 Open. The default port uses the configured OpenMapX `ApiClient`; tests inject it.
 Resolve station names through `/transit/stops/search` (limit 20), requiring exact
 normalized names (Unicode/case/whitespace; no fuzzy city/station substitution).
-Collapse duplicate provider records only when coordinates agree within 100 m;
+Collapse duplicate provider records only when equivalent names and coordinates agree within 1 km;
 multiple geographic clusters mean ambiguous, not first-result selection.
 
-For each leg, call `fetchTransitPlan` with station coordinates, a departure anchor
-15 minutes before the shared departure, `maxTransfers: 0`, `numItineraries: 6`,
-walking access and no direct street modes. Use at most 2 pages per leg through
-OpenMapX signed page tokens. No user route preference or Deutschlandticket filter
-may exclude the shared train. Bound the whole operation to 60 seconds; cancellation
-must stop acquisition and prevent publication.
+Opus review identified that even per-leg Pareto planning can omit an overtaken
+regional train or a cancellation. Corrected design: acquire time-anchored departures
+for each matching provider-qualified boarding station (maximum 4 records), from
+one minute before the shared departure over a 5-minute window. Add an optional
+ISO `time` to GET /stops/:id/departures, with strict validation, a distinct cache
+key and no shared caching for anchored queries. Add `getDeparturesAt` as an
+explicit optional provider method: current-only providers cannot silently answer
+historical/future requests. MOTIS local and hosted implement it through stoptimes;
+retain host source policy and the local adapter's hosted-fallback setting.
 
-Match exactly one non-street leg per candidate. Require valid coordinates,
-provider trip/stop IDs, exact normalized from/to station names, exact scheduled
-departure AND arrival instants, and matching operational train number from
-`tripShortName` or `serviceInfo.trainNumber`. Explicit conflicting train numbers
-always reject; a route line alone cannot confirm `RE9 (10935)`.
-Use scheduled fields; only fall back to start/end where realtime is explicitly
-false. Check service label when it is available and comparable; platforms and
-headsigns are not identity because providers abbreviate/change them.
+Match operational train number from serviceInfo.trainNumber or an unambiguous
+service label, plus exact scheduled departure. Fetch each candidate vehicle
+journey (at most 4 candidates), verify the boarding stop and ordered alighting stop,
+both scheduled times and geographically corroborated station names. Require a
+single provider-qualified trip/stop/time match; distinct matching identities fail
+ambiguous rather than selecting a first result. Stop names expand Hbf/Bf and
+normalize punctuation and umlauts without dropping locality qualifiers. Equivalent
+station names must remain geographically near the resolved station (1 km); no
+fuzzy city substitution. Preserve cancellations rather than silently replanning.
 
-Resolve DB domestic times in Europe/Berlin, independently of the device timezone;
-require resolved endpoint timezones to agree. Reject nonexistent and ambiguous
-DST wall times rather than shifting or arbitrarily choosing an occurrence.
-Deduplicate copies of the same provider-qualified trip/endpoints/times; distinct
-matching trips are ambiguous. Finish both pages before deciding uniqueness.
-Failures distinguish invalid, unavailable, not-found and ambiguous to the UI,
-without logging raw input. Partial data or partial matches never publish.
+Get the exact ridden segment geometry through /leg-geometry. On unavailable
+geometry, use ordered journey-stop coordinates with an explicit schematic-route
+notice. Never draw an invented track or walking path as measured geometry.
+Transfer stations are searched once per import; requests run sequentially with
+an overall 60-second abort deadline. A failed supported source prevents claiming
+uniqueness. Providers without anchored departures are skipped explicitly.
+
+Resolve wall times in Europe/Berlin independently of device timezone; verify stop
+zone offsets match Berlin at the requested instants (also permits equivalent
+Central European zones). Reject DST gaps/folds. Require explicit years, as in all
+four examples. Date-less, +day markers, walking blocks and transfers of 24 hours
+or more are unsupported; document instead of guessing. Past and beyond-horizon
+journeys are tried with their explicit date; no match explains unavailable
+provider timetable coverage. Cancellation is a successful identity match with
+visible cancellation state. Invalid, unavailable and ambiguous outcomes retain
+input. No approximate substitution or partial publication.
 
 Publish a `TripItinerary` containing the verified transit legs in order. Do not
 invent walking legs, transfer feasibility, through-ticket fares, refresh tokens,
@@ -146,6 +159,8 @@ search for alternatives (clears the marker). Imported trips are transient and
 cannot create a hidden persistent routing lock. Existing ordinary directions
 must retain their behavior.
 
+iOS preserves each complete input text value, including repeated and blank lines; only identical attachment values are deduplicated. Android header omission is handled by deriving endpoints from the legs.
+
 The intake handler classifies once per draft and displays a compact source,
 station/date/train summary before confirmation. No network during preview.
 Open resolves asynchronously, then repeats native inbox existence/authority and
@@ -155,6 +170,8 @@ start, route change or unmount cannot publish stale results. Cancel pending work
 on those transitions. Acknowledge only after publication; failures retain the item
 and draft for retry. Reopening after an acknowledgement failure is idempotent at
 the itinerary level. Existing map/file paths retain their checks.
+
+While resolving, show progress and an explicit Cancel that aborts and retains the item. Record plannedAt and label current information as of import; re-check can be performed by sharing again or retrying before publication.
 
 New user-facing strings live in both en/de JSON files. No technical provider or
 parser diagnostics in product UI. Errors explain that the exact connection could
@@ -184,3 +201,17 @@ suggest that a fallback is the imported journey.
   narrow viewport. Attach hosted contextual screenshots to the PR and inspect
   uploads. Browser fixtures prove web presentation, not Android/iOS share-sheet
   delivery. Report native device/DB live-provider checks separately and honestly.
+
+## Opus review disposition
+
+B1: replaced Pareto discovery with anchored departure/journey resolution. B2/H1:
+expanded names and geographically corroborated station grouping. B3: preserve iOS
+text and allow missing header. B4: spec/plan force-added to git; exact four fixture
+texts will be committed with synthetic link UUIDs. H2/H3/H5: offset verification,
+coverage/cancellation outcomes, and endpoint-only waypoints. H4: missing-year and
+walking formats remain unsupported rather than adding speculative inference.
+M1: import snapshot notice, plannedAt; no refresh token is invented. M2: cancel.
+M3: compare explicit train number sources. M4: tight recognition. M5: cache station
+lookups, bounded candidates, remove planning pages. M6: public Aachen lookup
+succeeded; the first sample route search returned no itineraries. Other supplied
+routes will be probed read-only; fixture proof remains distinct from live coverage.

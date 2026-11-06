@@ -19,12 +19,13 @@ enum ShareSelection: Equatable {
   }
   static func text(_ values: [String], allowEmpty: Bool = false) throws -> String {
     guard values.allSatisfy({ $0.utf16.count <= IntakePolicy.textLength }) else { throw IntakeFailure.tooLarge }
-    var labels: [String] = [], link: String?
-    for line in values.flatMap({ $0.components(separatedBy: .newlines) }).map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }).filter({ !$0.isEmpty }) {
-      if line.range(of: "^(https?://|geo:|[a-z][a-z0-9+.-]*://)", options: [.regularExpression, .caseInsensitive]) != nil { if link == nil { link = line } }
-      else if !labels.contains(line) { labels.append(line) }
+    // Deduplicate attachment values, never structural lines within a travel plan.
+    var texts: [String] = []
+    for value in values {
+      let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !text.isEmpty && !texts.contains(text) { texts.append(text) }
     }
-    let combined = (labels + (link.map { [$0] } ?? [])).joined(separator: "\n")
+    let combined = texts.joined(separator: "\n")
     guard allowEmpty || !combined.isEmpty else { throw IntakeFailure.unsupported }
     guard combined.utf16.count <= IntakePolicy.textLength, combined.utf8.count <= IntakePolicy.textBytes else { throw IntakeFailure.tooLarge }
     return combined

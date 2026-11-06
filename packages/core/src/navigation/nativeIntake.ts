@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseSharedTravelPlan, type TravelPlanParseResult } from "../travel-plans";
 
 export const MAX_INTAKE_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_INTAKE_TEXT_BYTES = 8192;
@@ -65,6 +66,7 @@ export const intakeChunkSchema = z
   .strict();
 export type IntakeChunk = z.infer<typeof intakeChunkSchema>;
 export type SharedTextIntent =
+  | Exclude<TravelPlanParseResult, { kind: "unrecognized" }>
   | { kind: "map"; query: string; summary: string }
   | { kind: "unsupported"; reason: "unsupported" | "too-large" };
 interface Config {
@@ -118,6 +120,8 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     Array.from(text).some((c) => c.charCodeAt(0) < 32 && ![9, 10, 13].includes(c.charCodeAt(0)))
   )
     return { kind: "unsupported", reason: "unsupported" };
+  const travelPlan = parseSharedTravelPlan(text);
+  if (travelPlan.kind !== "unrecognized") return travelPlan;
   const direct = point(text);
   if (direct) return direct;
   const lines = text

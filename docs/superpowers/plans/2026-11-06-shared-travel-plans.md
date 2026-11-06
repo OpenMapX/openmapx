@@ -16,7 +16,7 @@
 - Existing 4096-character/8192-byte limits; at most 8 legs and 72 hours.
 - Exact train number, station names and scheduled times; unavailable/ambiguous fails closed.
 - Europe/Berlin domestic times; reject DST gaps/folds and cross-timezone endpoints.
-- Maximum 2 pages per leg, 6 itineraries per page, 60-second deadline.
+- Maximum 4 stop records and 4 journey candidates per leg, 60-second deadline.
 - No network before Open; repeat authority checks after resolution before publication.
 
 ## Review Focus
@@ -41,10 +41,10 @@
 
 **Files:** create `packages/core/src/travel-plans/{resolve,apiPort}.ts` and tests; use existing `api/transit.ts`, `api/client.ts` and timezone helpers.
 
-**Interfaces:** `resolveSharedTravelPlan(plan, port, signal): Promise<TripItinerary>`; port searches stops and plans legs with paging/signal; typed errors map to user outcomes.
+**Interfaces:** `resolveSharedTravelPlan(plan, port, signal): Promise<TripItinerary>`; port searches stops, anchored departures, vehicle journeys and segment geometry with signal; typed errors map to user outcomes.
 
-- [ ] Write failing fixture-backed resolver tests for each supplied journey, wrong/missing train numbers, scheduled time conflicts, second page, duplicate versus ambiguous identities, timezone/DST, cancellation and budget limits.
-- [ ] Implement exact station resolution, bounded sequential per-leg search and unique candidate verification, conservative itinerary composition and contributor preservation.
+- [ ] Write failing fixture-backed resolver tests for each supplied journey, wrong/missing train numbers, scheduled time conflicts, anchored departure lookup, duplicate versus ambiguous identities, timezone/DST, cancellation and budget limits.
+- [ ] Implement exact station resolution, bounded sequential departure/journey resolution and unique candidate verification, conservative itinerary composition and contributor preservation.
 - [ ] Verify tests, core types and no headless network-barrel regression; commit.
 
 ### Task 3: Atomic fixed-trip state and presentation
@@ -74,3 +74,19 @@
 - [ ] Run `pnpm verify:full` and relevant mobile checks, recording exact failures/remaining platform gaps.
 - [ ] Capture and inspect real rendered narrow-viewport intake/details/error states; upload and inspect hosted images.
 - [ ] Commit verified changes, push branch and create concise PR with Medformatik assignment and suitable existing labels; immediately link the PR to this thread.
+
+## Reviewed additions
+
+Task 1 also changes `apps/mobile/modules/openmapx-intake/ios/ShareSelection.swift`
+and Swift tests to preserve repeated/blank lines within each text value. Header
+is optional; date has explicit year. All supplied examples become committed fixtures.
+
+Task 2 first adds `getDeparturesAt` to the transit provider contract, routes
+optional validated `time` through `integrations/transit/{index,orchestrator}.ts`
+and the MOTIS local/cloud adapters to stoptimes. Add route cache/validation,
+orchestrator fail-closed and adapter query tests before implementing; regenerate
+OpenAPI and inspect diff. No planner-only discovery: overtaken/cancelled trains
+must be discoverable from departures and confirmed by the journey's stop sequence.
+Geometry fallback must be labeled schematic; station clusters use 1 km and name
+normalization retains locality qualifiers. Update stale paging-specific test
+items to the corresponding anchored departure/candidate-bound contract.
