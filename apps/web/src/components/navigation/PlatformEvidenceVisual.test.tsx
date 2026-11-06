@@ -7,6 +7,7 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { cleanup, render } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { expect, it, vi } from "vitest";
+import wire from "../../../../../integrations/transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json";
 import messages from "../../../../../packages/i18n/locales/en.json";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
@@ -32,28 +33,35 @@ vi.mock("@openmapx/core", async (original) => ({
   useVehicleJourney: () => ({ data: undefined, isError: false, isFetching: false }),
   useStopTransfers: () => ({ data: undefined }),
 }));
-const names = [
-  "Aachen Hbf",
-  "Aachen-Rothe Erde",
-  "Stolberg (Rheinl) Hbf",
-  "Eschweiler Hbf",
-  "Langerwehe",
-  "Düren",
-  "Horrem",
-  "Köln-Ehrenfeld",
-  "Köln Hbf",
-];
 const codes = ["2", "2", "2", "3", "1", "3", "3", "3", "5 A-C"];
-const times = ["20:51", "20:54", "21:01", "21:04", "21:10", "21:17", "21:28", "21:37", "21:49"];
-const base: VehicleJourneyStop[] = names.map((name, i) => ({
-  stopId: `s${i}`,
-  name,
-  lat: 50 + i / 100,
-  lng: 6 + i / 100,
-  scheduledDeparture: `2026-11-06T${times[i]}:00Z`,
-  scheduledArrival: `2026-11-06T${times[i]}:00Z`,
-  platform: i === 6 ? "37" : i === 7 ? "78" : undefined,
-  scheduledPlatform: i === 6 ? "37" : i === 7 ? "78" : undefined,
+interface CapturedPlace {
+  stopId?: string;
+  name?: string;
+  lat?: number;
+  lon?: number;
+  track?: string;
+  scheduledTrack?: string;
+  scheduledArrival?: string;
+  scheduledDeparture?: string;
+  arrival?: string;
+  departure?: string;
+}
+const raw: CapturedPlace[] = [
+  wire.legs[0].from,
+  ...wire.legs[0].intermediateStops,
+  wire.legs[0].to,
+].slice(0, 9);
+const base: VehicleJourneyStop[] = raw.map((place) => ({
+  stopId: place.stopId ?? "",
+  name: place.name ?? "",
+  lat: place.lat ?? 0,
+  lng: place.lon ?? 0,
+  scheduledArrival: place.scheduledArrival,
+  scheduledDeparture: place.scheduledDeparture,
+  expectedArrival: place.arrival,
+  expectedDeparture: place.departure,
+  platform: place.track ?? place.scheduledTrack,
+  scheduledPlatform: place.scheduledTrack,
 }));
 const leg: TripLeg = {
   tripId: "re1",
@@ -66,7 +74,7 @@ const leg: TripLeg = {
   },
   mode: "rail",
   startTime: "2026-11-06T20:51:00Z",
-  endTime: "2026-11-06T21:49:00Z",
+  endTime: "2026-11-06T21:44:00Z",
   from: { ...base[0] },
   to: { ...base[8] },
   route: { shortName: "RE1", longName: "", color: "E40000", textColor: "FFFFFF" },
@@ -76,7 +84,7 @@ const leg: TripLeg = {
 };
 const itinerary: TripItinerary = {
   legs: [leg],
-  duration: 3480,
+  duration: 3180,
   startTime: leg.startTime,
   endTime: leg.endTime,
   transfers: 0,
@@ -84,6 +92,8 @@ const itinerary: TripItinerary = {
   source: "transitous",
 };
 it("renders comparable RE1 platform states from the production banner and journey sheet", () => {
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: Optional export for direct Vitest runs, outside cached Turbo outputs.
+  const visualDirectory = process.env.PLATFORM_VISUAL_DIR;
   for (const state of ["before", "after", "realtime"] as const) {
     const stops = structuredClone(base);
     if (state !== "before")
@@ -132,13 +142,15 @@ it("renders comparable RE1 platform states from the production banner and journe
       expect(view.container.textContent).toContain("5 A-C");
       expect(view.container.textContent).not.toContain("(changed)");
     } else expect(view.container.textContent).toContain("2 → 4 A-C");
-    if (process.env.PLATFORM_VISUAL_DIR) {
-      const css = Array.from(document.styleSheets)
-        .flatMap((sheet) => Array.from(sheet.cssRules).map((rule) => rule.cssText))
-        .join("\n");
-      mkdirSync(process.env.PLATFORM_VISUAL_DIR, { recursive: true });
+    if (visualDirectory) {
+      // Keep original CSS: jsdom's cssText serializer damages CSS clip rectangles.
+      const css = Array.from(
+        document.querySelectorAll("style"),
+        (style) => style.textContent ?? "",
+      ).join("\n");
+      mkdirSync(visualDirectory, { recursive: true });
       writeFileSync(
-        `${process.env.PLATFORM_VISUAL_DIR}/${state}.html`,
+        `${visualDirectory}/${state}.html`,
         `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><body>${view.container.innerHTML}</body></html>`,
       );
     }
