@@ -469,11 +469,51 @@ cover app/group metadata (`C617.1`), selected-file metadata (`3B52.1`) and monot
 deadline timers (`35F9.1`). No uptime or metadata is transmitted. The extension imports GPX `com.topografix.gpx`, KML
 `com.google.earth.kml`, and Apple's `public.geojson` (also declared for older OS
 versions). Its bounded SUBQUERY activation predicate excludes arbitrary file URLs.
-URL and text attachments are combined into one editable location, retaining
-labels and the first link; irrelevant preview attachments are ignored in this
+URL and text attachments are combined into one editable item. Repeated lines and
+blank lines inside each text value are preserved; only identical attachment
+values are deduplicated; irrelevant preview attachments are ignored in this
 mode. Geographic files must all be supported. Apple declares `public.geojson`
 on iOS 18 and later; its imported declaration supports older OS versions, whose
 installation and Files registration still require device qualification.
+
+### Shared travel plans
+
+German DB Navigator connection text is recognized before generic location search.
+The source-adapter registry in `packages/core/src/travel-plans/index.ts` is pure:
+new sharing apps implement `TravelPlanAdapter` and produce `SharedTravelPlan`;
+they do not change the native protocol or implement their own transit resolver.
+The DB adapter accepts an optional route header, explicit weekday/date/year,
+service, optional headsign, and ordered `Ab`/`An` station/time lines. Overnight
+calendar dates are inferred. Walking blocks, missing years, DST-discontinuous
+wall times, cross-offset travel and day-long transfers are unsupported. A DB
+booking link alone requests the full text; it is never fetched.
+
+Only confirmation triggers acquisition through the configured OpenMapX API client.
+Station search supplies geographic anchors, corroborated by nearby baseline rail
+stops. Unrelated partial global discovery is not train identity evidence. Complete,
+non-stale anchored departure and vehicle-journey responses must confirm every
+operational train number and both scheduled stop times. Failures, ambiguity and
+cancellation retain the share; cancellation of a **train** is displayed on the
+verified trip rather than replaced by another train. Current platform/delay
+changes do not change identity. The resolver bounds station records/candidate
+journeys and has a 60-second cancelable deadline. Exact availability depends on
+the enabled sources and their timetable horizon; historical trains can be absent.
+
+`GET /api/integrations/transit/stops/:id/departures?time=<UTC ISO>&minutes=5`
+selects the explicit optional provider method `getDeparturesAt`; current-only
+providers return 501 rather than ignoring the anchor. Anchored requests have
+separate cache keys and `no-store` response headers. MOTIS local/hosted support
+this through their existing transport/source policy. No new upstream is added.
+OpenAPI generation was rerun; this route remains inventory-only, so adding the
+query parameter does not change its generated operation entry.
+
+An atomic directions-store action publishes the verified legs as one fixed trip.
+Ordinary planning cannot overwrite it; editing route inputs, searching alternatives
+or closing directions releases it. Imported data is a snapshot, without an
+invented refresh token or fare. There are no invented walking transfers. If segment
+geometry is unavailable, the UI identifies a schematic line through known stops.
+Native authority, document lifetime, selected item and cancellation are rechecked
+before publication; failed acknowledgement leaves the owned item for retry.
 
 Limits are 4,096 UTF-16 units/8 KiB for text, 5 MiB per file, five files per share,
 and eight content items/20 MiB for the owned inbox. Two bounded error descriptors

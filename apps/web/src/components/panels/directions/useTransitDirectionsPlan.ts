@@ -62,6 +62,8 @@ export function useTransitDirectionsPlan({
   bikeHillPreference,
   deutschlandticketOnly,
 }: TransitDirectionsSnapshot) {
+  const importedTrip = useDirectionsStore((s) => s.importedTransitTrip);
+  enabled = enabled && !importedTrip;
   const origin = waypoints[0]?.coords ?? null;
   const destination = waypoints.at(-1)?.coords ?? null;
   const routeWaypoints = useMemo(
@@ -268,7 +270,7 @@ export function useTransitDirectionsPlan({
   const { data: transitPlanData } = transitPlanQuery;
   const attributions = contributorsForRecords(itineraries);
   useEffect(() => {
-    if (!transitPlanData?.itineraries) return;
+    if (importedTrip || !transitPlanData?.itineraries) return;
     setTransitItineraries(
       mergeTransitItineraryPage({
         existing: transitPageToken ? useDirectionsStore.getState().transitItineraries : [],
@@ -280,6 +282,7 @@ export function useTransitDirectionsPlan({
     );
   }, [
     transitPlanData,
+    importedTrip,
     transitRoutePreference,
     setTransitItineraries,
     transitPageToken,
@@ -288,7 +291,20 @@ export function useTransitDirectionsPlan({
 
   return {
     isChained: transitIsChained,
-    planQuery: transitPlanQuery,
+    planQuery: importedTrip
+      ? {
+          ...transitPlanQuery,
+          data: {
+            from: itineraries[0]?.legs[0]?.from ?? { name: "", lat: 0, lng: 0 },
+            to: itineraries[0]?.legs.at(-1)?.to ?? { name: "", lat: 0, lng: 0 },
+            itineraries,
+          },
+          isLoading: false,
+          isError: false,
+          isFetching: false,
+          freshness: undefined,
+        }
+      : transitPlanQuery,
     chainQuery: transitChainQuery,
     itineraries,
     replanOptions: transitReplanOptions,

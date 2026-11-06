@@ -1349,7 +1349,10 @@
     "bikeSpeedKmh": "{speed} km/h",
     "bikeSpeedMph": "{speed} mph",
     "bikeSpeedHint": "Your riding speed on flat, paved roads. Hills and surfaces affect the estimate.",
-    "bikePreferencesHint": "Preferences influence route choice; road conditions and traffic may vary."
+    "bikePreferencesHint": "Preferences influence route choice; road conditions and traffic may vary.",
+    "importedTrip": "Shared from {source}. Current information is a snapshot from import. Station transfer paths have not been checked.",
+    "importedSchematic": "The map connects known stops; it does not show the precise track.",
+    "importedAlternatives": "Search alternatives"
   },
   "openingHours": {
     "source": "Source",
@@ -2662,7 +2665,15 @@
       "navigationUnavailable": "OpenMapX could not check your trip status. Close and reopen the app before importing. Shared items have been kept.",
       "listingUnavailable": "Shared items are temporarily unavailable. Try again; your items have been kept.",
       "retry": "Check again",
-      "sharedLocation": "Shared location"
+      "sharedLocation": "Shared location",
+      "tripHelp": "OpenMapX will check every shared train against the enabled timetable sources. No alternative train will be selected automatically.",
+      "tripMissingText": "Share the full connection text from DB Navigator, including its date, trains and times. A booking link alone cannot identify the trip here.",
+      "tripInvalid": "This connection text is incomplete or uses an unsupported format. Check the date and every train leg, or share the full connection again.",
+      "tripUnavailable": "The exact connection could not be verified. Timetable coverage may be unavailable for this date. Your share has been kept; try again.",
+      "tripAmbiguous": "More than one station or train matches this connection. OpenMapX has kept the share rather than choosing one.",
+      "tripText": "Shared connection text",
+      "resolvingTrip": "Checking the exact connection…",
+      "cancelTrip": "Cancel lookup"
     }
   },
   "offline": {

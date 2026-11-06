@@ -708,3 +708,24 @@ describe("transit paging through the real query cache and signed tokens", () => 
     }
   });
 });
+
+it("suspends planning and ignores an already returned result while an imported trip is fixed", () => {
+  const imported = {
+    plan: {
+      sourceId: "test",
+      sourceLabel: "Test",
+      origin: "A",
+      destination: "B",
+      timeZone: "Europe/Berlin",
+      legs: [],
+    },
+    schematic: false,
+  };
+  useDirectionsStore.setState({ importedTransitTrip: imported, transitItineraries: [a] });
+  mocks.plan.mockReturnValue({ data: response([b]), isLoading: false, isError: false });
+  const view = renderHook(() => useTransitDirectionsPlan(snapshot()));
+  expect(lastPlan().origin).toBeNull();
+  expect(lastPlan().destination).toBeNull();
+  expect(view.result.current.itineraries).toEqual([a]);
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([a]);
+});

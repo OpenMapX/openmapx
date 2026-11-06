@@ -8,6 +8,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -164,6 +165,8 @@ export function DirectionsPanelContent() {
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const {
     isOpen,
+    importedTransitTrip,
+    clearImportedTransitTrip,
     waypoints,
     mode,
     isEvMode,
@@ -272,6 +275,12 @@ export function DirectionsPanelContent() {
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
   const [transitDetailsIndex, setTransitDetailsIndex] = useState<number | null>(null);
   const [transitTimeMode, setTransitTimeMode] = useState<"now" | "depart" | "arrive">("now");
+  useEffect(() => {
+    if (importedTransitTrip) {
+      setTransitDetailsIndex(0);
+      setTransitTimeMode("depart");
+    } else setTransitDetailsIndex(null);
+  }, [importedTransitTrip]);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   // Driving depart/arrive is kept independent of the transit time state so the
   // two flows never interfere.
@@ -899,6 +908,27 @@ export function DirectionsPanelContent() {
   if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
     return (
       <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
+        {importedTransitTrip && (
+          <Alert
+            severity="info"
+            sx={{ m: 1 }}
+            action={
+              <Button
+                onClick={() => {
+                  clearImportedTransitTrip();
+                  setTransitDetailsIndex(null);
+                }}
+              >
+                {t("importedAlternatives")}
+              </Button>
+            }
+          >
+            {t("importedTrip", { source: importedTransitTrip.plan.sourceLabel })}
+            {importedTransitTrip.schematic && (
+              <Typography variant="body2">{t("importedSchematic")}</Typography>
+            )}
+          </Alert>
+        )}
         <TransitDetailsView
           itinerary={transitItineraries[transitDetailsIndex]}
           isLowestCo2={

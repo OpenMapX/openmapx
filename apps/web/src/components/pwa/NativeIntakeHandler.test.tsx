@@ -1,4 +1,4 @@
-import { useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
+import { useDirectionsStore, useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { IntakeTransferError } from "@/lib/mobile/nativeIntake";
@@ -11,6 +11,39 @@ const f = vi.hoisted(() => ({
   mutating: false,
   pathname: "/",
   push: vi.fn(),
+}));
+const travel = vi.hoisted(() => ({
+  resolve: vi.fn(),
+  result: {
+    schematic: true,
+    itinerary: {
+      startTime: "2026-11-06T20:18:00Z",
+      endTime: "2026-11-06T21:11:00Z",
+      duration: 3180,
+      transfers: 0,
+      walkDistance: 0,
+      legs: [
+        {
+          mode: "rail",
+          from: { name: "Aachen Hbf", lat: 50.77, lng: 6.1 },
+          to: { name: "Köln Hbf", lat: 50.94, lng: 6.95 },
+          startTime: "2026-11-06T20:18:00Z",
+          endTime: "2026-11-06T21:11:00Z",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [6.1, 50.77],
+              [6.95, 50.94],
+            ],
+          },
+        },
+      ],
+    },
+  },
+}));
+vi.mock("../../../../../packages/core/src/travel-plans/resolve", async (original) => ({
+  ...(await original<object>()),
+  resolveSharedTravelPlan: travel.resolve,
 }));
 const item = {
   id: "f386e706-b728-40a3-9554-881d0ff0958a",
@@ -61,6 +94,9 @@ vi.mock("@/lib/mobile/MobileRuntimeProvider", () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  const { close } = useDirectionsStore.getState();
+  close();
+  travel.resolve.mockReset().mockResolvedValue(travel.result);
   f.mutating = false;
   f.pathname = "/";
   useNavigationStore.setState({ status: "idle", nativeSessionId: null });
@@ -244,4 +280,129 @@ it("reports an item gone from the empty inbox as expired rather than an active t
   expect(screen.queryByText("deferred")).toBeNull();
   expect(useImportedGeometryStore.getState().imported).toBeNull();
   expect(f.complete).not.toHaveBeenCalled();
+});
+
+it("recognizes a travel plan without acquiring until Open and publishes the verified trip", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { useDirectionsStore } = await import("@openmapx/core");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  render(<NativeIntakeHandler />);
+  await screen.findByText("DB Navigator");
+  expect(travel.resolve).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("open"));
+  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+  expect(useDirectionsStore.getState().importedTransitTrip?.plan.sourceId).toBe("db-navigator");
+});
+it("rechecks native authority after resolving and retains the share on a navigation race", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { useDirectionsStore } = await import("@openmapx/core");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  travel.resolve.mockImplementation(async () => {
+    f.mutating = true;
+    return travel.result;
+  });
+  render(<NativeIntakeHandler />);
+  await screen.findByText("DB Navigator");
+  fireEvent.click(screen.getByText("open"));
+  await screen.findByText("deferred");
+  expect(f.complete).not.toHaveBeenCalled();
+  expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
+});
+it("cancel aborts a pending travel-plan lookup without consuming content", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  let signal: AbortSignal | undefined;
+  travel.resolve.mockImplementation((_plan, _port, s) => {
+    signal = s as AbortSignal;
+    return new Promise(() => {});
+  });
+  render(<NativeIntakeHandler />);
+  await screen.findByText("DB Navigator");
+  fireEvent.click(screen.getByText("open"));
+  await screen.findByText("resolvingTrip");
+  fireEvent.click(screen.getByText("cancelTrip"));
+  expect(signal?.aborted).toBe(true);
+  expect(f.complete).not.toHaveBeenCalled();
+});
+
+it("an unavailable exact trip retains the input and can be retried", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { TravelPlanResolutionError } = await import("@openmapx/core/navigation/api");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  travel.resolve.mockRejectedValueOnce(new TravelPlanResolutionError("not-found"));
+  render(<NativeIntakeHandler />);
+  await screen.findByText("DB Navigator");
+  fireEvent.click(screen.getByText("open"));
+  await screen.findByText("tripUnavailable");
+  expect(f.complete).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("tripText")).toHaveValue(dbNavigatorExamples[0]);
+  fireEvent.click(screen.getByText("open"));
+  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+});
+it("unmount aborts a lookup and prevents later publication or acknowledgement", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  let finish: (value: typeof travel.result) => void = () => {};
+  travel.resolve.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(<NativeIntakeHandler />);
+  await screen.findByText("DB Navigator");
+  fireEvent.click(screen.getByText("open"));
+  await screen.findByText("resolvingTrip");
+  view.unmount();
+  await act(async () => finish(travel.result));
+  expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+});
+it("a URL-only DB share is editable but cannot become a location search", async () => {
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 60 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue("https://www.bahn.de/buchung/start?vbid=abc");
+  render(<NativeIntakeHandler />);
+  await screen.findByText("tripMissingText");
+  expect(screen.getByText("open")).toBeDisabled();
+  expect(travel.resolve).not.toHaveBeenCalled();
 });

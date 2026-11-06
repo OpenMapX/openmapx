@@ -184,3 +184,65 @@ describe("insertWaypoint", () => {
     expect(useDirectionsStore.getState().waypoints).toBe(full);
   });
 });
+
+describe("fixed imported transit connections", () => {
+  beforeEach(reset);
+  const plan = {
+    sourceId: "test",
+    sourceLabel: "Test",
+    origin: "A",
+    destination: "B",
+    timeZone: "Europe/Berlin",
+    legs: [],
+  };
+  const itinerary = {
+    startTime: "2026-11-06T20:18:00Z",
+    endTime: "2026-11-06T21:11:00Z",
+    duration: 3180,
+    transfers: 0,
+    walkDistance: 0,
+    legs: [
+      {
+        mode: "rail" as const,
+        startTime: "2026-11-06T20:18:00Z",
+        endTime: "2026-11-06T21:11:00Z",
+        scheduledStartTime: "2026-11-06T20:18:00Z",
+        from: { name: "A", lat: 50, lng: 6 },
+        to: { name: "B", lat: 51, lng: 7 },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [6, 50],
+            [7, 51],
+          ] as [number, number][],
+        },
+      },
+    ],
+  };
+  it("opens endpoints and exact trip atomically and ignores stale planning publication", () => {
+    useDirectionsStore.getState().openImportedTransitTrip(plan, { itinerary, schematic: true });
+    const s = useDirectionsStore.getState();
+    expect(s.mode).toBe("transit");
+    expect(s.isOpen).toBe(true);
+    expect(s.waypoints.map((w) => w.label)).toEqual(["A", "B"]);
+    expect(s.transitDepartureTime).toEqual(new Date(itinerary.startTime));
+    s.setTransitItineraries([]);
+    expect(useDirectionsStore.getState().transitItineraries).toEqual([itinerary]);
+  });
+  it.each(["waypoint", "mode", "time", "options", "close", "alternatives"])(
+    "releases the fixed trip on %s",
+    (action) => {
+      useDirectionsStore.getState().openImportedTransitTrip(plan, { itinerary, schematic: false });
+      const s = useDirectionsStore.getState();
+      if (action === "waypoint") s.setWaypoint(0, [8, 52], "Edited");
+      if (action === "mode") s.setMode("walking");
+      if (action === "time") s.setTransitDepartureTime("now");
+      if (action === "options") s.setMaxTransfers(2);
+      if (action === "close") s.close();
+      if (action === "alternatives") s.clearImportedTransitTrip();
+      expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
+      s.setTransitItineraries([]);
+      expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
+    },
+  );
+});

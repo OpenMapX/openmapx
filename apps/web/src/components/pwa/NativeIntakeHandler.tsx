@@ -10,8 +10,19 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
+import {
+  PANEL,
+  useDirectionsStore,
+  useImportedGeometryStore,
+  useNavigationStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { classifySharedText, type IntakeItem } from "@openmapx/core/navigation";
+import {
+  createTravelPlanPort,
+  resolveSharedTravelPlan,
+  TravelPlanResolutionError,
+} from "@openmapx/core/navigation/api";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -60,6 +71,30 @@ export function NativeIntakeHandler() {
   const [draft, setDraft] = useState(""),
     [scheme, setScheme] = useState("openmapx");
   const [geometry, setGeometry] = useState<GeoJSON.FeatureCollection | null>(null);
+  const textIntent = useMemo(
+    () =>
+      classifySharedText(draft, {
+        webOrigin: typeof window === "undefined" ? "https://openmapx.com" : window.location.origin,
+        scheme,
+      }),
+    [draft, scheme],
+  );
+  const applyAbort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      applyAbort.current?.abort();
+    },
+    [],
+  );
+  useEffect(() => {
+    if (nativeSessionId !== null || !["idle", "planning", "preview"].includes(navStatus))
+      applyAbort.current?.abort();
+  }, [navStatus, nativeSessionId]);
+  function cancelApply() {
+    applyAbort.current?.abort();
+    applyAbort.current = null;
+    setBusy(false);
+  }
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const later = useRef(new Set<string>()),
@@ -189,13 +224,20 @@ export function NativeIntakeHandler() {
   }
   async function apply() {
     if (!client || !selectedItem || busy) return;
+    const abort = new AbortController();
+    applyAbort.current = abort;
     setBusy(true);
     setError("");
     const documentGeneration = generation.current;
+    const itemId = selectedItem.id;
+    const fresh = () =>
+      !abort.signal.aborted &&
+      generation.current === documentGeneration &&
+      selectedItemRef.current?.id === itemId;
     try {
-      const current = await client.list();
-      if (generation.current !== documentGeneration) return;
-      if (!current.items.some((item) => item.id === selectedItem.id)) {
+      let current = await client.list();
+      if (!fresh()) return;
+      if (!current.items.some((item) => item.id === itemId)) {
         setError("expired");
         return;
       }
@@ -203,45 +245,77 @@ export function NativeIntakeHandler() {
         setBlocked(true);
         return;
       }
-      // No await between the final local authority check and synchronous map application.
+      let resolved: Awaited<ReturnType<typeof resolveSharedTravelPlan>> | undefined;
+      if (selectedItem.kind === "text" && textIntent.kind === "travel-plan") {
+        resolved = await resolveSharedTravelPlan(
+          textIntent.plan,
+          createTravelPlanPort(),
+          abort.signal,
+        );
+        if (!fresh()) return;
+        // Resolution crossed an async boundary: native ownership/authority must be checked again.
+        current = await client.list();
+        if (!fresh()) return;
+        if (!current.items.some((item) => item.id === itemId)) {
+          setError("expired");
+          return;
+        }
+        if (!current.canApply || localBlocked()) {
+          setBlocked(true);
+          return;
+        }
+      }
+      // No await between the final authority check and synchronous publication.
       if (selectedItem.kind === "file" && geometry)
         useImportedGeometryStore
           .getState()
           .setImported({ name: selectedItem.name, geojson: geometry });
       else if (selectedItem.kind === "text") {
-        const intent = classifySharedText(draft, {
-          webOrigin: window.location.origin,
-          scheme: current.scheme,
-        });
-        if (intent.kind !== "map") {
+        if (textIntent.kind === "travel-plan" && resolved) {
+          useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+          useDirectionsStore.getState().openImportedTransitTrip(textIntent.plan, resolved);
+        } else if (textIntent.kind === "map") {
+          applyNativeDeepLink(textIntent, {
+            replaceSearch: (query) => {
+              const url = new URL(window.location.href);
+              url.search = query;
+              window.history.replaceState(window.history.state, "", url.toString());
+            },
+            notify: () => window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT)),
+            showActiveNavigation: () => undefined,
+            requestSnapshot: () => undefined,
+          });
+        } else {
           setError("unsupported");
           return;
         }
-        applyNativeDeepLink(intent, {
-          replaceSearch: (query) => {
-            const url = new URL(window.location.href);
-            url.search = query;
-            window.history.replaceState(window.history.state, "", url.toString());
-          },
-          notify: () => window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT)),
-          showActiveNavigation: () => undefined,
-          requestSnapshot: () => undefined,
-        });
       } else return;
-      // If acknowledgement fails, leave the item available for an explicit retry.
-      await client.complete(selectedItem.id, "opened");
-      later.current.add(selectedItem.id);
+      await client.complete(itemId, "opened");
+      if (!fresh()) return;
+      later.current.add(itemId);
       setVisible(false);
       await refresh();
     } catch (error) {
-      if (error instanceof IntakeTransferError && error.code === "navigation-active")
+      if (!fresh()) return;
+      if (error instanceof TravelPlanResolutionError)
+        setError(
+          error.code === "ambiguous"
+            ? "trip-ambiguous"
+            : error.code === "invalid"
+              ? "trip-invalid"
+              : "trip-unavailable",
+        );
+      else if (error instanceof IntakeTransferError && error.code === "navigation-active")
         setBlocked(true);
       else if (error instanceof IntakeTransferError && error.code === "navigation-unavailable") {
         setBlocked(true);
         setListingUnavailable(error.code);
       } else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
     } finally {
-      setBusy(false);
+      if (applyAbort.current === abort) {
+        applyAbort.current = null;
+        setBusy(false);
+      }
     }
   }
   if (!client) return null;
@@ -270,8 +344,7 @@ export function NativeIntakeHandler() {
   if (!items.length) return null;
   const waiting = blocked || localBlocked();
   const invalidText =
-    selectedItem?.kind === "text" &&
-    classifySharedText(draft, { webOrigin: window.location.origin, scheme }).kind !== "map";
+    selectedItem?.kind === "text" && textIntent.kind !== "map" && textIntent.kind !== "travel-plan";
   const code = selectedItem?.kind === "error" ? selectedItem.errorCode : error;
   return (
     <>
@@ -332,19 +405,58 @@ export function NativeIntakeHandler() {
                       "inbox-full": "inboxFull",
                       expired: "expired",
                       unsupported: "unsupported",
+                      "trip-ambiguous": "tripAmbiguous",
+                      "trip-invalid": "tripInvalid",
+                      "trip-unavailable": "tripUnavailable",
                     } as Record<string, string>
                   )[code] ?? "failed") as "failed",
                 )}
               </Alert>
             )}
+            {textIntent.kind === "travel-plan" && selectedItem?.kind === "text" && !loading && (
+              <Stack spacing={1}>
+                <Typography sx={{ fontWeight: 600 }}>{textIntent.plan.sourceLabel}</Typography>
+                <Typography>
+                  {textIntent.plan.origin} → {textIntent.plan.destination}
+                </Typography>
+                {textIntent.plan.legs.map((leg) => (
+                  <Typography key={`${leg.trainNumber}-${leg.departure}`} variant="body2">
+                    {leg.service} ({leg.trainNumber}) · {leg.departure.replace("T", " ")} →{" "}
+                    {leg.arrival.replace("T", " ")}
+                  </Typography>
+                ))}
+                <Alert severity="info">{t("tripHelp")}</Alert>
+              </Stack>
+            )}
+            {textIntent.kind === "invalid-travel-plan" &&
+              selectedItem?.kind === "text" &&
+              !loading && (
+                <Alert severity="warning">
+                  {t(textIntent.reason === "missing-text" ? "tripMissingText" : "tripInvalid")}
+                </Alert>
+              )}
+            {busy && textIntent.kind === "travel-plan" && (
+              <Typography role="status">{t("resolvingTrip")}</Typography>
+            )}
             {selectedItem?.kind === "text" && !loading && (
               <TextField
-                label={t("search")}
+                label={t(
+                  textIntent.kind === "travel-plan" || textIntent.kind === "invalid-travel-plan"
+                    ? "tripText"
+                    : "search",
+                )}
+                disabled={busy}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 multiline
                 slotProps={{ htmlInput: { maxLength: 4096 } }}
-                helperText={invalidText ? t("editUnsupported") : t("textHelp")}
+                helperText={
+                  textIntent.kind === "travel-plan" || textIntent.kind === "invalid-travel-plan"
+                    ? undefined
+                    : invalidText
+                      ? t("editUnsupported")
+                      : t("textHelp")
+                }
               />
             )}
             {geometry && (
@@ -367,6 +479,9 @@ export function NativeIntakeHandler() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ flexWrap: "wrap" }}>
+          {busy && textIntent.kind === "travel-plan" && (
+            <Button onClick={cancelApply}>{t("cancelTrip")}</Button>
+          )}
           <Button onClick={() => void discard()} disabled={busy}>
             {t("discard")}
           </Button>

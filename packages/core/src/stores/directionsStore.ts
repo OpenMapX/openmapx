@@ -13,6 +13,8 @@ import {
   isBikeProfile,
   isBikeSpeedKmh,
 } from "../routing/bicycleOptions";
+import type { ResolvedTravelPlan } from "../travel-plans/resolve";
+import type { SharedTravelPlan } from "../travel-plans/types";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
 
@@ -115,6 +117,9 @@ export interface DirectionsState {
   avoidTolls: boolean;
   avoidFerries: boolean;
   transitItineraries: TripItinerary[];
+  importedTransitTrip: { plan: SharedTravelPlan; schematic: boolean } | null;
+  openImportedTransitTrip: (plan: SharedTravelPlan, result: ResolvedTravelPlan) => void;
+  clearImportedTransitTrip: () => void;
   activeItineraryIndex: number;
   transitDepartureTime: "now" | Date;
   transitArrivalTime: Date | null;
@@ -202,6 +207,35 @@ function initialWaypoints(): Waypoint[] {
 
 export const useDirectionsStore = create<DirectionsState>((set, get) => {
   const initWps = initialWaypoints();
+  // Routing edits release the fixed import; ordinary UI state changes do not.
+  const routingKeys = new Set([
+    "waypoints",
+    "mode",
+    "isEvMode",
+    "timeMode",
+    "tripTime",
+    "transitDepartureTime",
+    "transitArrivalTime",
+    "transitPreferredModes",
+    "transitRoutePreference",
+    "transitAccessMode",
+    "wheelchairRequired",
+    "maxTransfers",
+    "transferBuffer",
+    "requireBikeTransport",
+    "bikeHillPreference",
+    "deutschlandticketOnly",
+  ]);
+  const update = (patch: Partial<DirectionsState>) => {
+    const release =
+      get().importedTransitTrip && Object.keys(patch).some((key) => routingKeys.has(key));
+    set(
+      release
+        ? { ...patch, importedTransitTrip: null, transitItineraries: [], activeItineraryIndex: 0 }
+        : patch,
+    );
+  };
+
   return {
     isOpen: false,
     waypoints: initWps,
@@ -217,6 +251,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
     avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
     transitItineraries: [],
+    importedTransitTrip: null,
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
     transitArrivalTime: null,
@@ -230,10 +265,43 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     ...readBikePrefs(),
     deutschlandticketOnly: false,
 
-    open: () => set({ isOpen: true }),
+    openImportedTransitTrip: (plan, result) => {
+      const first = result.itinerary.legs[0],
+        last = result.itinerary.legs.at(-1);
+      if (!first || !last) return;
+      set({
+        isOpen: true,
+        mode: "transit",
+        isEvMode: false,
+        timeMode: "depart",
+        tripTime: new Date(first.scheduledStartTime ?? first.startTime),
+        waypoints: deriveTypes([
+          {
+            id: newWaypointId(),
+            coords: [first.from.lng, first.from.lat],
+            label: plan.origin,
+            type: "origin",
+          },
+          {
+            id: newWaypointId(),
+            coords: [last.to.lng, last.to.lat],
+            label: plan.destination,
+            type: "destination",
+          },
+        ]),
+        transitDepartureTime: new Date(first.scheduledStartTime ?? first.startTime),
+        transitArrivalTime: null,
+        transitItineraries: [result.itinerary],
+        activeItineraryIndex: 0,
+        importedTransitTrip: { plan, schematic: result.schematic },
+      });
+    },
+    clearImportedTransitTrip: () =>
+      set({ importedTransitTrip: null, transitItineraries: [], activeItineraryIndex: 0 }),
+    open: () => update({ isOpen: true }),
     close: () => {
       const wps = initialWaypoints();
-      set({
+      update({
         isOpen: false,
         waypoints: wps,
         activeRouteIndex: 0,
@@ -263,7 +331,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = [...get().waypoints];
       if (index < 0 || index >= wps.length) return;
       wps[index] = { ...wps[index], coords, label };
-      set({ waypoints: wps, activeRouteIndex: 0 });
+      update({ waypoints: wps, activeRouteIndex: 0 });
     },
 
     addWaypoint: (afterIndex) => {
@@ -272,7 +340,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const newWp = makeEmptyWaypoint();
       wps.splice(afterIndex + 1, 0, newWp);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     insertWaypoint: (index, coords, label) => {
@@ -280,7 +348,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.length >= MAX_DIRECTIONS_WAYPOINTS) return false;
       if (!Number.isInteger(index) || index < 1 || index > wps.length - 1) return false;
       wps.splice(index, 0, { ...makeEmptyWaypoint(), coords, label });
-      set({ waypoints: deriveTypes(wps), activeRouteIndex: 0 });
+      update({ waypoints: deriveTypes(wps), activeRouteIndex: 0 });
       return true;
     },
 
@@ -289,7 +357,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.length <= 2) return;
       wps.splice(index, 1);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reorderWaypoints: (fromIndex, toIndex) => {
@@ -297,19 +365,19 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const [moved] = wps.splice(fromIndex, 1);
       wps.splice(toIndex, 0, moved);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reverseWaypoints: () => {
       const wps = [...get().waypoints].reverse();
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
-    setMode: (mode) => set({ mode, activeRouteIndex: 0, isEvMode: false }),
+    setMode: (mode) => update({ mode, activeRouteIndex: 0, isEvMode: false }),
     setEvMode: (isEvMode) => {
       if (!isEvMode) {
-        set({ isEvMode });
+        update({ isEvMode });
         return;
       }
       // EV re-routing only supports origin + destination (see ev-plan.ts) —
@@ -317,7 +385,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = get().waypoints;
       const last = wps.length - 1;
       const trimmed = last > 1 ? deriveTypes([wps[0], wps[last]]) : wps;
-      set({
+      update({
         waypoints: trimmed,
         isEvMode,
         mode: "driving",
@@ -325,12 +393,12 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         evForceNonExclusive: false,
       });
     },
-    setEvSocStartPct: (evSocStartPct) => set({ evSocStartPct }),
-    setEvSocArrivalMinPct: (evSocArrivalMinPct) => set({ evSocArrivalMinPct }),
-    setEvForceNonExclusive: (evForceNonExclusive) => set({ evForceNonExclusive }),
+    setEvSocStartPct: (evSocStartPct) => update({ evSocStartPct }),
+    setEvSocArrivalMinPct: (evSocArrivalMinPct) => update({ evSocArrivalMinPct }),
+    setEvForceNonExclusive: (evForceNonExclusive) => update({ evForceNonExclusive }),
     setTimeMode: (timeMode) =>
-      set(timeMode === "now" ? { timeMode, tripTime: null } : { timeMode }),
-    setTripTime: (tripTime) => set({ tripTime }),
+      update(timeMode === "now" ? { timeMode, tripTime: null } : { timeMode }),
+    setTripTime: (tripTime) => update({ tripTime }),
 
     setWaypointSchedule: (index, schedule) => {
       const wps = get().waypoints;
@@ -338,7 +406,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const next = [...wps];
       const { schedule: _previous, ...rest } = next[index];
       next[index] = schedule === null ? rest : { ...rest, schedule };
-      set({ waypoints: next, activeRouteIndex: 0 });
+      update({ waypoints: next, activeRouteIndex: 0 });
     },
 
     applyWaypointOrder: (order) => {
@@ -347,79 +415,80 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.some((wp) => hasWindow(wp.schedule))) return false;
       const reordered = order.map((index) => wps[index]);
       if (reordered.some((wp) => wp === undefined)) return false;
-      set({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
+      update({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
       return true;
     },
 
     hasScheduleConstraints: () => get().waypoints.some((wp) => hasWindow(wp.schedule)),
 
-    setActiveRouteIndex: (activeRouteIndex) => set({ activeRouteIndex }),
+    setActiveRouteIndex: (activeRouteIndex) => update({ activeRouteIndex }),
     setAvoidHighways: (avoidHighways) => {
       getStorage().setString(AVOID_HIGHWAYS_STORAGE_KEY, String(avoidHighways));
-      set({ avoidHighways });
+      update({ avoidHighways });
     },
     setAvoidTolls: (avoidTolls) => {
       getStorage().setString(AVOID_TOLLS_STORAGE_KEY, String(avoidTolls));
-      set({ avoidTolls });
+      update({ avoidTolls });
     },
     setAvoidFerries: (avoidFerries) => {
       getStorage().setString(AVOID_FERRIES_STORAGE_KEY, String(avoidFerries));
-      set({ avoidFerries });
+      update({ avoidFerries });
     },
     hydrateRoutePrefs: () =>
-      set({
+      update({
         ...readBikePrefs(),
         avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
         avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
         avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
       }),
-    setTransitItineraries: (transitItineraries) =>
-      set({ transitItineraries, activeItineraryIndex: 0 }),
-    setActiveItineraryIndex: (activeItineraryIndex) => set({ activeItineraryIndex }),
-    setTransitDepartureTime: (transitDepartureTime) => set({ transitDepartureTime }),
-    setTransitArrivalTime: (transitArrivalTime) => set({ transitArrivalTime }),
+    setTransitItineraries: (transitItineraries) => {
+      if (!get().importedTransitTrip) update({ transitItineraries, activeItineraryIndex: 0 });
+    },
+    setActiveItineraryIndex: (activeItineraryIndex) => update({ activeItineraryIndex }),
+    setTransitDepartureTime: (transitDepartureTime) => update({ transitDepartureTime }),
+    setTransitArrivalTime: (transitArrivalTime) => update({ transitArrivalTime }),
     toggleTransitPreferredMode: (key) => {
       const current = get().transitPreferredModes;
       const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-      set({ transitPreferredModes: next, activeItineraryIndex: 0 });
+      update({ transitPreferredModes: next, activeItineraryIndex: 0 });
     },
     setTransitRoutePreference: (transitRoutePreference) =>
-      set({ transitRoutePreference, activeItineraryIndex: 0 }),
+      update({ transitRoutePreference, activeItineraryIndex: 0 }),
     setTransitAccessMode: (transitAccessMode) =>
-      set({
+      update({
         transitAccessMode,
         activeItineraryIndex: 0,
         ...(transitAccessMode !== "bike" ? { requireBikeTransport: false } : {}),
       }),
     setWheelchairRequired: (wheelchairRequired) =>
-      set({ wheelchairRequired, activeItineraryIndex: 0 }),
-    setMaxTransfers: (maxTransfers) => set({ maxTransfers, activeItineraryIndex: 0 }),
-    setTransferBuffer: (transferBuffer) => set({ transferBuffer, activeItineraryIndex: 0 }),
+      update({ wheelchairRequired, activeItineraryIndex: 0 }),
+    setMaxTransfers: (maxTransfers) => update({ maxTransfers, activeItineraryIndex: 0 }),
+    setTransferBuffer: (transferBuffer) => update({ transferBuffer, activeItineraryIndex: 0 }),
     setRequireBikeTransport: (requireBikeTransport) =>
-      set({ requireBikeTransport, activeItineraryIndex: 0 }),
+      update({ requireBikeTransport, activeItineraryIndex: 0 }),
     setBikeHillPreference: (bikeHillPreference) => {
       getStorage().setString("openmapx:bikeHillPreference", bikeHillPreference);
-      set({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
+      update({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
     },
     setBikeProfile: (bikeProfile) => {
       getStorage().setString("openmapx:bikeProfile", bikeProfile);
-      set({ bikeProfile, activeRouteIndex: 0 });
+      update({ bikeProfile, activeRouteIndex: 0 });
     },
     setBikePreferQuietRoads: (bikePreferQuietRoads) => {
       getStorage().setString("openmapx:bikePreferQuietRoads", String(bikePreferQuietRoads));
-      set({ bikePreferQuietRoads, activeRouteIndex: 0 });
+      update({ bikePreferQuietRoads, activeRouteIndex: 0 });
     },
     setBikePreferSmoothSurfaces: (bikePreferSmoothSurfaces) => {
       getStorage().setString("openmapx:bikePreferSmoothSurfaces", String(bikePreferSmoothSurfaces));
-      set({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
+      update({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
     },
     setBikeSpeedKmh: (bikeSpeedKmh) => {
       if (bikeSpeedKmh !== undefined && !isBikeSpeedKmh(bikeSpeedKmh)) return;
       if (bikeSpeedKmh === undefined) getStorage().remove("openmapx:bikeSpeedKmh");
       else getStorage().setString("openmapx:bikeSpeedKmh", String(bikeSpeedKmh));
-      set({ bikeSpeedKmh, activeRouteIndex: 0 });
+      update({ bikeSpeedKmh, activeRouteIndex: 0 });
     },
     setDeutschlandticketOnly: (deutschlandticketOnly) =>
-      set({ deutschlandticketOnly, activeItineraryIndex: 0 }),
+      update({ deutschlandticketOnly, activeItineraryIndex: 0 }),
   };
 });
