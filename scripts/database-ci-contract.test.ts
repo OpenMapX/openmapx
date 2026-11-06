@@ -72,7 +72,9 @@ describe("required database test gate", () => {
       '--health-cmd "pg_isready -h 127.0.0.1 -U postgres -d openmapx_test"',
     );
     expect(databaseJob).toContain("pnpm --filter @openmapx/api exec drizzle-kit migrate");
-    expect(databaseJob).toContain("run: pnpm test:database $" + "{{ matrix.group }}");
+    expect(databaseJob).toContain(
+      'run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"',
+    );
     expect(databaseJob).not.toContain("continue-on-error:");
     const exportSteps = databaseJob.slice(databaseJob.indexOf("      # Docker Hub"));
     expect(exportSteps.match(/if: matrix.group == 'export-restore'/g)).toHaveLength(3);

@@ -577,9 +577,12 @@ jobs:
 
       - name: Run the required database integration suites
         env:
+          TEST_DB_GROUP: ${{ matrix.group }}
+          TEST_DB_PART: ${{ matrix.part }}
+          TEST_DB_TOTAL: ${{ matrix.total }}
           OPENMAPX_REAL_BACKUP_FIXTURE: ${{ runner.temp }}/openmapx-real-backup-result.tar
           OPENMAPX_TEST_SHARD_RECEIPT: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
-        run: pnpm test:database ${{ matrix.group }} ${{ matrix.part }}/${{ matrix.total }}
+        run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"
 
       - name: Preserve the exact database shard inventory
         if: always()
