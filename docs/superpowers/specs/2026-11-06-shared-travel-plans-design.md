@@ -1,217 +1,251 @@
-# Shared travel plans: DB Navigator exact connections
+# Shared travel plans: resolve and select a normal provider trip
 
-Date: 2026-11-06. Status: reviewed by Claude Opus; corrections below accepted for implementation.
+Date: 2026-11-06. Status: revised after the user's clarification; reviewed by
+Claude Opus. Corrections below are accepted for implementation. This replaces the earlier fixed-import design.
 
-## Intent and scope
+## Required outcome
 
-Sharing a DB Navigator connection to the existing Android/iOS OpenMapX share
-receiver should open that connection, including its individual trains and overnight
-transfers. Opening an approximately similar route is a failure. The user delegated
-all design decisions and implementation, requesting Opus reviews before and after
-implementation; there is no additional human approval checkpoint.
+Sharing a DB Navigator connection identifies and opens the exact corresponding
+OpenMapX connection as though the user had searched for it and selected it in the
+ordinary directions panel. DB text supplies an identity fingerprint only. All
+visible trip data, including names, times, platforms, intermediate stops, alerts,
+geometry, transfers and fares where available, comes from the configured transit
+provider through the normal OpenMapX mapping path. An instance using Transitous
+uses Transitous data; a local MOTIS instance uses that instance's data and policy.
 
-The first adapter supports the German plain-text format supplied in the request:
-optional route header, German weekday/date, repeated service / Nach / Ab / An blocks, and an
-optional `Verbindung ansehen: https://www.bahn.de/buchung/start?vbid=...` footer.
-The four supplied examples become regression fixtures. URL-only shares cannot
-prove a connection and explain that the full connection text is needed. Recognized
-but malformed plans never fall through to an ordinary map search.
+There is no import detail screen, source banner, snapshot mode, schematic-route
+notice or special alternatives action. The existing native intake confirmation,
+progress/error feedback and ordinary directions controls are sufficient. Do not
+render the DB text as trip detail data. No automatic navigation start.
 
-No new upstream, route, credentials, native bridge version, or dependencies. The existing departures route gains an optional time query, backed by an explicitly optional provider method; unsupported providers never silently ignore the time.
-No automatic navigation start, ticket import, booking, persistence of raw shares,
-tracking, or background DB link resolution. Other languages, walking-only shares,
-cross-timezone journeys and other source apps are subsequent adapters, not guessed
-formats. Existing generic text, location and geometry sharing remains supported.
+The user's Bahn-App example is a behavioral reference. Its internal implementation
+has not been established and is not assumed to use MOTIS. No emulator observation
+is claimed.
 
-## Investigation and alternatives
+## Keep and remove
 
-Current flow: native owned inbox -> protocol-v4 `intake.list/read` ->
-`NativeIntakeHandler` editable confirmation -> `classifySharedText` -> map URL
-application -> `intake.complete`. Today a DB share is searched as text.
-Native authority and document-generation fencing must remain intact.
+Keep the pure source adapter registry and explicit plan model, German DB parser,
+all four shared fixtures, overnight/calendar validation, bounded station identity
+matching and iOS preservation of repeated text and URL attachment ordering.
 
-Transit route search (`fetchTransitPlan`) returns provider-qualified stop/trip IDs,
-scheduled and current leg times, service numbers, geometry and contributors. The
-existing directions store/layer/cards/details/navigation already consume these
-itineraries. `useTransitDirectionsPlan` would overwrite a manually inserted trip
-unless explicitly suspended. `TransitDetailsView` renders individual trains.
+Remove client-side `TripItinerary` composition, geometry acquisition/fallback,
+`importedTransitTrip`, the fixed-import planner bypass, source notices, train
+summary presentation and dedicated alternatives action. Replace their tests with
+normal provider-result equivalence and ordinary directions-selection tests. The
+previous screenshots and full-suite run are historical evidence, not validation
+of the revised feature. The old portable run was stopped on this clarification;
+it had seven failures in unchanged build-artifact tests and no final summary.
 
-Alternatives considered:
+## Identity and source abstraction
 
-1. Resolve the DB vbid using DB's web/mobile APIs. This could recover richer data
-   and URL-only shares but requires an undocumented, changeable external API,
-   privacy/source policy, attribution and a new integration. Rejected for this
-   feature. External research: the db-vendo-client maintainers document distinct
-   web/mobile APIs and opaque journey reconstruction; this is not a stable
-   documented cross-provider trip identifier. See
-   <https://github.com/public-transport/db-vendo-client/blob/main/docs/db-apis.md>.
-   A live read of the supplied bahn.de page was unavailable during investigation.
-2. Run one A-to-B search and select a close result. Rejected: optimization can omit
-   the specified trains/long transfer; endpoint/time similarity is not identity.
-3. Parse explicit legs, resolve each through existing OpenMapX transit search,
-   verify every leg, and publish a fixed imported itinerary. Selected. Per-leg
-   search preserves nonoptimal transfer choices while retaining provider geometry,
-   identities, current delays and attribution. Bounded search can still fail to
-   find a train; report unavailable rather than substituting it.
+`SharedTravelPlan` contains only source identification and explicit station,
+service/train-number and dated wall-clock hints. Parsing remains pure, with no DB
+URL fetch or new upstream. Another sharing app adds one adapter and fixtures;
+it reuses resolution and publication.
 
-Dated timetables plus vehicle journeys were also investigated. MOTIS timetables
-stop at 300 departures and are absent on the hosted adapter. They are unsuitable
-as the primary discovery mechanism for late departures at busy stations.
+Retain the 4096 UTF-16 / 8192-byte text bounds, 1..8 rail legs, 72-hour maximum,
+strict complete blocks, explicit year, weekday/calendar checks, overnight date
+rollover and station locality qualifiers. DB booking URLs alone cannot identify
+a provider trip. Missing-year/walking/+day variants remain unsupported. Berlin
+wall times are independent of device timezone; reject DST folds/gaps and endpoints
+with different UTC offsets. Platforms and live delays are not identity.
 
-## Architecture
+## Resolve a provider result, never synthesize displayed trip data
 
-### Source adapters (pure, shared core)
+A common resolver returns a complete `MobilityEnvelope<TripPlan>`, the exact normal
+planning request and the selected itinerary identity/index. It never returns a
+hand-assembled itinerary. All acquisition uses the configured OpenMapX API client.
 
-Create `packages/core/src/travel-plans/` with a source-neutral model and explicit
-adapter registry. An adapter has a stable id, display name and pure `parse(text)`
-returning unrecognized, invalid with reason, or a normalized `SharedTravelPlan`.
-The registry has one DB Navigator adapter; future adapters register here without
-modifying mobile or transit resolution. No network in parsers.
+1. Resolve geographically corroborated station names with the existing bounded
+   search/nearby approach. Use the enabled provider and its current capabilities. Prefer verified boarding
+   and alighting platform coordinates over parent-station coordinates; allow a
+   small bounded departure margin for normal access walking.
+2. Search through the ordinary transit planning API with an explicit departure
+   anchor and canonical request options. Compare the entire ordered transit leg
+   sequence to the share: operational numbers, scheduled departure/arrival,
+   geographically corroborated boarding/alighting stations, leg count/order.
+   Walking transfers in the provider itinerary are retained verbatim. A unique
+   exact match returns the provider plan and selected itinerary without changing
+   any field. Use at most one signed next page for discovery only. If it contains a match,
+   run a fresh unpaged request at that itinerary's start minute; only an exact
+   unpaged result can seed ordinary search. Never seed paged data under an unpaged
+   key, or select a first/approximately matching alternative. A bounded retry with
+   the shared services' mode classes can recover a dominated regional connection
+   while remaining a real, refetchable ordinary search.
+3. Pareto planning can omit a valid overtaken train or canceled service. If a
+   bounded normal search has no exact result, retain the existing dated-board
+   and vehicle-journey identity discovery. Bound parent stations and candidates
+   to four per leg; deduplicate equivalent parent/platform records. Verify exact
+   operational number, both scheduled times, ordered stop IDs and coordinates.
+4. Ask that same provider to reconstruct the verified sequence through a common
+   optional `resolveTrip` provider operation. The client submits provider-qualified
+   trip/stop IDs, scheduled instants and the dataset epoch, not coordinates or
+   displayed DB data. The server independently fetches provider trip data to
+   obtain coordinates, native display name and scheduled/additional-trip flags. All legs must
+   belong to the same provider instance/dataset context. Unsupported providers
+   may still succeed through normal search, otherwise resolution fails closed.
+5. Validate the returned provider itinerary against every verified transit leg
+   again. Native reconstruction can pick another candidate or return dummy legs;
+   reject substitutions, changed scheduled identity and missing trip IDs. Return
+   only the complete normal provider result, or keep the share unopened.
 
-A plan contains source id/label, origin/destination names and 1..8 ordered rail
-legs. A leg contains station names, local departure/arrival date/time, display
-service/line, train number and optional headsign/platforms. Shared platforms are
-reference hints, not immutable identity (live platforms may change).
+The 60-second overall deadline, cancellation, sequential bounded calls, fresh and
+complete exact evidence, and authority/lifetime fences remain. Search discovery
+may be partial; a matched itinerary and identity evidence must not be partial or
+stale. No cross-provider concatenation, invented walks, fares, refresh handles or
+geometry.
 
-Enforce the existing 4096-character/8192-byte intake bounds before parsing; reject
-control characters. Accept CRLF, blank lines, NBSP and ordinary whitespace
-variants. Parse all blocks, not just recognizable subsets. Validate calendar dates,
-weekday, 00:00..23:59 times, header endpoints and contiguous transfer names.
-Strip only explicit `, Gleis ...` suffixes, not arbitrary commas in station names.
-Increment the calendar date each time the sequence crosses midnight; impose a
-72-hour maximum duration, 8-leg limit and nonzero leg durations. Service examples
-`RE9 (10935)` and `ICE 1541` provide both public label and operational train number.
-Do not interpret an arbitrary train label as a machine trip ID.
+## MOTIS / Transitous reconstruction
 
-`classifySharedText` gains travel-plan and invalid-travel-plan outcomes before its
-multiline/map heuristics. A DB vbid link alone is recognized as missing text.
-An invalid recognized share is visible/editable, but cannot open as a map query.
+The installed client is MOTIS 2.11.4. Its documented structured
+`refreshItineraryPost` accepts an `ItineraryId` containing `LegId` references and
+returns the provider's ordinary `Itinerary`. This avoids encoding a private
+protobuf ID in OpenMapX. Use the existing configured MOTIS client and source
+policy for local/hosted requests.
 
-### Resolver (shared core, injected acquisition)
+Construct transit references only from verified provider IDs, coordinates and
+scheduled instants. Insert WALK transfer references between different trains:
+adjacent transit references are treated as interlining by MOTIS. These are
+reconstruction requests, not displayed or measured transfer legs. MOTIS resolves
+the real footpath; reject dummy/unresolved transfers rather than display a guessed
+path. Validate the complete returned transit identity because MOTIS reconstruction
+uses candidate scoring and can substitute a nearby/time-similar trip.
 
-`resolveSharedTravelPlan(plan, port, signal)` acquires only after the user clicks
-Open. The default port uses the configured OpenMapX `ApiClient`; tests inject it.
-Resolve station names through `/transit/stops/search` (limit 20), requiring exact
-normalized names (Unicode/case/whitespace; no fuzzy city/station substitution).
-Collapse duplicate provider records only when equivalent names and coordinates agree within 1 km;
-multiple geographic clusters mean ambiguous, not first-result selection.
+Use the same `mapItinerary` / `mapLeg` normalization as ordinary planning. Preserve
+provider itinerary ID, source, instance, dataset epoch, detailed legs, current
+platforms, cancellations, alternatives, walking transfers and contributor receipts.
+An original normal plan match retains its fares and paging in the search path;
+a reconstruction is never merged into or labeled as an ordinary search result. MOTIS 2.11.4 reconstruction itself does not compute fares; do not manufacture
+them or claim that the upstream supplies fields it omits. Reuse ordinary
+server refresh-token eligibility and signing. A reference-based refresh must
+refresh/re-resolve that exact reference or fail; it must never use the existing
+search fallback that chooses `itineraries[0]`. The native returned ID is the
+provider-serialized reference ID, not a planner-issued ID.
 
-Opus review identified that even per-leg Pareto planning can omit an overtaken
-regional train or a cancellation. Corrected design: acquire time-anchored departures
-for each matching provider-qualified boarding station (maximum 4 records), from
-one minute before the shared departure over a 5-minute window. Add an optional
-ISO `time` to GET /stops/:id/departures, with strict validation, a distinct cache
-key and no shared caching for anchored queries. Add `getDeparturesAt` as an
-explicit optional provider method: current-only providers cannot silently answer
-historical/future requests. MOTIS local and hosted implement it through stoptimes;
-retain host source policy and the local adapter's hosted-fallback setting.
+Primary contract/source evidence:
 
-Match operational train number from serviceInfo.trainNumber or an unambiguous
-service label, plus exact scheduled departure. Fetch each candidate vehicle
-journey (at most 4 candidates), verify the boarding stop and ordered alighting stop,
-both scheduled times and geographically corroborated station names. Require a
-single provider-qualified trip/stop/time match; distinct matching identities fail
-ambiguous rather than selecting a first result. Stop names expand Hbf/Bf and
-normalize punctuation and umlauts without dropping locality qualifiers. Equivalent
-station names must remain geographically near the resolved station (1 km); no
-fuzzy city substitution. Preserve cancellations rather than silently replanning.
+- [Pinned MOTIS API](https://github.com/motis-project/motis/blob/v2.11.4/openapi.yaml)
+- [Structured refresh endpoint](https://github.com/motis-project/motis/blob/v2.11.4/src/endpoints/refresh_itinerary.cc)
+- [Reconstruction and identity behavior](https://github.com/motis-project/motis/blob/v2.11.4/src/itinerary_id.cc)
 
-Get the exact ridden segment geometry through /leg-geometry. On unavailable
-geometry, use ordered journey-stop coordinates with an explicit schematic-route
-notice. Never draw an invented track or walking path as measured geometry.
-Transfer stations are searched once per import; requests run sequentially with
-an overall 60-second abort deadline. A failed supported source prevents claiming
-uniqueness. Providers without anchored departures are skipped explicitly.
+## Normal directions publication
 
-Resolve wall times in Europe/Berlin independently of device timezone; verify stop
-zone offsets match Berlin at the requested instants (also permits equivalent
-Central European zones). Reject DST gaps/folds. Require explicit years, as in all
-four examples. Date-less, +day markers, walking blocks and transfers of 24 hours
-or more are unsupported; document instead of guessing. Past and beyond-horizon
-journeys are tried with their explicit date; no match explains unavailable
-provider timetable coverage. Cancellation is a successful identity match with
-visible cancellation state. Invalid, unavailable and ambiguous outcomes retain
-input. No approximate substitution or partial publication.
+Publish only after the existing Open confirmation, final native inbox/authority
+check, current document/item checks and abort checks. No await between the final
+check and synchronous publication; acknowledge only afterward.
 
-Publish a `TripItinerary` containing the verified transit legs in order. Do not
-invent walking legs, transfer feasibility, through-ticket fares, refresh tokens,
-CO2 totals or cross-provider dataset identity. Preserve per-leg contributors,
-geometry, IDs, current/scheduled times, cancellation flags and alerts. Union actual
-provider contributors at itinerary level. Calculate duration, distance (when all
-legs supply it) and transfers from the verified legs. Transfer gaps must remain
-chronologically ordered in scheduled time; realtime disruptions can invalidate
-connections and remain visible. An imported-trip notice states that station
-transfer paths have not been checked. Existing navigation remains an explicit
-separate action, with its existing feasibility/authority checks.
+There are two truthful query inputs feeding the same existing directions UI:
 
-### Fixed trip presentation and lifecycle
+- **Search match:** the unchanged complete envelope from a real unpaged `/plan`
+  request. Seed it under that exact request's ordinary query key. The normal
+  search query, paging and refresh behavior consume it.
+- **Provider-reference match:** a separate `transit-plan-reference` query calls
+  `/plan/resolve` with the verified reference. Seed only that key. Refetch calls
+  the same resolver and therefore cannot replace the trip with a Pareto search
+  alternative. It has no search paging. The reference is a normal provider lookup
+  input, not DB metadata or a frozen snapshot; it is released by routing edits or
+  closing directions. Both variants return the same complete provider plan type.
 
-Add an imported transit trip marker and atomic `openImportedTransitTrip` action to
-the directions store. Populate station waypoints, transit mode, departure time,
-exact itinerary and active index. Open the directions panel and details for the
-imported itinerary. Map rendering uses the existing itinerary layer.
+This is the explicit B1 decision: keep native reconstruction, using Opus's
+provider-reference query correction rather than postponing exact-trip support.
+There is no imported banner, synthesized data or permanent fixed-import bypass.
 
-Suspend automatic transit planning/paging/publication while the imported trip is
-active. Do not let already-running search responses replace it. When the user
-edits routing inputs or closes directions, clear the imported marker and resume
-ordinary planning. Show source and transfer notice, with an explicit action to
-search for alternatives (clears the marker). Imported trips are transient and
-cannot create a hidden persistent routing lock. Existing ordinary directions
-must retain their behavior.
+Extract one canonical builder for normal query keys and `fetchTransitPlan`
+parameters. Share the capabilities query key/options so intake obtains the same
+metadata the panel reads. Preserve persisted `bikeHillPreference` and the user's
+`wheelchairRequired`. Reset only session exclusionary controls for this search:
+preferred transport classes (or a deliberate class-restricted retry), D-ticket,
+maximum transfers, route preference, access mode and transfer buffer. Preserve
+other mandatory accessibility/transport requirements or fail rather than silently
+ignore them. Published departure `Date.toISOString()` must equal the canonical
+request anchor, including milliseconds. Do not add waypoint schedules.
 
-iOS preserves each complete input text value, including repeated and blank lines; only identical attachment values are deduplicated. Android header omission is handled by deriving endpoints from the legs.
+Move transit time mode into the directions store so a mounted panel immediately
+uses depart mode; preserve ordinary close/reset behavior. Use a generic one-shot
+`pendingTransitSelection: {requestKey, itineraryKey}` handoff set atomically with
+provider-labeled waypoints, query input and `isOpen`. Move the existing stable
+`itineraryKey` helper from `transitPlanPages.ts` to core. The publication effect
+must wait until its current query key equals the requested key, publish the normal
+ranked records, find the selected identity, set active index and signal existing
+details. This fences old in-flight results and the 500ms debounce without bypassing
+normal query behavior. A raw-input key mismatch means a real edit/epoch change:
+clear pending state and resume the ordinary flow. Clear on routing edits/close.
+Do not broaden ordinary selection persistence or repair unrelated refetch UI.
 
-The intake handler classifies once per draft and displays a compact source,
-station/date/train summary before confirmation. No network during preview.
-Open resolves asynchronously, then repeats native inbox existence/authority and
-local navigation/document-generation checks before a synchronous publication.
-Fence selected item, draft and component lifetime; a changed item/draft, navigation
-start, route change or unmount cannot publish stale results. Cancel pending work
-on those transitions. Acknowledge only after publication; failures retain the item
-and draft for retry. Reopening after an acknowledgement failure is idempotent at
-the itinerary level. Existing map/file paths retain their checks.
+Capture the origin waypoint ID before requesting auto-location. Apply its delayed
+fix only when the same waypoint still exists with `coords === null`. This generic
+rule preserves explicit origins for shares and ordinary route openings.
 
-While resolving, show progress and an explicit Cancel that aborts and retains the item. Record plannedAt and label current information as of import; re-check can be performed by sharing again or retrying before publication.
+Test an already-mounted panel, old in-flight queries, debounce, synchronous cached
+capabilities, raw-key mismatch, re-ranking, selection/details, ordinary paging and
+focus/refetch parity. Reference refetch must retain the reference identity. No
+special success UI or DB-derived endpoint display fields.
 
-New user-facing strings live in both en/de JSON files. No technical provider or
-parser diagnostics in product UI. Errors explain that the exact connection could
-not be verified, and invite retry or correcting/sharing full text; never silently
-suggest that a fallback is the imported journey.
+## Reconstruction contract details
 
-## Acceptance and verification
+Validate raw MOTIS output before `mapItinerary`: a dummy transit reference lacks
+`tripId`; a dummy non-transit leg sets leg-level `cancelled === true`. A genuinely
+cancelled train with the exact ID is valid. Require exact raw trip/stop IDs and both
+scheduled instants for every transit reference. Obtain the provider's actual native
+display name and use `requireDisplayNameMatch=true`. Use platform coordinates from
+the server-fetched provider trip. Preserve the scheduled/additional-trip flag; if
+not known, fail closed. Same-stop transfers and interlined number changes require
+real native verification; unsupported/dummy results fail closed.
 
-- All four supplied texts parse, including next-day Berlin arrival and RE1 on the
-  following calendar day after ICE 1540. Browser timezone cannot change results.
-- Synthetic provider fixtures resolve all four exact train sequences and preserve
-  IDs, geometry, contributors, delays, cancellations and platform changes.
-- Wrong train, same line, wrong service day, changed scheduled arrival, missing
-  number, multiple matches, ambiguous station, partial/no data, invalid date,
-  malformed/truncated extra leg, excess bounds, DST gaps/folds and URL-only shares
-  do not select a different trip or generic search.
-- Per-leg pagination finds a matching second-page service; caps and cancellation
-  stop bounded work. A long wait does not require the whole connection to be a
-  Pareto-optimal route.
-- Intake tests cover no acquisition before confirmation, authority changes while
-  resolving, unmount/draft/item changes, failed acknowledgement and retry.
-- Store/hook tests prove imported state cannot be overwritten by stale planning,
-  and explicit edits/alternatives/close release it.
-- Run focused tests, affected types, translations, formatting, full `verify:full`,
-  mobile tests/bundle checks appropriate to the shared navigation-barrel changes.
-- Inspect actual rendered intake, imported details and failure states, including a
-  narrow viewport. Attach hosted contextual screenshots to the PR and inspect
-  uploads. Browser fixtures prove web presentation, not Android/iOS share-sheet
-  delivery. Report native device/DB live-provider checks separately and honestly.
+The generated POST client type omits query fields although the server supports
+them. Test that detailed legs/transfers, display-name matching and interlining
+options are actually serialized. Reuse the normal normalizer; never accept its
+straight-line fallback after an unresolved raw reference.
 
-## Opus review disposition
+Add an explicit optional resolve capability. Local support is tied to the pinned
+MOTIS runtime and current dataset epoch. Hosted Transitous is unpinned: feature-
+detect structured reconstruction through the configured provider transport,
+otherwise return unsupported; do not assert support based only on the client
+package version. Normal search matching remains available independently. Reject
+mixed prefixes, stale/missing required local epoch, more than eight references and
+arbitrary client coordinates. Keep health/source-policy gating and bounded calls.
+Register a literal API method/path, match `/plan` authentication, regenerate
+OpenAPI and inspect client-visible fields for response serialization losses.
 
-B1: replaced Pareto discovery with anchored departure/journey resolution. B2/H1:
-expanded names and geographically corroborated station grouping. B3: preserve iOS
-text and allow missing header. B4: spec/plan force-added to git; exact four fixture
-texts will be committed with synthetic link UUIDs. H2/H3/H5: offset verification,
-coverage/cancellation outcomes, and endpoint-only waypoints. H4: missing-year and
-walking formats remain unsupported rather than adding speculative inference.
-M1: import snapshot notice, plannedAt; no refresh token is invented. M2: cancel.
-M3: compare explicit train number sources. M4: tight recognition. M5: cache station
-lookups, bounded candidates, remove planning pages. M6: public Aachen lookup
-succeeded; the first sample route search returned no itineraries. Other supplied
-routes will be probed read-only; fixture proof remains distinct from live coverage.
+## Minimal intake presentation
+
+Reuse the existing confirmation dialog, Open/Later/error controls and generic
+loading feedback. Later/dismissal can cancel resolution without adding a button. A recognized
+travel plan can use a generic shared-trip label. Do not add a DB train summary or
+render raw DB text as trip details. Existing unsupported/missing-text error feedback
+may explain that the full share is required. No new success surface or persistent
+source styling. Existing map/file sharing and native navigation authority remain.
+
+## Validation and review
+
+Before implementation, Claude Opus reviews this revised design and plan. The root
+agent implements and fixes findings; Opus reviews the revised implementation before
+PR creation. No user questions or approval checkpoint.
+
+Tests must prove object/data equivalence to normal provider planning, including
+fields deliberately different from the DB share (platform, delay, names, alerts,
+fares, walking transfer, geometry, refresh metadata). Cover all four examples,
+no Pareto match -> provider reconstruction, wrong reconstruction/dummy rejection,
+unsupported sources, ambiguity, bounds, cancellation and native authority races.
+The success view must be the actual existing directions details, with production
+theme/font and no import banner or DB summary. Old visual evidence is replaced.
+Run focused checks, affected types, full local gates and relevant native/mobile
+checks; report failures and actual device/live-provider limits precisely.
+
+## Revised Opus review disposition
+
+B1: accepted distinct reference query, no fabricated search-cache entry, no paging
+or first-result replan fallback for reconstruction. B2: only unpaged search results
+may seed search; one discovery page followed by a canonical unpaged query, platform
+coordinates and access margin. B3/B4: store-owned transit time mode, generic pending
+selection keyed by canonical request and stable itinerary identity; matching epoch,
+filters, exact anchor and persisted hill preference. I1/I2: raw/debounced key fence
+and waypoint-ID/empty-origin geolocation guard. I3: retain wheelchair and mandatory
+requirements; session-only neutral filter reset. I4: raw dummy/substitution checks,
+real native flags/display name and POST query serialization tests; same-stop and
+interlined native cases fail closed. I5: server derives coordinates/raw hints,
+provider/epoch binding, honest hosted capability detection and API contract checks.
+I6: missing plan numbers trigger provider-ID discovery, never route-name guessing.
+Do not extend this work into ordinary refetch-selection bugs or upstream refresh
+fare behavior. The reviewed reconstruction deferral recommendation is declined:
+its explicit reference-query alternative is accepted to cover exact omitted trips.
