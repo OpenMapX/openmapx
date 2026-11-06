@@ -238,6 +238,7 @@ export const PhotoAttribution = memo(function PhotoAttribution({
     return (
       <Box
         component="span"
+        data-thumbnail-credit-control
         sx={{ color, display: "inline-flex", alignItems: "center", minHeight: 24, fontSize: 14 }}
       >
         <AttributionDetails entries={details} label={t("credits")} iconOnly />

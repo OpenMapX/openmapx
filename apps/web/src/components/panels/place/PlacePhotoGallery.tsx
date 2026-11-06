@@ -580,5 +580,14 @@ const THUMBNAIL_CREDIT_SX = {
   lineHeight: 1.3,
   color: "#fff",
   bgcolor: "rgba(0,0,0,0.65)",
+  "&:has(> [data-thumbnail-credit-control])": {
+    borderRadius: "50%",
+    width: 32,
+    height: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    p: 0.5,
+  },
   overflowWrap: "anywhere",
 } as const;
