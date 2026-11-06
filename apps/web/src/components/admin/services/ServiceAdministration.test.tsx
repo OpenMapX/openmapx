@@ -1,21 +1,98 @@
 import { SERVICE_ACTIONS } from "@openmapx/core/ops";
+import { en } from "@openmapx/i18n";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
+import { adminTestHistory } from "@/test/adminNavigation";
 import { RequiredServicesPanel } from "../integrations/RequiredServicesPanel";
 import { ServiceCatalog } from "./ServiceCatalog";
 import { ServiceCredentials } from "./ServiceCredentials";
 import { ServiceDetail } from "./ServiceDetail";
 
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+
+import { ServiceSelectionEditor } from "./ServiceSelectionEditor";
+
+async function chooseAction(label: string) {
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Action" }));
+  fireEvent.click(await screen.findByRole("option", { name: label }));
+}
 const availableActions = Object.fromEntries(
   SERVICE_ACTIONS.map((action) => [
     action,
     { available: true, execution: "direct", reason: null, workflow: null },
   ]),
 );
+it("starts the service inventory with rows and keeps persistent roots on Deployment", async () => {
+  setup();
+  mount(<ServiceCatalog />);
+  expect(await screen.findByRole("link", { name: "Demo" })).toBeVisible();
+  expect(screen.queryByLabelText("Selected root service IDs")).toBeNull();
+  expect(screen.queryByText("Bulk Actions")).toBeNull();
+  expect(screen.getByRole("link", { name: "Deployment" })).toHaveAttribute(
+    "href",
+    "/admin/system/deployment",
+  );
+});
+it("mounts the inline log pane from an addressable tab and disposes it on a tab switch", async () => {
+  setup();
+  adminTestHistory.reset("/admin/system/services/demo?tab=logs");
+  mount(<ServiceDetail id="demo" />);
+  expect(await screen.findByText("Inline service logs")).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
+  expect(screen.queryByText("Inline service logs")).toBeNull();
+});
+it("does not expand reviewed Build All targets when the inventory refreshes", async () => {
+  let expanded = false;
+  const service = {
+    id: "demo",
+    name: "Demo",
+    version: "1",
+    quality: "built-in",
+    provides: [],
+    consumes: [],
+    enabled: true,
+    isBuiltIn: true,
+    status: "running",
+    actions: availableActions,
+  };
+  const requests = setup((url, init) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition: { state: "available", reason: null },
+          services: expanded ? [service, { ...service, id: "late", name: "Late" }] : [service],
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          summary: { running: expanded ? 2 : 1, stopped: 0, unknown: 0, total: expanded ? 2 : 1 },
+        })
+      : url.pathname.endsWith("/bulk-action") && init.method === "POST"
+        ? Response.json({ ok: true, jobId: "job-1" })
+        : undefined,
+  );
+  const { qc } = mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "Demo" });
+  fireEvent.click(screen.getByRole("button", { name: "Build All" }));
+  await screen.findByRole("button", { name: "Build reviewed targets" });
+  expanded = true;
+  await act(() => qc.invalidateQueries({ queryKey: ["admin", "services", apiUrl, "list"] }));
+  fireEvent.click(screen.getByRole("button", { name: "Build reviewed targets" }));
+  await waitFor(() =>
+    expect(requests.some((request) => request.url.pathname.endsWith("/bulk-action"))).toBe(true),
+  );
+  const request = requests.find((entry) => entry.url.pathname.endsWith("/bulk-action"));
+  expect(JSON.parse(String(request?.init.body))).toEqual({
+    action: "build",
+    serviceIds: ["demo"],
+    continueOnError: true,
+  });
+});
 
 it("confirms immutable image staging and reuses the request key after a lost response", async () => {
   let attempts = 0;
@@ -31,6 +108,7 @@ it("confirms immutable image staging and reuses the request key after a lost res
   mount(<ServiceCatalog />);
   await screen.findByRole("link", { name: "Demo" });
   fireEvent.click(screen.getByRole("checkbox", { name: "Select demo" }));
+  await chooseAction("Stage selected images");
   fireEvent.click(screen.getByRole("button", { name: "Stage selected images" }));
   expect(
     await screen.findByText(/Configured tags and running containers stay unchanged/),
@@ -58,7 +136,10 @@ const toast = vi.fn();
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => toast }));
 vi.mock("./ManagedDawarichSetup", () => ({ ManagedDawarichSetup: () => null }));
-vi.mock("./ServiceLogsDrawer", () => ({ ServiceLogsDrawer: () => null }));
+vi.mock("./ServiceLogsDrawer", () => ({
+  ServiceLogsDrawer: () => null,
+  ServiceLogsPanel: () => <div>Inline service logs</div>,
+}));
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
 function pending<T>() {
   let resolve!: (v: T) => void;
@@ -178,7 +259,9 @@ function mount(child: React.ReactNode) {
   caches.push(qc);
   const view = (next: React.ReactNode) => (
     <QueryClientProvider client={qc}>
-      <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <AdminJobEffectsProvider>{next}</AdminJobEffectsProvider>
+      </NextIntlClientProvider>
     </QueryClientProvider>
   );
   return { qc, view, ...render(view(child)) };
@@ -363,12 +446,11 @@ describe("service administration visible behavior with the generated SDK", () =>
         ? Response.json({ ...selection, source: "env", envVarValue: "demo" })
         : undefined,
     );
-    mount(<ServiceCatalog />);
+    mount(<ServiceSelectionEditor />);
     expect(await screen.findByText("Requested: 1")).toBeInTheDocument();
     expect(screen.getByText("Effective: 2")).toBeInTheDocument();
     expect(screen.getByText("Synthetic warning")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Selection" })).toBeDisabled();
-    expect(await screen.findByText("routing")).toBeInTheDocument();
   });
   it("fences a catalog health completion toast after origin replacement", async () => {
     const deferred = pending<Response>();
@@ -637,22 +719,24 @@ describe("service administration visible behavior with the generated SDK", () =>
     fireEvent.click(screen.getByRole("button", { name: "Start Selected" }));
     await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Build All" }));
+    expect(requests.filter((r) => r.url.pathname.endsWith("/bulk-action"))).toHaveLength(1);
+    fireEvent.click(await screen.findByRole("button", { name: "Build reviewed targets" }));
     await waitFor(() => expect(toast).toHaveBeenCalledTimes(2));
     const bodies = requests
       .filter((r) => r.url.pathname.endsWith("/bulk-action"))
       .map((r) => JSON.parse(String(r.init.body)));
     expect(bodies).toEqual([
       { action: "start", serviceIds: ["demo"] },
-      { action: "build", all: true, continueOnError: true },
+      { action: "build", serviceIds: ["demo"], continueOnError: true },
     ]);
-    expect(screen.getByText("0 running")).toBeInTheDocument();
+    expect(screen.getByText(/1 total · 0 running · 1 stopped/)).toBeInTheDocument();
     revision = 2;
     await act(() =>
       qc.invalidateQueries({
         queryKey: ["admin", "jobs", "detail", apiUrl, "application", "job-1"],
       }),
     );
-    expect(await screen.findByText("1 running")).toBeInTheDocument();
+    expect(await screen.findByText(/1 total · 1 running · 0 stopped/)).toBeInTheDocument();
     revision = 3;
     await act(() =>
       qc.invalidateQueries({
@@ -660,7 +744,7 @@ describe("service administration visible behavior with the generated SDK", () =>
       }),
     );
     expect(await screen.findByText("3.0.0")).toBeInTheDocument();
-    expect(screen.getByText("0 running")).toBeInTheDocument();
+    expect(screen.getByText(/1 total · 0 running · 1 stopped/)).toBeInTheDocument();
   });
   it("saves deliberate empty selection and refreshes its full server summary", async () => {
     let cleared = false;
@@ -679,7 +763,7 @@ describe("service administration visible behavior with the generated SDK", () =>
       }
       return Response.json(cleared ? summary : selection);
     });
-    mount(<ServiceCatalog />);
+    mount(<ServiceSelectionEditor />);
     await screen.findByDisplayValue("demo");
     fireEvent.change(screen.getByLabelText("Selected root service IDs"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Selection" }));
@@ -711,8 +795,15 @@ it("uses capabilities for deselected running service cleanup", async () => {
   );
   mount(<ServiceDetail id="demo" />);
   expect(await screen.findByRole("button", { name: "Apply changes" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Stop" })).not.toBeDisabled();
-  expect(screen.getByRole("button", { name: "Logs" })).not.toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.getByRole("menuitem", { name: "Stop" })).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  expect(screen.getByRole("menuitem", { name: "Logs" })).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
 });
 it("disables unavailable controls and keeps outage guidance visible", async () => {
   const actions = Object.fromEntries(
@@ -735,8 +826,12 @@ it("disables unavailable controls and keeps outage guidance visible", async () =
       : undefined,
   );
   mount(<ServiceDetail id="demo" />);
-  expect(await screen.findByRole("button", { name: "Restart" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Logs" })).toBeDisabled();
+  fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+  expect(screen.getByRole("menuitem", { name: /Restart/ })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  expect(screen.getByRole("menuitem", { name: /Logs/ })).toHaveAttribute("aria-disabled", "true");
   expect(screen.getByText(/Operations agent is unavailable/)).toBeInTheDocument();
 });
 
@@ -783,6 +878,7 @@ it("disables a mixed bulk action and lists ineligible IDs", async () => {
   mount(<ServiceCatalog />);
   await screen.findByRole("link", { name: "Demo" });
   fireEvent.click(screen.getByRole("checkbox", { name: "Select visible services" }));
+  await chooseAction("Restart Selected");
   const button = screen.getByRole("button", { name: "Restart Selected" });
   expect(button).toBeDisabled();
   expect(button).toHaveAttribute("title", expect.stringContaining("app-api"));
@@ -861,7 +957,8 @@ it("removes only an explicit root through the existing selection producer", asyn
         })
       : undefined,
   );
-  mount(<ServiceCatalog />);
+  mount(<ServiceSelectionEditor />);
+  fireEvent.click(await screen.findByRole("button", { name: "Services and root controls" }));
   await screen.findByRole("link", { name: "Demo" });
   fireEvent.click(screen.getByRole("button", { name: "Remove demo root" }));
   await waitFor(() =>
@@ -912,6 +1009,7 @@ it("sends update dependency options and MOTIS import only on their corresponding
   mount(<ServiceCatalog />);
   await screen.findByRole("link", { name: "MOTIS" });
   fireEvent.click(screen.getByRole("checkbox", { name: "Select motis" }));
+  await chooseAction("Update selected");
   fireEvent.click(screen.getByRole("checkbox", { name: "Update without dependency recreation" }));
   fireEvent.click(screen.getByRole("button", { name: "Update selected" }));
   await waitFor(() =>
@@ -919,6 +1017,7 @@ it("sends update dependency options and MOTIS import only on their corresponding
       requests.filter((request) => request.url.pathname.endsWith("/bulk-action")),
     ).toHaveLength(1),
   );
+  await chooseAction("Build Selected");
   fireEvent.click(screen.getByRole("checkbox", { name: "Import MOTIS after build" }));
   fireEvent.click(screen.getByRole("button", { name: "Build Selected" }));
   await waitFor(() =>
@@ -992,7 +1091,8 @@ it.each(["file", "env"])(
         });
       return undefined;
     });
-    mount(<ServiceCatalog />);
+    mount(<ServiceSelectionEditor />);
+    fireEvent.click(await screen.findByRole("button", { name: "Services and root controls" }));
     await screen.findByRole("link", { name: "Dependency" });
     expect(screen.getByRole("button", { name: "Required dependency" })).toBeDisabled();
     const enable = screen.getByRole("button", { name: "Enable valhalla" });
@@ -1075,4 +1175,40 @@ it("starts a new apply intent after another successful configuration save", asyn
   await screen.findByText(/Service apply queued/);
   expect(keys).toHaveLength(2);
   expect(keys[0]).not.toBe(keys[1]);
+});
+
+it("reviews and submits captured Build All targets in the established build order", async () => {
+  const ids = ["tileserver", "motis", "osrm"];
+  const requests = setup((url) =>
+    url.pathname === "/api/admin/services"
+      ? Response.json({
+          acquisition,
+          services: ids.map((id) => ({
+            id,
+            name: id,
+            version: "1",
+            quality: "built-in",
+            enabled: true,
+            isBuiltIn: true,
+            status: "not-running",
+            actions: availableActions,
+            provides: [],
+            consumes: [],
+          })),
+          capabilityInventory: { recognized: [], unrecognized: [] },
+          summary: { running: 0, stopped: 3, unknown: 0, total: 3 },
+        })
+      : undefined,
+  );
+  mount(<ServiceCatalog />);
+  await screen.findByRole("link", { name: "tileserver" });
+  fireEvent.click(screen.getByRole("button", { name: "Build All" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Build reviewed targets" }));
+  await waitFor(() =>
+    expect(requests.some((r) => r.url.pathname.endsWith("/bulk-action"))).toBe(true),
+  );
+  expect(
+    JSON.parse(String(requests.find((r) => r.url.pathname.endsWith("/bulk-action"))?.init.body))
+      .serviceIds,
+  ).toEqual(["osrm", "motis", "tileserver"]);
 });

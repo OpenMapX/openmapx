@@ -1,7 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useContext } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AdminDraftContext, AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { PlatformConfiguration } from "./PlatformConfiguration";
+import { PlatformPreviewLifecycle } from "./PlatformPreviewLifecycle";
+import type { PlatformScope } from "./platformScope";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), preview: vi.fn(), apply: vi.fn(), job: vi.fn() }));
 vi.mock("@openmapx/core", async () => ({
@@ -77,12 +81,12 @@ const preview = {
   previewFingerprint: "b".repeat(64),
 };
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
-function mount() {
+function mount(scope: PlatformScope = "deployment") {
   const cache = createTestQueryClient();
   caches.push(cache);
   return render(
     <QueryClientProvider client={cache}>
-      <PlatformConfiguration />
+      <PlatformConfiguration scope={scope} />
     </QueryClientProvider>,
   );
 }
@@ -107,7 +111,7 @@ afterEach(() => {
   });
 });
 it("locks host fields until explicit adoption, previews without saving and binds apply to that preview", async () => {
-  mount();
+  mount("retention");
   const retention = await screen.findByLabelText("Backup retention (days)");
   expect(retention).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Manage Backup retention (days) in UI" }));
@@ -128,6 +132,110 @@ it("locks host fields until explicit adoption, previews without saving and binds
     confirmations,
   });
   expect(await screen.findByText("Job original-job")).toBeVisible();
+});
+it("exposes only the fields owned by retention and refuses a hidden domain change", async () => {
+  mocks.preview.mockResolvedValue({
+    status: 200,
+    data: {
+      preview: { ...preview, values: { ...values, domain: "unexpected.example.test" } },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  mount("retention");
+  await screen.findByLabelText("Backup retention (days)");
+  expect(screen.queryByLabelText("Domain")).toBeNull();
+  expect(screen.queryByLabelText("Release selector")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  await screen.findByText(/Preview unavailable/);
+  expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+});
+it("does not preview an empty adopted default region", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Manage Default region in UI" }));
+  expect(screen.getByLabelText("Default region")).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Preview changes" })).toBeDisabled();
+  expect(mocks.preview).not.toHaveBeenCalled();
+});
+it("does not start a platform write after leaving during the fresh-baseline read", async () => {
+  let resolve!: (value: unknown) => void;
+  let reads = 0;
+  mocks.get.mockImplementation(() =>
+    ++reads === 1
+      ? Promise.resolve({ status: 200, data: { ...initial, pending: [] } })
+      : new Promise((done) => {
+          resolve = done;
+        }),
+  );
+  const view = mount("retention");
+  fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
+  view.unmount();
+  resolve({ status: 200, data: { ...initial, pending: [] } });
+  await new Promise((done) => setTimeout(done, 0));
+  expect(mocks.preview).not.toHaveBeenCalled();
+});
+it("removes an old unscoped preview instead of loading it in a scoped owner", async () => {
+  const key = "openmapx-platform-preview:http://admin.test:admin-a";
+  sessionStorage.setItem(
+    key,
+    JSON.stringify({ preview, expiresAt: new Date(Date.now() + 600000).toISOString() }),
+  );
+  mount("retention");
+  await screen.findByLabelText("Backup retention (days)");
+  expect(sessionStorage.getItem(key)).toBeNull();
+  expect(screen.queryByText("Review platform changes")).toBeNull();
+});
+it("reuses the same apply intent after an unconfirmed transport outcome", async () => {
+  mocks.apply.mockRejectedValueOnce(Error("offline"));
+  mount();
+  await screen.findByLabelText("Domain");
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Apply reviewed changes" }));
+  await screen.findByText(/Apply was not confirmed/);
+  fireEvent.click(screen.getByRole("button", { name: "Apply reviewed changes" }));
+  await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(2));
+  expect(mocks.apply.mock.calls[0][1]).toEqual(mocks.apply.mock.calls[1][1]);
+});
+it("copies the fresh full baseline before overlaying a retention edit", async () => {
+  const fresh = {
+    ...initial,
+    pending: [],
+    configuration: { version: 1, domain: { source: "database", value: "fresh.example.test" } },
+    values: { ...values, domain: "fresh.example.test" },
+    sources: { ...sources, domain: "database" },
+  };
+  let reads = 0;
+  mocks.get.mockImplementation(async () => ({
+    status: 200,
+    data: ++reads === 1 ? { ...initial, pending: [] } : fresh,
+  }));
+  mocks.preview.mockResolvedValue({
+    status: 200,
+    data: {
+      preview: {
+        ...preview,
+        ...fresh,
+        configuration: {
+          ...fresh.configuration,
+          backupRetentionDays: { source: "database", value: 60 },
+        },
+        oldOrigin: "https://fresh.example.test",
+        newOrigin: "https://fresh.example.test",
+      },
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  mount("retention");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Manage Backup retention (days) in UI" }),
+  );
+  fireEvent.change(screen.getByLabelText("Backup retention (days)"), { target: { value: "60" } });
+  fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+  await screen.findByText("Review platform changes");
+  expect((mocks.preview.mock.calls[0][0] as { changes: unknown }).changes).toEqual({
+    ...fresh.configuration,
+    backupRetentionDays: { source: "database", value: 60 },
+  });
 });
 it("invalidates a preview on edit and preserves the draft on conflict", async () => {
   mocks.preview.mockResolvedValue({ status: 409, data: { error: "changed" } });
@@ -210,4 +318,78 @@ it("retains the exact unexpired actor-bound preview across the alternate-login r
   mount();
   expect(await screen.findByText("Review platform changes")).toBeVisible();
   expect(mocks.preview).toHaveBeenCalledTimes(1);
+});
+
+it.each([false, true])(
+  "clears retained platform previews on global discard while the form is hidden=%s",
+  async (hide) => {
+    function Discard() {
+      const store = useContext(AdminDraftContext);
+      return (
+        <button type="button" onClick={() => store?.discard()}>
+          Discard all
+        </button>
+      );
+    }
+    const cache = createTestQueryClient();
+    caches.push(cache);
+    const tree = (show: boolean) => (
+      <QueryClientProvider client={cache}>
+        <AdminDraftProvider>
+          <PlatformPreviewLifecycle apiUrl="http://admin.test" actorId="admin-a" />
+          <Discard />
+          {show && <PlatformConfiguration scope="retention" />}
+        </AdminDraftProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(true));
+    fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+    await screen.findByText("Review platform changes");
+    const key = "openmapx-platform-preview:http://admin.test:admin-a:retention";
+    expect(sessionStorage.getItem(key)).not.toBeNull();
+    if (hide) view.rerender(tree(false));
+    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    expect(sessionStorage.getItem(key)).toBeNull();
+    if (hide) view.rerender(tree(true));
+    expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+  },
+);
+it("does not revive a preview that arrives after global discard", async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.preview.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  function Discard() {
+    const store = useContext(AdminDraftContext);
+    return (
+      <button type="button" onClick={() => store?.discard()}>
+        Discard all
+      </button>
+    );
+  }
+  const cache = createTestQueryClient();
+  caches.push(cache);
+  render(
+    <QueryClientProvider client={cache}>
+      <AdminDraftProvider>
+        <Discard />
+        <PlatformConfiguration scope="retention" />
+      </AdminDraftProvider>
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
+  await waitFor(() => expect(mocks.preview).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+  resolve({
+    status: 200,
+    data: { preview, expiresAt: new Date(Date.now() + 600000).toISOString() },
+  });
+  await new Promise((done) => setTimeout(done, 0));
+  expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
+  expect(
+    sessionStorage.getItem("openmapx-platform-preview:http://admin.test:admin-a:retention"),
+  ).toBeNull();
 });

@@ -11,6 +11,7 @@ import { authPolicySettingsSchema, type authPolicyViewSchema } from "@openmapx/c
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminFieldFocus } from "@/lib/admin/useAdminFieldFocus";
 export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   const scope = useAccountAdmin(),
@@ -44,17 +45,42 @@ export function AuthPolicySettings({ focusKey }: { focusKey?: string } = {}) {
   );
 }
 function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.parse> }) {
-  const { active, pending, ownership } = view,
-    [email, setEmail] = useState(active.emailVerificationRequired),
-    [hours, setHours] = useState(String(active.sessionDurationHours)),
-    [twoFa, setTwoFa] = useState(active.twoFaEnabled),
-    [length, setLength] = useState(String(active.passwordMinLength)),
-    [confirmed, setConfirmed] = useState(false),
+  const { active, pending, ownership } = view;
+  const draft = useAdminDraft({
+    id: "authentication-policy",
+    signature: "policy-v1",
+    baseline: {
+      emailVerificationRequired: active.emailVerificationRequired,
+      sessionDurationHours: String(active.sessionDurationHours),
+      twoFaEnabled: active.twoFaEnabled,
+      passwordMinLength: String(active.passwordMinLength),
+    },
+    editableKeys: [
+      "sessionDurationHours",
+      "twoFaEnabled",
+      "passwordMinLength",
+      ...(ownership.emailVerificationRequired === "env" ? [] : ["emailVerificationRequired"]),
+    ],
+  });
+  const submitted = useRef<Record<string, unknown>>({});
+  const email = Boolean(draft.values.emailVerificationRequired ?? active.emailVerificationRequired),
+    hours = String(draft.values.sessionDurationHours),
+    twoFa = Boolean(draft.values.twoFaEnabled),
+    length = String(draft.values.passwordMinLength);
+  const setEmail = (value: boolean) =>
+    draft.setValues((old) => ({ ...old, emailVerificationRequired: value }));
+  const setHours = (value: string) =>
+    draft.setValues((old) => ({ ...old, sessionDurationHours: value }));
+  const setTwoFa = (value: boolean) => draft.setValues((old) => ({ ...old, twoFaEnabled: value }));
+  const setLength = (value: string) =>
+    draft.setValues((old) => ({ ...old, passwordMinLength: value }));
+  const [confirmed, setConfirmed] = useState(false),
     [saved, setSaved] = useState(false),
     key = useRef<string | null>(null),
     mutation = useAccountAction("auth-policy", {
       viewKey: active.revision,
       onSuccess: () => {
+        draft.acknowledge(submitted.current);
         setConfirmed(false);
         setSaved(true);
       },
@@ -206,6 +232,23 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
         }
         label="I have reviewed all four policy settings"
       />
+      {!!draft.conflicts.length && (
+        <Alert
+          severity="warning"
+          action={<Button onClick={() => edit(() => draft.keepEdits())}>Keep my edits</Button>}
+        >
+          The active policy changed. Review or discard your draft before applying.
+        </Alert>
+      )}
+      {draft.dirty && (
+        <Button
+          sx={{ alignSelf: "start" }}
+          disabled={mutation.isPending}
+          onClick={() => edit(() => draft.discard())}
+        >
+          Discard policy edits
+        </Button>
+      )}
       {mutation.error && <Alert severity="error">{mutation.error.message}</Alert>}
       {saved && (
         <Alert severity="success">
@@ -215,11 +258,12 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       <Button
         sx={{ alignSelf: "start" }}
         variant="contained"
-        disabled={!parsed.success || !confirmed || mutation.isPending}
+        disabled={!parsed.success || !confirmed || mutation.isPending || !!draft.conflicts.length}
         onClick={() => {
           if (!parsed.success) return;
           key.current ??= crypto.randomUUID();
           const requestKey = key.current;
+          submitted.current = { ...draft.values };
           mutation.mutate((client) => client.applyPolicy(parsed.data, active.revision, requestKey));
         }}
       >

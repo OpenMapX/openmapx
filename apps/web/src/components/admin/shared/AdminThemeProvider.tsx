@@ -1,5 +1,6 @@
 "use client";
 
+import GlobalStyles from "@mui/material/GlobalStyles";
 import { alpha, createTheme, type Theme, ThemeProvider, useTheme } from "@mui/material/styles";
 import { type ReactNode, useMemo } from "react";
 
@@ -29,7 +30,12 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
           MuiButton: {
             defaultProps: { size: "small", disableElevation: true },
             styleOverrides: {
-              root: { minHeight: 34, borderRadius: 8, paddingInline: 12 },
+              root: {
+                minHeight: 34,
+                borderRadius: 8,
+                paddingInline: 12,
+                "@media (pointer: coarse)": { minHeight: 44 },
+              },
             },
           },
           MuiCard: {
@@ -54,7 +60,29 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
             },
           },
           MuiDialog: {
-            styleOverrides: { paper: { borderRadius: 16 } },
+            styleOverrides: {
+              paper: {
+                borderRadius: 16,
+                "@media (prefers-reduced-motion: reduce)": {
+                  transition: "none !important",
+                  animation: "none !important",
+                },
+              },
+              root: {
+                "@media (prefers-reduced-motion: reduce)": {
+                  "& *": { transition: "none !important", animation: "none !important" },
+                },
+              },
+            },
+          },
+          MuiPopover: {
+            styleOverrides: {
+              root: {
+                "@media (prefers-reduced-motion: reduce)": {
+                  "& *": { transition: "none !important", animation: "none !important" },
+                },
+              },
+            },
           },
           MuiDialogActions: {
             styleOverrides: { root: { padding: "8px 20px 16px" } },
@@ -66,9 +94,30 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
             styleOverrides: { root: { padding: "18px 20px 8px", fontSize: "1.125rem" } },
           },
           MuiFormControl: { defaultProps: { size: "small" } },
+          MuiFormControlLabel: {
+            styleOverrides: { root: { "@media (pointer: coarse)": { minHeight: 44 } } },
+          },
+          MuiInputBase: {
+            styleOverrides: { root: { "@media (pointer: coarse)": { minHeight: 44 } } },
+          },
+          MuiListItemButton: {
+            styleOverrides: { root: { "@media (pointer: coarse)": { minHeight: 44 } } },
+          },
+          MuiDrawer: {
+            styleOverrides: {
+              paper: {
+                "@media (prefers-reduced-motion: reduce)": { transition: "none !important" },
+              },
+            },
+          },
           MuiIconButton: {
             defaultProps: { size: "small" },
-            styleOverrides: { root: { borderRadius: 8 } },
+            styleOverrides: {
+              root: {
+                borderRadius: 8,
+                "@media (pointer: coarse)": { minHeight: 44, minWidth: 44 },
+              },
+            },
           },
           MuiPaper: {
             defaultProps: { elevation: 0 },
@@ -153,5 +202,20 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
     [parentTheme],
   );
 
-  return <ThemeProvider theme={adminTheme}>{children}</ThemeProvider>;
+  return (
+    <ThemeProvider theme={adminTheme}>
+      <GlobalStyles
+        styles={{
+          "@media (prefers-reduced-motion: reduce)": {
+            ".omx-admin, .omx-admin *": {
+              transitionDuration: "0.01ms !important",
+              animationDuration: "0.01ms !important",
+              scrollBehavior: "auto !important",
+            },
+          },
+        }}
+      />
+      {children}
+    </ThemeProvider>
+  );
 }

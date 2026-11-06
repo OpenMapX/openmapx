@@ -13,8 +13,8 @@ it("addresses the owning legal section without creating a duplicate policy edito
 it.each([
   ["SMTP", "/admin/settings/email?field=smtpHost"],
   ["GTFS", "/admin/data#transit-sources"],
-  ["backup expiry", "/admin/system/deployment#backup-retention"],
-  ["release channel", "/admin/system/deployment#release-selector"],
+  ["backup expiry", "/admin/system/backups#backup-retention"],
+  ["release channel", "/admin/system/updates#release-selector"],
 ])("finds the current owning control for %s", (query, href) => {
   expect(searchAdminEntries(buildAdminSearchEntries(access), query)[0]?.href).toBe(href);
 });

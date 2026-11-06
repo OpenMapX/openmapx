@@ -92,6 +92,10 @@ export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: 
             flex: 1,
             minWidth: 0,
             "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" },
+            "& .MuiBreadcrumbs-li": { minWidth: 0 },
+            "& .MuiBreadcrumbs-li:not(:last-child), & .MuiBreadcrumbs-separator": {
+              display: { xs: "none", sm: "block" },
+            },
           }}
         >
           {breadcrumbs.map((crumb, i) => {

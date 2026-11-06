@@ -71,14 +71,14 @@ export function buildAdminSearchEntries(
         id: "backup-retention",
         title: "Backup retention",
         description: "Backup expiry and retention days",
-        href: "/admin/system/deployment#backup-retention",
+        href: "/admin/system/backups#backup-retention",
         keywords: ["backup expiry", "Aufbewahrung", "Sicherung"],
       },
       {
         id: "release-selector",
         title: "Release channel",
         description: "Release selector and update channel",
-        href: "/admin/system/deployment#release-selector",
+        href: "/admin/system/updates#release-selector",
         keywords: ["release channel", "Version", "Kanal"],
       },
     );

@@ -47,8 +47,9 @@ they do not use this HTTP shortcut.
 
 ## Self-hosted vs. hosted
 
-Services and Maintenance appear when the deployment exposes Docker host control
-through the operations agent. On a deployment without that control plane, use
+Host-operation topics in System appear for self-hosted or unknown deployments.
+Explicitly hosted deployments retain Cache and Configuration transfer, while direct
+entry into host topics shows an availability explanation. On a deployment without that control plane, use
 the host's deployment tooling for container operations. Docker sockets and
 registry credentials belong to the operations agent.
 
@@ -164,19 +165,19 @@ See [Monitoring](./monitoring.md).
 
 ### Settings
 
-Edit instance details, email, map settings, data-use policy and legal/controller
-facts. Valid environment values take precedence over saved values, then defaults.
+Edit instance details, email, map settings and data-use policy by topic. Legal and
+controller facts belong to Privacy setup. Valid environment values take precedence over saved values, then defaults.
 Environment overrides appear read-only; empty or invalid environment values do
 not necessarily override a valid saved setting. JSON export excludes secrets.
 
-The Authentication group exposes saved policy fields, but the current Better
-Auth configuration does not consume its email-verification, session-duration,
-two-factor or minimum-password-length values. Do not rely on those controls to
-change enforcement. See [Authentication methods](./users-and-access.md#authentication-methods).
+Authentication edits the effective four-field policy as one reviewed change.
+Existing sessions keep their original expiry; disabling new 2FA enrollment keeps
+existing factors and sign-in challenges. Environment-owned email verification is
+read-only. See [Authentication methods](./users-and-access.md#authentication-methods).
 
 ### Privacy setup
 
-Full administrators use `/admin/privacy-setup` for controller details, email,
+Full administrators use `/admin/privacy-setup` for controller details, email readiness,
 retention, source declarations and independent reviews. Privacy administrators
 handle cases and inspect readiness through privacy casework. A release install
 does not approve generation for the deployment. See

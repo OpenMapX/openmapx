@@ -5026,7 +5026,17 @@
     "retry": "Erneut versuchen",
     "partialSearch": "Einige Metadaten konnten nicht geladen werden. Die Seitenziele bleiben verfügbar.",
     "noSearchResults": "Kein passendes Verwaltungsziel.",
-    "hostedData": "Hostverwaltete Datenaktionen sind in dieser gehosteten Bereitstellung nicht verfügbar. Transit und Abdeckung bleiben verfügbar."
+    "hostUnavailable": "Host-Vorgänge sind bei dieser gehosteten Bereitstellung nicht verfügbar. Cache und Konfigurationsübertragung bleiben verfügbar.",
+    "chooseTopic": "Thema auswählen",
+    "authorityChanged": "Der Administratorzugriff hat sich geändert. Lade die Seite neu, um Konto und Berechtigungen zu bestätigen.",
+    "reload": "Neu laden",
+    "hostedData": "Hostverwaltete Datenaktionen sind in dieser gehosteten Bereitstellung nicht verfügbar. Transit und Abdeckung bleiben verfügbar.",
+    "buildAll": {
+      "title": "Alle aktivierten Dienste bauen",
+      "targets": "Diese {count} erfassten Ziele bauen: {ids}. Der Server prüft die Build-Voraussetzungen jedes Dienstes. Später aktivierte Dienste werden diesem Auftrag nicht hinzugefügt.",
+      "cancel": "Abbrechen",
+      "confirm": "Geprüfte Ziele bauen"
+    }
   },
   "adminDrafts": {
     "title": "Nicht gespeicherte Verwaltungsänderungen verwerfen?",

@@ -123,7 +123,8 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
         onCancel={() => setRenderIntent(null)}
       />
       <Typography
-        variant="h5"
+        component="h3"
+        variant="subtitle1"
         sx={{
           fontWeight: 700,
           mb: 2,
@@ -177,7 +178,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
       <Alert severity="info" sx={{ mb: 2 }}>
         Compose Up starts the selected stack and applies ordinary services. It preserves existing
         Data Manager and operations-agent containers. Apply or update Data Manager from its service
-        page; apply agent changes through Settings or System Maintenance.
+        page; apply agent changes through System → Deployment or Updates.
       </Alert>
       <Alert severity="info" sx={{ mb: 2 }}>
         Full shutdown stops this panel and its operations agent. From the instance checkout on the

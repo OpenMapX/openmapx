@@ -1,5 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), apply: vi.fn() }));
@@ -66,6 +67,28 @@ afterEach(() => {
 it("focuses the addressed policy field without applying it", async () => {
   await mount("passwordMinLength");
   await waitFor(() => expect(screen.getByLabelText("Minimum password length")).toHaveFocus());
+  expect(mocks.apply).not.toHaveBeenCalled();
+});
+it("retains ordinary policy edits across topic disposal and clears confirmation", async () => {
+  const { AuthPolicySettings } = await import("./AuthPolicySettings");
+  const cache = createTestQueryClient();
+  caches.push(cache);
+  const view = (show: boolean) => (
+    <QueryClientProvider client={cache}>
+      <AdminDraftProvider>
+        {show ? <AuthPolicySettings /> : <div>Another topic</div>}
+      </AdminDraftProvider>
+    </QueryClientProvider>
+  );
+  const mounted = render(view(true));
+  fireEvent.change(await screen.findByLabelText("Minimum password length"), {
+    target: { value: "12" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: /I have reviewed/ }));
+  mounted.rerender(view(false));
+  mounted.rerender(view(true));
+  expect(await screen.findByLabelText("Minimum password length")).toHaveValue(12);
+  expect(screen.getByRole("checkbox", { name: /I have reviewed/ })).not.toBeChecked();
   expect(mocks.apply).not.toHaveBeenCalled();
 });
 it("keeps effective defaults separate from legacy false drafts and rejects invalid bounds", async () => {

@@ -1,4 +1,4 @@
-export { serviceBatchResultSchema } from "../../ops/service-results";
+export { compareServiceBuildOrder, serviceBatchResultSchema } from "../../ops/service-results";
 export * from "./account-admin/index";
 export * from "./activity-admin";
 export * from "./configuration-ownership";

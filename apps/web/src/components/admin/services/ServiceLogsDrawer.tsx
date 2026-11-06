@@ -31,17 +31,47 @@ export function ServiceLogsDrawer({
   serviceId,
   serviceName,
 }: ServiceLogsDrawerProps) {
-  const { client, apiUrl } = useActivityClient();
   return (
-    <ServiceLogsSession
-      key={JSON.stringify([apiUrl, serviceId, open])}
+    <Drawer
+      anchor="right"
       open={open}
+      onClose={onClose}
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: "100vw", sm: 640, md: 720 },
+            display: "flex",
+            flexDirection: "column",
+          },
+        },
+      }}
+    >
+      <ServiceLogsPanel
+        active={open}
+        serviceId={serviceId}
+        serviceName={serviceName}
+        onClose={onClose}
+      />
+    </Drawer>
+  );
+}
+export function ServiceLogsPanel({
+  active,
+  serviceId,
+  serviceName,
+  onClose,
+}: Omit<ServiceLogsDrawerProps, "open" | "onClose"> & { active: boolean; onClose?: () => void }) {
+  const { client, apiUrl } = useActivityClient();
+  return active ? (
+    <ServiceLogsSession
+      key={JSON.stringify([apiUrl, serviceId, active])}
+      open={active}
       onClose={onClose}
       serviceId={serviceId}
       serviceName={serviceName}
       client={client}
     />
-  );
+  ) : null;
 }
 
 function ServiceLogsSession({
@@ -50,7 +80,10 @@ function ServiceLogsSession({
   serviceId,
   serviceName,
   client,
-}: ServiceLogsDrawerProps & Pick<ReturnType<typeof useActivityClient>, "client">) {
+}: Omit<ServiceLogsDrawerProps, "onClose"> & { onClose?: () => void } & Pick<
+    ReturnType<typeof useActivityClient>,
+    "client"
+  >) {
   const [output, setOutput] = useState({ lines: [] as string[], truncated: false });
   const [streaming, setStreaming] = useState(open),
     [error, setError] = useState<string | null>(null);
@@ -64,7 +97,7 @@ function ServiceLogsSession({
     () => ({ tail, follow, duration, connection, idempotencyKey: crypto.randomUUID() }),
     [tail, follow, duration, connection],
   );
-  const bottomRef = useRef<HTMLDivElement>(null),
+  const outputRef = useRef<HTMLDivElement>(null),
     abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     if (!open || paused) return;
@@ -115,7 +148,7 @@ function ServiceLogsSession({
 
   useEffect(() => {
     if (open && lines.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [lines, open]);
 
@@ -124,22 +157,20 @@ function ServiceLogsSession({
     setOutput({ lines: [], truncated: false });
     setError(null);
     setStreaming(false);
-    onClose();
+    onClose?.();
   }
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={handleClose}
-      slotProps={{
-        paper: {
-          sx: {
-            width: { xs: "100vw", sm: 640, md: 720 },
-            display: "flex",
-            flexDirection: "column",
-          },
-        },
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 400,
+        height: onClose ? "100%" : "min(70dvh,760px)",
+        border: onClose ? 0 : 1,
+        borderColor: "divider",
+        borderRadius: onClose ? 0 : 2,
+        overflow: "hidden",
       }}
     >
       <Stack
@@ -187,9 +218,11 @@ function ServiceLogsSession({
             />
           )}
         </Stack>
-        <IconButton aria-label="Close service logs" size="small" onClick={handleClose} edge="end">
-          <CloseIcon fontSize="small" />
-        </IconButton>
+        {onClose && (
+          <IconButton aria-label="Close service logs" size="small" onClick={handleClose} edge="end">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
       </Stack>
       <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap", p: 2 }}>
         <TextField
@@ -283,6 +316,10 @@ function ServiceLogsSession({
         </Typography>
       )}
       <Box
+        ref={outputRef}
+        role="region"
+        aria-label="Service log output"
+        tabIndex={0}
         sx={{
           flex: 1,
           overflow: "auto",
@@ -341,9 +378,7 @@ function ServiceLogsSession({
         >
           {lines.join("\n")}
         </Box>
-
-        <div ref={bottomRef} />
       </Box>
-    </Drawer>
+    </Box>
   );
 }

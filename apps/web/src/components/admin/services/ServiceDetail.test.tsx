@@ -43,7 +43,10 @@ vi.mock("./ManagedDawarichSetup", () => ({
   ManagedDawarichSetup: () => <section>Managed Dawarich provisioning</section>,
 }));
 vi.mock("./ServiceCredentials", () => ({ ServiceCredentials: () => null }));
-vi.mock("./ServiceLogsDrawer", () => ({ ServiceLogsDrawer: () => null }));
+vi.mock("./ServiceLogsDrawer", () => ({
+  ServiceLogsDrawer: () => null,
+  ServiceLogsPanel: () => <div>Inline service logs</div>,
+}));
 
 describe("ServiceDetail managed Dawarich setup", () => {
   it("shows the provisioning card only on the Dawarich app service", async () => {

@@ -208,7 +208,13 @@ export function SystemMaintenanceProvider({ children }: PropsWithChildren) {
     <MaintenanceStateProvider key={`${apiUrl}:${generation}`}>{children}</MaintenanceStateProvider>
   );
 }
-export function SystemMaintenance({ section }: { section?: "updates" | "diagnostics" } = {}) {
+export function SystemMaintenance({
+  section,
+  showHeader = true,
+}: {
+  section?: "updates" | "diagnostics";
+  showHeader?: boolean;
+} = {}) {
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
   const register = useOptionalAdminJobRegistration();
@@ -503,21 +509,23 @@ export function SystemMaintenance({ section }: { section?: "updates" | "diagnost
 
   return (
     <Stack sx={{ gap: 2 }}>
-      <AdminPageHeader
-        title={
-          section === "updates"
-            ? "Updates"
-            : section === "diagnostics"
-              ? "Diagnostics"
-              : "System maintenance"
-        }
-        subtitle="Update the OpenMapX application and run host-level diagnostics"
-        actions={
-          <Button component={Link} href="/admin/activity" variant="outlined">
-            View activity
-          </Button>
-        }
-      />
+      {showHeader && (
+        <AdminPageHeader
+          title={
+            section === "updates"
+              ? "Updates"
+              : section === "diagnostics"
+                ? "Diagnostics"
+                : "System maintenance"
+          }
+          subtitle="Update the OpenMapX application and run host-level diagnostics"
+          actions={
+            <Button component={Link} href="/admin/activity" variant="outlined">
+              View activity
+            </Button>
+          }
+        />
+      )}
 
       {status && !status.deployment.maintenanceReady && (
         <Alert severity="warning">
@@ -550,9 +558,9 @@ export function SystemMaintenance({ section }: { section?: "updates" | "diagnost
             <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
               Check reads the configured release manifest without downloading images or restarting
               services. Update downloads that exact checked release before replacing any container.
-              Change the configured channel under Platform configuration in Settings. Clearing the
-              pin preserves that channel and all running containers; the next configuration action
-              may resolve the configured channel again.
+              Change the configured channel in the release selection above. Clearing the pin
+              preserves that channel and all running containers; the next configuration action may
+              resolve the configured channel again.
             </Typography>
             <Button
               disabled={active || !status?.release?.selectedReleaseId}

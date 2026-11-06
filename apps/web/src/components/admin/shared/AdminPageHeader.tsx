@@ -10,6 +10,7 @@ interface AdminPageHeaderProps {
   subtitle?: ReactNode;
   /** Right-aligned action(s): buttons, refresh icon, status chip. */
   actions?: ReactNode;
+  badges?: ReactNode;
   /** Optional parent route for detail and workflow pages. */
   backHref?: string;
   backLabel?: string;
@@ -19,6 +20,7 @@ export function AdminPageHeader({
   title,
   subtitle,
   actions,
+  badges,
   backHref,
   backLabel = "Back",
 }: AdminPageHeaderProps) {
@@ -40,9 +42,12 @@ export function AdminPageHeader({
           </IconButton>
         )}
         <Stack sx={{ gap: 0.25, minWidth: 0 }}>
-          <Typography component="h1" variant="h5" noWrap>
-            {title}
-          </Typography>
+          <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography component="h1" variant="h5" sx={{ overflowWrap: "anywhere" }}>
+              {title}
+            </Typography>
+            {badges}
+          </Stack>
           {subtitle && (
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {subtitle}

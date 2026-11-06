@@ -80,7 +80,7 @@ it("migrates the legacy retention fragment to the field's current owner", async 
   const replace = vi.spyOn(adminTestHistory, "replace");
   render(<LegacySettingsRedirect />);
   await waitFor(() =>
-    expect(replace).toHaveBeenCalledWith("/admin/system/deployment#backup-retention"),
+    expect(replace).toHaveBeenCalledWith("/admin/system/backups#backup-retention"),
   );
   window.history.replaceState(null, "", "/admin");
 });

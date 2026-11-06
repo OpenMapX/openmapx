@@ -9,6 +9,9 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -164,27 +167,6 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 ))}
               </Stack>
             </Stack>
-            {data.description && (
-              <Stack
-                direction="row"
-                sx={{
-                  gap: 1,
-                  alignItems: "flex-start",
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                    minWidth: 110,
-                    flexShrink: 0,
-                  }}
-                >
-                  Description
-                </Typography>
-                <Typography variant="body2">{data.description}</Typography>
-              </Stack>
-            )}
           </Stack>
         </CardContent>
       </Card>
@@ -347,18 +329,32 @@ function ConfigTab({
         gap: 3,
       }}
     >
+      {/* Editable config form */}
+      {data.manifest.configSchema && (
+        <Box sx={{ maxWidth: 760 }}>
+          <Box>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              Edit Configuration
+            </Typography>
+            <ConfigSchemaForm
+              integrationId={integrationId}
+              schema={data.manifest.configSchema}
+              resolvedConfig={data.resolvedConfig}
+              ownership={data.ownership}
+            />
+          </Box>
+        </Box>
+      )}
       {/* Raw resolved config table */}
-      <Card variant="outlined">
-        <CardContent>
-          <Typography
-            variant="subtitle2"
-            gutterBottom
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Resolved Values
-          </Typography>
+      <Accordion variant="outlined" disableGutters>
+        <AccordionSummary>Effective values and sources</AccordionSummary>
+        <AccordionDetails>
           {entries.length === 0 ? (
             <Alert severity="info" variant="outlined">
               No configuration keys found.
@@ -414,30 +410,8 @@ function ConfigTab({
             </TableContainer>
           )}
           <AdminTablePagination {...entriesPagination} />
-        </CardContent>
-      </Card>
-      {/* Editable config form */}
-      {data.manifest.configSchema && (
-        <Card variant="outlined">
-          <CardContent>
-            <Typography
-              variant="subtitle2"
-              gutterBottom
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              Edit Configuration
-            </Typography>
-            <ConfigSchemaForm
-              integrationId={integrationId}
-              schema={data.manifest.configSchema}
-              resolvedConfig={data.resolvedConfig}
-              ownership={data.ownership}
-            />
-          </CardContent>
-        </Card>
-      )}
+        </AccordionDetails>
+      </Accordion>
     </Stack>
   );
 }
@@ -1147,6 +1121,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               size={14}
             />
             <Typography
+              component="h1"
               variant="h5"
               sx={{
                 fontWeight: 700,
