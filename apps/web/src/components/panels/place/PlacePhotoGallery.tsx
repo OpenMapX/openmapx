@@ -463,7 +463,7 @@ function GalleryThumbnail({
         )}
         {imgSrc && (
           <Box sx={THUMBNAIL_CREDIT_SX}>
-            <PhotoAttribution photo={photo} compact />
+            <PhotoAttribution photo={photo} compact thumbnail />
           </Box>
         )}
       </Box>
@@ -542,7 +542,7 @@ function MobileThumbnail({
         )}
         {imgSrc && (
           <Box sx={THUMBNAIL_CREDIT_SX}>
-            <PhotoAttribution photo={photo} compact />
+            <PhotoAttribution photo={photo} compact thumbnail />
           </Box>
         )}
       </Box>
@@ -569,6 +569,9 @@ const GALLERY_MINIMAP_SX = {
 const THUMBNAIL_CREDIT_SX = {
   gridArea: "1 / 1",
   alignSelf: "end",
+  justifySelf: "end",
+  maxWidth: "100%",
+  borderRadius: 0.5,
   zIndex: 1,
   minWidth: 0,
   px: 0.5,

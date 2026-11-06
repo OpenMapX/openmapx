@@ -29,6 +29,8 @@ interface Props {
   color?: string;
   /** Thumbnails keep creator/licence visible without repeating the provider label. */
   compact?: boolean;
+  /** Navigational previews expose full file credits in one action when placement permits. */
+  thumbnail?: boolean;
 }
 
 /** Pure receipt projection; contrast, compactness and locale do not change the grants. */
@@ -42,8 +44,8 @@ function photoCreditPresentation(photo: PlacePhoto) {
     photo.licensing?.bindings.filter((binding) => binding.scope !== "service") ?? [];
   // Earlier unported CC grants allow a reasonable credit line, with authors at
   // equal prominence (2.x §4c / 3.0 §4c). Keep creator, file and licence linked
-  // beside EVERY image; source/acquisition prose stays in its associated details.
-  // This is not permission to collapse authors or general map/data attribution.
+  // beside full images; navigational previews may use directly associated details.
+  // This does not override stricter provider placement or unknown grants.
   // https://creativecommons.org/licenses/by-sa/3.0/legalcode#section4
   // https://creativecommons.org/licenses/by-sa/2.0/legalcode#section4
   const placementBindings = [
@@ -203,6 +205,7 @@ function photoCreditPresentation(photo: PlacePhoto) {
     captionLinks,
     notices,
     useRequiredCaption,
+    thumbnailDetailsAllowed: detailsAllowed && notices.length === 0,
     details: mergeAttributionDetails(details),
     licenceHtml:
       photo.licensing && fileBindings.length > 0
@@ -216,6 +219,7 @@ export const PhotoAttribution = memo(function PhotoAttribution({
   photo,
   color = "#fff",
   compact = false,
+  thumbnail = false,
 }: Props) {
   const t = useTranslations("photoGallery");
   const {
@@ -228,7 +232,18 @@ export const PhotoAttribution = memo(function PhotoAttribution({
     useRequiredCaption,
     details,
     licenceHtml,
+    thumbnailDetailsAllowed,
   } = useMemo(() => photoCreditPresentation(photo), [photo]);
+  if (thumbnail && thumbnailDetailsAllowed) {
+    return (
+      <Box
+        component="span"
+        sx={{ color, display: "inline-flex", alignItems: "center", minHeight: 24, fontSize: 14 }}
+      >
+        <AttributionDetails entries={details} label={t("credits")} iconOnly />
+      </Box>
+    );
+  }
   const linkSx = {
     color: "inherit",
     textDecoration: "none",
