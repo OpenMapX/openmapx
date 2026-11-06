@@ -5,6 +5,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./transit-alternative": {
+      "types": "./src/transit-alternative.ts",
+      "default": "./src/transit-alternative.ts"
+    },
     "./attribution": {
       "types": "./src/types/attribution.ts",
       "default": "./src/types/attribution.ts"

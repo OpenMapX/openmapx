@@ -15,6 +15,7 @@ import SubwayIcon from "@mui/icons-material/Subway";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
@@ -52,6 +53,7 @@ import type {
   TripItinerary,
   TripLeg,
 } from "@openmapx/mobility-core/transit";
+import { composeTransitAlternative } from "@openmapx/mobility-core/transit-alternative";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
@@ -197,6 +199,7 @@ export function TransitDetailsView({
   originTimeZone = null,
   destinationTimeZone = null,
   onBack,
+  onSelectItinerary,
 }: {
   itinerary: TripItinerary;
   isLowestCo2?: boolean;
@@ -216,6 +219,7 @@ export function TransitDetailsView({
   /** Set only when the trip crosses a time-zone boundary; renders the arrival in that zone with an offset chip. */
   destinationTimeZone?: string | null;
   onBack: () => void;
+  onSelectItinerary?: (parent: TripItinerary, candidate: TripItinerary) => void;
 }) {
   const selectedAttributions =
     itinerary.contributors !== undefined
@@ -657,24 +661,34 @@ export function TransitDetailsView({
                           }}
                         >
                           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                            {t("alsoDeparts")}
+                            {t("transitAlternatives")}
                           </Typography>
-                          {leg.alternatives.map((alt) => (
-                            <Box
-                              key={alt.startTime}
-                              component="span"
-                              sx={{
-                                px: 0.75,
-                                py: 0.1,
-                                borderRadius: 1,
-                                bgcolor: "action.hover",
-                                color: "text.secondary",
-                                fontSize: 12,
-                              }}
-                            >
-                              {fmt.time(alt.startTime)}
-                            </Box>
-                          ))}
+                          {leg.alternatives.map((alt, alternativeIndex) => {
+                            const candidate = composeTransitAlternative(
+                              itinerary,
+                              i,
+                              alternativeIndex,
+                            );
+                            const label = `${alt.routeShortName ?? ""} · ${fmt.time(alt.startTime, originTimeZone && tzOffsetLabel(new Date(alt.startTime), originTimeZone) ? { timeZone: originTimeZone } : undefined)} – ${fmt.time(alt.endTime, destinationTimeZone && tzOffsetLabel(new Date(alt.endTime), destinationTimeZone) ? { timeZone: destinationTimeZone } : undefined)}`;
+                            return candidate && onSelectItinerary ? (
+                              <Button
+                                key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}
+                                size="small"
+                                variant="outlined"
+                                onClick={() => onSelectItinerary(itinerary, candidate)}
+                              >
+                                {label}
+                              </Button>
+                            ) : (
+                              <Typography
+                                key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {label}
+                              </Typography>
+                            );
+                          })}
                         </Box>
                       )}
                       <TransitLegStops

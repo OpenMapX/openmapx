@@ -217,6 +217,7 @@ export function setupCloud(
           bikeHillPreference: params.bikeHillPreference,
           rentalFilters: params.rentalFilters,
           pageCursor: params.pageCursor,
+          regionalAlternatives: params.regionalAlternatives,
           detailedLegs: true,
           detailedTransfers: true,
           useRoutedTransfers: true,

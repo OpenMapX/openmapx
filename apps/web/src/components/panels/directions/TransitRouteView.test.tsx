@@ -340,3 +340,16 @@ describe("TransitItineraryCard", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
+
+it("identifies supplemented regional services without making a ticket claim", () => {
+  const html = renderToStaticMarkup(
+    <TransitItineraryCard
+      itinerary={{ ...SAMPLE_TRANSIT_ITINERARY, regionalOnly: true }}
+      active={false}
+      onSelect={() => {}}
+      onDetails={() => {}}
+    />,
+  );
+  expect(html).toContain("regionalLocal");
+  expect(html).not.toContain("Deutschlandticket");
+});

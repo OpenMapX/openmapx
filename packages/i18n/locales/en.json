@@ -1081,6 +1081,8 @@
     "driveDuration": "Drive — ~{duration}",
     "rentalVehicle": "Shared vehicle",
     "book": "Book",
+    "regionalLocal": "Regional/local",
+    "transitAlternatives": "Alternatives",
     "alsoDeparts": "Also at",
     "onDemandBookAhead": "On-demand — book ahead",
     "transitDuration": "~{duration}",

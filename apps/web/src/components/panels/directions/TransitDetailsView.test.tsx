@@ -2,6 +2,7 @@ import type { Place } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitDetailsView } from "./TransitDetailsView";
@@ -320,4 +321,65 @@ it("opens a journey's stop as that transit stop, so its board treats it as the m
     transitStop: { id: "ms:de_DELFI_0", name: "From 0" },
     ids: { ms: "de_DELFI_0" },
   });
+});
+
+it("names a different-service alternative and selects its complete RE1 journey with the keyboard", async () => {
+  const itinerary = makeItinerary([undefined]);
+  const leg = itinerary.legs[0];
+  const re1 = {
+    ...leg,
+    mode: "rail" as const,
+    route: { shortName: "RE1", longName: "" },
+    tripId: "mo:re1",
+  };
+  const parent = {
+    ...itinerary,
+    legs: [
+      {
+        ...leg,
+        alternatives: [
+          {
+            startTime: leg.startTime,
+            endTime: leg.endTime,
+            routeShortName: "RE1",
+            replaces: { fromLegIndex: 0, toLegIndex: 0 },
+            legs: [re1],
+          },
+        ],
+      },
+    ],
+  };
+  const select = vi.fn();
+  render(
+    <TransitDetailsView
+      itinerary={parent}
+      originLabel="A"
+      destinationLabel="B"
+      onBack={() => {}}
+      onSelectItinerary={select}
+    />,
+  );
+  const button = screen.getByRole("button", { name: /RE1/ });
+  button.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(select).toHaveBeenCalledWith(
+    parent,
+    expect.objectContaining({ legs: [expect.objectContaining({ tripId: "mo:re1" })] }),
+  );
+});
+
+it("shows legacy compact alternatives by train name without offering an unsafe selection", () => {
+  const p = makeItinerary([undefined]);
+  p.legs[0].alternatives = [{ startTime: p.startTime, endTime: p.endTime, routeShortName: "RE42" }];
+  render(
+    <TransitDetailsView
+      itinerary={p}
+      originLabel="A"
+      destinationLabel="B"
+      onBack={() => {}}
+      onSelectItinerary={vi.fn()}
+    />,
+  );
+  expect(screen.getByText(/RE42 ·/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /RE42/ })).toBeNull();
 });

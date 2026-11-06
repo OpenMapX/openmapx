@@ -426,6 +426,11 @@ export function TransitItineraryCard({
           </Typography>
         )}
       </Box>
+      {itinerary.regionalOnly && (
+        <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: "text.secondary" }}>
+          {t("regionalLocal")}
+        </Typography>
+      )}
       {firstBoardingLeg && <BoardingSummary leg={firstBoardingLeg} />}
       {(metaBits.length > 0 ||
         itinerary.legs.some((leg) => leg.wheelchairAccessible === false)) && (

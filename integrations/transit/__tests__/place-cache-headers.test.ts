@@ -151,3 +151,50 @@ describe("transit place response caching", () => {
     expect(res.headers["Cache-Control"]).toBeUndefined();
   });
 });
+
+it("opts public point-to-point planning into regional alternatives", async () => {
+  const planTrip = vi.fn(async () =>
+    withAttribution(
+      [
+        {
+          from: { name: "A", lat: 50, lng: 6 },
+          to: { name: "B", lat: 51, lng: 7 },
+          itineraries: [
+            {
+              duration: 60,
+              startTime: "2026-11-06T20:41:00Z",
+              endTime: "2026-11-06T20:42:00Z",
+              walkDistance: 0,
+              transfers: 0,
+              legs: [],
+            },
+          ],
+        },
+      ],
+      [],
+      freshnessNow(),
+    ),
+  );
+  const p = answering();
+  p.planTrip = planTrip;
+  p.capabilities.planning = true;
+  const handlers = routes([p]);
+  const res = reply();
+  await handlers.get("GET /plan")?.(
+    {
+      query: {
+        from_lat: "50",
+        from_lng: "6",
+        to_lat: "51",
+        to_lng: "7",
+        time: "2026-11-06T20:41:00Z",
+      },
+      params: {},
+    },
+    res,
+  );
+  expect(res.statusCode).toBe(200);
+  expect(planTrip).toHaveBeenCalledWith(
+    expect.objectContaining({ regionalAlternatives: true, departureTime: "2026-11-06T20:41:00Z" }),
+  );
+});

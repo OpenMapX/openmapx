@@ -1081,6 +1081,8 @@
     "driveDuration": "Auto — ~{duration}",
     "rentalVehicle": "Leihfahrzeug",
     "book": "Buchen",
+    "regionalLocal": "Regional- und Nahverkehr",
+    "transitAlternatives": "Alternativen",
     "alsoDeparts": "Auch um",
     "onDemandBookAhead": "On-Demand — vorher buchen",
     "transitDuration": "~{duration}",

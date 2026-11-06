@@ -1,4 +1,5 @@
 import { rankItineraries, type TransitRoutePreference } from "@openmapx/core";
+import { transitItineraryFingerprint } from "@openmapx/core/navigation";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 
 /** Preserve the planner's source-qualified identity, including providers without itinerary IDs. */
@@ -37,4 +38,26 @@ export function mergeTransitItineraryPage({
     return true;
   });
   return rankItineraries(deduped, preference);
+}
+
+/** Keep the current list and authoritative refresh identity; ignore callbacks from an older search. */
+export function selectTransitAlternative(
+  existing: readonly TripItinerary[],
+  parent: TripItinerary,
+  candidate: TripItinerary,
+): { itineraries: TripItinerary[]; index: number } | null {
+  const parentIndex = existing.indexOf(parent);
+  if (parentIndex < 0) return null;
+  const key = transitItineraryFingerprint(candidate);
+  const found = existing.findIndex(
+    (it) =>
+      it.source === candidate.source &&
+      it.instance === candidate.instance &&
+      it.datasetEpoch === candidate.datasetEpoch &&
+      transitItineraryFingerprint(it) === key,
+  );
+  if (found >= 0) return { itineraries: [...existing], index: found };
+  const itineraries = [...existing];
+  itineraries.splice(parentIndex + 1, 0, candidate);
+  return { itineraries, index: parentIndex + 1 };
 }

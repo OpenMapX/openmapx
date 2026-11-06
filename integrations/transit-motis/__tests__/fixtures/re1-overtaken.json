@@ -1,0 +1,1508 @@
+{
+  "note": "Reduced public Transitous responses captured 2026-11-06 around 21:03Z for Aachen to Koeln 20:41Z. No credentials or user identifiers. Raw original geometry retained.",
+  "primary": {
+    "from": {
+      "name": "START",
+      "lat": 50.76776,
+      "lon": 6.09139,
+      "vertexType": "NORMAL"
+    },
+    "to": {
+      "name": "END",
+      "lat": 50.94303,
+      "lon": 6.95873,
+      "vertexType": "NORMAL"
+    },
+    "previousPageCursor": "EARLIER|1793997660",
+    "nextPageCursor": "LATER|1793999880",
+    "direct": [],
+    "itineraries": [
+      {
+        "id": "Cn4hp5at9UViSUApy7kUV5VdGEAyO2ZyLWV1cm9zdGFyLWd0ZnMtcGxhbi1kZS10cmFuc3BvcnQtZXQtdGVtcHMtcmVlbF9hYWNoZW5faGJmOTYMHxFTYklAQbwJvmn6XBhASJj3uNcGUJD4uNcGWgRXQUxLYAFxAAAAAAAA8D8KoQIKCEVTVCA5NDc3EkkyMDI2MTEwNl8xODo0MV9mci1ldXJvc3Rhci1ndGZzLXBsYW4tZGUtdHJhbnNwb3J0LWV0LXRlbXBzLXJlZWxfOTQ3Ny0xMTA2Gjtmci1ldXJvc3Rhci1ndGZzLXBsYW4tZGUtdHJhbnNwb3J0LWV0LXRlbXBzLXJlZWxfYWFjaGVuX2hiZiE2DB8RU2JJQCm8Cb5p+lwYQDI5ZnItZXVyb3N0YXItZ3Rmcy1wbGFuLWRlLXRyYW5zcG9ydC1ldC10ZW1wcy1yZWVsX2tvbG5faGJmOY6QgTy7eElAQRCWsaGb1RtASJD4uNcGUPiJudcGWg5ISUdIU1BFRURfUkFJTGABaQAAAAAAAPA/cQAAAAAAAPA/CnwaOWZyLWV1cm9zdGFyLWd0ZnMtcGxhbi1kZS10cmFuc3BvcnQtZXQtdGVtcHMtcmVlbF9rb2xuX2hiZiGOkIE8u3hJQCkQlrGhm9UbQDnNkgA1tXhJQEG9xi5RvdUbQEj4ibnXBlC0irnXBloEV0FMS2ABaQAAAAAAAPA/",
+        "startTime": "2026-11-06T20:42:00Z",
+        "endTime": "2026-11-06T21:23:00Z",
+        "duration": 2460,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T20:42:00Z",
+            "endTime": "2026-11-06T20:44:00Z",
+            "scheduledStartTime": "2026-11-06T20:42:00Z",
+            "scheduledEndTime": "2026-11-06T20:44:00Z",
+            "duration": 120,
+            "distance": 40.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T20:42:00Z",
+              "scheduledDeparture": "2026-11-06T20:42:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen Hbf",
+              "stopId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_aachen_hbf",
+              "parentId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_aachen_hbf_station_area",
+              "importance": 0.0038811590056866407,
+              "lat": 50.76816000000001,
+              "lon": 6.0907990000000005,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T20:44:00Z",
+              "scheduledArrival": "2026-11-06T20:44:00Z",
+              "stopCode": "8015345",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "}|ry_Ba`xrJ^xC??TbB??UL??[L??uJjE??]N??UeB????",
+              "precision": 6,
+              "length": 16
+            }
+          },
+          {
+            "mode": "HIGHSPEED_RAIL",
+            "startTime": "2026-11-06T20:44:00Z",
+            "endTime": "2026-11-06T21:22:00Z",
+            "scheduledStartTime": "2026-11-06T20:44:00Z",
+            "scheduledEndTime": "2026-11-06T21:22:00Z",
+            "duration": 2280,
+            "from": {
+              "name": "Aachen Hbf",
+              "stopId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_aachen_hbf",
+              "parentId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_aachen_hbf_station_area",
+              "importance": 0.0038811590056866407,
+              "lat": 50.76816000000001,
+              "lon": 6.0907990000000005,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T20:44:00Z",
+              "scheduledDeparture": "2026-11-06T20:44:00Z",
+              "stopCode": "8015345",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "NO_RT_DATA",
+              "departureTimestampReason": "NO_RT_DATA",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_koln_hbf",
+              "parentId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_koln_hbf_station_area",
+              "importance": 0.006867678835988045,
+              "lat": 50.943214,
+              "lon": 6.9586015,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:22:00Z",
+              "scheduledArrival": "2026-11-06T21:22:00Z",
+              "stopCode": "8015458",
+              "vertexType": "TRANSIT",
+              "pickupType": "NOT_ALLOWED",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "NO_RT_DATA",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_18:41_fr-eurostar-gtfs-plan-de-transport-et-temps-reel_9477-1106",
+            "routeId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_FRPNO-DEKOH",
+            "routeShortName": "FRPNO -> DEKOH",
+            "displayName": "EST 9477",
+            "tripShortName": "9477",
+            "agencyName": "Eurostar",
+            "headsign": "Köln Hbf",
+            "cancelled": false,
+            "realTime": false,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "_qsy_B}awrJxs@pFyQmvAcBqSG{Dg@mUHcQ?oB|@}VvA}XvBuVzDmXnGsc@~OkaA~U}uAhPwiA|DwTpHqc@nI{e@pGc_@pGw^~Hwj@zFej@vDak@bBq`@\\ca@Oaf@_Aaf@}Bce@aEud@wLg}@aR}y@qCuKkm@}zAg_AuaBuT__@yL{VmZig@}NmXo^it@mc@oaAsGqPyBkHkKcW{_@i_Aw^qy@_Uae@_Wac@ce@kv@{~AeiCo\\}h@iS}]oXik@eW}m@sh@snAiMsYaa@u}@_IcRgPeb@kP_f@{s@qmCgn@g_Ckj@e_Cun@ccCmo@qbCip@saCeXcbAgT}|@oPat@gI{b@gK}e@iK}h@oIii@qLycA}I{eA}P}rBsO}vBck@_iImd@e`Haf@_wHoTqvCkLqkB_d@q{G_C{`@c|Cykd@oHokAmJ_zAwD}l@a\\wfEkLojBoLwlBkX}zDcFel@qCuZmD_`@{Fab@sHec@uH}e@gc@a~BiMkn@yQiq@yRot@yeAefDu^ecAir@_cBqp@m}Asp@wbBgm@_aBmm@e|AcLcY}Oi_@gAaCgQcZoh@_y@cZ{ZuZyWqy@il@ek@wY{k@uT}l@qQam@eOubAmZk`@aRu_@gTgYqRmYyTsg@uh@gf@wo@c]ge@cZsk@c[es@sE}LoJkY_Sqq@gUc_AuMgy@mGog@sDqg@kHgtAcAsi@Egj@bAgn@`AwYrC}g@z@oMnDw`@fMegAnJ{t@hMau@pGeZxHaZjPei@hHwRj[_x@zVuh@lOw]xMg]rXiy@zO_m@bLmf@lQseAvDmSzKc~@fDiXhVqbBxXudCbF_h@jF_l@rAuMdUsgCpReiClUkwDnHszAd@}GbBkc@`Cak@GgBdEybAl@eWdEizAt@qo@l@{m@\\_nAFwKLww@Usw@?sQ_AubAcBsmA_DcnAgE{mAwG}lAaKi_BqLu~AcLkhAoYabCiB_N_Jer@ag@ytCgm@ksCcf@{mBkRor@{Tys@gw@szBsE}KojCgbG_Y{l@ewAu|CmxAe_DgkAemCkz@caC{[stAkUquAyMauAmJwoAsFixA{BgtAv@oaAnCcgAdK}jBtc@mkEjd@gtDvZeuChWwdC`YsdClg@elEpk@mqErX}xBbe@{|DdIyu@hkAsaKbnAknK|d@e`Ezd@szDzmBsvPxDq\\j_A_bI|BcTja@ykD`BoOl{BeoRvDk\\|mAulKzBsQb@aEp}BccSdF{c@d_@ujDfDgXlrAu_LzCwUjSamBnNshAfi@cxE`R_jBdPulBrJo{AfDsn@bBun@jA}_BrAs}AkBuxBaGk{BkL}eByBcXg[oeDuRm{AyVuzAcGyYgNkx@sVipA{Zu|A{FyV{m@sfCwi@a_Bql@m{AeHyNq|AemCs`@wi@wS{[_SaWiHkJwr@m}@iQmUiwAegBqVcZkUkXcV}Yyk@er@kU_Ywn@}u@k[}_@kyAigBiQeSqRsUkdAonAy|CsnDox@u_Aqa@ch@eT{Rw~HwmJmtA}`Bi_@ic@aHqJkQ}S{g@wm@_fEcdF{PsRwfAsoAumAmwAakAstAsbCk{CaW_\\oXe_@gYya@yWmb@gXke@iRa^yGgMqR}`@_Xum@mEsKu^g_AyRaj@sO{d@cMy_@sL{_@{Kc_@sNcg@}Pil@mPil@{P}l@sPil@mPkl@iPqk@wPol@{Pml@oPql@oPql@c_HeeVoqFcpRsoFihRipGgeU_`BoqFcVs`AyqFc|RmqIofZ}qBwgHurF_uRuh@okBkhBiqGwn@qzBoi@_eBspC{|Jci@inB_cEudO{mE{vOk~Uyaz@wPkm@gOei@crA{uEsNkg@q}CkxKi[ckAsg@cfB{YieAguCubKgd@c_BiLm_@mbAkdD_Vcx@kf@o`ByIwYyb@mzAcd@ycB{VoaAkKgb@yRcv@gTkz@ip@qhCw^ixAgn@a~BgRep@egBotGig@emBil@_cC{t@{}CmgA{{Ee}AqxGssA{}Fkk@kdC}n@eoCweBqsHqeAisEuYiyAoh@waDo]{fC_gBg~Ood@{gE_XqgCgJ_mA_GqiAgNokC{RkqD_b@kpHcKw`BwIatAkA}WmYu{FuOeaDwk@umL_I{}A}AwZaIk_B_Cqe@aSm`EeP{aDeT{kEySceEyFehAaCid@{FioAoS_cEsA}VqA{Wm@oKud@abJoc@k_JqBea@sOq`DsD{u@kD}q@_Cgi@oA_VgEgx@wGczAaa@mhIuTsoEwIggBkDcs@sDis@cj@}|KgEgv@eDap@eFadA{Bah@oFeuAcB{b@u@eTiGmaBwGyeByDk~@}EqbAoCml@}JofBkKybBaDuc@gH}oAsOu|CqOocD_Nk}CsAo[kFopAsFamAkFeiAuEsgAgDsr@gDuw@uEiiAoIaoB{@iRqH_dBuEqz@qE{y@mGmcAwIgjAyD}e@{D{b@iB}ReEef@Oy@oBuX{Bm[{AyTsA}Sg@aIc@iI_AyRg@kNuAm\\a@uLc@eN]eSe@gWm@od@e@c\\s@y]_@cQu@{X{@sSu@cVoAmWcBqYcBq[qCua@aDyc@wHklAgEiz@uCgn@_D}l@aCie@qCcg@yBce@iCgf@eCkf@}AmWm@qKu@_LuA_QiAwNyA}NyBmRqCiRkBoO_CeOmEsZkFm_@gEuZoCmWiB{TsAkRkAqPg@yG]eH_Dwn@kAe\\aCae@gB_d@wFcmAeDet@iC{j@yBok@]uOW{O?eF?mPFaN\\yR\\aKt@kRjA}RrBqWdCoTbC_PvA{JjCqNpCqMpBaJt@_D|BaJxDwM|EkOdEsL|FiOfCkFrEeKpM{VbGqJbGmIlEsFlJkKdMoLrNcJ~MiH`M{EnI{BbLyCtOaDlOmDhPmDfOaDhNmEzEcBpEiBnGiD~ByArNwInBsApBgB`EeDfTmTf^g`@|AeBbBaBh[i^vEiF`BuBxWqYfAcAz@cAnLyM|EcG|D{DbO_M`JaHdI{Gv@y@~@aAvFsGlOuPnNsPpH_HhM}LdEiExRcSdc@ee@~x@m|@GoA",
+              "precision": 6,
+              "length": 618
+            },
+            "alternatives": [
+              [
+                {
+                  "mode": "WALK",
+                  "startTime": "2026-11-06T21:05:00Z",
+                  "endTime": "2026-11-06T21:06:00Z",
+                  "scheduledStartTime": "2026-11-06T21:05:00Z",
+                  "scheduledEndTime": "2026-11-06T21:06:00Z",
+                  "duration": 60,
+                  "distance": 5.0,
+                  "from": {
+                    "name": "START",
+                    "lat": 50.76776,
+                    "lon": 6.09139,
+                    "tz": "Europe/Berlin",
+                    "departure": "2026-11-06T21:05:00Z",
+                    "scheduledDeparture": "2026-11-06T21:05:00Z",
+                    "vertexType": "NORMAL"
+                  },
+                  "to": {
+                    "name": "Aachen, Hbf",
+                    "stopId": "de-DELFI_de:05334:1008",
+                    "importance": 0.0038811590056866407,
+                    "lat": 50.7678,
+                    "lon": 6.091499000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:06:00Z",
+                    "scheduledArrival": "2026-11-06T21:06:00Z",
+                    "vertexType": "TRANSIT",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "BUS",
+                      "ODM"
+                    ]
+                  },
+                  "realTime": false,
+                  "legGeometry": {
+                    "points": "m|ry_BagxrJ????a@_D",
+                    "precision": 6,
+                    "length": 4
+                  }
+                },
+                {
+                  "mode": "HIGHSPEED_RAIL",
+                  "startTime": "2026-11-06T21:06:00Z",
+                  "endTime": "2026-11-06T21:42:00Z",
+                  "scheduledStartTime": "2026-11-06T20:36:00Z",
+                  "scheduledEndTime": "2026-11-06T21:15:00Z",
+                  "duration": 2160,
+                  "from": {
+                    "name": "Aachen, Hbf",
+                    "stopId": "de-DELFI_de:05334:1008",
+                    "importance": 0.0038811590056866407,
+                    "lat": 50.7678,
+                    "lon": 6.091499000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "departure": "2026-11-06T21:06:00Z",
+                    "scheduledDeparture": "2026-11-06T20:36:00Z",
+                    "track": "9",
+                    "vertexType": "TRANSIT",
+                    "pickupType": "NORMAL",
+                    "dropoffType": "NORMAL",
+                    "cancelled": false,
+                    "arrivalTimestampReason": "PREDICTED",
+                    "departureTimestampReason": "PREDICTED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "BUS",
+                      "ODM"
+                    ]
+                  },
+                  "to": {
+                    "name": "Köln Hbf",
+                    "stopId": "de-DELFI_de:05315:11201",
+                    "importance": 0.006867678835988045,
+                    "lat": 50.94303,
+                    "lon": 6.958729000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:42:00Z",
+                    "scheduledArrival": "2026-11-06T21:15:00Z",
+                    "track": "4 A-C",
+                    "vertexType": "TRANSIT",
+                    "pickupType": "NORMAL",
+                    "dropoffType": "NORMAL",
+                    "cancelled": false,
+                    "arrivalTimestampReason": "PREDICTED",
+                    "departureTimestampReason": "PREDICTED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "COACH",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "TRAM",
+                      "BUS"
+                    ]
+                  },
+                  "tripId": "20261106_20:22_de-DELFI_3468557554",
+                  "routeId": "de-DELFI_162324_101",
+                  "routeShortName": "79",
+                  "displayName": "ICE 319",
+                  "tripShortName": "ICE 319",
+                  "agencyName": "DB Fernverkehr AG",
+                  "headsign": "Frankfurt (Main) Hauptbahnhof",
+                  "cancelled": false,
+                  "realTime": true,
+                  "interlineWithPreviousLeg": false,
+                  "wheelchairAccessible": "NOT_ACCESSIBLE",
+                  "bikesAllowed": false,
+                  "legGeometry": {
+                    "points": "wwry_BaoxrJsDs[mA{SEcFA{EFiGFkDJ{CJwC`@gIz@qJjAoJzA{JnBkMlAmHxAmJxBmND]fFw\\z@_FhE_Yx@mFfBsLhLus@Lq@nGy_@hH}a@r@eEnFcZ`BuIfC{MvEuUNu@n@}CJk@lGo[tFiX`G}[vIqe@dJkk@bCqQvBiQ|Cu[rAmQvAmWbA{Wj@mWTuWEq\\e@e\\k@iQs@_RsA_UaB_U_C}TgCcTwBaOsBoM_B_JeEoSoEwR}BcJeD}KiDuL_G}QkGwPoLiYwCqGeRk_@sg@o|@s@mAMUeCqEeC{EeEgIgI{P{GiNyDaIcDqG{GwMqQc^cKiSc\\kq@iH}N_Qg^kRm`@iGmMuEsJoE}JcTgf@kTyf@uP}_@aD_HgDgHqDgHiEoI}DgHsDyGoIoN{Sg]sZ}f@ws@mkAwb@yt@wYig@mVib@cIiN}GiMsG_NaWgl@ol@stAed@aeAiEmKkE{KiFkNeFqN{EmNyEuNcEwM{DwMyCiKwCoKsDgNqDmNwLoe@_IwZcIwZaHoVeHiV_EkOwDqOgHeZaE}PeE}PmEiQoEkQcLwc@{l@s~BeNii@qOam@kG_VkG_VqG_VqG_VoGoUoGoU}^ysA_FcRwEaRyEeRsEiRmCaLkCeL_A}DeB{HyDyPoG_ZmGcZiJce@sH_a@yD{SuDaTwCcQqCiQsB{MoB_N}CgUyCmUgCiT}BeTuAoMmA_MaAqKoBcUkBcUQqB}@wLiAkOKsA{B_[_Did@mDsh@sKa_BkDih@aCs]eSeyC_SiwCeAsOgAmPgGi~@}Eqs@mg@{sHaIglA{HmjAcMyjBe@yGoSy{CyUemDwUqlDgP_cCYiEkZ_pE}AgUeNisBoWuzDqAcSsOw}BqYwjE_@sFy@aMuPefCgA{O{T}fDuUulDoBeZ}TsfDyHejAoA}QgB_V{AoR_CkWcBsPsEoa@[gCsAaKQ_BgG}b@eE}WaImg@sIgi@{Iyg@wDcSaEqRyEqS}CkM_DaM}DgNmFwQsCyIuHwU{CkJ_KqZcEgMa@kAEOoPgg@qG{RiN}a@mPgg@cIsUwGwQ}FkOwMa\\uWqn@a\\aw@wU{j@oYar@qJqU{DoJwDoJeIcTgI}TqQmg@yIyUiDcJsLgZaOu^qOk_@sPaa@gEgJeBuDe@aAuCgGkM{VqIeOcIqM{@sAgIoLuFwHoE{FsH{IqGcHeFkFsFmFwFgF_NkLmKoIkOaLsOkKsHwEgJmFkM_HyOyHcPaHwTsI}N{EaN_EeNwDaPaEi\\eIkQuEaQ{EmT}GcTcIs^qPw_@kTsQuLcQ_N}NsL}R}QgSgTaHcIoIwJyQcVwMkRcPcWgF}IcDuFiKuRkMwXkCmGeHmPgFkNgA{C}@qCiVsx@oCcKaIy]mL{k@iEsWcCyP{Fsf@uAuNsAkO}@wKOgCeC_k@}Bse@SuKM}JC{BE_ICyH?kEFsENmJTsJ`@qM\\_MfAq]v@uQfAgQl@yHp@gJz@oJj@iG`LcbA`DoXpB_QnB}PvBaQvBgPpBmMf@cDfD_RbAaFdDyOjDmNpDeNxEcPrEwNnEeMhC_HbGyOnFwMxAmDdI{RfP}]|Og^pE}KpHoRdGqP`FyNbFoOrGiTxIo[l@aClAaFnCoLhCiMbCcN|AmJjAaIjDkV~Hwi@l@aEz@yFdL_y@xD_YrAgKd@eDdMccArIcv@hMskAnDm]pK_gAlAuMrJoeAzIcdAfIadAdHo`AxHedAzNsjCjFgfAnEadAvFc|AjBqn@`CmbAl@y`@f@i[HkHv@{eAHmWBaNBe]UyeAKoUA{Da@aj@iAcfAU{OyAyo@mBop@qE}mAyCgn@cCgf@oLyfBaHo|@{Ca^eDg]iDg]kDc\\aNyiA_EsZqBoNuJ{q@_Gq_@w@oFiPu`AgQc`AkRa_AaSm}@sTm}@uU_|@{Ncg@qTos@{JcZ{Xuw@eI_U_IiSgBwEo]wz@a\\qt@}Zqq@az@whB}KiV{HuPi]wu@{\\wt@u\\it@w]_v@o[gr@{\\mt@kY{n@y[ct@gWoo@uTan@ePig@cLi`@iNii@oNqp@_Nav@wKiw@{CqVcEmb@wGm{@cEk{@_B_j@y@ce@W_g@d@kgAnAkm@hCsr@XaHnFqx@rCs\\bD{\\dJ}y@jMggApIgu@~LqeAvGck@bHim@vUuuBpCuWbXkjCjNmoAjFyd@hGci@tFwe@\\yClU}pBz@yGpGki@lGug@lGgf@fIuo@vFec@~T_gB|RcbBlSsdB|A}OpIgu@fAiJxT{lBjs@{gGnGwj@VgCxe@mbEt]{zCfCuTfCeT`]ewCbEk]v]szCzUqrBbFyb@|x@ycH|X}aCzA{MpGkj@hv@avGrDc\\xAeMt]wyCxBaRxG}k@pYmcCrg@wjExo@iwFdBkN~LgeAzK__AvJo{@xc@axDlBoPdAcJdBaOl@}FnTilBvY_eCbf@qcEz@oHjc@swD`BaMrCwUbX}}BnIit@rD}Z|a@uoDdn@alFnCkUv@{GPuArRcaBxDq\\jHwn@j^o~CzIax@dLajAvCs\\pQ{_CbHqmANkCzBug@r@aQhA}]ZuM~BmoAf@ky@Aoc@?qRw@_t@yAgs@aFe}AqAe\\c@uKoHa{AyAaWsImfAsO{}AgNgfAmDuVcRahA{BkMuF{YcR}cAoQa_AaAcF}Qq`AqIy`@iEiRqI}]oEuRqPin@_Ocg@uB}GmLk_@kQih@cN__@}DoKmQgc@sLgYwCiGgZmo@aLiScIaOoVo`@aEkGgLkQuc@ml@sSiXwC}Dsy@weAw@oAcAiAmNaQaRiVMOoA}Asp@}z@ka@gh@em@ss@kyAofBoRgVs[e_@}UoYeNuP_}@gfA}Q}TaWkZgTeWiEeFsDcEqo@yv@}T}Wqr@ax@a|@}bAwI{J_V{Yaz@mbAy_CmrCqfFehGgR_UwcAumA}G}Hqp@cx@_z@kbAefCizCaSaVa^{b@_IwJsh@an@gw@y}@{v@{|@or@{x@yWe[sdCmyC_Wc\\cXm^mYgb@sW{a@cXie@c\\gn@qQy^uWyl@mEoKaIwSqTgk@{Rkj@uOud@}Lo_@sLc`@wK{^wNkg@qP}k@wPkl@yP_m@wBuHeLia@kQym@gPsk@uPul@oPkl@sPml@wPsl@yMie@kwDczMaxAqdFsgEicOei@skBmoD{cMa~@{`D}x@ouCwsDiuMg]elAwc@s|Aac@u{AwPcm@{P_m@}Nih@_n@_xBweAuwD{eBinGkTaw@}Nch@en@cyBob@kzA}b@y{Ags@afC_\\_jAuUyy@eL}`@cQum@sPul@{Pam@qc@y}A}}@eaDoc@i}AqvAmaFw`AciDa~@saDueAcuDyHuXme@kbBor@adC_ByFe~@qbDaD_LkU{x@aXw_Akj@}oBa|AeoFiF_RwCiKkg@kgBsf@ofByk@}vBU{@wJ{^mk@yvBql@ivB{vDa{MkSmt@_Pej@ghH}|VgnAolEwnAolE}Vuy@a}C{nKkl@uuBqc@o}AsRqq@_Ju[mk@irBig@sgBqR{q@g_A{eDkyAeiFa\\kjAwf@mfBcZeeAgwBquHw\\glAglAgbEeCsIaDaK_o@iuBoSsp@wVyy@aHwUcJ}Zy@sC{XcbAcTcw@mOml@eE{OmPso@yc@qfBeDkMqJs_@gNui@yYcjA{EgR}^gxAi^ctAefA_zDsOqj@u[ujAkA{DI[sSgv@oKwa@gZmjAoJk_@{`@mcBcQot@kGsWkTu_AKa@uCoMo[stA}o@qqCm[cuA}c@qmBkWuhA{Jsb@_w@ogDwUscAgb@uhByd@cqBwBiJo`@wcBiR}x@yy@mpD}]y{Am\\azAmR}|@{Ogy@gMas@iZmmBkDgVc@uDgVukBwEkb@q`@mmDcWwxBmPwzAoP}zAiI_t@g@}EaYieCeEy^_Km_AqKogAcD{`@wEkk@_IghAeCg`@oJ}iBgDyo@yLq`CkHsvAuFabAuOckC_Cy]kEmw@kKcnBaA_R}G_uAsOe_DY_GyO_aDsCok@aMieCkUouE{Bkd@sAwWsFugAoAaX}NcwC{QovDsOuzCSeE{S}eEo@gMuI_gB_Emx@gAcUyFahAwBkd@uC}k@aOiwCm@eOa@cIoDws@yAkYyAuYgEix@aZi_GiDmq@sCsj@aT{jE}MsoCmAwVeDcq@kGmpAsDqt@_GclAaCsg@_Cqe@cA_Sa^qpHe@}JgJefBaEuz@aNmrCcJoiBaD}p@iDks@wAoYca@gdIgBc^iBo^uDet@eAoSoBm]cFqeAm@uMkAwWuF{tAeAi[SmF}@yT_@qJsHwpBkEkjAmCqp@}C{p@cEq|@w@yNkKweBoKofB[_FaBmY_AoOoFs_AiIe|AcDyp@o@sMmD_t@c@mIgGsoAcNi~CkAwXs@sPqNsbDkB}`@wIqlByCqr@mDa|@kCal@_Dkt@w@mRIqB{Do_Aw@gRkDgv@kDqt@yD_s@iF}_A_Dah@mEap@cCo]cBqT}Fcu@qAmPgBwVoAgQe@aH?A[sEmCia@iAyRo@aLwAwViA{ToA_XqByc@o@cQiAoXqAm^Ao@uAgc@c@qPa@wQw@_]e@aQaAc\\aAgXiAcXo@aNyA}XoBy]oCca@_Dcd@oEmo@qCwg@]cHgAsToEm|@uBca@wDav@eGyjAgEux@IeBu@kO}AiXm@aKy@eLmA{PgAsLgBeQ_AeI{@kHaCwRsB{N{BiOsEyZiFe_@oD_XgBoOwAkOsAwNsAyRoA_P_@_Hg@qJ_@qQSmPBsOJqPp@oQjBqYhAcM`A_Jz@sGf@}CjC_OpA_GnC}KrBkHrAaEnEyLlAyClCyFpCeG`CkEjAyBrAwB|CwEvCoDxFkHpG{GjSeThOsOjKeLvHuJhGiIrFoIzFkK~EgKzEqLbE}LvDeMhDqNzDmR|B}MrAgKvAaMx@iJz@{IpBgYbEwh@nEoj@fByRpBsRTiBLcA\\qCnAuJnAmJtAeJjCcPfC_Nn@_DdAkFzBgKdDcNjCqKrBoHbDiKzB_Hr@cBpDqIvDiIdLyRXe@|E{GxIwKtZm]dDuDnD_ErHoIvSuUlEaFpe@yh@\\a@xBcCdF{FzJ_L~AgBfSaUdBmCfDiFlAiBfEsGvEgFnB}BzLgNfIcJlFsGbCeDbDkElD}DlAkANM|H{HnIuIhCqCrIiJzCeDb@e@zN{Of@i@bSeUdGuGhH{HtT}UzDeEd@g@",
+                    "precision": 6,
+                    "length": 1150
+                  }
+                },
+                {
+                  "mode": "WALK",
+                  "startTime": "2026-11-06T21:42:00Z",
+                  "endTime": "2026-11-06T21:43:00Z",
+                  "scheduledStartTime": "2026-11-06T21:42:00Z",
+                  "scheduledEndTime": "2026-11-06T21:43:00Z",
+                  "duration": 60,
+                  "distance": 0.0,
+                  "from": {
+                    "name": "Köln Hbf",
+                    "stopId": "de-DELFI_de:05315:11201",
+                    "importance": 0.006867678835988045,
+                    "lat": 50.94303,
+                    "lon": 6.958729000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:42:00Z",
+                    "departure": "2026-11-06T21:42:00Z",
+                    "scheduledArrival": "2026-11-06T21:15:00Z",
+                    "scheduledDeparture": "2026-11-06T21:42:00Z",
+                    "track": "4 A-C",
+                    "vertexType": "TRANSIT",
+                    "cancelled": false,
+                    "arrivalTimestampReason": "PREDICTED",
+                    "departureTimestampReason": "PREDICTED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "COACH",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "TRAM",
+                      "BUS"
+                    ]
+                  },
+                  "to": {
+                    "name": "END",
+                    "lat": 50.94303,
+                    "lon": 6.95873,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:43:00Z",
+                    "scheduledArrival": "2026-11-06T21:43:00Z",
+                    "vertexType": "NORMAL"
+                  },
+                  "realTime": false,
+                  "legGeometry": {
+                    "points": "kbid`BqgvgL?A",
+                    "precision": 6,
+                    "length": 2
+                  }
+                }
+              ],
+              [
+                {
+                  "mode": "WALK",
+                  "startTime": "2026-11-06T20:50:00Z",
+                  "endTime": "2026-11-06T20:51:00Z",
+                  "scheduledStartTime": "2026-11-06T20:50:00Z",
+                  "scheduledEndTime": "2026-11-06T20:51:00Z",
+                  "duration": 60,
+                  "distance": 5.0,
+                  "from": {
+                    "name": "START",
+                    "lat": 50.76776,
+                    "lon": 6.09139,
+                    "tz": "Europe/Berlin",
+                    "departure": "2026-11-06T20:50:00Z",
+                    "scheduledDeparture": "2026-11-06T20:50:00Z",
+                    "vertexType": "NORMAL"
+                  },
+                  "to": {
+                    "name": "Aachen, Hbf",
+                    "stopId": "de-DELFI_de:05334:1008",
+                    "importance": 0.0038811590056866407,
+                    "lat": 50.7678,
+                    "lon": 6.091499000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T20:51:00Z",
+                    "scheduledArrival": "2026-11-06T20:51:00Z",
+                    "vertexType": "TRANSIT",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "BUS",
+                      "ODM"
+                    ]
+                  },
+                  "realTime": false,
+                  "legGeometry": {
+                    "points": "m|ry_BagxrJ????a@_D",
+                    "precision": 6,
+                    "length": 4
+                  }
+                },
+                {
+                  "mode": "REGIONAL_RAIL",
+                  "startTime": "2026-11-06T20:51:00Z",
+                  "endTime": "2026-11-06T21:44:00Z",
+                  "scheduledStartTime": "2026-11-06T20:51:00Z",
+                  "scheduledEndTime": "2026-11-06T21:44:00Z",
+                  "duration": 3180,
+                  "from": {
+                    "name": "Aachen, Hbf",
+                    "stopId": "de-DELFI_de:05334:1008",
+                    "importance": 0.0038811590056866407,
+                    "lat": 50.7678,
+                    "lon": 6.091499000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "departure": "2026-11-06T20:51:00Z",
+                    "scheduledDeparture": "2026-11-06T20:51:00Z",
+                    "vertexType": "TRANSIT",
+                    "pickupType": "NORMAL",
+                    "dropoffType": "NORMAL",
+                    "cancelled": false,
+                    "departureTimestampReason": "PREDICTED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "BUS",
+                      "ODM"
+                    ]
+                  },
+                  "to": {
+                    "name": "Köln Hbf",
+                    "stopId": "de-DELFI_de:05315:11201",
+                    "importance": 0.006867678835988045,
+                    "lat": 50.94303,
+                    "lon": 6.958729000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:44:00Z",
+                    "scheduledArrival": "2026-11-06T21:44:00Z",
+                    "vertexType": "TRANSIT",
+                    "pickupType": "NORMAL",
+                    "dropoffType": "NORMAL",
+                    "cancelled": false,
+                    "arrivalTimestampReason": "PROPAGATED",
+                    "departureTimestampReason": "PROPAGATED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "COACH",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "TRAM",
+                      "BUS"
+                    ]
+                  },
+                  "tripId": "20261106_21:51_de-DELFI_3469151921",
+                  "routeId": "de-DELFI_de:nrw:re1:_100",
+                  "routeShortName": "RE1",
+                  "displayName": "RE1",
+                  "tripShortName": "026839",
+                  "agencyName": "National Express",
+                  "headsign": "Hamm (Westf), Hauptbahnhof",
+                  "cancelled": false,
+                  "realTime": true,
+                  "interlineWithPreviousLeg": false,
+                  "wheelchairAccessible": "NOT_ACCESSIBLE",
+                  "bikesAllowed": false,
+                  "legGeometry": {
+                    "points": "czry_B{mxrJyDc\\cAeTC}CAcGDaGJaHDmAVuF\\cG`@iFf@kFx@sGpA}IbEyW|DoW^yBbDsSxBgNjFi]^eCnBqMxLcu@Js@`YmaBnLeq@N_A`@{BJm@jCyMtBoJbDcNpByJpCoNVuAHe@|Kwn@lJgk@bC}PtBiQ`Di\\pAiQxA_VhA{Xh@{VPoWAw\\k@_\\e@}Ps@sQoA}TeB_UwBeTmC}SqB}NuBuM{AwIgEoSmEuRkC_K_D}K}CmK{FgQgGwPoL_YwCoGqRe_@gi@o_AgEsHcAeBuUmb@mNwXcVef@cAsBcMeWk@kAqMmXuKgUq@{AeX{k@yNo[iFcL[q@}AkDyEgKkEmJsGuNaJySeB_EgBgE{A{D}BuG}F}QuP}_@aD_HgDgHqDgHiEoI}DgHsDyGoIoN{Sg]sZ}f@ws@mkAwb@yt@wYig@mVib@cIiN}GiMsG_NaWgl@ol@stAed@aeAiEmKkE{KiFkNeFqN{EmNyEuNcEwM{DwMyCiKwCoKsDgNqDmNwLoe@_IwZcIwZaHoVeHiV_EkOwDqOgHeZaE}PeE}PmEiQoEkQcLwc@{l@s~BeNii@qOam@kG_VkG_VqG_VqG_VoGoUoGoU}^ysA_FcRwEaRyEeRsEiRmCaLkCeL_A}DeB{HyDyPoG_ZmGcZiJce@sH_a@yD{SuDaTwCcQqCiQsB{MoB_N}CgUyCmUgCiT}BeTuAoMmA_MaAqKoBcUkBcUQqB}@wLiAkOKsA{B_[_Did@mDsh@sKa_BkDih@aCs]eSeyC_SiwCeAsOgAmPgGi~@}Eqs@mg@{sHaIglA{HmjAcMyjBe@yGoSy{CyUemDwUqlDgP_cCYiEkZ_pE}AgUeNisBoWuzDqAcSsOw}BqYwjE_@sFy@aMuPefCgA{O{T}fDuUulDoBeZ}TsfDyHejAoA}QgB_V{AoR_CkWcBsPsEoa@[gCsAaKQ_BgG}b@eE}WaImg@sIgi@{Iyg@wDcSaEqRyEqSkCwKQs@_DaM}DgNmFwQsCyIuHwU{CkJ_KqZcEgMa@kAEOoPgg@qG{RiN}a@mPgg@cIsUwGwQ}FkOwMa\\uWqn@a\\aw@wU{j@oYar@qJqU{DoJwDoJeIcTgI}TqQmg@yIyUiDcJsLgZaOu^qOk_@sPaa@gEgJeBuDe@aAuCgGkM{VqIeOcIqM{@sAgIoLuFwHoE{FsH{IqGcHeFkFsFmFwFgF_NkLmKoIkOaLsOkKsHwEgJmFkM_HyOyHcPaHwTsI}N{EaN_EeNwDaPaEi\\eIkQuEaQ{EmT}GcTcIs^qPw_@kTsQuLcQ_N}NsL}R}QgSgTaHcIoIwJyQcVwMkRcPcWgF}IcDuFiKuRkMwXkCmGeHmPgFkNgA{C}@qCiVsx@oCcKaIy]mL{k@iEsWcCyP{Fsf@uAuNsAkO}@wKOgCeC_k@}Bse@SuKM}JC{BImIEsIE_RDgRHgLRgLNkJ`@{Nf@yOp@qPbAcRlA_R`A}NhAuNlAcNlAwLrBgSxBuQTgBvBoPrB{NbDuS`A_Gr@eEjC{NpEyUjAwFd@qBxC{MpAmFtBwIxBuIpGgUnGsS~FcQpFcOpL_ZfFoLzNc\\n@uAnM{XdPc_@bOg`@~GeSxH}VdF}QdDsMbDeNpCkMrC_NhFmXnB{KhCsOpFq]l@aEz@yFdL_y@xD_YrAgKd@eDdMccArIcv@hMskAnDm]pK_gAlAuMrJoeAzIcdAfIadAdHo`AxHedAzNsjCjFgfAnEadAvFc|AjBqn@`CmbAl@y`@f@i[HkHv@{eAHmWBaNBe]UyeAKoUA{Da@aj@iAcfAU{OyAyo@mBop@qE}mAyCgn@cCgf@oLyfBaHo|@{Ca^eDg]iDg]kDc\\aNyiA_EsZqBoNuJ{q@_Gq_@w@oFiPu`AgQc`AkRa_AaSm}@sTm}@uU_|@{Ncg@qTos@{JcZ{Xuw@eI_U_IiSgBwEo]wz@a\\qt@}Zqq@az@whB}KiV{HuPi]wu@{\\wt@u\\it@w]_v@o[gr@{\\mt@kY{n@y[ct@gWoo@uTan@ePig@cLi`@iNii@oNqp@_Nav@wKiw@{CqVcEmb@wGm{@cEk{@_B_j@y@ce@W_g@d@kgAnAkm@hCsr@XaHnFqx@rCs\\bD{\\dJ}y@jMggApIgu@~LqeAvGck@bHim@vUuuBpCuWbXkjCjNmoAjFyd@hGci@tFwe@\\yClU}pBz@yGHq@fGyg@lGug@lGgf@fIuo@vFec@~T_gB|RcbBlSsdB|A}OpIgu@fAiJxT{lBjs@{gGnGwj@VgCxe@mbEt]{zCfCuTfCeT`]ewCbEk]v]szCzUqrBbFyb@|x@ycH|X}aCzA{MpGkj@hv@avGrDc\\xAeMt]wyCxBaRxG}k@pYmcCrg@wjExo@iwFdBkN~LgeAzK__AvJo{@xc@axDlBoPdAcJdBaOl@}FnTilBvY_eCbf@qcEz@oHjc@swD`BaMrCwUbX}}BnIit@rD}Z|a@uoDdn@alFnCkUv@{GPuArRcaBxDq\\jHwn@j^o~CzIax@dLajAvCs\\pQ{_CbHqmANkCzBug@r@aQhA}]ZuM~BmoAf@ky@Aoc@?qRw@_t@yAgs@aFe}AqAe\\c@uKoHa{AyAaWsImfAsO{}AgNgfAmDuVcRahA{BkMuF{YcR}cAoQa_AaAcF}Qq`AqIy`@iEiRqI}]oEuRqPin@_Ocg@uB}GmLk_@kQih@cN__@}DoKmQgc@sLgYwCiGgZmo@aLiScIaOoVo`@aEkGgLkQuc@ml@sSiXwC}Dsy@weAw@oAcAiAqG{IkEgGgH_LwGuKkDyFqBgDsA}Bg@s@u@wAiVq_@qCkEcHmKsHeKw@cAoDcEoB_CiGmHiByBKMGGel@es@}UoY}O}Qa_@yc@aR_UyOiR_PmRqNwPqa@ye@aMeN}_@id@ca@mb@ePeQ}LsNwGyHyAcBig@em@{NcQY]{CwDcUaXMQOOiFyGqh@an@_h@yk@qe@mi@cVmY{UaZoW_]um@kw@wOoR}kD{dEGGq{BumCcHqIgtAw`BoAsAkm@gs@__AadAgoCmcDmRcUm^kc@eIaKcw@q~@oHyIeoAgxA{JqLq]sa@wf@wo@wxAqeBsWm\\aHyIka@wh@}_@yj@_Ywd@qTqa@aTga@yRs_@gVse@mWmg@sEmKaGmNgQwa@eTil@{Som@kBwFsQgj@aToq@_Ran@}Pml@qPsl@wP_m@s@eCOe@cN}e@aRop@gL{`@seAauD{Mae@_AeDaLq`@m|Gc`V_i@ekBclD}|LkyDuzM_u@yhCeqCs_Kip@ocCqSwt@ySeu@}Nug@qXoaA}K}^aPch@gPkh@qQ{m@}GmVsf@qeBsm@kwBoOck@{Okl@oQkq@wR}r@{s@ugCwq@{aC_U_x@ykBswG{lBg{Gc^ioAkNwf@_EqNuJg]_Nue@}Ky^qLw_@gLi_@aLw_@{G{Ueo@u{Bu`@_vAyhEqhOk_@ktA{^muAwWy`AmqFcrRskEypOu{@c|C_q@{cCi]}mAunEkxOozAalFgg@_fBkhBemGml@{tBowAcdFowAedFok@_oBoPkk@mLk`@ml@upBwxAycF{Tgx@qTsv@y@uCkKka@qFmUuFwTqF}RmJo\\gP}k@mj@koBaYqbAuPcm@abAamDcyAyhFaVsz@}l@evBmZafAaKw^olBa{GoZifAysC_aKsc@uzAwE}O}\\ijAQq@{c@g}Ae@gByIe]gCqJgBcGkAsDoAiDqBkFkAwD}ByHkA_F}DsMwGeQqE}NgjAyrEe_@mxAaf@ygB}j@qrBkOcj@uDaNaHsTqEqNgNib@yMyc@kA{DI[sSgv@oKwa@gZmjAoJk_@{`@mcBcQot@kGsWkTu_AKa@uCoMo[stA}o@qqCm[cuA}c@qmBkWuhA{Jsb@_w@ogDwUscAgb@uhByd@cqBwBiJo`@wcBiR}x@yy@mpD}]y{Am\\azAmR}|@{Ogy@gMas@iZmmBkDgVc@uDgVukBwEkb@q`@mmDcWwxBmPwzAoP}zAiI_t@g@}EaYieCeEy^_Km_AqKogAcD{`@wEkk@_IghAeCg`@oJ}iBgDyo@yLq`CkHsvAuFabAuOckC_Cy]kEmw@kKcnBaA_R}G_uAsOe_DY_GyO_aDsCok@aMieCkUouE{Bkd@sAwWsFugAoAaX}NcwC{QovDsOuzCSeE{S}eEo@gMuI_gB_Emx@gAcUyFahAwBkd@uC}k@aOiwCm@eOa@cIoDws@yAkYyAuYgEix@aZi_GiDmq@sCsj@aT{jE}MsoCmAwVeDcq@kGmpAsDqt@_GclAaCsg@_Cqe@cA_Sa^qpHe@}JgJefBaEuz@aNmrCcJoiBaD}p@iDks@wAoYca@gdIgBc^iBo^uDet@eAoSoBm]cFqeAm@uMkAwWuF{tAeAi[SmF}@yT_@qJsHwpBkEkjAmCqp@}C{p@cEq|@w@yNkKweBoKofB[_FaBmY_AoOoFs_AiIe|AcDyp@o@sMmD_t@c@mIgGsoAcNi~CkAwXs@sPqNsbDkB}`@wIqlByCqr@mDa|@kCal@_Dkt@w@mRIqB{Do_Aw@gRkDgv@kDqt@yD_s@iF}_A_Dah@mEap@cCo]cBqT}Fcu@qAmPgBwVoAgQe@aH?A[sEmCia@iAyRo@aLwAwViA{TO{C_AcSqByc@o@cQiAoXqAm^Ao@uAgc@c@qPa@wQw@_]e@aQaAc\\aAgXiAcXo@aNyA}XoBy]oCca@_Dcd@oEmo@qCwg@]cHgAsToEm|@uBca@wDav@eGyjAgEux@IeBu@kO}AiXm@aKy@eLmA{PgAsLgBeQ_AeI{@kHaCwRsB{N{BiOsEyZiFe_@oD_XgBoOwAkOsAwNsAyRoA_P_@_Hg@qJ_@qQSmPBsOJqPp@oQjBqYhAcM`A_Jz@sGf@}CjC_OpA_GnC}KrBkHrAaEnEyLlAyClCyFpCeG`CkEjAyBrAwB|CwEvCoDxFkHpG{GjSeThOsOjKeLvHuJhGiIrFoIzFkK~EgKzEqLbE}LvDeMhDqNzDmR|B}MrAgKvAaMx@iJz@{IpBgYbEwh@nEoj@fByRpBsRTiBLcA\\qCnAuJnAmJtAeJjCcPfC_Nn@_DdAkFzBgKdDcNjCqKrBoHbDiKzB_Hr@cBpDqIvDiIdLyRXe@|E{GxIwKtZm]dDuDnD_ErHoIvSuUlEaFpe@yh@\\a@xBcCdF{FzJ_L~AgBfSaUdBmCfDiFlAiBfEsGvEgFnB}BzLgNfIcJlFsGbCeDbDkElD}DlAkANM|H{HnIuIhCqCrIiJzCeDb@e@zN{Of@i@bSeUdGuGhH{HtT}UzDeEd@g@",
+                    "precision": 6,
+                    "length": 1193
+                  }
+                },
+                {
+                  "mode": "WALK",
+                  "startTime": "2026-11-06T21:44:00Z",
+                  "endTime": "2026-11-06T21:45:00Z",
+                  "scheduledStartTime": "2026-11-06T21:44:00Z",
+                  "scheduledEndTime": "2026-11-06T21:45:00Z",
+                  "duration": 60,
+                  "distance": 0.0,
+                  "from": {
+                    "name": "Köln Hbf",
+                    "stopId": "de-DELFI_de:05315:11201",
+                    "importance": 0.006867678835988045,
+                    "lat": 50.94303,
+                    "lon": 6.958729000000001,
+                    "level": 1.0,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:44:00Z",
+                    "departure": "2026-11-06T21:44:00Z",
+                    "scheduledArrival": "2026-11-06T21:44:00Z",
+                    "scheduledDeparture": "2026-11-06T21:44:00Z",
+                    "vertexType": "TRANSIT",
+                    "cancelled": false,
+                    "arrivalTimestampReason": "PROPAGATED",
+                    "departureTimestampReason": "PROPAGATED",
+                    "modes": [
+                      "HIGHSPEED_RAIL",
+                      "LONG_DISTANCE",
+                      "COACH",
+                      "NIGHT_RAIL",
+                      "REGIONAL_RAIL",
+                      "SUBURBAN",
+                      "TRAM",
+                      "BUS"
+                    ]
+                  },
+                  "to": {
+                    "name": "END",
+                    "lat": 50.94303,
+                    "lon": 6.95873,
+                    "tz": "Europe/Berlin",
+                    "arrival": "2026-11-06T21:45:00Z",
+                    "scheduledArrival": "2026-11-06T21:45:00Z",
+                    "vertexType": "NORMAL"
+                  },
+                  "realTime": false,
+                  "legGeometry": {
+                    "points": "kbid`BqgvgL?A",
+                    "precision": 6,
+                    "length": 2
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:22:00Z",
+            "endTime": "2026-11-06T21:23:00Z",
+            "scheduledStartTime": "2026-11-06T21:22:00Z",
+            "scheduledEndTime": "2026-11-06T21:23:00Z",
+            "duration": 60,
+            "distance": 22.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_koln_hbf",
+              "parentId": "fr-eurostar-gtfs-plan-de-transport-et-temps-reel_koln_hbf_station_area",
+              "importance": 0.006867678835988045,
+              "lat": 50.943214,
+              "lon": 6.9586015,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:22:00Z",
+              "departure": "2026-11-06T21:22:00Z",
+              "scheduledArrival": "2026-11-06T21:22:00Z",
+              "scheduledDeparture": "2026-11-06T21:22:00Z",
+              "stopCode": "8015458",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "NO_RT_DATA",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:23:00Z",
+              "scheduledArrival": "2026-11-06T21:23:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "{lid`Be}ugLhI}I",
+              "precision": 6,
+              "length": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "Clkhp5at9UViSUApy7kUV5VdGEAyFmRlLURFTEZJX2RlOjA1MzM0OjEwMDg5Ne84RUdiSUBBgnfy6bFdGEBI/IG51wZQuIK51wZaBFdBTEtgAXEAAAAAAADwPwqyAQoHSUNFIDMxORIiMjAyNjExMDZfMjA6MjJfZGUtREVMRklfMzQ2ODU1NzU1NBoWZGUtREVMRklfZGU6MDUzMzQ6MTAwOCE17zhFR2JJQCmCd/LpsV0YQDIXZGUtREVMRklfZGU6MDUzMTU6MTEyMDE5zZIANbV4SUBBO+gSDr3VG0BIsPS41wZQ1Ia51wZaDkhJR0hTUEVFRF9SQUlMYAFpAAAAAAAA8D9xAAAAAAAA8D8KWhoXZGUtREVMRklfZGU6MDUzMTU6MTEyMDEhzZIANbV4SUApO+gSDr3VG0A5zZIANbV4SUBBvcYuUb3VG0BIqJO51wZQ5JO51wZaBFdBTEtgAWkAAAAAAADwPw==",
+        "startTime": "2026-11-06T21:05:00Z",
+        "endTime": "2026-11-06T21:43:00Z",
+        "duration": 2280,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:05:00Z",
+            "endTime": "2026-11-06T21:06:00Z",
+            "scheduledStartTime": "2026-11-06T21:05:00Z",
+            "scheduledEndTime": "2026-11-06T21:06:00Z",
+            "duration": 60,
+            "distance": 5.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:05:00Z",
+              "scheduledDeparture": "2026-11-06T21:05:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:06:00Z",
+              "scheduledArrival": "2026-11-06T21:06:00Z",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "m|ry_BagxrJ????a@_D",
+              "precision": 6,
+              "length": 4
+            }
+          },
+          {
+            "mode": "HIGHSPEED_RAIL",
+            "startTime": "2026-11-06T21:06:00Z",
+            "endTime": "2026-11-06T21:42:00Z",
+            "scheduledStartTime": "2026-11-06T20:36:00Z",
+            "scheduledEndTime": "2026-11-06T21:15:00Z",
+            "duration": 2160,
+            "from": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:06:00Z",
+              "scheduledDeparture": "2026-11-06T20:36:00Z",
+              "track": "9",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PREDICTED",
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:42:00Z",
+              "scheduledArrival": "2026-11-06T21:15:00Z",
+              "track": "4 A-C",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PREDICTED",
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_20:22_de-DELFI_3468557554",
+            "routeId": "de-DELFI_162324_101",
+            "routeShortName": "79",
+            "displayName": "ICE 319",
+            "tripShortName": "ICE 319",
+            "agencyName": "DB Fernverkehr AG",
+            "headsign": "Frankfurt (Main) Hauptbahnhof",
+            "cancelled": false,
+            "realTime": true,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "wwry_BaoxrJsDs[mA{SEcFA{EFiGFkDJ{CJwC`@gIz@qJjAoJzA{JnBkMlAmHxAmJxBmND]fFw\\z@_FhE_Yx@mFfBsLhLus@Lq@nGy_@hH}a@r@eEnFcZ`BuIfC{MvEuUNu@n@}CJk@lGo[tFiX`G}[vIqe@dJkk@bCqQvBiQ|Cu[rAmQvAmWbA{Wj@mWTuWEq\\e@e\\k@iQs@_RsA_UaB_U_C}TgCcTwBaOsBoM_B_JeEoSoEwR}BcJeD}KiDuL_G}QkGwPoLiYwCqGeRk_@sg@o|@s@mAMUeCqEeC{EeEgIgI{P{GiNyDaIcDqG{GwMqQc^cKiSc\\kq@iH}N_Qg^kRm`@iGmMuEsJoE}JcTgf@kTyf@uP}_@aD_HgDgHqDgHiEoI}DgHsDyGoIoN{Sg]sZ}f@ws@mkAwb@yt@wYig@mVib@cIiN}GiMsG_NaWgl@ol@stAed@aeAiEmKkE{KiFkNeFqN{EmNyEuNcEwM{DwMyCiKwCoKsDgNqDmNwLoe@_IwZcIwZaHoVeHiV_EkOwDqOgHeZaE}PeE}PmEiQoEkQcLwc@{l@s~BeNii@qOam@kG_VkG_VqG_VqG_VoGoUoGoU}^ysA_FcRwEaRyEeRsEiRmCaLkCeL_A}DeB{HyDyPoG_ZmGcZiJce@sH_a@yD{SuDaTwCcQqCiQsB{MoB_N}CgUyCmUgCiT}BeTuAoMmA_MaAqKoBcUkBcUQqB}@wLiAkOKsA{B_[_Did@mDsh@sKa_BkDih@aCs]eSeyC_SiwCeAsOgAmPgGi~@}Eqs@mg@{sHaIglA{HmjAcMyjBe@yGoSy{CyUemDwUqlDgP_cCYiEkZ_pE}AgUeNisBoWuzDqAcSsOw}BqYwjE_@sFy@aMuPefCgA{O{T}fDuUulDoBeZ}TsfDyHejAoA}QgB_V{AoR_CkWcBsPsEoa@[gCsAaKQ_BgG}b@eE}WaImg@sIgi@{Iyg@wDcSaEqRyEqS}CkM_DaM}DgNmFwQsCyIuHwU{CkJ_KqZcEgMa@kAEOoPgg@qG{RiN}a@mPgg@cIsUwGwQ}FkOwMa\\uWqn@a\\aw@wU{j@oYar@qJqU{DoJwDoJeIcTgI}TqQmg@yIyUiDcJsLgZaOu^qOk_@sPaa@gEgJeBuDe@aAuCgGkM{VqIeOcIqM{@sAgIoLuFwHoE{FsH{IqGcHeFkFsFmFwFgF_NkLmKoIkOaLsOkKsHwEgJmFkM_HyOyHcPaHwTsI}N{EaN_EeNwDaPaEi\\eIkQuEaQ{EmT}GcTcIs^qPw_@kTsQuLcQ_N}NsL}R}QgSgTaHcIoIwJyQcVwMkRcPcWgF}IcDuFiKuRkMwXkCmGeHmPgFkNgA{C}@qCiVsx@oCcKaIy]mL{k@iEsWcCyP{Fsf@uAuNsAkO}@wKOgCeC_k@}Bse@SuKM}JC{BE_ICyH?kEFsENmJTsJ`@qM\\_MfAq]v@uQfAgQl@yHp@gJz@oJj@iG`LcbA`DoXpB_QnB}PvBaQvBgPpBmMf@cDfD_RbAaFdDyOjDmNpDeNxEcPrEwNnEeMhC_HbGyOnFwMxAmDdI{RfP}]|Og^pE}KpHoRdGqP`FyNbFoOrGiTxIo[l@aClAaFnCoLhCiMbCcN|AmJjAaIjDkV~Hwi@l@aEz@yFdL_y@xD_YrAgKd@eDdMccArIcv@hMskAnDm]pK_gAlAuMrJoeAzIcdAfIadAdHo`AxHedAzNsjCjFgfAnEadAvFc|AjBqn@`CmbAl@y`@f@i[HkHv@{eAHmWBaNBe]UyeAKoUA{Da@aj@iAcfAU{OyAyo@mBop@qE}mAyCgn@cCgf@oLyfBaHo|@{Ca^eDg]iDg]kDc\\aNyiA_EsZqBoNuJ{q@_Gq_@w@oFiPu`AgQc`AkRa_AaSm}@sTm}@uU_|@{Ncg@qTos@{JcZ{Xuw@eI_U_IiSgBwEo]wz@a\\qt@}Zqq@az@whB}KiV{HuPi]wu@{\\wt@u\\it@w]_v@o[gr@{\\mt@kY{n@y[ct@gWoo@uTan@ePig@cLi`@iNii@oNqp@_Nav@wKiw@{CqVcEmb@wGm{@cEk{@_B_j@y@ce@W_g@d@kgAnAkm@hCsr@XaHnFqx@rCs\\bD{\\dJ}y@jMggApIgu@~LqeAvGck@bHim@vUuuBpCuWbXkjCjNmoAjFyd@hGci@tFwe@\\yClU}pBz@yGpGki@lGug@lGgf@fIuo@vFec@~T_gB|RcbBlSsdB|A}OpIgu@fAiJxT{lBjs@{gGnGwj@VgCxe@mbEt]{zCfCuTfCeT`]ewCbEk]v]szCzUqrBbFyb@|x@ycH|X}aCzA{MpGkj@hv@avGrDc\\xAeMt]wyCxBaRxG}k@pYmcCrg@wjExo@iwFdBkN~LgeAzK__AvJo{@xc@axDlBoPdAcJdBaOl@}FnTilBvY_eCbf@qcEz@oHjc@swD`BaMrCwUbX}}BnIit@rD}Z|a@uoDdn@alFnCkUv@{GPuArRcaBxDq\\jHwn@j^o~CzIax@dLajAvCs\\pQ{_CbHqmANkCzBug@r@aQhA}]ZuM~BmoAf@ky@Aoc@?qRw@_t@yAgs@aFe}AqAe\\c@uKoHa{AyAaWsImfAsO{}AgNgfAmDuVcRahA{BkMuF{YcR}cAoQa_AaAcF}Qq`AqIy`@iEiRqI}]oEuRqPin@_Ocg@uB}GmLk_@kQih@cN__@}DoKmQgc@sLgYwCiGgZmo@aLiScIaOoVo`@aEkGgLkQuc@ml@sSiXwC}Dsy@weAw@oAcAiAmNaQaRiVMOoA}Asp@}z@ka@gh@em@ss@kyAofBoRgVs[e_@}UoYeNuP_}@gfA}Q}TaWkZgTeWiEeFsDcEqo@yv@}T}Wqr@ax@a|@}bAwI{J_V{Yaz@mbAy_CmrCqfFehGgR_UwcAumA}G}Hqp@cx@_z@kbAefCizCaSaVa^{b@_IwJsh@an@gw@y}@{v@{|@or@{x@yWe[sdCmyC_Wc\\cXm^mYgb@sW{a@cXie@c\\gn@qQy^uWyl@mEoKaIwSqTgk@{Rkj@uOud@}Lo_@sLc`@wK{^wNkg@qP}k@wPkl@yP_m@wBuHeLia@kQym@gPsk@uPul@oPkl@sPml@wPsl@yMie@kwDczMaxAqdFsgEicOei@skBmoD{cMa~@{`D}x@ouCwsDiuMg]elAwc@s|Aac@u{AwPcm@{P_m@}Nih@_n@_xBweAuwD{eBinGkTaw@}Nch@en@cyBob@kzA}b@y{Ags@afC_\\_jAuUyy@eL}`@cQum@sPul@{Pam@qc@y}A}}@eaDoc@i}AqvAmaFw`AciDa~@saDueAcuDyHuXme@kbBor@adC_ByFe~@qbDaD_LkU{x@aXw_Akj@}oBa|AeoFiF_RwCiKkg@kgBsf@ofByk@}vBU{@wJ{^mk@yvBql@ivB{vDa{MkSmt@_Pej@ghH}|VgnAolEwnAolE}Vuy@a}C{nKkl@uuBqc@o}AsRqq@_Ju[mk@irBig@sgBqR{q@g_A{eDkyAeiFa\\kjAwf@mfBcZeeAgwBquHw\\glAglAgbEeCsIaDaK_o@iuBoSsp@wVyy@aHwUcJ}Zy@sC{XcbAcTcw@mOml@eE{OmPso@yc@qfBeDkMqJs_@gNui@yYcjA{EgR}^gxAi^ctAefA_zDsOqj@u[ujAkA{DI[sSgv@oKwa@gZmjAoJk_@{`@mcBcQot@kGsWkTu_AKa@uCoMo[stA}o@qqCm[cuA}c@qmBkWuhA{Jsb@_w@ogDwUscAgb@uhByd@cqBwBiJo`@wcBiR}x@yy@mpD}]y{Am\\azAmR}|@{Ogy@gMas@iZmmBkDgVc@uDgVukBwEkb@q`@mmDcWwxBmPwzAoP}zAiI_t@g@}EaYieCeEy^_Km_AqKogAcD{`@wEkk@_IghAeCg`@oJ}iBgDyo@yLq`CkHsvAuFabAuOckC_Cy]kEmw@kKcnBaA_R}G_uAsOe_DY_GyO_aDsCok@aMieCkUouE{Bkd@sAwWsFugAoAaX}NcwC{QovDsOuzCSeE{S}eEo@gMuI_gB_Emx@gAcUyFahAwBkd@uC}k@aOiwCm@eOa@cIoDws@yAkYyAuYgEix@aZi_GiDmq@sCsj@aT{jE}MsoCmAwVeDcq@kGmpAsDqt@_GclAaCsg@_Cqe@cA_Sa^qpHe@}JgJefBaEuz@aNmrCcJoiBaD}p@iDks@wAoYca@gdIgBc^iBo^uDet@eAoSoBm]cFqeAm@uMkAwWuF{tAeAi[SmF}@yT_@qJsHwpBkEkjAmCqp@}C{p@cEq|@w@yNkKweBoKofB[_FaBmY_AoOoFs_AiIe|AcDyp@o@sMmD_t@c@mIgGsoAcNi~CkAwXs@sPqNsbDkB}`@wIqlByCqr@mDa|@kCal@_Dkt@w@mRIqB{Do_Aw@gRkDgv@kDqt@yD_s@iF}_A_Dah@mEap@cCo]cBqT}Fcu@qAmPgBwVoAgQe@aH?A[sEmCia@iAyRo@aLwAwViA{ToA_XqByc@o@cQiAoXqAm^Ao@uAgc@c@qPa@wQw@_]e@aQaAc\\aAgXiAcXo@aNyA}XoBy]oCca@_Dcd@oEmo@qCwg@]cHgAsToEm|@uBca@wDav@eGyjAgEux@IeBu@kO}AiXm@aKy@eLmA{PgAsLgBeQ_AeI{@kHaCwRsB{N{BiOsEyZiFe_@oD_XgBoOwAkOsAwNsAyRoA_P_@_Hg@qJ_@qQSmPBsOJqPp@oQjBqYhAcM`A_Jz@sGf@}CjC_OpA_GnC}KrBkHrAaEnEyLlAyClCyFpCeG`CkEjAyBrAwB|CwEvCoDxFkHpG{GjSeThOsOjKeLvHuJhGiIrFoIzFkK~EgKzEqLbE}LvDeMhDqNzDmR|B}MrAgKvAaMx@iJz@{IpBgYbEwh@nEoj@fByRpBsRTiBLcA\\qCnAuJnAmJtAeJjCcPfC_Nn@_DdAkFzBgKdDcNjCqKrBoHbDiKzB_Hr@cBpDqIvDiIdLyRXe@|E{GxIwKtZm]dDuDnD_ErHoIvSuUlEaFpe@yh@\\a@xBcCdF{FzJ_L~AgBfSaUdBmCfDiFlAiBfEsGvEgFnB}BzLgNfIcJlFsGbCeDbDkElD}DlAkANM|H{HnIuIhCqCrIiJzCeDb@e@zN{Of@i@bSeUdGuGhH{HtT}UzDeEd@g@",
+              "precision": 6,
+              "length": 1150
+            }
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:42:00Z",
+            "endTime": "2026-11-06T21:43:00Z",
+            "scheduledStartTime": "2026-11-06T21:42:00Z",
+            "scheduledEndTime": "2026-11-06T21:43:00Z",
+            "duration": 60,
+            "distance": 0.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:42:00Z",
+              "departure": "2026-11-06T21:42:00Z",
+              "scheduledArrival": "2026-11-06T21:15:00Z",
+              "scheduledDeparture": "2026-11-06T21:42:00Z",
+              "track": "4 A-C",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "PREDICTED",
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:43:00Z",
+              "scheduledArrival": "2026-11-06T21:43:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "kbid`BqgvgL?A",
+              "precision": 6,
+              "length": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "Clkhp5at9UViSUApy7kUV5VdGEAyFmRlLURFTEZJX2RlOjA1MzM0OjEwMDg5Ne84RUdiSUBBgnfy6bFdGEBIzIe51wZQiIi51wZaBFdBTEtgAXEAAAAAAADwPwqtAQoDUkU5EiIyMDI2MTEwNl8yMjoxOF9kZS1ERUxGSV8zNDY4OTk4NjkwGhZkZS1ERUxGSV9kZTowNTMzNDoxMDA4ITXvOEVHYklAKYJ38umxXRhAMhdkZS1ERUxGSV9kZTowNTMxNToxMTIwMTnNkgA1tXhJQEE76BIOvdUbQEiIiLnXBlC4oLnXBloNUkVHSU9OQUxfUkFJTGABaQAAAAAAAPA/cQAAAAAAAPA/CloaF2RlLURFTEZJX2RlOjA1MzE1OjExMjAxIc2SADW1eElAKTvoEg691RtAOc2SADW1eElAQb3GLlG91RtASLigudcGUPSgudcGWgRXQUxLYAFpAAAAAAAA8D8=",
+        "startTime": "2026-11-06T21:17:00Z",
+        "endTime": "2026-11-06T22:11:00Z",
+        "duration": 3240,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:17:00Z",
+            "endTime": "2026-11-06T21:18:00Z",
+            "scheduledStartTime": "2026-11-06T21:17:00Z",
+            "scheduledEndTime": "2026-11-06T21:18:00Z",
+            "duration": 60,
+            "distance": 5.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:17:00Z",
+              "scheduledDeparture": "2026-11-06T21:17:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:18:00Z",
+              "scheduledArrival": "2026-11-06T21:18:00Z",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "m|ry_BagxrJ????a@_D",
+              "precision": 6,
+              "length": 4
+            }
+          },
+          {
+            "mode": "REGIONAL_RAIL",
+            "startTime": "2026-11-06T21:18:00Z",
+            "endTime": "2026-11-06T22:10:00Z",
+            "scheduledStartTime": "2026-11-06T21:18:00Z",
+            "scheduledEndTime": "2026-11-06T22:10:00Z",
+            "duration": 3120,
+            "from": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:18:00Z",
+              "scheduledDeparture": "2026-11-06T21:18:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:10:00Z",
+              "scheduledArrival": "2026-11-06T22:10:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_22:18_de-DELFI_3468998690",
+            "routeId": "de-DELFI_de:nrw:re9:_100",
+            "routeShortName": "RE9",
+            "displayName": "RE9",
+            "tripShortName": "010937",
+            "agencyName": "DB Regio AG NRW",
+            "headsign": "Siegen Hbf",
+            "cancelled": false,
+            "realTime": true,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "czry_B{mxrJyDc\\cAeTC}CAcGDaGJaHDmAVuF\\cG`@iFf@kFx@sGpA}IbEyW|DoW^yBbDsSxBgNjFi]^eCnBqMxLcu@Js@`YmaBnLeq@N_A`@{BJm@jCyMtBoJbDcNpByJpCoNVuAHe@|Kwn@lJgk@bC}PtBiQ`Di\\pAiQxA_VhA{Xh@{VPoWAw\\k@_\\e@}Ps@sQoA}TeB_UwBeTmC}SqB}NuBuM{AwIgEoSmEuRkC_K_D}K}CmK{FgQgGwPoL_YwCoGqRe_@gi@o_AgEsHcAeBuUmb@mNwXcVef@cAsBcMeWk@kAqMmXuKgUq@{AeX{k@yNo[iFcL[q@}AkDyEgKkEmJsGuNaJySeB_EgBgE{A{D}BuG}F}QuP}_@aD_HgDgHqDgHiEoI}DgHsDyGoIoN{Sg]sZ}f@ws@mkAwb@yt@wYig@mVib@cIiN}GiMsG_NaWgl@ol@stAed@aeAiEmKkE{KiFkNeFqN{EmNyEuNcEwM{DwMyCiKwCoKsDgNqDmNwLoe@_IwZcIwZaHoVeHiV_EkOwDqOgHeZaE}PeE}PmEiQoEkQcLwc@{l@s~BeNii@qOam@kG_VkG_VqG_VqG_VoGoUoGoU}^ysA_FcRwEaRyEeRsEiRmCaLkCeL_A}DeB{HyDyPoG_ZmGcZiJce@sH_a@yD{SuDaTwCcQqCiQsB{MoB_N}CgUyCmUgCiT}BeTuAoMmA_MaAqKoBcUkBcUQqB}@wLiAkOKsA{B_[_Did@mDsh@sKa_BkDih@aCs]eSeyC_SiwCeAsOgAmPgGi~@}Eqs@mg@{sHaIglA{HmjAcMyjBe@yGoSy{CyUemDwUqlDgP_cCYiEkZ_pE}AgUeNisBoWuzDqAcSsOw}BqYwjE_@sFy@aMuPefCgA{O{T}fDuUulDoBeZ}TsfDyHejAoA}QgB_V{AoR_CkWcBsPsEoa@[gCsAaKQ_BgG}b@eE}WaImg@sIgi@{Iyg@wDcSaEqRyEqSkCwKQs@_DaM}DgNmFwQsCyIuHwU{CkJ_KqZcEgMa@kAEOoPgg@qG{RiN}a@mPgg@cIsUwGwQ}FkOwMa\\uWqn@a\\aw@wU{j@oYar@qJqU{DoJwDoJeIcTgI}TqQmg@yIyUiDcJsLgZaOu^qOk_@sPaa@gEgJeBuDe@aAuCgGkM{VqIeOcIqM{@sAgIoLuFwHoE{FsH{IqGcHeFkFsFmFwFgF_NkLmKoIkOaLsOkKsHwEgJmFkM_HyOyHcPaHwTsI}N{EaN_EeNwDaPaEi\\eIkQuEaQ{EmT}GcTcIs^qPw_@kTsQuLcQ_N}NsL}R}QgSgTaHcIoIwJyQcVwMkRcPcWgF}IcDuFiKuRkMwXkCmGeHmPgFkNgA{C}@qCiVsx@oCcKaIy]mL{k@iEsWcCyP{Fsf@uAuNsAkO}@wKOgCeC_k@}Bse@SuKM}JC{BImIEsIE_RDgRHgLRgLNkJ`@{Nf@yOp@qPbAcRlA_R`A}NhAuNlAcNlAwLrBgSxBuQTgBvBoPrB{NbDuS`A_Gr@eEjC{NpEyUjAwFd@qBxC{MpAmFtBwIxBuIpGgUnGsS~FcQpFcOpL_ZfFoLzNc\\n@uAnM{XdPc_@bOg`@~GeSxH}VdF}QdDsMbDeNpCkMrC_NhFmXnB{KhCsOpFq]l@aEz@yFdL_y@xD_YrAgKd@eDdMccArIcv@hMskAnDm]pK_gAlAuMrJoeAzIcdAfIadAdHo`AxHedAzNsjCjFgfAnEadAvFc|AjBqn@`CmbAl@y`@f@i[HkHv@{eAHmWBaNBe]UyeAKoUA{Da@aj@iAcfAU{OyAyo@mBop@qE}mAyCgn@cCgf@oLyfBaHo|@{Ca^eDg]iDg]kDc\\aNyiA_EsZqBoNuJ{q@_Gq_@w@oFiPu`AgQc`AkRa_AaSm}@sTm}@uU_|@{Ncg@qTos@{JcZ{Xuw@eI_U_IiSgBwEo]wz@a\\qt@}Zqq@az@whB}KiV{HuPi]wu@{\\wt@u\\it@w]_v@o[gr@{\\mt@kY{n@y[ct@gWoo@uTan@ePig@cLi`@iNii@oNqp@_Nav@wKiw@{CqVcEmb@wGm{@cEk{@_B_j@y@ce@W_g@d@kgAnAkm@hCsr@XaHnFqx@rCs\\bD{\\dJ}y@jMggApIgu@~LqeAvGck@bHim@vUuuBpCuWbXkjCjNmoAjFyd@hGci@tFwe@\\yClU}pBz@yGHq@fGyg@lGug@lGgf@fIuo@vFec@~T_gB|RcbBlSsdB|A}OpIgu@fAiJxT{lBjs@{gGnGwj@VgCxe@mbEt]{zCfCuTfCeT`]ewCbEk]v]szCzUqrBbFyb@|x@ycH|X}aCzA{MpGkj@hv@avGrDc\\xAeMt]wyCxBaRxG}k@pYmcCrg@wjExo@iwFdBkN~LgeAzK__AvJo{@xc@axDlBoPdAcJdBaOl@}FnTilBvY_eCbf@qcEz@oHjc@swD`BaMrCwUbX}}BnIit@rD}Z|a@uoDdn@alFnCkUv@{GPuArRcaBxDq\\jHwn@j^o~CzIax@dLajAvCs\\pQ{_CbHqmANkCzBug@r@aQhA}]ZuM~BmoAf@ky@Aoc@?qRw@_t@yAgs@aFe}AqAe\\c@uKoHa{AyAaWsImfAsO{}AgNgfAmDuVcRahA{BkMuF{YcR}cAoQa_AaAcF}Qq`AqIy`@iEiRqI}]oEuRqPin@_Ocg@uB}GmLk_@kQih@cN__@}DoKmQgc@sLgYwCiGgZmo@aLiScIaOoVo`@aEkGgLkQuc@ml@sSiXwC}Dsy@weAw@oAcAiAqG{IkEgGgH_LwGuKkDyFqBgDsA}Bg@s@u@wAiVq_@qCkEcHmKsHeKw@cAoDcEoB_CiGmHiByBKMGGel@es@}UoY}O}Qa_@yc@aR_UyOiR_PmRqNwPqa@ye@aMeN}_@id@ca@mb@ePeQ}LsNwGyHyAcBig@em@{NcQY]{CwDcUaXMQOOiFyGqh@an@_h@yk@qe@mi@cVmY{UaZoW_]um@kw@wOoR}kD{dEGGq{BumCcHqIgtAw`BoAsAkm@gs@__AadAgoCmcDmRcUm^kc@eIaKcw@q~@oHyIeoAgxA{JqLq]sa@wf@wo@wxAqeBsWm\\aHyIka@wh@}_@yj@_Ywd@qTqa@aTga@yRs_@gVse@mWmg@sEmKaGmNgQwa@eTil@{Som@kBwFsQgj@aToq@_Ran@}Pml@qPsl@wP_m@s@eCOe@cN}e@aRop@gL{`@seAauD{Mae@_AeDaLq`@m|Gc`V_i@ekBclD}|LkyDuzM_u@yhCeqCs_Kip@ocCqSwt@ySeu@}Nug@qXoaA}K}^aPch@gPkh@qQ{m@}GmVsf@qeBsm@kwBoOck@{Okl@oQkq@wR}r@{s@ugCwq@{aC_U_x@ykBswG{lBg{Gc^ioAkNwf@_EqNuJg]_Nue@}Ky^qLw_@gLi_@aLw_@{G{Ueo@u{Bu`@_vAyhEqhOk_@ktA{^muAwWy`AmqFcrRskEypOu{@c|C_q@{cCi]}mAunEkxOozAalFgg@_fBkhBemGml@{tBowAcdFowAedFok@_oBoPkk@mLk`@ml@upBwxAycF{Tgx@qTsv@y@uCkKka@qFmUuFwTqF}RmJo\\gP}k@mj@koBaYqbAuPcm@abAamDcyAyhFaVsz@}l@evBmZafAaKw^olBa{GoZifAysC_aKsc@uzAwE}O}\\ijAQq@{c@g}Ae@gByIe]gCqJgBcGkAsDoAiDqBkFkAwD}ByHkA_F}DsMwGeQqE}NgjAyrEe_@mxAaf@ygB}j@qrBkOcj@uDaNaHsTqEqNgNib@yMyc@kA{DI[sSgv@oKwa@gZmjAoJk_@{`@mcBcQot@kGsWkTu_AKa@uCoMo[stA}o@qqCm[cuA}c@qmBkWuhA{Jsb@_w@ogDwUscAgb@uhByd@cqBwBiJo`@wcBiR}x@yy@mpD}]y{Am\\azAmR}|@{Ogy@gMas@iZmmBkDgVc@uDgVukBwEkb@q`@mmDcWwxBmPwzAoP}zAiI_t@g@}EaYieCeEy^_Km_AqKogAcD{`@wEkk@_IghAeCg`@oJ}iBgDyo@yLq`CkHsvAuFabAuOckC_Cy]kEmw@kKcnBaA_R}G_uAsOe_DY_GyO_aDsCok@aMieCkUouE{Bkd@sAwWsFugAoAaX}NcwC{QovDsOuzCSeE{S}eEo@gMuI_gB_Emx@gAcUyFahAwBkd@uC}k@aOiwCm@eOa@cIoDws@yAkYyAuYgEix@aZi_GiDmq@sCsj@aT{jE}MsoCmAwVeDcq@kGmpAsDqt@_GclAaCsg@_Cqe@cA_Sa^qpHe@}JgJefBaEuz@aNmrCcJoiBaD}p@iDks@wAoYca@gdIgBc^iBo^uDet@eAoSoBm]cFqeAm@uMkAwWuF{tAeAi[SmF}@yT_@qJsHwpBkEkjAmCqp@}C{p@cEq|@w@yNkKweBoKofB[_FaBmY_AoOoFs_AiIe|AcDyp@o@sMmD_t@c@mIgGsoAcNi~CkAwXs@sPqNsbDkB}`@wIqlByCqr@mDa|@kCal@_Dkt@w@mRIqB{Do_Aw@gRkDgv@kDqt@yD_s@iF}_A_Dah@mEap@cCo]cBqT}Fcu@qAmPgBwVoAgQe@aH?A[sEmCia@iAyRo@aLwAwViA{TO{C_AcSqByc@o@cQiAoXqAm^Ao@uAgc@c@qPa@wQw@_]e@aQaAc\\aAgXiAcXo@aNyA}XoBy]oCca@_Dcd@oEmo@qCwg@]cHgAsToEm|@uBca@wDav@eGyjAgEux@IeBu@kO}AiXm@aKy@eLmA{PgAsLgBeQ_AeI{@kHaCwRsB{N{BiOsEyZiFe_@oD_XgBoOwAkOsAwNsAyRoA_P_@_Hg@qJ_@qQSmPBsOJqPp@oQjBqYhAcM`A_Jz@sGf@}CjC_OpA_GnC}KrBkHrAaEnEyLlAyClCyFpCeG`CkEjAyBrAwB|CwEvCoDxFkHpG{GjSeThOsOjKeLvHuJhGiIrFoIzFkK~EgKzEqLbE}LvDeMhDqNzDmR|B}MrAgKvAaMx@iJz@{IpBgYbEwh@nEoj@fByRpBsRTiBLcA\\qCnAuJnAmJtAeJjCcPfC_Nn@_DdAkFzBgKdDcNjCqKrBoHbDiKzB_Hr@cBpDqIvDiIdLyRXe@|E{GxIwKtZm]dDuDnD_ErHoIvSuUlEaFpe@yh@\\a@xBcCdF{FzJ_L~AgBfSaUdBmCfDiFlAiBfEsGvEgFnB}BzLgNfIcJlFsGbCeDbDkElD}DlAkANM|H{HnIuIhCqCrIiJzCeDb@e@zN{Of@i@bSeUdGuGhH{HtT}UzDeEd@g@",
+              "precision": 6,
+              "length": 1193
+            }
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T22:10:00Z",
+            "endTime": "2026-11-06T22:11:00Z",
+            "scheduledStartTime": "2026-11-06T22:10:00Z",
+            "scheduledEndTime": "2026-11-06T22:11:00Z",
+            "duration": 60,
+            "distance": 0.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:10:00Z",
+              "departure": "2026-11-06T22:10:00Z",
+              "scheduledArrival": "2026-11-06T22:10:00Z",
+              "scheduledDeparture": "2026-11-06T22:10:00Z",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:11:00Z",
+              "scheduledArrival": "2026-11-06T22:11:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "kbid`BqgvgL?A",
+              "precision": 6,
+              "length": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "regional": {
+    "from": {
+      "name": "START",
+      "lat": 50.76776,
+      "lon": 6.09139,
+      "level": 0.0,
+      "vertexType": "NORMAL"
+    },
+    "to": {
+      "name": "END",
+      "lat": 50.94303,
+      "lon": 6.95873,
+      "level": 0.0,
+      "vertexType": "NORMAL"
+    },
+    "previousPageCursor": "EARLIER|1793997660",
+    "nextPageCursor": "LATER|1794005460",
+    "direct": [],
+    "itineraries": [
+      {
+        "id": "Clkhp5at9UViSUApy7kUV5VdGEAyFmRlLURFTEZJX2RlOjA1MzM0OjEwMDg5Ne84RUdiSUBBgnfy6bFdGEBI+Pq41wZQtPu41wZaBFdBTEtgAXEAAAAAAADwPwqtAQoDUkUxEiIyMDI2MTEwNl8yMTo1MV9kZS1ERUxGSV8zNDY5MTUxOTIxGhZkZS1ERUxGSV9kZTowNTMzNDoxMDA4ITXvOEVHYklAKYJ38umxXRhAMhdkZS1ERUxGSV9kZTowNTMxNToxMTIwMTnNkgA1tXhJQEE76BIOvdUbQEi0+7jXBlCglLnXBloNUkVHSU9OQUxfUkFJTGABaQAAAAAAAPA/cQAAAAAAAPA/CloaF2RlLURFTEZJX2RlOjA1MzE1OjExMjAxIc2SADW1eElAKTvoEg691RtAOc2SADW1eElAQb3GLlG91RtASKCUudcGUNyUudcGWgRXQUxLYAFpAAAAAAAA8D8=",
+        "startTime": "2026-11-06T20:50:00Z",
+        "endTime": "2026-11-06T21:45:00Z",
+        "duration": 3300,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T20:50:00Z",
+            "endTime": "2026-11-06T20:51:00Z",
+            "scheduledStartTime": "2026-11-06T20:50:00Z",
+            "scheduledEndTime": "2026-11-06T20:51:00Z",
+            "duration": 60,
+            "distance": 5.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T20:50:00Z",
+              "scheduledDeparture": "2026-11-06T20:50:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T20:51:00Z",
+              "scheduledArrival": "2026-11-06T20:51:00Z",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "cefig]oo{dsB????{Iaq@",
+              "precision": 7,
+              "length": 4
+            }
+          },
+          {
+            "mode": "REGIONAL_RAIL",
+            "startTime": "2026-11-06T20:51:00Z",
+            "endTime": "2026-11-06T21:44:00Z",
+            "scheduledStartTime": "2026-11-06T20:51:00Z",
+            "scheduledEndTime": "2026-11-06T21:44:00Z",
+            "duration": 3180,
+            "from": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T20:51:00Z",
+              "scheduledDeparture": "2026-11-06T20:51:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:44:00Z",
+              "scheduledArrival": "2026-11-06T21:44:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_21:51_de-DELFI_3469151921",
+            "routeId": "de-DELFI_de:nrw:re1:_100",
+            "routeShortName": "RE1",
+            "displayName": "RE1",
+            "tripShortName": "026839",
+            "agencyName": "National Express",
+            "headsign": "Hamm (Westf), Hauptbahnhof",
+            "cancelled": false,
+            "realTime": true,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "_neig]{s}dsBcy@}aHoTcsEk@op@SapAz@woAvBgyA|@sWnFykAnHipAvIkhAdKqhAfQguApXalBb|@awFnz@ctFbIme@nr@_mEpd@qwCdiAinHxHsh@va@{pCdiC}{OzBoOtcG_w]dfCeuN~CcSpI{e@|BgMtj@yrC|c@_rBxq@cvC`c@quBll@_zCfFsYhBcKb`Cq|MjqB_yLph@urD`d@kvDjq@cdHvX{uD`[ceFdVyaGxKomFzDgtF_@ghHeLy`H{JqrDqOiyDcXczEw^a{Eid@{rEgk@wpE{b@}}Cyc@grCc\\ijB}|@_lE{_AucEgj@kwBiq@a`Ckp@k{B{mA}uDaqAgpDqfCecGmn@_tAibEy`IoeL_dS{}@}~AgTi_@oaFiaJuyC_`GgfFmgK}Sub@glCcqF{LqVspCq}F}}Bw}EmNg[uzFc`Mq}C_|G_hAebCyGqNo\\{t@ccAoyBk~@gqBcuAa|CsmB}nEe_@c{@w_@i}@e[wy@wf@uuAinA{|DuoDehIsq@gyAss@_{Akv@u{Am~@ygBiz@_|Aow@svA}gBazCqoEwmHasGqnKunO{zVidJgyOwjGirKkiFy_JedBoxCexAwmCiuAcuCapFmcMqeMkwYyrJ}{Tg~@_{Bu~@q_CqhA_yCqfAozCadAwyCqbAk{Ck|@orC_z@orCao@izBsn@{{Bgw@{wCev@myC{hCo_K}bB_uG}cBgtGwyAwiFg{AghF{z@}bDmx@odDi{A{nG}{@orD{|@mrDi_AgvDa`AgvDkbCaoJsiMyzf@mvCkfLwdDikMwrAgeFcsAgeFetAydFwtA{dF{sA}_FitA_`Fo~HooYsdAy}DybAw}DwbA{~DiaAa`Euk@qaCyj@{bCuRkz@g_@uaBsx@cqDktAkmGisAcnG{oBi|Jm_B_sIcy@soEuw@}qEwn@{sDyl@gvDac@qsCya@}tCwp@s}Esn@s_F}i@{sEef@urEuYepCkW_kCyS_}Bab@{{E{`@i|EgDkb@uRuhCeVybDyBgYse@ewGsp@etJiu@__Lk}Bk_]{t@e|Kug@kqH{hE{do@}fEorn@{TaeDsUamDcqAexRodAylOisKoo_BwcBmcW_bB}qValCau`@uJ}vAolEk_p@}bFqlu@mbFqfu@ukDcgh@aGi~@{pGwh`Ae\\u}EqvCcjc@atFysy@_Y_hEydDsrf@_iGot~@uH_kAoQalCooDufi@kUogDezEmns@oaFygu@kb@eoGazEmks@iaBonVeXw|Dg_@odF{[_bE}f@csF}]aoDkaA{wI_Hmi@aYaxByDu\\kqAifJ{|@wxFmcB}rKeiB}eLalB}vKsx@ohEu{@sbEccAklEqj@w~BmD_Oiq@mkCaz@ywCwiAuzDam@yjBs_BsbFep@kpBovBcsGs|@amCgIcW}@yC}mDqqKauAoeEuwCq|I}mDmqKycBaaFyvAszDanAecDurCcaHyuFuzMmaHsoP_cF{uLogGm}NyrB_aFyy@{qBgx@}qB}dBqrE{eBizEqxDmsKwjBybFot@gnBcgCooGq_Du{HodDgcIsoDcsIo}@ooBy^ex@sJsS_n@sqAynComFuhBaaDcdBupCoQ_YoeBefCilAa`B{_A}mAm_BukBmtAizAwfAuhAkkAkiAilAwgAcuC{dCo{B}gBsbDiaCmeD_{Be_BobAcoBgiA_oC_yAegDiaB}iDeyAmxEqiB}~CqcAmuCk{@svCex@wiDs{@gdHgeBuvDwaAqsDkcAcuEuxAirEedBe{HinDofIguEsyDkgC}sDguCi~C_gCofEu|DkiEksEsyAedBchBktBa{DofFmrCs`EqjDkpFugAilBcr@{kA_zBycEqnCs`G}j@ksAwzAomDygAwxCiUyo@sRql@ehFe_Q_l@mxBmcB_sHmeC{_Mu}@euFgh@_qDwmA_kKaZ}{CqY{bD{Qy~BiDii@uh@awLif@}`KgE}}B{CmvBc@}e@{AogB_AyhBq@a}Dt@q_EhBmcCtDwcCnDqpBpIw}CrKegDbNunDnTc~DjW_}DvSu~CzUq{CpWovChWchCjc@qiEbe@{yDtEu_@vd@_nDfc@y}Cdr@omEdSkoApOy|@lj@{}CdaA_cFvVclApJsb@do@wsCnXsiAvc@ujBre@{iBltAc}ExsAemEdoAgtDnjAq`DpfC{lGpgA_fCr}CgbHdNcZxoCwaGxjD}_Ir`DqkI|xAeiEfaB}mFnfAk|D|r@uqCjr@wvCxl@wnChm@_uCbhAm}Fta@m_Cbj@qeDvjAupHjMu{@nQamA|bCsbQ|x@}bGtYoyBpJcs@xlCahTpiBsfPfnCi}Vpu@}nHz|BcoUjWarCjsBu_UzkBqrTleBsqT|zA}mSt`B_sT~}Casj@xhAkgUr_AwqTvlA}a\\v`@}zMxg@oaTbM}pItK{yG`Bg}AdPmcUrBisFTwuCn@wlH{E_cUqBk`FSmy@{IumLaVgfUcFygDyZigNqa@_nNs`ActWco@wwMih@igKyeCom_@kyAmeRuo@{uHas@omH_t@gmH}t@mbH}uCgkV}z@msGsb@uyCmsBc|NgoAedIqP}iAclDcpSiuDgjSw`Ek_SogE{oRswEkoR}aF{`Rw}C}oKqvEalOouBcnGwaGgvPeeBszE}bBsjEo_@obAapHgtQeaHsvOwvGmxNwmQ}``@_`C_hFabBmoDanH_cPuiHixOqgHctOurHydPc|Gq_OmiHwuO_gGq}Mi_HarOoqFidNswEguMsjDcrKsbCilI}wCcfL_zCsnNguCwePk~B_rPwo@ojFk|@kaJmvAw{Q{{@gzQk]kmLyP_|JoF}nKpJ}rU`XunM|i@gcOlGqyAriAs~Prm@cgHjr@ejHxnB}kQhnCqqU`iBk}OxjC_aUtvA}wLzyAinMpbFabd@tl@muFbzFgqj@`yC{bXvhAuyJxqAwcLblAmbKpHco@l_Fkrb@pQuwAbBqNhqAuvKtsAivK|rAcgKveBweNrlA}hJzzE}n_@`fEg~]nkEww^n\\{gDvhB}}OdUcpBjyE{ia@pjOmwqAftAytLbF_i@dcK{a|@brHsuo@ti@_xEli@irEjkHaqn@n|@}nHprHeso@lcFwbc@nfAaeJhbQwnzA~aGy|g@x[qsC|tAaqLvgPeevArw@cbHd[_mCvqHyjo@de@k}DxvAk`M~hGokh@huKit~@xfNgrlAb_@yxC`kCw}Tj_Cw~RztBc|QxnJkyx@ta@inD|T}mBj^q_DzMsnA|uE}ca@pjGc{h@bfKul|@hQs}AxjJmux@~]mkCzl@sbFdzFitf@phBctOdw@ivGd|Iafv@xvMsaiA`l@u~ErPcxAhDyYdcEit]hy@qfHv|Ag|MnxHgzp@dlBkyPzbC{mVrn@{fHdxDahg@rzAipWnCek@xe@yuKdOssDfVmtH|G}qCvf@kcXnKqfQGwkJGacEmPmpO{Z}iOseAul\\cY{bH}Iw}Bw}Aqw[k[_pFiiBeiUgeDos\\iwCygUuu@ukF{}DwyUaf@wnCqkAskGe~DmpT_xDu_SsSgfAq|DqnSshBoqIo~@w_EihBwtHc`AkcEmnDmxM{~CkpK_d@cxAmeC_cI}vDa|KgvCs~Hiz@m|BkwDeiJ}fCweGwn@erAwoGccNqaC{iE_dBs_DajFknIk{@srAqcCuvDenJqeM{lEa|Fmn@cz@oiQ{bUyPaX}SeVktAukB__AiqAy{Au`C}uAe~Bwt@kmA}b@ks@kYof@oKeOyOcZwgFodIwl@{~@qzAo{B}~AwxB{PqTqu@_|@ab@}f@_rAu}Aq`@ge@qBcCgAsAecMuhOgdFihGohDk|Dy_IqnJe}Dk{EqgD_`EaiDuaEazCmpDuxI{bKykCsvCchIgtJutIqaJ_kDwtDcjCa{CkvAkaBc[g^erKylMw}CgtDgGuHqo@ex@g|EwyFsCoDsCiDohAcwAm~KuuM{xKq~Ly`KogLcfFogGadFwmGatFakHiqMmrPsfDabEw`u@uy|@mAwAs|e@}qk@{yAkhBmsYip]_XuYeoMoiOu~RiqT{al@ykr@_aEe|EmyHsjJ_eBswBkpPqzRq}AakBeaXi{ZyuB{fCspHkyIilKofNi`[q`_@guFceHsyAgkB_wIu`LqhIeuL_cGqxJwvEkxImqEquIeeEceIogFeaKesFssKaaA_{B}oAiyCkuDszI_sEodMyoEooMs`@_mAmyDooLiqEqwNi}DwuM_rDqeMsnDegM{pDekMcOoh@sC}JmvCgdKo}DcnN}cCwqI}`U}{w@ssCo{JkS}r@iaConIoexAgjeF_cL{x`@abu@qjjCyfy@mssCa{Okaj@aul@oewBglN_lh@ulE}wOunEg}Om~CyuKm~FaxSm`Ck~HcjDkzK}jDy|KuxDqsMwxAciF_kKu`_@oqMsrd@adDwxLggDmdMcxDwvNkdEufO_pOqui@ozNu{g@wzEcyPe_a@kuvAwia@eywAkvH_bXsxCqlKc{@qzCatBwmHcuCyaK_`Cc}H}fCwfIocCcbIoaCafIwwAcdFaaNs}e@}oImeZ{`~@c~aD{bIutY{}H{_ZavFaqSowjAe~bEg}~@eqdDu}Qyap@}rN}oh@mnHitWy{_As|fD{q[yaiAuqKae_@q|_@{lsAkeMwyc@ctZirfAetZyrfAq{Lg_b@anDwzLqeCmlIceMapb@u`[aofAsyEq{PawEakPaQum@szBawIijAq_FmlAexEmjAufEaqBweH_lDi`MaqLubb@mcG_cTepD_lMi}S{ku@ed[_ahAweFesQujMagd@eqGmeUmwBi|Hmfa@swwAyqGihUkom@}rwBgmJat[cbAahDijHqpVaEiNsoJgm\\{J{_@ekBslHoi@_sBa_@ipAgWcw@{Wgt@ob@ihA}Vmx@cf@maB_WsdAiz@gqCavAauDs`Ae~C_pVmeaAk`Ie}ZcfKgw_@avLkbc@{bDinLcx@suCmyAgwEg`Aa{C{wCc`J_sC_oJqVyy@oBuGkmEggP_|BszI_oGoqV_rB{bIyqIkk^mtDwuOorAeuFwtE}eSuB{I_n@{oCg|GkwYghNexl@o{Gk|YapJopa@_sFa`V_vBgcJsnPets@wbFkmTm_Jw_`@wxJysb@sd@opBcnIgn^e`EgbQakQsmv@qtH}~[}dHym[}aEejRkgD}eQkmCggOkpGioa@st@qgFgJ{w@kgF_~`@}bAq`JinIoou@epFm`e@gmDkt[mnDuv[cfB{pOsKgdAecGa~h@e}@u}HqvB}bS_}B{sUer@yqIobAuzLwbBu{U}h@kkIcrB{l`@is@agNqiCong@y|AikZykAm}SyeDkxj@ag@gsHg~@{rPg{Biva@oSm}DcxAa{YceDm`q@iGgoAegDsrq@om@i|LekC{}h@__Fm`bA_f@utJuXavFikA{uU_XyyFo~Cgpn@w{Dijx@keDsso@oEc}@eoEgd}@_NimCmjBeo_@mz@a}P{Ug|EylAsyU}d@wtJum@q`Mu_Dkrn@qMm`DqIudB_v@anO}ZwfGi[gjGi}@}{PmmG}aoAgt@{wNom@csLeqEou~@stCkel@sWqlFyr@_tNqrAimXkw@wvOqnAkbWeh@euK_g@q`KwSggEsuHin~AeKovBeoBwf_@}{@ysQouCkam@inBoh`@oq@irN_t@mjOwZygGatIwsdBu_@ovH_`@}yHgx@_sOkT{kEeb@ooHofAk`UcM_rCyVevFwkA_zY_UwyGiEqiAgR}xEyHasBg_Bepb@w~@spVmk@}nNup@{qNc|@efRePs}Cc{Bib_@a|Bwi_@yGceAc]kgG_SkdDmjAeeSefByb\\er@{pNaNiqCku@ypOwIigByqAieXevCoxp@wVg`GeOkoD}zCicr@o`@qrIkjBgfa@mo@mbOou@uaRoj@qaMgq@euO}OeaEgBqb@az@gdSsPs_Eut@mgPot@ivO_y@agOghAohSyp@iyKk_AyiNkh@{oHc^yvEknAa|O{XimDs_@ylFaXsuDwJcyACYsGgaAak@cvIeVeeE}MkaCoZwlFgVoyE{C}o@eSghE{b@}nJ{MstDyU{}FyXuyHYyM{YciJiJunDcI_{DuP_kHgKksDiSibH{Se{F{UwzFaNauCk[ybGya@esHal@ctI_q@krJa`A_cNul@qvKiHszA_UwvEi`AqeRqc@atIqx@cfPaqAstVs}@a`QiB}^{O{bD{[_|FkM{wBoQibCmW}qDcUogCs_@_uDeSodBuQ_}Ayg@odEac@u}Cwe@_bD}`A}tGmhAgaI_v@sxFe_@cdD_[_cDcYq|C_Y}dEyWciD_IqxAuKwrBkI{xD}D_mDl@meDjBonDpN_xDv`@aiGrV{kChScmBrQcuAzKsp@lj@}~CtXcoAdl@c`Chc@{|AhYk{@l_AsiCvW{n@nk@imAhl@}pArg@m~@`Wke@|Xkd@rp@ibAln@kv@fmAo|AjtAwwAvjEcsE`bDceD~zBobCp`B}sB|qAmfB|jAugB`nAa{BtdAqyBvcAqfCp|@_jClx@_mC`t@ozCvy@qaEdf@gtCfYoyBvZwkCbQkpBrQwkBzb@ceG|{@s`Lf`A_rLp_@}dEpb@wcExEu_@jCeTdH_m@|WqsBhXuqBpY}nB~j@wiDti@guCxMwp@dUgiApe@kyBtr@_vCrj@w|Bfc@i~Apr@{yBve@eyAhO{]vv@qhB~w@kfB|bC_eEfGuJddAexArkBs~BzsGkoHhr@kw@lv@g{@f_BchBnnEwaFn_AieAf`KqaLjHeIfe@qh@vfA}mAvuBw`C~\\s_@jiEw{E`_@ik@xs@}gAzVa`@l}@cuApbAwgAlb@gf@hiCwwCteBgnBliA}tAnh@wr@`r@w~@`u@kz@lWwV|C{CpbBsaBfhBwiBzi@ul@diBgpBro@yr@dJ{J|}CqgDvKoL`hE{|EzpAsuAb|AmaB|wEodFvy@a}@|JsK",
+              "precision": 7,
+              "length": 1193
+            }
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:44:00Z",
+            "endTime": "2026-11-06T21:45:00Z",
+            "scheduledStartTime": "2026-11-06T21:44:00Z",
+            "scheduledEndTime": "2026-11-06T21:45:00Z",
+            "duration": 60,
+            "distance": 0.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:44:00Z",
+              "departure": "2026-11-06T21:44:00Z",
+              "scheduledArrival": "2026-11-06T21:44:00Z",
+              "scheduledDeparture": "2026-11-06T21:44:00Z",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:45:00Z",
+              "scheduledArrival": "2026-11-06T21:45:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "w`dtj]stgvcC?S",
+              "precision": 7,
+              "length": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "Clkhp5at9UViSUApy7kUV5VdGEAyFmRlLURFTEZJX2RlOjA1MzM0OjEwMDg5Ne84RUdiSUBBgnfy6bFdGEBIzIe51wZQiIi51wZaBFdBTEtgAXEAAAAAAADwPwqtAQoDUkU5EiIyMDI2MTEwNl8yMjoxOF9kZS1ERUxGSV8zNDY4OTk4NjkwGhZkZS1ERUxGSV9kZTowNTMzNDoxMDA4ITXvOEVHYklAKYJ38umxXRhAMhdkZS1ERUxGSV9kZTowNTMxNToxMTIwMTnNkgA1tXhJQEE76BIOvdUbQEiIiLnXBlC4oLnXBloNUkVHSU9OQUxfUkFJTGABaQAAAAAAAPA/cQAAAAAAAPA/CloaF2RlLURFTEZJX2RlOjA1MzE1OjExMjAxIc2SADW1eElAKTvoEg691RtAOc2SADW1eElAQb3GLlG91RtASLigudcGUPSgudcGWgRXQUxLYAFpAAAAAAAA8D8=",
+        "startTime": "2026-11-06T21:17:00Z",
+        "endTime": "2026-11-06T22:11:00Z",
+        "duration": 3240,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:17:00Z",
+            "endTime": "2026-11-06T21:18:00Z",
+            "scheduledStartTime": "2026-11-06T21:17:00Z",
+            "scheduledEndTime": "2026-11-06T21:18:00Z",
+            "duration": 60,
+            "distance": 5.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:17:00Z",
+              "scheduledDeparture": "2026-11-06T21:17:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:18:00Z",
+              "scheduledArrival": "2026-11-06T21:18:00Z",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "cefig]oo{dsB????{Iaq@",
+              "precision": 7,
+              "length": 4
+            }
+          },
+          {
+            "mode": "REGIONAL_RAIL",
+            "startTime": "2026-11-06T21:18:00Z",
+            "endTime": "2026-11-06T22:10:00Z",
+            "scheduledStartTime": "2026-11-06T21:18:00Z",
+            "scheduledEndTime": "2026-11-06T22:10:00Z",
+            "duration": 3120,
+            "from": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:18:00Z",
+              "scheduledDeparture": "2026-11-06T21:18:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:10:00Z",
+              "scheduledArrival": "2026-11-06T22:10:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_22:18_de-DELFI_3468998690",
+            "routeId": "de-DELFI_de:nrw:re9:_100",
+            "routeShortName": "RE9",
+            "displayName": "RE9",
+            "tripShortName": "010937",
+            "agencyName": "DB Regio AG NRW",
+            "headsign": "Siegen Hbf",
+            "cancelled": false,
+            "realTime": true,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "_neig]{s}dsBcy@}aHoTcsEk@op@SapAz@woAvBgyA|@sWnFykAnHipAvIkhAdKqhAfQguApXalBb|@awFnz@ctFbIme@nr@_mEpd@qwCdiAinHxHsh@va@{pCdiC}{OzBoOtcG_w]dfCeuN~CcSpI{e@|BgMtj@yrC|c@_rBxq@cvC`c@quBll@_zCfFsYhBcKb`Cq|MjqB_yLph@urD`d@kvDjq@cdHvX{uD`[ceFdVyaGxKomFzDgtF_@ghHeLy`H{JqrDqOiyDcXczEw^a{Eid@{rEgk@wpE{b@}}Cyc@grCc\\ijB}|@_lE{_AucEgj@kwBiq@a`Ckp@k{B{mA}uDaqAgpDqfCecGmn@_tAibEy`IoeL_dS{}@}~AgTi_@oaFiaJuyC_`GgfFmgK}Sub@glCcqF{LqVspCq}F}}Bw}EmNg[uzFc`Mq}C_|G_hAebCyGqNo\\{t@ccAoyBk~@gqBcuAa|CsmB}nEe_@c{@w_@i}@e[wy@wf@uuAinA{|DuoDehIsq@gyAss@_{Akv@u{Am~@ygBiz@_|Aow@svA}gBazCqoEwmHasGqnKunO{zVidJgyOwjGirKkiFy_JedBoxCexAwmCiuAcuCapFmcMqeMkwYyrJ}{Tg~@_{Bu~@q_CqhA_yCqfAozCadAwyCqbAk{Ck|@orC_z@orCao@izBsn@{{Bgw@{wCev@myC{hCo_K}bB_uG}cBgtGwyAwiFg{AghF{z@}bDmx@odDi{A{nG}{@orD{|@mrDi_AgvDa`AgvDkbCaoJsiMyzf@mvCkfLwdDikMwrAgeFcsAgeFetAydFwtA{dF{sA}_FitA_`Fo~HooYsdAy}DybAw}DwbA{~DiaAa`Euk@qaCyj@{bCuRkz@g_@uaBsx@cqDktAkmGisAcnG{oBi|Jm_B_sIcy@soEuw@}qEwn@{sDyl@gvDac@qsCya@}tCwp@s}Esn@s_F}i@{sEef@urEuYepCkW_kCyS_}Bab@{{E{`@i|EgDkb@uRuhCeVybDyBgYse@ewGsp@etJiu@__Lk}Bk_]{t@e|Kug@kqH{hE{do@}fEorn@{TaeDsUamDcqAexRodAylOisKoo_BwcBmcW_bB}qValCau`@uJ}vAolEk_p@}bFqlu@mbFqfu@ukDcgh@aGi~@{pGwh`Ae\\u}EqvCcjc@atFysy@_Y_hEydDsrf@_iGot~@uH_kAoQalCooDufi@kUogDezEmns@oaFygu@kb@eoGazEmks@iaBonVeXw|Dg_@odF{[_bE}f@csF}]aoDkaA{wI_Hmi@aYaxByDu\\kqAifJ{|@wxFmcB}rKeiB}eLalB}vKsx@ohEu{@sbEccAklEqj@w~BmD_Oiq@mkCaz@ywCwiAuzDam@yjBs_BsbFep@kpBovBcsGs|@amCgIcW}@yC}mDqqKauAoeEuwCq|I}mDmqKycBaaFyvAszDanAecDurCcaHyuFuzMmaHsoP_cF{uLogGm}NyrB_aFyy@{qBgx@}qB}dBqrE{eBizEqxDmsKwjBybFot@gnBcgCooGq_Du{HodDgcIsoDcsIo}@ooBy^ex@sJsS_n@sqAynComFuhBaaDcdBupCoQ_YoeBefCilAa`B{_A}mAm_BukBmtAizAwfAuhAkkAkiAilAwgAcuC{dCo{B}gBsbDiaCmeD_{Be_BobAcoBgiA_oC_yAegDiaB}iDeyAmxEqiB}~CqcAmuCk{@svCex@wiDs{@gdHgeBuvDwaAqsDkcAcuEuxAirEedBe{HinDofIguEsyDkgC}sDguCi~C_gCofEu|DkiEksEsyAedBchBktBa{DofFmrCs`EqjDkpFugAilBcr@{kA_zBycEqnCs`G}j@ksAwzAomDygAwxCiUyo@sRql@ehFe_Q_l@mxBmcB_sHmeC{_Mu}@euFgh@_qDwmA_kKaZ}{CqY{bD{Qy~BiDii@uh@awLif@}`KgE}}B{CmvBc@}e@{AogB_AyhBq@a}Dt@q_EhBmcCtDwcCnDqpBpIw}CrKegDbNunDnTc~DjW_}DvSu~CzUq{CpWovChWchCjc@qiEbe@{yDtEu_@vd@_nDfc@y}Cdr@omEdSkoApOy|@lj@{}CdaA_cFvVclApJsb@do@wsCnXsiAvc@ujBre@{iBltAc}ExsAemEdoAgtDnjAq`DpfC{lGpgA_fCr}CgbHdNcZxoCwaGxjD}_Ir`DqkI|xAeiEfaB}mFnfAk|D|r@uqCjr@wvCxl@wnChm@_uCbhAm}Fta@m_Cbj@qeDvjAupHjMu{@nQamA|bCsbQ|x@}bGtYoyBpJcs@xlCahTpiBsfPfnCi}Vpu@}nHz|BcoUjWarCjsBu_UzkBqrTleBsqT|zA}mSt`B_sT~}Casj@xhAkgUr_AwqTvlA}a\\v`@}zMxg@oaTbM}pItK{yG`Bg}AdPmcUrBisFTwuCn@wlH{E_cUqBk`FSmy@{IumLaVgfUcFygDyZigNqa@_nNs`ActWco@wwMih@igKyeCom_@kyAmeRuo@{uHas@omH_t@gmH}t@mbH}uCgkV}z@msGsb@uyCmsBc|NgoAedIqP}iAclDcpSiuDgjSw`Ek_SogE{oRswEkoR}aF{`Rw}C}oKqvEalOouBcnGwaGgvPeeBszE}bBsjEo_@obAapHgtQeaHsvOwvGmxNwmQ}``@_`C_hFabBmoDanH_cPuiHixOqgHctOurHydPc|Gq_OmiHwuO_gGq}Mi_HarOoqFidNswEguMsjDcrKsbCilI}wCcfL_zCsnNguCwePk~B_rPwo@ojFk|@kaJmvAw{Q{{@gzQk]kmLyP_|JoF}nKpJ}rU`XunM|i@gcOlGqyAriAs~Prm@cgHjr@ejHxnB}kQhnCqqU`iBk}OxjC_aUtvA}wLzyAinMpbFabd@tl@muFbzFgqj@`yC{bXvhAuyJxqAwcLblAmbKpHco@l_Fkrb@pQuwAbBqNhqAuvKtsAivK|rAcgKveBweNrlA}hJzzE}n_@`fEg~]nkEww^n\\{gDvhB}}OdUcpBjyE{ia@pjOmwqAftAytLbF_i@dcK{a|@brHsuo@ti@_xEli@irEjkHaqn@n|@}nHprHeso@lcFwbc@nfAaeJhbQwnzA~aGy|g@x[qsC|tAaqLvgPeevArw@cbHd[_mCvqHyjo@de@k}DxvAk`M~hGokh@huKit~@xfNgrlAb_@yxC`kCw}Tj_Cw~RztBc|QxnJkyx@ta@inD|T}mBj^q_DzMsnA|uE}ca@pjGc{h@bfKul|@hQs}AxjJmux@~]mkCzl@sbFdzFitf@phBctOdw@ivGd|Iafv@xvMsaiA`l@u~ErPcxAhDyYdcEit]hy@qfHv|Ag|MnxHgzp@dlBkyPzbC{mVrn@{fHdxDahg@rzAipWnCek@xe@yuKdOssDfVmtH|G}qCvf@kcXnKqfQGwkJGacEmPmpO{Z}iOseAul\\cY{bH}Iw}Bw}Aqw[k[_pFiiBeiUgeDos\\iwCygUuu@ukF{}DwyUaf@wnCqkAskGe~DmpT_xDu_SsSgfAq|DqnSshBoqIo~@w_EihBwtHc`AkcEmnDmxM{~CkpK_d@cxAmeC_cI}vDa|KgvCs~Hiz@m|BkwDeiJ}fCweGwn@erAwoGccNqaC{iE_dBs_DajFknIk{@srAqcCuvDenJqeM{lEa|Fmn@cz@oiQ{bUyPaX}SeVktAukB__AiqAy{Au`C}uAe~Bwt@kmA}b@ks@kYof@oKeOyOcZwgFodIwl@{~@qzAo{B}~AwxB{PqTqu@_|@ab@}f@_rAu}Aq`@ge@qBcCgAsAecMuhOgdFihGohDk|Dy_IqnJe}Dk{EqgD_`EaiDuaEazCmpDuxI{bKykCsvCchIgtJutIqaJ_kDwtDcjCa{CkvAkaBc[g^erKylMw}CgtDgGuHqo@ex@g|EwyFsCoDsCiDohAcwAm~KuuM{xKq~Ly`KogLcfFogGadFwmGatFakHiqMmrPsfDabEw`u@uy|@mAwAs|e@}qk@{yAkhBmsYip]_XuYeoMoiOu~RiqT{al@ykr@_aEe|EmyHsjJ_eBswBkpPqzRq}AakBeaXi{ZyuB{fCspHkyIilKofNi`[q`_@guFceHsyAgkB_wIu`LqhIeuL_cGqxJwvEkxImqEquIeeEceIogFeaKesFssKaaA_{B}oAiyCkuDszI_sEodMyoEooMs`@_mAmyDooLiqEqwNi}DwuM_rDqeMsnDegM{pDekMcOoh@sC}JmvCgdKo}DcnN}cCwqI}`U}{w@ssCo{JkS}r@iaConIoexAgjeF_cL{x`@abu@qjjCyfy@mssCa{Okaj@aul@oewBglN_lh@ulE}wOunEg}Om~CyuKm~FaxSm`Ck~HcjDkzK}jDy|KuxDqsMwxAciF_kKu`_@oqMsrd@adDwxLggDmdMcxDwvNkdEufO_pOqui@ozNu{g@wzEcyPe_a@kuvAwia@eywAkvH_bXsxCqlKc{@qzCatBwmHcuCyaK_`Cc}H}fCwfIocCcbIoaCafIwwAcdFaaNs}e@}oImeZ{`~@c~aD{bIutY{}H{_ZavFaqSowjAe~bEg}~@eqdDu}Qyap@}rN}oh@mnHitWy{_As|fD{q[yaiAuqKae_@q|_@{lsAkeMwyc@ctZirfAetZyrfAq{Lg_b@anDwzLqeCmlIceMapb@u`[aofAsyEq{PawEakPaQum@szBawIijAq_FmlAexEmjAufEaqBweH_lDi`MaqLubb@mcG_cTepD_lMi}S{ku@ed[_ahAweFesQujMagd@eqGmeUmwBi|Hmfa@swwAyqGihUkom@}rwBgmJat[cbAahDijHqpVaEiNsoJgm\\{J{_@ekBslHoi@_sBa_@ipAgWcw@{Wgt@ob@ihA}Vmx@cf@maB_WsdAiz@gqCavAauDs`Ae~C_pVmeaAk`Ie}ZcfKgw_@avLkbc@{bDinLcx@suCmyAgwEg`Aa{C{wCc`J_sC_oJqVyy@oBuGkmEggP_|BszI_oGoqV_rB{bIyqIkk^mtDwuOorAeuFwtE}eSuB{I_n@{oCg|GkwYghNexl@o{Gk|YapJopa@_sFa`V_vBgcJsnPets@wbFkmTm_Jw_`@wxJysb@sd@opBcnIgn^e`EgbQakQsmv@qtH}~[}dHym[}aEejRkgD}eQkmCggOkpGioa@st@qgFgJ{w@kgF_~`@}bAq`JinIoou@epFm`e@gmDkt[mnDuv[cfB{pOsKgdAecGa~h@e}@u}HqvB}bS_}B{sUer@yqIobAuzLwbBu{U}h@kkIcrB{l`@is@agNqiCong@y|AikZykAm}SyeDkxj@ag@gsHg~@{rPg{Biva@oSm}DcxAa{YceDm`q@iGgoAegDsrq@om@i|LekC{}h@__Fm`bA_f@utJuXavFikA{uU_XyyFo~Cgpn@w{Dijx@keDsso@oEc}@eoEgd}@_NimCmjBeo_@mz@a}P{Ug|EylAsyU}d@wtJum@q`Mu_Dkrn@qMm`DqIudB_v@anO}ZwfGi[gjGi}@}{PmmG}aoAgt@{wNom@csLeqEou~@stCkel@sWqlFyr@_tNqrAimXkw@wvOqnAkbWeh@euK_g@q`KwSggEsuHin~AeKovBeoBwf_@}{@ysQouCkam@inBoh`@oq@irN_t@mjOwZygGatIwsdBu_@ovH_`@}yHgx@_sOkT{kEeb@ooHofAk`UcM_rCyVevFwkA_zY_UwyGiEqiAgR}xEyHasBg_Bepb@w~@spVmk@}nNup@{qNc|@efRePs}Cc{Bib_@a|Bwi_@yGceAc]kgG_SkdDmjAeeSefByb\\er@{pNaNiqCku@ypOwIigByqAieXevCoxp@wVg`GeOkoD}zCicr@o`@qrIkjBgfa@mo@mbOou@uaRoj@qaMgq@euO}OeaEgBqb@az@gdSsPs_Eut@mgPot@ivO_y@agOghAohSyp@iyKk_AyiNkh@{oHc^yvEknAa|O{XimDs_@ylFaXsuDwJcyACYsGgaAak@cvIeVeeE}MkaCoZwlFgVoyE{C}o@eSghE{b@}nJ{MstDyU{}FyXuyHYyM{YciJiJunDcI_{DuP_kHgKksDiSibH{Se{F{UwzFaNauCk[ybGya@esHal@ctI_q@krJa`A_cNul@qvKiHszA_UwvEi`AqeRqc@atIqx@cfPaqAstVs}@a`QiB}^{O{bD{[_|FkM{wBoQibCmW}qDcUogCs_@_uDeSodBuQ_}Ayg@odEac@u}Cwe@_bD}`A}tGmhAgaI_v@sxFe_@cdD_[_cDcYq|C_Y}dEyWciD_IqxAuKwrBkI{xD}D_mDl@meDjBonDpN_xDv`@aiGrV{kChScmBrQcuAzKsp@lj@}~CtXcoAdl@c`Chc@{|AhYk{@l_AsiCvW{n@nk@imAhl@}pArg@m~@`Wke@|Xkd@rp@ibAln@kv@fmAo|AjtAwwAvjEcsE`bDceD~zBobCp`B}sB|qAmfB|jAugB`nAa{BtdAqyBvcAqfCp|@_jClx@_mC`t@ozCvy@qaEdf@gtCfYoyBvZwkCbQkpBrQwkBzb@ceG|{@s`Lf`A_rLp_@}dEpb@wcExEu_@jCeTdH_m@|WqsBhXuqBpY}nB~j@wiDti@guCxMwp@dUgiApe@kyBtr@_vCrj@w|Bfc@i~Apr@{yBve@eyAhO{]vv@qhB~w@kfB|bC_eEfGuJddAexArkBs~BzsGkoHhr@kw@lv@g{@f_BchBnnEwaFn_AieAf`KqaLjHeIfe@qh@vfA}mAvuBw`C~\\s_@jiEw{E`_@ik@xs@}gAzVa`@l}@cuApbAwgAlb@gf@hiCwwCteBgnBliA}tAnh@wr@`r@w~@`u@kz@lWwV|C{CpbBsaBfhBwiBzi@ul@diBgpBro@yr@dJ{J|}CqgDvKoL`hE{|EzpAsuAb|AmaB|wEodFvy@a}@|JsK",
+              "precision": 7,
+              "length": 1193
+            }
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T22:10:00Z",
+            "endTime": "2026-11-06T22:11:00Z",
+            "scheduledStartTime": "2026-11-06T22:10:00Z",
+            "scheduledEndTime": "2026-11-06T22:11:00Z",
+            "duration": 60,
+            "distance": 0.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:10:00Z",
+              "departure": "2026-11-06T22:10:00Z",
+              "scheduledArrival": "2026-11-06T22:10:00Z",
+              "scheduledDeparture": "2026-11-06T22:10:00Z",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:11:00Z",
+              "scheduledArrival": "2026-11-06T22:11:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "w`dtj]stgvcC?S",
+              "precision": 7,
+              "length": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "Clkhp5at9UViSUApy7kUV5VdGEAyFmRlLURFTEZJX2RlOjA1MzM0OjEwMDg5Ne84RUdiSUBBgnfy6bFdGEBIiJe51wZQxJe51wZaBFdBTEtgAXEAAAAAAADwPwqtAQoDUkUxEiIyMDI2MTEwNl8yMjo1MV9kZS1ERUxGSV8zNDY5MTUxOTE5GhZkZS1ERUxGSV9kZTowNTMzNDoxMDA4ITXvOEVHYklAKYJ38umxXRhAMhdkZS1ERUxGSV9kZTowNTMxNToxMTIwMTnNkgA1tXhJQEE76BIOvdUbQEjEl7nXBlCwsLnXBloNUkVHSU9OQUxfUkFJTGABaQAAAAAAAPA/cQAAAAAAAPA/CloaF2RlLURFTEZJX2RlOjA1MzE1OjExMjAxIc2SADW1eElAKTvoEg691RtAOc2SADW1eElAQb3GLlG91RtASLCwudcGUOywudcGWgRXQUxLYAFpAAAAAAAA8D8=",
+        "startTime": "2026-11-06T21:50:00Z",
+        "endTime": "2026-11-06T22:45:00Z",
+        "duration": 3300,
+        "transfers": 0,
+        "legs": [
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T21:50:00Z",
+            "endTime": "2026-11-06T21:51:00Z",
+            "scheduledStartTime": "2026-11-06T21:50:00Z",
+            "scheduledEndTime": "2026-11-06T21:51:00Z",
+            "duration": 60,
+            "distance": 5.0,
+            "from": {
+              "name": "START",
+              "lat": 50.76776,
+              "lon": 6.09139,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:50:00Z",
+              "scheduledDeparture": "2026-11-06T21:50:00Z",
+              "vertexType": "NORMAL"
+            },
+            "to": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T21:51:00Z",
+              "scheduledArrival": "2026-11-06T21:51:00Z",
+              "vertexType": "TRANSIT",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "cefig]oo{dsB????{Iaq@",
+              "precision": 7,
+              "length": 4
+            }
+          },
+          {
+            "mode": "REGIONAL_RAIL",
+            "startTime": "2026-11-06T21:51:00Z",
+            "endTime": "2026-11-06T22:44:00Z",
+            "scheduledStartTime": "2026-11-06T21:51:00Z",
+            "scheduledEndTime": "2026-11-06T22:44:00Z",
+            "duration": 3180,
+            "from": {
+              "name": "Aachen, Hbf",
+              "stopId": "de-DELFI_de:05334:1008",
+              "importance": 0.0038811590056866407,
+              "lat": 50.7678,
+              "lon": 6.091499000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "departure": "2026-11-06T21:51:00Z",
+              "scheduledDeparture": "2026-11-06T21:51:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "departureTimestampReason": "PREDICTED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "BUS",
+                "ODM"
+              ]
+            },
+            "to": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:44:00Z",
+              "scheduledArrival": "2026-11-06T22:44:00Z",
+              "vertexType": "TRANSIT",
+              "pickupType": "NORMAL",
+              "dropoffType": "NORMAL",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "tripId": "20261106_22:51_de-DELFI_3469151919",
+            "routeId": "de-DELFI_de:nrw:re1:_100",
+            "routeShortName": "RE1",
+            "displayName": "RE1",
+            "tripShortName": "026841",
+            "agencyName": "National Express",
+            "headsign": "Hamm (Westf), Hauptbahnhof",
+            "cancelled": false,
+            "realTime": true,
+            "interlineWithPreviousLeg": false,
+            "wheelchairAccessible": "NOT_ACCESSIBLE",
+            "bikesAllowed": false,
+            "legGeometry": {
+              "points": "_neig]{s}dsBcy@}aHoTcsEk@op@SapAz@woAvBgyA|@sWnFykAnHipAvIkhAdKqhAfQguApXalBb|@awFnz@ctFbIme@nr@_mEpd@qwCdiAinHxHsh@va@{pCdiC}{OzBoOtcG_w]dfCeuN~CcSpI{e@|BgMtj@yrC|c@_rBxq@cvC`c@quBll@_zCfFsYhBcKb`Cq|MjqB_yLph@urD`d@kvDjq@cdHvX{uD`[ceFdVyaGxKomFzDgtF_@ghHeLy`H{JqrDqOiyDcXczEw^a{Eid@{rEgk@wpE{b@}}Cyc@grCc\\ijB}|@_lE{_AucEgj@kwBiq@a`Ckp@k{B{mA}uDaqAgpDqfCecGmn@_tAibEy`IoeL_dS{}@}~AgTi_@oaFiaJuyC_`GgfFmgK}Sub@glCcqF{LqVspCq}F}}Bw}EmNg[uzFc`Mq}C_|G_hAebCyGqNo\\{t@ccAoyBk~@gqBcuAa|CsmB}nEe_@c{@w_@i}@e[wy@wf@uuAinA{|DuoDehIsq@gyAss@_{Akv@u{Am~@ygBiz@_|Aow@svA}gBazCqoEwmHasGqnKunO{zVidJgyOwjGirKkiFy_JedBoxCexAwmCiuAcuCapFmcMqeMkwYyrJ}{Tg~@_{Bu~@q_CqhA_yCqfAozCadAwyCqbAk{Ck|@orC_z@orCao@izBsn@{{Bgw@{wCev@myC{hCo_K}bB_uG}cBgtGwyAwiFg{AghF{z@}bDmx@odDi{A{nG}{@orD{|@mrDi_AgvDa`AgvDkbCaoJsiMyzf@mvCkfLwdDikMwrAgeFcsAgeFetAydFwtA{dF{sA}_FitA_`Fo~HooYsdAy}DybAw}DwbA{~DiaAa`Euk@qaCyj@{bCuRkz@g_@uaBsx@cqDktAkmGisAcnG{oBi|Jm_B_sIcy@soEuw@}qEwn@{sDyl@gvDac@qsCya@}tCwp@s}Esn@s_F}i@{sEef@urEuYepCkW_kCyS_}Bab@{{E{`@i|EgDkb@uRuhCeVybDyBgYse@ewGsp@etJiu@__Lk}Bk_]{t@e|Kug@kqH{hE{do@}fEorn@{TaeDsUamDcqAexRodAylOisKoo_BwcBmcW_bB}qValCau`@uJ}vAolEk_p@}bFqlu@mbFqfu@ukDcgh@aGi~@{pGwh`Ae\\u}EqvCcjc@atFysy@_Y_hEydDsrf@_iGot~@uH_kAoQalCooDufi@kUogDezEmns@oaFygu@kb@eoGazEmks@iaBonVeXw|Dg_@odF{[_bE}f@csF}]aoDkaA{wI_Hmi@aYaxByDu\\kqAifJ{|@wxFmcB}rKeiB}eLalB}vKsx@ohEu{@sbEccAklEqj@w~BmD_Oiq@mkCaz@ywCwiAuzDam@yjBs_BsbFep@kpBovBcsGs|@amCgIcW}@yC}mDqqKauAoeEuwCq|I}mDmqKycBaaFyvAszDanAecDurCcaHyuFuzMmaHsoP_cF{uLogGm}NyrB_aFyy@{qBgx@}qB}dBqrE{eBizEqxDmsKwjBybFot@gnBcgCooGq_Du{HodDgcIsoDcsIo}@ooBy^ex@sJsS_n@sqAynComFuhBaaDcdBupCoQ_YoeBefCilAa`B{_A}mAm_BukBmtAizAwfAuhAkkAkiAilAwgAcuC{dCo{B}gBsbDiaCmeD_{Be_BobAcoBgiA_oC_yAegDiaB}iDeyAmxEqiB}~CqcAmuCk{@svCex@wiDs{@gdHgeBuvDwaAqsDkcAcuEuxAirEedBe{HinDofIguEsyDkgC}sDguCi~C_gCofEu|DkiEksEsyAedBchBktBa{DofFmrCs`EqjDkpFugAilBcr@{kA_zBycEqnCs`G}j@ksAwzAomDygAwxCiUyo@sRql@ehFe_Q_l@mxBmcB_sHmeC{_Mu}@euFgh@_qDwmA_kKaZ}{CqY{bD{Qy~BiDii@uh@awLif@}`KgE}}B{CmvBc@}e@{AogB_AyhBq@a}Dt@q_EhBmcCtDwcCnDqpBpIw}CrKegDbNunDnTc~DjW_}DvSu~CzUq{CpWovChWchCjc@qiEbe@{yDtEu_@vd@_nDfc@y}Cdr@omEdSkoApOy|@lj@{}CdaA_cFvVclApJsb@do@wsCnXsiAvc@ujBre@{iBltAc}ExsAemEdoAgtDnjAq`DpfC{lGpgA_fCr}CgbHdNcZxoCwaGxjD}_Ir`DqkI|xAeiEfaB}mFnfAk|D|r@uqCjr@wvCxl@wnChm@_uCbhAm}Fta@m_Cbj@qeDvjAupHjMu{@nQamA|bCsbQ|x@}bGtYoyBpJcs@xlCahTpiBsfPfnCi}Vpu@}nHz|BcoUjWarCjsBu_UzkBqrTleBsqT|zA}mSt`B_sT~}Casj@xhAkgUr_AwqTvlA}a\\v`@}zMxg@oaTbM}pItK{yG`Bg}AdPmcUrBisFTwuCn@wlH{E_cUqBk`FSmy@{IumLaVgfUcFygDyZigNqa@_nNs`ActWco@wwMih@igKyeCom_@kyAmeRuo@{uHas@omH_t@gmH}t@mbH}uCgkV}z@msGsb@uyCmsBc|NgoAedIqP}iAclDcpSiuDgjSw`Ek_SogE{oRswEkoR}aF{`Rw}C}oKqvEalOouBcnGwaGgvPeeBszE}bBsjEo_@obAapHgtQeaHsvOwvGmxNwmQ}``@_`C_hFabBmoDanH_cPuiHixOqgHctOurHydPc|Gq_OmiHwuO_gGq}Mi_HarOoqFidNswEguMsjDcrKsbCilI}wCcfL_zCsnNguCwePk~B_rPwo@ojFk|@kaJmvAw{Q{{@gzQk]kmLyP_|JoF}nKpJ}rU`XunM|i@gcOlGqyAriAs~Prm@cgHjr@ejHxnB}kQhnCqqU`iBk}OxjC_aUtvA}wLzyAinMpbFabd@tl@muFbzFgqj@`yC{bXvhAuyJxqAwcLblAmbKpHco@l_Fkrb@pQuwAbBqNhqAuvKtsAivK|rAcgKveBweNrlA}hJzzE}n_@`fEg~]nkEww^n\\{gDvhB}}OdUcpBjyE{ia@pjOmwqAftAytLbF_i@dcK{a|@brHsuo@ti@_xEli@irEjkHaqn@n|@}nHprHeso@lcFwbc@nfAaeJhbQwnzA~aGy|g@x[qsC|tAaqLvgPeevArw@cbHd[_mCvqHyjo@de@k}DxvAk`M~hGokh@huKit~@xfNgrlAb_@yxC`kCw}Tj_Cw~RztBc|QxnJkyx@ta@inD|T}mBj^q_DzMsnA|uE}ca@pjGc{h@bfKul|@hQs}AxjJmux@~]mkCzl@sbFdzFitf@phBctOdw@ivGd|Iafv@xvMsaiA`l@u~ErPcxAhDyYdcEit]hy@qfHv|Ag|MnxHgzp@dlBkyPzbC{mVrn@{fHdxDahg@rzAipWnCek@xe@yuKdOssDfVmtH|G}qCvf@kcXnKqfQGwkJGacEmPmpO{Z}iOseAul\\cY{bH}Iw}Bw}Aqw[k[_pFiiBeiUgeDos\\iwCygUuu@ukF{}DwyUaf@wnCqkAskGe~DmpT_xDu_SsSgfAq|DqnSshBoqIo~@w_EihBwtHc`AkcEmnDmxM{~CkpK_d@cxAmeC_cI}vDa|KgvCs~Hiz@m|BkwDeiJ}fCweGwn@erAwoGccNqaC{iE_dBs_DajFknIk{@srAqcCuvDenJqeM{lEa|Fmn@cz@oiQ{bUyPaX}SeVktAukB__AiqAy{Au`C}uAe~Bwt@kmA}b@ks@kYof@oKeOyOcZwgFodIwl@{~@qzAo{B}~AwxB{PqTqu@_|@ab@}f@_rAu}Aq`@ge@qBcCgAsAecMuhOgdFihGohDk|Dy_IqnJe}Dk{EqgD_`EaiDuaEazCmpDuxI{bKykCsvCchIgtJutIqaJ_kDwtDcjCa{CkvAkaBc[g^erKylMw}CgtDgGuHqo@ex@g|EwyFsCoDsCiDohAcwAm~KuuM{xKq~Ly`KogLcfFogGadFwmGatFakHiqMmrPsfDabEw`u@uy|@mAwAs|e@}qk@{yAkhBmsYip]_XuYeoMoiOu~RiqT{al@ykr@_aEe|EmyHsjJ_eBswBkpPqzRq}AakBeaXi{ZyuB{fCspHkyIilKofNi`[q`_@guFceHsyAgkB_wIu`LqhIeuL_cGqxJwvEkxImqEquIeeEceIogFeaKesFssKaaA_{B}oAiyCkuDszI_sEodMyoEooMs`@_mAmyDooLiqEqwNi}DwuM_rDqeMsnDegM{pDekMcOoh@sC}JmvCgdKo}DcnN}cCwqI}`U}{w@ssCo{JkS}r@iaConIoexAgjeF_cL{x`@abu@qjjCyfy@mssCa{Okaj@aul@oewBglN_lh@ulE}wOunEg}Om~CyuKm~FaxSm`Ck~HcjDkzK}jDy|KuxDqsMwxAciF_kKu`_@oqMsrd@adDwxLggDmdMcxDwvNkdEufO_pOqui@ozNu{g@wzEcyPe_a@kuvAwia@eywAkvH_bXsxCqlKc{@qzCatBwmHcuCyaK_`Cc}H}fCwfIocCcbIoaCafIwwAcdFaaNs}e@}oImeZ{`~@c~aD{bIutY{}H{_ZavFaqSowjAe~bEg}~@eqdDu}Qyap@}rN}oh@mnHitWy{_As|fD{q[yaiAuqKae_@q|_@{lsAkeMwyc@ctZirfAetZyrfAq{Lg_b@anDwzLqeCmlIceMapb@u`[aofAsyEq{PawEakPaQum@szBawIijAq_FmlAexEmjAufEaqBweH_lDi`MaqLubb@mcG_cTepD_lMi}S{ku@ed[_ahAweFesQujMagd@eqGmeUmwBi|Hmfa@swwAyqGihUkom@}rwBgmJat[cbAahDijHqpVaEiNsoJgm\\{J{_@ekBslHoi@_sBa_@ipAgWcw@{Wgt@ob@ihA}Vmx@cf@maB_WsdAiz@gqCavAauDs`Ae~C_pVmeaAk`Ie}ZcfKgw_@avLkbc@{bDinLcx@suCmyAgwEg`Aa{C{wCc`J_sC_oJqVyy@oBuGkmEggP_|BszI_oGoqV_rB{bIyqIkk^mtDwuOorAeuFwtE}eSuB{I_n@{oCg|GkwYghNexl@o{Gk|YapJopa@_sFa`V_vBgcJsnPets@wbFkmTm_Jw_`@wxJysb@sd@opBcnIgn^e`EgbQakQsmv@qtH}~[}dHym[}aEejRkgD}eQkmCggOkpGioa@st@qgFgJ{w@kgF_~`@}bAq`JinIoou@epFm`e@gmDkt[mnDuv[cfB{pOsKgdAecGa~h@e}@u}HqvB}bS_}B{sUer@yqIobAuzLwbBu{U}h@kkIcrB{l`@is@agNqiCong@y|AikZykAm}SyeDkxj@ag@gsHg~@{rPg{Biva@oSm}DcxAa{YceDm`q@iGgoAegDsrq@om@i|LekC{}h@__Fm`bA_f@utJuXavFikA{uU_XyyFo~Cgpn@w{Dijx@keDsso@oEc}@eoEgd}@_NimCmjBeo_@mz@a}P{Ug|EylAsyU}d@wtJum@q`Mu_Dkrn@qMm`DqIudB_v@anO}ZwfGi[gjGi}@}{PmmG}aoAgt@{wNom@csLeqEou~@stCkel@sWqlFyr@_tNqrAimXkw@wvOqnAkbWeh@euK_g@q`KwSggEsuHin~AeKovBeoBwf_@}{@ysQouCkam@inBoh`@oq@irN_t@mjOwZygGatIwsdBu_@ovH_`@}yHgx@_sOkT{kEeb@ooHofAk`UcM_rCyVevFwkA_zY_UwyGiEqiAgR}xEyHasBg_Bepb@w~@spVmk@}nNup@{qNc|@efRePs}Cc{Bib_@a|Bwi_@yGceAc]kgG_SkdDmjAeeSefByb\\er@{pNaNiqCku@ypOwIigByqAieXevCoxp@wVg`GeOkoD}zCicr@o`@qrIkjBgfa@mo@mbOou@uaRoj@qaMgq@euO}OeaEgBqb@az@gdSsPs_Eut@mgPot@ivO_y@agOghAohSyp@iyKk_AyiNkh@{oHc^yvEknAa|O{XimDs_@ylFaXsuDwJcyACYsGgaAak@cvIeVeeE}MkaCoZwlFgVoyE{C}o@eSghE{b@}nJ{MstDyU{}FyXuyHYyM{YciJiJunDcI_{DuP_kHgKksDiSibH{Se{F{UwzFaNauCk[ybGya@esHal@ctI_q@krJa`A_cNul@qvKiHszA_UwvEi`AqeRqc@atIqx@cfPaqAstVs}@a`QiB}^{O{bD{[_|FkM{wBoQibCmW}qDcUogCs_@_uDeSodBuQ_}Ayg@odEac@u}Cwe@_bD}`A}tGmhAgaI_v@sxFe_@cdD_[_cDcYq|C_Y}dEyWciD_IqxAuKwrBkI{xD}D_mDl@meDjBonDpN_xDv`@aiGrV{kChScmBrQcuAzKsp@lj@}~CtXcoAdl@c`Chc@{|AhYk{@l_AsiCvW{n@nk@imAhl@}pArg@m~@`Wke@|Xkd@rp@ibAln@kv@fmAo|AjtAwwAvjEcsE`bDceD~zBobCp`B}sB|qAmfB|jAugB`nAa{BtdAqyBvcAqfCp|@_jClx@_mC`t@ozCvy@qaEdf@gtCfYoyBvZwkCbQkpBrQwkBzb@ceG|{@s`Lf`A_rLp_@}dEpb@wcExEu_@jCeTdH_m@|WqsBhXuqBpY}nB~j@wiDti@guCxMwp@dUgiApe@kyBtr@_vCrj@w|Bfc@i~Apr@{yBve@eyAhO{]vv@qhB~w@kfB|bC_eEfGuJddAexArkBs~BzsGkoHhr@kw@lv@g{@f_BchBnnEwaFn_AieAf`KqaLjHeIfe@qh@vfA}mAvuBw`C~\\s_@jiEw{E`_@ik@xs@}gAzVa`@l}@cuApbAwgAlb@gf@hiCwwCteBgnBliA}tAnh@wr@`r@w~@`u@kz@lWwV|C{CpbBsaBfhBwiBzi@ul@diBgpBro@yr@dJ{J|}CqgDvKoL`hE{|EzpAsuAb|AmaB|wEodFvy@a}@|JsK",
+              "precision": 7,
+              "length": 1193
+            }
+          },
+          {
+            "mode": "WALK",
+            "startTime": "2026-11-06T22:44:00Z",
+            "endTime": "2026-11-06T22:45:00Z",
+            "scheduledStartTime": "2026-11-06T22:44:00Z",
+            "scheduledEndTime": "2026-11-06T22:45:00Z",
+            "duration": 60,
+            "distance": 0.0,
+            "from": {
+              "name": "Köln Hbf",
+              "stopId": "de-DELFI_de:05315:11201",
+              "importance": 0.006867678835988045,
+              "lat": 50.94303,
+              "lon": 6.958729000000001,
+              "level": 1.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:44:00Z",
+              "departure": "2026-11-06T22:44:00Z",
+              "scheduledArrival": "2026-11-06T22:44:00Z",
+              "scheduledDeparture": "2026-11-06T22:44:00Z",
+              "vertexType": "TRANSIT",
+              "cancelled": false,
+              "arrivalTimestampReason": "PROPAGATED",
+              "departureTimestampReason": "PROPAGATED",
+              "modes": [
+                "HIGHSPEED_RAIL",
+                "LONG_DISTANCE",
+                "COACH",
+                "NIGHT_RAIL",
+                "REGIONAL_RAIL",
+                "SUBURBAN",
+                "TRAM",
+                "BUS"
+              ]
+            },
+            "to": {
+              "name": "END",
+              "lat": 50.94303,
+              "lon": 6.95873,
+              "level": 0.0,
+              "tz": "Europe/Berlin",
+              "arrival": "2026-11-06T22:45:00Z",
+              "scheduledArrival": "2026-11-06T22:45:00Z",
+              "vertexType": "NORMAL"
+            },
+            "realTime": false,
+            "legGeometry": {
+              "points": "w`dtj]stgvcC?S",
+              "precision": 7,
+              "length": 2
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
