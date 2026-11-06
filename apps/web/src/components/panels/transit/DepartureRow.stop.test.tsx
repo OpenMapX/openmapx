@@ -30,3 +30,18 @@ describe("DepartureRow stop name", () => {
     expect(screen.queryByText("Köln Breslauer Platz/Hbf")).toBeNull();
   });
 });
+
+it("shows exactly +60 seconds from timestamps and only one cancellation label", () => {
+  const { rerender } = render(
+    <DepartureRow departure={{ ...bus, expectedAt: "2026-10-31T10:03:00Z" }} />,
+  );
+  expect(screen.getByText("10:02")).toHaveStyle({ textDecoration: "line-through" });
+  expect(screen.getByText("10:03")).toBeInTheDocument();
+  expect(screen.getByText("navigation.delayMinutes")).toBeInTheDocument();
+  rerender(
+    <DepartureRow departure={{ ...bus, expectedAt: "2026-10-31T10:03:00Z", canceled: true }} />,
+  );
+  expect(screen.queryByText("10:03")).toBeNull();
+  expect(screen.queryByText("navigation.delayMinutes")).toBeNull();
+  expect(screen.getAllByText("transit.canceled")).toHaveLength(1);
+});

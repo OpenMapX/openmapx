@@ -13,10 +13,11 @@ import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transi
 import { useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { stopTransitTime } from "@/lib/transitTime";
 import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
+import { DepartureTime } from "./DepartureTime";
 import { RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
 
@@ -28,13 +29,11 @@ interface TripDetailViewProps {
 export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
-  const fmt = useDateTimeFormat();
   const journeyQuery = useVehicleJourney(departure.tripId || null, departure.tripIds);
   const { data: journey, isLoading, isError, refetch } = journeyQuery;
   const alertsQuery = useRouteAlerts(departure.route.id);
   const { data: alerts } = alertsQuery;
 
-  const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
   const lineColor = routeColor(departure.route, BRAND);
   // The departure's own details, such as the train number sources write into
@@ -82,26 +81,11 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
           <Box
             sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, flexWrap: "wrap" }}
           >
-            <Typography
-              variant="body2"
-              sx={{
-                textDecoration: isCanceled || isDelayed ? "line-through" : "none",
-                color: isCanceled ? "text.disabled" : "text.secondary",
-              }}
-            >
-              {fmt.time(departure.scheduledAt)}
-            </Typography>
-            {isDelayed && !isCanceled && departure.expectedAt && (
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 600,
-                  color: "error.main",
-                }}
-              >
-                {fmt.time(departure.expectedAt)}
-              </Typography>
-            )}
+            <DepartureTime
+              scheduledAt={departure.scheduledAt}
+              expectedAt={departure.expectedAt}
+              canceled={isCanceled}
+            />
             {isCanceled && (
               <Typography
                 variant="caption"
@@ -394,17 +378,8 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
               }}
             />
             {journey.stops.map((stop, i) => {
-              // Show realtime (delay-adjusted) time when available, fall back to scheduled
-              const time =
-                stop.expectedDeparture ??
-                stop.expectedArrival ??
-                stop.scheduledDeparture ??
-                stop.scheduledArrival;
-              const timeStr = time ? fmt.time(time) : "";
-              // Only treat as realtime when delaySeconds is explicitly provided (not undefined)
-              const isRealtime = stop.delaySeconds !== undefined;
-              const delaySec = stop.delaySeconds ?? 0;
-              const delayMin = Math.round(delaySec / 60);
+              const time = stopTransitTime(stop);
+              const isRealtime = !!time.expectedAt;
               const isCanceledStop = stop.canceled ?? false;
               const isDeparted = stop.departed ?? false;
 
@@ -440,28 +415,7 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
                   />
                   {/* Time + delay */}
                   <Box sx={{ width: 62, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontVariantNumeric: "tabular-nums",
-                        color: delayMin > 0 ? "error.main" : "text.primary",
-                      }}
-                    >
-                      {timeStr}
-                    </Typography>
-                    {delayMin > 0 && !isCanceledStop && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: "error.main",
-                          display: "block",
-                          fontSize: "0.6rem",
-                          fontWeight: 600,
-                        }}
-                      >
-                        +{delayMin} min
-                      </Typography>
-                    )}
+                    <DepartureTime {...time} variant="caption" canceled={isCanceledStop} />
                   </Box>
                   {/* Name + platform */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -472,6 +426,11 @@ export function TripDetailView({ departure, onBack }: TripDetailViewProps) {
                     >
                       {stop.name}
                     </Typography>
+                    {isCanceledStop && (
+                      <Typography variant="caption" color="error.main" sx={{ fontWeight: 600 }}>
+                        {t("canceled")}
+                      </Typography>
+                    )}
                   </Box>
                   {stop.platform && (
                     <Typography

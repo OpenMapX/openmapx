@@ -75,6 +75,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
+import { legTransitTime } from "@/lib/transitTime";
 import { legToMergedDeparture } from "./legDeparture";
 import { getWheelchairStatus } from "./transitAccessibility";
 
@@ -384,8 +385,6 @@ export function TransitDetailsView({
       {/* Timeline */}
       <Box sx={{ pl: 1, pr: 2, py: 1 }}>
         {itinerary.legs.map((leg, i) => {
-          const legStartTime = fmt.time(leg.startTime);
-          const legEndTime = fmt.time(leg.endTime);
           const isWalk = leg.mode === "walking";
           // Non-transit street legs (walk + intermodal bike/car access) share the
           // compact dashed-line rendering; `street` is set only for those.
@@ -405,7 +404,8 @@ export function TransitDetailsView({
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
                 <Box sx={{ width: 62, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
                   <LiveStopTime
-                    scheduledTime={legStartTime}
+                    time={legTransitTime(leg)}
+                    event={isWalk && i > 0 ? "arrival" : "departure"}
                     tripId={
                       !isWalk
                         ? leg.tripId
@@ -723,7 +723,8 @@ export function TransitDetailsView({
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
                   <Box sx={{ width: 62, textAlign: "right", flexShrink: 0, whiteSpace: "nowrap" }}>
                     <LiveStopTime
-                      scheduledTime={legEndTime}
+                      time={legTransitTime(leg, "arrival")}
+                      event="arrival"
                       tripId={!isWalk ? leg.tripId : undefined}
                       stopId={leg.to.stopId}
                     />

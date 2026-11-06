@@ -354,6 +354,51 @@ describe("MobileRuntimeProvider store integration", () => {
     expect(state.progress).toEqual({ alongMeters: 100 });
   });
 
+  it("ignores late transit full responses but accepts a newer on-time prediction", async () => {
+    const shell = shellScope();
+    mount(shell.scope);
+    deliverHello(shell);
+    await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    const transit = (revision: number, departure: string) =>
+      snapshot({
+        kind: "transit",
+        routeFingerprint: undefined,
+        itineraryFingerprint: "bus-21",
+        revision,
+        liveStatus: { refresh: "broken", hasLiveToken: true },
+        itinerary: {
+          legs: [{ startTime: departure, scheduledStartTime: "2026-11-06T08:44:00Z" }],
+          endTime: revision === 8 ? "2026-11-06T09:01:00Z" : "2026-11-06T09:00:00Z",
+        },
+        captures: [
+          {
+            legIndex: 0,
+            tripId: "bus-21",
+            status: "captured",
+            capturedAtMs: 0,
+            stops: [{ expectedDeparture: departure, scheduledDeparture: "2026-11-06T08:44:00Z" }],
+          },
+        ],
+      });
+    shell.deliver(transit(8, "2026-11-06T08:45:00Z"));
+    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(8));
+    const delayed = useNavigationStore.getState();
+    expect(delayed.itinerary?.legs[0].startTime).toBe("2026-11-06T08:45:00Z");
+    expect(delayed.liveDataUnavailable).toBe(true);
+    shell.sent.length = 0;
+    shell.deliver(transit(7, "2026-11-06T08:44:00Z"));
+    expect(useNavigationStore.getState().nativeRevision).toBe(8);
+    expect(useNavigationStore.getState().itinerary).toBe(delayed.itinerary);
+    expect(useNavigationStore.getState().transitCaptures).toBe(delayed.transitCaptures);
+    expect(shell.sent).toEqual([]);
+    shell.deliver(transit(9, "2026-11-06T08:44:00Z"));
+    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(9));
+    expect(useNavigationStore.getState().itinerary?.legs[0].startTime).toBe("2026-11-06T08:44:00Z");
+    expect(useNavigationStore.getState().transitCaptures[0].stops[0].expectedDeparture).toBe(
+      "2026-11-06T08:44:00Z",
+    );
+  });
+
   it("updates the store when a snapshot arrives, never while React renders", async () => {
     // Applying the store inside a state updater ran it during the provider's
     // render, updating every map layer subscribed to the store mid-render.

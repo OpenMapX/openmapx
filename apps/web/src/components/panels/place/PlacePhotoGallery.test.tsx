@@ -64,10 +64,17 @@ describe("gallery file credits", () => {
     open();
     expect(screen.queryByRole("img")).toBeNull();
   });
-  it("credits every rendered thumbnail's own licence, including an unselected file", () => {
-    photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 4.0")];
+  it("keeps thumbnail captions out of the strip and opens an unselected file's complete credits", () => {
+    photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 3.0")];
     open();
-    expect(screen.getAllByRole("link", { name: "CC-BY-SA-4.0" }).length).toBeGreaterThan(0);
+    const thumbnail = screen.getAllByTestId("gallery-thumbnail")[1];
+    expect(within(thumbnail).queryByText(/Two artist/)).toBeNull();
+    expect(within(thumbnail).queryByRole("link")).toBeNull();
+    fireEvent.click(within(thumbnail).getByRole("button", { name: "Photo credits" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByText(/Two artist/).length).toBeGreaterThan(0);
+    expect(within(dialog).getByRole("link", { name: "CC-BY-SA-3.0" })).toBeVisible();
+    expect(screen.getByTestId("gallery-information")).toHaveTextContent("One artist");
   });
 });
 
@@ -86,7 +93,29 @@ it("keeps capture-map credits in gallery information, outside the photo stage an
 it("keeps each thumbnail credit in the same image cell, with its required notice intact", () => {
   const notice = "A mandatory custom credit that wraps over several lines on a narrow thumbnail";
   photos.items = [
-    { ...photo("LongNotice", "CC BY 4.0"), attributionOverride: notice },
+    {
+      ...photo("LongNotice", "CC BY 4.0"),
+      attributionOverride: notice,
+      licensing: {
+        version: 1,
+        bindings: [
+          {
+            scope: "imagery",
+            subject: "Photo",
+            license: { kind: "spdx", expression: "CC-BY-4.0" },
+            attribution: {
+              placement: "visible",
+              surfaces: ["image"],
+              basis: "provider-terms",
+              reviewedAt: "2026-11-06",
+              reason: "Required beside image",
+              evidenceUrls: ["https://provider.example/terms"],
+              compactText: notice,
+            },
+          },
+        ],
+      },
+    },
     photo("Two", "CC BY-SA 4.0"),
   ];
   open();
@@ -97,22 +126,37 @@ it("keeps each thumbnail credit in the same image cell, with its required notice
   for (const thumbnail of creditedThumbnails) {
     const imageCell = within(thumbnail).getByTestId("thumbnail-image-cell");
     expect(imageCell.querySelector("img")).not.toBeNull();
-    expect(within(imageCell).getByText(notice)).toBeVisible();
+    expect(within(imageCell).getAllByText(notice).length).toBeGreaterThan(0);
   }
 });
 
-it("closes photo details with Escape while keeping the gallery open and returning focus", async () => {
-  const user = userEvent.setup();
-  photos.items = [photo("One", "CC BY 4.0")];
-  const onClose = vi.fn();
-  open(onClose);
-  const trigger = within(screen.getByTestId("gallery-information")).getByRole("button", {
-    name: "Photo credits",
-  });
-  await user.click(trigger);
-  expect(screen.getByRole("dialog", { name: "Photo credits" })).toBeVisible();
-  await user.keyboard("{Escape}");
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Photo credits" })).toBeNull());
-  expect(onClose).not.toHaveBeenCalled();
-  expect(trigger).toHaveFocus();
+it.each(["selected", "thumbnail"] as const)(
+  "closes %s photo details with Escape while keeping the gallery open and returning focus",
+  async (owner) => {
+    const user = userEvent.setup();
+    photos.items = [photo("One", "CC BY 4.0")];
+    const onClose = vi.fn();
+    open(onClose);
+    const trigger = within(
+      owner === "thumbnail"
+        ? screen.getAllByTestId("gallery-thumbnail")[0]
+        : screen.getByTestId("gallery-information"),
+    ).getByRole("button", {
+      name: "Photo credits",
+    });
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Photo credits" })).toBeVisible();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Photo credits" })).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  },
+);
+
+it("updates the full selected-photo caption when a clean thumbnail is selected", () => {
+  photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 4.0")];
+  open();
+  fireEvent.click(screen.getAllByTestId("gallery-thumbnail")[1]);
+  expect(screen.getByTestId("gallery-information")).toHaveTextContent("Two artist");
+  expect(screen.getByTestId("gallery-information")).not.toHaveTextContent("One artist");
 });
