@@ -3,16 +3,20 @@
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import useMediaQuery from "@mui/material/useMediaQuery";
+import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useBindAdminDraftOwner } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
+import { adminWorkspaceForPath } from "@/lib/admin/adminNavigation";
 import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import { TOPBAR_HEIGHT } from "./layoutConstants";
 import { AdminThemeProvider } from "./shared/AdminThemeProvider";
 import { AdminToastProvider } from "./shared/AdminToast";
+import { AdminTopicNavigation } from "./shared/AdminTopicNavigation";
+import { SystemMaintenanceProvider } from "./system/SystemMaintenance";
 
 interface AdminUser {
   id: string;
@@ -28,8 +32,16 @@ interface AdminLayoutProps {
   selfHosted?: boolean | null;
 }
 
-export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutProps) {
+export function AdminLayout(props: AdminLayoutProps) {
+  return (
+    <SystemMaintenanceProvider>
+      <AdminLayoutContent {...props} />
+    </SystemMaintenanceProvider>
+  );
+}
+function AdminLayoutContent({ children, user, selfHosted = false }: AdminLayoutProps) {
   const { apiUrl } = useEnv();
+  const workspace = adminWorkspaceForPath(usePathname());
   useBindAdminDraftOwner({ apiUrl, actorId: user.id, role: user.role ?? "admin" });
   const hydrated = useHydrated();
   const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
@@ -64,7 +76,12 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
                 minWidth: 0,
               }}
             >
-              <AdminTopBar user={user} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} />
+              <AdminTopBar
+                user={user}
+                selfHosted={selfHosted}
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={toggleSidebar}
+              />
               <Box
                 sx={{
                   flexGrow: 1,
@@ -82,7 +99,23 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
                   }}
                 >
                   {hydrated ? (
-                    children
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: { xs: "column", lg: "row" },
+                        gap: { xs: 1, lg: 2.5 },
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      {workspace && (
+                        <AdminTopicNavigation
+                          workspace={workspace}
+                          role={user.role}
+                          selfHosted={selfHosted}
+                        />
+                      )}
+                      <Box sx={{ flex: 1, width: "100%", minWidth: 0 }}>{children}</Box>
+                    </Box>
                   ) : (
                     <Box
                       role="status"

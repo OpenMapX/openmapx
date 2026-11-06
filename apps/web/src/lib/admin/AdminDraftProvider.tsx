@@ -140,6 +140,15 @@ export function useAdminDraftExit() {
   const request = useContext(ExitContext);
   return request ?? (() => Promise.resolve(true));
 }
+const noDirtyDrafts = () => 0;
+export function useAdminDraftCount() {
+  const store = useContext(AdminDraftContext);
+  return useSyncExternalStore(
+    store?.subscribe ?? noopSubscribe,
+    store?.dirtyCount ?? noDirtyDrafts,
+    noDirtyDrafts,
+  );
+}
 
 const noopSubscribe = () => () => {};
 const emptySnapshot = () => "none";

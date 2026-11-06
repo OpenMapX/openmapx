@@ -14,15 +14,12 @@ import {
 
 export type { AdminReauthIntent, StoredAdminReauth } from "@openmapx/core/api-contracts";
 
+import { adminTabsForPath, safeAdminNavigationReturn } from "./adminNavigation";
 import { browserAdminApiBase } from "./browserAdminApiBase";
 export const adminReauthStorageKey = (apiUrl: string) =>
   `openmapx-admin-reauth:${browserAdminApiBase(apiUrl)}`;
 export function safeAdminReturnPath(path: string) {
-  return (
-    ["/admin", "/admin/users", "/admin/settings", "/admin/integrations", "/admin/transit"].includes(
-      path,
-    ) || /^\/admin\/users\/[a-zA-Z0-9_-]{1,128}$/.test(path)
-  );
+  return safeAdminNavigationReturn(path) !== null;
 }
 function validRequests(requests: AdminReauthIntent[]) {
   if (requests.length === 2) {
@@ -71,7 +68,14 @@ export async function startStoredAdminReauthentication(
     challengeIds.push(result.challengeId);
     expiry = Math.min(expiry, Date.parse(result.expiresAt));
   }
-  const path = window.location.pathname,
+  const pathname = window.location.pathname;
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  const path =
+      pathname +
+      (tab && params.getAll("tab").length === 1 && adminTabsForPath(pathname).includes(tab)
+        ? `?${new URLSearchParams({ tab })}`
+        : ""),
     value: StoredAdminReauth = {
       phase: "login",
       requests: parsed,

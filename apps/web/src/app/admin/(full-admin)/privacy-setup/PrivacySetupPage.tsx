@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
 import { PrivacyApprovalForm } from "@/components/admin/privacy/PrivacyApprovalForm";
@@ -31,6 +32,7 @@ const STEP_IDS = ["operator", "notifications", "retention", "reviews"] as const;
 export function PrivacySetupPage() {
   const t = useTranslations("privacySetup");
   const env = useEnv();
+  const field = useSearchParams()?.get("field");
   const sections = useMemo<SettingsEditorSection[]>(
     () => [
       {
@@ -40,13 +42,6 @@ export function PrivacySetupPage() {
         label: t("steps.operator.title"),
         description: t("steps.operator.description"),
         defaultExpanded: true,
-      },
-      {
-        id: "notifications",
-        groupId: "email",
-        label: t("steps.notifications.title"),
-        description: t("steps.notifications.description"),
-        includeTestEmail: true,
       },
       {
         id: "retention",
@@ -131,15 +126,28 @@ export function PrivacySetupPage() {
 
       <Paper component="nav" aria-label={t("stepNavigation")} variant="outlined" sx={{ p: 1 }}>
         <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: "wrap" }}>
-          {STEP_IDS.map((id, index) => (
-            <Button key={id} component={Link} href={`#${id}`} size="small">
-              {t("stepLink", { number: index + 1, title: t(`steps.${id}.title`) })}
+          {STEP_IDS.map((id) => (
+            <Button key={id} component="a" href={`#${id}`} size="small">
+              {t(`steps.${id}.title`)}
             </Button>
           ))}
         </Stack>
       </Paper>
 
+      <Paper id="notifications" variant="outlined" sx={{ p: 2 }}>
+        <Typography component="h2" variant="subtitle1">
+          {t("steps.notifications.title")}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {t("notificationsOwner")}
+        </Typography>
+        <Button component={Link} href="/admin/settings/email">
+          {t("openEmailSettings")}
+        </Button>
+      </Paper>
+
       <SystemSettings
+        focusKey={field && /^[a-zA-Z0-9_-]{1,128}$/.test(field) ? field : undefined}
         sections={sections}
         showHeader={false}
         showTransfer={false}

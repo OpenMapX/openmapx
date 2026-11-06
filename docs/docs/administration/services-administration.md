@@ -9,7 +9,7 @@ sidebar_position: 2
 Manage supported backend service operations from the admin panel in a browser,
 behind the same login. Operation availability follows the current instance and
 service ownership; initial installation and offline recovery require host access. The admin pages
-under `/admin/services` are a window onto the service registry: they list what's
+under `/admin/system/services` are a window onto the service registry: they list what's
 installed, show each service's manifest and live container status, let you edit
 config and stream logs, preview the compose file the renderer would write, and
 take stock of the data on disk. Under the hood these are the same operations the
@@ -120,7 +120,7 @@ request. Apply an update separately when you want services to use newer images.
 
 ## A single service in detail
 
-Open `/admin/services/<id>`. Its header shows container state, selection and
+Open `/admin/system/services/<id>`. Its header shows container state, selection and
 lifecycle actions. The detail page has **Overview**, **Configuration**, **Credentials**,
 **Logs** and **Manifest** tabs.
 
@@ -213,7 +213,7 @@ rather than trying to update the running API as an ordinary service job.
 
 ## Compose preview
 
-Open `/admin/services/compose` to inspect the generated Compose YAML for the
+Open `/admin/system/deployment` to inspect the generated Compose YAML for the
 current selection and resolved configuration. Do not edit generated files.
 Use the form or source configuration, then render again.
 
@@ -260,7 +260,7 @@ no platform credentials or arbitrary environment keys.
 
 ## Data inventory
 
-Open `/admin/services/data` to inspect OSM downloads, engine build directories,
+Open `/admin/data` to inspect OSM downloads, engine build directories,
 transit source state and specialized publication workflows. Follow the linked
 jobs for failures and progress. Operation forms, previews and risk levels come
 from the API's operation catalog.

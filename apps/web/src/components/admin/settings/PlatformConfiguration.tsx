@@ -196,7 +196,7 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
         jobId: accepted.jobId,
         label: "Platform configuration",
         kind: "platform",
-        returnTo: "/admin/settings",
+        returnTo: "/admin/system/deployment",
         onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "platform", apiUrl] }),
       });
       return accepted;
@@ -236,7 +236,13 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
         return (
           <Stack
             key={key}
-            id={key === "backupRetentionDays" ? "backup-retention" : undefined}
+            id={
+              key === "backupRetentionDays"
+                ? "backup-retention"
+                : key === "releaseSelector"
+                  ? "release-selector"
+                  : undefined
+            }
             sx={{ gap: 1 }}
           >
             <TextField

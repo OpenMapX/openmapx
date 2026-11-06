@@ -132,7 +132,7 @@ pipeline jobs. Pin changes require review. See
 
 ### Coverage & freshness
 
-`/admin/coverage` reports eight domains: Addresses, POIs, Transit, EV, Parking,
+`/admin/data/coverage` reports eight domains: Addresses, POIs, Transit, EV, Parking,
 Fuel, Cameras and Traffic. Publication, freshness, runtime, geography and rights
 remain separate observations. **Unknown** means evidence is missing or cannot
 be verified. See [Coverage & freshness](./coverage-freshness.md).
@@ -206,3 +206,28 @@ Choose [Services](./services-administration.md),
 [Integrations](./integrations-administration.md),
 [Extensions](./community-extensions.md), [Users](./users-and-access.md),
 [Monitoring](./monitoring.md) or [Backup and restore](./backup-and-restore.md).
+
+## Administration navigation
+
+The primary navigation has nine workspaces: Overview, Integrations, Extensions,
+Data, Users, Privacy, Activity, Settings and System. Settings and System provide
+local topic navigation; on small screens, choose a topic from the selector.
+Search administration (Cmd/Ctrl+K) finds pages, setting labels, service names and
+data tasks. It navigates to a control without running the task or changing a value.
+
+Settings owns General, Authentication, Email, Map and Data use. Operator details,
+legal facts and privacy retention belong to Privacy setup. The email readiness
+step links to Settings → Email. Configuration export, import, migration and
+protected credential transfer belong to System → Configuration transfer.
+
+System groups Services, Deployment, Updates, Backups, Diagnostics, Cache and
+Configuration transfer. Explicitly hosted deployments show Cache and
+Configuration transfer; host operations and the unsupported Platform editor are
+hidden. When deployment status is unknown, troubleshooting topics remain visible.
+Privacy administrators see privacy casework only.
+
+Existing Services, Transit, Coverage and Cache URLs redirect to their canonical
+workspace, retaining supported public navigation state. Ordinary unsaved drafts
+survive topic changes. The draft count in the top bar can discard all ordinary
+drafts after confirmation, including drafts for a removed service or integration.
+Draft values remain in this browser document's memory only.

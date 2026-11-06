@@ -1,6 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@/test";
-import { AdminDraftProvider, useAdminDraftAuthority } from "./AdminDraftProvider";
+import { cleanup, fireEvent, render, screen, waitFor } from "@/test";
+import {
+  AdminDraftProvider,
+  useAdminDraftAuthority,
+  useAdminDraftCount,
+  useAdminDraftExit,
+} from "./AdminDraftProvider";
 import { allowAdminDocumentExit } from "./adminDocumentExit";
 import { useAdminDraft } from "./useAdminDraft";
 
@@ -40,6 +45,34 @@ it("retains only ordinary allowlisted values across tab and soft map navigation"
   rerender(view(true));
   expect(screen.getByLabelText("Label")).toHaveValue("draft");
   fireEvent.click(screen.getByText("Discard"));
+  expect(exit()).toBe(false);
+});
+it("can discard an orphaned draft from the shell after its form disappears", async () => {
+  function Summary() {
+    const count = useAdminDraftCount();
+    const discard = useAdminDraftExit();
+    return (
+      <button type="button" onClick={() => void discard("Discard all drafts")}>
+        {count} drafts
+      </button>
+    );
+  }
+  const view = (show: boolean) => (
+    <AdminDraftProvider>
+      <Summary />
+      {show && <Form />}
+    </AdminDraftProvider>
+  );
+  const { rerender } = render(view(true));
+  fireEvent.change(screen.getByLabelText("Label"), { target: { value: "orphaned edit" } });
+  rerender(view(false));
+  fireEvent.click(screen.getByRole("button", { name: "1 drafts" }));
+  fireEvent.click(screen.getByRole("button", { name: "Stay" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(exit()).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "1 drafts" }));
+  fireEvent.click(screen.getByRole("button", { name: "Discard and continue" }));
+  expect(await screen.findByRole("button", { name: "0 drafts" })).toBeInTheDocument();
   expect(exit()).toBe(false);
 });
 it("bypasses only the immediate download and restores warning for later real exits", () => {

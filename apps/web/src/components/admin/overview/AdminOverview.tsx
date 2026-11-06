@@ -106,7 +106,7 @@ function attentionHref(item: AttentionItem): string {
     return `/admin/integrations/${item.target}`;
   }
   if (item.type === "job_failed") return "/admin/activity";
-  if (item.type === "service_unhealthy") return "/admin/services";
+  if (item.type === "service_unhealthy") return "/admin/system/services";
   return "/admin";
 }
 
@@ -331,7 +331,7 @@ export function AdminOverview() {
 
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: "grow" }}>
           {data.services ? (
-            <StatCard title="Services" icon={<DnsIcon />} href="/admin/services">
+            <StatCard title="Services" icon={<DnsIcon />} href="/admin/system/services">
               <Typography
                 variant="h4"
                 sx={{

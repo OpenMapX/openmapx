@@ -24,8 +24,10 @@ it.each([true, null])(
         <AdminSidebar open={true} onClose={() => {}} selfHosted={selfHosted} />
       </NextIntlClientProvider>,
     );
-    expect(screen.getAllByText("Services").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Maintenance").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "System" })[0]).toHaveAttribute(
+      "href",
+      "/admin/system/services",
+    );
   },
 );
 it.each(["admin", "privacy_admin"])(
@@ -61,9 +63,9 @@ it("shows privacy setup to full administrators", () => {
       <AdminSidebar open={true} onClose={() => {}} {...{ role: "admin" }} />
     </NextIntlClientProvider>,
   );
-  expect(screen.getAllByRole("link", { name: "Privacy setup" })[0]).toHaveAttribute(
+  expect(screen.getAllByRole("link", { name: "Privacy" })[0]).toHaveAttribute(
     "href",
-    "/admin/privacy-setup",
+    "/admin/privacy",
   );
 });
 it("does not offer privacy setup to privacy administrators", () => {
@@ -83,6 +85,6 @@ it("closes mobile navigation on an ordinary destination selection", () => {
     </NextIntlClientProvider>,
   );
   document.addEventListener("click", (event) => event.preventDefault(), { once: true });
-  screen.getAllByRole("link", { name: "Catalog" })[0].click();
+  screen.getAllByRole("link", { name: "System" })[0].click();
   expect(close).toHaveBeenCalledTimes(1);
 });

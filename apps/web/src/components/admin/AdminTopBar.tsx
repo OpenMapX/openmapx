@@ -12,53 +12,49 @@ import Typography from "@mui/material/Typography";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import {
+  type AdminNavigationAccess,
+  adminDestinationForPath,
+  adminPrimaryNavigation,
+  adminWorkspaceForPath,
+} from "@/lib/admin/adminNavigation";
+import { AdminDraftSummary } from "./AdminDraftSummary";
+import { AdminSearch } from "./AdminSearch";
 import { AdminJobTray } from "./activity/AdminJobTray";
 import { SIDEBAR_WIDTH, TOPBAR_HEIGHT } from "./layoutConstants";
 
-const SEGMENT_LABELS: Record<string, string> = {
-  admin: "Admin",
-  users: "Users",
-  integrations: "Integrations",
-  store: "Store",
-  services: "Services",
-  data: "Data",
-  status: "Status",
-  activity: "Activity",
-  settings: "Settings",
-  cache: "Cache",
-  sources: "Sources",
-};
-
-function labelForSegment(seg: string): string {
-  if (SEGMENT_LABELS[seg]) return SEGMENT_LABELS[seg];
-  // UUID → "Detail"
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)) return "Detail";
-  // kebab-case slug (e.g. integration ID) → title case
-  if (seg.includes("-"))
-    return seg
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  return seg.charAt(0).toUpperCase() + seg.slice(1);
-}
-
 interface AdminTopBarProps {
-  user: { name: string; email: string; image?: string; role?: string };
+  user: { id: string; name: string; email: string; image?: string; role?: string };
+  selfHosted?: boolean | null;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
-
-function useBreadcrumbs(): { label: string; href: string }[] {
+function useBreadcrumbs(access: AdminNavigationAccess): { label: string; href: string }[] {
   const pathname = usePathname();
-  const segments = pathname.split("/").filter(Boolean);
-  return segments.map((seg, i) => ({
-    label: labelForSegment(seg),
-    href: `/${segments.slice(0, i + 1).join("/")}`,
-  }));
+  const t = useTranslations("adminNavigation");
+  const workspace = adminWorkspaceForPath(pathname);
+  const topic = adminDestinationForPath(pathname);
+  const primary = adminPrimaryNavigation(access).find((entry) => entry.workspace === workspace);
+  const crumbs = [{ label: t("administration"), href: "/admin" }];
+  if (primary && workspace !== "overview")
+    crumbs.push({ label: t(`primary.${workspace}`), href: primary.href });
+  if (topic && topic.href !== primary?.href)
+    crumbs.push({ label: t(`destinations.${topic.id}.label`), href: topic.href });
+  if (topic && pathname.startsWith(`${topic.href}/`)) {
+    let label = pathname.slice(topic.href.length + 1);
+    try {
+      label = decodeURIComponent(label);
+    } catch {
+      label = "Detail";
+    }
+    crumbs.push({ label, href: pathname });
+  }
+  return crumbs;
 }
 
-export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarProps) {
-  const breadcrumbs = useBreadcrumbs();
+export function AdminTopBar({ user, selfHosted, sidebarOpen, onToggleSidebar }: AdminTopBarProps) {
+  const breadcrumbs = useBreadcrumbs({ role: user.role, selfHosted });
   const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
 
   return (
@@ -107,6 +103,10 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
                 sx={{
                   color: "text.primary",
                   fontWeight: 600,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  maxWidth: { xs: 110, sm: 260 },
                 }}
               >
                 {crumb.label}
@@ -129,7 +129,13 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
           })}
         </Breadcrumbs>
 
-        {user.role === "admin" && <AdminJobTray />}
+        {user.role === "admin" && (
+          <>
+            <AdminSearch role={user.role} selfHosted={selfHosted} actorId={user.id} />
+            <AdminDraftSummary />
+            <AdminJobTray />
+          </>
+        )}
         <Tooltip title="Back to Map">
           <IconButton
             component={Link}
@@ -147,6 +153,7 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
             src={avatarSrc}
             alt={user.name}
             sx={{
+              display: { xs: "none", sm: "flex" },
               width: 32,
               height: 32,
               fontSize: 13,

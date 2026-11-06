@@ -3029,28 +3029,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(JSON.stringify(unchanged!.result)).toBe(failed);
             return;
           }
-          let retainedBytes: Buffer | undefined;
           const unlinkBoundary = async () => {
             const marker = join(host.root, "coordinator-retirement-unlinked"),
               until = Date.now() + 150000;
             while (!existsSync(marker)) {
-              const [observed] = await fixture.db
-                  .select()
-                  .from(schema.adminJob)
-                  .where(eq(schema.adminJob.id, id)),
-                candidate = (
-                  observed?.result as
-                    | { _configurationCandidate?: { sealedOperationKey?: string } }
-                    | undefined
-                )?._configurationCandidate;
-              if (candidate?.sealedOperationKey) {
-                const path = join(
-                  host.queue,
-                  ".candidates",
-                  `${candidate.sealedOperationKey}.json`,
-                );
-                if (existsSync(path)) retainedBytes = readFileSync(path);
-              }
               if (Date.now() > until) throw Error("Actual retirement unlink boundary missing");
               await delay(10);
             }
@@ -3068,7 +3050,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             prior = before!.result as Record<string, unknown>,
             candidate = prior._configurationCandidate as Record<string, unknown>,
             path = join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`),
-            bytes = point === "candidate unlink" ? retainedBytes! : readFileSync(path),
+            // The native unlink hook publishes these exact bytes only after unlink succeeds.
+            bytes =
+              point === "candidate unlink"
+                ? readFileSync(join(host.root, "coordinator-retirement-unlinked"))
+                : readFileSync(path),
             decision = JSON.stringify(prior._configurationMaintenanceDecision),
             inspected = inspectPreparedConfigurationRecord(bytes, host.token).record,
             originalNormal =
@@ -3085,7 +3071,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             point === "candidate unlink" ? "settled" : !pullBoundary ? "saved" : "prepared",
           );
           if (point === "candidate unlink") {
-            expect(bytes).toBeDefined();
+            expect(inspected.operationKey).toBe(candidate.sealedOperationKey);
             expect(existsSync(path)).toBe(false);
             expect(candidate.retirement).toMatchObject({ version: 1, integrationIds: [] });
             expect(posts.get("configurationMaintenance.settle")).toBe(1);

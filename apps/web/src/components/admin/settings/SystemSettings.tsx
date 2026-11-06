@@ -408,6 +408,7 @@ function SettingsGroupPanel({
   description,
   anchorId,
   defaultExpanded,
+  focusKey,
   subgroupMeta = SUBGROUP_META,
   text,
 }: {
@@ -418,6 +419,7 @@ function SettingsGroupPanel({
   description?: string;
   anchorId?: string;
   defaultExpanded?: boolean;
+  focusKey?: string;
   subgroupMeta?: Record<string, { label: string; description?: string }>;
   text: SettingsEditorText;
 }) {
@@ -430,6 +432,17 @@ function SettingsGroupPanel({
   );
   const [secretValues, setSecretValues] = useState<Record<string, unknown>>({});
   const [invalidKeys, setInvalidKeys] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState(defaultExpanded ?? group.id === "general");
+  useEffect(() => {
+    if (!focusKey || !group.settings.some((setting) => setting.key === focusKey)) return;
+    setExpanded(true);
+    const timer = setTimeout(() => {
+      const element = document.getElementById(`setting-${focusKey}`);
+      element?.scrollIntoView?.({ block: "center" });
+      element?.querySelector<HTMLElement>("input, textarea, button, [role=combobox]")?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [focusKey, group.settings]);
   const renderedValues = { ...serverValues, ...draft.values, ...secretValues };
   const dirtyKeys = group.settings
     .filter(
@@ -499,7 +512,8 @@ function SettingsGroupPanel({
   return (
     <Accordion
       id={anchorId}
-      defaultExpanded={defaultExpanded ?? group.id === "general"}
+      expanded={expanded}
+      onChange={(_event, value) => setExpanded(value)}
       variant="outlined"
       disableGutters
       sx={{
@@ -538,6 +552,15 @@ function SettingsGroupPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails sx={{ px: 2, pt: 1.5, pb: 2, borderTop: 1, borderColor: "divider" }}>
+        {focusKey &&
+          group.settings.some(
+            (setting) => setting.key === focusKey && !isVisible(setting, renderedValues),
+          ) && (
+            <Alert severity="info">
+              This setting is hidden by the current policy or provider selection. Change that
+              selection only if you intend to change the effective configuration.
+            </Alert>
+          )}
         <Stack
           sx={{
             gap: 2.5,
@@ -602,7 +625,11 @@ function SettingsGroupPanel({
                 }}
               >
                 {section.settings.map((s) => (
-                  <Stack key={s.key} sx={{ gap: 0.5, minWidth: 0 }}>
+                  <Stack
+                    id={`setting-${s.key}`}
+                    key={s.key}
+                    sx={{ gap: 0.5, minWidth: 0, scrollMarginTop: 80 }}
+                  >
                     <Stack
                       direction="row"
                       sx={{
@@ -928,6 +955,7 @@ export function SystemSettings({
   subgroupMeta,
   text = DEFAULT_TEXT,
   onSettingsSaved,
+  focusKey,
 }: {
   sections?: readonly SettingsEditorSection[];
   showHeader?: boolean;
@@ -936,6 +964,7 @@ export function SystemSettings({
   subgroupMeta?: Record<string, { label: string; description?: string }>;
   text?: SettingsEditorText;
   onSettingsSaved?: () => void | Promise<void>;
+  focusKey?: string;
 } = {}) {
   const env = useEnv();
   const draftStore = useContext(AdminDraftContext);
@@ -1040,7 +1069,9 @@ export function SystemSettings({
     >
       {showHeader && <AdminPageHeader title="Settings" subtitle="Operator configuration" />}
       {(!sections || sections.some((section) => section.groupId === "auth")) &&
-        data.groups.some((group) => group.id === "auth") && <AuthPolicySettings />}
+        data.groups.some((group) => group.id === "auth") && (
+          <AuthPolicySettings focusKey={focusKey} />
+        )}
       {panels.map(({ group, section }) => (
         <SettingsGroupPanel
           key={section?.id ?? group.id}
@@ -1050,6 +1081,7 @@ export function SystemSettings({
           anchorId={section?.id}
           description={section?.description}
           defaultExpanded={section?.defaultExpanded}
+          focusKey={focusKey}
           subgroupMeta={subgroupMeta}
           text={text}
           extra={
@@ -1076,6 +1108,28 @@ export function SystemSettings({
           {toast?.msg}
         </Alert>
       </Snackbar>
+    </Stack>
+  );
+}
+
+/** Transfer utilities intentionally fetch no settings values until an operator exports. */
+export function SettingsTransfer() {
+  const [message, setMessage] = useState<{ text: string; severity: "success" | "error" } | null>(
+    null,
+  );
+  return (
+    <Stack sx={{ gap: 2, maxWidth: 900 }}>
+      <AdminPageHeader
+        title="Configuration transfer"
+        subtitle="Export application settings, transfer integration configuration or migrate an instance"
+      />
+      {message && (
+        <Alert severity={message.severity} onClose={() => setMessage(null)}>
+          {message.text}
+        </Alert>
+      )}
+      <ExportImportSection onMsg={(text, severity = "success") => setMessage({ text, severity })} />
+      <ConfigurationMigrationPanel />
     </Stack>
   );
 }

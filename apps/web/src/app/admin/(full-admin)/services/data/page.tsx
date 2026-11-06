@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { DataWorkflowsPage } from "@/components/admin/services/DataWorkflowsPage";
-
-export const metadata: Metadata = { title: "Data Workflows — Admin — OpenMapX" };
-
-export default function AdminDataWorkflowsPage() {
-  return <DataWorkflowsPage />;
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(legacyAdminHref("/admin/services/data", await searchParams));
 }

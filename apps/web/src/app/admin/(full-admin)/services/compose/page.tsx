@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { ComposePreview } from "@/components/admin/services/ComposePreview";
-
-export const metadata: Metadata = { title: "Compose Preview — Admin — OpenMapX" };
-
-export default function ComposePreviewPage() {
-  return <ComposePreview />;
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(legacyAdminHref("/admin/services/compose", await searchParams));
 }

@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { BackupsPage } from "@/components/admin/services/BackupsPage";
-
-export const metadata: Metadata = { title: "Backups — Admin — OpenMapX" };
-
-export default function AdminBackupsPage() {
-  return <BackupsPage />;
+import { redirect } from "next/navigation";
+import { legacyAdminHref } from "@/lib/admin/adminNavigation";
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(legacyAdminHref("/admin/services/backups", await searchParams));
 }

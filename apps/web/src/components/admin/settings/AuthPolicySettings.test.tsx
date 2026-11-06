@@ -44,13 +44,13 @@ const view = {
   },
 };
 const caches: ReturnType<typeof createTestQueryClient>[] = [];
-async function mount() {
+async function mount(focusKey?: string) {
   const { AuthPolicySettings } = await import("./AuthPolicySettings"),
     cache = createTestQueryClient();
   caches.push(cache);
   return render(
     <QueryClientProvider client={cache}>
-      <AuthPolicySettings />
+      <AuthPolicySettings focusKey={focusKey} />
     </QueryClientProvider>,
   );
 }
@@ -62,6 +62,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   for (const c of caches.splice(0)) c.clear();
+});
+it("focuses the addressed policy field without applying it", async () => {
+  await mount("passwordMinLength");
+  await waitFor(() => expect(screen.getByLabelText("Minimum password length")).toHaveFocus());
+  expect(mocks.apply).not.toHaveBeenCalled();
 });
 it("keeps effective defaults separate from legacy false drafts and rejects invalid bounds", async () => {
   await mount();

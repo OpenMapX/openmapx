@@ -145,7 +145,7 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
         {(catalog.data?.operations ?? [])
           .filter((operation) => DATA_OPERATION_GROUPS.has(operation.group))
           .map((operation) => (
-            <Grid key={operation.id} size={{ xs: 12, md: 6 }}>
+            <Grid id={`operation-${operation.id}`} key={operation.id} size={{ xs: 12, md: 6 }}>
               <AdminOperationCard
                 apiUrl={apiUrl}
                 operation={operation}
@@ -427,7 +427,12 @@ function DataWorkflowsView() {
                   <RefreshIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Button component={Link} href="/admin/services" variant="outlined" size="small">
+              <Button
+                component={Link}
+                href="/admin/system/services"
+                variant="outlined"
+                size="small"
+              >
                 ← Services
               </Button>
             </>
@@ -448,11 +453,24 @@ function DataWorkflowsView() {
         )}
         <DataInventorySection osm={data.osm} builds={data.builds} onPageChange={setOsmOffset} />
         <ArtifactTransfersSection apiUrl={apiUrl} />
-        <OvertureMaintenance apiUrl={apiUrl} />
-        <SearchIndexMaintenance apiUrl={apiUrl} />
+        <div id="operation-overture-sync">
+          {["overture-pull", "overture-ingest", "overture-extract", "overture-conflate"].map(
+            (id) => (
+              <span key={id} id={`operation-${id}`} />
+            ),
+          )}
+          <OvertureMaintenance apiUrl={apiUrl} />
+        </div>
+        <div id="operation-search-index-build">
+          <SearchIndexMaintenance apiUrl={apiUrl} />
+        </div>
         <AmbientPlacesMaintenance apiUrl={apiUrl} />
-        <NotablePlacesMaintenance apiUrl={apiUrl} />
-        <TransitSourcesSection apiUrl={apiUrl} />
+        <div id="operation-notable-places-build">
+          <NotablePlacesMaintenance apiUrl={apiUrl} />
+        </div>
+        <div id="transit-sources">
+          <TransitSourcesSection apiUrl={apiUrl} />
+        </div>
         <MotisTransitousSection status={data.motisTransitous} />
         <SharedMobilityPolicySection apiUrl={apiUrl} />
       </Stack>
