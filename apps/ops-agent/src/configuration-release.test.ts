@@ -289,6 +289,10 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
       legacy = services.agentStatePaths(join(checkout, "infra/docker")).handoff;
     }
     const before = readFileSync(legacy);
+    const cliRead = () =>
+      services.readCheckedConfigurationRelease(infraDir, { releaseId, manifestDigest });
+    if (kind === "consumed-handoff") expect(cliRead()).toMatchObject({ releaseId, manifestDigest });
+    else expect(cliRead).toThrow(/legacy/i);
     const execFile = vi.fn(async (_file: string, args: readonly string[]) => ({
       stdout:
         args[0] === "info"

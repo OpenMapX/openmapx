@@ -1,7 +1,7 @@
 /** Actual queued API producer/reconciler. Only its owning test controls HTTP
  * reply delivery and kills this native process; no DB/service/authority mocks. */
 
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { constants, readFileSync, renameSync, writeFileSync } from "node:fs";
 import filesystem from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -16,7 +16,9 @@ import { handleSystemUpdateJob } from "../../system-maintenance";
 let body = "";
 for await (const chunk of process.stdin) body += chunk;
 const input = JSON.parse(body) as {
-  action: "apply" | "update" | "release" | "reconcile";
+  action: "apply" | "update" | "release" | "platform-release" | "reconcile";
+  operationKey?: string;
+  applyInput?: unknown;
   actorId?: string;
   releaseId?: string;
   manifestDigest?: string;
@@ -107,7 +109,39 @@ try {
     id = input.jobId;
     await jobRunner.reconcile({ limit: 1 });
   } else {
-    if (input.action === "release") {
+    if (input.action === "platform-release") {
+      // Synthetic test-only session from Better Auth's real adapter and signer.
+      // No production credentials, service mocks or direct job enqueue path.
+      const { auth } = await import("../../../auth");
+      const { adminPlatformRoute } = await import("../../../routes/admin-platform");
+      const { default: Fastify } = await import("fastify");
+      if (!input.actorId || !input.operationKey) throw Error("Invalid fixture actor");
+      const context = await auth.$context;
+      const session = await context.internalAdapter.createSession(input.actorId);
+      if (!session) throw Error("Fixture session unavailable");
+      const signature = createHmac("sha256", process.env.BETTER_AUTH_SECRET!)
+        .update(session.token)
+        .digest("base64");
+      const app = Fastify();
+      await app.register(adminPlatformRoute, { prefix: "/api" });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/admin/platform/configuration/apply",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": input.operationKey,
+            cookie: `${context.authCookies.sessionToken.name}=${encodeURIComponent(`${session.token}.${signature}`)}`,
+          },
+          payload: input.applyInput as Record<string, unknown>,
+        });
+        if (response.statusCode !== 202)
+          throw Error(`Fixture public apply refused: ${response.statusCode}`);
+        id = response.json().jobId;
+      } finally {
+        await app.close();
+      }
+    } else if (input.action === "release") {
       if (
         typeof input.actorId !== "string" ||
         !/^[a-f0-9-]{36}$/.test(input.actorId) ||

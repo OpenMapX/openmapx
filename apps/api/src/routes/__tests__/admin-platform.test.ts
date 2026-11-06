@@ -246,3 +246,48 @@ it("transports a checked-release preview identity without accepting caller image
   expect(invalid.statusCode).toBe(400);
   expect(mocks.preview).not.toHaveBeenCalled();
 });
+
+it("accepts the CLI's real-session release-only headers and bodies on the public routes", async () => {
+  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "not-a-client-credential");
+  const address = app.server.address();
+  if (!address || typeof address === "string") throw Error("Fixture address unavailable");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = {
+    cookie: "__Secure-better-auth.session_token=synthetic.signed",
+    origin: "https://maps.example.test",
+    "content-type": "application/json",
+    "idempotency-key": "update:synthetic-cli-preview-01",
+  };
+  const body = {
+    ...request,
+    release: { releaseId: "checked-release", manifestDigest: "a".repeat(64) },
+  };
+  const reviewed = await fetch(`${base}/api/admin/platform/configuration/preview`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  expect(reviewed.status).toBe(200);
+  expect(mocks.preview).toHaveBeenLastCalledWith({
+    ...body,
+    actorId: "test-admin-id",
+    operationKey: expect.stringMatching(/^opk1_/),
+  });
+  const applied = await fetch(`${base}/api/admin/platform/configuration/apply`, {
+    method: "POST",
+    headers: { ...headers, "idempotency-key": "update:synthetic-cli-apply-0001" },
+    body: JSON.stringify({
+      expectedCurrentRevisionId: null,
+      previewFingerprint: preview.previewFingerprint,
+      confirmations: preview.requiredConfirmation,
+    }),
+  });
+  expect(applied.status).toBe(202);
+  expect(mocks.apply).toHaveBeenLastCalledWith({
+    actorId: "test-admin-id",
+    operationKey: expect.stringMatching(/^opk1_/),
+    expectedCurrentRevisionId: null,
+    previewFingerprint: preview.previewFingerprint,
+    confirmations: preview.requiredConfirmation,
+  });
+});

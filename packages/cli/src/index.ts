@@ -9,6 +9,7 @@ import { registerDataCommands } from "./commands/data";
 import { registerExtCommands } from "./commands/ext";
 import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerServicesCommands } from "./commands/services";
+import { registerSystemCommands } from "./commands/system";
 import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerUsersCommands } from "./commands/users";
 import { fixedCliCommandExitCode } from "./lib/control-context";
@@ -30,6 +31,7 @@ program
   .version("1.0.0");
 
 registerServicesCommands(program);
+registerSystemCommands(program);
 registerIntegrationsCommands(program);
 registerComposeCommands(program);
 registerDataCommands(program);

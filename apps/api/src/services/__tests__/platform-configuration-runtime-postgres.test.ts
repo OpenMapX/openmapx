@@ -345,6 +345,22 @@ async function nativeReleaseWorker(
   databaseUrl: string,
   input:
     | { action: "release"; actorId: string; releaseId: string; manifestDigest: string }
+    | {
+        action: "platform-release";
+        actorId: string;
+        operationKey: string;
+        applyInput: {
+          expectedCurrentRevisionId: string | null;
+          previewFingerprint: string;
+          confirmations: {
+            domain: boolean;
+            dnsTls: boolean;
+            oauth: boolean;
+            passkeys: boolean;
+            alternateLogin: boolean;
+          };
+        };
+      }
     | { action: "reconcile"; jobId: string },
 ) {
   const child = spawn(
@@ -387,7 +403,10 @@ async function nativeReleaseWorker(
       }
     }
   });
-  child.stderr.resume();
+  let workerStderr = "";
+  child.stderr.on("data", (chunk) => {
+    workerStderr = (workerStderr + String(chunk)).slice(-4096);
+  });
   const done = new Promise<{
     code: number | null;
     signal: NodeJS.Signals | null;
@@ -397,7 +416,8 @@ async function nativeReleaseWorker(
     child.once("close", (code, signal) => resolve({ code, signal, result }));
   });
   void done.then(
-    (value) => queued.reject(Error(`Native API exited before queueing (${value.code})`)),
+    (value) =>
+      queued.reject(Error(`Native API exited before queueing (${value.code}): ${workerStderr}`)),
     (error) => queued.reject(error),
   );
   if (input.action === "reconcile") queued.resolve(input.jobId);
@@ -449,6 +469,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-resource-inspection-loss",
       "launch-native-release",
       "launch-native-release-wrong-config",
+      "launch-native-release-api-before-save",
+      "launch-native-release-api-after-save",
       "launch-native-system-release",
       "launch-native-system-release-ack-loss",
       "launch-native-system-release-killed",
@@ -472,7 +494,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             version.startsWith("launch-native") || version === "launch-bundle-authority-mismatch",
           application = version === "launch-apply" || native,
           systemRelease = version.startsWith("launch-native-system-release"),
-          apiRestart = version.startsWith("launch-native-system-release-api-");
+          apiRestart = /-api-(before|after)-save$/.test(version);
         const ids = [
           "motis",
           "ops-agent",
@@ -517,6 +539,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-resource",
             "launch-native-release",
             "launch-native-release-wrong-config",
+            "launch-native-release-api-before-save",
+            "launch-native-release-api-after-save",
             "launch-native-system-release",
             "launch-native-system-release-ack-loss",
             "launch-native-system-release-killed",
@@ -708,7 +732,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           sql: state.fixture.sql,
           infraDir: host.infraDir,
           serviceIds: ids,
-          pausePrepareResponse: version === "launch-native-system-release-api-before-save",
+          pausePrepareResponse: version.endsWith("-api-before-save"),
         });
         const journal = await openOpsJobJournal(
           join(host.infraDir, "state/ops-agent/jobs-v1.json"),
@@ -813,6 +837,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-resource",
               "launch-native-release",
               "launch-native-release-wrong-config",
+              "launch-native-release-api-before-save",
+              "launch-native-release-api-after-save",
               "launch-native-system-release",
               "launch-native-system-release-ack-loss",
               "launch-native-system-release-killed",
@@ -846,6 +872,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           "launch-native-resource",
                           "launch-native-release",
                           "launch-native-release-wrong-config",
+                          "launch-native-release-api-before-save",
+                          "launch-native-release-api-after-save",
                           "launch-native-system-release",
                           "launch-native-system-release-ack-loss",
                           "launch-native-system-release-killed",
@@ -880,7 +908,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               const { handleSystemUpdateJob } = await import("../system-maintenance");
               jobRunner.register("system.update", handleSystemUpdateJob);
             }
+            let platformWorkerStarted = false;
             const apply = async () => {
+              if (apiRestart && !systemRelease && !platformWorkerStarted) {
+                platformWorkerStarted = true;
+                const worker = await nativeReleaseWorker(host, state.fixture.connectionUri, {
+                  action: "platform-release",
+                  actorId,
+                  operationKey,
+                  applyInput: input!,
+                });
+                nativeWorkers.push(worker);
+                return { ok: true as const, jobId: worker.jobId };
+              }
               if (systemRelease) {
                 if (apiRestart) {
                   const worker = await nativeReleaseWorker(host, state.fixture.connectionUri, {
@@ -944,7 +984,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .from(schema.systemSettings)
                 .where(eq(schema.systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
             };
-            if (version === "launch-native-system-release-api-before-save") {
+            if (version.endsWith("-api-before-save")) {
               await Promise.race([
                 dm.prepareReplyEntered,
                 nativeWorkers[0]!.done.then(() => {
@@ -974,7 +1014,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 outcome: "not_committed",
                 cleanupFailed: false,
               });
-              expect(result.phase).toBe("not_applied");
+              if (systemRelease) expect(result.phase).toBe("not_applied");
               expect(await readDesiredPlatform()).toEqual([]);
               expect(dm.preparePosts).toBe(1);
               expect(dm.settlePosts).toBe(1);
@@ -1045,7 +1085,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(dm.settlePosts).toBe(0);
             }
             let originalRows: unknown, originalPlatformRows: unknown;
-            if (version === "launch-native-system-release-api-after-save") {
+            if (version.endsWith("-api-after-save")) {
               const original = (await readJob()).result as {
                 _configurationCandidate?: { sealedOperationKey?: string; rowVersions?: unknown };
               };
@@ -1136,7 +1176,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ),
               );
             }
-            if (version === "launch-native-system-release-api-after-save") {
+            if (version.endsWith("-api-after-save")) {
               await waitForOriginalLease();
               const replacement = await nativeReleaseWorker(host, state.fixture.connectionUri, {
                 action: "reconcile",

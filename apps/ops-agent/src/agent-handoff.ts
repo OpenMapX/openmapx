@@ -25,39 +25,11 @@ export const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.mjs";
 const MAX_HANDOFF_BYTES = 128 * 1024;
 const MAX_REASON_LENGTH = 256;
 const HANDOFF_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-const PHASES = new Set<AgentHandoffPhase>([
-  "launched",
-  "overlay_written",
-  "recreated",
-  "applied",
-  "rolled_back",
-  "failed",
-]);
 const TERMINAL_PHASES = new Set<AgentHandoffPhase>(["applied", "rolled_back", "failed"]);
 const SILENT: Omit<DockerCommandContext, "signal"> = { emitLog: () => {} };
 
 export type AgentHandoffPhase = Exclude<OpsAgentHandoffPhase, "none">;
-
-export interface AgentHandoffRecord {
-  version: 1;
-  handoffId: string;
-  releaseId: string;
-  digest: string;
-  phase: AgentHandoffPhase;
-  /** Overlay bytes before the handoff, restored on rollback; null when absent. */
-  previousOverlay: string | null;
-  createdAt: string;
-  updatedAt: string;
-  reason?: string;
-  /** Set once a release application has used this handoff's previous overlay. */
-  consumed?: boolean;
-  /**
-   * Set on a handoff imported from an earlier release's state location. Its
-   * helper keeps recording there, so this agent settles it once that helper
-   * has exited.
-   */
-  importedFromLegacy?: boolean;
-}
+export type AgentHandoffRecord = coreServices.AgentHandoffRecord;
 
 function agentHandoffPath(rootDir: string): string {
   return coreServices.agentStatePaths(join(rootDir, "infra", "docker")).handoff;
@@ -65,32 +37,6 @@ function agentHandoffPath(rootDir: string): string {
 
 export function isTerminalHandoff(phase: AgentHandoffPhase): boolean {
   return TERMINAL_PHASES.has(phase);
-}
-
-function parseRecord(raw: string): AgentHandoffRecord {
-  const value = JSON.parse(raw) as Partial<AgentHandoffRecord> | null;
-  if (
-    !value ||
-    typeof value !== "object" ||
-    value.version !== 1 ||
-    typeof value.handoffId !== "string" ||
-    !HANDOFF_ID.test(value.handoffId) ||
-    typeof value.releaseId !== "string" ||
-    !HANDOFF_ID.test(value.releaseId) ||
-    typeof value.digest !== "string" ||
-    !/^[a-f0-9]{64}$/.test(value.digest) ||
-    typeof value.phase !== "string" ||
-    !PHASES.has(value.phase) ||
-    !(value.previousOverlay === null || typeof value.previousOverlay === "string") ||
-    typeof value.createdAt !== "string" ||
-    typeof value.updatedAt !== "string" ||
-    !(value.reason === undefined || typeof value.reason === "string") ||
-    !(value.consumed === undefined || typeof value.consumed === "boolean") ||
-    !(value.importedFromLegacy === undefined || typeof value.importedFromLegacy === "boolean")
-  ) {
-    throw new Error("Agent handoff record rejected");
-  }
-  return value as AgentHandoffRecord;
 }
 
 export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
@@ -108,7 +54,7 @@ export function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new Error("Agent handoff record rejected");
   }
-  return parseRecord(raw);
+  return coreServices.parseAgentHandoffRecord(raw);
 }
 
 export function writeAgentHandoff(rootDir: string, record: AgentHandoffRecord): void {

@@ -1,4 +1,5 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
+export * from "./agent-handoff-record";
 export {
   type AgentMountLayout,
   generationAgentMountLayout,
@@ -39,6 +40,7 @@ export {
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
+export * from "./checked-configuration-release";
 export {
   cacheCheckedReleaseManifest,
   listReleaseStoreManifests,
