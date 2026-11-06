@@ -366,7 +366,7 @@ describe("integration administration canonical producer contracts", () => {
   });
   it("serializes raw manifest and config-schema JSON losslessly through the installed schema emitter", () => {
     const apiRequire = createRequire(
-      new URL("../../../../../../apps/api/package.json", import.meta.url),
+      new URL("../../../../../apps/api/package.json", import.meta.url),
     );
     const stringify = createRequire(apiRequire.resolve("fastify"))("fast-json-stringify");
     const definitions: Record<string, unknown> = {};

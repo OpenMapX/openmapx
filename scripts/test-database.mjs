@@ -1,8 +1,11 @@
+// biome-ignore-all lint/suspicious/noUndeclaredEnvVars: Explicit uncached test launcher.
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { shardDatabaseCommand } from "./database-test-shards.mjs";
 
 const groups = JSON.parse(readFileSync(new URL("./database-test-groups.json", import.meta.url)));
 
@@ -57,10 +60,34 @@ export function createDatabaseTestCommand(group = "all", env = process.env) {
 
 if (import.meta.main) {
   try {
-    if (process.argv.length > 3) throw new Error("Usage: pnpm test:database [group]");
-    const { args, env } = createDatabaseTestCommand(process.argv[2]);
+    if (
+      process.argv.length > 4 ||
+      (process.argv[3] && !/^[1-9][0-9]*\/[1-9][0-9]*$/.test(process.argv[3]))
+    )
+      throw new Error("Usage: pnpm test:database [group] [part/total]");
+    let command = createDatabaseTestCommand(process.argv[2]);
     const vitestPackage = createRequire(import.meta.url).resolve("vitest/package.json");
     const vitest = resolve(dirname(vitestPackage), "vitest.mjs");
+    if (process.argv[3])
+      command = shardDatabaseCommand({
+        group: process.argv[2],
+        shard: process.argv[3],
+        command,
+        receiptPath: process.env.OPENMAPX_TEST_SHARD_RECEIPT,
+        collect(args) {
+          const result = spawnSync(process.execPath, [vitest, ...args], {
+            cwd: fileURLToPath(new URL("..", import.meta.url)),
+            env: command.env,
+            encoding: "utf8",
+            maxBuffer: 32 * 1024 * 1024,
+            timeout: 90000,
+          });
+          if (result.error || result.status !== 0)
+            throw new Error(`Vitest inventory failed: ${result.error?.message ?? result.stderr}`);
+          return JSON.parse(result.stdout);
+        },
+      });
+    const { args, env } = command;
     const result = spawnSync(process.execPath, [vitest, ...args], {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
       env,

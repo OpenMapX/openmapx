@@ -2,7 +2,7 @@
   "name": "openmapx",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build --filter='!web' && turbo run build:deploy --filter=web",
     "dev": "turbo run dev",
     "start": "turbo run start",
     "lint": "biome check . && prettier --check \"**/*.{md,yml,yaml}\" && pnpm check-translations",

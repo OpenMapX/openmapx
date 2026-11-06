@@ -12,9 +12,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, resolve } from "node:path";
-import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
+import { createImpactPlan, verifyResults } from "./ci-impact-plan.mjs";
+import { databaseMatrix } from "./database-test-shards.mjs";
 import { createDatabaseTestCommand } from "./test-database.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -50,13 +52,14 @@ describe("required database test gate", () => {
     const workflow = read(".github/workflows/ci.yml");
     const databaseJob =
       workflow.match(/^ {2}database:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
-    const matrixGroups = databaseJob
-      .match(/group:\s*\[([^\]]+)\]/)?.[1]
-      .split(/,\s*/)
-      .map((group) => group.trim())
-      .filter(Boolean);
+    const matrixGroups = [...new Set(databaseMatrix.map((entry) => entry.group))];
     expect(matrixGroups).toEqual(groupNames);
     expect(matrixGroups).toEqual(Object.keys(groups));
+    const parsed = parse(workflow);
+    expect(parsed.jobs.database.strategy.matrix).toBe(
+      "${{ fromJSON(needs.select.outputs['database-matrix']) }}",
+    );
+    expect(databaseMatrix).toHaveLength(13);
     expect(databaseJob).toContain("fail-fast: false");
     expect(databaseJob).toContain(
       "DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test",
@@ -69,7 +72,9 @@ describe("required database test gate", () => {
       '--health-cmd "pg_isready -h 127.0.0.1 -U postgres -d openmapx_test"',
     );
     expect(databaseJob).toContain("pnpm --filter @openmapx/api exec drizzle-kit migrate");
-    expect(databaseJob).toContain("run: pnpm test:database $" + "{{ matrix.group }}");
+    expect(databaseJob).toContain(
+      'run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"',
+    );
     expect(databaseJob).not.toContain("continue-on-error:");
     const exportSteps = databaseJob.slice(databaseJob.indexOf("      # Docker Hub"));
     expect(exportSteps.match(/if: matrix.group == 'export-restore'/g)).toHaveLength(3);
@@ -83,7 +88,8 @@ describe("required database test gate", () => {
       "OPENMAPX_REAL_BACKUP_FIXTURE: $" + "{{ runner.temp }}/openmapx-real-backup-result.tar",
     );
     expect(workflow).toMatch(/needs:\s*\[[^\]]*\bdatabase\b[^\]]*\]/);
-    expect(workflow).toContain("needs.database.result != 'success'");
+    expect(workflow).toContain("run: node scripts/ci-impact-plan.mjs verify");
+    expect(workflow).toContain("node scripts/database-test-shards.mjs verify");
     const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
     expect(packageJson.scripts["test:database"]).toBe("node scripts/test-database.mjs");
   });
@@ -95,39 +101,15 @@ describe("required database test gate", () => {
     ["skipped", true],
     [undefined, true],
   ])("fails the aggregate for database result %s", (result, shouldFail) => {
-    const aggregate = read(".github/workflows/ci.yml").split("  ci:\n")[1].split("  release:\n")[0];
-    const expression = aggregate.match(/if: >-\n([\s\S]*?)\n {8}run:/)?.[1];
-    expect(expression).toBeDefined();
-    const needs: Record<string, { result?: string }> = Object.fromEntries(
-      [
-        "lint",
-        "types",
-        "test-node",
-        "test-linux-user",
-        "test-agent-mounts",
-        "test-web",
-        "mobile",
-        "database",
-        "build",
-      ].map((job) => [job, { result: "success" }]),
+    const plan = createImpactPlan({ event: "push", head: "a".repeat(40), paths: [] });
+    const needs = Object.fromEntries(
+      Object.keys(plan.jobs).map((id) => [id, { result: "success" }]),
     );
     needs.database = { result };
-    // This condition uses only comparisons, || and &&, shared by Actions and JS.
-    const condition = (expression ?? "").replace(/needs\.([\w-]+)/g, 'needs["$1"]');
-    expect(
-      runInNewContext(
-        condition,
-        {
-          needs: {
-            ...needs,
-            "docker-changes": { result: "skipped" },
-            "docker-build": { result: "skipped" },
-          },
-          github: { event_name: "push" },
-        },
-        { timeout: 1000 },
-      ),
-    ).toBe(shouldFail);
+    needs["docker-changes"] = { result: "skipped" };
+    needs["docker-build"] = { result: "skipped" };
+    if (shouldFail) expect(() => verifyResults(plan, needs, "push")).toThrow();
+    else expect(() => verifyResults(plan, needs, "push")).not.toThrow();
   });
 
   it("discovers gated suites and requires exactly one enabled group owner for each", () => {
@@ -289,6 +271,12 @@ describe("required database test gate", () => {
           resolve(root, "scripts/test-database.mjs"),
           join(temp, "scripts/test-database.mjs"),
         );
+        for (const file of [
+          "database-test-shards.mjs",
+          "database-test-shards.json",
+          "database-test-timings.json",
+        ])
+          copyFileSync(resolve(root, "scripts", file), join(temp, "scripts", file));
         writeFileSync(
           join(temp, "scripts/database-test-groups.json"),
           JSON.stringify({ ingestion: ["launcher.test.mjs"] }),
@@ -345,6 +333,12 @@ describe("required database test gate", () => {
         resolve(root, "scripts/test-database.mjs"),
         join(temp, "scripts/test-database.mjs"),
       );
+      for (const file of [
+        "database-test-shards.mjs",
+        "database-test-shards.json",
+        "database-test-timings.json",
+      ])
+        copyFileSync(resolve(root, "scripts", file), join(temp, "scripts", file));
       copyFileSync(groupsFile, join(temp, "scripts/database-test-groups.json"));
       writeFileSync(
         join(vitest, "package.json"),

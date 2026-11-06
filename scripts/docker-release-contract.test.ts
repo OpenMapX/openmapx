@@ -410,7 +410,7 @@ describe("Docker release trust gate", () => {
     expect(ci).toContain(`apps: \${{ steps.select.outputs.apps }}`);
     expect(ci).toMatch(/^ {2}docker-build:\n/m);
     expect(ci).toContain(`app: \${{ fromJSON(needs.docker-changes.outputs.apps) }}`);
-    expect(ci).toContain("needs: docker-changes");
+    expect(ci).toContain("needs: [select, docker-changes]");
     expect(ci).toContain("needs.docker-changes.outputs.apps != '[]'");
     expect(ci).toContain("push: false");
     expect(ci).toMatch(/needs:\s*\[[^\]]*\bdocker-build\b[^\]]*\]/);

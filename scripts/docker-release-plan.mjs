@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
+import { createDockerIgnoreMatcher } from "./check-docker-context-secrets.ts";
 import { coversPath, dockerInputs, stageInputs } from "./docker-inputs.mjs";
 
 export { coversPath, dockerInputs };
@@ -50,6 +51,7 @@ const globalInputs = [
   ".github/workflows/docker.yml",
   "scripts/docker-release-plan.mjs",
   "scripts/docker-inputs.mjs",
+  "scripts/check-docker-context-secrets.ts",
 ];
 const LOCKFILE = "pnpm-lock.yaml";
 
@@ -68,19 +70,48 @@ export function targetInputs(
   ];
 }
 
+/** Compile each effective ignore policy once, not once per tracked file. */
+function copiedInputPredicate(target, inputs, readDockerfile, readIgnoreFile) {
+  const controls = targetInputs(target, readDockerfile, []);
+  const prefix = target.context === "." ? "" : `${target.context}/`;
+  let excludes;
+  if (readIgnoreFile) {
+    try {
+      let specific;
+      try {
+        specific = readIgnoreFile(`${target.dockerfile}.dockerignore`);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      const policy = specific ?? readIgnoreFile(posix.join(target.context, ".dockerignore"));
+      if (typeof policy === "string") excludes = createDockerIgnoreMatcher(policy.split(/\r?\n/));
+    } catch {
+      /* Unreadable/unknown policies must conservatively rebuild. */
+    }
+  }
+  return (path) => {
+    if (!coversPath(inputs, path)) return false;
+    if (coversPath(controls, path) || !excludes || (prefix && !path.startsWith(prefix)))
+      return true;
+    return !excludes(path.slice(prefix.length));
+  };
+}
+
 export function selectChangedTargets({
   changedPaths,
   readDockerfile,
   tree = [],
   candidates = pullRequestTargets,
+  readIgnoreFile,
 }) {
   return candidates
     .filter((target) => {
       const inputs = targetInputs(target, readDockerfile);
+      const counts = copiedInputPredicate(target, inputs, readDockerfile, readIgnoreFile);
       const copiedSymlink = tree.some(
         (entry) => entry.mode === "120000" && coversPath(inputs, entry.path),
       );
-      return changedPaths.some((path) => copiedSymlink || coversPath(inputs, path));
+      return changedPaths.some((path) => copiedSymlink || counts(path));
     })
     .map((target) => target.app);
 }
@@ -203,7 +234,8 @@ export function imageFingerprint({
     if (typeof readFile !== "function") throw new Error("A bundled image needs file contents");
     inputs = targetInputs(target, readDockerfile, staged.inputs);
   } else inputs = targetInputs(target, readDockerfile);
-  let entries = tree.filter((entry) => coversPath(inputs, entry.path));
+  const counts = copiedInputPredicate(target, inputs, readDockerfile, readFile);
+  let entries = tree.filter((entry) => counts(entry.path));
   // A copied symlink may resolve to another tracked path. Include the whole tree
   // rather than guessing which side of a Docker COPY dereferences it.
   if (entries.some((entry) => entry.mode === "120000")) entries = tree;
@@ -526,6 +558,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       changedPaths,
       readDockerfile: (path) => readFileSync(join(root, path), "utf8"),
       tree: trackedTree(root),
+      readIgnoreFile: (path) => {
+        try {
+          return readFileSync(join(root, path), "utf8");
+        } catch {
+          return null;
+        }
+      },
     });
     appendFileSync(process.env.GITHUB_OUTPUT, `apps=${JSON.stringify(apps)}\n`);
     console.log(apps.length > 0 ? apps.join("\n") : "No Docker targets changed");

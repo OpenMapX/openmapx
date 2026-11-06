@@ -179,21 +179,29 @@ function parseIgnoreRule(rawRule: string, firstRule = false): ParsedIgnoreRule |
 }
 
 /** Docker-compatible ordered, last-match ignore evaluation for a path name. */
-export function dockerIgnoreExcludes(path: string, rules: readonly string[]): boolean {
-  const normalizedPath = normalizeCandidatePath(path);
-  const segments = normalizedPath.split("/");
-  const candidates = [
-    normalizedPath,
-    ...segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/")),
-  ];
-  let excluded = false;
-  for (const [index, rawRule] of rules.entries()) {
-    const rule = parseIgnoreRule(rawRule, index === 0);
-    if (rule && candidates.some((candidate) => rule.matcher.test(candidate))) {
-      excluded = rule.excluded;
+export function createDockerIgnoreMatcher(rules: readonly string[]): (path: string) => boolean {
+  const parsed = rules
+    .map((rawRule, index) => parseIgnoreRule(rawRule, index === 0))
+    .filter((rule): rule is ParsedIgnoreRule => rule !== undefined);
+  return (path: string) => {
+    const normalizedPath = normalizeCandidatePath(path);
+    const segments = normalizedPath.split("/");
+    const candidates = [
+      normalizedPath,
+      ...segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/")),
+    ];
+    let excluded = false;
+    for (const rule of parsed) {
+      if (rule && candidates.some((candidate) => rule.matcher.test(candidate))) {
+        excluded = rule.excluded;
+      }
     }
-  }
-  return excluded;
+    return excluded;
+  };
+}
+
+export function dockerIgnoreExcludes(path: string, rules: readonly string[]): boolean {
+  return createDockerIgnoreMatcher(rules)(path);
 }
 
 function sensitiveCandidate(path: string): boolean {

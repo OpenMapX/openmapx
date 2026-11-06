@@ -38,9 +38,10 @@ describe("required production build gate", () => {
     expect(buildPosition).toBeGreaterThan(-1);
     expect(smokePosition).toBeGreaterThan(buildPosition);
     // Neither step can be conditional or allowed to fail while the aggregate succeeds.
-    expect(buildJob).not.toMatch(/continue-on-error:|^\s+if:/m);
+    expect(buildJob).not.toContain("continue-on-error:");
+    expect(buildJob).toContain("needs.select.outputs['build'] == 'true'");
     expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
-    expect(workflow).toContain("needs.build.result != 'success'");
+    expect(workflow).toContain("run: node scripts/ci-impact-plan.mjs verify");
   });
 
   it("does not make a production build depend on downloading a Google font", () => {

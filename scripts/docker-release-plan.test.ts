@@ -775,3 +775,53 @@ describe("bundled image fingerprints", () => {
     );
   });
 });
+
+describe("production Docker context exclusions", () => {
+  const readDockerfile = () => "FROM scratch\nCOPY packages/ /app/packages/\n";
+  const candidate = { app: "api", context: ".", dockerfile: "apps/api/Dockerfile" };
+  it("applies main's root policy when a Dockerfile-specific file does not exist", () => {
+    const input = {
+      ...options,
+      target: candidate,
+      readDockerfile,
+      tree: [{ path: "packages/core/src/example.test.ts", mode: "100644", oid: "a".repeat(40) }],
+      readFile: (path: string) => readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
+    };
+    const first = imageFingerprint(input);
+    expect(imageFingerprint({ ...input, tree: [{ ...input.tree[0], oid: "b".repeat(40) }] })).toBe(
+      first,
+    );
+  });
+  it("does not build images for excluded test sources, but honors later reinclusions", () => {
+    const input = {
+      changedPaths: ["packages/core/src/example.test.ts"],
+      readDockerfile,
+      candidates: [candidate],
+      readIgnoreFile: (path: string) => (path === ".dockerignore" ? "**/*.test.ts\n" : null),
+    };
+    expect(selectChangedTargets(input)).toEqual([]);
+    expect(
+      selectChangedTargets({
+        ...input,
+        readIgnoreFile: (path: string) =>
+          path === ".dockerignore" ? "**/*.test.ts\n!packages/core/src/example.test.ts\n" : null,
+      }),
+    ).toEqual(["api"]);
+    expect(
+      selectChangedTargets({ ...input, changedPaths: ["packages/core/src/example.ts"] }),
+    ).toEqual(["api"]);
+    expect(selectChangedTargets({ ...input, changedPaths: [".dockerignore"] })).toEqual(["api"]);
+    expect(selectChangedTargets({ ...input, readIgnoreFile: () => null })).toEqual(["api"]);
+  });
+  it("uses a Dockerfile-specific ignore policy before the root one", () => {
+    expect(
+      selectChangedTargets({
+        changedPaths: ["packages/core/src/example.test.ts"],
+        readDockerfile,
+        candidates: [candidate],
+        readIgnoreFile: (path: string) =>
+          path === "apps/api/Dockerfile.dockerignore" ? "!**/*.test.ts\n" : "**/*.test.ts\n",
+      }),
+    ).toEqual(["api"]);
+  });
+});

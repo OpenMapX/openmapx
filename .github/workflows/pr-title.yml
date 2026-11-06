@@ -1,19 +1,26 @@
-name: PR Title
+name: PR metadata
 
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] reads title only; never checks out PR code
+  pull_request_target: # zizmor: ignore[dangerous-triggers] trusted metadata validation; never checks out PR code
     types: [opened, edited, synchronize, reopened]
 
 # Least-privilege default; the validate job escalates to what the action needs.
 permissions:
   contents: read
 
+# Never let a cancelled/out-of-order metadata job replace the newest required
+# result. A later edit waits for the current validator, independently of code CI.
+concurrency:
+  group: pr-metadata-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     name: Validate conventional commit title
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
+      contents: read # trusted default-branch checkout and candidate Git objects
       # `statuses: write` is required because action-semantic-pull-request@v6
       # reports its result via the commit-statuses API (also used by `wip: true`
       # to flag [WIP] titles). Without it the action fails with
@@ -45,3 +52,25 @@ jobs:
             The subject "{subject}" must start with a lowercase letter.
             Example: `fix: validate service-repo hash params` (not `Fix: ...`).
           wip: true
+
+      # CI metadata gate v1. Reuse the existing required check context, so body
+      # edits cannot bypass classification and no live ruleset rollout is needed.
+      # Only default-branch code/dependencies execute. Candidate commits are Git
+      # objects read by the validator, never a checkout, lifecycle script or import.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --filter . --frozen-lockfile --ignore-scripts
+      - name: Validate current release classification with trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/validate-pr-metadata.mjs

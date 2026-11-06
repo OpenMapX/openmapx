@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import { createImpactPlan, verifyResults } from "./ci-impact-plan.mjs";
 
 const workflow = readFileSync(
   resolve(import.meta.dirname, "../.github/workflows/docs.yml"),
@@ -151,7 +151,7 @@ esac
     expect(dockerJob).not.toMatch(/packages: write|login-action|secrets:/);
     expect(dockerJob).toContain("push: false");
     expect(dockerJob).toContain("pull: $" + "{{ matrix.app == 'docs' }}");
-    expect(ci).toContain("needs.docker-build.result != 'success'");
+    expect(ci).toContain("run: node scripts/ci-impact-plan.mjs verify");
     expect(workflow).not.toContain("pnpm -C docs typecheck");
   });
 
@@ -164,40 +164,20 @@ esac
     ["", "skipped", true],
     ["[]", "skipped", false],
   ])("requires applicable docs result apps=%s result=%s", (apps, result, shouldFail) => {
-    const ci = readFileSync(resolve(import.meta.dirname, "../.github/workflows/ci.yml"), "utf8");
-    const condition =
-      ci
-        .split("  ci:\n")[1]
-        .split("  release:\n")[0]
-        .match(/if: >-\n([\s\S]*?)\n {8}run:/)?.[1] ?? "";
-    expect(condition).not.toBe("");
-    const needs = Object.fromEntries(
-      [
-        "lint",
-        "types",
-        "test-node",
-        "test-linux-user",
-        "test-agent-mounts",
-        "test-web",
-        "mobile",
-        "database",
-        "build",
-      ].map((job) => [job, { result: "success" }]),
-    );
-    expect(
-      runInNewContext(
-        condition.replace(/needs\.([\w-]+)/g, 'needs["$1"]'),
-        {
-          needs: {
-            ...needs,
-            "docker-changes": { result: "success", outputs: { apps } },
-            "docker-build": { result },
-          },
-          github: { event_name: "pull_request" },
-        },
-        { timeout: 1000 },
-      ),
-    ).toBe(shouldFail);
+    const plan = createImpactPlan({
+      event: "pull_request",
+      action: "synchronize",
+      head: sha,
+      base: "b".repeat(40),
+      paths: [],
+    });
+    const needs = {
+      ...Object.fromEntries(Object.keys(plan.jobs).map((job) => [job, { result: "success" }])),
+      "docker-changes": { result: "success", outputs: { apps } },
+      "docker-build": { result },
+    };
+    if (shouldFail) expect(() => verifyResults(plan, needs, "pull_request")).toThrow();
+    else expect(() => verifyResults(plan, needs, "pull_request")).not.toThrow();
   });
 
   async function selectSource(eventName: string, ref: string) {

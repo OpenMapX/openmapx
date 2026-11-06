@@ -6,8 +6,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"],
-      "env": ["SW_BUILD_ID"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -23,6 +22,26 @@
     "start": {
       "cache": false,
       "persistent": true
+    },
+    "web#build": {
+      "cache": false,
+      "env": ["SW_BUILD_ID"]
+    },
+    "web#build:app": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/integrations/**"],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "public/runtime/**",
+        "public/icons/**",
+        "src/generated/open-source-licenses.json"
+      ]
+    },
+    "web#build:deploy": {
+      "dependsOn": ["build:app"],
+      "env": ["SW_BUILD_ID"],
+      "cache": false
     }
   }
 }

@@ -6,6 +6,14 @@ on:
     - cron: "20 7 * * 1" # Mondays 07:20 UTC
   push:
     branches: [main]
+    paths:
+      - ".github/**"
+      - "SECURITY.md"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+      - "package.json"
+      - ".npmrc"
+      - "pnpm-workspace.yaml"
   workflow_dispatch:
 
 # Least-privilege by default; the job opts into what it needs.
