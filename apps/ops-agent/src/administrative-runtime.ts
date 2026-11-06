@@ -3,22 +3,15 @@ import { installDataWorkflowRuntime, resolveDataDefaultRegion } from "./data-wor
 
 export { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   accessSync,
-  closeSync,
   constants,
   existsSync,
-  fsyncSync,
-  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  openSync,
-  readdirSync,
   rmSync,
-  unlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -47,7 +40,7 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
 } from "@openmapx/core/ops";
-import { atomicWrite, durableUnlink, fsyncDirectory } from "@openmapx/core/release-files";
+import { atomicWrite, durableUnlink } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   advanceAgentHandoff,
@@ -77,7 +70,7 @@ import {
   type OpsRuntime,
 } from "./runtime";
 
-const { acquireStoreLock, acquireReleaseStoreLock, RELEASE_STORE_LOCK_NAME } = coreServices;
+const { acquireStoreLock, acquireReleaseStoreLock } = coreServices;
 type ReleaseStoreLock = coreServices.ReleaseStoreLock;
 type ReleaseStoreLockHooks = coreServices.ReleaseStoreLockHooks;
 
@@ -107,9 +100,7 @@ const MAX_RELEASE_MANIFEST_BYTES = coreServices.RELEASE_STORE_LIMITS.manifestByt
 const MAX_RELEASE_STATE_BYTES = coreServices.RELEASE_STORE_LIMITS.stateBytes;
 const MAX_RELEASE_TRANSACTION_BYTES = coreServices.RELEASE_STORE_LIMITS.transactionBytes;
 const MAX_RELEASE_SELECTIONS_BYTES = coreServices.RELEASE_STORE_LIMITS.selectionsBytes;
-const MAX_RELEASE_STORE_ENTRIES = coreServices.RELEASE_STORE_LIMITS.entries;
 const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
-const MAX_RELEASE_STORE_BYTES = MAX_RELEASE_STORE_ENTRIES * MAX_RELEASE_MANIFEST_BYTES;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
@@ -678,17 +669,6 @@ function stateOwner(uid?: number): number | undefined {
   return uid ?? process.geteuid?.();
 }
 
-/**
- * Every entry of the release store is the agent's own: a regular file of its
- * uid with one link and no group or other write, within its size bound.
- */
-function assertStoreEntry(path: string, maximum: number, uid: number | undefined): void {
-  const stat = lstatSync(path);
-  if (stat.size < 1 || coreServices.releaseStateFileProblem(stat, maximum, { uid }) !== null) {
-    throw new Error("Release store contains an unsafe entry");
-  }
-}
-
 export function inspectReleaseAuthority(rootDir: string, releaseId: string): boolean {
   try {
     const manifest = coreServices.parseReleaseManifest(
@@ -704,47 +684,6 @@ export function inspectReleaseAuthority(rootDir: string, releaseId: string): boo
 
 function releaseDigest(contents: string): string {
   return createHash("sha256").update(contents).digest("hex");
-}
-
-function immutableWrite(path: string, contents: string, owner: number | undefined): void {
-  const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  const descriptor = openSync(
-    temporary,
-    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-    0o600,
-  );
-  try {
-    writeFileSync(descriptor, contents, "utf8");
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-  let writeError: unknown;
-  try {
-    linkSync(temporary, path);
-    fsyncDirectory(dirname(path));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      writeError = error;
-    } else {
-      try {
-        if (strictReadFile(path, MAX_RELEASE_MANIFEST_BYTES, { owner }) !== contents) {
-          writeError = new Error("Release authority rejected");
-        }
-      } catch (readError) {
-        writeError = readError;
-      }
-    }
-  }
-  try {
-    unlinkSync(temporary);
-    fsyncDirectory(dirname(path));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT" && writeError === undefined) {
-      writeError = error;
-    }
-  }
-  if (writeError !== undefined) throw writeError;
 }
 
 function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
@@ -912,49 +851,7 @@ export function createDefaultReleaseEffects(
   };
   const { repositoryPaths, stackArgs, restoreOverlay, withStoreLock, readOverlay } =
     releaseStoreBindings(rootDir, releaseStoreLockHooks, uid);
-  const manifestNames = () => {
-    const entries = readdirSync(directory);
-    if (entries.length > MAX_RELEASE_STORE_ENTRIES + 5)
-      throw new Error("Release store limit exceeded");
-    let bytes = 0;
-    const names: string[] = [];
-    for (const name of entries) {
-      // The lock is agent-owned coordination state, not a stored release.
-      if (name === RELEASE_STORE_LOCK_NAME) {
-        const stat = lstatSync(join(directory, name));
-        if (
-          !stat.isDirectory() ||
-          stat.isSymbolicLink() ||
-          (uid !== undefined && stat.uid !== uid) ||
-          (stat.mode & 0o022) !== 0
-        ) {
-          throw new Error("Release store contains an unsafe entry");
-        }
-        continue;
-      }
-      if ((coreServices.RELEASE_STORE_POINTER_FILES as readonly string[]).includes(name)) {
-        const maximum =
-          name === "transaction.json"
-            ? MAX_RELEASE_TRANSACTION_BYTES
-            : name === "selections.json"
-              ? MAX_RELEASE_SELECTIONS_BYTES
-              : MAX_RELEASE_STATE_BYTES;
-        assertStoreEntry(join(directory, name), maximum, uid);
-        continue;
-      }
-      const match = coreServices.RELEASE_MANIFEST_FILE_PATTERN.exec(name);
-      if (!match) throw new Error("Release store contains an unsafe entry");
-      const path = join(directory, name);
-      assertStoreEntry(path, MAX_RELEASE_MANIFEST_BYTES, uid);
-      const stat = lstatSync(path);
-      bytes += stat.size;
-      if (bytes > MAX_RELEASE_STORE_BYTES || names.length >= MAX_RELEASE_STORE_ENTRIES) {
-        throw new Error("Release store limit exceeded");
-      }
-      names.push(match[1] as string);
-    }
-    return names;
-  };
+  const manifestNames = () => coreServices.listReleaseStoreManifests(directory, { uid });
   const loadManifest = (releaseId: string) => {
     manifestNames();
     const raw = strictReadFile(
@@ -1416,32 +1313,19 @@ export function createDefaultReleaseEffects(
         const raw = strictReadFile(temporaryManifest, MAX_RELEASE_MANIFEST_BYTES);
         const manifest = coreServices.parseReleaseManifest(raw, selection.imagePrefix);
         coreServices.validateResolvedSelection(selection, manifest, ociDigest);
-        const canonical = coreServices.canonicalReleaseManifest(manifest);
-        const destination = releaseManifestPath(rootDir, manifest.release);
         // Re-read the store under the lock. A snapshot taken before the Docker
         // pull/create/cp awaits is stale, so two concurrent resolutions could
         // each observe the same sub-limit count and both publish past it.
         const lock = await acquireReleaseStoreLock(directory, releaseStoreLockHooks);
         try {
-          const currentNames = manifestNames();
-          if (
-            !currentNames.includes(manifest.release) &&
-            currentNames.length >= MAX_RELEASE_STORE_ENTRIES
-          ) {
-            throw new Error("Release store limit exceeded");
-          }
-          immutableWrite(destination, canonical, uid);
-          const receipts = selectionReceipts();
-          receipts[manifest.release] = {
-            configuration: configurationIdentity(),
+          coreServices.cacheCheckedReleaseManifest({
+            infraDir,
+            manifest,
             ociDigest,
-            digest: releaseDigest(canonical),
-          };
-          atomicWrite(paths.selections, JSON.stringify(receipts));
-          atomicWrite(
-            paths.latest,
-            JSON.stringify({ releaseId: manifest.release, digest: releaseDigest(canonical) }),
-          );
+            configurationIdentity: configurationIdentity(),
+            lock,
+            uid,
+          });
         } finally {
           lock.release();
         }

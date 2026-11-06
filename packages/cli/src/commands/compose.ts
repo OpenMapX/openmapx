@@ -39,6 +39,7 @@ import {
 } from "../lib/platform-secret-files";
 import { combineServiceSelection } from "../lib/preset-selection";
 import {
+  checkRelease,
   clearReleaseSelection,
   ensureReleaseOverlay,
   releaseStatusLines,
@@ -604,14 +605,30 @@ export function registerComposeCommands(program: Command): void {
     .option("--status", "Show locally selected release and image pins without registry access")
     .addOption(
       new Option(
+        "--check",
+        "Check and cache release metadata without changing selected pins",
+      ).conflicts(["status", "clear"]),
+    )
+    .addOption(
+      new Option(
         "--clear",
         "Clear local release selection without changing running containers",
-      ).conflicts("status"),
+      ).conflicts(["status", "check"]),
     )
-    .action(async (options: { status?: boolean; clear?: boolean }) => {
+    .action(async (options: { status?: boolean; clear?: boolean; check?: boolean }) => {
       try {
         if (options.status) {
           for (const line of releaseStatusLines()) log.info(line);
+          return;
+        }
+        if (options.check) {
+          const checked = await checkRelease();
+          log.ok(`Checked release: ${checked.manifest.release}`);
+          log.info(`Manifest digest: ${checked.manifestDigest}`);
+          log.info(`Metadata image digest: ${checked.ociDigest}`);
+          for (const name of coreServices.RELEASE_IMAGE_NAMES)
+            log.info(`${name}: ${checked.manifest.images[name]}`);
+          log.dim("Selected pins and running services were not changed.");
           return;
         }
         if (options.clear) {

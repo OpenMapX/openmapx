@@ -40,6 +40,11 @@ export {
   WELL_KNOWN_DATA_TYPES,
 } from "./capabilities";
 export {
+  cacheCheckedReleaseManifest,
+  listReleaseStoreManifests,
+  releaseConfigurationIdentity,
+} from "./checked-release";
+export {
   type CheckoutDifference,
   checkoutDifferencesFromRelease,
   describeCheckoutDifferences,
@@ -339,6 +344,7 @@ export {
 export {
   acquireReleaseStoreLock,
   acquireStoreLock,
+  assertReleaseStoreLock,
   RELEASE_STORE_LOCK_NAME,
   type ReleaseStoreLock,
   type ReleaseStoreLockHooks,

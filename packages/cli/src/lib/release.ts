@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
@@ -133,11 +142,46 @@ async function assertCoordinatorSelection(manifest: ReleaseManifest, docker: Rel
     throw Error("Coordinator image identity is unavailable; selection was not changed");
 }
 
-/** Pull the aggregate release pointer and return its validated manifest. */
-export async function resolveReleaseManifest(
+/** Read only the copied file inside our private temporary directory. Artifact
+ * file permissions need not match mutable deployment-state permissions. */
+function readManifestFromPrivateTemp(path: string): string {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const before = fstatSync(fd);
+    if (
+      !before.isFile() ||
+      before.nlink !== 1 ||
+      before.size < 1 ||
+      before.size > coreServices.RELEASE_STORE_LIMITS.manifestBytes
+    )
+      throw Error("Release manifest exceeds its file bound");
+    const bytes = Buffer.alloc(before.size);
+    let used = 0;
+    while (used < bytes.length) {
+      const count = readSync(fd, bytes, used, bytes.length - used, null);
+      if (!count) throw Error("Release manifest changed while reading");
+      used += count;
+    }
+    const after = fstatSync(fd);
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs
+    )
+      throw Error("Release manifest changed while reading");
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Resolve only the small immutable metadata image, not application/helper images. */
+export async function resolveReleaseCandidate(
   docker: ReleaseDockerRunner = defaultDocker,
   infraDir = repoPaths().infraDir,
-): Promise<ReleaseManifest> {
+): Promise<{ manifest: ReleaseManifest; ociDigest: string }> {
   const channel = appliedReleaseChannel(infraDir);
   if (channel.kind === "disabled") {
     throw new Error(`release resolution is disabled (${RELEASE_SELECTOR_ENV}=local)`);
@@ -170,16 +214,62 @@ export async function resolveReleaseManifest(
       await docker(["cp", `${containerId}:${RELEASE_MANIFEST_CONTAINER_PATH}`, manifestPath]),
       "docker cp release-manifest.json",
     );
-    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"), channel.imagePrefix);
-    coreServices.validateResolvedSelection(channel.selection, manifest, digest);
-    expectOk(
-      await docker(["pull", manifest.images["privacy-backup"]]),
-      `docker pull ${manifest.images["privacy-backup"]}`,
+    const manifest = parseReleaseManifest(
+      readManifestFromPrivateTemp(manifestPath),
+      channel.imagePrefix,
     );
-    return manifest;
+    coreServices.validateResolvedSelection(channel.selection, manifest, digest);
+    return { manifest, ociDigest: digest };
   } finally {
     await docker(["rm", "-f", containerId]).catch(() => undefined);
     rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+/** Bootstrap selection also acquires its pinned privacy helper as before. */
+export async function resolveReleaseManifest(
+  docker: ReleaseDockerRunner = defaultDocker,
+  infraDir = repoPaths().infraDir,
+): Promise<ReleaseManifest> {
+  const { manifest } = await resolveReleaseCandidate(docker, infraDir);
+  expectOk(
+    await docker(["pull", manifest.images["privacy-backup"]]),
+    `docker pull ${manifest.images["privacy-backup"]}`,
+  );
+  return manifest;
+}
+
+/** Cache a checked candidate; never publish an overlay or recorded running state. */
+export async function checkRelease(
+  opts: { docker?: ReleaseDockerRunner } & ReleaseStateLocation = {},
+) {
+  const infraDir = opts.infraDir ?? repoPaths().infraDir;
+  const paths = coreServices.ensureReleaseStateDirectories(infraDir, { uid: opts.uid });
+  assertNoReleaseTransaction(paths.store);
+  const selection = coreServices.readAppliedReleaseSelection(infraDir);
+  if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
+  const configurationIdentity = coreServices.releaseConfigurationIdentity(infraDir);
+  const candidate = await resolveReleaseCandidate(opts.docker, infraDir);
+  const lock = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
+  try {
+    assertNoReleaseTransaction(paths.store);
+    if (coreServices.releaseConfigurationIdentity(infraDir) !== configurationIdentity)
+      throw Error("Release configuration changed during check; check again");
+    const cached = coreServices.cacheCheckedReleaseManifest({
+      infraDir,
+      ...candidate,
+      configurationIdentity,
+      lock,
+      uid: opts.uid,
+    });
+    return {
+      ...candidate,
+      ...cached,
+      configurationIdentity,
+      configuredSelector: selection.selector,
+    };
+  } finally {
+    lock.release();
   }
 }
 
@@ -231,7 +321,9 @@ export async function ensureReleaseOverlay(
   try {
     const paths = releaseState(opts);
     coreServices.ensureReleaseStateDirectory(paths.store, { uid: opts.uid });
-    if (!opts.releaseStoreLock)
+    if (opts.releaseStoreLock)
+      coreServices.assertReleaseStoreLock(opts.releaseStoreLock, paths.store);
+    else
       acquired = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
     // Up/pull may have observed absence before another owner selected a release.
     const current = readSelection(path, opts);
@@ -249,6 +341,9 @@ export async function ensureReleaseOverlay(
       return { status: "unpinned", reason: (error as Error).message };
     }
     await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
+    const activeLock = opts.releaseStoreLock ?? acquired;
+    if (!activeLock) throw Error("Release store lock unavailable");
+    coreServices.assertReleaseStoreLock(activeLock, paths.store);
     writeReleaseOverlay(manifest, opts);
     return { status: "resolved", path, release: manifest.release };
   } catch (error) {
@@ -350,6 +445,7 @@ export async function selectRelease(
         `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
       );
     }
+    coreServices.assertReleaseStoreLock(lock, store);
     writeReleaseOverlay(manifest, opts);
     return { path, release: manifest.release };
   } finally {
