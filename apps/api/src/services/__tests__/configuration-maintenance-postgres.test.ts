@@ -4713,13 +4713,63 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(
                 await fixture.sql`SELECT metadata,ownership_version,xmin::text AS xmin FROM data_manager.jobs WHERE id=${before.guardSource!.preparedReceipt.fenceId}::uuid`,
               ).toEqual([sqlBefore]);
-              expect(
-                (
-                  await prospective.persistAndApplyProspectiveConfiguration(candidate, {
-                    coordinatorMode: "require-running",
-                  })
-                ).application,
-              ).toMatchObject({ outcome: "committed", followUp: "complete" });
+              const { readProjection } = await import("../admin-job-ops"),
+                { observeOriginalOperation } = await import(
+                  "../../test/observe-original-operation"
+                ),
+                settlement = Object.values(readProjection(ctx.checkpointResult).operations).find(
+                  (entry) => entry.kind === "configurationMaintenance.settle",
+                );
+              expect(settlement?.operationId).toBeDefined();
+              const originalIdentity = {
+                  kind: "configurationMaintenance.settle" as const,
+                  operationKey: settlement!.operationKey,
+                  operationId: settlement!.operationId,
+                },
+                originalFetch = globalThis.fetch;
+              let lostStatusReads = 0;
+              // Lose one actual bounded status read after publication repair.
+              // The original two-second observer signal expires; no clock changes.
+              const lostRead =
+                mode === "publication-root-owner-ack"
+                  ? vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+                      if (
+                        lostStatusReads === 0 &&
+                        (options?.method ?? "GET") === "GET" &&
+                        String(input).endsWith(`/v1/operations/${originalIdentity.operationId}`)
+                      ) {
+                        lostStatusReads++;
+                        const signal = options?.signal;
+                        if (!signal) throw Error("Original bounded status signal required");
+                        return new Promise<Response>((_resolve, reject) => {
+                          const abort = () =>
+                            reject(new DOMException("Lost retained status read", "AbortError"));
+                          if (signal.aborted) abort();
+                          else signal.addEventListener("abort", abort, { once: true });
+                        });
+                      }
+                      return originalFetch(input, options);
+                    })
+                  : undefined;
+              try {
+                expect(
+                  (
+                    await observeOriginalOperation(
+                      () =>
+                        prospective.persistAndApplyProspectiveConfiguration(candidate, {
+                          coordinatorMode: "require-running",
+                        }),
+                      originalIdentity,
+                      ctx.signal,
+                    )
+                  ).application,
+                ).toMatchObject({ outcome: "committed", followUp: "complete" });
+              } finally {
+                lostRead?.mockRestore();
+              }
+              expect(lostStatusReads).toBe(mode === "publication-root-owner-ack" ? 1 : 0);
+              expect(actualPosts.get("configurationMaintenance.settle")).toBe(1);
+              expect(actualPosts.get("service.recreate")).toBe(1);
               expect(
                 existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
               ).toBe(false);
