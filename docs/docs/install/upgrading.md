@@ -111,7 +111,7 @@ own code and manifests, so a host render reads the selected release's service
 files from its operations-agent image and refuses while the checkout's built-in
 services differ from that release's. It names the differing files and says
 what to do: wait until the release of the checkout's commit is published and
-run `pnpm openmapx compose release` again, or check out the release's source
+use the coordinated update below, or check out the selected release's source
 revision. A changed service file belongs in an
 [override](./managing-services.md#service-file-overrides), which the refusal
 ignores. `pnpm openmapx check` reports the same.
@@ -187,142 +187,119 @@ their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
   pnpm openmapx services start app-api
   ```
 
-## 4. Resolve the complete release and replace containers
+## 4. Check and apply the complete release
 
-Inspect the locally selected release without contacting the registry:
+For an existing installation, use **Admin → System → Updates** (older panels:
+**Admin → System**). Check the configured release and apply that exact candidate.
+The coordinated producer preserves Data Manager ownership, drains active work,
+retains its configuration decision and observes the original job across API and
+agent replacement. Keep the backup option enabled.
+
+The host CLI can drive the same public administrative producer when the panel is
+unavailable. Run as the deployment/store owner from a current checkout. First
+check the configured candidate without changing selected or running images:
 
 ```bash
 pnpm openmapx compose release --status
+pnpm openmapx compose release --check
 ```
 
-This reports the selected release and its seven image pins. It does not inspect
-running containers. Older overlays without selection metadata show an unknown
-release identity while retaining their available image pins.
+The check pulls only the small metadata image, validates the seven immutable
+image pins and privacy evidence, and caches the canonical manifest. It prints a
+**Checked release** ID and a **Manifest digest**. It does not write the release
+overlay, download application images or replace containers. Configuration changes
+or an active release transaction require inspection before checking again.
 
-Running `pnpm openmapx compose release` prints the previous and candidate release,
-then marks each image **changed**, **reused**, or **unknown** by comparing digests,
-and writes the selected lockfile as the Compose overlay. An existing overlay
-continues to apply even if release resolution is disabled with
-`OPENMAPX_RELEASE=local`; the status command reports that explicitly.
-
-Select the release explicitly, then replace the five running application
-services. This operation can interrupt requests; it is not a database rollback
-transaction:
+Create a private directory for the client receipt and an operator-provided
+session file:
 
 ```bash
-pnpm openmapx compose release
-pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
+mkdir -p "$HOME/.local/state/openmapx"
+chmod 700 "$HOME/.local/state/openmapx"
 ```
 
-`compose up`, `services start`, and `services update` refuse to run release
-services when no overlay exists and the release manifest cannot be resolved.
+The session file must already contain only the signed-in full administrator's
+Better Auth session cookie (`better-auth.session_token=…` or its `__Secure-`
+variant), be owned by this user, have mode `0600`, and have one link. Obtain it
+through your normal administrator session; the CLI never discovers browser
+credentials, creates a session or uses local-admin authentication for an update.
+Do not commit or publish it. The session needs at least two minutes remaining;
+if it later expires, provide a fresh session for the same administrator and resume.
 
-The CLI validates all seven image pins and matching privacy evidence. Use it
-instead of writing a partial overlay by hand. `main` is the automatic development pointer; `preview` is the latest deliberately published named prerelease. Exact versions or metadata digests pin a specific selection. A missing preview or pin fails without choosing main.
+Replace the checked ID and digest below. The receipt path must be new:
 
-All seven development aliases are verified before the main manifest pointer advances. Individual aliases can move separately; use the manifest for coherent updates. Named publication promotes the selected image digests without rebuilding them and advances preview only after immutable GitHub publication is verified. See [Product releases](../developer/product-releases.md).
+```bash
+pnpm openmapx system update \
+  --release-id CHECKED_ID --digest MANIFEST_SHA256 \
+  --session-file "$HOME/.local/state/openmapx/admin-session" \
+  --receipt "$HOME/.local/state/openmapx/update.json"
+```
 
-:::note[Admin updater and later service commands]
-The admin system updater checks the configured channel and stores its exact candidate ID and digest.
-A check compares the manifest's digests with the running images and downloads
-nothing. Apply uses that checked candidate rather than resolving the channel again:
-it pulls every digest-pinned image while the services keep running, then writes
-`docker-compose.release.yml` atomically. A configuration change requires a fresh check.
+The default API origin is `https://DOMAIN`; `--api-origin https://maps.example.org`
+sets it explicitly. Credentials are sent only to that exact HTTPS origin, with
+redirects refused. `--allow-loopback-http` is only for explicit local development.
 
-When the release changes the ops-agent image or its privacy-backup helper pin,
-the agent is updated first. It refuses while other agent operations are running,
-and refuses new ones until the handoff finishes.
-It records the handoff in `infra/docker/state/ops-agent/agent-handoff.json` and
-starts a helper container from its own image, which:
+The command checks for other maintenance work, creates a named backup and waits
+for its matching completion. It then previews a release-only change, verifies
+that configuration, origins, sources and the five application targets are exactly
+as expected, and applies through the real administrator's public API. The server's
+writer and coordinator checks remain authoritative. A refused or incomplete
+outcome is never reported as a successful update.
 
-1. writes the release overlay;
-2. recreates only `ops-agent`;
-3. waits up to three minutes for the new agent to be healthy and to run the pinned image and helper pin.
+Each request's key and body are retained before sending. After a transport error,
+API restart or observation timeout, resume the original receipt:
 
-If the new agent does not start, the helper restores the previous overlay and
-agent. The update then stops with **Host update required**, before any other
-service changes. A new agent can fail to start when the release needs a newer
-host checkout, for example for a new service manifest. In that case, run the
-host commands shown in the panel.
+```bash
+pnpm openmapx system update \
+  --release-id CHECKED_ID --digest MANIFEST_SHA256 \
+  --session-file "$HOME/.local/state/openmapx/admin-session" \
+  --receipt "$HOME/.local/state/openmapx/update.json" --resume
+```
 
-The agent keeps its own state, the job journal, this handoff record, the
-trusted-configuration queue it shares with `app-api` and its privacy-extraction
-scratch, in `infra/docker/state/ops-agent/`. Releases before it kept them in
-`infra/docker/data/`, which data-manager can write. The first agent of a newer
-release imports from there only the jobs the previous agent left unfinished,
-which then read as failed and needing recovery, and the handoff record only
-while the helper replacing it is still running, without its previous overlay.
-Finished job history is not carried over. The first configuration render, or
-the new agent's start, moves the queue and the scratch directory; running
-containers keep using them. When `infra/docker/data` is a filesystem of its own
-(a separate dataset or disk), they can't be moved: the new locations start
-empty and nothing is copied from the old ones, which data-manager could have
-written. The agent reads its queue from the new location whatever its own
-container mounts, so it meets `app-api` there once `app-api` has been replaced;
-a request made in between, during the update, ends without being applied. The
-old directories stay in `infra/docker/data/` while a container still mounts
-them. When it starts, or a self-update has settled, and none does, the agent
-removes each one that is empty and its own (the queue with its empty
-`.claimed`); one that is not is left in place and named in the agent's log. Nothing needs doing by hand. An older agent started afterwards, for example by
-selecting an earlier release, finds no job history.
+An accepted job is observed by its original ID; unknown POST outcomes replay only
+the original key and body. A definite refusal stops. An expired preview requires a
+new receipt and backup, rather than silently reviewing a different candidate.
+Activity shows `platform.apply` for this workflow. After completion, verify the
+actual running image digests and health; selected pins alone do not prove a
+running deployment. The session file is preserved so you can decide when to
+remove it.
 
-The applied configuration, the service selection and the release state are in
-that directory too: `configuration/`, `service-selection.json` and `releases/`
-(the store, the evidence and `docker-compose.release.yml`). Releases before it
-kept them in `infra/docker` itself (`.trusted-config-current`,
-`.trusted-config-generations/`, `service-selection.json`, `.ops-agent-releases/`,
-`.release-evidence/` and `docker-compose.release.yml`), where a checkout cloned
-under a umask of `002` lets other accounts of its group write. The first
-configuration render of the newer release, or its agent's start after a panel
-self-update, copies them across:
+### Bootstrap and recovery selection
 
-- the applied configuration, with the selection its generation applied; the
-  old `service-selection.json` is never read;
-- the release manifests and pointers that are the deployment user's own files
-  and pass the store's checks; anything else stays behind, named in the render's
-  output or the agent's log;
-- the release overlay, rendered again from the manifest it selected or, when
-  `compose release` selected it and the store holds no manifest of it, from its
-  own pins and evidence, once they give exactly its bytes again.
+Bare `pnpm openmapx compose release` is for a clean installation without an
+existing Data Manager, or restoring the exact immutable pin its container already
+uses. It refuses a different pin, ambiguous/unavailable Docker observations, or
+an active transaction. The container's recorded image reference and actual image
+identity must both match. It never recreates containers.
 
-Nothing is moved, so this works when `infra/docker/data` is a filesystem of its
-own. The old files stay as they were, for rolling back to an earlier release,
-and are never read again. Until the newer agent runs with no self-update helper
-left, every configuration writer also takes the earlier releases' lock in
-`infra/docker`, so an earlier agent can't apply configuration at the same time.
-A rollback restores an earlier agent with the configuration it left; anything
-applied after the update is not carried back.
+Do not select a new pin and then run `services update data-manager`. Host service
+lifecycle commands preserve an existing selection; a Data Manager update needs
+the coordinated producer above. Updating other services individually does not
+complete an application release and API migrations move forward only.
 
-When the earlier agent left a release update unfinished
-(`.ops-agent-releases/transaction.json`), the release state is not copied; the
-render's output and the agent's log say so, and the next render or agent start
-tries again once that agent has recovered the update.
+For bootstrap, the CLI validates all seven image pins and matching privacy
+evidence before selecting. `main` is the development pointer; `preview` is the
+latest deliberately published named prerelease. Exact versions or metadata
+image digests pin a particular selection. A missing preview or pin fails without
+choosing main. See [Product releases](../developer/product-releases.md).
 
-While the release the earlier overlay selected has not come over, for that
-reason or because the overlay could not be verified, no release is selected or
-applied automatically: resolving one would replace the running release with
-whatever is newest. `services update` and `services start` of the release's services, `compose up` and
-`compose pull` refuse, and so do **Check for updates** and **Update** in the
-admin panel, which report **Host update required**; the job log, the command
-and **Run diagnostics** name the reason. To continue, either:
-
-- let the earlier agent finish its update, then render again; or
-- select a release explicitly with `pnpm openmapx compose release`, or clear the
-  selection with `pnpm openmapx compose release --clear` to let the next start
-  resolve one.
+A legacy transaction or unconsumed handoff must finish or recover before a new
+update. Preserve those records and inspect Activity and diagnostics; do not delete
+writer guards or reinterpret a selected overlay as proof of completion.
 
 Rendering stops, with the reason, when:
 
-- `infra/docker/.trusted-config-current` is not the deployment user's own: remove
-  it, and the admin panel applies its saved settings again;
+- `infra/docker/.trusted-config-current` is not the deployment user's own: inspect
+  ownership and the configuration recovery guidance before changing it;
 - `infra/docker/.env` is not the deployment user's own regular file, has more
   than one link, or its group or others can write it: run
   `chown "$(id -u)" infra/docker/.env && chmod 600 infra/docker/.env`.
 
-The update then replaces API, web, data-manager and transitous-runner without
-restarting their dependencies. If that step fails, those four services return
-to the images they ran before the update; the verified new agent stays.
-System status includes all five running application services.
+The retained configuration helper replaces the selected application services
+without restarting unrelated dependencies. A failure can require reconciliation;
+inspect the original Activity job and preserve its recovery records. Do not infer
+a rollback from a disconnected API or an unchanged release-status field.
+System status includes all five application services.
 
 API and CLI service lifecycle commands automatically include an
 existing release overlay, so restarting or re-rendering the stack retains the
@@ -332,9 +309,8 @@ removing the local selection.
 Forks and mirrored registries select their own channel with
 `OPENMAPX_RELEASE` and `OPENMAPX_RELEASE_MANIFEST_REPOSITORY` (see [Configuration](./configuration.md)).
 `services update` preserves an existing release selection and stops before
-container recreation if pulling that pinned release fails. Run `compose release`
-first when deliberately selecting a newer release.
-:::
+container recreation if pulling that pinned release fails. Use System → Updates or the authenticated `system update` workflow
+when deliberately applying a newer release.
 
 For local-image workflows, explicit `OPENMAPX_RELEASE=local` disables automatic release resolution. It does
 not remove or bypass an existing release overlay. Clear the local selection
@@ -345,11 +321,13 @@ pnpm openmapx compose release --clear
 ```
 
 This idempotent command removes only `infra/docker/state/ops-agent/releases/docker-compose.release.yml`.
-It makes no Docker calls and preserves running containers, `state/ops-agent/releases/evidence`
+It inspects existing Data Manager containers and refuses to clear a valid overlay
+that a matching coordinator still uses. Clearing mismatched or malformed state is
+only a recovery action; Docker ambiguity or observation failure refuses. It preserves running containers, `state/ops-agent/releases/evidence`
 files that they may still mount, and `state/ops-agent/releases/store` manifests and recorded
 running state. It refuses to clear while the release store is locked or an update
 transaction awaits completion or recovery. `--clear` cannot be combined with
-`--status`.
+`--status` or `--check`.
 
 Clearing does not change your environment. If automatic resolution remains
 enabled, the next start/update selects a release again. To use local images,
@@ -567,8 +545,8 @@ checkout's `services/`. Changes of your own go in
   recreates only the application services, which mount no service files.
 - **A host render refuses while the checkout differs from the selected
   release** (see above). On a host that follows `main`, the newest commit's
-  release may not be published yet: wait for it and run `compose release`
-  again.
+  release may not be published yet: wait for it and use the coordinated update
+  above.
 
 A rollback to the release before this one mounts the checkout's files again,
 which nothing here changed. Edits you made only in `overrides/` meanwhile do
@@ -581,12 +559,9 @@ mounts `infra/docker` read-only (for `.env` and your overrides) and
 `infra/docker/state`, `data`, `secrets` and `backups` read-write, all at
 their host paths. Everything else it uses comes from its image and its state.
 
-**The switch is the usual host update**, nothing more:
-
-```bash
-pnpm openmapx compose release
-pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
-```
+**Use the coordinated update above** to apply the release. A later permitted host
+render/recreation can adopt the reduced mount layout when its prerequisites hold;
+do not change the running Data Manager pin with bare `compose release`.
 
 Its render moves the agent to the new mounts only once the host has
 everything an agent without the checkout needs. Otherwise it keeps the whole
@@ -618,18 +593,13 @@ second host update, once its agent has started.
 renders, and the admin panel's changes, keep whichever mounts the agent runs
 with. The next host update switches it.
 
-**To roll back**, select the release before this one and update on the host,
-or apply it from the admin panel:
-
-```bash
-pnpm openmapx compose release <earlier release>
-pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
-```
-
-That release works with either mounts, and its renders give the agent the
-whole checkout again. After a panel apply the agent keeps the new mounts
-until it is next recreated, for example with `pnpm openmapx services update
-ops-agent`.
+**Rollback needs a recovery decision.** Image selection does not reverse database
+migrations or a committed configuration change. Preserve the previous coherent
+manifest and matching database/configuration backups. If a rollback is compatible,
+set `OPENMAPX_RELEASE` to its exact metadata digest, check it with `--check` and
+review it through the same coordinated workflow. There is no positional
+`compose release <release>` command. Bare selection is permitted only for bootstrap
+or restoring the exact Data Manager pin already in use.
 
 ## Reclaiming disk after an upgrade
 

@@ -357,7 +357,7 @@ export function unpinnedReleaseWarning(reason: string): string {
   return (
     `No ${repoPaths().composeReleasePath} and the release lockfile could not be resolved (${reason}). ` +
     "Refusing to start release runtime images without atomic release selection. " +
-    "Run `pnpm openmapx compose release` once the registry is reachable, or set " +
+    "For bootstrap, run `pnpm openmapx compose release` once the registry is reachable. Existing installations use System → Updates or authenticated system update after compose release --check. Alternatively set " +
     `${RELEASE_SELECTOR_ENV}=local to run local images deliberately.`
   );
 }

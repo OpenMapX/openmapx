@@ -384,7 +384,7 @@ export async function renderComposeWithWriter(
   let checkoutPosition: coreServices.CheckoutPosition | undefined;
   if (selected === "none") {
     log.dim(
-      "No release is selected yet: the services' files come from this checkout. `pnpm openmapx compose release` selects one.",
+      "No release is selected yet: the services' files come from this checkout. Bootstrap can select with `pnpm openmapx compose release`; existing installations use System → Updates or `system update`.",
     );
   } else if (selected) {
     // Before anything is imported: what the checkout holds that the release
@@ -612,7 +612,7 @@ export function registerComposeCommands(program: Command): void {
     .addOption(
       new Option(
         "--clear",
-        "Clear local release selection without changing running containers",
+        "Clear an unused or mismatched release selection; refuses a matching Data Manager",
       ).conflicts(["status", "check"]),
     )
     .action(async (options: { status?: boolean; clear?: boolean; check?: boolean }) => {
@@ -651,7 +651,7 @@ export function registerComposeCommands(program: Command): void {
         const selected = await selectRelease({ report: log.info });
         log.ok(`Atomic release selection ${selected.release} → ${selected.path}`);
         log.dim(
-          "Apply it with `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner`.",
+          "Bootstrap: start the selected release with `pnpm openmapx compose up`. Existing installations: use System → Updates or authenticated `system update` after `compose release --check`.",
         );
       } catch (err) {
         log.err(`Release lockfile operation failed: ${(err as Error).message}`);

@@ -84,7 +84,7 @@ export async function runCliServiceLifecycle(options: {
   if (options.action === "update" && options.serviceIds.includes("data-manager"))
     throw new ServiceLifecycleCommandError(
       1,
-      "Coordinator Update requires its guarded administrative workflow",
+      "Coordinator Update requires its guarded administrative workflow: use System → Updates or authenticated `pnpm openmapx system update` after `compose release --check`",
     );
   const { randomBytes, randomUUID } = await import("node:crypto");
   const { existsSync, mkdirSync } = await import("node:fs");

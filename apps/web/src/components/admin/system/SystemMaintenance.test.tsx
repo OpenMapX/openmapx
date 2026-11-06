@@ -101,9 +101,9 @@ describe("SystemMaintenance", () => {
       render(<SystemMaintenance />);
       expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
       expect(screen.getByRole("alert")).toHaveTextContent("Host update required");
-      expect(screen.getByRole("alert")).toHaveTextContent("pnpm openmapx compose release");
+      expect(screen.getByRole("alert")).toHaveTextContent("pnpm openmapx compose release --check");
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+        "pnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
       );
       expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled();
     },
@@ -130,7 +130,7 @@ describe("SystemMaintenance", () => {
     render(<SystemMaintenance />);
     fireEvent.click(screen.getByRole("button", { name: "Copy commands" }));
     expect(writeText).toHaveBeenCalledWith(
-      "pnpm openmapx compose release\npnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+      "pnpm openmapx compose release --check\npnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
     );
   });
 

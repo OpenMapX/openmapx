@@ -109,9 +109,7 @@ describe("complete administrative release coverage", () => {
     );
     expect(f.context.emitLog).toHaveBeenCalledWith(
       "stderr",
-      expect.stringContaining(
-        "services update app-api app-web data-manager ops-agent transitous-runner",
-      ),
+      expect.stringContaining("system update"),
     );
   });
   it("reports a safe host-update code through the agent protocol", async () => {

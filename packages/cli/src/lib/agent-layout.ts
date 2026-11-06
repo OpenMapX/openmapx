@@ -30,7 +30,7 @@ export function narrowAgentLayoutBlockers(input: {
   }
   if (!coreServices.serviceFilesImported(infraDir)) {
     blockers.push(
-      `The one-time import of your edits in the checkout's service files has not run (${state}/overrides-import.json is missing). It runs in a render that uses a release's service files: select a release with \`pnpm openmapx compose release\`, see what the render says about the import, and render again.`,
+      `The one-time import of your edits in the checkout's service files has not run (${state}/overrides-import.json is missing). It runs in a render that uses a release's service files: bootstrap with \`pnpm openmapx compose release\` or update an existing installation through System → Updates / authenticated \`system update\`, see what the render says about the import, and render again.`,
     );
   }
   if (coreServices.readAgentStoresMigration(infraDir) === null) {

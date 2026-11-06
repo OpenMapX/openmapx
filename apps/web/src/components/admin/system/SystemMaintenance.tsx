@@ -48,8 +48,8 @@ import { ErrorState } from "../shared/ErrorState";
 
 const CONFIRMATION = "UPDATE OPENMAPX";
 const HOST_UPDATE_COMMANDS = [
-  "pnpm openmapx compose release",
-  "pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner",
+  "pnpm openmapx compose release --check",
+  "pnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
 ].join("\n");
 
 interface ImageStatus {
@@ -583,7 +583,10 @@ export function SystemMaintenance({
                 {agentReplacementFailed
                   ? "The operations agent could not be updated from the admin panel. The previous agent keeps running."
                   : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
-                Run these commands from an updated OpenMapX checkout on the host.
+                Use the coordinated host update from a current checkout with a real administrator
+                session. It creates a backup before applying the checked release. Replace the
+                placeholders with the checked ID and digest, your private session file and a new
+                private receipt path.
               </Typography>
               <Box
                 component="pre"
