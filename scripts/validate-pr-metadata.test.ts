@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validatePrMetadata } from "./validate-pr-metadata.mjs";
+import { metadataValidationEnvironment, validatePrMetadata } from "./validate-pr-metadata.mjs";
 
 const original = {
   number: 12,
@@ -10,6 +10,18 @@ const original = {
 };
 
 describe("trusted PR metadata validation", () => {
+  it("does not pass workflow credentials to release parsing or canonical replay", () => {
+    expect(
+      metadataValidationEnvironment({
+        PATH: "/bin",
+        HOME: "/home",
+        TMPDIR: "/tmp",
+        GH_TOKEN: "secret",
+        ACTIONS_RUNTIME_TOKEN: "secret",
+        NODE_OPTIONS: "injected",
+      }),
+    ).toEqual({ PATH: "/bin", HOME: "/home", TMPDIR: "/tmp" });
+  });
   it("validates current metadata against immutable Git objects, never a candidate checkout", async () => {
     const actions: unknown[] = [];
     await validatePrMetadata(

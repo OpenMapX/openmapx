@@ -44,6 +44,7 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
     action = "synchronize",
     changes: object = {},
     requestedBase = base,
+    baseRef = "main",
   ) => {
     const event = join(root, "event.json"),
       output = join(root, "output.txt");
@@ -52,7 +53,7 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
       JSON.stringify({
         action,
         changes,
-        pull_request: { head: { sha: head }, base: { sha: requestedBase } },
+        pull_request: { head: { sha: head }, base: { sha: requestedBase, ref: baseRef } },
       }),
     );
     writeFileSync(output, "");
@@ -144,9 +145,13 @@ describe("complete immutable Git diff selection", () => {
       );
       const head = f.commit();
       expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      f.git("update-ref", "refs/remotes/origin/stack", f.base);
       f.git("update-ref", "refs/remotes/origin/main", head);
       // An old stacked target still has its old privileged workflow definition.
-      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      expect(f.select(head, "edited", { body: { from: "old" } }, f.base, "stack").plan.code).toBe(
+        true,
+      );
+      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(false);
       f.write("docs/docs/new.md", "prose");
       const candidate = f.commit();
       expect(f.select(candidate, "edited", { body: { from: "old" } }, head).plan.code).toBe(false);

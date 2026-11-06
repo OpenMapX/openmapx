@@ -117,7 +117,7 @@ rollout is in shadow mode: all jobs still run. After at least ten comparable
 hosted PRs and dependency/asset review, approve `docs`, then proven `web`/`mobile`
 classes in `scripts/ci-impact-rollout.json` on trusted main. PR edits to this file
 cannot enable their own skips. Shared/backend/toolchain changes run the full gate.
-Approved ordinary docs prose runs lint/policy and the docs image; approved web
+Approved ordinary docs prose runs lint/policy, portable node contracts and the docs image; approved web
 component or mobile runtime edits retain their relevant runtime, types, portable
 contracts and builds without unrelated native recovery.
 Unknown paths, incomplete diffs, symlinks and base retargets select full coverage.

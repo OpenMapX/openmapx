@@ -77,9 +77,13 @@ function copiedInputPredicate(target, inputs, readDockerfile, readIgnoreFile) {
   let excludes;
   if (readIgnoreFile) {
     try {
-      const policy =
-        readIgnoreFile(`${target.dockerfile}.dockerignore`) ??
-        readIgnoreFile(posix.join(target.context, ".dockerignore"));
+      let specific;
+      try {
+        specific = readIgnoreFile(`${target.dockerfile}.dockerignore`);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      const policy = specific ?? readIgnoreFile(posix.join(target.context, ".dockerignore"));
       if (typeof policy === "string") excludes = createDockerIgnoreMatcher(policy.split(/\r?\n/));
     } catch {
       /* Unreadable/unknown policies must conservatively rebuild. */

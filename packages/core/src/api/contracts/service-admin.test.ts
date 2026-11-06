@@ -264,7 +264,7 @@ describe("canonical complete service administration contracts", () => {
     };
     expect(response("getAdminService", 200, detail)).toEqual(detail);
     const apiRequire = createRequire(
-      new URL("../../../../../../apps/api/package.json", import.meta.url),
+      new URL("../../../../../apps/api/package.json", import.meta.url),
     );
     const stringify = createRequire(apiRequire.resolve("fastify"))("fast-json-stringify");
     const definitions: Record<string, unknown> = {};

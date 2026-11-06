@@ -19,6 +19,7 @@ const event = (id: number, action = "synchronize") => ({
     workflow: "CI",
     ref: "refs/heads/main",
     run_id: id,
+    run_attempt: 1,
     event_name: "push",
     event: { action, pull_request: {}, changes: {} },
   },
@@ -41,6 +42,33 @@ describe("CI scheduling and context preservation", () => {
         evaluate(job.concurrency.group, { ...context, ...event(2) }),
       );
     }
+  });
+  it("isolates manual runs, retries, and PR jobs from source-wide main cancellation", () => {
+    const group = ci.jobs.lint.concurrency.group;
+    const push = event(1);
+    const schedule = event(2);
+    schedule.github.event_name = "schedule";
+    expect(evaluate(group, push)).toBe(evaluate(group, schedule));
+    for (const eventName of ["workflow_dispatch", "pull_request"]) {
+      const first = event(1);
+      first.github.event_name = eventName;
+      const second = event(2);
+      second.github.event_name = eventName;
+      expect(evaluate(group, first)).not.toBe(evaluate(group, second));
+      expect(evaluate(group, first)).not.toBe(evaluate(group, push));
+    }
+    const retry = event(1);
+    retry.github.run_attempt = 2;
+    expect(evaluate(group, retry)).not.toBe(evaluate(group, push));
+    const policy = ci.concurrency["cancel-in-progress"];
+    const metadata = event(1, "edited");
+    metadata.github.event_name = "pull_request";
+    expect(evaluate(policy, metadata)).toBe("false");
+    expect(
+      ci.jobs.database.steps.find((step: { uses?: string }) =>
+        step.uses?.startsWith("actions/upload-artifact@"),
+      ).with.overwrite,
+    ).toBe(true);
   });
   it("gives every database and Linux partition a separate cancellation key", () => {
     const keys = databaseMatrix.map((matrix) =>
@@ -76,6 +104,7 @@ describe("CI scheduling and context preservation", () => {
       readFileSync(new URL("../.github/workflows/pr-title.yml", import.meta.url), "utf8"),
     );
     const steps = workflow.jobs.validate.steps;
+    expect(workflow.concurrency["cancel-in-progress"]).toBe(false);
     expect(workflow.jobs.validate.name).toBe("Validate conventional commit title");
     expect(workflow.jobs.validate.permissions.contents).toBe("read");
     const checkout = steps.find((step: { uses?: string }) =>

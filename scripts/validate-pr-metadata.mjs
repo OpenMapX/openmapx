@@ -8,6 +8,28 @@ const sha = /^[a-f0-9]{40}$/;
 const identity = (pr) =>
   JSON.stringify([pr.number, pr.head?.sha, pr.base?.sha, pr.base?.ref, pr.body, pr.title]);
 
+export function metadataValidationEnvironment(env) {
+  return Object.fromEntries(
+    [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "LANG",
+      "LC_ALL",
+      "CI",
+      "SystemRoot",
+      "ComSpec",
+      "PATHEXT",
+    ]
+      .filter((key) => typeof env[key] === "string")
+      .map((key) => [key, env[key]]),
+  );
+}
+
 /** Only trusted default-branch code runs; candidate objects are parser input. */
 export async function validatePrMetadata({ repository, number, head }, io) {
   if (
@@ -55,9 +77,7 @@ if (import.meta.main) {
         validate: (pr) => {
           const metadata = join(directory, "pr.json");
           writeFileSync(metadata, JSON.stringify(pr));
-          const env = { ...process.env };
-          delete env.GH_TOKEN;
-          delete env.GITHUB_TOKEN;
+          const env = metadataValidationEnvironment(process.env);
           command(
             process.execPath,
             [

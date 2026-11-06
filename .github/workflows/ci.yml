@@ -16,7 +16,7 @@ on:
 # source concurrency; this workflow must never cancel an executing publication.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.action == 'edited' && !github.event.changes.base && 'metadata' || 'code') || format('run-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base != null) }}
 
 permissions:
   contents: read
@@ -68,7 +68,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['lint'] == 'true'
     name: lint
     concurrency:
-      group: ci-validation-lint-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-lint-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -151,7 +151,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['types'] == 'true'
     name: types
     concurrency:
-      group: ci-validation-types-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-types-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -186,7 +186,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['test-node'] == 'true'
     name: test (node)
     concurrency:
-      group: ci-validation-test-node-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-test-node-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -221,7 +221,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['test-agent-mounts'] == 'true'
     name: test (ops-agent image, both mount layouts)
     concurrency:
-      group: ci-validation-test-agent-mounts-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-test-agent-mounts-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -277,7 +277,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['test-linux-user'] == 'true'
     name: test (linux, uid 1001, umask 002, ${{ matrix.part }}/2)
     concurrency:
-      group: ci-validation-test-linux-user-${{ github.event.pull_request.number || github.ref }}-${{ matrix.part }}
+      group: ci-validation-test-linux-user-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}-${{ matrix.part }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -327,6 +327,7 @@ jobs:
           name: linux-user-shard-${{ matrix.part }}
           path: ${{ runner.temp }}/linux-user-${{ matrix.part }}.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
   test-web:
@@ -334,7 +335,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['test-web'] == 'true'
     name: test (web)
     concurrency:
-      group: ci-validation-test-web-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-test-web-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -359,7 +360,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['mobile'] == 'true'
     name: test (mobile)
     concurrency:
-      group: ci-validation-mobile-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-mobile-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -411,7 +412,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['database'] == 'true'
     name: test (database, ${{ matrix.group }}, ${{ matrix.part }}/${{ matrix.total }})
     concurrency:
-      group: ci-validation-database-${{ github.event.pull_request.number || github.ref }}-${{ matrix.group }}-${{ matrix.part }}
+      group: ci-validation-database-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}-${{ matrix.group }}-${{ matrix.part }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     # API/privacy includes the full native platform-helper recovery matrix.
@@ -481,7 +482,7 @@ jobs:
       # spend their budget on the fixture itself. No Docker Hub login: the
       # workflow holds no Docker Hub credentials.
       - name: Pull the pinned extension-store Valkey image
-        if: matrix.group == 'api-privacy' && matrix.part == 1
+        if: matrix.group == 'api-privacy'
         timeout-minutes: 10
         run: |
           image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
@@ -587,6 +588,7 @@ jobs:
           name: database-shard-${{ matrix.group }}-${{ matrix.part }}
           path: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
   build:
@@ -594,7 +596,7 @@ jobs:
     if: needs.select.outputs.code == 'true' && needs.select.outputs['build'] == 'true'
     name: build (production)
     concurrency:
-      group: ci-validation-build-${{ github.event.pull_request.number || github.ref }}
+      group: ci-validation-build-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -313,17 +313,29 @@ restart heavy work. Their aggregate has a different, non-required name and skips
 it cannot replace failed code validation with a successful skipped required check.
 No new required status or live ruleset transition is needed. Base retargets and
 code updates still produce full applicable code evidence.
+Metadata CI runs do not cancel each other; the required metadata workflow is
+serialized separately so an older racing failure cannot land after its successor.
+Selector failure still fails closed under the required code context: without its
+receipt, CI cannot safely prove that the trusted metadata gate is deployed.
 
 Main runs no longer hold one workflow-wide slot through tests and publication.
-The selector first rejects a superseded main source, so rerunning an old main
-commit does not deliberately cancel current validation. Validation cancellation
-is keyed by job and partition, so a newer main revision
-can supersede obsolete work. Publication remains a non-cancelling serialized
+The selector first rejects a superseded main source. Only first-attempt main
+push/schedule validation shares cancellation keys by job and partition. Manual
+runs and reruns (including failed-jobs-only reruns with carried-forward selector
+outputs) use run/attempt keys, so they cannot suppress current-main publication.
+PR job keys are also run/attempt-specific; only code workflow concurrency cancels
+obsolete PR code runs. Publication remains a non-cancelling serialized
 trusted `workflow_call`, admitted only after its exact source's successful gate.
 All existing source/provenance/scan/privacy/coherent-pointer guards remain.
 A superseded selection may finish its workflow without code work; its distinct
 non-required context and selection reason are not evidence of a successful code
 gate. Do not count such intermediate commits as individually validated.
+GitHub orders concurrency requests by arrival rather than commit topology. A
+delayed older first-attempt job can still supersede newer validation; the source
+guard reduces this window but does not prove scheduler ordering. Publication's
+unchanged final freshness/atomicity guards prevent stale promotion; daily full
+reconciliation remains necessary. Qualify overlap on a test repository before
+claiming hosted latest-source scheduling acceptance.
 
 ## Build identity and production context
 
@@ -334,6 +346,10 @@ unrelated package builds. The stamp always runs, including when local fallback
 identity comes from Git, so cache restoration cannot deliver an old service-worker
 identity. Direct web builds retain their behavior; their combined Turbo task is
 uncached. The web Dockerfile likewise compiles before declaring the changing ID.
+Integration sources outside `apps/web` are explicit inputs of cacheable Next
+compilation; a real dry-graph regression proves an integration edit changes its
+hash. A separate built-output test checks two deployment identities in both the
+public worker and copied standalone worker, including static assets.
 
 Root Docker contexts exclude `*.test.ts(x)`/`*.spec.ts(x)` sources. Fixture/assets
 are deliberately retained. The planner applies the same ordered Docker ignore

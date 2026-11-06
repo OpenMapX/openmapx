@@ -8,11 +8,17 @@ on:
 permissions:
   contents: read
 
+# Never let a cancelled/out-of-order metadata job replace the newest required
+# result. A later edit waits for the current validator, independently of code CI.
+concurrency:
+  group: pr-metadata-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     name: Validate conventional commit title
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read # trusted default-branch checkout and candidate Git objects
       # `statuses: write` is required because action-semantic-pull-request@v6
@@ -60,8 +66,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          package-manager-cache: false
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+          cache: pnpm
+      - run: pnpm install --filter . --frozen-lockfile --ignore-scripts
       - name: Validate current release classification with trusted code
         env:
           GH_TOKEN: ${{ github.token }}

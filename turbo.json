@@ -29,7 +29,7 @@
     },
     "web#build:app": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "$TURBO_ROOT$/integrations/**"],
       "outputs": [
         ".next/**",
         "!.next/cache/**",

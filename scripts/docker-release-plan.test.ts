@@ -779,6 +779,19 @@ describe("bundled image fingerprints", () => {
 describe("production Docker context exclusions", () => {
   const readDockerfile = () => "FROM scratch\nCOPY packages/ /app/packages/\n";
   const candidate = { app: "api", context: ".", dockerfile: "apps/api/Dockerfile" };
+  it("applies main's root policy when a Dockerfile-specific file does not exist", () => {
+    const input = {
+      ...options,
+      target: candidate,
+      readDockerfile,
+      tree: [{ path: "packages/core/src/example.test.ts", mode: "100644", oid: "a".repeat(40) }],
+      readFile: (path: string) => readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
+    };
+    const first = imageFingerprint(input);
+    expect(imageFingerprint({ ...input, tree: [{ ...input.tree[0], oid: "b".repeat(40) }] })).toBe(
+      first,
+    );
+  });
   it("does not build images for excluded test sources, but honors later reinclusions", () => {
     const input = {
       changedPaths: ["packages/core/src/example.test.ts"],

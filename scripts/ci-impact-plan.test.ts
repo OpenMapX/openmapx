@@ -35,7 +35,7 @@ describe("CI applicability and required result enforcement", () => {
     expect(plan.jobs).toEqual({
       lint: true,
       types: false,
-      "test-node": false,
+      "test-node": true,
       "test-linux-user": false,
       "test-agent-mounts": false,
       "test-web": false,
@@ -101,6 +101,22 @@ describe("CI applicability and required result enforcement", () => {
       verifyResults(plan, { ...results, database: { result: "success" } }, "pull_request"),
     ).toThrow();
     expect(() => verifyResults({ ...plan, version: 0 }, results, "pull_request")).toThrow();
+  });
+  it("keeps hidden docs/node and web/mobile boundary readers selected", () => {
+    expect(pr(["docs/docs/features/personal-timeline.md"]).jobs["test-node"]).toBe(true);
+    for (const path of ["map/HostMapProvider.tsx", "search/VoiceSearchButton.tsx"]) {
+      expect(pr([`apps/web/src/components/${path}`]).jobs.mobile).toBe(true);
+    }
+  });
+  it("rejects aggregate dependencies absent from the selection contract", () => {
+    const plan = pr(["packages/core/src/index.ts"]);
+    const needs = {
+      ...Object.fromEntries(Object.keys(plan.jobs).map((id) => [id, { result: "success" }])),
+      "docker-changes": { result: "success", outputs: { apps: "[]" } },
+      "docker-build": { result: "skipped" },
+      future: { result: "failure" },
+    };
+    expect(() => verifyResults(plan, needs, "pull_request")).toThrow(/unknown/i);
   });
   it("rejects malformed immutable source identities", () => {
     expect(() => pr(["docs/docs/a.md"], { head: "main" })).toThrow();

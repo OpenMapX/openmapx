@@ -1,5 +1,7 @@
 // biome-ignore-all lint/suspicious/noUndeclaredEnvVars: Uncached GitHub Actions entry point.
+
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 
 import { databaseMatrix } from "./database-test-shards.mjs";
@@ -36,6 +38,8 @@ export function createImpactPlan({
   pathsComplete = true,
   regularFiles = true,
   approvedScopes = [],
+  closedPr = false,
+  rolloutCommit = "",
 }) {
   if (!shaPattern.test(head) || (event === "pull_request" && !shaPattern.test(base)))
     throw new Error("CI selection requires immutable head/base commit identities");
@@ -61,8 +65,16 @@ export function createImpactPlan({
   ) {
     if (paths.every((path) => /^docs\/(?:docs|blog)\/.*\.md$/.test(path))) {
       scope = "docs";
-      for (const id of validationJobs) jobs[id] = id === "lint";
-    } else if (paths.every((path) => /^apps\/web\/src\/components\/.*\.[jt]sx?$/.test(path))) {
+      for (const id of validationJobs) jobs[id] = ["lint", "test-node"].includes(id);
+    } else if (
+      paths.every((path) => /^apps\/web\/src\/components\/.*\.[jt]sx?$/.test(path)) &&
+      !paths.some((path) =>
+        [
+          "apps/web/src/components/map/HostMapProvider.tsx",
+          "apps/web/src/components/search/VoiceSearchButton.tsx",
+        ].includes(path),
+      )
+    ) {
       // Keep node-side source/build contracts, all types and the actual web build.
       scope = "web";
       for (const id of ["database", "mobile", "test-linux-user", "test-agent-mounts"])
@@ -83,10 +95,21 @@ export function createImpactPlan({
     event,
     head,
     base: base ?? "",
-    code: !metadataOnly && mainCurrent,
-    reason: !mainCurrent ? "superseded-main" : metadataOnly ? "metadata-only" : "code",
+    code: !closedPr && !metadataOnly && mainCurrent,
+    reason: closedPr
+      ? "closed-pr"
+      : !mainCurrent
+        ? "superseded-main"
+        : metadataOnly
+          ? "metadata-only"
+          : "code",
     scope,
     proposedScope,
+    rolloutCommit,
+    changedPathCount: paths?.length ?? 0,
+    changedPathDigest: createHash("sha256")
+      .update(JSON.stringify([...(paths ?? [])].sort()))
+      .digest("hex"),
     jobs,
   };
 }
@@ -103,10 +126,15 @@ export function verifyResults(plan, needs, event) {
     Object.values(plan.jobs).some((value) => typeof value !== "boolean")
   )
     throw new Error("Missing or invalid CI selection receipt");
+  const unknown = Object.keys(needs).filter(
+    (id) => !["select", ...validationJobs, "docker-changes", "docker-build"].includes(id),
+  );
+  if (unknown.length) throw new Error(`Unknown aggregate dependencies: ${unknown.join(", ")}`);
   const expected = full();
   if (event !== "pull_request" && plan.scope !== "full")
     throw new Error("Trusted main requires complete validation");
-  if (plan.scope === "docs") for (const id of validationJobs) expected[id] = id === "lint";
+  if (plan.scope === "docs")
+    for (const id of validationJobs) expected[id] = ["lint", "test-node"].includes(id);
   else if (plan.scope === "web")
     for (const id of ["database", "mobile", "test-linux-user", "test-agent-mounts"])
       expected[id] = false;
@@ -154,7 +182,7 @@ if (import.meta.main) {
       const base = pr?.base?.sha ?? "";
       let paths = [],
         regularFiles = true;
-      if (pr) {
+      if (pr && pr.state !== "closed") {
         if (!shaPattern.test(base) || !shaPattern.test(head))
           throw new Error("Invalid PR source identity");
         const ancestor = git("merge-base", base, head).trim();
@@ -176,8 +204,10 @@ if (import.meta.main) {
       }
       let metadataGateReady = false;
       let approvedScopes = [];
+      let rolloutCommit = "";
       try {
         // Approval is a reviewed default-branch input, never a PR opt-in.
+        rolloutCommit = git("rev-parse", "origin/main").trim();
         const rollout = JSON.parse(git("show", "origin/main:scripts/ci-impact-rollout.json"));
         if (
           rollout.version === 1 &&
@@ -195,7 +225,7 @@ if (import.meta.main) {
           policy.includes("# CI metadata gate v1") &&
           policy.includes("node scripts/validate-pr-metadata.mjs") &&
           !!pr &&
-          policy === git("show", `${base}:.github/workflows/pr-title.yml`);
+          policy === git("show", `origin/${pr.base.ref ?? "main"}:.github/workflows/pr-title.yml`);
       } catch {
         /* Old bases keep the full code gate on edits. */
       }
@@ -207,6 +237,8 @@ if (import.meta.main) {
         paths,
         regularFiles,
         approvedScopes,
+        rolloutCommit,
+        closedPr: pr?.state === "closed",
         baseChanged: !!event.changes?.base,
         mainCurrent:
           process.env.GITHUB_REF !== "refs/heads/main" ||
@@ -230,6 +262,11 @@ if (import.meta.main) {
         .join("");
       appendFileSync(process.env.GITHUB_OUTPUT, lines);
       console.log(JSON.stringify(plan, null, 2));
+      if (process.env.GITHUB_STEP_SUMMARY)
+        appendFileSync(
+          process.env.GITHUB_STEP_SUMMARY,
+          `### CI applicability receipt\n\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n`,
+        );
     } else throw new Error("Usage: ci-impact-plan.mjs select|verify");
   } catch (error) {
     console.error(error.message);
