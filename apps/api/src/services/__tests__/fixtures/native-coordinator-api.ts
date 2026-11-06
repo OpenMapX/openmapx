@@ -2,7 +2,7 @@
  * reply delivery and kills this native process; no DB/service/authority mocks. */
 
 import { randomUUID } from "node:crypto";
-import { constants, writeFileSync } from "node:fs";
+import { constants, readFileSync, renameSync, writeFileSync } from "node:fs";
 import filesystem from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
@@ -36,12 +36,12 @@ if (input.filesystemFault === "after-retirement-unlink") {
   const unlink = filesystem.unlink,
     directory = join(process.env.OPS_TRUSTED_CONFIG_DIR!, ".candidates") + "/";
   filesystem.unlink = async (path) => {
+    const candidate = String(path).startsWith(directory) ? readFileSync(path) : undefined;
     await unlink(path);
-    if (String(path).startsWith(directory)) {
-      writeFileSync(
-        join(process.env.OPENMAPX_ROOT_DIR!, "coordinator-retirement-unlinked"),
-        "unlinked",
-      );
+    if (candidate) {
+      const marker = join(process.env.OPENMAPX_ROOT_DIR!, "coordinator-retirement-unlinked");
+      writeFileSync(`${marker}.partial`, candidate, { mode: 0o600, flag: "wx" });
+      renameSync(`${marker}.partial`, marker);
       await new Promise<void>(() => {});
     }
   };
