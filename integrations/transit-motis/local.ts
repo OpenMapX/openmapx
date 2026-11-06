@@ -150,6 +150,7 @@ async function planWithInstance(
       bikeHillPreference: params.bikeHillPreference,
       rentalFilters: params.rentalFilters,
       pageCursor: params.pageCursor,
+      regionalAlternatives: params.regionalAlternatives,
       detailedLegs: true,
       detailedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,
       useRoutedTransfers: capabilities?.planningFeatures?.hasRoutedTransfers === true,

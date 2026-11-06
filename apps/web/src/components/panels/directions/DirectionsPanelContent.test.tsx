@@ -20,6 +20,30 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMapOptional: () => null,
 }));
 
+const selectionCallbacks = vi.hoisted(() => ({
+  select: undefined as
+    | ((
+        parent: import("@openmapx/mobility-core/transit").TripItinerary,
+        candidate: import("@openmapx/mobility-core/transit").TripItinerary,
+      ) => void)
+    | undefined,
+  refresh: undefined as
+    | ((
+        updated: import("@openmapx/mobility-core/transit").TripItinerary,
+        changed: boolean,
+        fallback: boolean,
+      ) => void)
+    | undefined,
+}));
+vi.mock("@/components/panels/directions/TransitDetailsView", async (original) => {
+  const actual = await original<typeof import("./TransitDetailsView")>();
+  return {
+    TransitDetailsView: (props: Parameters<typeof actual.TransitDetailsView>[0]) => {
+      selectionCallbacks.select = props.onSelectItinerary;
+      return <actual.TransitDetailsView {...props} />;
+    },
+  };
+});
 const useDirectionsMock = vi.fn();
 const useScheduledDirectionsMock = vi.fn();
 const useTransitPlanMock = vi.fn();
@@ -84,17 +108,26 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   TransitItineraryCard: ({
     itinerary,
     onDetails,
+    onRefreshed,
   }: {
     itinerary: { duration: number };
     onDetails?: () => void;
-  }) => (
-    <div data-testid="transit-itinerary-card">
-      {itinerary.duration}
-      <button type="button" onClick={onDetails}>
-        Open transit details
-      </button>
-    </div>
-  ),
+    onRefreshed?: (
+      updated: import("@openmapx/mobility-core/transit").TripItinerary,
+      changed: boolean,
+      fallback: boolean,
+    ) => void;
+  }) => {
+    selectionCallbacks.refresh = onRefreshed;
+    return (
+      <div data-testid="transit-itinerary-card">
+        {itinerary.duration}
+        <button type="button" onClick={onDetails}>
+          Open transit details
+        </button>
+      </div>
+    );
+  },
   LegBadge: () => <span />,
   LegRemarks: () => null,
   LiveStopTime: ({ time }: { time: { scheduledAt?: string; expectedAt?: string } }) => (
@@ -1510,6 +1543,123 @@ describe("stops along the route", () => {
     expect(screen.queryByTestId("route-stop-search")).toBeNull();
   });
 });
+
+function reviewTransitFixture(): import("@openmapx/mobility-core/transit").TripItinerary {
+  const leg = {
+    mode: "rail" as const,
+    from: { name: "Aachen", stopId: "a", lat: 50.7678, lng: 6.0914 },
+    to: { name: "Köln", stopId: "b", lat: 50.943, lng: 6.9587 },
+    startTime: "2026-11-06T20:44:00Z",
+    endTime: "2026-11-06T21:22:00Z",
+    route: { shortName: "EST", longName: "" },
+    tripId: "mo:est",
+    geometry: { type: "LineString" as const, coordinates: [] },
+  };
+  const replacement = {
+    ...leg,
+    startTime: "2026-11-06T20:51:00Z",
+    endTime: "2026-11-06T21:44:00Z",
+    route: { shortName: "RE1", longName: "" },
+    tripId: "mo:re1",
+  };
+  return {
+    id: "parent",
+    source: "mo",
+    instance: "mo",
+    datasetEpoch: "epoch",
+    regionalOnly: true,
+    startTime: leg.startTime,
+    endTime: leg.endTime,
+    duration: 2280,
+    transfers: 0,
+    walkDistance: 0,
+    legs: [
+      {
+        ...leg,
+        alternatives: [
+          {
+            routeShortName: "RE1",
+            startTime: replacement.startTime,
+            endTime: replacement.endTime,
+            replaces: { fromLegIndex: 0, toLegIndex: 0 },
+            legs: [replacement],
+          },
+        ],
+      },
+    ],
+  };
+}
+function publishReviewTransit(items: import("@openmapx/mobility-core/transit").TripItinerary[]) {
+  useTransitPlanMock.mockReturnValue({
+    data: { provider: "mo", itineraries: items },
+    isLoading: false,
+    isError: false,
+  });
+}
+it("keeps real details and active selection across result object replacement and preserves an inserted alternative", async () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setMode("transit"));
+  const parent = reviewTransitFixture();
+  publishReviewTransit([parent]);
+  const view = renderPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Open transit details" }));
+  publishReviewTransit([{ ...parent }]);
+  view.rerender(<DirectionsPanelContent />);
+  await waitFor(() => expect(screen.queryByTestId("transit-itinerary-card")).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: /RE1 ·/ }));
+  const selected = useDirectionsStore.getState().transitItineraries[1];
+  expect(selected.legs[0].tripId).toBe("mo:re1");
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+  publishReviewTransit([{ ...parent }]);
+  view.rerender(<DirectionsPanelContent />);
+  await waitFor(() => expect(screen.queryByTestId("transit-itinerary-card")).toBeNull());
+  expect(
+    useDirectionsStore.getState().transitItineraries[
+      useDirectionsStore.getState().activeItineraryIndex
+    ],
+  ).toBe(selected);
+  expect(screen.getAllByText("RE1").length).toBeGreaterThan(0);
+  expect(useDirectionsStore.getState().transitItineraries).toHaveLength(2);
+});
+it("ignores an old details callback after the user changes the search", () => {
+  seedOriginDestination();
+  act(() => useDirectionsStore.getState().setMode("transit"));
+  const parent = reviewTransitFixture();
+  publishReviewTransit([parent]);
+  renderPanel();
+  fireEvent.click(screen.getByRole("button", { name: "Open transit details" }));
+  const stale = selectionCallbacks.select;
+  act(() => useDirectionsStore.getState().setMaxTransfers(0));
+  act(() =>
+    stale?.(parent, {
+      ...parent,
+      id: undefined,
+      legs: [{ ...parent.legs[0], tripId: "mo:another" }],
+    }),
+  );
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([parent]);
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(0);
+  expect(screen.queryAllByTestId("transit-itinerary-card")).toHaveLength(1);
+});
+it.each(["same", "changed", "fallback"])(
+  "handles the regional label after a %s refresh in the panel",
+  (kind) => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode("transit"));
+    const parent = reviewTransitFixture();
+    publishReviewTransit([parent]);
+    renderPanel();
+    const updated = {
+      ...parent,
+      regionalOnly: undefined,
+      legs: parent.legs.map((l) => ({ ...l, tripId: kind === "changed" ? "mo:new" : l.tripId })),
+    };
+    act(() => selectionCallbacks.refresh?.(updated, false, kind === "fallback"));
+    expect(useDirectionsStore.getState().transitItineraries[0].regionalOnly).toBe(
+      kind === "same" ? true : undefined,
+    );
+  },
+);
 
 it("opens provided provider details and keeps their origin when an earlier auto-location resolves", async () => {
   let giveFix: PositionCallback = () => {};

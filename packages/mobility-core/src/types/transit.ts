@@ -373,8 +373,12 @@ export interface TransitFlexInfo extends ContributingRecord {
   pickupWindowEnd?: string;
 }
 
-/** An alternative departure for a transit leg (earlier/later same-route service). */
+/** An alternative transit service, which can use a different route. */
 export interface TransitLegAlternative extends ContributingRecord {
+  /** Validated inclusive parent-leg replacement span, present only with legs. */
+  replaces?: { fromLegIndex: number; toLegIndex: number };
+  legs?: Array<Omit<TripLeg, "alternatives">>;
+  regionalOnly?: boolean;
   startTime: string;
   endTime: string;
   /** Prefixed trip id of the alternative's transit leg, when available. */
@@ -468,6 +472,8 @@ export interface TripLeg extends ContributingRecord {
 }
 
 export interface TripItinerary extends ContributingRecord {
+  /** Regional/local service alternative, not a ticket-validity claim. */
+  regionalOnly?: boolean;
   id?: string;
   source?: string;
   instance?: string;

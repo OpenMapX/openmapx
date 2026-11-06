@@ -32,6 +32,27 @@ can be flagged; confirm important connections with the operator.
 Trips whose endpoints have different UTC offsets show departure in the origin's
 local time and arrival in the destination's local time, with offset labels.
 
+### Regional and local alternatives
+
+For point-to-point journeys using MOTIS or Transitous, an unrestricted search
+can include regional/local connections alongside faster long-distance trains.
+When the results include a long-distance train and your allowed modes include
+regional/local transport, OpenMapX makes one additional bounded query to the
+same provider. Both searches keep your time, access modes and other requirements.
+A regional query failure leaves the primary results available.
+
+**Regional/local** describes the services used; it does not establish a fare or
+validate a Deutschlandticket. The results are useful alternatives, not a list of
+every departure. Earlier/later pages retain each search's own timetable cursor.
+Chained journeys and refresh replanning do not run the extra search.
+
+In connection details, alternatives show their train name and departure–arrival
+times. A selectable alternative replaces its complete access, ride and transfer
+legs. The original journey remains available. A composed alternative has no
+inherited fare or refresh identity; a matching complete result keeps its own.
+Your selected connection survives background refreshes of the same search.
+Changing the endpoints or routing requirements retires composed alternatives.
+
 ### Route options
 
 | Option                         | Effect and limit                                                                                                                      |

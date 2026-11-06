@@ -17,8 +17,14 @@ import {
   useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mergeTransitItineraryPage } from "./transitPlanPages";
+import {
+  findTransitItinerary,
+  mergeTransitItineraryPage,
+  sameTransitItinerary,
+  selectTransitAlternative,
+} from "./transitPlanPages";
 
 export type TransitDirectionsSnapshot = Pick<
   DirectionsState,
@@ -70,6 +76,8 @@ export function useTransitDirectionsPlan({
   const [selectionToOpen, setSelectionToOpen] = useState<{
     index: number;
     itineraryKey: string;
+    itinerary: TripItinerary;
+    queryIdentity: string;
   } | null>(null);
   const lastPublication = useRef<{ data: unknown; identity: string } | null>(null);
   const origin = waypoints[0]?.coords ?? null;
@@ -80,7 +88,6 @@ export function useTransitDirectionsPlan({
   );
   const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
   const itineraries = useDirectionsStore((s) => s.transitItineraries);
-  const setTransitItineraries = useDirectionsStore((s) => s.setTransitItineraries);
   const { data: transitPlanningCapabilities } = useTransitPlanningCapabilities();
   // Transit plan query
   const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
@@ -314,6 +321,25 @@ export function useTransitDirectionsPlan({
   });
   const { data: transitPlanData } = transitPlanQuery;
   const attributions = contributorsForRecords(itineraries);
+  const queryOwner = useRef(pagingIdentity);
+  queryOwner.current = pagingIdentity;
+  const publishedOwner = useRef<string | null>(null);
+  const retainedAlternative = useRef<{ identity: string; itinerary: TripItinerary } | null>(null);
+  const selectAlternative = (
+    parent: TripItinerary,
+    candidate: TripItinerary,
+  ): TripItinerary | null => {
+    if (queryOwner.current !== pagingIdentity) return null;
+    const state = useDirectionsStore.getState();
+    if (state.pendingTransitSelection) return null;
+    const selected = selectTransitAlternative(state.transitItineraries, parent, candidate);
+    if (!selected) return null;
+    const itinerary = selected.itineraries[selected.index];
+    retainedAlternative.current = { identity: pagingIdentity, itinerary };
+    state.setTransitItineraries(selected.itineraries);
+    state.setActiveItineraryIndex(selected.index);
+    return itinerary;
+  };
   useEffect(() => {
     const store = useDirectionsStore.getState();
     if (pending && rawKey !== pending.requestKey) {
@@ -327,6 +353,9 @@ export function useTransitDirectionsPlan({
       lastPublication.current.identity === identity
     )
       return;
+    const active = store.transitItineraries[store.activeItineraryIndex];
+    const sameSearch = publishedOwner.current === pagingIdentity;
+    publishedOwner.current = pagingIdentity;
     const items = mergeTransitItineraryPage({
       existing: transitPageToken ? store.transitItineraries : [],
       incoming: transitPlanData.itineraries,
@@ -334,16 +363,48 @@ export function useTransitDirectionsPlan({
       page: transitPageToken ? transitPageDirection : "initial",
       preference: transitRoutePreference,
     });
+    const retained = retainedAlternative.current;
+    if (
+      !pending &&
+      sameSearch &&
+      retained?.identity === pagingIdentity &&
+      active &&
+      sameTransitItinerary(active, retained.itinerary)
+    ) {
+      const match = findTransitItinerary(items, active);
+      if (
+        match < 0 &&
+        items.some(
+          (it) =>
+            it.source === active.source &&
+            it.instance === active.instance &&
+            it.datasetEpoch === active.datasetEpoch,
+        )
+      )
+        items.push(active);
+      retainedAlternative.current = {
+        identity: pagingIdentity,
+        itinerary: match >= 0 ? items[match] : active,
+      };
+    }
     lastPublication.current = { data: transitPlanData, identity };
-    setTransitItineraries(items, currentKey);
+    store.setTransitItineraries(items, currentKey);
     if (pending) {
       const index = items.findIndex(
         (item) => transitItineraryKey(item, transitPlanData.provider) === pending.itineraryKey,
       );
       if (store.completeTransitSelection(pending) && index >= 0) {
         store.setActiveItineraryIndex(index);
-        setSelectionToOpen({ index, itineraryKey: pending.itineraryKey });
+        setSelectionToOpen({
+          index,
+          itineraryKey: pending.itineraryKey,
+          itinerary: items[index],
+          queryIdentity: pagingIdentity,
+        });
       }
+    } else if (sameSearch && active) {
+      const index = findTransitItinerary(items, active);
+      if (index >= 0) store.setActiveItineraryIndex(index);
     }
   }, [
     transitPlanData,
@@ -352,12 +413,14 @@ export function useTransitDirectionsPlan({
     currentKey,
     waitingForSelection,
     transitRoutePreference,
-    setTransitItineraries,
     transitPageToken,
     transitPageDirection,
+    pagingIdentity,
   ]);
 
   return {
+    queryIdentity: pagingIdentity,
+    selectAlternative,
     isChained: transitIsChained,
     planQuery: waitingForSelection
       ? { ...transitPlanQuery, data: undefined, isLoading: true, isFetching: true }

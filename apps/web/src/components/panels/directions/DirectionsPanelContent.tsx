@@ -43,6 +43,7 @@ import {
   useVehicles,
   viewerTimeZone,
 } from "@openmapx/core";
+import { transitItineraryFingerprint } from "@openmapx/core/navigation";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
@@ -50,6 +51,7 @@ import {
   contributorsForNestedRecordFields,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -93,6 +95,7 @@ import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { servedAttributions } from "@/lib/servedAttributions";
+import { findTransitItinerary } from "./transitPlanPages";
 import { useRouteImpacts } from "./useRouteImpacts";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 
@@ -272,7 +275,11 @@ export function DirectionsPanelContent() {
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
-  const [transitDetailsIndex, setTransitDetailsIndex] = useState<number | null>(null);
+  const [transitDetailsSelection, setTransitDetailsSelection] = useState<{
+    identity: string;
+    itinerary: TripItinerary;
+  } | null>(null);
+
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   // Driving depart/arrive is kept independent of the transit time state so the
   // two flows never interfere.
@@ -586,6 +593,8 @@ export function DirectionsPanelContent() {
   const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
 
   const {
+    queryIdentity: transitQueryIdentity,
+    selectAlternative: selectTransitAlternative,
     isChained: transitIsChained,
     planQuery: transitPlanQuery,
     chainQuery: transitChainQuery,
@@ -611,7 +620,11 @@ export function DirectionsPanelContent() {
     deutschlandticketOnly,
   });
   useEffect(() => {
-    if (transitSelectionToOpen) setTransitDetailsIndex(transitSelectionToOpen.index);
+    if (transitSelectionToOpen)
+      setTransitDetailsSelection({
+        identity: transitSelectionToOpen.queryIdentity,
+        itinerary: transitSelectionToOpen.itinerary,
+      });
   }, [transitSelectionToOpen]);
   const { data: transitChainData } = transitChainQuery;
   const {
@@ -829,7 +842,7 @@ export function DirectionsPanelContent() {
   const selectFallbackMode = (nextMode: GroundFallbackMode) => {
     setMode(nextMode);
     setDetailsRouteIndex(null);
-    setTransitDetailsIndex(null);
+    setTransitDetailsSelection(null);
   };
   const recoveryActions = {
     onEditOrigin: () => focusWaypoint(0),
@@ -905,7 +918,11 @@ export function DirectionsPanelContent() {
     return Math.min(...values);
   }, [transitItineraries]);
 
-  if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
+  const transitDetailsIndex =
+    transitDetailsSelection?.identity === transitQueryIdentity
+      ? findTransitItinerary(transitItineraries, transitDetailsSelection.itinerary)
+      : -1;
+  if (transitDetailsIndex >= 0 && transitItineraries[transitDetailsIndex]) {
     return (
       <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
         <TransitDetailsView
@@ -922,7 +939,12 @@ export function DirectionsPanelContent() {
           )}
           originTimeZone={originTimeZone}
           destinationTimeZone={destinationTimeZone}
-          onBack={() => setTransitDetailsIndex(null)}
+          onSelectItinerary={(parent, candidate) => {
+            const selected = selectTransitAlternative(parent, candidate);
+            if (selected)
+              setTransitDetailsSelection({ identity: transitQueryIdentity, itinerary: selected });
+          }}
+          onBack={() => setTransitDetailsSelection(null)}
         />
       </AttributionDetailsGroup>
     );
@@ -1044,7 +1066,7 @@ export function DirectionsPanelContent() {
               onClick={() => {
                 setMode(m);
                 setDetailsRouteIndex(null);
-                setTransitDetailsIndex(null);
+                setTransitDetailsSelection(null);
               }}
             />
           );
@@ -1065,7 +1087,7 @@ export function DirectionsPanelContent() {
               if (!value) return;
               setEvMode(value === "ev");
               setDetailsRouteIndex(null);
-              setTransitDetailsIndex(null);
+              setTransitDetailsSelection(null);
             }}
             aria-label={t("driving")}
             sx={{ "& .MuiToggleButton-root": { textTransform: "none", py: 0.3, px: 1.2 } }}
@@ -1412,11 +1434,22 @@ export function DirectionsPanelContent() {
                         setActiveItineraryIndex(i);
                         snapTo("peek");
                       }}
-                      onDetails={() => setTransitDetailsIndex(i)}
+                      onDetails={() =>
+                        setTransitDetailsSelection({
+                          identity: transitQueryIdentity,
+                          itinerary: itin,
+                        })
+                      }
                       onRefreshed={(updated, changed, fallbackOccurred) => {
                         const current = useDirectionsStore.getState().transitItineraries;
+                        if (!current.includes(itin)) return;
+                        const retained =
+                          !fallbackOccurred &&
+                          transitItineraryFingerprint(updated) === transitItineraryFingerprint(itin)
+                            ? { ...updated, regionalOnly: itin.regionalOnly }
+                            : updated;
                         setTransitItineraries(
-                          current.map((candidate, index) => (index === i ? updated : candidate)),
+                          current.map((candidate) => (candidate === itin ? retained : candidate)),
                         );
                         if (changed || fallbackOccurred) {
                           setSnackbar(

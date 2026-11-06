@@ -256,3 +256,28 @@ describe("stripTransitSecretsForSnapshot", () => {
     );
   });
 });
+
+it("omits alternative replacement geometry from the native bridge while retaining risk summaries", () => {
+  const source = itinerary() as unknown as { legs: Array<Record<string, unknown>> };
+  source.legs[1].alternatives = [
+    {
+      startTime: "2026-08-09T09:00:00Z",
+      endTime: "2026-08-09T09:40:00Z",
+      routeShortName: "RE1",
+      tripId: "re1",
+      legs: [source.legs[1]],
+      replaces: { fromLegIndex: 0, toLegIndex: 2 },
+    },
+  ];
+  const result = build({ itinerary: source });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const ride = (
+    result.startPackage.itinerary as {
+      legs: Array<{ alternatives?: Array<Record<string, unknown>> }>;
+    }
+  ).legs[1];
+  expect(ride.alternatives?.[0]).toMatchObject({ routeShortName: "RE1", tripId: "re1" });
+  expect(ride.alternatives?.[0]).not.toHaveProperty("legs");
+  expect(ride.alternatives?.[0]).not.toHaveProperty("replaces");
+});

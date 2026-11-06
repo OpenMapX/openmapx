@@ -710,6 +710,73 @@ describe("transit paging through the real query cache and signed tokens", () => 
   });
 });
 
+it("retains a chosen composite through background result replacement but retires it for a changed search", async () => {
+  const parent = itinerary("parent", { instance: "mo", datasetEpoch: "epoch", legs: [] });
+  const chosen = itinerary("", {
+    id: undefined,
+    instance: "mo",
+    datasetEpoch: "epoch",
+    legs: [
+      {
+        mode: "rail",
+        tripId: "re1",
+        startTime: a.startTime,
+        endTime: a.endTime,
+        from: { name: "A", lat: 50, lng: 6 },
+        to: { name: "B", lat: 51, lng: 7 },
+        geometry: { type: "LineString", coordinates: [] },
+      },
+    ],
+  });
+  mocks.plan.mockReturnValue({ data: response([parent]), isLoading: false, isError: false });
+  const view = renderHook(
+    ({ maxTransfers }) => useTransitDirectionsPlan(snapshot({ maxTransfers })),
+    { initialProps: { maxTransfers: null as number | null } },
+  );
+  const select = view.result.current.selectAlternative;
+  act(() => {
+    expect(select(parent, chosen)).toBe(chosen);
+  });
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+  const fresh = { ...parent };
+  mocks.plan.mockReturnValue({ data: response([fresh]), isLoading: false, isError: false });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(chosen),
+  );
+  const authoritative = { ...chosen, id: "official", refreshToken: "official-token" };
+  mocks.plan.mockReturnValue({
+    data: response([{ ...parent }, authoritative]),
+    isLoading: false,
+    isError: false,
+  });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(authoritative),
+  );
+  mocks.plan.mockReturnValue({ data: response([fresh]), isLoading: false, isError: false });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(authoritative),
+  );
+  view.rerender({ maxTransfers: 0 });
+  expect(view.result.current.selectAlternative(parent, chosen)).toBeNull();
+  expect(select(parent, chosen)).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([fresh]);
+});
+
 function seedSelection() {
   const selection = providerPlanSelection({
     bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
@@ -744,6 +811,8 @@ it("consumes a matching normal query and opens the selected identity after ranki
   expect(view.result.current.selectionToOpen).toMatchObject({
     index: 1,
     itineraryKey: selection.selectedItineraryKey,
+    itinerary: selection.plan.data.itineraries[1],
+    queryIdentity: view.result.current.queryIdentity,
   });
   view.rerender();
   expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
@@ -767,6 +836,12 @@ it("fences an old mounted-panel result through debounce, then selects the seeded
   ]);
   expect(useDirectionsStore.getState().pendingTransitSelection).not.toBeNull();
   expect(view.result.current.planQuery.isLoading).toBe(true);
+  const seeded = useDirectionsStore.getState().transitItineraries;
+  expect(
+    view.result.current.selectAlternative(seeded[0], { ...seeded[0], id: undefined }),
+  ).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries).toBe(seeded);
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
   mocks.plan.mockReturnValue({ data: selection.plan.data, isLoading: false, isError: false });
   act(() => vi.advanceTimersByTime(500));
   expect(lastPlan().enabled).toBe(true);

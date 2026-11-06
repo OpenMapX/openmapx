@@ -309,3 +309,48 @@ describe("MOTIS planner request mapping", () => {
     });
   });
 });
+
+import { composeTransitAlternative } from "@openmapx/mobility-core/transit-alternative";
+// Reduced captured public responses: the actual overtaken RE1 must survive the entire adapter.
+import incident from "./fixtures/re1-overtaken.json";
+
+it("shows RE1 26839 without a ticket filter and preserves a selectable Eurostar replacement", async () => {
+  planMock
+    .mockReset()
+    .mockResolvedValueOnce({ data: incident.primary })
+    .mockResolvedValueOnce({ data: incident.regional });
+  const result = await planTrip(
+    instance,
+    50.76776,
+    6.09139,
+    50.94303,
+    6.95873,
+    "2026-11-06",
+    "20:41:00",
+    false,
+    3,
+    { regionalAlternatives: true },
+  );
+  const re1 = result!.itineraries.find((it) => it.legs.some((l) => l.tripShortName === "026839"))!;
+  expect(re1).toMatchObject({
+    startTime: "2026-11-06T20:50:00Z",
+    endTime: "2026-11-06T21:45:00Z",
+    regionalOnly: true,
+  });
+  expect(
+    result!.itineraries.filter((it) => it.legs.some((l) => l.route?.shortName === "RE9")),
+  ).toHaveLength(1);
+  const eurostar = result!.itineraries.find((it) =>
+    it.legs.some((l) => l.tripShortName === "9477" || l.route?.shortName.includes("9477")),
+  )!;
+  const replacement = composeTransitAlternative(eurostar, 1, 1)!;
+  expect(replacement).toMatchObject({
+    startTime: re1.startTime,
+    endTime: re1.endTime,
+    transfers: 0,
+    regionalOnly: true,
+  });
+  expect(replacement.legs[1].tripId).toContain("3469151921");
+  expect(replacement.legs[1].geometry.coordinates.length).toBeGreaterThan(2);
+  expect(replacement).not.toHaveProperty("id");
+});

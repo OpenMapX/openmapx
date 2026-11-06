@@ -50,7 +50,9 @@ import type {
   VehicleJourney,
   VehicleJourneyStop,
 } from "@openmapx/mobility-core/transit";
+import { type AlternativeContext, alternativeReplacement } from "./alternative-itinerary.js";
 import { motisLegMode, uniqueModes } from "./mode-map.js";
+import { diversifyPlan, isRegional, type PlanQuery } from "./plan-diversity.js";
 import {
   decodeMotisLineReference,
   encodeMotisLineReference,
@@ -933,8 +935,44 @@ export function mapItinerary(
   instance: MotisInstance,
   it: Itinerary,
   datasetEpoch?: string,
+  context?: AlternativeContext,
+  supplemented = false,
 ): TripItinerary {
   const legs = it.legs.map((leg) => mapLeg(instance, leg, datasetEpoch));
+  if (context) {
+    for (const [index, raw] of it.legs.entries()) {
+      if (!raw.alternatives?.length) continue;
+      legs[index].alternatives = raw.alternatives.slice(0, 2).flatMap((chain) => {
+        const compact = mapAlternatives(instance, [chain])[0];
+        if (!compact) return [];
+        const replaces = alternativeReplacement(it, index, chain, context);
+        if (replaces) {
+          compact.replaces = replaces;
+          compact.legs = chain.map((l) => {
+            const {
+              alternatives: _a,
+              fareTransferIndex: _f,
+              effectiveFareLegIndex: _e,
+              ...retained
+            } = l;
+            return mapLeg(instance, retained, datasetEpoch);
+          });
+          if (
+            supplemented &&
+            isRegional({
+              legs: [
+                ...it.legs.slice(0, replaces.fromLegIndex),
+                ...chain,
+                ...it.legs.slice(replaces.toLegIndex + 1),
+              ],
+            })
+          )
+            compact.regionalOnly = true;
+        }
+        return [compact];
+      });
+    }
+  }
 
   const startTime = legs[0]?.startTime ?? "";
   const endTime = legs[legs.length - 1]?.endTime ?? "";
@@ -1038,6 +1076,7 @@ export async function planTrip(
     useRoutedTransfers?: boolean;
     datasetEpoch?: string;
     throwOnError?: boolean;
+    regionalAlternatives?: boolean;
   },
 ): Promise<TripPlan | null> {
   try {
@@ -1068,77 +1107,101 @@ export async function planTrip(
     const preRental = opts?.rentalFilters?.preTransit;
     const postRental = opts?.rentalFilters?.postTransit;
 
-    const { data } = await plan({
-      client: instance.client,
-      query: {
-        fromPlace: `${fromLat},${fromLng}`,
-        toPlace: `${toLat},${toLng}`,
-        numItineraries: numItineraries ?? 3,
-        // Ask MOTIS for a couple of earlier/later alternatives per transit leg
-        // so the UI can offer departure swaps without a re-query.
-        numLegAlternatives: 2,
-        ...(queryTime ? { time: queryTime } : {}),
-        ...(arriveBy ? { arriveBy: true } : {}),
-        ...(transitModes ? { transitModes } : {}),
-        ...(preTransitModes ? { preTransitModes } : {}),
-        ...(postTransitModes ? { postTransitModes } : {}),
-        ...(directModes ? { directModes } : {}),
-        ...(opts?.maxTransfers !== undefined ? { maxTransfers: opts.maxTransfers } : {}),
-        ...transferPreset,
-        ...(opts?.requireBikeTransport ? { requireBikeTransport: true } : {}),
-        ...(elevationCosts ? { elevationCosts } : {}),
-        ...(opts?.pageCursor ? { pageCursor: opts.pageCursor } : {}),
-        ...(opts?.detailedLegs ? { detailedLegs: true } : {}),
-        ...(opts?.detailedTransfers ? { detailedTransfers: true } : {}),
-        ...(opts?.useRoutedTransfers ? { useRoutedTransfers: true } : {}),
-        ...(directRental?.formFactors?.length
-          ? { directRentalFormFactors: directRental.formFactors }
-          : {}),
-        ...(directRental?.propulsionTypes?.length
-          ? { directRentalPropulsionTypes: directRental.propulsionTypes }
-          : {}),
-        ...(directRental?.providerIds?.length
-          ? { directRentalProviders: directRental.providerIds }
-          : {}),
-        ...(directRental?.groupIds?.length
-          ? { directRentalProviderGroups: directRental.groupIds }
-          : {}),
-        ...(preRental?.formFactors?.length
-          ? { preTransitRentalFormFactors: preRental.formFactors }
-          : {}),
-        ...(preRental?.propulsionTypes?.length
-          ? { preTransitRentalPropulsionTypes: preRental.propulsionTypes }
-          : {}),
-        ...(preRental?.providerIds?.length
-          ? { preTransitRentalProviders: preRental.providerIds }
-          : {}),
-        ...(preRental?.groupIds?.length
-          ? { preTransitRentalProviderGroups: preRental.groupIds }
-          : {}),
-        ...(postRental?.formFactors?.length
-          ? { postTransitRentalFormFactors: postRental.formFactors }
-          : {}),
-        ...(postRental?.propulsionTypes?.length
-          ? { postTransitRentalPropulsionTypes: postRental.propulsionTypes }
-          : {}),
-        ...(postRental?.providerIds?.length
-          ? { postTransitRentalProviders: postRental.providerIds }
-          : {}),
-        ...(postRental?.groupIds?.length
-          ? { postTransitRentalProviderGroups: postRental.groupIds }
-          : {}),
-        ...(opts?.wheelchair ? { pedestrianProfile: "WHEELCHAIR" as const } : {}),
-        withFares: true,
+    const query: PlanQuery = {
+      fromPlace: `${fromLat},${fromLng}`,
+      toPlace: `${toLat},${toLng}`,
+      numItineraries: numItineraries ?? 3,
+      // Ask MOTIS for a couple of earlier/later alternatives per transit leg
+      // so the UI can offer departure swaps without a re-query.
+      numLegAlternatives: 2,
+      ...(queryTime ? { time: queryTime } : {}),
+      ...(arriveBy ? { arriveBy: true } : {}),
+      ...(transitModes ? { transitModes } : {}),
+      ...(preTransitModes ? { preTransitModes } : {}),
+      ...(postTransitModes ? { postTransitModes } : {}),
+      ...(directModes ? { directModes } : {}),
+      ...(opts?.maxTransfers !== undefined ? { maxTransfers: opts.maxTransfers } : {}),
+      ...transferPreset,
+      ...(opts?.requireBikeTransport ? { requireBikeTransport: true } : {}),
+      ...(elevationCosts ? { elevationCosts } : {}),
+      ...(opts?.pageCursor ? { pageCursor: opts.pageCursor } : {}),
+      ...(opts?.detailedLegs ? { detailedLegs: true } : {}),
+      ...(opts?.detailedTransfers ? { detailedTransfers: true } : {}),
+      ...(opts?.useRoutedTransfers ? { useRoutedTransfers: true } : {}),
+      ...(directRental?.formFactors?.length
+        ? { directRentalFormFactors: directRental.formFactors }
+        : {}),
+      ...(directRental?.propulsionTypes?.length
+        ? { directRentalPropulsionTypes: directRental.propulsionTypes }
+        : {}),
+      ...(directRental?.providerIds?.length
+        ? { directRentalProviders: directRental.providerIds }
+        : {}),
+      ...(directRental?.groupIds?.length
+        ? { directRentalProviderGroups: directRental.groupIds }
+        : {}),
+      ...(preRental?.formFactors?.length
+        ? { preTransitRentalFormFactors: preRental.formFactors }
+        : {}),
+      ...(preRental?.propulsionTypes?.length
+        ? { preTransitRentalPropulsionTypes: preRental.propulsionTypes }
+        : {}),
+      ...(preRental?.providerIds?.length
+        ? { preTransitRentalProviders: preRental.providerIds }
+        : {}),
+      ...(preRental?.groupIds?.length
+        ? { preTransitRentalProviderGroups: preRental.groupIds }
+        : {}),
+      ...(postRental?.formFactors?.length
+        ? { postTransitRentalFormFactors: postRental.formFactors }
+        : {}),
+      ...(postRental?.propulsionTypes?.length
+        ? { postTransitRentalPropulsionTypes: postRental.propulsionTypes }
+        : {}),
+      ...(postRental?.providerIds?.length
+        ? { postTransitRentalProviders: postRental.providerIds }
+        : {}),
+      ...(postRental?.groupIds?.length
+        ? { postTransitRentalProviderGroups: postRental.groupIds }
+        : {}),
+      ...(opts?.wheelchair ? { pedestrianProfile: "WHEELCHAIR" as const } : {}),
+      withFares: true,
+    };
+    const diversified = await diversifyPlan(
+      query,
+      (query, signal) => plan({ client: instance.client, query, ...(signal ? { signal } : {}) }),
+      {
+        enabled: opts?.regionalAlternatives,
+        instance: instance.provider,
+        epoch: opts?.datasetEpoch ?? "",
       },
-    });
+    );
+    const data = diversified?.data;
     if (!data?.itineraries?.length && !data?.direct?.length) return null;
 
     // Transit itineraries first; append `direct` (door-to-door bike/car) options
     // only when the caller explicitly requested directModes — MOTIS otherwise
     // always computes a WALK direct trip we don't want cluttering transit results.
     const normalizeItinerary = (it: Itinerary): TripItinerary => {
-      const mapped = mapItinerary(instance, it, opts?.datasetEpoch);
+      const mapped = mapItinerary(
+        instance,
+        it,
+        opts?.datasetEpoch,
+        {
+          modes: opts?.modes,
+          wheelchair: opts?.wheelchair,
+          requireBikeTransport: opts?.requireBikeTransport,
+          maxTransfers: opts?.maxTransfers,
+          transferBufferMinutes:
+            (transferPreset.minTransferTime ?? 0) + (transferPreset.additionalTransferTime ?? 0),
+          additionalTransferMinutes: transferPreset.additionalTransferTime ?? 0,
+          time: queryTime,
+          arriveBy,
+        },
+        diversified?.supplemented,
+      );
       mapped.datasetEpoch = opts?.datasetEpoch;
+      if (diversified?.supplemented && isRegional(it)) mapped.regionalOnly = true;
       const invalidRequirements: string[] = [];
       if (opts?.wheelchair && mapped.legs.some((leg) => leg.wheelchairAccessible === false)) {
         invalidRequirements.push("wheelchairRequired");

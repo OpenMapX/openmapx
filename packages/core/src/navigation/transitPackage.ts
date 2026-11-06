@@ -92,7 +92,16 @@ export function buildTransitNavigationPackage(
 
   const candidate = {
     kind: "transit" as const,
-    itinerary: input.itinerary as unknown as Record<string, unknown>,
+    itinerary: {
+      ...input.itinerary,
+      legs: legs.map((leg) => ({
+        ...leg,
+        alternatives: leg.alternatives?.map((alt) => {
+          const { legs: _legs, replaces: _replaces, ...compact } = alt;
+          return compact;
+        }),
+      })),
+    } as unknown as Record<string, unknown>,
     captures,
     ...(input.stopAreas && Object.keys(input.stopAreas).length > 0
       ? { stopAreas: input.stopAreas }

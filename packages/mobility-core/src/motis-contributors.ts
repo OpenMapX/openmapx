@@ -125,7 +125,20 @@ export function annotateLegsWithAttribution(
   if (tagsByLength.length === 0) return itineraries;
   return itineraries.map((itin) => ({
     ...itin,
-    legs: itin.legs.map((leg) => {
+    legs: itin.legs.map((originalLeg) => {
+      const leg = originalLeg.alternatives?.length
+        ? {
+            ...originalLeg,
+            alternatives: originalLeg.alternatives.map((alt) => ({
+              ...alt,
+              ...(alt.legs
+                ? {
+                    legs: annotateLegsWithAttribution([{ ...itin, legs: alt.legs }], index)[0].legs,
+                  }
+                : {}),
+            })),
+          }
+        : originalLeg;
       const legTags = extractFeedTags(leg, tagsByLength);
       if (legTags.length === 0) return leg;
       const attributions: Attribution[] = [];
@@ -165,6 +178,7 @@ export function wrapMotisWithFeedAttribution<T>(
     for (const key of [
       "legs",
       "itineraries",
+      "alternatives",
       "stops",
       "from",
       "to",

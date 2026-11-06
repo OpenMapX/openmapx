@@ -134,6 +134,8 @@ export interface TransitRentalFilters {
 }
 
 export interface TripPlanRequest {
+  /** Allow a bounded regional/local supplement without changing primary routing. */
+  regionalAlternatives?: boolean;
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
   departureTime?: string;

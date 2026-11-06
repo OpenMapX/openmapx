@@ -872,6 +872,7 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
     const planRequest: TripPlanRequest = {
+      regionalAlternatives: true,
       from: { lat: fromLat, lng: fromLng },
       to: { lat: toLat, lng: toLng },
       ...(arriveBy ? { arrivalTime: when } : { departureTime: when }),
@@ -1090,7 +1091,11 @@ export function setup(ctx: IntegrationContext): void {
 
     if (!itinerary) {
       fallbackOccurred = true;
-      const fallback = await orchestrator.planTrip({ ...state.request, pageCursor: undefined });
+      const fallback = await orchestrator.planTrip({
+        ...state.request,
+        regionalAlternatives: false,
+        pageCursor: undefined,
+      });
       itinerary = fallback.data?.itineraries[0] ?? null;
       resultAttributions = fallback.attributions;
       resultFreshness = fallback.freshness;
