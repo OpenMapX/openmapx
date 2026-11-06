@@ -141,3 +141,46 @@ it("accepts an interlined replacement but rejects disconnected transit runs", ()
     ),
   ).toBeNull();
 });
+
+it("enforces the extra transfer buffer on both retained-ride boundaries", () => {
+  const contextWithBuffer = { ...context, time: "2026-11-06T18:00:00Z", transferBufferMinutes: 10 };
+  const preceding = {
+    legs: [
+      leg("REGIONAL_RAIL", "19:00", "20:45"),
+      leg("WALK", "20:45", "20:46"),
+      parent.legs[1],
+      parent.legs[2],
+    ],
+  } as Itinerary;
+  expect(alternativeReplacement(preceding, 2, chain, contextWithBuffer)).toBeNull();
+  const following = { legs: [...parent.legs, leg("REGIONAL_RAIL", "21:50", "22:20")] } as Itinerary;
+  expect(alternativeReplacement(following, 1, chain, contextWithBuffer)).toBeNull();
+  const enough = {
+    ...preceding,
+    legs: [leg("REGIONAL_RAIL", "19:00", "20:40"), ...preceding.legs.slice(1)],
+  };
+  expect(alternativeReplacement(enough, 2, chain, contextWithBuffer)).toEqual({
+    fromLegIndex: 1,
+    toLegIndex: 3,
+  });
+});
+
+it("adds the extra wait after a long footpath rather than counting walking as buffer", () => {
+  const p = {
+    legs: [
+      leg("REGIONAL_RAIL", "19:00", "20:40"),
+      leg("WALK", "20:40", "20:42"),
+      parent.legs[1],
+      parent.legs[2],
+    ],
+  } as Itinerary;
+  const longWalk = [leg("WALK", "20:42", "20:51"), chain[1], chain[2]];
+  expect(
+    alternativeReplacement(p, 2, longWalk, {
+      ...context,
+      time: "2026-11-06T18:00:00Z",
+      transferBufferMinutes: 10,
+      additionalTransferMinutes: 5,
+    }),
+  ).toBeNull();
+});

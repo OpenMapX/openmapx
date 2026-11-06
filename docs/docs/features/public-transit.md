@@ -50,6 +50,8 @@ In connection details, alternatives show their train name and departure–arriva
 times. A selectable alternative replaces its complete access, ride and transfer
 legs. The original journey remains available. A composed alternative has no
 inherited fare or refresh identity; a matching complete result keeps its own.
+Your selected connection survives background refreshes of the same search.
+Changing the endpoints or routing requirements retires composed alternatives.
 
 ### Route options
 

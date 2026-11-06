@@ -1083,7 +1083,6 @@
     "book": "Book",
     "regionalLocal": "Regional/local",
     "transitAlternatives": "Alternatives",
-    "alsoDeparts": "Also at",
     "onDemandBookAhead": "On-demand — book ahead",
     "transitDuration": "~{duration}",
     "noRoutesFound": "No routes found between these locations.",

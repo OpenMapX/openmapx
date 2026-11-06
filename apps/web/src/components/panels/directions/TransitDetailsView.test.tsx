@@ -383,3 +383,14 @@ it("shows legacy compact alternatives by train name without offering an unsafe s
   expect(screen.getByText(/RE42 ·/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /RE42/ })).toBeNull();
 });
+
+it("omits the line-name separator when the provider supplies only alternative times", () => {
+  const p = makeItinerary([undefined]);
+  p.legs[0].alternatives = [{ startTime: p.startTime, endTime: p.endTime }];
+  render(
+    <TransitDetailsView itinerary={p} originLabel="A" destinationLabel="B" onBack={() => {}} />,
+  );
+  expect(screen.getByText("transitAlternatives").parentElement?.textContent).toBe(
+    `transitAlternatives${p.startTime} – ${p.endTime}`,
+  );
+});

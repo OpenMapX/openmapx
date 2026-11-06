@@ -103,6 +103,7 @@ describe("MOTIS regional diversity", () => {
         .mockResolvedValueOnce(failure);
       const result = await diversifyPlan(query, run, options);
       expect(result?.data.itineraries).toEqual([ice]);
+      expect(result?.supplemented).toBe(false);
     },
   );
   it("pages independently, retains exhausted lanes for reverse direction, and rejects other epochs", async () => {
@@ -185,4 +186,60 @@ it("keeps primary journeys when the supplement contains malformed itinerary reco
     .mockResolvedValueOnce({ data: { itineraries: [{}] } });
   const result = await diversifyPlan(query, run, options);
   expect(result?.data.itineraries).toEqual([ice]);
+});
+
+it("does not reject the primary's entire response because one record has no legs", async () => {
+  const primary = page([ice, { ...re1, legs: [] }]);
+  const run = vi.fn().mockResolvedValue({ data: primary });
+  const result = await diversifyPlan(query, run, { ...options, enabled: false });
+  expect(result?.data).toBe(primary);
+});
+it("keeps the regional cursor retryable after a failed page while primary succeeds", async () => {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ data: page([ice], "P-prev", "P-next") })
+    .mockResolvedValueOnce({ data: page([re1], "R-prev", "R-next") });
+  const first = await diversifyPlan(query, run, options);
+  run
+    .mockReset()
+    .mockResolvedValueOnce({ data: page([ice], "P-back", "P-more") })
+    .mockRejectedValueOnce(new Error("regional down"));
+  const second = await diversifyPlan(
+    { ...query, pageCursor: first?.data.nextPageCursor },
+    run,
+    options,
+  );
+  expect(second?.data.itineraries).toEqual([ice]);
+  run.mockReset().mockResolvedValue({ data: page([]) });
+  await diversifyPlan({ ...query, pageCursor: second?.data.nextPageCursor }, run, options);
+  expect(run.mock.calls.map((c) => c[0].pageCursor)).toEqual(["P-more", "R-next"]);
+});
+
+it("aborts an unresponsive optional request and keeps successful primary journeys", async () => {
+  let aborted = false;
+  const run = vi.fn(async (_query: unknown, signal?: AbortSignal) => {
+    if (!signal) return { data: page([ice]) };
+    return await new Promise<never>((_resolve, reject) => {
+      const abort = () => {
+        aborted = true;
+        reject(signal.reason);
+      };
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  });
+  const result = await diversifyPlan(query, run, options);
+  expect(aborted).toBe(true);
+  expect(result?.data.itineraries).toEqual([ice]);
+});
+
+it("does not enable regional labels when the extra window adds no distinct journeys", async () => {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ data: page([ice, re9]) })
+    .mockResolvedValueOnce({ data: page([{ ...re9, id: "duplicate" }]) });
+  const result = await diversifyPlan(query, run, options);
+  expect(result?.data.itineraries).toEqual([ice, re9]);
+  expect(result?.supplemented).toBe(false);
+  expect(result?.data.nextPageCursor).toMatch(/^omxmotis1\./);
 });

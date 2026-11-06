@@ -198,3 +198,32 @@ describe("selecting complete transit alternatives", () => {
     expect(selectTransitAlternative(result.itineraries, a, ride)!.itineraries).toHaveLength(2);
   });
 });
+
+it("upgrades a composed journey to its authoritative record when another page supplies it", () => {
+  const ride = {
+    ...a,
+    id: undefined,
+    instance: "mo",
+    datasetEpoch: "epoch",
+    legs: [
+      {
+        mode: "rail",
+        tripId: "mo:re1",
+        from: { name: "A", stopId: "a", lat: 50, lng: 6 },
+        to: { name: "B", stopId: "b", lat: 51, lng: 7 },
+        startTime: a.startTime,
+        endTime: a.endTime,
+        geometry: { type: "LineString", coordinates: [] },
+      },
+    ],
+  } as TripItinerary;
+  const authoritative = { ...ride, id: "official", refreshToken: "official-token" };
+  const merged = mergeTransitItineraryPage({
+    existing: [ride],
+    incoming: [authoritative],
+    page: "next",
+    preference: "best",
+  });
+  expect(merged).toEqual([authoritative]);
+  expect(merged[0].refreshToken).toBe("official-token");
+});

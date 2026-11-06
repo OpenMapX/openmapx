@@ -95,7 +95,7 @@ import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { routeAttributions } from "@/lib/routeAttributions";
 import { servedAttributions } from "@/lib/servedAttributions";
-import { selectTransitAlternative } from "./transitPlanPages";
+import { findTransitItinerary } from "./transitPlanPages";
 import { useRouteImpacts } from "./useRouteImpacts";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 
@@ -273,9 +273,10 @@ export function DirectionsPanelContent() {
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
-  const [transitDetailsSelection, setTransitDetailsSelection] = useState<TripItinerary | null>(
-    null,
-  );
+  const [transitDetailsSelection, setTransitDetailsSelection] = useState<{
+    identity: string;
+    itinerary: TripItinerary;
+  } | null>(null);
 
   const [transitTimeMode, setTransitTimeMode] = useState<"now" | "depart" | "arrive">("now");
   const [timePickerOpen, setTimePickerOpen] = useState(false);
@@ -587,6 +588,8 @@ export function DirectionsPanelContent() {
   const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
 
   const {
+    queryIdentity: transitQueryIdentity,
+    selectAlternative: selectTransitAlternative,
     isChained: transitIsChained,
     planQuery: transitPlanQuery,
     chainQuery: transitChainQuery,
@@ -902,9 +905,10 @@ export function DirectionsPanelContent() {
     return Math.min(...values);
   }, [transitItineraries]);
 
-  const transitDetailsIndex = transitDetailsSelection
-    ? transitItineraries.indexOf(transitDetailsSelection)
-    : -1;
+  const transitDetailsIndex =
+    transitDetailsSelection?.identity === transitQueryIdentity
+      ? findTransitItinerary(transitItineraries, transitDetailsSelection.itinerary)
+      : -1;
   if (transitDetailsIndex >= 0 && transitItineraries[transitDetailsIndex]) {
     return (
       <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
@@ -923,15 +927,9 @@ export function DirectionsPanelContent() {
           originTimeZone={originTimeZone}
           destinationTimeZone={destinationTimeZone}
           onSelectItinerary={(parent, candidate) => {
-            const selected = selectTransitAlternative(
-              useDirectionsStore.getState().transitItineraries,
-              parent,
-              candidate,
-            );
-            if (!selected) return;
-            setTransitItineraries(selected.itineraries);
-            setActiveItineraryIndex(selected.index);
-            setTransitDetailsSelection(selected.itineraries[selected.index]);
+            const selected = selectTransitAlternative(parent, candidate);
+            if (selected)
+              setTransitDetailsSelection({ identity: transitQueryIdentity, itinerary: selected });
           }}
           onBack={() => setTransitDetailsSelection(null)}
         />
@@ -1423,7 +1421,12 @@ export function DirectionsPanelContent() {
                         setActiveItineraryIndex(i);
                         snapTo("peek");
                       }}
-                      onDetails={() => setTransitDetailsSelection(itin)}
+                      onDetails={() =>
+                        setTransitDetailsSelection({
+                          identity: transitQueryIdentity,
+                          itinerary: itin,
+                        })
+                      }
                       onRefreshed={(updated, changed, fallbackOccurred) => {
                         const current = useDirectionsStore.getState().transitItineraries;
                         if (!current.includes(itin)) return;

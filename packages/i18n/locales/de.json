@@ -1083,7 +1083,6 @@
     "book": "Buchen",
     "regionalLocal": "Regional- und Nahverkehr",
     "transitAlternatives": "Alternativen",
-    "alsoDeparts": "Auch um",
     "onDemandBookAhead": "On-Demand — vorher buchen",
     "transitDuration": "~{duration}",
     "noRoutesFound": "Keine Route zwischen diesen Orten gefunden.",

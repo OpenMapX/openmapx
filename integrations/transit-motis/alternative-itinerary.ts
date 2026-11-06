@@ -6,6 +6,8 @@ export interface AlternativeContext {
   wheelchair?: boolean;
   requireBikeTransport?: boolean;
   maxTransfers?: number;
+  transferBufferMinutes?: number;
+  additionalTransferMinutes?: number;
   time?: string;
   arriveBy?: boolean;
 }
@@ -45,6 +47,19 @@ export function alternativeReplacement(
     !sameTransitPlace(place(parent.legs[fromLegIndex].from), place(chain[0].from)) ||
     !sameTransitPlace(place(parent.legs[toLegIndex].to), place(chain[chain.length - 1].to))
   )
+    return null;
+  const bufferMs = (context.transferBufferMinutes ?? 0) * 60_000;
+  const extraMs = (context.additionalTransferMinutes ?? 0) * 60_000;
+  const streetMs = (legs: Leg[]) =>
+    legs.reduce((total, l) => total + Date.parse(l.endTime) - Date.parse(l.startTime), 0);
+  const ingressBuffer = Math.max(bufferMs, streetMs(chain.slice(0, firstTransit)) + extraMs);
+  const egressBuffer = Math.max(bufferMs, streetMs(chain.slice(lastTransit + 1)) + extraMs);
+  if (
+    before &&
+    Date.parse(chain[firstTransit].startTime) - Date.parse(before.endTime) < ingressBuffer
+  )
+    return null;
+  if (after && Date.parse(after.startTime) - Date.parse(chain[lastTransit].endTime) < egressBuffer)
     return null;
   const modes = expandedModes(context.modes);
   const streetModes = new Set(

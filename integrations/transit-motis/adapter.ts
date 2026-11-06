@@ -1183,6 +1183,9 @@ export async function planTrip(
           wheelchair: opts?.wheelchair,
           requireBikeTransport: opts?.requireBikeTransport,
           maxTransfers: opts?.maxTransfers,
+          transferBufferMinutes:
+            (transferPreset.minTransferTime ?? 0) + (transferPreset.additionalTransferTime ?? 0),
+          additionalTransferMinutes: transferPreset.additionalTransferTime ?? 0,
           time: queryTime,
           arriveBy,
         },

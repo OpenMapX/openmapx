@@ -68,8 +68,8 @@ export function rawItineraryKey(it: Itinerary): string {
     it.legs.map((l) => [
       l.mode,
       l.tripId,
-      l.from.stopId ?? [l.from.lat, l.from.lon],
-      l.to.stopId ?? [l.to.lat, l.to.lon],
+      l.from.stopId ?? [Math.round(l.from.lat * 1e5) / 1e5, Math.round(l.from.lon * 1e5) / 1e5],
+      l.to.stopId ?? [Math.round(l.to.lat * 1e5) / 1e5, Math.round(l.to.lon * 1e5) / 1e5],
       l.startTime,
       l.endTime,
       l.rental?.systemId,
@@ -124,7 +124,13 @@ function encode(state: Omit<Cursor, "d">, d: Cursor["d"]): string {
     ? PREFIX + Buffer.from(JSON.stringify({ ...state, d })).toString("base64url")
     : "";
 }
-function usable(
+/** Preserve the primary mapper's existing contract; regional validation is deliberately stricter. */
+function usablePrimary(
+  result: Awaited<ReturnType<RunPlan>>,
+): result is Awaited<ReturnType<RunPlan>> & { data: PlanResponse } {
+  return !result.error && result.response?.ok !== false && Array.isArray(result.data?.itineraries);
+}
+function usableRegional(
   result: Awaited<ReturnType<RunPlan>>,
 ): result is Awaited<ReturnType<RunPlan>> & { data: PlanResponse } {
   return (
@@ -178,18 +184,18 @@ export async function diversifyPlan(
     ]);
     if (a.status === "rejected") throw a.reason;
     if (a.value) {
-      if (!usable(a.value)) throw new Error("MOTIS page unavailable");
+      if (!usablePrimary(a.value)) throw new Error("MOTIS page unavailable");
       primary = a.value.data;
       p = laneState(primary);
     }
-    if (b.status === "fulfilled" && b.value && usable(b.value)) {
+    if (b.status === "fulfilled" && b.value && usableRegional(b.value)) {
       supplement = b.value.data;
       r = laneState(supplement);
     }
     if (!primary && !supplement) throw new Error("MOTIS page unavailable");
   } else {
     const initial = await run(query);
-    if (!usable(initial)) return null;
+    if (!usablePrimary(initial)) return null;
     primary = initial.data;
     if (
       !options.enabled ||
@@ -201,7 +207,7 @@ export async function diversifyPlan(
     p = laneState(primary);
     try {
       const answer = await regional();
-      if (usable(answer)) {
+      if (usableRegional(answer)) {
         supplement = answer.data;
         r = laneState(supplement);
       }
@@ -209,6 +215,10 @@ export async function diversifyPlan(
       /* Optional diversification must not hide the primary journeys. */
     }
   }
+  const primaryKeys = new Set((primary?.itineraries ?? []).map(rawItineraryKey));
+  const supplemented = (supplement?.itineraries ?? []).some(
+    (it) => isRegional(it) && !primaryKeys.has(rawItineraryKey(it)),
+  );
   const seen = new Set<string>();
   const itineraries = [...(primary?.itineraries ?? []), ...(supplement?.itineraries ?? [])]
     .filter((it) => {
@@ -220,7 +230,7 @@ export async function diversifyPlan(
     .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
   const state = { v: 1 as const, i: options.instance, e: options.epoch, p, r };
   return {
-    supplemented: true,
+    supplemented,
     data: {
       ...(primary ?? (supplement as PlanResponse)),
       itineraries,

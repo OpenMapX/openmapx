@@ -669,7 +669,7 @@ export function TransitDetailsView({
                               i,
                               alternativeIndex,
                             );
-                            const label = `${alt.routeShortName ?? ""} · ${fmt.time(alt.startTime, originTimeZone && tzOffsetLabel(new Date(alt.startTime), originTimeZone) ? { timeZone: originTimeZone } : undefined)} – ${fmt.time(alt.endTime, destinationTimeZone && tzOffsetLabel(new Date(alt.endTime), destinationTimeZone) ? { timeZone: destinationTimeZone } : undefined)}`;
+                            const label = `${alt.routeShortName ? `${alt.routeShortName} · ` : ""}${fmt.time(alt.startTime, originTimeZone && tzOffsetLabel(new Date(alt.startTime), originTimeZone) ? { timeZone: originTimeZone } : undefined)} – ${fmt.time(alt.endTime, destinationTimeZone && tzOffsetLabel(new Date(alt.endTime), destinationTimeZone) ? { timeZone: destinationTimeZone } : undefined)}`;
                             return candidate && onSelectItinerary ? (
                               <Button
                                 key={`${alt.tripId}:${alt.routeShortName}:${alt.startTime}:${alt.endTime}`}

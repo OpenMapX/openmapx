@@ -708,3 +708,70 @@ describe("transit paging through the real query cache and signed tokens", () => 
     }
   });
 });
+
+it("retains a chosen composite through background result replacement but retires it for a changed search", async () => {
+  const parent = itinerary("parent", { instance: "mo", datasetEpoch: "epoch", legs: [] });
+  const chosen = itinerary("", {
+    id: undefined,
+    instance: "mo",
+    datasetEpoch: "epoch",
+    legs: [
+      {
+        mode: "rail",
+        tripId: "re1",
+        startTime: a.startTime,
+        endTime: a.endTime,
+        from: { name: "A", lat: 50, lng: 6 },
+        to: { name: "B", lat: 51, lng: 7 },
+        geometry: { type: "LineString", coordinates: [] },
+      },
+    ],
+  });
+  mocks.plan.mockReturnValue({ data: response([parent]), isLoading: false, isError: false });
+  const view = renderHook(
+    ({ maxTransfers }) => useTransitDirectionsPlan(snapshot({ maxTransfers })),
+    { initialProps: { maxTransfers: null as number | null } },
+  );
+  const select = view.result.current.selectAlternative;
+  act(() => {
+    expect(select(parent, chosen)).toBe(chosen);
+  });
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+  const fresh = { ...parent };
+  mocks.plan.mockReturnValue({ data: response([fresh]), isLoading: false, isError: false });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(chosen),
+  );
+  const authoritative = { ...chosen, id: "official", refreshToken: "official-token" };
+  mocks.plan.mockReturnValue({
+    data: response([{ ...parent }, authoritative]),
+    isLoading: false,
+    isError: false,
+  });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(authoritative),
+  );
+  mocks.plan.mockReturnValue({ data: response([fresh]), isLoading: false, isError: false });
+  view.rerender({ maxTransfers: null });
+  await waitFor(() =>
+    expect(
+      useDirectionsStore.getState().transitItineraries[
+        useDirectionsStore.getState().activeItineraryIndex
+      ],
+    ).toBe(authoritative),
+  );
+  view.rerender({ maxTransfers: 0 });
+  expect(view.result.current.selectAlternative(parent, chosen)).toBeNull();
+  expect(select(parent, chosen)).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([fresh]);
+});
