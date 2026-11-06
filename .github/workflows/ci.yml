@@ -266,8 +266,9 @@ jobs:
       - run: umask 002 && corepack pnpm install --frozen-lockfile
 
       - name: Run the agent, core and data-manager suites and the deployment-user test
+        # One file worker reduces I/O contention between filesystem-heavy lease fixtures.
         run: >-
-          umask 002 && corepack pnpm exec vitest run --project node
+          umask 002 && corepack pnpm exec vitest run --project node --maxWorkers=1
           apps/ops-agent packages/core services/data-manager
           scripts/ops-agent-deployment-user.test.ts
 
