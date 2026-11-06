@@ -375,3 +375,30 @@ describe("orchestrator route-network provider policy", () => {
     expect(hostedRoutes).toHaveBeenCalledOnce();
   });
 });
+
+it("keeps a real SDK HTTP failure unavailable while the provider health cache is healthy", async () => {
+  const { createMotisInstance } = await import("@openmapx/mobility-core/motis-client");
+  const { refreshTrip } = await import("../../transit-motis/adapter");
+  const instance = createMotisInstance({
+    baseUrl: "http://motis.test",
+    prefix: "ms:",
+    provider: "ms",
+  });
+  instance.client.setConfig({
+    fetch: async () => Response.json({ error: "temporary upstream failure" }, { status: 503 }),
+  });
+  const provider = makeProvider({
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: async (params) =>
+      withAttribution(await refreshTrip(instance, params.itineraryId), ATTR, freshnessNow()),
+  });
+  const orchestrator = createTransitOrchestrator(
+    makeCtx([provider], { isHealthy: async () => true }),
+  );
+  expect(
+    await orchestrator.refreshTrip(provider.id, { itineraryId: "bound-id", datasetEpoch: "epoch" }),
+  ).toEqual({ status: "unavailable" });
+});

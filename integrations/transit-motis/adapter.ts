@@ -51,6 +51,7 @@ import type {
   VehicleJourneyStop,
 } from "@openmapx/mobility-core/transit";
 import { type AlternativeContext, alternativeReplacement } from "./alternative-itinerary.js";
+import { delfiTripIdentity, motisPlatform, quarantinedDelfiTrack } from "./delfi-platforms.js";
 import { motisLegMode, uniqueModes } from "./mode-map.js";
 import { diversifyPlan, isRegional, type PlanQuery } from "./plan-diversity.js";
 import {
@@ -76,7 +77,7 @@ export function normalizeStop(instance: MotisInstance, place: Place): TransitSto
     lat: place.lat ?? 0,
     lng: place.lon ?? 0,
     modes: uniqueModes(place.modes ?? []),
-    platformCode: place.track ?? place.scheduledTrack ?? undefined,
+    platformCode: motisPlatform(place).platform,
     parentStationId: place.parentId ? `${instance.prefix}${place.parentId}` : undefined,
     provider: instance.provider,
   };
@@ -282,16 +283,14 @@ export async function searchByName(
     return data
       .filter((match) => (match.type === "STOP" || match.type === "PLACE") && match.id != null)
       .slice(0, limit)
-      .map(
-        (match): TransitStop => ({
-          id: `${instance.prefix}${match.id}`,
-          name: match.name ?? "Unknown",
-          lat: match.lat ?? 0,
-          lng: match.lon ?? 0,
-          modes: [],
-          provider: instance.provider,
-        }),
-      );
+      .map((match): TransitStop => ({
+        id: `${instance.prefix}${match.id}`,
+        name: match.name ?? "Unknown",
+        lat: match.lat ?? 0,
+        lng: match.lon ?? 0,
+        modes: [],
+        provider: instance.provider,
+      }));
   } catch {
     throw new Error("MOTIS stop search unavailable");
   }
@@ -345,8 +344,7 @@ export function normalizeStoptime(
     }
   }
 
-  const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
-  const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
+  const { platform, scheduledPlatform } = motisPlatform(place);
   const lineName = motisLineName(st);
   // GTFS-backed MOTIS can expose "RE9" as displayName and "010935" only
   // in tripShortName. Keep the operational number distinct from the line.
@@ -851,8 +849,8 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
       lng: fromPlace.lon ?? 0,
       stopId: fromPlace.stopId ? `${instance.prefix}${fromPlace.stopId}` : undefined,
       level: fromPlace.level,
-      platformCode: fromPlace.track ?? fromPlace.scheduledTrack ?? undefined,
-      scheduledPlatformCode: fromPlace.scheduledTrack ?? undefined,
+      platformCode: motisPlatform(fromPlace).platform,
+      scheduledPlatformCode: motisPlatform(fromPlace).scheduledPlatform,
       stopCode: fromPlace.stopCode ?? undefined,
     },
     to: {
@@ -861,8 +859,8 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
       lng: toPlace.lon ?? 0,
       stopId: toPlace.stopId ? `${instance.prefix}${toPlace.stopId}` : undefined,
       level: toPlace.level,
-      platformCode: toPlace.track ?? toPlace.scheduledTrack ?? undefined,
-      scheduledPlatformCode: toPlace.scheduledTrack ?? undefined,
+      platformCode: motisPlatform(toPlace).platform,
+      scheduledPlatformCode: motisPlatform(toPlace).scheduledPlatform,
       stopCode: toPlace.stopCode ?? undefined,
     },
     route: isTransit
@@ -1025,7 +1023,7 @@ export async function refreshTrip(
   },
 ): Promise<TripItinerary | null> {
   try {
-    const { data } = await motisRefreshItinerary({
+    const { data, error, response } = await motisRefreshItinerary({
       client: instance.client,
       query: {
         itineraryId,
@@ -1038,13 +1036,16 @@ export async function refreshTrip(
         ...(opts?.detailedTransfers ? { useRoutedTransfers: true } : {}),
       },
     });
-    if (!data) return null;
+    // MOTIS v2.11.4 src/itinerary_id.cc uses this specific 400 for failed reconstruction.
+    // An unrecognized HTTP error (including a missing endpoint) is availability failure.
+    if (response?.status === 400 && error?.error === "no legs reconstructed") return null;
+    if (error || !data || (response && !response.ok)) throw new Error("unavailable");
     const mapped = mapItinerary(instance, data, opts?.datasetEpoch);
     mapped.datasetEpoch = opts?.datasetEpoch;
     mapped.refreshedAt = new Date().toISOString();
     return mapped;
   } catch {
-    return null;
+    throw new Error("MOTIS itinerary refresh unavailable");
   }
 }
 
@@ -1264,8 +1265,11 @@ export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): 
     name: place.name ?? "",
     lat: place.lat ?? 0,
     lng: place.lon ?? 0,
-    platform: (place.track ?? place.scheduledTrack ?? undefined) as string | undefined,
-    scheduledPlatform: (place.scheduledTrack ?? undefined) as string | undefined,
+    ...motisPlatform(place),
+    ...((place.scheduledTrack && !motisPlatform(place).scheduledPlatform) ||
+    (place.track && quarantinedDelfiTrack(place.stopId, place.track) === undefined)
+      ? { platformQuarantined: true }
+      : {}),
     scheduledArrival: place.scheduledArrival ?? undefined,
     scheduledDeparture: place.scheduledDeparture ?? undefined,
     expectedArrival: place.arrival ?? undefined,
@@ -1415,6 +1419,7 @@ export async function getTrip(
     return {
       id: `${instance.prefix}${id}`,
       name: firstLeg?.routeShortName ?? firstLeg?.headsign ?? id,
+      identity: delfiTripIdentity(id, legs),
       provider: instance.provider,
       stops: journeyStops,
     };

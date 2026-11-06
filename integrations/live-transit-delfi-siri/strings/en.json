@@ -1,0 +1,11 @@
+{
+  "name": "DELFI SIRI ET Rhein-Ruhr",
+  "description": "Passenger platforms from a community mirror of DELFI SIRI ET.",
+  "dataSources": {
+    "delfi-siri-et-rhein-ruhr": {
+      "purpose": "Passenger platform assignments for strictly matched DELFI trains in the Rhein-Ruhr feed.",
+      "dataSent": "No user data is sent. One regional feed is downloaded server-side and matched locally.",
+      "dataReceived": "Platform names, service dates, train references, stop sequences and source timestamps."
+    }
+  }
+}

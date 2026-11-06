@@ -195,12 +195,14 @@ describe("TransitNavigationProcessor.onConnectivityRestored", () => {
     expect((mutation?.session as TransitMobileSession).payload.refresh.generation).toBe(4);
   });
 
-  it("does not refresh without a token to rotate", async () => {
+  it("refreshes captured journeys after reconnecting without an itinerary token", async () => {
     const tokenless = session();
     tokenless.payload.refreshToken = null;
     tokenless.payload.refresh = { status: "stale", generation: 1, attempts: 0 };
 
-    expect(await processor().onConnectivityRestored(tokenless, NOW)).toBeNull();
+    expect((await processor().onConnectivityRestored(tokenless, NOW))?.effects).toEqual([
+      { kind: "request-transit-refresh", requestId: expect.any(String) },
+    ]);
   });
 
   it.each(["ready", "in-flight", "broken"] as const)(
@@ -242,4 +244,31 @@ describe("TransitNavigationProcessor.processFixes", () => {
     );
     expect((mutation.effects ?? []).every((e) => e.kind !== "request-reroute")).toBe(true);
   });
+});
+
+it("keeps hosted sessions parseable across repeated capture timeouts", () => {
+  const { parseMobileSession } = require("@openmapx/core/navigation");
+  const p = processor();
+  let current = session();
+  current.payload.refreshToken = null;
+  current.payload.refresh = { status: "broken", generation: 0, attempts: 3, ambiguousAttempts: 3 };
+  for (let i = 0; i < 80; i++) {
+    const at = NOW + i * 400_000;
+    current = p.processFixes(current, [], at).session as TransitMobileSession;
+    expect(current.payload.refresh.status).toBe("in-flight");
+    current = p.processFixes(current, [], at + 21_000).session as TransitMobileSession;
+    expect(parseMobileSession(JSON.stringify(current)).ok).toBe(true);
+  }
+});
+it("does not poll completed captures on the final walking leg", async () => {
+  const current = session();
+  current.payload.refreshToken = null;
+  current.payload.tickState.currentLegIndex = 2;
+  current.payload.refresh = { status: "stale", generation: 0, attempts: 0 };
+  expect(
+    processor()
+      .processFixes(current, [], NOW)
+      .effects?.some((e) => e.kind === "request-transit-refresh"),
+  ).toBe(false);
+  expect(await processor().onConnectivityRestored(current, NOW)).toBeNull();
 });

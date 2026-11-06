@@ -11,6 +11,7 @@ import {
   readShellTransport,
   type ShellTransport,
 } from "./mobileShellEnvironment";
+import { platformCompatibleCommand } from "./platformCompatibility";
 
 /**
  * The page's side of the bridge.
@@ -283,7 +284,7 @@ export class BridgeClient {
 
       this.pending.set(messageId, { resolve, reject, timer, requestType: type });
       try {
-        this.transport?.postMessage(JSON.stringify(validated.data));
+        this.transport?.postMessage(JSON.stringify(platformCompatibleCommand(validated.data)));
       } catch {
         this.pending.delete(messageId);
         this.cancelTimeout(timer);
@@ -316,7 +317,7 @@ export class BridgeClient {
     const validated = webToNativeSchema.safeParse(envelope);
     if (!validated.success) throw new BridgeError("invalid-command");
     try {
-      this.transport.postMessage(JSON.stringify(validated.data));
+      this.transport.postMessage(JSON.stringify(platformCompatibleCommand(validated.data)));
     } catch {
       throw new BridgeError("no-transport");
     }

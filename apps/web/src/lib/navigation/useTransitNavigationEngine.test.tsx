@@ -422,3 +422,50 @@ it("recovers the offline warning after the selected vehicle's data returns", asy
   expect(useNavigationStore.getState().transitProgress?.phase).toBe("riding");
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
 });
+
+it("refreshes upcoming captured journeys after platform evidence becomes available", async () => {
+  vi.useFakeTimers();
+  let enriched = false;
+  vi.spyOn(apiClient, "get").mockImplementation(async (path) => {
+    const future = String(path).endsWith("/future");
+    return {
+      data: {
+        stops: [
+          {
+            stopId: future ? "fa" : "a",
+            name: "Board",
+            lat: 0,
+            lng: 0,
+            ...(future && enriched
+              ? { departurePlatform: { code: "3", kind: "correction", sourceId: "siri" } }
+              : {}),
+          },
+          { stopId: future ? "fb" : "b", name: "Alight", lat: 0, lng: 0.02 },
+        ],
+      },
+    };
+  });
+  const chosen = trip();
+  chosen.legs[0].from.stopId = "a";
+  chosen.legs[0].to.stopId = "b";
+  chosen.legs.push({
+    ...chosen.legs[0],
+    tripId: "future",
+    from: { ...chosen.legs[0].from, stopId: "fa" },
+    to: { ...chosen.legs[0].to, stopId: "fb" },
+  });
+  useNavigationStore.getState().startTransitNavigation(chosen);
+  const view = renderHookWithQuery(() => useTransitNavigationEngine());
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    enriched = true;
+    await act(async () => vi.advanceTimersByTimeAsync(30_001));
+    expect(
+      useNavigationStore.getState().transitCaptures.find((c) => c.tripId === "future")?.stops[0]
+        .departurePlatform?.code,
+    ).toBe("3");
+  } finally {
+    view.unmount();
+    vi.useRealTimers();
+  }
+});

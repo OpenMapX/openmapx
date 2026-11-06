@@ -98,7 +98,11 @@ export function createTransitPreparingSession(
       progress: null,
       confidence: "gps",
       refreshToken,
-      refresh: { status: refreshToken ? "ready" : "broken", generation: 0, attempts: 0 },
+      refresh: {
+        status: refreshToken || startPackage.captures.length ? "ready" : "broken",
+        generation: 0,
+        attempts: 0,
+      },
       scheduledAlerts: [],
     },
   };

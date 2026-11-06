@@ -564,3 +564,76 @@ hand-edit generated operations or add a separate network fallback.
 
 A fixture test does not establish live agency coverage, current provider
 credentials or MOTIS promotion readiness. Record those runtime checks separately.
+
+## Journey platform enrichment
+
+`RealtimeCapabilities.journeyPlatforms` and `getJourneyPlatforms(journey)`
+return event evidence indexed by the complete baseline journey's stop sequence.
+The transit route caches only the baseline, then applies policy-allowed, healthy
+platform providers within a 750 ms budget. Enrichment clones the data, attaches
+field contributor receipts and retains baseline timing/identity. Disabling a
+source prevents its cached assignments from being published.
+
+The opt-in `live-transit-delfi-siri` integration downloads one fixed Rhein-Ruhr
+feed through `IntegrationContext.http.getStream` and `upstreamRuntime`. Acquisition
+runs detached from requests under a shared lease and quota (one per four minutes,
+at most 15 per hour), with conditional HTTP requests and 64 compact cache buckets.
+No user journey is sent upstream. XML is streamed with namespace checking,
+DOCTYPE rejection and byte/depth/record ceilings. Cached deliveries expire after
+ten minutes; delivery timestamps older than 30 minutes are rejected.
+
+Matching requires an allowlisted DELFI feed tag, a single train number, the
+MOTIS service date, normalized line, complete ordered DHID station roots and
+identical supplied aimed event times at every call. Repeated calls match by
+position; ambiguous candidates, extra calls and cancelled journeys yield nothing.
+Names, operator labels and `VisitNumber` do not establish identity. Overnight
+service-date disagreement fails closed.
+
+`TransitPlatformEvidence` distinguishes `schedule`, `correction` and `realtime`.
+Realtime requires an expected/actual event and a source record no older than five
+minutes. Older records can supply schedules/corrections for up to 24 hours, never
+replace known MOTIS realtime platforms, and keep their original `recordedAt`.
+Conflicting realtime sources retain MOTIS. The shared selector drives timeline,
+boarding/alighting, transfer guidance and platform alerts. Captures carry this
+information in protocol v5; the web removes the new fields for installed v3/v4
+shells. Existing capture ownership remains unchanged. Browser capture queries refresh the
+current and up to three upcoming journeys every 30 seconds, so a feed warmed
+after navigation starts can update future boarding guidance too. The native refresh service also
+polls journey captures for hosted itineraries without an itinerary refresh
+token; it keeps the selected itinerary and sends no refresh POST in that case.
+
+Refresh handles remain signed and bound to their original request/provider.
+`POST /plan/refresh` caches the exact successor body before retiring the old
+state. Concurrent callers serialize using a distributed lease (local mutex only
+without an upstream runtime). Provider unavailability returns retryable 503;
+invalid/expired handles remain terminal. Both clients reject `fallbackOccurred`
+during navigation. Native ambiguous retries are limited to three attempts within
+the two-minute replay window.
+
+The captured RE1 investigation and source/code comparison are documented in
+[Platform evidence investigation](./transit-platform-investigation.md). The old
+DB/HAFAS direct-field mapping recommendation was already fixed in #728; those
+integrations were subsequently removed in #747 and are not restored here.
+
+### Evidence limits
+
+The coverage catalog's `transit.realtime` category includes platform assignment
+providers. It describes a supported operation, not a guarantee of fresh realtime
+predictions: the Rhein-Ruhr fixture contains published assignments only. The
+per-event evidence kind and record timestamp determine what guidance can claim.
+
+The exact DELFI quarantine is deliberately narrow. An unrecognized upstream
+error in another scheduled platform can still look like an operational change
+when compared with a fresh expected assignment. No general decoder or high-track
+filter can safely distinguish those cases; source corrections remain limited to
+verified evidence. The mirror's current captured delivery has no expected times.
+
+A malformed event timestamp drops its journey while retaining other valid
+journeys in the delivery. Structural XML, security and resource-limit failures
+still reject the snapshot. Extra journeys are excluded from enrichment.
+
+MOTIS transport errors, unrecognized HTTP errors and missing success payloads
+are unavailable, preserving the refresh handle. Apart from an explicit dataset
+epoch mismatch, only the pinned server's `400 {error:"no legs reconstructed"}`
+answer establishes a gone itinerary. See
+[MOTIS v2.11.4 reconstruction](https://github.com/motis-project/motis/blob/v2.11.4/src/itinerary_id.cc#L1055).

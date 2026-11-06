@@ -610,12 +610,33 @@ export interface StopTransfer extends ContributingRecord {
   wheelchairUsesElevator?: boolean;
 }
 
+/** Source-scoped passenger platform for one arrival or departure event. */
+export interface TransitPlatformEvidence {
+  code: string;
+  scheduledCode?: string;
+  kind: "schedule" | "correction" | "realtime";
+  sourceId: string;
+  recordedAt?: string;
+  fetchedAt?: string;
+}
+
+export interface JourneyPlatformUpdate {
+  stopIndex: number;
+  arrivalPlatform?: TransitPlatformEvidence;
+  departurePlatform?: TransitPlatformEvidence;
+}
+
 export interface VehicleJourneyStop extends ContributingRecord {
+  fieldContributors?: FieldContributors;
   stopId: string;
   name: string;
   lat: number;
   lng: number;
   platform?: string;
+  arrivalPlatform?: TransitPlatformEvidence;
+  departurePlatform?: TransitPlatformEvidence;
+  /** Diagnostic only: the adapter withheld an exact known-bad static source code. */
+  platformQuarantined?: boolean;
   /** Scheduled platform/track; distinct from {@link platform} to flag changes. */
   scheduledPlatform?: string;
   scheduledArrival?: string;
@@ -633,6 +654,14 @@ export interface VehicleJourney extends ContributingRecord {
   id: string;
   name: string;
   provider: string;
+  /** Present only when the provider can bind a complete single train to its service day. */
+  identity?: {
+    serviceDate: string;
+    trainNumber: string;
+    lineName: string;
+    routeId: string;
+    feedTag: string;
+  };
   occupancy?: OccupancyLevel;
   formation?: TransitFormationReference[];
   formationDetails?: TransitFormationDetail;

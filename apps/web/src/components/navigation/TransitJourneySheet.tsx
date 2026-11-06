@@ -6,6 +6,8 @@ import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
+import { selectLegPlatform } from "@openmapx/core/navigation";
+import { selectStopPlatform } from "@openmapx/mobility-core/platform";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
@@ -35,6 +37,7 @@ function StopTimeline({
       {stops.map((stop, i) => {
         const isFirst = i === 0;
         const isLast = i === stops.length - 1;
+        const platform = selectStopPlatform(stop, isLast ? "arrival" : "departure");
         const isNext = i === nextIdx;
         const passed = i < nextIdx;
         const emphasized = isFirst || isLast || isNext;
@@ -127,9 +130,9 @@ function StopTimeline({
                   {t("stopSkipped")}
                 </Typography>
               )}
-              {stop.platform && !stop.canceled && (
+              {platform.code && !stop.canceled && (
                 <Box sx={{ mt: 0.25 }}>
-                  <PlatformBadge code={stop.platform} scheduledCode={stop.scheduledPlatform} />
+                  <PlatformBadge code={platform.code} scheduledCode={platform.scheduledCode} />
                 </Box>
               )}
             </Box>
@@ -144,6 +147,9 @@ function StopTimeline({
 function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; now: number }) {
   const t = useTranslations("navigation");
   const tt = useTranslations("transit");
+  const captures = useNavigationStore((s) => s.transitCaptures);
+  const legs = useNavigationStore((s) => s.itinerary?.legs);
+  const platform = selectLegPlatform(leg, legs?.indexOf(leg) ?? -1, captures, "departure");
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
@@ -176,11 +182,8 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
         )}
         {!isWalk && <TransitDataStatus now={now} realtime={leg.realtime} source={source} />}
       </Box>
-      {leg.from.platformCode && !isWalk && (
-        <PlatformBadge
-          code={leg.from.platformCode}
-          scheduledCode={leg.from.scheduledPlatformCode}
-        />
+      {platform.code && !isWalk && (
+        <PlatformBadge code={platform.code} scheduledCode={platform.scheduledCode} />
       )}
     </Box>
   );

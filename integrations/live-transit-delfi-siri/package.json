@@ -1,0 +1,13 @@
+{
+  "name": "@openmapx/integration-live-transit-delfi-siri",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "./index.ts",
+  "dependencies": {
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
+    "saxes": "6.0.0"
+  }
+}

@@ -209,3 +209,77 @@ it("captures the scheduled boarding occurrence on a loop instead of its earlier 
   expect(capture.stops).toHaveLength(2);
   expect(capture.stops[0].name).toBe("Second lap");
 });
+
+it("selects captured event evidence and removes superseded bad platform state", async () => {
+  const { selectLegPlatform, refreshTransitCaptures } = await import("./transitStops");
+  const leg = {
+    tripId: "t",
+    from: { stopId: "a", platformCode: "37" },
+    to: { stopId: "b", platformCode: "78" },
+  };
+  const evidence = { code: "3", kind: "correction" as const, sourceId: "siri" };
+  const fresh = captureTransitLegStops(
+    [leg],
+    {
+      t: [
+        { stopId: "a", lat: 0, lng: 0, departurePlatform: evidence },
+        { stopId: "b", lat: 0, lng: 1, arrivalPlatform: { ...evidence, code: "5 A-C" } },
+      ],
+    },
+    2,
+  );
+  expect(selectLegPlatform(leg, 0, fresh, "departure")).toMatchObject({
+    code: "3",
+    changed: false,
+  });
+  expect(selectLegPlatform(leg, 0, fresh, "arrival").code).toBe("5 A-C");
+  expect(selectLegPlatform({ ...leg, tripId: "other" }, 0, fresh, "departure").code).toBe("37");
+  const old = captureTransitLegStops(
+    [leg],
+    {
+      t: [
+        { stopId: "a", lat: 0, lng: 0, platform: "37", scheduledPlatform: "37" },
+        { stopId: "b", lat: 0, lng: 1, platform: "78", scheduledPlatform: "78" },
+      ],
+    },
+    1,
+  );
+  const updated = refreshTransitCaptures(old, [leg], { t: fresh[0].stops }, 3);
+  expect(updated[0].stops[0].scheduledPlatform).toBeUndefined();
+  expect(selectLegPlatform(leg, 0, updated, "departure").code).toBe("3");
+});
+
+it("captures only bounded known evidence fields on initial load and refresh", async () => {
+  const { transitLegCaptureSchema } = await import("./mobileProtocol");
+  const { refreshTransitCaptures } = await import("./transitStops");
+  const legs = [{ tripId: "t", from: { stopId: "a" }, to: { stopId: "b" } }];
+  const stops = [
+    {
+      stopId: "a",
+      name: "A",
+      lat: 0,
+      lng: 0,
+      departurePlatform: {
+        code: "3",
+        kind: "correction" as const,
+        sourceId: "siri",
+        recordedAt: "x".repeat(100),
+        futureField: "must not persist",
+      },
+    },
+    { stopId: "b", name: "B", lat: 0, lng: 1 },
+  ];
+  const original = captureTransitLegStops(legs, { t: stops }, 1);
+  expect(transitLegCaptureSchema.safeParse(original[0]).success).toBe(true);
+  expect(original[0].stops[0].departurePlatform).toEqual({
+    code: "3",
+    kind: "correction",
+    sourceId: "siri",
+  });
+  const malformed = stops[0].departurePlatform;
+  if (!malformed) throw new Error("Missing fixture platform");
+  malformed.code = "x".repeat(65);
+  const updated = refreshTransitCaptures(original, legs, { t: stops }, 2);
+  expect(updated[0].stops[0].departurePlatform).toBeUndefined();
+  expect(transitLegCaptureSchema.safeParse(updated[0]).success).toBe(true);
+});

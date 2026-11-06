@@ -219,3 +219,46 @@ describe("no-fix and rejected callbacks", () => {
     expect(tick({ state, fix: fix(0.001) }).rejectedReason).toBe("out-of-order");
   });
 });
+
+it.each(["realtime", "correction", "schedule"] as const)(
+  "uses captured %s platform evidence for alerts, independently of delay",
+  (kind) => {
+    const trip = itinerary();
+    trip.legs[1].from.platformCode = "78";
+    const input = {
+      itinerary: trip,
+      state: { ...atRide(), phase: "waiting-to-board" as const },
+      fix: fix(0.002),
+      captures: [
+        {
+          legIndex: 1,
+          tripId: "trip-1",
+          status: "captured" as const,
+          capturedAtMs: NOW,
+          stops: [
+            {
+              stopId: "a",
+              name: "A",
+              lat: 0,
+              lng: 0.002,
+              departurePlatform: { code: "3", scheduledCode: "2", kind, sourceId: "siri" },
+            },
+            { stopId: "b", name: "B", lat: 0, lng: 0.02 },
+          ],
+        },
+      ],
+    };
+    const first = tick(input);
+    const changes = first.events.filter((e) => e.type === "platform-change");
+    expect(changes).toHaveLength(kind === "realtime" ? 1 : 0);
+    if (kind === "realtime") expect(changes[0]).toMatchObject({ platform: "3" });
+    expect(
+      tick({
+        ...input,
+        state: first.state,
+        nowMs: NOW + 1000,
+        fix: fix(0.002, 0, NOW + 1000),
+      }).events.filter((e) => e.type === "platform-change"),
+    ).toHaveLength(0);
+  },
+);

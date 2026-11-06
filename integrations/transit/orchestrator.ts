@@ -41,6 +41,7 @@ import type {
 } from "@openmapx/mobility-core/transit-reachability";
 import { pMapSettled } from "p-map";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
+import { enrichJourneyPlatforms } from "./journey-platforms";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
 import {
@@ -719,7 +720,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function refreshTrip(
     providerId: string,
     params: TripRefreshRequest,
-  ): Promise<MobilityResult<TripItinerary | null>> {
+  ): Promise<
+    | { status: "ok" | "gone"; result: MobilityResult<TripItinerary | null> }
+    | { status: "unavailable" }
+  > {
     const provider = collectProviders().find((candidate) => candidate.id === providerId);
     if (
       !provider?.refreshTrip ||
@@ -727,7 +731,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       !(await providerHealth.isHealthy(provider.id))
     ) {
       recordDecision("refresh", provider, "refresh_fallback");
-      return emptyResult<TripItinerary | null>(null, { hasRealtimeData: true });
+      return { status: "unavailable" };
     }
     const fn = provider.refreshTrip.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "refreshTrip", () =>
@@ -735,12 +739,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     );
     if (!outcome.ok || !outcome.value.data) {
       recordDecision("refresh", provider, "refresh_fallback");
-      return outcome.ok
-        ? outcome.value
-        : emptyResult<TripItinerary | null>(null, { hasRealtimeData: true });
+      return outcome.ok ? { status: "gone", result: outcome.value } : { status: "unavailable" };
     }
     recordDecision("refresh", provider, "refresh_success");
-    return outcome.value;
+    return { status: "ok", result: outcome.value };
   }
 
   async function getVehicleRadar(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>> {
@@ -1245,6 +1247,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
   return {
     collectProviders,
+    enrichJourneyPlatforms: (base: MobilityResult<VehicleJourney | null>) =>
+      enrichJourneyPlatforms(
+        { ctx, timed: boundTimed, healthy: (id) => providerHealth.isHealthy(id) },
+        base,
+      ),
     resolveByPrefix,
     getProviderPriority,
     getProvidersForBbox,

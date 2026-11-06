@@ -1264,6 +1264,18 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
+  integrations/live-transit-delfi-siri:
+    dependencies:
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      saxes:
+        specifier: 6.0.0
+        version: 6.0.0
+
   integrations/live-transit-entur:
     dependencies:
       '@openmapx/core':

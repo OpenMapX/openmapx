@@ -135,13 +135,20 @@ describe("refresh transitions", () => {
       expect(onRefreshFailed(inFlight, "rejected").status).toBe("broken");
     });
 
-    it("breaks the chain after an ambiguous timeout rather than gambling", () => {
-      // The server may or may not have consumed the token. Retrying blindly is a
-      // coin flip that, when it loses, silently ends live data for the trip.
-      const ambiguous = onRefreshFailed(inFlight, "ambiguous");
-
-      expect(ambiguous.status).toBe("broken");
-      expect(shouldRefresh(context({ runtime: ambiguous }))).toEqual({
+    it("retries a lost reply within the bounded replay window, then stops", () => {
+      const first = onRefreshFailed(inFlight, "ambiguous", NOW);
+      expect(first.status).toBe("ready");
+      const second = onRefreshFailed(
+        onRefreshRequested(first, "r2", NOW + 30_000),
+        "ambiguous",
+        NOW + 45_000,
+      );
+      expect(second.status).toBe("ready");
+      expect(
+        onRefreshFailed(onRefreshRequested(second, "r3", NOW + 75_000), "ambiguous", NOW + 90_000)
+          .status,
+      ).toBe("broken");
+      expect(shouldRefresh(context({ runtime: first, nowMs: NOW + 120_000 }))).toEqual({
         refresh: false,
         reason: "broken",
       });
@@ -204,4 +211,33 @@ describe("isCurrentGeneration", () => {
 
     expect(isCurrentGeneration(moved, { generation: 4, requestId: "r4" })).toBe(false);
   });
+});
+
+it("does not extend the replay window when a retry receives 503", () => {
+  const ambiguous = onRefreshFailed(
+    onRefreshRequested(READY, "r1", NOW),
+    "ambiguous",
+    NOW + 15_000,
+  );
+  const unavailable = onRefreshFailed(
+    onRefreshRequested(ambiguous, "r2", NOW + 45_000),
+    "retryable",
+    NOW + 60_000,
+  );
+  expect(unavailable.firstAttemptAtMs).toBe(NOW);
+  expect(shouldRefresh(context({ runtime: unavailable, nowMs: NOW + 120_000 }))).toEqual({
+    refresh: false,
+    reason: "broken",
+  });
+});
+
+it("bounds failure counters within the persisted-session schema", () => {
+  const runtime: RefreshRuntime = {
+    status: "ready",
+    generation: 1,
+    attempts: 64,
+    ambiguousAttempts: 3,
+  };
+  expect(onRefreshFailed(runtime, "ambiguous", NOW).ambiguousAttempts).toBe(3);
+  expect(onRefreshUnreachable(runtime, NOW).attempts).toBe(64);
 });

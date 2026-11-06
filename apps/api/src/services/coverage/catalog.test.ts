@@ -65,3 +65,18 @@ describe("coverage governance catalog", () => {
     expect(catalog.rights.some((record) => record.conflict)).toBe(false);
   });
 });
+
+it("counts a journey-platform-only live provider without claiming unsupported methods", () => {
+  const fixture = integration([{ ...baseSource, commercialUse: "conditional" }]);
+  fixture.manifest.domains = ["live-transit"];
+  fixture.providers.set("live-transit", [
+    {
+      id: "platforms",
+      coverage: { all: true },
+      priority: 1,
+      capabilities: { journeyPlatforms: true },
+      getJourneyPlatforms: async () => ({ data: [] }),
+    } as never,
+  ]);
+  expect(buildCoverageCatalog([fixture]).providers[0].supports["transit.realtime"]).toBe(true);
+});
