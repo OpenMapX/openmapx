@@ -48,8 +48,8 @@ and a source-neutral provider reconstruction fallback.
 ## 5. Deliver
 
 - [x] Replace obsolete visual evidence with actual normal directions behavior and inspect it.
-- [x] Commit the verified work locally. PR creation and pushing are deferred at the user's explicit request; wait for their later instruction.
-- [ ] When later authorized, create and immediately link the PR, assign Medformatik, use
+- [x] Commit the verified work locally. The user has now authorized publication after rebasing onto latest `origin/main`.
+- [ ] Create and immediately link the authorized PR, assign Medformatik, use
       an existing appropriate label, and inspect hosted visual evidence and metadata.
 
 The old portable run was stopped after the user's clarification; it is not final
@@ -74,4 +74,17 @@ in the local ledger; do not weaken those tests or silently call the old run gree
 - Live provider verification resolved all four examples against Transitous in
   an adapter/resolver harness. Native share-sheet delivery, a deployed OpenMapX
   API and local-MOTIS-plus-hosted-fallback runtime were not exercised. No database
-  changes. PR creation and pushing remain deferred by the user.
+  changes. Publication was initially deferred; the user subsequently authorized
+  rebasing onto latest `origin/main` and opening the PR.
+
+## Rebase verification
+
+The feature was rebased without conflicts onto `3e63c602d`, which includes merged
+PRs #788 and #791. All six feature commits have identical patches in `range-diff`.
+The rebased tree passes 1,605 tests across 110 affected test files, all 32 workspace
+type checks, discovery-eval types, lint, policy and OpenAPI/SDK freshness checks.
+The mobile suite passes 83 suites / 1,416 tests; Swift intake passes 24 tests;
+the headless bundle check and docs production build also pass. Rendered screenshots
+were refreshed with the production theme and the newer provider delay display.
+The earlier broad-suite result remains recorded above; unrelated artifact tests
+were not repeated after this rebase, as requested by the user.
