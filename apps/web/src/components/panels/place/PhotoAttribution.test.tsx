@@ -31,10 +31,10 @@ function commons(license = "Public domain", extra = {}) {
   return photo;
 }
 
-function caption(photo = commons()) {
+function caption(photo = commons(), thumbnail = false) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <PhotoAttribution photo={photo} />
+      <PhotoAttribution photo={photo} thumbnail={thumbnail} />
     </NextIntlClientProvider>,
   );
 }
@@ -131,7 +131,7 @@ describe("photo credit presentation", () => {
       };
       if (owner === "photo") photo.licensing = structuredClone(strict);
       else photo.contributors[0].licensing = structuredClone(strict);
-      const { container } = caption(photo);
+      const { container } = caption(photo, true);
       expect(container.textContent).toContain("Exact required image notice");
       expect(screen.getByRole("img", { name: "Mapillary" })).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: /photo credits/i }));
@@ -351,4 +351,34 @@ it("applies a changed captured image policy even when the image URL stays the sa
     }),
   );
   expect(view.container.textContent).toContain("New required image notice");
+});
+
+it.each(["Public domain", "CC0 1.0", "CC BY 4.0", "CC BY-SA 4.0", "CC BY-SA 3.0", "CC BY-SA 2.0"])(
+  "offers complete %s thumbnail credits without printing a caption over the preview",
+  (license) => {
+    const photo = commons(license, { Attribution: { value: "Museum collection credit" } });
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <PhotoAttribution photo={photo} thumbnail />
+      </NextIntlClientProvider>,
+    );
+    expect(view.container.textContent).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("Museum collection credit");
+    expect(dialog.querySelector('a[href*="File:Cathedral.jpg"]')).not.toBeNull();
+  },
+);
+
+it("keeps unreviewed licence captions visible even for a thumbnail", () => {
+  const photo = commons("Special photo agreement", {
+    LicenseUrl: { value: "https://photos.example/terms" },
+    Permission: { value: "Required notice" },
+  });
+  const view = render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <PhotoAttribution photo={photo} thumbnail />
+    </NextIntlClientProvider>,
+  );
+  expect(view.container.textContent).toContain("Required notice");
 });

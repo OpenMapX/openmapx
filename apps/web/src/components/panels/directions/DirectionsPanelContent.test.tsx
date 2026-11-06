@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@/test";
 import { enterDateTime } from "@/test/dateTimeField";
+import { providerPlanSelection } from "../../../../../../packages/core/src/travel-plans/__fixtures__/providerPlan";
 
 vi.mock("next-intl", async () =>
   (await import("@/test/intl")).mockNextIntl({ useLocale: () => "de" }),
@@ -129,7 +130,9 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   },
   LegBadge: () => <span />,
   LegRemarks: () => null,
-  LiveStopTime: ({ scheduledTime }: { scheduledTime: string }) => <span>{scheduledTime}</span>,
+  LiveStopTime: ({ time }: { time: { scheduledAt?: string; expectedAt?: string } }) => (
+    <span>{time.expectedAt ?? time.scheduledAt}</span>
+  ),
   TransitEmissionsBadge: () => null,
   TransitLiveBadge: () => null,
 }));
@@ -1657,3 +1660,73 @@ it.each(["same", "changed", "fallback"])(
     );
   },
 );
+
+it("opens provided provider details and keeps their origin when an earlier auto-location resolves", async () => {
+  let giveFix: PositionCallback = () => {};
+  const getCurrentPosition = vi.fn((...args: unknown[]) => {
+    giveFix = args[0] as PositionCallback;
+  });
+  vi.stubGlobal("navigator", { geolocation: { getCurrentPosition } });
+  const client = createTestQueryClient();
+  client.setQueryData(["transit-planning-capabilities"], {
+    providers: [
+      {
+        id: "transit-motis-local",
+        metadata: {
+          source: "transit-motis-local",
+          instance: "ms",
+          datasetEpoch: "E",
+          rentalFormFactors: [],
+        },
+      },
+    ],
+  });
+  useDirectionsStore.getState().open();
+  render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(client) });
+  await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
+  const selection = providerPlanSelection({
+    bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
+  });
+  act(() => {
+    useTransitPlanMock.mockReturnValue({
+      data: selection.plan.data,
+      isLoading: false,
+      isError: false,
+    });
+    useDirectionsStore.getState().openTransitSelection(selection);
+  });
+  await act(async () =>
+    giveFix({
+      coords: { longitude: 13, latitude: 52, accuracy: 5 },
+      timestamp: Date.now(),
+    } as GeolocationPosition),
+  );
+  expect(useDirectionsStore.getState().waypoints[0].label).toBe("Provider Aachen");
+  await screen.findAllByText("Provider Aachen");
+  expect(screen.queryByText("directions.importedTrip")).toBeNull();
+  expect(screen.queryByText("DB Navigator")).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject({
+    id: "provider-trip",
+    legs: [{ from: { platformCode: "17" } }],
+  });
+});
+
+it("still fills the same empty origin from ordinary auto-location", async () => {
+  let giveFix: PositionCallback = () => {};
+  vi.stubGlobal("navigator", {
+    geolocation: {
+      getCurrentPosition: vi.fn((...args: unknown[]) => {
+        giveFix = args[0] as PositionCallback;
+      }),
+    },
+  });
+  useDirectionsStore.getState().open();
+  renderPanel();
+  await act(async () =>
+    giveFix({
+      coords: { longitude: 13, latitude: 52, accuracy: 5 },
+      timestamp: Date.now(),
+    } as GeolocationPosition),
+  );
+  expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13, 52]);
+});

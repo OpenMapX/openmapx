@@ -25,6 +25,7 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { DepartureTime } from "@/components/panels/transit/DepartureTime";
 import { LegBadge } from "@/components/panels/transit/LegBadge";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -36,6 +37,12 @@ import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
+import {
+  stopTransitTime,
+  type TransitTime,
+  type TransitTimeEvent,
+  transitDelayMinutes,
+} from "@/lib/transitTime";
 import { formatCo2Emission } from "../../../lib/formatCo2";
 import { TransitAccessibilityIndicator } from "./TransitAccessibilityIndicator";
 
@@ -144,51 +151,28 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
 }
 
 function LiveStopTime({
-  scheduledTime,
+  time,
+  event = "departure",
   tripId,
   stopId,
 }: {
-  scheduledTime: string;
+  time: TransitTime;
+  event?: TransitTimeEvent;
   tripId?: string;
   stopId?: string;
 }) {
-  const fmt = useDateTimeFormat();
   const { data: journey } = useVehicleJourney(tripId ?? null);
   const stop = stopId ? journey?.stops.find((s) => s.stopId === stopId) : undefined;
-  const delayMin = stop ? Math.round((stop.delaySeconds ?? 0) / 60) : 0;
-  const hasDelay = delayMin > 0;
-
-  const displayTime =
-    hasDelay && stop
-      ? fmt.time(
-          stop.expectedDeparture ??
-            stop.expectedArrival ??
-            stop.scheduledDeparture ??
-            stop.scheduledArrival ??
-            scheduledTime,
-        )
-      : scheduledTime;
-
+  const stopPair = stop ? stopTransitTime(stop, event) : undefined;
+  // A timetable-only lookup must not erase the itinerary's retained prediction.
+  const prediction = stopPair?.expectedAt ? stopPair : undefined;
+  const pair = prediction ?? time;
+  const changed = (transitDelayMinutes(pair) ?? 0) !== 0;
   return (
     <>
-      <Typography variant="caption" color={hasDelay ? "error.main" : "text.secondary"}>
-        {displayTime}
-      </Typography>
-      {hasDelay && (
+      <DepartureTime {...pair} variant="caption" canceled={stop?.canceled} muted />
+      {changed && prediction && stop && (
         <AttributionStrip attributions={contributorsForRecords([stop])} variant="inline" />
-      )}
-      {hasDelay && (
-        <Typography
-          variant="caption"
-          sx={{
-            fontWeight: 600,
-            display: "block",
-            color: "error.main",
-            fontSize: "0.7rem",
-          }}
-        >
-          +{delayMin}m
-        </Typography>
       )}
     </>
   );

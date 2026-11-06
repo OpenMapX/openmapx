@@ -1,9 +1,13 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
-import type {
-  TransitAccessMode,
-  TransitPreferKey,
-  TransitRoutePreference,
+import { type TransitReferenceParams, transitPlanQueryKey } from "../api/transit";
+import {
+  rankItineraries,
+  TRANSIT_PREFER_MOTIS_MODES,
+  TRANSIT_PREFER_OPTIONS,
+  type TransitAccessMode,
+  type TransitPreferKey,
+  type TransitRoutePreference,
 } from "../constants/transit";
 import { getStorage } from "../platform/storage";
 import {
@@ -13,8 +17,10 @@ import {
   isBikeProfile,
   isBikeSpeedKmh,
 } from "../routing/bicycleOptions";
+import type { ResolvedTravelPlan } from "../travel-plans/resolve";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
+import { transitItineraryKey } from "../utils/transitItineraryKey";
 
 // Route-avoidance defaults persist so a chosen preference (also editable in the
 // nav settings screen) applies to every route rather than resetting each session.
@@ -68,6 +74,11 @@ function hasWindow(schedule: WaypointSchedule | undefined): boolean {
   );
 }
 
+export interface PendingTransitSelection {
+  requestKey: string;
+  itineraryKey: string;
+}
+
 export interface DirectionsState {
   isOpen: boolean;
   waypoints: Waypoint[];
@@ -115,6 +126,13 @@ export interface DirectionsState {
   avoidTolls: boolean;
   avoidFerries: boolean;
   transitItineraries: TripItinerary[];
+  transitTimeMode: "now" | "depart" | "arrive";
+  transitReference: TransitReferenceParams | null;
+  pendingTransitSelection: PendingTransitSelection | null;
+  openTransitSelection: (result: ResolvedTravelPlan) => boolean;
+  completeTransitSelection: (expected: PendingTransitSelection) => boolean;
+  cancelTransitSelection: (expected: PendingTransitSelection) => boolean;
+  setTransitTimeMode: (mode: "now" | "depart" | "arrive") => void;
   activeItineraryIndex: number;
   transitDepartureTime: "now" | Date;
   transitArrivalTime: Date | null;
@@ -174,7 +192,7 @@ export interface DirectionsState {
   setAvoidFerries: (v: boolean) => void;
   /** Re-read the persisted route-avoidance defaults (storage may configure late). */
   hydrateRoutePrefs: () => void;
-  setTransitItineraries: (items: TripItinerary[]) => void;
+  setTransitItineraries: (items: TripItinerary[], requestKey?: string) => void;
   setActiveItineraryIndex: (i: number) => void;
   setTransitDepartureTime: (t: "now" | Date) => void;
   setTransitArrivalTime: (t: Date | null) => void;
@@ -202,6 +220,43 @@ function initialWaypoints(): Waypoint[] {
 
 export const useDirectionsStore = create<DirectionsState>((set, get) => {
   const initWps = initialWaypoints();
+  // A route edit releases an exact provider reference and an unconsumed handoff.
+  const routingKeys = new Set([
+    "waypoints",
+    "mode",
+    "isEvMode",
+    "timeMode",
+    "tripTime",
+    "transitTimeMode",
+    "transitDepartureTime",
+    "transitArrivalTime",
+    "transitPreferredModes",
+    "transitRoutePreference",
+    "transitAccessMode",
+    "wheelchairRequired",
+    "maxTransfers",
+    "transferBuffer",
+    "requireBikeTransport",
+    "bikeHillPreference",
+    "deutschlandticketOnly",
+  ]);
+  const update = (patch: Partial<DirectionsState>) => {
+    const release =
+      (get().pendingTransitSelection || get().transitReference) &&
+      Object.keys(patch).some((key) => routingKeys.has(key));
+    set(
+      release
+        ? {
+            ...patch,
+            pendingTransitSelection: null,
+            transitReference: null,
+            transitItineraries: [],
+            activeItineraryIndex: 0,
+          }
+        : patch,
+    );
+  };
+
   return {
     isOpen: false,
     waypoints: initWps,
@@ -217,6 +272,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
     avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
     transitItineraries: [],
+    transitTimeMode: "now",
+    transitReference: null,
+    pendingTransitSelection: null,
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
     transitArrivalTime: null,
@@ -230,10 +288,111 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     ...readBikePrefs(),
     deutschlandticketOnly: false,
 
-    open: () => set({ isOpen: true }),
+    openTransitSelection: (result) => {
+      const params = result.query.params;
+      const current = get();
+      // This station-to-station handoff uses walking access. Keep a mandatory
+      // bike requirement visible in the existing bike session, without dropping it.
+      if (params.requireBikeTransport || current.requireBikeTransport) return false;
+      if (
+        Boolean(params.wheelchairRequired) !== current.wheelchairRequired ||
+        Boolean(params.requireBikeTransport) !== current.requireBikeTransport ||
+        (params.bikeHillPreference ?? "default") !== current.bikeHillPreference
+      )
+        return false;
+      const wanted = new Set(params.modes ?? []);
+      const preferred = TRANSIT_PREFER_OPTIONS.filter((key) =>
+        TRANSIT_PREFER_MOTIS_MODES[key].every((mode) => wanted.has(mode)),
+      );
+      const represented = new Set(preferred.flatMap((key) => TRANSIT_PREFER_MOTIS_MODES[key]));
+      if (wanted.size && represented.size !== wanted.size) return false;
+      if (
+        result.query.kind === "search" &&
+        ((result.query.params.numItineraries ?? 3) !== 3 ||
+          result.query.params.deutschlandticketOnly ||
+          result.query.params.preTransitModes?.length ||
+          result.query.params.postTransitModes?.length ||
+          result.query.params.directModes?.length)
+      )
+        return false;
+      const itineraries = rankItineraries([...result.plan.data.itineraries], "best");
+      const index = itineraries.findIndex(
+        (item) =>
+          transitItineraryKey(item, result.plan.data.provider) === result.selectedItineraryKey,
+      );
+      const selected = itineraries[index];
+      if (!selected) return false;
+      const transit = selected.legs.filter((leg) => leg.tripId || leg.route);
+      const first = transit[0]?.from,
+        last = transit.at(-1)?.to;
+      if (!first || !last) return false;
+      const origin =
+        result.query.kind === "search"
+          ? result.query.params.origin
+          : ([result.plan.data.from.lng, result.plan.data.from.lat] as LngLat);
+      const destination =
+        result.query.kind === "search"
+          ? result.query.params.destination
+          : ([result.plan.data.to.lng, result.plan.data.to.lat] as LngLat);
+      const anchor =
+        result.query.kind === "search"
+          ? result.query.params.time
+          : new Date(
+              Date.parse(result.query.params.reference.legs[0].scheduledDeparture) - 120000,
+            ).toISOString();
+      const time = new Date(anchor);
+      if (!Number.isFinite(time.getTime())) return false;
+      set({
+        isOpen: true,
+        mode: "transit",
+        isEvMode: false,
+        transitTimeMode: "depart",
+        transitDepartureTime: time,
+        transitArrivalTime: null,
+        waypoints: deriveTypes([
+          { id: newWaypointId(), coords: origin, label: first.name, type: "origin" },
+          { id: newWaypointId(), coords: destination, label: last.name, type: "destination" },
+        ]),
+        transitItineraries: itineraries,
+        activeItineraryIndex: index,
+        transitPreferredModes: preferred,
+        transitRoutePreference: "best",
+        transitAccessMode: "walk",
+        maxTransfers:
+          result.query.kind === "search" ? (result.query.params.maxTransfers ?? null) : null,
+        transferBuffer:
+          result.query.kind === "search"
+            ? (result.query.params.transferBuffer ?? "standard")
+            : "standard",
+        deutschlandticketOnly: false,
+        transitReference: result.query.kind === "reference" ? result.query.params : null,
+        pendingTransitSelection: {
+          requestKey: JSON.stringify(transitPlanQueryKey(result.query)),
+          itineraryKey: result.selectedItineraryKey,
+        },
+      });
+      return true;
+    },
+    completeTransitSelection: (expected) => {
+      if (get().pendingTransitSelection !== expected) return false;
+      set({ pendingTransitSelection: null });
+      return true;
+    },
+    cancelTransitSelection: (expected) => {
+      if (get().pendingTransitSelection !== expected) return false;
+      set({
+        pendingTransitSelection: null,
+        transitReference: null,
+        transitItineraries: [],
+        activeItineraryIndex: 0,
+      });
+      return true;
+    },
+    setTransitTimeMode: (mode) => update({ transitTimeMode: mode }),
+    open: () => update({ isOpen: true }),
     close: () => {
       const wps = initialWaypoints();
-      set({
+      update({
         isOpen: false,
         waypoints: wps,
         activeRouteIndex: 0,
@@ -245,6 +404,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         evForceNonExclusive: false,
         transitItineraries: [],
         activeItineraryIndex: 0,
+        transitTimeMode: "now" as const,
+        transitReference: null,
+        pendingTransitSelection: null,
         transitDepartureTime: "now" as const,
         transitArrivalTime: null,
         transitPreferredModes: [],
@@ -263,7 +425,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = [...get().waypoints];
       if (index < 0 || index >= wps.length) return;
       wps[index] = { ...wps[index], coords, label };
-      set({ waypoints: wps, activeRouteIndex: 0 });
+      update({ waypoints: wps, activeRouteIndex: 0 });
     },
 
     addWaypoint: (afterIndex) => {
@@ -272,7 +434,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const newWp = makeEmptyWaypoint();
       wps.splice(afterIndex + 1, 0, newWp);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     insertWaypoint: (index, coords, label) => {
@@ -280,7 +442,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.length >= MAX_DIRECTIONS_WAYPOINTS) return false;
       if (!Number.isInteger(index) || index < 1 || index > wps.length - 1) return false;
       wps.splice(index, 0, { ...makeEmptyWaypoint(), coords, label });
-      set({ waypoints: deriveTypes(wps), activeRouteIndex: 0 });
+      update({ waypoints: deriveTypes(wps), activeRouteIndex: 0 });
       return true;
     },
 
@@ -289,7 +451,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.length <= 2) return;
       wps.splice(index, 1);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reorderWaypoints: (fromIndex, toIndex) => {
@@ -297,19 +459,19 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const [moved] = wps.splice(fromIndex, 1);
       wps.splice(toIndex, 0, moved);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reverseWaypoints: () => {
       const wps = [...get().waypoints].reverse();
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, activeRouteIndex: 0 });
+      update({ waypoints: typed, activeRouteIndex: 0 });
     },
 
-    setMode: (mode) => set({ mode, activeRouteIndex: 0, isEvMode: false }),
+    setMode: (mode) => update({ mode, activeRouteIndex: 0, isEvMode: false }),
     setEvMode: (isEvMode) => {
       if (!isEvMode) {
-        set({ isEvMode });
+        update({ isEvMode });
         return;
       }
       // EV re-routing only supports origin + destination (see ev-plan.ts) —
@@ -317,7 +479,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = get().waypoints;
       const last = wps.length - 1;
       const trimmed = last > 1 ? deriveTypes([wps[0], wps[last]]) : wps;
-      set({
+      update({
         waypoints: trimmed,
         isEvMode,
         mode: "driving",
@@ -325,12 +487,12 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         evForceNonExclusive: false,
       });
     },
-    setEvSocStartPct: (evSocStartPct) => set({ evSocStartPct }),
-    setEvSocArrivalMinPct: (evSocArrivalMinPct) => set({ evSocArrivalMinPct }),
-    setEvForceNonExclusive: (evForceNonExclusive) => set({ evForceNonExclusive }),
+    setEvSocStartPct: (evSocStartPct) => update({ evSocStartPct }),
+    setEvSocArrivalMinPct: (evSocArrivalMinPct) => update({ evSocArrivalMinPct }),
+    setEvForceNonExclusive: (evForceNonExclusive) => update({ evForceNonExclusive }),
     setTimeMode: (timeMode) =>
-      set(timeMode === "now" ? { timeMode, tripTime: null } : { timeMode }),
-    setTripTime: (tripTime) => set({ tripTime }),
+      update(timeMode === "now" ? { timeMode, tripTime: null } : { timeMode }),
+    setTripTime: (tripTime) => update({ tripTime }),
 
     setWaypointSchedule: (index, schedule) => {
       const wps = get().waypoints;
@@ -338,7 +500,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const next = [...wps];
       const { schedule: _previous, ...rest } = next[index];
       next[index] = schedule === null ? rest : { ...rest, schedule };
-      set({ waypoints: next, activeRouteIndex: 0 });
+      update({ waypoints: next, activeRouteIndex: 0 });
     },
 
     applyWaypointOrder: (order) => {
@@ -347,79 +509,82 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.some((wp) => hasWindow(wp.schedule))) return false;
       const reordered = order.map((index) => wps[index]);
       if (reordered.some((wp) => wp === undefined)) return false;
-      set({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
+      update({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
       return true;
     },
 
     hasScheduleConstraints: () => get().waypoints.some((wp) => hasWindow(wp.schedule)),
 
-    setActiveRouteIndex: (activeRouteIndex) => set({ activeRouteIndex }),
+    setActiveRouteIndex: (activeRouteIndex) => update({ activeRouteIndex }),
     setAvoidHighways: (avoidHighways) => {
       getStorage().setString(AVOID_HIGHWAYS_STORAGE_KEY, String(avoidHighways));
-      set({ avoidHighways });
+      update({ avoidHighways });
     },
     setAvoidTolls: (avoidTolls) => {
       getStorage().setString(AVOID_TOLLS_STORAGE_KEY, String(avoidTolls));
-      set({ avoidTolls });
+      update({ avoidTolls });
     },
     setAvoidFerries: (avoidFerries) => {
       getStorage().setString(AVOID_FERRIES_STORAGE_KEY, String(avoidFerries));
-      set({ avoidFerries });
+      update({ avoidFerries });
     },
     hydrateRoutePrefs: () =>
-      set({
+      update({
         ...readBikePrefs(),
         avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
         avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
         avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
       }),
-    setTransitItineraries: (transitItineraries) =>
-      set({ transitItineraries, activeItineraryIndex: 0 }),
-    setActiveItineraryIndex: (activeItineraryIndex) => set({ activeItineraryIndex }),
-    setTransitDepartureTime: (transitDepartureTime) => set({ transitDepartureTime }),
-    setTransitArrivalTime: (transitArrivalTime) => set({ transitArrivalTime }),
+    setTransitItineraries: (transitItineraries, requestKey) => {
+      if (get().pendingTransitSelection && get().pendingTransitSelection?.requestKey !== requestKey)
+        return;
+      update({ transitItineraries, activeItineraryIndex: 0 });
+    },
+    setActiveItineraryIndex: (activeItineraryIndex) => update({ activeItineraryIndex }),
+    setTransitDepartureTime: (transitDepartureTime) => update({ transitDepartureTime }),
+    setTransitArrivalTime: (transitArrivalTime) => update({ transitArrivalTime }),
     toggleTransitPreferredMode: (key) => {
       const current = get().transitPreferredModes;
       const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-      set({ transitPreferredModes: next, activeItineraryIndex: 0 });
+      update({ transitPreferredModes: next, activeItineraryIndex: 0 });
     },
     setTransitRoutePreference: (transitRoutePreference) =>
-      set({ transitRoutePreference, activeItineraryIndex: 0 }),
+      update({ transitRoutePreference, activeItineraryIndex: 0 }),
     setTransitAccessMode: (transitAccessMode) =>
-      set({
+      update({
         transitAccessMode,
         activeItineraryIndex: 0,
         ...(transitAccessMode !== "bike" ? { requireBikeTransport: false } : {}),
       }),
     setWheelchairRequired: (wheelchairRequired) =>
-      set({ wheelchairRequired, activeItineraryIndex: 0 }),
-    setMaxTransfers: (maxTransfers) => set({ maxTransfers, activeItineraryIndex: 0 }),
-    setTransferBuffer: (transferBuffer) => set({ transferBuffer, activeItineraryIndex: 0 }),
+      update({ wheelchairRequired, activeItineraryIndex: 0 }),
+    setMaxTransfers: (maxTransfers) => update({ maxTransfers, activeItineraryIndex: 0 }),
+    setTransferBuffer: (transferBuffer) => update({ transferBuffer, activeItineraryIndex: 0 }),
     setRequireBikeTransport: (requireBikeTransport) =>
-      set({ requireBikeTransport, activeItineraryIndex: 0 }),
+      update({ requireBikeTransport, activeItineraryIndex: 0 }),
     setBikeHillPreference: (bikeHillPreference) => {
       getStorage().setString("openmapx:bikeHillPreference", bikeHillPreference);
-      set({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
+      update({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
     },
     setBikeProfile: (bikeProfile) => {
       getStorage().setString("openmapx:bikeProfile", bikeProfile);
-      set({ bikeProfile, activeRouteIndex: 0 });
+      update({ bikeProfile, activeRouteIndex: 0 });
     },
     setBikePreferQuietRoads: (bikePreferQuietRoads) => {
       getStorage().setString("openmapx:bikePreferQuietRoads", String(bikePreferQuietRoads));
-      set({ bikePreferQuietRoads, activeRouteIndex: 0 });
+      update({ bikePreferQuietRoads, activeRouteIndex: 0 });
     },
     setBikePreferSmoothSurfaces: (bikePreferSmoothSurfaces) => {
       getStorage().setString("openmapx:bikePreferSmoothSurfaces", String(bikePreferSmoothSurfaces));
-      set({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
+      update({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
     },
     setBikeSpeedKmh: (bikeSpeedKmh) => {
       if (bikeSpeedKmh !== undefined && !isBikeSpeedKmh(bikeSpeedKmh)) return;
       if (bikeSpeedKmh === undefined) getStorage().remove("openmapx:bikeSpeedKmh");
       else getStorage().setString("openmapx:bikeSpeedKmh", String(bikeSpeedKmh));
-      set({ bikeSpeedKmh, activeRouteIndex: 0 });
+      update({ bikeSpeedKmh, activeRouteIndex: 0 });
     },
     setDeutschlandticketOnly: (deutschlandticketOnly) =>
-      set({ deutschlandticketOnly, activeItineraryIndex: 0 }),
+      update({ deutschlandticketOnly, activeItineraryIndex: 0 }),
   };
 });

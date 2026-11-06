@@ -1,4 +1,4 @@
-import { rankItineraries, type TransitRoutePreference } from "@openmapx/core";
+import { rankItineraries, type TransitRoutePreference, transitItineraryKey } from "@openmapx/core";
 import { transitItineraryFingerprint } from "@openmapx/core/navigation";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 
@@ -24,10 +24,7 @@ export function findTransitItinerary(
 
 /** Preserve the planner's source-qualified identity, including providers without itinerary IDs. */
 function itineraryKey(itinerary: TripItinerary, provider: string | undefined): string {
-  const fallback = `${itinerary.startTime}|${itinerary.endTime}|${itinerary.legs
-    .map((leg) => `${leg.tripId ?? leg.mode}:${leg.from.stopId ?? leg.from.name}`)
-    .join("|")}`;
-  return `${itinerary.source ?? provider ?? "unknown"}:${itinerary.instance ?? ""}:${itinerary.datasetEpoch ?? ""}:${itinerary.id ?? fallback}`;
+  return `${itinerary.instance ?? ""}:${itinerary.datasetEpoch ?? ""}:${transitItineraryKey(itinerary, provider)}`;
 }
 
 /** Merge one page without altering its records or their captured contributor receipts. */

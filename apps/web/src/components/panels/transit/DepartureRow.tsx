@@ -9,8 +9,8 @@ import Typography from "@mui/material/Typography";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { Departure, MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { departureRealtimeEvidence } from "@/lib/transit-data-status";
+import { DepartureTime } from "./DepartureTime";
 import { OccupancyIndicator } from "./OccupancyIndicator";
 import { PlatformBadge } from "./PlatformBadge";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
@@ -52,16 +52,7 @@ export function DepartureRow({
   now = Date.now(),
 }: DepartureRowProps) {
   const t = useTranslations("transit");
-  const fmt = useDateTimeFormat();
-  const isDelayed = departure.delaySeconds != null && departure.delaySeconds > 60;
   const isCanceled = departure.canceled === true;
-  const scheduledTime = fmt.time(departure.scheduledAt);
-  const validExpectedAt =
-    departure.expectedAt && Number.isFinite(Date.parse(departure.expectedAt))
-      ? departure.expectedAt
-      : undefined;
-  const expectedTime = validExpectedAt ? fmt.time(validExpectedAt) : undefined;
-  const timeChanged = expectedTime !== undefined && expectedTime !== scheduledTime;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
   // Only named when the place has differently named stops and this is not its main one.
   const otherStopName = departure.atOtherStop ? departure.stop?.name : undefined;
@@ -121,27 +112,11 @@ export function DepartureRow({
         </Box>
         {departure.occupancy && <OccupancyIndicator level={departure.occupancy} size={16} />}
         <Box sx={{ textAlign: "right", flexShrink: 0 }}>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 500,
-              textDecoration: isCanceled || timeChanged ? "line-through" : "none",
-              color: isCanceled ? "text.disabled" : "text.primary",
-            }}
-          >
-            {scheduledTime}
-          </Typography>
-          {timeChanged && !isCanceled && (
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                color: isDelayed ? "error.main" : "text.primary",
-              }}
-            >
-              {expectedTime}
-            </Typography>
-          )}
+          <DepartureTime
+            scheduledAt={departure.scheduledAt}
+            expectedAt={departure.expectedAt}
+            canceled={isCanceled}
+          />
           {isCanceled && (
             <Typography
               variant="caption"

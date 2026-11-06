@@ -2,6 +2,7 @@ export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 export {
   addressComponentsFromOsmTags,
   directPlaceDetailsId,
+  formatAddressLocality,
   sanitizeAddressComponents,
 } from "./addressEvidence";
 export { isCityOrSmaller } from "./administrativePlace";
@@ -455,6 +456,8 @@ export {
   TRAFFIC_BAND_COLORS,
   type TrafficBand,
 } from "./trafficSeverity";
+export { transitItineraryKey } from "./transitItineraryKey";
+export { itineraryMatchesTransitReference } from "./transitTripReference";
 export { type UrlWithoutCredentials, urlCredentialsAsBasicAuth } from "./url-credentials";
 export {
   contactDomain,

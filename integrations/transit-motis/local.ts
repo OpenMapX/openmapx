@@ -39,6 +39,7 @@ import {
   resolveMotisReachabilityCapabilities,
 } from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
+import { resolveMotisTrip } from "./resolve-trip.js";
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
@@ -258,6 +259,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
         },
         paging: true,
         refresh: true,
+        resolveTrip: true,
       },
       vehiclePositions: false,
       vehicleJourney: true,
@@ -331,6 +333,28 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
       }
       requireHostedFallback();
       return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
+    },
+    async getDeparturesAt(id, min, time) {
+      const localId = withPrefix(id, "ms:");
+      const cloudId = withPrefix(id, "mo:");
+      if (await isMotisReachableCached()) {
+        const capabilities = activeMotisCapabilities();
+        const local = await motis.getDepartures(
+          motisLocalInstance,
+          localId,
+          min,
+          {
+            datasetEpoch: capabilities?.epoch,
+            realtimeEnabled: capabilities?.health?.rt === true,
+          },
+          time,
+        );
+        return wrapLocalRT(local);
+      }
+      requireHostedFallback();
+      return wrapTransitousRT(
+        await motis.getDepartures(transitousInstance, cloudId, min, undefined, time),
+      );
     },
     async getStopPlatforms(id) {
       if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
@@ -423,6 +447,19 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
         itineraries: annotateLegsWithAttribution(local.itineraries, attributionIndex),
       };
       return wrapLocalRT([annotated]);
+    },
+    async resolveTrip(params) {
+      if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
+      const capabilities = activeMotisCapabilities();
+      if (!capabilities?.epoch || params.reference.datasetEpoch !== capabilities.epoch)
+        return wrapLocalRT(null);
+      return wrapLocalRT(
+        await resolveMotisTrip(motisLocalInstance, params, {
+          datasetEpoch: capabilities.epoch,
+          http: ctx.http,
+          useRoutedTransfers: capabilities.planningFeatures?.hasRoutedTransfers === true,
+        }),
+      );
     },
     async refreshTrip(params) {
       if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");

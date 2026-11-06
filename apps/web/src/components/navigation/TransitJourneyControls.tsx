@@ -12,11 +12,12 @@ import Typography from "@mui/material/Typography";
 import { haversineDistance, useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { DepartureTime } from "@/components/panels/transit/DepartureTime";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
-import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useTransitRiderAction } from "@/lib/mobile/useTransitRiderAction";
+import { legTransitTime, transitDelayMinutes } from "@/lib/transitTime";
 import { useNow } from "@/lib/useNow";
 export function TransitJourneyControls({
   onAlternatives,
@@ -26,7 +27,6 @@ export function TransitJourneyControls({
   walkRepair?: "idle" | "repairing" | "unavailable" | "accessibility";
 }) {
   const t = useTranslations("navigation");
-  const fmt = useDateTimeFormat();
   const now = useNow(5000);
   const liveUnavailable = useNavigationStore((s) => s.liveDataUnavailable);
   const itinerary = useNavigationStore((s) => s.itinerary);
@@ -64,6 +64,8 @@ export function TransitJourneyControls({
       setPending(false);
     }
   };
+  const departureTime = ride ? legTransitTime(ride) : {};
+  const timeChanged = (transitDelayMinutes(departureTime) ?? 0) !== 0;
   const departure = ride?.startTime ? new Date(ride.startTime).getTime() : NaN;
   const liveDeparture = !liveUnavailable && (!runtime.browserAuthority || !!itinerary.refreshToken);
   const departurePassed =
@@ -122,23 +124,22 @@ export function TransitJourneyControls({
             )}
           </Box>
           <Box sx={{ textAlign: "right", flexShrink: 0, maxWidth: 120 }}>
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.4 }}
-            >
-              {Number.isFinite(departure) ? fmt.time(departure) : t("timeUnknown")}
-            </Typography>
+            {Number.isFinite(departure) ? (
+              <DepartureTime {...departureTime} variant="subtitle1" fontWeight={700} />
+            ) : (
+              <Typography variant="subtitle1">{t("timeUnknown")}</Typography>
+            )}
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ display: "block", lineHeight: 1.4 }}
             >
               {t(
-                ride.realtime
-                  ? liveDeparture
-                    ? "departureLive"
-                    : "departureLastKnown"
-                  : "departureScheduled",
+                ride.realtime && liveDeparture
+                  ? "departureLive"
+                  : !ride.realtime && !timeChanged
+                    ? "departureScheduled"
+                    : "departureLastKnown",
               )}
             </Typography>
           </Box>

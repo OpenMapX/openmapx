@@ -1,6 +1,7 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type {
   TransitStopArea,
+  TransitTripResolveRequest,
   TripItinerary,
   TripPlan,
   VehicleJourney,
@@ -8,6 +9,7 @@ import type {
 import type { LngLat } from "../types/geometry";
 import type { WaypointSchedule } from "../types/routing";
 import type { ChainedTripPlan } from "../types/transitChain";
+import { itineraryMatchesTransitReference } from "../utils/transitTripReference";
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
@@ -45,6 +47,59 @@ export interface TransitPlanParams {
   capabilityEpoch?: string;
   rentalSource?: string;
   rentalInstance?: string;
+}
+
+export type TransitReferenceParams = TransitTripResolveRequest;
+
+export type TransitPlanQuery =
+  | { kind: "search"; params: TransitPlanParams }
+  | { kind: "reference"; params: TransitReferenceParams };
+
+/** The normal search and reference lookups have distinct, truthful cache identities. */
+export function transitPlanQueryKey(query: TransitPlanQuery) {
+  if (query.kind === "search")
+    return ["transit-plan", buildTransitPlanParams(query.params)] as const;
+  const { reference, modes, wheelchairRequired, requireBikeTransport, bikeHillPreference } =
+    query.params;
+  return [
+    "transit-plan-reference",
+    reference,
+    {
+      modes: listParam(modes),
+      wheelchairRequired: Boolean(wheelchairRequired),
+      requireBikeTransport: Boolean(requireBikeTransport),
+      bikeHillPreference: bikeHillPreference ?? "default",
+    },
+  ] as const;
+}
+
+export async function fetchReferencedTransitPlan(
+  params: TransitReferenceParams,
+  client: ApiClient = apiClient,
+  options: ApiRequestOptions = {},
+): Promise<MobilityEnvelope<TripPlan>> {
+  const result = await client.post<MobilityEnvelope<TripPlan>>(
+    API_ENDPOINTS.transitPlanResolve,
+    params,
+    options,
+  );
+  if (
+    result.freshness.isStale ||
+    result.freshness.isPartial ||
+    !result.data.itineraries.length ||
+    result.data.itineraries.some(
+      (itinerary) =>
+        !itineraryMatchesTransitReference(itinerary, params.reference) ||
+        itinerary.invalidRequirements?.length ||
+        itinerary.legs.some(
+          (leg) =>
+            (params.wheelchairRequired && leg.wheelchairAccessible === false) ||
+            (params.requireBikeTransport && leg.route && leg.bikesAllowed === false),
+        ),
+    )
+  )
+    throw new Error("The provider did not return the referenced trip");
+  return result;
 }
 
 /** Order-independent list parameter, so the same set always produces one key. */

@@ -304,8 +304,6 @@ export function TransitLegBanner({
             py: 1.25,
             bgcolor: "background.paper",
             color: "text.primary",
-            borderLeft: 4,
-            borderColor: "primary.main",
             borderRadius: 2,
             boxShadow: 1,
           }}

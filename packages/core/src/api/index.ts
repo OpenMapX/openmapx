@@ -90,6 +90,7 @@ export { searchStreetLevelImages } from "./streetLevel";
 export { fetchTrafficSignals } from "./trafficSignals";
 export {
   buildTransitPlanParams,
+  fetchReferencedTransitPlan,
   fetchTransitPlan,
   fetchTransitStopArea,
   fetchVehicleJourney,
@@ -97,7 +98,10 @@ export {
   refreshTransitItinerary,
   type TransitChainPlanRequest,
   type TransitPlanParams,
+  type TransitPlanQuery,
+  type TransitReferenceParams,
   type TransitRefreshResult,
   type TransitStopAreaRequest,
+  transitPlanQueryKey,
   type VehicleJourneyParams,
 } from "./transit";

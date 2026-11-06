@@ -469,11 +469,76 @@ cover app/group metadata (`C617.1`), selected-file metadata (`3B52.1`) and monot
 deadline timers (`35F9.1`). No uptime or metadata is transmitted. The extension imports GPX `com.topografix.gpx`, KML
 `com.google.earth.kml`, and Apple's `public.geojson` (also declared for older OS
 versions). Its bounded SUBQUERY activation predicate excludes arbitrary file URLs.
-URL and text attachments are combined into one editable location, retaining
-labels and the first link; irrelevant preview attachments are ignored in this
+URL and text attachments are combined into one editable item. Repeated lines and
+blank lines inside each text value are preserved; only identical attachment
+values are deduplicated; irrelevant preview attachments are ignored in this
 mode. Geographic files must all be supported. Apple declares `public.geojson`
 on iOS 18 and later; its imported declaration supports older OS versions, whose
 installation and Files registration still require device qualification.
+
+### Shared travel plans
+
+German DB Navigator connection text is recognized before generic location search.
+The source-adapter registry in `packages/core/src/travel-plans/index.ts` is pure:
+new sharing apps implement `TravelPlanAdapter` and produce `SharedTravelPlan`;
+they do not change the native protocol or implement their own transit resolver.
+The DB adapter accepts an optional route header, explicit weekday/date/year,
+service, optional headsign, and ordered `Ab`/`An` station/time lines. Overnight
+calendar dates are inferred. Walking blocks, missing years, DST-discontinuous
+wall times, cross-offset travel and day-long transfers are unsupported. A DB
+booking link alone requests the full text; it is never fetched.
+
+Only confirmation triggers acquisition through the configured OpenMapX API client.
+Station search supplies geographic anchors, corroborated by nearby baseline rail
+stops. Unrelated partial global discovery is not train identity evidence. Complete,
+non-stale anchored departure and vehicle-journey responses must confirm every
+operational train number and both scheduled stop times. Failures, ambiguity and
+cancellation retain the share; cancellation of a **train** is displayed on the
+verified trip rather than replaced by another train. Current platform/delay
+changes do not change identity. The resolver bounds station records/candidate
+journeys and has a 60-second cancelable deadline. Exact availability depends on
+the enabled sources and their timetable horizon; historical trains can be absent.
+
+`GET /api/integrations/transit/stops/:id/departures?time=<UTC ISO>&minutes=60`
+selects the explicit optional provider method `getDeparturesAt`; current-only
+providers return 501 rather than ignoring the anchor. Anchored requests have
+separate cache keys and `no-store` response headers. MOTIS local/hosted support
+this through their existing transport/source policy. No new upstream is added.
+OpenAPI generation was rerun; this route remains inventory-only, so adding the
+query parameter does not change its generated operation entry.
+
+The resolver first asks the configured provider for an ordinary plan and matches
+its whole transit sequence against verified trip IDs, stop IDs and scheduled
+instants. A bounded paging probe can discover a candidate, but only a fresh
+unpaged response seeds the ordinary search cache. If search omits that train,
+`POST /api/integrations/transit/plan/resolve` accepts bounded provider references.
+The server binds them to a healthy permitted source and its dataset epoch, derives
+native coordinates and flags from provider trips, and uses MOTIS structured
+reconstruction. Raw substituted, merged or dummy legs are rejected before the
+ordinary itinerary normalizer runs. Hosted endpoint support is detected at runtime;
+an unsupported source or missing timetable fails without selecting an alternative.
+Successful reconstruction acquisition is cached for 30 seconds; policy, health
+and epoch are checked on every request and one-time refresh handles stay separate.
+
+The complete provider envelope is retained: displayed names, delays, platforms,
+geometry, transfers, fares and alerts come from the provider, never from the share.
+Native reconstruction currently omits fares when the upstream omits them. It uses
+a separate reference-query key; refetch and signed live refresh resolve that same
+reference and never fall back to the first ordinary search result. Ordinary plans
+keep their existing paging and refresh behavior.
+
+A generic one-shot selection handoff seeds the truthful query cache, publishes
+provider-derived route inputs and selects the matching stable itinerary key after
+normal ranking. It opens the existing directions details without an import banner
+or a separate travel UI. Route edits release the reference. Mandatory accessibility
+and bike requirements and persisted hill preferences are preserved; session filters
+use the ordinary neutral defaults. A current mandatory bike-carriage session is
+retained with an explanation before acquisition: walking access cannot hide or
+drop that requirement. Raw/debounced query-key fencing prevents a
+mounted panel from publishing a previous search, and a late location fix only fills
+the same still-empty origin waypoint. Native authority, document lifetime, selected
+item and cancellation are rechecked before publication; failed acknowledgement
+leaves the owned item for retry.
 
 Limits are 4,096 UTF-16 units/8 KiB for text, 5 MiB per file, five files per share,
 and eight content items/20 MiB for the owned inbox. Two bounded error descriptors

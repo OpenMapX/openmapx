@@ -239,3 +239,113 @@ describe("address request and ownership behavior", () => {
     expect(result.current.place?.directOsmReference).toEqual(selected.directOsmReference);
   });
 });
+
+describe("selected address display identity", () => {
+  const selected: Place = {
+    ...place,
+    id: "maptiler:address.1",
+    primaryScheme: "maptiler",
+    ids: { maptiler: "address.1", osm: "way/1" },
+    name: "Jakobstraße 45b",
+    category: "address",
+    address: "Jakobstraße 45b, 52064 Aachen",
+    addressEvidence: {
+      source: "geocoding-maptiler",
+      method: "provider-address",
+      components: { postcode: "52064", municipality: "Aachen" },
+    },
+    fieldContributors: {
+      name: [{ sourceId: "maptiler", name: "MapTiler" }],
+      category: [{ sourceId: "maptiler", name: "MapTiler" }],
+      addressEvidence: [{ sourceId: "maptiler", name: "MapTiler" }],
+    },
+  };
+  beforeEach(() => useDataSourceStore.setState({ selectedItem: null }));
+  it.each(["address", "Address"])(
+    "keeps the numbered title, %s classification and their receipts after sparse details load",
+    (category) => {
+      const { result, rerender } = renderHook(() => useMergedPlace({ ...selected, category }));
+      expect(result.current.place?.addressLocality).toBe("52064 Aachen");
+      mocks.details.mockReturnValue({
+        data: {
+          ...place,
+          id: "osm:way/1",
+          ids: { osm: "way/1" },
+          name: "Jakobstraße",
+          category: "Building",
+          addressEvidence: {
+            source: "osm",
+            method: "osm-tags",
+            components: { road: "Jakobstraße", house_number: "45b" },
+          },
+        },
+        isLoading: false,
+      });
+      rerender();
+      expect(result.current.place?.name).toBe("Jakobstraße 45b");
+      expect(result.current.place?.category).toBe("Address");
+      expect(result.current.place?.addressLocality).toBe("52064 Aachen");
+      expect(result.current.place?.fieldContributors?.name).toEqual(
+        selected.fieldContributors?.name,
+      );
+      expect(result.current.place?.fieldContributors?.category).toEqual(
+        selected.fieldContributors?.category,
+      );
+      expect(result.current.place?.fieldContributors?.addressLocality).toEqual(
+        selected.fieldContributors?.addressEvidence,
+      );
+    },
+  );
+  it("uses the winning locality as one candidate without filling its missing postcode", () => {
+    mocks.details.mockReturnValue({
+      data: {
+        ...place,
+        ids: { osm: "way/1" },
+        addressEvidence: {
+          source: "osm",
+          method: "provider-address",
+          components: { town: "Other town" },
+        },
+        fieldContributors: { address: [{ sourceId: "osm", name: "OSM" }] },
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useMergedPlace(selected));
+    expect(result.current.place?.addressLocality).toBe("Other town");
+    expect(result.current.place?.fieldContributors?.addressLocality).toEqual([
+      { sourceId: "osm", name: "OSM" },
+    ]);
+  });
+  it("does not fall back to selected locality across conflicting OSM IDs", () => {
+    mocks.details.mockReturnValue({
+      data: {
+        ...place,
+        ids: { osm: "way/2" },
+        addressEvidence: {
+          source: "osm",
+          method: "provider-address",
+          components: { road: "Other road" },
+        },
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useMergedPlace(selected));
+    // Address ownership rejects conflicting details and keeps the selected whole candidate.
+    expect(result.current.place?.addressLocality).toBe("52064 Aachen");
+  });
+  it("preserves a street-level full-address title without turning a POI into an address", () => {
+    mocks.details.mockReturnValue({
+      data: { ...place, name: "Resolved", category: "Cafe" },
+      isLoading: false,
+    });
+    expect(
+      renderHook(() => useMergedPlace({ ...selected, name: selected.address })).result.current.place
+        ?.name,
+    ).toBe(selected.address);
+    const poi = renderHook(() => useMergedPlace({ ...selected, category: "poi" })).result.current
+      .place;
+    expect(poi?.name).toBe("Resolved");
+    expect(poi?.category).toBe("Cafe");
+    expect(poi?.addressLocality).toBeUndefined();
+  });
+});

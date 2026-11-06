@@ -272,6 +272,21 @@ an explicitly empty list. A hover
 hint or global `/licenses` page is not a replacement for the current, one-action
 full attribution dialog. Do not implement source-name checks in view components.
 
+Gallery thumbnails are navigational previews. `PhotoAttribution`'s `thumbnail`
+mode uses a directly associated, keyboard-accessible file-credits button for
+reviewed grants, including ordinary CC BY/BY-SA 2.x–4.0, CC0 and declared public
+domain. Every unselected preview retains its own one-action details; the selected
+full image keeps its normal caption. Earlier CC equal-prominence clauses are
+handled by giving all thumbnail credits the same presentation, not by attributing
+only the selected file. This is a contextual placement decision, not a general
+exemption for thumbnails. Explicit visible policies, required branding and
+unreviewed grants retain visible captions. Do not clip those notices or infer
+permission from a Wikimedia source name.
+
+See [CC BY 4.0 §3(a)(2)](https://creativecommons.org/licenses/by/4.0/legalcode.en),
+[CC BY-SA 2.0 §4(c)](https://creativecommons.org/licenses/by-sa/2.0/legalcode.en),
+and Wikimedia's [small-screen attribution guidance, pp. 24–27](https://upload.wikimedia.org/wikipedia/commons/e/e5/Attributing_Creative_Commons_Content_-_A_guide.pdf).
+
 Images keep their actual creator, file page, file licence and embedded
 watermarks. Capture API/service obligations separately; a platform manifest is
 not the grant for an individual photograph. Built-in photo/imagery acquisition

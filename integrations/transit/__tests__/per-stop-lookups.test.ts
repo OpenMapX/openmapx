@@ -71,6 +71,7 @@ function provider(overrides: Partial<TransitProvider>): TransitProvider {
 
 function orchestrator(providers: TransitProvider[], coolingDown: string[] = []) {
   const ctx = {
+    cache: { withCache: (_key: string, _ttl: number, load: () => Promise<unknown>) => load() },
     providerHealth: {
       isHealthy: async (id: string) => !coolingDown.includes(id),
       recordSuccess: async () => {},
@@ -153,4 +154,61 @@ describe("getRoutesForStop", () => {
     );
     expect((await transit.getRoutesForStop("b:stop")).data).toEqual([]);
   });
+});
+
+it("uses explicitly supported anchored departures and never a current-only board", async () => {
+  const current = ok([departure]);
+  const anchored = ok([departure]);
+  const time = "2026-11-06T20:17:00.000Z";
+  const supported = orchestrator([provider({ getDepartures: current, getDeparturesAt: anchored })]);
+  await supported.getDepartures("a:stop", 5, time);
+  expect(anchored).toHaveBeenCalledWith("a:stop", 5, time);
+  expect(current).not.toHaveBeenCalled();
+  await expect(
+    orchestrator([provider({ getDepartures: current })]).getDepartures("a:stop", 5, time),
+  ).rejects.toThrow();
+  expect(current).not.toHaveBeenCalled();
+});
+
+it("reports health cooldown as unavailable, not unsupported dated departures", async () => {
+  const anchored = ok([departure]);
+  const source = provider({ getDeparturesAt: anchored });
+  await expect(
+    orchestrator([source], ["a"]).getDepartures("a:stop", 60, "2026-11-06T20:17:00Z"),
+  ).rejects.toThrow(/unavailable/i);
+  expect(anchored).not.toHaveBeenCalled();
+});
+
+it("resolves only the referenced healthy provider and rejects stale epochs without fallback", async () => {
+  const resolveTrip = ok(null);
+  const source = provider({
+    id: "a",
+    prefix: "a:",
+    capabilities: { ...provider({}).capabilities, planning: true },
+    planningMetadata: { source: "a", instance: "a", datasetEpoch: "E", rentalFormFactors: [] },
+    resolveTrip,
+  });
+  const alternate = provider({ id: "b", prefix: "b:", resolveTrip: ok(null) });
+  const reference = {
+    datasetEpoch: "E",
+    legs: [
+      {
+        tripId: "a:trip",
+        fromStopId: "a:from",
+        toStopId: "a:to",
+        scheduledDeparture: "2026-11-06T20:18:00.000Z",
+        scheduledArrival: "2026-11-06T21:11:00.000Z",
+      },
+    ],
+  };
+  await expect(orchestrator([source, alternate]).resolveTrip({ reference })).resolves.toMatchObject(
+    { data: null },
+  );
+  expect(resolveTrip).toHaveBeenCalledTimes(1);
+  expect(alternate.resolveTrip).not.toHaveBeenCalled();
+  await expect(
+    orchestrator([source]).resolveTrip({ reference: { ...reference, datasetEpoch: "stale" } }),
+  ).rejects.toThrow(/epoch/i);
+  await expect(orchestrator([source], ["a"]).resolveTrip({ reference })).rejects.toThrow();
+  expect(resolveTrip).toHaveBeenCalledTimes(1);
 });

@@ -1,12 +1,20 @@
 import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchTransitPlan } from "../../api/transit";
+import {
+  fetchReferencedTransitPlan,
+  fetchTransitPlan,
+  type TransitPlanParams,
+  type TransitReferenceParams,
+  transitPlanQueryKey,
+} from "../../api/transit";
 import type { LngLat } from "../../types/geometry";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
 interface UseTransitPlanParams {
   origin: LngLat | null;
+  enabled?: boolean;
+  reference?: TransitReferenceParams | null;
   destination: LngLat | null;
   /** ISO 8601 timestamp — desired departure time. Mutually exclusive with arriveBy. */
   departAt?: string;
@@ -49,6 +57,8 @@ function floorToMinute(iso: string): string {
 export function useTransitPlan({
   origin,
   destination,
+  enabled = true,
+  reference,
   departAt,
   arriveBy,
   numItineraries,
@@ -70,15 +80,6 @@ export function useTransitPlan({
   rentalSource,
   rentalInstance,
 }: UseTransitPlanParams): MobilityEnvelopeQueryResult<TripPlan> {
-  // Stable, order-independent key for the modes allow-list so toggling the same
-  // set in a different order reuses the cached query.
-  const modesKey = modes && modes.length > 0 ? [...modes].sort().join(",") : undefined;
-  const preKey = preTransitModes?.length ? [...preTransitModes].sort().join(",") : undefined;
-  const postKey = postTransitModes?.length ? [...postTransitModes].sort().join(",") : undefined;
-  const directKey = directModes?.length ? [...directModes].sort().join(",") : undefined;
-  const rentalFormFactorsKey = rentalFormFactors?.length
-    ? [...new Set(rentalFormFactors)].sort().join(",")
-    : undefined;
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
   // of treating every refetch as a new query due to a fresh timestamp.
@@ -91,62 +92,45 @@ export function useTransitPlan({
   if (!pageToken && retainedTime !== unpagedTime) setRetainedTime(unpagedTime);
   const effectiveTime = pageToken && !explicitTime ? retainedTime : unpagedTime;
 
+  const search: TransitPlanParams | undefined =
+    origin && destination
+      ? {
+          origin,
+          destination,
+          time: effectiveTime,
+          arriveBy: Boolean(arriveBy),
+          numItineraries,
+          lang,
+          modes,
+          wheelchair,
+          wheelchairRequired,
+          maxTransfers,
+          transferBuffer,
+          requireBikeTransport,
+          bikeHillPreference,
+          rentalFormFactors,
+          preTransitModes,
+          postTransitModes,
+          directModes,
+          deutschlandticketOnly,
+          pageToken,
+          capabilityEpoch,
+          rentalSource,
+          rentalInstance,
+        }
+      : undefined;
   const query = useQuery({
-    queryKey: [
-      "transit-plan",
-      origin,
-      destination,
-      effectiveTime,
-      !!arriveBy,
-      numItineraries,
-      lang,
-      modesKey,
-      !!wheelchair,
-      !!wheelchairRequired,
-      maxTransfers,
-      transferBuffer,
-      !!requireBikeTransport,
-      bikeHillPreference,
-      rentalFormFactorsKey,
-      preKey,
-      postKey,
-      directKey,
-      !!deutschlandticketOnly,
-      pageToken,
-      capabilityEpoch,
-      rentalSource,
-      rentalInstance,
-    ],
-    queryFn: () => {
-      if (!origin || !destination) throw new Error("Origin and destination required");
-      // The query string lives in `api/transit.ts` so the browser and the
-      // headless background replan always ask for the same journey.
-      return fetchTransitPlan({
-        origin,
-        destination,
-        time: effectiveTime,
-        arriveBy: !!arriveBy,
-        numItineraries,
-        lang,
-        modes,
-        wheelchair,
-        wheelchairRequired,
-        maxTransfers,
-        transferBuffer,
-        requireBikeTransport,
-        bikeHillPreference,
-        rentalFormFactors,
-        preTransitModes,
-        postTransitModes,
-        directModes,
-        deutschlandticketOnly,
-        pageToken,
-        capabilityEpoch,
-        rentalSource,
-        rentalInstance,
-      });
+    queryKey: reference
+      ? transitPlanQueryKey({ kind: "reference", params: reference })
+      : search
+        ? transitPlanQueryKey({ kind: "search", params: search })
+        : ["transit-plan", "incomplete", origin, destination, effectiveTime],
+    queryFn: ({ signal }) => {
+      if (reference) return fetchReferencedTransitPlan(reference, undefined, { signal });
+      if (!search) throw new Error("Origin and destination required");
+      return fetchTransitPlan(search, undefined, { signal });
     },
-    enabled: origin !== null && destination !== null,
+    enabled: enabled && origin !== null && destination !== null,
     staleTime: 120_000,
     gcTime: 600_000,
   });

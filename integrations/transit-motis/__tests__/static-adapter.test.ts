@@ -686,6 +686,22 @@ describe("MOTIS line names", () => {
     expect(departure.serviceInfo?.trainNumber).toBe("26826");
   });
 
+  it("retains a regional operational number supplied separately from the display name", () => {
+    const departure = normalizeStoptime(
+      instance,
+      {
+        place: { scheduledDeparture: "2026-11-06T20:18:00Z" },
+        displayName: "RE9",
+        routeShortName: "RE9",
+        tripShortName: "010935",
+        mode: "REGIONAL_RAIL",
+      } as never,
+      "departure",
+    );
+    expect(departure.route.shortName).toBe("RE9");
+    expect(departure.serviceInfo?.trainNumber).toBe("10935");
+  });
+
   it("keeps a long-distance train's display name, whose route name is a bare number", () => {
     const departure = normalizeStoptime(
       instance,
@@ -747,3 +763,12 @@ it.each([false, undefined])(
     expect(normalized.provenance?.realtimeCompleteness).toBe("unknown");
   },
 );
+
+it("anchors a departure window to the requested time instead of now", async () => {
+  mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
+  await getDepartures(instance, "ms:root", 5, undefined, "2026-11-06T20:17:00.000Z");
+  expect(mocks.stoptimes.mock.calls.at(-1)[0].query).toMatchObject({
+    time: "2026-11-06T20:17:00.000Z",
+    window: 300,
+  });
+});

@@ -14,6 +14,7 @@ import type { ReverseGeocodingResult } from "../types/geocoding";
 import type { Place } from "../types/place";
 import {
   directPlaceDetailsId,
+  formatAddressLocality,
   hasUsablePlaceAddress,
   haveConflictingOsmIds,
   isLocalityOnlyAddress,
@@ -25,6 +26,11 @@ import { useDataSourceMatch } from "./useDataSourceMatch";
 import { useOpeningHoursClock } from "./useOpeningHoursClock";
 import { usePlaceDetails } from "./usePlaceDetails";
 import { useReverseGeocoding } from "./useReverseGeocoding";
+
+/** Display-only enrichment; these derived fields are not part of the place API. */
+export interface MergedPlace extends Place {
+  addressLocality?: string;
+}
 
 /**
  * Prettifies a raw OSM category string for display.
@@ -38,9 +44,8 @@ function prettifyCategory(raw: string): string {
  * Merges place data from all available sources into a single Place.
  *
  * Priority rules (per field):
- *  1. Identity fields (id, name, category, rawCategory, transitStop,
- *     dataSourceDetail): selectedPlace always wins — these define what the
- *     user clicked.
+ *  1. Selected identity stays stable. Address selections and data-source places
+ *     retain their display name and category; other places prefer resolver labels.
  *  2. Address selection retains explicit object tags and data-source ownership;
  *     unknown legacy candidates keep the existing resolver-first precedence.
  *  3. OSM-sourced fields (city, phone, website, openingHours, osmTags,
@@ -57,13 +62,17 @@ function mergePlaceFields(
   reverseGeo: ReverseGeocodingResult | null | undefined,
   matchedDetail: DataSourceDetail | null,
   isDataSourceItem: boolean,
-): Place {
+): MergedPlace {
   const nom = nominatim ?? null;
 
   const isDataSourcePlace = isDataSourceItem || selected.dataSourceDetail !== undefined;
 
   const fields: Record<string, Attribution[]> = {};
-  const base: Place = nom
+  const keepsAddressIdentity =
+    !isDataSourcePlace &&
+    selected.category?.toLowerCase() === "address" &&
+    Boolean(selected.name.trim());
+  const base: MergedPlace = nom
     ? {
         ...nom,
         // Identity fields: selected wins so `id`/`primaryScheme`/`ids`
@@ -74,10 +83,14 @@ function mergePlaceFields(
         primaryScheme: selected.primaryScheme,
         ids: { ...(nom.ids ?? {}), ...selected.ids },
         directOsmReference: selected.directOsmReference,
-        name: isDataSourcePlace ? selected.name || nom.name : nom.name || selected.name,
-        category: isDataSourcePlace
-          ? prettifyCategory(selected.category ?? "") || nom.category
-          : nom.category || prettifyCategory(selected.category ?? ""),
+        name:
+          isDataSourcePlace || keepsAddressIdentity
+            ? selected.name || nom.name
+            : nom.name || selected.name,
+        category:
+          isDataSourcePlace || keepsAddressIdentity
+            ? prettifyCategory(selected.category ?? "") || nom.category
+            : nom.category || prettifyCategory(selected.category ?? ""),
         rawCategory: selected.rawCategory || nom.rawCategory,
         transitStop: selected.transitStop,
       }
@@ -120,11 +133,15 @@ function mergePlaceFields(
   transfer("directOsmReference", selected);
   transfer(
     "name",
-    nom && (isDataSourcePlace ? !selected.name : Boolean(nom.name)) ? nom : selected,
+    nom && (isDataSourcePlace || keepsAddressIdentity ? !selected.name : Boolean(nom.name))
+      ? nom
+      : selected,
   );
   transfer(
     "category",
-    nom && (isDataSourcePlace ? !selected.category : Boolean(nom.category)) ? nom : selected,
+    nom && (isDataSourcePlace || keepsAddressIdentity ? !selected.category : Boolean(nom.category))
+      ? nom
+      : selected,
   );
   transfer("rawCategory", selected.rawCategory ? selected : (nom ?? selected));
   for (const key of Object.keys(base.ids ?? {})) {
@@ -227,6 +244,21 @@ function mergePlaceFields(
     }
   }
 
+  if (base.category?.toLowerCase() === "address") {
+    const locality = formatAddressLocality(base.addressEvidence?.components);
+    const selectedLocality = !haveConflictingOsmIds(selected, nom)
+      ? formatAddressLocality(selected.addressEvidence?.components)
+      : "";
+    base.addressLocality = locality || selectedLocality || undefined;
+    if (locality) {
+      fields.addressLocality = snapshotContributors(
+        contributorsForField({ fieldContributors: fields }, "addressEvidence"),
+      );
+    } else if (selectedLocality) {
+      transfer("addressLocality", selected, "addressEvidence");
+    }
+  }
+
   for (const key of Object.keys(fields)) {
     const root = key.split(".")[0];
     if ((base as unknown as Record<string, unknown>)[root] === undefined) delete fields[key];
@@ -249,7 +281,7 @@ function mergePlaceFields(
  * consistent data regardless of how the place was accessed.
  */
 export function useMergedPlace(selectedPlace: Place | null): {
-  place: Place | null;
+  place: MergedPlace | null;
   isLoading: boolean;
 } {
   const now = useOpeningHoursClock();

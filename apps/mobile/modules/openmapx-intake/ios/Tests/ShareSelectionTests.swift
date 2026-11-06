@@ -6,6 +6,22 @@ final class ShareSelectionTests: XCTestCase {
     XCTAssertEqual(plan, .text([0, 1]))
     XCTAssertEqual(try ShareSelection.text(["Station", "https://maps.example/short", "Station"]), "Station\nhttps://maps.example/short")
   }
+  func testAllSuppliedNavigatorExamplesSurviveTheNativeTextPath() throws {
+    var root = URL(fileURLWithPath: #filePath)
+    for _ in 0..<7 { root.deleteLastPathComponent() }
+    let fixture = root.appendingPathComponent("packages/core/src/travel-plans/__fixtures__/dbNavigator.json")
+    let examples = try JSONDecoder().decode([String].self, from: Data(contentsOf: fixture))
+    XCTAssertEqual(examples.count, 4)
+    for text in examples {
+      XCTAssertEqual(try ShareSelection.text([text, text]), text)
+      let link = String(text.split(whereSeparator: { $0.isWhitespace }).last!)
+      XCTAssertEqual(try ShareSelection.text([link, text, link]), text)
+    }
+  }
+  func testRepeatedLinesInsideOneTextValueArePreserved() throws {
+    let text = "A → B\nFr. 06.11.2026\n\nRE9 (1)\nNach Siegen Hbf\nAb 21:00 A\nAn 22:00 C\n\nRE9 (2)\nNach Siegen Hbf\nAb 22:10 C\nAn 23:00 B"
+    XCTAssertEqual(try ShareSelection.text([text, text]), text)
+  }
   func testGeographicFileModeNeverSilentlyIgnoresOtherFiles() throws {
     XCTAssertEqual(try ShareSelection.select([["com.topografix.gpx"], ["public.geojson"]]), .files([.init(index: 0, type: "com.topografix.gpx"), .init(index: 1, type: "public.geojson")]))
     XCTAssertThrowsError(try ShareSelection.select([["com.topografix.gpx"], ["public.pdf"]]))

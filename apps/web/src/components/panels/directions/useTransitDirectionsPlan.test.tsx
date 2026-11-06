@@ -9,6 +9,7 @@ import {
   verifyTransitPageToken,
 } from "../../../../../../integrations/transit/page-token";
 import { useTransitPlan as realUseTransitPlan } from "../../../../../../packages/core/src/hooks/transit/useTransitPlan";
+import { providerPlanSelection } from "../../../../../../packages/core/src/travel-plans/__fixtures__/providerPlan";
 import {
   type TransitDirectionsSnapshot,
   useTransitDirectionsPlan,
@@ -32,7 +33,7 @@ function snapshot(overrides: Partial<TransitDirectionsSnapshot> = {}): TransitDi
   const state = useDirectionsStore.getState();
   return {
     enabled: true,
-    timeMode: "now",
+    timeMode: state.transitTimeMode,
     waypoints: state.waypoints,
     transitDepartureTime: state.transitDepartureTime,
     transitArrivalTime: state.transitArrivalTime,
@@ -774,4 +775,102 @@ it("retains a chosen composite through background result replacement but retires
   expect(view.result.current.selectAlternative(parent, chosen)).toBeNull();
   expect(select(parent, chosen)).toBeNull();
   expect(useDirectionsStore.getState().transitItineraries).toEqual([fresh]);
+});
+
+function seedSelection() {
+  const selection = providerPlanSelection({
+    bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
+  });
+  const target = selection.plan.data.itineraries[0];
+  selection.plan.data.itineraries = [{ ...target, id: "other", duration: 1000 }, target];
+  mocks.capabilities.mockReturnValue({
+    data: {
+      providers: [
+        {
+          id: "transit-motis-local",
+          metadata: {
+            source: "transit-motis-local",
+            instance: "ms",
+            datasetEpoch: "E",
+            rentalFormFactors: [],
+          },
+        },
+      ],
+    },
+  });
+  return selection;
+}
+
+it("consumes a matching normal query and opens the selected identity after ranking", () => {
+  const selection = seedSelection();
+  useDirectionsStore.getState().openTransitSelection(selection);
+  mocks.plan.mockReturnValue({ data: selection.plan.data, isLoading: false, isError: false });
+  const view = renderHook(() => useTransitDirectionsPlan(snapshot()));
+  expect(useDirectionsStore.getState().pendingTransitSelection).toBeNull();
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+  expect(view.result.current.selectionToOpen).toMatchObject({
+    index: 1,
+    itineraryKey: selection.selectedItineraryKey,
+    itinerary: selection.plan.data.itineraries[1],
+    queryIdentity: view.result.current.queryIdentity,
+  });
+  view.rerender();
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+});
+
+it("fences an old mounted-panel result through debounce, then selects the seeded trip", () => {
+  vi.useFakeTimers();
+  mocks.plan.mockReturnValue({ data: response([a]), isLoading: false, isError: false });
+  const view = renderHook((props: TransitDirectionsSnapshot) => useTransitDirectionsPlan(props), {
+    initialProps: snapshot(),
+  });
+  const selection = seedSelection();
+  act(() => {
+    useDirectionsStore.getState().openTransitSelection(selection);
+    view.rerender(snapshot());
+  });
+  expect(lastPlan().enabled).toBe(false);
+  expect(useDirectionsStore.getState().transitItineraries.map((i) => i.id)).toEqual([
+    "other",
+    "provider-trip",
+  ]);
+  expect(useDirectionsStore.getState().pendingTransitSelection).not.toBeNull();
+  expect(view.result.current.planQuery.isLoading).toBe(true);
+  const seeded = useDirectionsStore.getState().transitItineraries;
+  expect(
+    view.result.current.selectAlternative(seeded[0], { ...seeded[0], id: undefined }),
+  ).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries).toBe(seeded);
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+  mocks.plan.mockReturnValue({ data: selection.plan.data, isLoading: false, isError: false });
+  act(() => vi.advanceTimersByTime(500));
+  expect(lastPlan().enabled).toBe(true);
+  expect(useDirectionsStore.getState().pendingTransitSelection).toBeNull();
+  expect(useDirectionsStore.getState().activeItineraryIndex).toBe(1);
+});
+
+it("releases a handoff on an epoch/raw-key change without a stuck loading state", () => {
+  const selection = seedSelection();
+  useDirectionsStore.getState().openTransitSelection(selection);
+  const view = renderHook(() => useTransitDirectionsPlan(snapshot()));
+  expect(useDirectionsStore.getState().pendingTransitSelection).not.toBeNull();
+  mocks.capabilities.mockReturnValue({
+    data: {
+      providers: [
+        {
+          id: "transit-motis-local",
+          metadata: {
+            source: "transit-motis-local",
+            instance: "ms",
+            datasetEpoch: "new",
+            rentalFormFactors: [],
+          },
+        },
+      ],
+    },
+  });
+  view.rerender();
+  expect(useDirectionsStore.getState().pendingTransitSelection).toBeNull();
+  expect(view.result.current.planQuery.isLoading).toBe(false);
+  expect(view.result.current.selectionToOpen).toBeNull();
 });

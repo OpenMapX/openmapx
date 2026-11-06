@@ -144,3 +144,38 @@ it.each([
     expect(!!screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBe(unavailable);
   },
 );
+
+it.each([
+  { realtime: true, unavailable: true, label: "navigation.departureLastKnown" },
+  { realtime: false, unavailable: false, label: "navigation.departureLastKnown" },
+  { realtime: true, unavailable: false, label: "navigation.departureLive" },
+])("keeps a +1 delay visible with $label", ({ realtime, unavailable, label }) => {
+  const scheduled = new Date(Math.floor((Date.now() + 300000) / 60000) * 60000).toISOString();
+  const expected = new Date(Date.parse(scheduled) + 60000).toISOString();
+  useNavigationStore.getState().startTransitNavigation({
+    duration: 1200,
+    startTime: scheduled,
+    endTime: expected,
+    transfers: 0,
+    walkDistance: 0,
+    refreshToken: "refresh",
+    legs: [
+      {
+        mode: "bus",
+        tripId: "bus",
+        realtime,
+        route: { shortName: "21" },
+        from: { name: "Bushof", lat: 0, lng: 0 },
+        to: { name: "Liebigstraße", lat: 0, lng: 0.01 },
+        startTime: expected,
+        scheduledStartTime: scheduled,
+        endTime: expected,
+      },
+    ],
+  } as TripItinerary);
+  useNavigationStore.getState().setLiveDataUnavailable(unavailable);
+  render(<TransitJourneyControls onAlternatives={() => {}} />);
+  expect(screen.getByText(label)).toBeInTheDocument();
+  expect(screen.getByText("navigation.delayMinutes")).toBeInTheDocument();
+  if (unavailable) expect(screen.queryByText("navigation.departureLive")).toBeNull();
+});
