@@ -331,6 +331,28 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
       requireHostedFallback();
       return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
     },
+    async getDeparturesAt(id, min, time) {
+      const localId = withPrefix(id, "ms:");
+      const cloudId = withPrefix(id, "mo:");
+      if (await isMotisReachableCached()) {
+        const capabilities = activeMotisCapabilities();
+        const local = await motis.getDepartures(
+          motisLocalInstance,
+          localId,
+          min,
+          {
+            datasetEpoch: capabilities?.epoch,
+            realtimeEnabled: capabilities?.health?.rt === true,
+          },
+          time,
+        );
+        return wrapLocalRT(local);
+      }
+      requireHostedFallback();
+      return wrapTransitousRT(
+        await motis.getDepartures(transitousInstance, cloudId, min, undefined, time),
+      );
+    },
     async getStopPlatforms(id) {
       if (!(await isMotisReachableCached())) throw new Error("local MOTIS unavailable");
       return wrapLocal(await motis.getStopPlatforms(motisLocalInstance, withPrefix(id, "ms:")));

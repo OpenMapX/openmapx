@@ -47,6 +47,8 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
 
 const EARTH_RADIUS = 6_371_000;
 
+export class AnchoredDeparturesUnsupported extends Error {}
+
 export function bboxToCenter(bbox: BBox): { lat: number; lng: number; radiusMeters: number } {
   const [west, south, east, north] = bbox;
   const lat = (south + north) / 2;
@@ -444,8 +446,22 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getDepartures(
     stopId: string,
     minutes: number,
+    time?: string,
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
+    if (time) {
+      if (!provider?.getDeparturesAt) throw new AnchoredDeparturesUnsupported();
+      const anchored = provider.getDeparturesAt.bind(provider);
+      const result = await timed(
+        providerHealth,
+        metricsRecorder,
+        provider.id,
+        "getDeparturesAt",
+        () => anchored(stopId, minutes, time),
+      );
+      if (!result.ok) throw new Error("Transit timetable source unavailable");
+      return result.value;
+    }
     if (!provider?.getDepartures) throw new Error("Transit timetable source unavailable");
     const fn = provider.getDepartures.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>

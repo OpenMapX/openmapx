@@ -747,3 +747,12 @@ it.each([false, undefined])(
     expect(normalized.provenance?.realtimeCompleteness).toBe("unknown");
   },
 );
+
+it("anchors a departure window to the requested time instead of now", async () => {
+  mocks.stoptimes.mockResolvedValue({ data: { stopTimes: [] } });
+  await getDepartures(instance, "ms:root", 5, undefined, "2026-11-06T20:17:00.000Z");
+  expect(mocks.stoptimes.mock.calls.at(-1)[0].query).toMatchObject({
+    time: "2026-11-06T20:17:00.000Z",
+    window: 300,
+  });
+});

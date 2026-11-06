@@ -33,6 +33,8 @@ export {
   bicycleOptions,
   validBikeRoutingOptions,
 } from "../routing/bicycleOptions";
+export { createTravelPlanPort } from "../travel-plans/apiPort";
+export { resolveSharedTravelPlan, TravelPlanResolutionError } from "../travel-plans/resolve";
 // The capture builder travels with the fetches that feed it: a caller preparing
 // a transit start needs both, and needing them together is the whole reason this
 // module exists.

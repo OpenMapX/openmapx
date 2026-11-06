@@ -154,3 +154,17 @@ describe("getRoutesForStop", () => {
     expect((await transit.getRoutesForStop("b:stop")).data).toEqual([]);
   });
 });
+
+it("uses explicitly supported anchored departures and never a current-only board", async () => {
+  const current = ok([departure]);
+  const anchored = ok([departure]);
+  const time = "2026-11-06T20:17:00.000Z";
+  const supported = orchestrator([provider({ getDepartures: current, getDeparturesAt: anchored })]);
+  await supported.getDepartures("a:stop", 5, time);
+  expect(anchored).toHaveBeenCalledWith("a:stop", 5, time);
+  expect(current).not.toHaveBeenCalled();
+  await expect(
+    orchestrator([provider({ getDepartures: current })]).getDepartures("a:stop", 5, time),
+  ).rejects.toThrow();
+  expect(current).not.toHaveBeenCalled();
+});

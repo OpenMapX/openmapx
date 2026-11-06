@@ -29,6 +29,7 @@ export interface TravelPlanAdapter {
 export function travelStationKey(name: string): string {
   return name
     .normalize("NFKC")
+    .replace(/^(?:s\+u|s|u)\s+/i, "")
     .toLowerCase()
     .replaceAll("ß", "ss")
     .replaceAll("ä", "ae")

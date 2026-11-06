@@ -491,6 +491,7 @@ export async function getDepartures(
   stopId: string,
   minutes: number,
   provenance?: { datasetEpoch?: string; realtimeEnabled?: boolean },
+  time?: string,
 ): Promise<Departure[]> {
   const id = rawId(instance, stopId);
   try {
@@ -498,7 +499,7 @@ export async function getDepartures(
       client: instance.client,
       query: {
         stopId: id,
-        time: new Date().toISOString(),
+        time: time ?? new Date().toISOString(),
         n: Math.min(200, Math.max(20, minutes * 2)),
         window: minutes * 60,
         arriveBy: false,

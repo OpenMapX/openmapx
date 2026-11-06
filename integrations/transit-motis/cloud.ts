@@ -236,6 +236,19 @@ export function setupCloud(
         }),
       );
     },
+    async getDeparturesAt(id, min, time) {
+      return wrapTransitousRT(
+        await motis.getDepartures(
+          transitousInstance,
+          withPrefix(id, "mo:"),
+          min,
+          {
+            realtimeEnabled: true,
+          },
+          time,
+        ),
+      );
+    },
     async getArrivals(id, min) {
       return wrapTransitousRT(
         await motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min, {

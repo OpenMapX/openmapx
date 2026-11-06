@@ -54,6 +54,7 @@ import {
   withSingleFlight,
 } from "./isochrone.js";
 import {
+  AnchoredDeparturesUnsupported,
   createTransitOrchestrator,
   UnsupportedTransitPlanningCapabilitiesError,
 } from "./orchestrator.js";
@@ -523,14 +524,34 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Invalid minutes param" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=30, s-maxage=30");
+    const rawTime = scalarQueries(req.query).time;
+    if (
+      rawTime !== undefined &&
+      (rawTime.length > 40 ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(rawTime) ||
+        !Number.isFinite(Date.parse(rawTime)) ||
+        new Date(rawTime).toISOString().slice(0, 10) !== rawTime.slice(0, 10))
+    ) {
+      reply.status(400).send({ error: "Invalid time; use an ISO UTC timestamp" });
+      return;
+    }
+    const time = rawTime === undefined ? undefined : new Date(rawTime).toISOString();
+    reply.header("Cache-Control", time ? "no-store" : "public, max-age=30, s-maxage=30");
     const stopId = req.params.id;
-    const cacheKey = `transit:departures:${stopId}:${minutes}`;
-    const result = await ctx.cache.withCache(cacheKey, 30, async () => {
-      const res = await orchestrator.getDepartures(stopId, minutes);
-      return toEnvelope(res);
-    });
-    reply.send(result);
+    const cacheKey = `transit:departures:${stopId}:${minutes}${time ? `:${time}` : ""}`;
+    try {
+      const result = await ctx.cache.withCache(cacheKey, 30, async () => {
+        const res = await orchestrator.getDepartures(stopId, minutes, time);
+        return toEnvelope(res);
+      });
+      reply.send(result);
+    } catch (error) {
+      if (error instanceof AnchoredDeparturesUnsupported) {
+        reply.status(501).send({ error: "This source does not support dated departure lookups" });
+        return;
+      }
+      throw error;
+    }
   });
 
   // GET /stops/:id/arrivals
@@ -671,10 +692,7 @@ export function setup(ctx: IntegrationContext): void {
     ]);
     const mergedAttrs = snapshotContributors(vehicles.attributions, alerts.attributions);
     const mergedFreshness: Freshness = {
-      fetchedAt:
-        vehicles.freshness.fetchedAt < alerts.freshness.fetchedAt
-          ? vehicles.freshness.fetchedAt
-          : alerts.freshness.fetchedAt,
+      fetchedAt: Math.min(vehicles.freshness.fetchedAt, alerts.freshness.fetchedAt),
       hasRealtimeData: vehicles.freshness.hasRealtimeData || alerts.freshness.hasRealtimeData,
       isStale: vehicles.freshness.isStale || alerts.freshness.isStale,
     };

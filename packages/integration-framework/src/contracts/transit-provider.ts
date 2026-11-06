@@ -216,6 +216,12 @@ export interface TransitProvider {
   getStopTransfers?(stopId: string): Promise<MobilityResult<StopTransfer[]>>;
 
   getDepartures?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
+  /** Explicit scheduled-time board support. Current-only providers must not implement this. */
+  getDeparturesAt?(
+    stopId: string,
+    minutes: number,
+    time: string,
+  ): Promise<MobilityResult<Departure[]>>;
   /** Arrivals reuse the departure shape; the `direction` field
    *  distinguishes inbound from outbound. Providers populate it with arriving
    *  trips at the given stop within `minutes`. */
