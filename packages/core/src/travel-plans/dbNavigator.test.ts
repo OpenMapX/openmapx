@@ -54,3 +54,11 @@ describe("DB Navigator share adapter", () => {
     expect(classifySharedText("Meeting\nAb 10 Uhr im Bahnhof", config).kind).toBe("map");
   });
 });
+
+it("does not mistake a public line without an operational number for a train number", () => {
+  for (const label of ["S 13", "RE 9", "Bus 63"]) {
+    expect(parseSharedTravelPlan(dbNavigatorExamples[0].replace("RE9 (10935)", label)).kind).toBe(
+      "invalid-travel-plan",
+    );
+  }
+});

@@ -492,6 +492,26 @@ export interface TripItinerary extends ContributingRecord {
   fare?: TripFare;
 }
 
+/** Exact provider trip identity; never contains display data from a sharing app. */
+export interface TransitTripReference {
+  datasetEpoch?: string;
+  legs: Array<{
+    tripId: string;
+    fromStopId: string;
+    toStopId: string;
+    scheduledDeparture: string;
+    scheduledArrival: string;
+  }>;
+}
+
+export interface TransitTripResolveRequest {
+  reference: TransitTripReference;
+  modes?: string[];
+  wheelchairRequired?: boolean;
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+}
+
 export interface TripPlan extends ContributingRecord {
   from: { name: string; lat: number; lng: number };
   to: { name: string; lat: number; lng: number };

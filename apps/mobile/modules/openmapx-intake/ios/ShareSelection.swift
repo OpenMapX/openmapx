@@ -25,7 +25,13 @@ enum ShareSelection: Equatable {
       let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
       if !text.isEmpty && !texts.contains(text) { texts.append(text) }
     }
-    let combined = texts.joined(separator: "\n")
+    func isLink(_ value: String) -> Bool {
+      !value.contains("\n") && value.range(of: "^(https?://|geo:|[a-z][a-z0-9+.-]*://)", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    let content = texts.filter { !isLink($0) }
+    let embeddedTokens = Set(content.flatMap { $0.split(whereSeparator: { $0.isWhitespace }).map(String.init) })
+    let links = texts.filter { isLink($0) && !embeddedTokens.contains($0) }
+    let combined = (content + links).joined(separator: "\n")
     guard allowEmpty || !combined.isEmpty else { throw IntakeFailure.unsupported }
     guard combined.utf16.count <= IntakePolicy.textLength, combined.utf8.count <= IntakePolicy.textBytes else { throw IntakeFailure.tooLarge }
     return combined

@@ -1,7 +1,10 @@
 import { useDirectionsStore, useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { act, fireEvent, render as renderInDom, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IntakeTransferError } from "@/lib/mobile/nativeIntake";
+import { createQueryWrapper, createTestQueryClient } from "@/test";
+import { transitPlanQueryKey } from "../../../../../packages/core/src/api/transit";
+import { providerPlanSelection } from "../../../../../packages/core/src/travel-plans/__fixtures__/providerPlan";
 import { NativeIntakeHandler } from "./NativeIntakeHandler";
 
 const f = vi.hoisted(() => ({
@@ -12,35 +15,13 @@ const f = vi.hoisted(() => ({
   pathname: "/",
   push: vi.fn(),
 }));
-const travel = vi.hoisted(() => ({
-  resolve: vi.fn(),
-  result: {
-    schematic: true,
-    itinerary: {
-      startTime: "2026-11-06T20:18:00Z",
-      endTime: "2026-11-06T21:11:00Z",
-      duration: 3180,
-      transfers: 0,
-      walkDistance: 0,
-      legs: [
-        {
-          mode: "rail",
-          from: { name: "Aachen Hbf", lat: 50.77, lng: 6.1 },
-          to: { name: "Köln Hbf", lat: 50.94, lng: 6.95 },
-          startTime: "2026-11-06T20:18:00Z",
-          endTime: "2026-11-06T21:11:00Z",
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [6.1, 50.77],
-              [6.95, 50.94],
-            ],
-          },
-        },
-      ],
-    },
-  },
-}));
+const travel = vi.hoisted(() => ({ resolve: vi.fn() }));
+let travelResult = providerPlanSelection();
+let queryClient = createTestQueryClient();
+function render(ui: Parameters<typeof renderInDom>[0]) {
+  return renderInDom(ui, { wrapper: createQueryWrapper(queryClient) });
+}
+afterEach(() => queryClient.clear());
 vi.mock("../../../../../packages/core/src/travel-plans/resolve", async (original) => ({
   ...(await original<object>()),
   resolveSharedTravelPlan: travel.resolve,
@@ -96,7 +77,26 @@ beforeEach(() => {
   vi.clearAllMocks();
   const { close } = useDirectionsStore.getState();
   close();
-  travel.resolve.mockReset().mockResolvedValue(travel.result);
+  queryClient = createTestQueryClient();
+  // The real app retains unobserved seeded plans until the panel mounts.
+  queryClient.setDefaultOptions({ queries: { retry: false, gcTime: 300_000 } });
+  queryClient.setQueryData(["transit-planning-capabilities"], {
+    providers: [
+      {
+        id: "transit-motis-local",
+        metadata: {
+          source: "transit-motis-local",
+          instance: "ms",
+          datasetEpoch: "E",
+          rentalFormFactors: [],
+        },
+      },
+    ],
+  });
+  travelResult = providerPlanSelection({
+    bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
+  });
+  travel.resolve.mockReset().mockResolvedValue(travelResult);
   f.mutating = false;
   f.pathname = "/";
   useNavigationStore.setState({ status: "idle", nativeSessionId: null });
@@ -282,7 +282,7 @@ it("reports an item gone from the empty inbox as expired rather than an active t
   expect(f.complete).not.toHaveBeenCalled();
 });
 
-it("recognizes a travel plan without acquiring until Open and publishes the verified trip", async () => {
+it("opens the normal provider trip without displaying DB text or an import summary", async () => {
   const { dbNavigatorExamples } = await import(
     "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
   );
@@ -294,12 +294,40 @@ it("recognizes a travel plan without acquiring until Open and publishes the veri
   });
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   render(<NativeIntakeHandler />);
-  await screen.findByText("DB Navigator");
+  await screen.findByText("sharedTrip");
   expect(travel.resolve).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText("open"));
   await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
-  expect(useDirectionsStore.getState().importedTransitTrip?.plan.sourceId).toBe("db-navigator");
+  expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
+    travelResult.plan.data.itineraries[0],
+  );
+  expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(travelResult.plan);
+  expect(screen.queryByText("DB Navigator")).toBeNull();
+  expect(screen.queryByLabelText("tripText")).toBeNull();
+});
+it("keeps a mandatory bike-carriage session visible and retains the share before any resolution", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  useDirectionsStore.getState().setTransitAccessMode("bike");
+  useDirectionsStore.getState().setRequireBikeTransport(true);
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+  render(<NativeIntakeHandler />);
+  await screen.findByText("sharedTrip");
+  fireEvent.click(screen.getByText("open"));
+  await screen.findByText("tripBikeRequirement");
+  expect(travel.resolve).not.toHaveBeenCalled();
+  expect(f.complete).not.toHaveBeenCalled();
+  expect(useDirectionsStore.getState()).toMatchObject({
+    transitAccessMode: "bike",
+    requireBikeTransport: true,
+  });
 });
 it("rechecks native authority after resolving and retains the share on a navigation race", async () => {
   const { dbNavigatorExamples } = await import(
@@ -314,16 +342,16 @@ it("rechecks native authority after resolving and retains the share on a navigat
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   travel.resolve.mockImplementation(async () => {
     f.mutating = true;
-    return travel.result;
+    return travelResult;
   });
   render(<NativeIntakeHandler />);
-  await screen.findByText("DB Navigator");
+  await screen.findByText("sharedTrip");
   fireEvent.click(screen.getByText("open"));
   await screen.findByText("deferred");
   expect(f.complete).not.toHaveBeenCalled();
-  expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
 });
-it("cancel aborts a pending travel-plan lookup without consuming content", async () => {
+it("Later cancels a pending travel-plan lookup without consuming content", async () => {
   const { dbNavigatorExamples } = await import(
     "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
   );
@@ -339,10 +367,10 @@ it("cancel aborts a pending travel-plan lookup without consuming content", async
     return new Promise(() => {});
   });
   render(<NativeIntakeHandler />);
-  await screen.findByText("DB Navigator");
+  await screen.findByText("sharedTrip");
   fireEvent.click(screen.getByText("open"));
-  await screen.findByText("resolvingTrip");
-  fireEvent.click(screen.getByText("cancelTrip"));
+  await screen.findByText("loading");
+  fireEvent.click(screen.getByText("later"));
   expect(signal?.aborted).toBe(true);
   expect(f.complete).not.toHaveBeenCalled();
 });
@@ -360,11 +388,11 @@ it("an unavailable exact trip retains the input and can be retried", async () =>
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   travel.resolve.mockRejectedValueOnce(new TravelPlanResolutionError("not-found"));
   render(<NativeIntakeHandler />);
-  await screen.findByText("DB Navigator");
+  await screen.findByText("sharedTrip");
   fireEvent.click(screen.getByText("open"));
   await screen.findByText("tripUnavailable");
   expect(f.complete).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("tripText")).toHaveValue(dbNavigatorExamples[0]);
+  expect(screen.queryByLabelText("tripText")).toBeNull();
   fireEvent.click(screen.getByText("open"));
   await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
 });
@@ -378,7 +406,7 @@ it("unmount aborts a lookup and prevents later publication or acknowledgement", 
     scheme: "openmapx",
   });
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
-  let finish: (value: typeof travel.result) => void = () => {};
+  let finish: (value: typeof travelResult) => void = () => {};
   travel.resolve.mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -386,12 +414,12 @@ it("unmount aborts a lookup and prevents later publication or acknowledgement", 
       }),
   );
   const view = render(<NativeIntakeHandler />);
-  await screen.findByText("DB Navigator");
+  await screen.findByText("sharedTrip");
   fireEvent.click(screen.getByText("open"));
-  await screen.findByText("resolvingTrip");
+  await screen.findByText("loading");
   view.unmount();
-  await act(async () => finish(travel.result));
-  expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
+  await act(async () => finish(travelResult));
+  expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
   expect(f.complete).not.toHaveBeenCalled();
 });
 it("a URL-only DB share is editable but cannot become a location search", async () => {

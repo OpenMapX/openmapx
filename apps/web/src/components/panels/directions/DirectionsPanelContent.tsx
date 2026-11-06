@@ -8,7 +8,6 @@ import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -165,8 +164,8 @@ export function DirectionsPanelContent() {
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const {
     isOpen,
-    importedTransitTrip,
-    clearImportedTransitTrip,
+    transitTimeMode,
+    setTransitTimeMode,
     waypoints,
     mode,
     isEvMode,
@@ -274,13 +273,6 @@ export function DirectionsPanelContent() {
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
   const [transitDetailsIndex, setTransitDetailsIndex] = useState<number | null>(null);
-  const [transitTimeMode, setTransitTimeMode] = useState<"now" | "depart" | "arrive">("now");
-  useEffect(() => {
-    if (importedTransitTrip) {
-      setTransitDetailsIndex(0);
-      setTransitTimeMode("depart");
-    } else setTransitDetailsIndex(null);
-  }, [importedTransitTrip]);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   // Driving depart/arrive is kept independent of the transit time state so the
   // two flows never interfere.
@@ -293,13 +285,17 @@ export function DirectionsPanelContent() {
   const requestFix = useForegroundLocation();
   useEffect(() => {
     if (!isOpen) return;
+    const requestedOrigin = useDirectionsStore.getState().waypoints[0];
+    if (!requestedOrigin || requestedOrigin.coords !== null) return;
 
     let active = true;
     // Through the adapter, so the installed shell answers from the one location
     // producer it already owns rather than opening a second one.
     void requestFix({ maxAgeMs: 0 }).then((result) => {
       if (!active || result.status !== "ok") return;
-      if (!useDirectionsStore.getState().isOpen) return;
+      const directions = useDirectionsStore.getState();
+      const origin = directions.waypoints[0];
+      if (!directions.isOpen || origin?.id !== requestedOrigin.id || origin.coords !== null) return;
       const location: LngLat = [result.fix.lng, result.fix.lat];
       useMapStore.getState().setUserLocation(location);
       setWaypoint(0, location, myLocationLabel);
@@ -597,6 +593,7 @@ export function DirectionsPanelContent() {
     replanOptions: transitReplanOptions,
     attributions: transitPlanAttributions,
     paging: transitPaging,
+    selectionToOpen: transitSelectionToOpen,
   } = useTransitDirectionsPlan({
     enabled: isTransitMode,
     timeMode: transitTimeMode,
@@ -613,6 +610,9 @@ export function DirectionsPanelContent() {
     bikeHillPreference,
     deutschlandticketOnly,
   });
+  useEffect(() => {
+    if (transitSelectionToOpen) setTransitDetailsIndex(transitSelectionToOpen.index);
+  }, [transitSelectionToOpen]);
   const { data: transitChainData } = transitChainQuery;
   const {
     data: transitPlanData,
@@ -908,27 +908,6 @@ export function DirectionsPanelContent() {
   if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
     return (
       <AttributionDetailsGroup placement="footer" label={tc("dataSources")}>
-        {importedTransitTrip && (
-          <Alert
-            severity="info"
-            sx={{ m: 1 }}
-            action={
-              <Button
-                onClick={() => {
-                  clearImportedTransitTrip();
-                  setTransitDetailsIndex(null);
-                }}
-              >
-                {t("importedAlternatives")}
-              </Button>
-            }
-          >
-            {t("importedTrip", { source: importedTransitTrip.plan.sourceLabel })}
-            {importedTransitTrip.schematic && (
-              <Typography variant="body2">{t("importedSchematic")}</Typography>
-            )}
-          </Alert>
-        )}
         <TransitDetailsView
           itinerary={transitItineraries[transitDetailsIndex]}
           isLowestCo2={

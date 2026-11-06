@@ -19,13 +19,17 @@ export {
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
 export { fetchGeocode, type GeocodeParams } from "../api/geocoding";
 export {
+  fetchReferencedTransitPlan,
   fetchTransitPlan,
   fetchTransitStopArea,
   fetchVehicleJourney,
   refreshTransitItinerary,
   type TransitPlanParams,
+  type TransitPlanQuery,
+  type TransitReferenceParams,
   type TransitRefreshResult,
   type TransitStopAreaRequest,
+  transitPlanQueryKey,
   type VehicleJourneyParams,
 } from "../api/transit";
 export {

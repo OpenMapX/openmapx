@@ -455,6 +455,8 @@ export {
   TRAFFIC_BAND_COLORS,
   type TrafficBand,
 } from "./trafficSeverity";
+export { transitItineraryKey } from "./transitItineraryKey";
+export { itineraryMatchesTransitReference } from "./transitTripReference";
 export { type UrlWithoutCredentials, urlCredentialsAsBasicAuth } from "./url-credentials";
 export {
   contactDomain,

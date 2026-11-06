@@ -1,9 +1,13 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
-import type {
-  TransitAccessMode,
-  TransitPreferKey,
-  TransitRoutePreference,
+import { type TransitReferenceParams, transitPlanQueryKey } from "../api/transit";
+import {
+  rankItineraries,
+  TRANSIT_PREFER_MOTIS_MODES,
+  TRANSIT_PREFER_OPTIONS,
+  type TransitAccessMode,
+  type TransitPreferKey,
+  type TransitRoutePreference,
 } from "../constants/transit";
 import { getStorage } from "../platform/storage";
 import {
@@ -14,9 +18,9 @@ import {
   isBikeSpeedKmh,
 } from "../routing/bicycleOptions";
 import type { ResolvedTravelPlan } from "../travel-plans/resolve";
-import type { SharedTravelPlan } from "../travel-plans/types";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
+import { transitItineraryKey } from "../utils/transitItineraryKey";
 
 // Route-avoidance defaults persist so a chosen preference (also editable in the
 // nav settings screen) applies to every route rather than resetting each session.
@@ -70,6 +74,11 @@ function hasWindow(schedule: WaypointSchedule | undefined): boolean {
   );
 }
 
+export interface PendingTransitSelection {
+  requestKey: string;
+  itineraryKey: string;
+}
+
 export interface DirectionsState {
   isOpen: boolean;
   waypoints: Waypoint[];
@@ -117,9 +126,13 @@ export interface DirectionsState {
   avoidTolls: boolean;
   avoidFerries: boolean;
   transitItineraries: TripItinerary[];
-  importedTransitTrip: { plan: SharedTravelPlan; schematic: boolean } | null;
-  openImportedTransitTrip: (plan: SharedTravelPlan, result: ResolvedTravelPlan) => void;
-  clearImportedTransitTrip: () => void;
+  transitTimeMode: "now" | "depart" | "arrive";
+  transitReference: TransitReferenceParams | null;
+  pendingTransitSelection: PendingTransitSelection | null;
+  openTransitSelection: (result: ResolvedTravelPlan) => boolean;
+  completeTransitSelection: (expected: PendingTransitSelection) => boolean;
+  cancelTransitSelection: (expected: PendingTransitSelection) => boolean;
+  setTransitTimeMode: (mode: "now" | "depart" | "arrive") => void;
   activeItineraryIndex: number;
   transitDepartureTime: "now" | Date;
   transitArrivalTime: Date | null;
@@ -179,7 +192,7 @@ export interface DirectionsState {
   setAvoidFerries: (v: boolean) => void;
   /** Re-read the persisted route-avoidance defaults (storage may configure late). */
   hydrateRoutePrefs: () => void;
-  setTransitItineraries: (items: TripItinerary[]) => void;
+  setTransitItineraries: (items: TripItinerary[], requestKey?: string) => void;
   setActiveItineraryIndex: (i: number) => void;
   setTransitDepartureTime: (t: "now" | Date) => void;
   setTransitArrivalTime: (t: Date | null) => void;
@@ -207,13 +220,14 @@ function initialWaypoints(): Waypoint[] {
 
 export const useDirectionsStore = create<DirectionsState>((set, get) => {
   const initWps = initialWaypoints();
-  // Routing edits release the fixed import; ordinary UI state changes do not.
+  // A route edit releases an exact provider reference and an unconsumed handoff.
   const routingKeys = new Set([
     "waypoints",
     "mode",
     "isEvMode",
     "timeMode",
     "tripTime",
+    "transitTimeMode",
     "transitDepartureTime",
     "transitArrivalTime",
     "transitPreferredModes",
@@ -228,10 +242,17 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
   ]);
   const update = (patch: Partial<DirectionsState>) => {
     const release =
-      get().importedTransitTrip && Object.keys(patch).some((key) => routingKeys.has(key));
+      (get().pendingTransitSelection || get().transitReference) &&
+      Object.keys(patch).some((key) => routingKeys.has(key));
     set(
       release
-        ? { ...patch, importedTransitTrip: null, transitItineraries: [], activeItineraryIndex: 0 }
+        ? {
+            ...patch,
+            pendingTransitSelection: null,
+            transitReference: null,
+            transitItineraries: [],
+            activeItineraryIndex: 0,
+          }
         : patch,
     );
   };
@@ -251,7 +272,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
     avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
     transitItineraries: [],
-    importedTransitTrip: null,
+    transitTimeMode: "now",
+    transitReference: null,
+    pendingTransitSelection: null,
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
     transitArrivalTime: null,
@@ -265,39 +288,107 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     ...readBikePrefs(),
     deutschlandticketOnly: false,
 
-    openImportedTransitTrip: (plan, result) => {
-      const first = result.itinerary.legs[0],
-        last = result.itinerary.legs.at(-1);
-      if (!first || !last) return;
+    openTransitSelection: (result) => {
+      const params = result.query.params;
+      const current = get();
+      // This station-to-station handoff uses walking access. Keep a mandatory
+      // bike requirement visible in the existing bike session, without dropping it.
+      if (params.requireBikeTransport || current.requireBikeTransport) return false;
+      if (
+        Boolean(params.wheelchairRequired) !== current.wheelchairRequired ||
+        Boolean(params.requireBikeTransport) !== current.requireBikeTransport ||
+        (params.bikeHillPreference ?? "default") !== current.bikeHillPreference
+      )
+        return false;
+      const wanted = new Set(params.modes ?? []);
+      const preferred = TRANSIT_PREFER_OPTIONS.filter((key) =>
+        TRANSIT_PREFER_MOTIS_MODES[key].every((mode) => wanted.has(mode)),
+      );
+      const represented = new Set(preferred.flatMap((key) => TRANSIT_PREFER_MOTIS_MODES[key]));
+      if (wanted.size && represented.size !== wanted.size) return false;
+      if (
+        result.query.kind === "search" &&
+        ((result.query.params.numItineraries ?? 3) !== 3 ||
+          result.query.params.deutschlandticketOnly ||
+          result.query.params.preTransitModes?.length ||
+          result.query.params.postTransitModes?.length ||
+          result.query.params.directModes?.length)
+      )
+        return false;
+      const itineraries = rankItineraries([...result.plan.data.itineraries], "best");
+      const index = itineraries.findIndex(
+        (item) =>
+          transitItineraryKey(item, result.plan.data.provider) === result.selectedItineraryKey,
+      );
+      const selected = itineraries[index];
+      if (!selected) return false;
+      const transit = selected.legs.filter((leg) => leg.tripId || leg.route);
+      const first = transit[0]?.from,
+        last = transit.at(-1)?.to;
+      if (!first || !last) return false;
+      const origin =
+        result.query.kind === "search"
+          ? result.query.params.origin
+          : ([result.plan.data.from.lng, result.plan.data.from.lat] as LngLat);
+      const destination =
+        result.query.kind === "search"
+          ? result.query.params.destination
+          : ([result.plan.data.to.lng, result.plan.data.to.lat] as LngLat);
+      const anchor =
+        result.query.kind === "search"
+          ? result.query.params.time
+          : new Date(
+              Date.parse(result.query.params.reference.legs[0].scheduledDeparture) - 120000,
+            ).toISOString();
+      const time = new Date(anchor);
+      if (!Number.isFinite(time.getTime())) return false;
       set({
         isOpen: true,
         mode: "transit",
         isEvMode: false,
-        timeMode: "depart",
-        tripTime: new Date(first.scheduledStartTime ?? first.startTime),
-        waypoints: deriveTypes([
-          {
-            id: newWaypointId(),
-            coords: [first.from.lng, first.from.lat],
-            label: plan.origin,
-            type: "origin",
-          },
-          {
-            id: newWaypointId(),
-            coords: [last.to.lng, last.to.lat],
-            label: plan.destination,
-            type: "destination",
-          },
-        ]),
-        transitDepartureTime: new Date(first.scheduledStartTime ?? first.startTime),
+        transitTimeMode: "depart",
+        transitDepartureTime: time,
         transitArrivalTime: null,
-        transitItineraries: [result.itinerary],
-        activeItineraryIndex: 0,
-        importedTransitTrip: { plan, schematic: result.schematic },
+        waypoints: deriveTypes([
+          { id: newWaypointId(), coords: origin, label: first.name, type: "origin" },
+          { id: newWaypointId(), coords: destination, label: last.name, type: "destination" },
+        ]),
+        transitItineraries: itineraries,
+        activeItineraryIndex: index,
+        transitPreferredModes: preferred,
+        transitRoutePreference: "best",
+        transitAccessMode: "walk",
+        maxTransfers:
+          result.query.kind === "search" ? (result.query.params.maxTransfers ?? null) : null,
+        transferBuffer:
+          result.query.kind === "search"
+            ? (result.query.params.transferBuffer ?? "standard")
+            : "standard",
+        deutschlandticketOnly: false,
+        transitReference: result.query.kind === "reference" ? result.query.params : null,
+        pendingTransitSelection: {
+          requestKey: JSON.stringify(transitPlanQueryKey(result.query)),
+          itineraryKey: result.selectedItineraryKey,
+        },
       });
+      return true;
     },
-    clearImportedTransitTrip: () =>
-      set({ importedTransitTrip: null, transitItineraries: [], activeItineraryIndex: 0 }),
+    completeTransitSelection: (expected) => {
+      if (get().pendingTransitSelection !== expected) return false;
+      set({ pendingTransitSelection: null });
+      return true;
+    },
+    cancelTransitSelection: (expected) => {
+      if (get().pendingTransitSelection !== expected) return false;
+      set({
+        pendingTransitSelection: null,
+        transitReference: null,
+        transitItineraries: [],
+        activeItineraryIndex: 0,
+      });
+      return true;
+    },
+    setTransitTimeMode: (mode) => update({ transitTimeMode: mode }),
     open: () => update({ isOpen: true }),
     close: () => {
       const wps = initialWaypoints();
@@ -313,6 +404,9 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         evForceNonExclusive: false,
         transitItineraries: [],
         activeItineraryIndex: 0,
+        transitTimeMode: "now" as const,
+        transitReference: null,
+        pendingTransitSelection: null,
         transitDepartureTime: "now" as const,
         transitArrivalTime: null,
         transitPreferredModes: [],
@@ -441,8 +535,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
         avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
       }),
-    setTransitItineraries: (transitItineraries) => {
-      if (!get().importedTransitTrip) update({ transitItineraries, activeItineraryIndex: 0 });
+    setTransitItineraries: (transitItineraries, requestKey) => {
+      if (get().pendingTransitSelection && get().pendingTransitSelection?.requestKey !== requestKey)
+        return;
+      update({ transitItineraries, activeItineraryIndex: 0 });
     },
     setActiveItineraryIndex: (activeItineraryIndex) => update({ activeItineraryIndex }),
     setTransitDepartureTime: (transitDepartureTime) => update({ transitDepartureTime }),

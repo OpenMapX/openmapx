@@ -1349,10 +1349,7 @@
     "bikeSpeedKmh": "{speed} km/h",
     "bikeSpeedMph": "{speed} mph",
     "bikeSpeedHint": "Deine Geschwindigkeit auf ebenen, befestigten Straßen. Steigungen und Oberflächen beeinflussen die Schätzung.",
-    "bikePreferencesHint": "Präferenzen beeinflussen die Routenwahl. Straßenzustand und Verkehr können abweichen.",
-    "importedTrip": "Geteilt aus {source}. Aktuelle Angaben sind eine Momentaufnahme beim Import. Umsteigewege im Bahnhof wurden nicht geprüft.",
-    "importedSchematic": "Die Karte verbindet bekannte Halte und zeigt nicht den genauen Gleisverlauf.",
-    "importedAlternatives": "Alternativen suchen"
+    "bikePreferencesHint": "Präferenzen beeinflussen die Routenwahl. Straßenzustand und Verkehr können abweichen."
   },
   "openingHours": {
     "source": "Quelle",
@@ -2666,14 +2663,13 @@
       "listingUnavailable": "Geteilte Inhalte sind vorübergehend nicht verfügbar. Versuche es erneut; die Inhalte bleiben erhalten.",
       "retry": "Erneut prüfen",
       "sharedLocation": "Geteilter Ort",
-      "tripHelp": "OpenMapX prüft jeden geteilten Zug anhand der aktivierten Fahrplanquellen. Es wird nicht automatisch ein anderer Zug ausgewählt.",
       "tripMissingText": "Teile den vollständigen Verbindungstext aus DB Navigator mit Datum, Zügen und Zeiten. Ein Buchungslink allein identifiziert hier keine Reise.",
       "tripInvalid": "Dieser Verbindungstext ist unvollständig oder hat ein nicht unterstütztes Format. Prüfe Datum und Zugabschnitte oder teile die vollständige Verbindung erneut.",
       "tripUnavailable": "Die genaue Verbindung konnte nicht bestätigt werden. Für dieses Datum sind möglicherweise keine Fahrplandaten verfügbar. Die geteilte Verbindung bleibt für einen erneuten Versuch erhalten.",
       "tripAmbiguous": "Mehrere Bahnhöfe oder Züge passen zu dieser Verbindung. OpenMapX behält die geteilte Verbindung, statt eine davon auszuwählen.",
       "tripText": "Geteilter Verbindungstext",
-      "resolvingTrip": "Genaue Verbindung wird geprüft…",
-      "cancelTrip": "Suche abbrechen"
+      "sharedTrip": "Geteilte Verbindung",
+      "tripBikeRequirement": "Diese geteilte Verbindung verwendet Fußwege. Deaktiviere „Fahrrad mitnehmen“ in den Routenoptionen und versuche es erneut. Deine Freigabe und die aktuelle Fahrradroute bleiben erhalten."
     }
   },
   "offline": {

@@ -3,10 +3,10 @@ import {
   captureResultContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
-import type { Departure, GeoJSONLineString, TransitStop } from "@openmapx/mobility-core/transit";
+import type { Departure, TransitStop } from "@openmapx/mobility-core/transit";
 import { type ApiClient, apiClient, isApiClientError } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import { fetchVehicleJourney } from "../api/transit";
+import { fetchReferencedTransitPlan, fetchTransitPlan, fetchVehicleJourney } from "../api/transit";
 import { haversineDistance } from "../utils/coordinates";
 import { type TravelPlanPort, TravelPlanResolutionError } from "./resolve";
 import { travelStationKey } from "./types";
@@ -35,7 +35,11 @@ export function createTravelPlanPort(client: ApiClient = apiClient): TravelPlanP
       // A partial global name search is discovery, never proof of a train. Corroborate
       // its geographic anchor with the selected baseline's nearby rail-stop surface.
       const anchors = envelope.data.filter(
-        (s) => s.modes.includes("rail") && travelStationKey(s.name) === travelStationKey(name),
+        // MOTIS name search can omit modes. It is only an anchor; nearby rail
+        // stops and the dated board/journey still supply the identity evidence.
+        (s) =>
+          (!s.modes.length || s.modes.includes("rail")) &&
+          travelStationKey(s.name) === travelStationKey(name),
       );
       if (!anchors.length) return [];
       const first = anchors[0];
@@ -51,7 +55,9 @@ export function createTravelPlanPort(client: ApiClient = apiClient): TravelPlanP
           ...record,
           contributors: captureResultContributors(record, envelope.attributions),
         })),
-        ...records(nearby),
+        ...records(nearby).filter(
+          (s) => haversineDistance([first.lng, first.lat], [s.lng, s.lat]) <= 1500,
+        ),
       ].filter((s) => travelStationKey(s.name) === travelStationKey(name));
     },
     async departures(stopId, time, signal) {
@@ -59,7 +65,7 @@ export function createTravelPlanPort(client: ApiClient = apiClient): TravelPlanP
         return records(
           await client.get<MobilityEnvelope<Departure[]>>(
             API_ENDPOINTS.transitDepartures.replace(":id", encodeURIComponent(stopId)),
-            { time, minutes: "5" },
+            { time, minutes: "60" },
             options(signal),
           ),
         );
@@ -76,22 +82,20 @@ export function createTravelPlanPort(client: ApiClient = apiClient): TravelPlanP
         contributors: captureResultContributors(journey, envelope.attributions),
       };
     },
-    async geometry(tripId, from, to, signal) {
+    async plan(params, signal) {
       try {
-        const envelope = await client.get<MobilityEnvelope<GeoJSONLineString>>(
-          API_ENDPOINTS.transitLegGeometry,
-          { trip_id: tripId, from_stop_id: from, to_stop_id: to },
-          options(signal),
-        );
-        const geometry = data(envelope);
-        return {
-          ...geometry,
-          contributors: captureResultContributors(geometry, envelope.attributions),
-        };
+        const envelope = await fetchTransitPlan(params, client, options(signal));
+        data(envelope);
+        return envelope;
       } catch (error) {
-        if (isApiClientError(error) && error.status === 404) return null;
+        if (isApiClientError(error) && error.status === 503) return null;
         throw error;
       }
+    },
+    async resolveTrip(params, signal) {
+      const envelope = await fetchReferencedTransitPlan(params, client, options(signal));
+      data(envelope);
+      return envelope;
     },
   };
 }

@@ -1,4 +1,9 @@
-import type { Departure, TransitStop, VehicleJourney } from "@openmapx/mobility-core/transit";
+import type {
+  Departure,
+  TransitStop,
+  TripItinerary,
+  VehicleJourney,
+} from "@openmapx/mobility-core/transit";
 import { describe, expect, it, vi } from "vitest";
 import { dbNavigatorExamples } from "./__fixtures__/dbNavigator";
 import { parseSharedTravelPlan } from "./index";
@@ -51,26 +56,70 @@ function fixture(text = dbNavigatorExamples[0]) {
       },
     ],
   }));
+  const providerTrip: TripItinerary = {
+    id: "provider-plan",
+    source: "transit-motis-local",
+    instance: "ms",
+    datasetEpoch: "epoch-1",
+    startTime: iso(plan.legs[0].departure),
+    endTime: iso(plan.legs.at(-1)?.arrival ?? ""),
+    duration: 3180,
+    transfers: plan.legs.length - 1,
+    walkDistance: 0,
+    legs: plan.legs.map((l, i) => ({
+      mode: "rail",
+      tripId: departures[i].tripId,
+      tripShortName: l.trainNumber,
+      from: { ...stop(l.from), stopId: stop(l.from).id },
+      to: { ...stop(l.to), stopId: stop(l.to).id },
+      route: departures[i].route,
+      startTime: iso(l.departure),
+      endTime: iso(l.arrival),
+      scheduledStartTime: iso(l.departure),
+      scheduledEndTime: iso(l.arrival),
+      cancelled: false,
+      geometry: { type: "LineString", coordinates: [positions[l.from], positions[l.to]] },
+    })),
+  };
+  const providerPlan = () => ({
+    data: {
+      from: stop(plan.origin),
+      to: stop(plan.destination),
+      itineraries: [providerTrip],
+      provider: "ms",
+      datasetEpoch: "epoch-1",
+    },
+    attributions: [],
+    freshness: { fetchedAt: "2026-11-06T19:00:00Z", isStale: false, hasRealtimeData: true },
+  });
   const port: TravelPlanPort = {
     searchStops: vi.fn(async (name) => [stop(name)]),
     departures: vi.fn(async (id) => departures.filter((d) => d.stop?.id === id)),
-    journey: vi.fn(async (id) => journeys.find((j) => j.id === id)!),
-    geometry: vi.fn(async () => null),
+    journey: vi.fn(async (id) => {
+      const journey = journeys.find((j) => j.id === id);
+      if (!journey) throw new Error("Missing fixture journey");
+      return journey;
+    }),
+    plan: vi.fn(async () => providerPlan()),
+    resolveTrip: vi.fn(async () => providerPlan()),
   };
-  return { plan, port, departures, journeys, stop };
+  return { plan, port, departures, journeys, stop, providerTrip };
 }
 describe("explicit shared trip resolution", () => {
   it.each(dbNavigatorExamples)(
-    "resolves every supplied exact train sequence without Pareto planning",
+    "selects the exact provider train sequence for every supplied share",
     async (text) => {
       const f = fixture(text);
       const result = await resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal);
-      expect(result.itinerary.legs.map((l) => l.tripShortName)).toEqual(
+      expect(result.plan.data.itineraries[0].legs.map((l) => l.tripShortName)).toEqual(
         f.plan.legs.map((l) => l.trainNumber),
       );
-      expect(result.itinerary.legs.map((l) => l.tripId)).toEqual(f.departures.map((d) => d.tripId));
-      expect(result.itinerary.refreshToken).toBeUndefined();
-      expect(result.schematic).toBe(true);
+      expect(result.plan.data.itineraries[0].legs.map((l) => l.tripId)).toEqual(
+        f.departures.map((d) => d.tripId),
+      );
+      expect(result.plan.data.itineraries[0].refreshToken).toBeUndefined();
+      expect(result.query.kind).toBe("search");
+      expect(result.plan.data.itineraries[0]).toBe(f.providerTrip);
       expect(f.port.departures).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringContaining("2026-11-"),
@@ -103,14 +152,19 @@ describe("explicit shared trip resolution", () => {
     f.journeys[0].stops[0].expectedDeparture = "2026-11-06T20:23:00Z";
     f.journeys[0].stops[0].platform = "5";
     f.journeys[0].stops[0].scheduledPlatform = "3";
+    f.providerTrip.legs[0].cancelled = true;
+    f.providerTrip.legs[0].startTime = "2026-11-06T20:23:00Z";
+    f.providerTrip.legs[0].from.platformCode = "5";
+    f.providerTrip.legs[0].from.scheduledPlatformCode = "3";
+    f.providerTrip.contributors = f.departures[0].contributors;
     const result = await resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal);
-    expect(result.itinerary.legs[0]).toMatchObject({
+    expect(result.plan.data.itineraries[0].legs[0]).toMatchObject({
       cancelled: true,
       startTime: "2026-11-06T20:23:00Z",
       scheduledStartTime: "2026-11-06T20:18:00.000Z",
       from: { platformCode: "5", scheduledPlatformCode: "3" },
     });
-    expect(result.itinerary.contributors).toEqual(f.departures[0].contributors);
+    expect(result.plan.data.itineraries[0].contributors).toEqual(f.departures[0].contributors);
   });
   it("rejects distinct matching trips but deduplicates identical board rows", async () => {
     const f = fixture();
@@ -176,7 +230,7 @@ it("settles the overall deadline even if an acquisition ignores its abort signal
   vi.useFakeTimers();
   try {
     const f = fixture();
-    f.port.searchStops = vi.fn(() => new Promise(() => {}));
+    f.port.searchStops = vi.fn(() => new Promise<TransitStop[]>(() => {}));
     const pending = resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal);
     const assertion = expect(pending).rejects.toMatchObject({ code: "unavailable" });
     await vi.advanceTimersByTimeAsync(60001);
@@ -184,4 +238,45 @@ it("settles the overall deadline even if an acquisition ignores its abort signal
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("queries a parent station once even when discovery returns more than four platform children", async () => {
+  const f = fixture();
+  f.port.searchStops = vi.fn(async (name) => [
+    f.stop(name),
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...f.stop(name),
+      id: `ms:platform-${name}-${i}`,
+      parentStationId: f.stop(name).id,
+    })),
+  ]);
+  await expect(
+    resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal),
+  ).resolves.toBeDefined();
+  expect(f.port.departures).toHaveBeenCalledTimes(1);
+});
+it("accepts bounded colocated platform/feed records when the provider omits parent links", async () => {
+  const f = fixture();
+  f.port.searchStops = vi.fn(async (name) =>
+    Array.from({ length: 20 }, (_, i) => ({
+      ...f.stop(name),
+      id: i === 0 ? f.stop(name).id : `ms:alias-${name}-${i}`,
+    })),
+  );
+  await expect(
+    resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal),
+  ).resolves.toBeDefined();
+  expect(f.port.departures).toHaveBeenCalledTimes(20);
+});
+it("a skipped intermediate stop does not cancel the ridden leg", async () => {
+  const f = fixture();
+  f.journeys[0].stops.splice(1, 0, {
+    stopId: "ms:skip",
+    name: "Skipped",
+    lat: 50.8,
+    lng: 6.4,
+    canceled: true,
+  });
+  const result = await resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal);
+  expect(result.plan.data.itineraries[0].legs[0].cancelled).toBe(false);
 });

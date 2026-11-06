@@ -30,6 +30,7 @@ import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/r
 import type {
   GeoJSONLineString,
   TransitStop,
+  TransitTripResolveRequest,
   TripItinerary,
 } from "@openmapx/mobility-core/transit";
 import {
@@ -71,6 +72,13 @@ import {
 } from "./reachability.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
 import { parseStopAreaQuery, resolveStopArea, stopAreaCacheKey } from "./stop-area.js";
+import {
+  parseTripReferenceRequest,
+  TripReferenceEpochError,
+  TripReferenceUnavailableError,
+  TripReferenceUnsupportedError,
+  TripReferenceValidationError,
+} from "./trip-reference.js";
 
 /**
  * Strip the server-only `trace` field from a MobilityResult and return the
@@ -286,12 +294,29 @@ export function setup(ctx: IntegrationContext): void {
   const refreshTtlSeconds = 15 * 60;
 
   interface RefreshState {
+    kind?: "search";
     providerId: string;
     instance: string;
     datasetEpoch: string;
     requestFingerprint: string;
     itineraryId: string;
     request: TripPlanRequest;
+  }
+
+  interface ReferenceRefreshState {
+    kind: "reference";
+    request: TransitTripResolveRequest;
+  }
+
+  async function issueReferenceRefreshToken(
+    itinerary: TripItinerary,
+    request: TransitTripResolveRequest,
+  ): Promise<string | undefined> {
+    if (!isRefreshEligible(itinerary) || !refreshSecret) return undefined;
+    const id = randomUUID();
+    const state: ReferenceRefreshState = { kind: "reference", request };
+    await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
+    return signRefreshHandle(id, refreshSecret, Math.floor(Date.now() / 1000) + refreshTtlSeconds);
   }
 
   async function issueRefreshToken(
@@ -550,6 +575,10 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(501).send({ error: "This source does not support dated departure lookups" });
         return;
       }
+      if (error instanceof TripReferenceUnavailableError) {
+        reply.status(503).send({ error: "Transit timetable source unavailable" });
+        return;
+      }
       throw error;
     }
   });
@@ -692,7 +721,10 @@ export function setup(ctx: IntegrationContext): void {
     ]);
     const mergedAttrs = snapshotContributors(vehicles.attributions, alerts.attributions);
     const mergedFreshness: Freshness = {
-      fetchedAt: Math.min(vehicles.freshness.fetchedAt, alerts.freshness.fetchedAt),
+      fetchedAt:
+        vehicles.freshness.fetchedAt < alerts.freshness.fetchedAt
+          ? vehicles.freshness.fetchedAt
+          : alerts.freshness.fetchedAt,
       hasRealtimeData: vehicles.freshness.hasRealtimeData || alerts.freshness.hasRealtimeData,
       isStale: vehicles.freshness.isStale || alerts.freshness.isStale,
     };
@@ -919,6 +951,34 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(toEnvelope(planRes));
   });
 
+  // A provider reference is a distinct lookup, never an ordinary search-cache result.
+  ctx.registerRoute("POST", "/plan/resolve", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try {
+      const request = parseTripReferenceRequest(req.body);
+      const result = await orchestrator.resolveTrip(request);
+      if (!result.data) {
+        reply.status(404).send({ error: "The exact provider trip could not be resolved" });
+        return;
+      }
+      if (result.data.source === "transit-motis-local" && result.data.datasetEpoch) {
+        for (const itinerary of result.data.itineraries)
+          itinerary.refreshToken = await issueReferenceRefreshToken(itinerary, request);
+      }
+      reply.send(toEnvelope(result));
+    } catch (error) {
+      if (error instanceof TripReferenceValidationError)
+        reply.status(400).send({ error: error.message });
+      else if (error instanceof TripReferenceEpochError)
+        reply.status(409).send({ error: "Trip reference epoch changed" });
+      else if (error instanceof TripReferenceUnsupportedError)
+        reply.status(501).send({ error: "Exact trip reconstruction is unsupported" });
+      else if (error instanceof TripReferenceUnavailableError)
+        reply.status(503).send({ error: "Exact trip source unavailable" });
+      else throw error;
+    }
+  });
+
   /**
    * POST /plan/chain — a multi-stop transit trip planned around per-waypoint
    * time windows and dwell. One `planTrip` call per segment; no paging, since a
@@ -982,12 +1042,38 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const cacheKey = `transit-refresh:${handle.id}`;
-    const state = await ctx.cache.get<RefreshState>(cacheKey);
+    const state = await ctx.cache.get<RefreshState | ReferenceRefreshState>(cacheKey);
     if (!state) {
       reply.status(409).send({ error: "Itinerary refresh state expired" });
       return;
     }
     await ctx.cache.del(cacheKey);
+
+    if (state.kind === "reference") {
+      try {
+        // A reference refresh must never fall back to the first search result.
+        const exact = await orchestrator.resolveTrip(state.request);
+        const itinerary = exact.data?.itineraries[0];
+        if (!itinerary) {
+          reply.status(409).send({ error: "The exact trip can no longer be refreshed" });
+          return;
+        }
+        itinerary.refreshToken = await issueReferenceRefreshToken(itinerary, state.request);
+        reply.send(
+          envelope({ itinerary, fallbackOccurred: false }, exact.attributions, exact.freshness),
+        );
+      } catch (error) {
+        if (
+          error instanceof TripReferenceEpochError ||
+          error instanceof TripReferenceUnavailableError ||
+          error instanceof TripReferenceUnsupportedError ||
+          error instanceof TripReferenceValidationError
+        )
+          reply.status(409).send({ error: "The exact trip can no longer be refreshed" });
+        else throw error;
+      }
+      return;
+    }
 
     const refreshed = await orchestrator.refreshTrip(state.providerId, {
       itineraryId: state.itineraryId,

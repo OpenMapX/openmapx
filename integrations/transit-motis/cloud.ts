@@ -14,6 +14,7 @@ import {
   resolveMotisReachabilityCapabilities,
 } from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
+import { resolveMotisTrip, supportsStructuredTripResolution } from "./resolve-trip.js";
 
 function wrapTransitous<T>(data: T, receipts = attributionTransitous()) {
   return withAttribution(captureTransitContributors(data, receipts), receipts, freshnessNow());
@@ -37,7 +38,10 @@ function withPrefix(id: string, prefix: "mo:"): string {
  * Route patterns, the stop timetable and trip refresh are bound to a local
  * dataset epoch and have no Transitous equivalent.
  */
-function primaryOperations(transitousInstance: MotisInstance): Partial<TransitProvider> {
+function primaryOperations(
+  ctx: IntegrationContext,
+  transitousInstance: MotisInstance,
+): Partial<TransitProvider> {
   const hostedReachability = () =>
     resolveMotisReachabilityCapabilities({
       source: "transitous",
@@ -45,6 +49,14 @@ function primaryOperations(transitousInstance: MotisInstance): Partial<TransitPr
       operatorEnabled: false,
     });
   return {
+    async resolveTrip(params) {
+      return wrapTransitousRT(
+        await resolveMotisTrip(transitousInstance, params, {
+          useRoutedTransfers: true,
+          http: ctx.http,
+        }),
+      );
+    },
     async getStopsNearby(lat, lng, radiusMeters) {
       const deg = radiusMeters / 111_320;
       return wrapTransitous(
@@ -173,6 +185,9 @@ export function setupCloud(
         detailedTransfers: true,
         paging: true,
         refresh: false,
+        get resolveTrip() {
+          return primary && supportsStructuredTripResolution(transitousInstance);
+        },
       },
       vehiclePositions: false,
       vehicleJourney: true,
@@ -259,6 +274,6 @@ export function setupCloud(
     async getVehicleJourney(tripId) {
       return wrapTransitousRT(await motis.getTrip(transitousInstance, withPrefix(tripId, "mo:")));
     },
-    ...(primary ? primaryOperations(transitousInstance) : {}),
+    ...(primary ? primaryOperations(ctx, transitousInstance) : {}),
   });
 }

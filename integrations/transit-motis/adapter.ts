@@ -346,6 +346,14 @@ export function normalizeStoptime(
   const platform = (place.track ?? place.scheduledTrack ?? undefined) as string | undefined;
   const scheduledPlatform = (place.scheduledTrack ?? undefined) as string | undefined;
   const lineName = motisLineName(st);
+  // GTFS-backed MOTIS can expose "RE9" as displayName and "010935" only
+  // in tripShortName. Keep the operational number distinct from the line.
+  const nativeNumber = st.tripShortName?.trim();
+  const trainNumber =
+    lineName.trainNumber ??
+    (motisMode(st.mode) === "rail" && /^\d{1,8}$/.test(nativeNumber ?? "")
+      ? nativeNumber?.replace(/^0+(?=\d)/, "")
+      : undefined);
 
   return {
     tripId: st.tripId ? `${instance.prefix}${st.tripId}` : "",
@@ -373,7 +381,7 @@ export function normalizeStoptime(
     platform,
     scheduledPlatform,
     canceled: st.cancelled || st.tripCancelled || false,
-    ...(lineName.trainNumber ? { serviceInfo: { trainNumber: lineName.trainNumber } } : {}),
+    ...(trainNumber ? { serviceInfo: { trainNumber } } : {}),
     // A station's board includes its platforms' stop times, each naming its own stop.
     ...(place.stopId && place.name
       ? { stop: { id: `${instance.prefix}${place.stopId}`, name: place.name } }
@@ -921,7 +929,7 @@ function mapLeg(instance: MotisInstance, leg: Leg, datasetEpoch?: string): TripL
 }
 
 /** Map a single MOTIS Itinerary to our TripItinerary. */
-function mapItinerary(
+export function mapItinerary(
   instance: MotisInstance,
   it: Itinerary,
   datasetEpoch?: string,

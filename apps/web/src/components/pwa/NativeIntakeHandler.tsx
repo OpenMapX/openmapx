@@ -12,6 +12,8 @@ import {
 } from "@mui/material";
 import {
   PANEL,
+  transitPlanningCapabilitiesQueryOptions,
+  transitPlanQueryKey,
   useDirectionsStore,
   useImportedGeometryStore,
   useNavigationStore,
@@ -23,6 +25,7 @@ import {
   resolveSharedTravelPlan,
   TravelPlanResolutionError,
 } from "@openmapx/core/navigation/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +39,7 @@ import { IntakeTransferError, NativeIntakeClient } from "@/lib/mobile/nativeInta
 /** User confirmation is the only path from owned inbox bytes to map state. */
 export function NativeIntakeHandler() {
   const t = useTranslations("pwa.intake");
+  const queryClient = useQueryClient();
   const runtime = useMobileRuntimeContext();
   const pathname = usePathname();
   const router = useRouter();
@@ -201,6 +205,7 @@ export function NativeIntakeHandler() {
     return () => abort.abort();
   }, [visible, selectedId, selectedKind, client]);
   function postpone() {
+    if (applyAbort.current) cancelApply();
     for (const item of items) later.current.add(item.id);
     setVisible(false);
   }
@@ -247,11 +252,33 @@ export function NativeIntakeHandler() {
       }
       let resolved: Awaited<ReturnType<typeof resolveSharedTravelPlan>> | undefined;
       if (selectedItem.kind === "text" && textIntent.kind === "travel-plan") {
+        if (useDirectionsStore.getState().requireBikeTransport) {
+          setError("trip-bike-requirement");
+          return;
+        }
+        const capabilities = await queryClient.ensureQueryData(
+          transitPlanningCapabilitiesQueryOptions(),
+        );
+        if (!fresh()) return;
+        const directions = useDirectionsStore.getState();
         resolved = await resolveSharedTravelPlan(
           textIntent.plan,
           createTravelPlanPort(),
           abort.signal,
+          {
+            wheelchairRequired: directions.wheelchairRequired,
+            requireBikeTransport: directions.requireBikeTransport,
+            bikeHillPreference: directions.bikeHillPreference,
+            capabilityEpoch:
+              capabilities.providers.find((p) => p.id === "transit-motis-local")?.metadata
+                ?.datasetEpoch || undefined,
+          },
         );
+        if (!fresh()) return;
+        await queryClient.cancelQueries({
+          queryKey: transitPlanQueryKey(resolved.query),
+          exact: true,
+        });
         if (!fresh()) return;
         // Resolution crossed an async boundary: native ownership/authority must be checked again.
         current = await client.list();
@@ -272,8 +299,10 @@ export function NativeIntakeHandler() {
           .setImported({ name: selectedItem.name, geojson: geometry });
       else if (selectedItem.kind === "text") {
         if (textIntent.kind === "travel-plan" && resolved) {
+          queryClient.setQueryData(transitPlanQueryKey(resolved.query), resolved.plan);
+          if (!useDirectionsStore.getState().openTransitSelection(resolved))
+            throw new TravelPlanResolutionError("unavailable");
           useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
-          useDirectionsStore.getState().openImportedTransitTrip(textIntent.plan, resolved);
         } else if (textIntent.kind === "map") {
           applyNativeDeepLink(textIntent, {
             replaceSearch: (query) => {
@@ -368,7 +397,12 @@ export function NativeIntakeHandler() {
       >
         {t("pending", { count: items.length })}
       </Button>
-      <Dialog open={visible} onClose={busy ? undefined : postpone} fullWidth maxWidth="sm">
+      <Dialog
+        open={visible}
+        onClose={busy && textIntent.kind !== "travel-plan" ? undefined : postpone}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>{t("title")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2}>
@@ -388,7 +422,9 @@ export function NativeIntakeHandler() {
               </TextField>
             )}
             <Typography sx={{ overflowWrap: "anywhere" }}>
-              {selectedItem?.kind === "text" ? t("sharedLocation") : selectedItem?.name}
+              {selectedItem?.kind === "text"
+                ? t(textIntent.kind === "travel-plan" ? "sharedTrip" : "sharedLocation")
+                : selectedItem?.name}
             </Typography>
             {waiting && <Alert severity="info">{t("deferred")}</Alert>}
             {items.some((item) => item.kind === "error") && selectedItem?.kind !== "error" && (
@@ -408,25 +444,11 @@ export function NativeIntakeHandler() {
                       "trip-ambiguous": "tripAmbiguous",
                       "trip-invalid": "tripInvalid",
                       "trip-unavailable": "tripUnavailable",
+                      "trip-bike-requirement": "tripBikeRequirement",
                     } as Record<string, string>
                   )[code] ?? "failed") as "failed",
                 )}
               </Alert>
-            )}
-            {textIntent.kind === "travel-plan" && selectedItem?.kind === "text" && !loading && (
-              <Stack spacing={1}>
-                <Typography sx={{ fontWeight: 600 }}>{textIntent.plan.sourceLabel}</Typography>
-                <Typography>
-                  {textIntent.plan.origin} → {textIntent.plan.destination}
-                </Typography>
-                {textIntent.plan.legs.map((leg) => (
-                  <Typography key={`${leg.trainNumber}-${leg.departure}`} variant="body2">
-                    {leg.service} ({leg.trainNumber}) · {leg.departure.replace("T", " ")} →{" "}
-                    {leg.arrival.replace("T", " ")}
-                  </Typography>
-                ))}
-                <Alert severity="info">{t("tripHelp")}</Alert>
-              </Stack>
             )}
             {textIntent.kind === "invalid-travel-plan" &&
               selectedItem?.kind === "text" &&
@@ -436,22 +458,18 @@ export function NativeIntakeHandler() {
                 </Alert>
               )}
             {busy && textIntent.kind === "travel-plan" && (
-              <Typography role="status">{t("resolvingTrip")}</Typography>
+              <Typography role="status">{t("loading")}</Typography>
             )}
-            {selectedItem?.kind === "text" && !loading && (
+            {selectedItem?.kind === "text" && textIntent.kind !== "travel-plan" && !loading && (
               <TextField
-                label={t(
-                  textIntent.kind === "travel-plan" || textIntent.kind === "invalid-travel-plan"
-                    ? "tripText"
-                    : "search",
-                )}
+                label={t(textIntent.kind === "invalid-travel-plan" ? "tripText" : "search")}
                 disabled={busy}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 multiline
                 slotProps={{ htmlInput: { maxLength: 4096 } }}
                 helperText={
-                  textIntent.kind === "travel-plan" || textIntent.kind === "invalid-travel-plan"
+                  textIntent.kind === "invalid-travel-plan"
                     ? undefined
                     : invalidText
                       ? t("editUnsupported")
@@ -479,13 +497,10 @@ export function NativeIntakeHandler() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ flexWrap: "wrap" }}>
-          {busy && textIntent.kind === "travel-plan" && (
-            <Button onClick={cancelApply}>{t("cancelTrip")}</Button>
-          )}
           <Button onClick={() => void discard()} disabled={busy}>
             {t("discard")}
           </Button>
-          <Button onClick={postpone} disabled={busy}>
+          <Button onClick={postpone} disabled={busy && textIntent.kind !== "travel-plan"}>
             {t("later")}
           </Button>
           {selectedItem?.kind !== "error" && (

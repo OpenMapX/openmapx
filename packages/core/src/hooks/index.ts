@@ -1,5 +1,6 @@
 export {
   resolvePrimaryTransitStopId,
+  transitPlanningCapabilitiesQueryOptions,
   useArrivals,
   useDepartures,
   useLinkedTransitAlerts,

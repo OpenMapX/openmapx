@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { transitPlanQueryKey } from "../api/transit";
+import { providerPlanSelection } from "../travel-plans/__fixtures__/providerPlan";
 import { MAX_DIRECTIONS_WAYPOINTS, useDirectionsStore } from "./directionsStore";
 
 function reset() {
@@ -185,64 +187,100 @@ describe("insertWaypoint", () => {
   });
 });
 
-describe("fixed imported transit connections", () => {
+describe("normal provider trip selection handoff", () => {
   beforeEach(reset);
-  const plan = {
-    sourceId: "test",
-    sourceLabel: "Test",
-    origin: "A",
-    destination: "B",
-    timeZone: "Europe/Berlin",
-    legs: [],
-  };
-  const itinerary = {
-    startTime: "2026-11-06T20:18:00Z",
-    endTime: "2026-11-06T21:11:00Z",
-    duration: 3180,
-    transfers: 0,
-    walkDistance: 0,
-    legs: [
-      {
-        mode: "rail" as const,
-        startTime: "2026-11-06T20:18:00Z",
-        endTime: "2026-11-06T21:11:00Z",
-        scheduledStartTime: "2026-11-06T20:18:00Z",
-        from: { name: "A", lat: 50, lng: 6 },
-        to: { name: "B", lat: 51, lng: 7 },
-        geometry: {
-          type: "LineString" as const,
-          coordinates: [
-            [6, 50],
-            [7, 51],
-          ] as [number, number][],
-        },
-      },
-    ],
-  };
-  it("opens endpoints and exact trip atomically and ignores stale planning publication", () => {
-    useDirectionsStore.getState().openImportedTransitTrip(plan, { itinerary, schematic: true });
+  const selection = () =>
+    providerPlanSelection({ bikeHillPreference: useDirectionsStore.getState().bikeHillPreference });
+  it("publishes provider endpoints and the normal trip without DB metadata", () => {
+    const result = selection();
+    expect(useDirectionsStore.getState().openTransitSelection(result)).toBe(true);
     const s = useDirectionsStore.getState();
     expect(s.mode).toBe("transit");
-    expect(s.isOpen).toBe(true);
-    expect(s.waypoints.map((w) => w.label)).toEqual(["A", "B"]);
-    expect(s.transitDepartureTime).toEqual(new Date(itinerary.startTime));
-    s.setTransitItineraries([]);
-    expect(useDirectionsStore.getState().transitItineraries).toEqual([itinerary]);
+    expect(s.transitTimeMode).toBe("depart");
+    expect(s.waypoints.map((w) => w.label)).toEqual(["Provider Aachen", "Provider Koeln"]);
+    expect(s.transitDepartureTime).toEqual(new Date("2026-11-06T20:16:00.000Z"));
+    expect(s.transitItineraries[0]).toBe(result.plan.data.itineraries[0]);
+    expect(s.pendingTransitSelection).toEqual({
+      requestKey: JSON.stringify(transitPlanQueryKey(result.query)),
+      itineraryKey: result.selectedItineraryKey,
+    });
+    expect("importedTransitTrip" in s).toBe(false);
   });
-  it.each(["waypoint", "mode", "time", "options", "close", "alternatives"])(
-    "releases the fixed trip on %s",
+  it("fences old publications only until the matching normal result is consumed", () => {
+    const result = selection();
+    useDirectionsStore.getState().openTransitSelection(result);
+    const pending = useDirectionsStore.getState().pendingTransitSelection;
+    if (!pending) throw new Error("missing handoff");
+    useDirectionsStore.getState().setTransitItineraries([], "old-query");
+    expect(useDirectionsStore.getState().transitItineraries).toHaveLength(1);
+    expect(useDirectionsStore.getState().completeTransitSelection(pending)).toBe(true);
+    useDirectionsStore.getState().setTransitItineraries([]);
+    expect(useDirectionsStore.getState().transitItineraries).toHaveLength(0);
+    expect(useDirectionsStore.getState().pendingTransitSelection).toBeNull();
+  });
+  it("does not consume a newer handoff with an old callback", () => {
+    const result = selection();
+    useDirectionsStore.getState().openTransitSelection(result);
+    const old = useDirectionsStore.getState().pendingTransitSelection;
+    if (!old) throw new Error("missing handoff");
+    useDirectionsStore.getState().openTransitSelection(result);
+    expect(useDirectionsStore.getState().completeTransitSelection(old)).toBe(false);
+    expect(useDirectionsStore.getState().pendingTransitSelection).not.toBeNull();
+  });
+  it.each(["waypoint", "mode", "time", "options", "close"])(
+    "releases the provider reference on %s",
     (action) => {
-      useDirectionsStore.getState().openImportedTransitTrip(plan, { itinerary, schematic: false });
+      const result = selection();
+      const leg = result.plan.data.itineraries[0].legs[0];
+      result.query = {
+        kind: "reference",
+        params: {
+          reference: {
+            datasetEpoch: "E",
+            legs: [
+              {
+                tripId: "ms:10935",
+                fromStopId: "ms:a",
+                toStopId: "ms:b",
+                scheduledDeparture: leg.scheduledStartTime ?? "",
+                scheduledArrival: leg.scheduledEndTime ?? "",
+              },
+            ],
+          },
+          bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
+        },
+      };
+      useDirectionsStore.getState().openTransitSelection(result);
+      expect(useDirectionsStore.getState().transitReference).not.toBeNull();
       const s = useDirectionsStore.getState();
       if (action === "waypoint") s.setWaypoint(0, [8, 52], "Edited");
       if (action === "mode") s.setMode("walking");
-      if (action === "time") s.setTransitDepartureTime("now");
+      if (action === "time") s.setTransitTimeMode("arrive");
       if (action === "options") s.setMaxTransfers(2);
       if (action === "close") s.close();
-      if (action === "alternatives") s.clearImportedTransitTrip();
-      expect(useDirectionsStore.getState().importedTransitTrip).toBeNull();
-      s.setTransitItineraries([]);
-      expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
+      expect(useDirectionsStore.getState().transitReference).toBeNull();
+      expect(useDirectionsStore.getState().pendingTransitSelection).toBeNull();
     },
   );
+  it("does not weaken an accessibility requirement that changed while resolving", () => {
+    const result = selection();
+    useDirectionsStore.getState().setWheelchairRequired(true);
+    expect(useDirectionsStore.getState().openTransitSelection(result)).toBe(false);
+    expect(useDirectionsStore.getState().isOpen).toBe(false);
+  });
+  it("retains bike access and its visible carriage requirement instead of hiding it in a walk query", () => {
+    const s = useDirectionsStore.getState();
+    s.setTransitAccessMode("bike");
+    s.setRequireBikeTransport(true);
+    const result = providerPlanSelection({
+      requireBikeTransport: true,
+      bikeHillPreference: s.bikeHillPreference,
+    });
+    expect(useDirectionsStore.getState().openTransitSelection(result)).toBe(false);
+    expect(useDirectionsStore.getState()).toMatchObject({
+      transitAccessMode: "bike",
+      requireBikeTransport: true,
+      isOpen: false,
+    });
+  });
 });

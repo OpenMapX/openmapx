@@ -12,7 +12,11 @@ final class ShareSelectionTests: XCTestCase {
     let fixture = root.appendingPathComponent("packages/core/src/travel-plans/__fixtures__/dbNavigator.json")
     let examples = try JSONDecoder().decode([String].self, from: Data(contentsOf: fixture))
     XCTAssertEqual(examples.count, 4)
-    for text in examples { XCTAssertEqual(try ShareSelection.text([text, text]), text) }
+    for text in examples {
+      XCTAssertEqual(try ShareSelection.text([text, text]), text)
+      let link = String(text.split(whereSeparator: { $0.isWhitespace }).last!)
+      XCTAssertEqual(try ShareSelection.text([link, text, link]), text)
+    }
   }
   func testRepeatedLinesInsideOneTextValueArePreserved() throws {
     let text = "A → B\nFr. 06.11.2026\n\nRE9 (1)\nNach Siegen Hbf\nAb 21:00 A\nAn 22:00 C\n\nRE9 (2)\nNach Siegen Hbf\nAb 22:10 C\nAn 23:00 B"

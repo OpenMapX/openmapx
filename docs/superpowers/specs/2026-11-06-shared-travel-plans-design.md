@@ -60,30 +60,29 @@ hand-assembled itinerary. All acquisition uses the configured OpenMapX API clien
    search/nearby approach. Use the enabled provider and its current capabilities. Prefer verified boarding
    and alighting platform coordinates over parent-station coordinates; allow a
    small bounded departure margin for normal access walking.
-2. Search through the ordinary transit planning API with an explicit departure
-   anchor and canonical request options. Compare the entire ordered transit leg
-   sequence to the share: operational numbers, scheduled departure/arrival,
-   geographically corroborated boarding/alighting stations, leg count/order.
-   Walking transfers in the provider itinerary are retained verbatim. A unique
-   exact match returns the provider plan and selected itinerary without changing
-   any field. Use at most one signed next page for discovery only. If it contains a match,
-   run a fresh unpaged request at that itinerary's start minute; only an exact
-   unpaged result can seed ordinary search. Never seed paged data under an unpaged
-   key, or select a first/approximately matching alternative. A bounded retry with
-   the shared services' mode classes can recover a dominated regional connection
-   while remaining a real, refetchable ordinary search.
-3. Pareto planning can omit a valid overtaken train or canceled service. If a
-   bounded normal search has no exact result, retain the existing dated-board
-   and vehicle-journey identity discovery. Bound parent stations and candidates
-   to four per leg; deduplicate equivalent parent/platform records. Verify exact
-   operational number, both scheduled times, ordered stop IDs and coordinates.
+2. Obtain dated-board and vehicle-journey identity evidence first: normal plans
+   do not consistently expose operational train numbers. Bound colocated station
+   aliases to 32 and candidate journeys to four per leg; deduplicate explicit
+   parent/platform records. Transitous can omit parent links and expose more than
+   four platform/feed aliases for one station. Verify the operational number,
+   scheduled departure and arrival, ordered stop IDs and geographic station match.
+3. Search through the ordinary transit planning API with an explicit departure
+   anchor and canonical request options. Match the entire ordered transit sequence
+   to the verified provider references. Retain walking transfers and all provider
+   fields verbatim. Use at most one signed next page for discovery; if it contains
+   a match, run a fresh unpaged request at that itinerary's start minute. Only an
+   exact unpaged response can seed ordinary search. Never seed paged data under
+   an unpaged key or choose a first/approximate alternative. One retry with the
+   existing train mode group remains a real, refetchable search. Pareto planning
+   can omit a valid overtaken or canceled train, so reconstruction is a fallback.
 4. Ask that same provider to reconstruct the verified sequence through a common
    optional `resolveTrip` provider operation. The client submits provider-qualified
    trip/stop IDs, scheduled instants and the dataset epoch, not coordinates or
    displayed DB data. The server independently fetches provider trip data to
    obtain coordinates, native display name and scheduled/additional-trip flags. All legs must
-   belong to the same provider instance/dataset context. Unsupported providers
-   may still succeed through normal search, otherwise resolution fails closed.
+   belong to the same provider instance/dataset context. Providers lacking reconstruction may
+   succeed through normal search after dated identity discovery; missing required
+   discovery support fails closed.
 5. Validate the returned provider itinerary against every verified transit leg
    again. Native reconstruction can pick another candidate or return dummy legs;
    reject substitutions, changed scheduled identity and missing trip IDs. Return
@@ -249,3 +248,18 @@ I6: missing plan numbers trigger provider-ID discovery, never route-name guessin
 Do not extend this work into ordinary refetch-selection bugs or upstream refresh
 fare behavior. The reviewed reconstruction deferral recommendation is declined:
 its explicit reference-query alternative is accepted to cover exact omitted trips.
+
+## Implementation review disposition
+
+Claude Opus reviewed the revised working tree and found no blocking exact-trip,
+source-policy or publication defect. Root fixed the supported edge cases:
+request-specific native 404s no longer disable reconstruction; explicit 405/501
+unsupported results retain their typed 501 semantics without cooling down other
+provider operations. Dated-board health cooldown is 503 rather than unsupported.
+A mandatory bike-carriage session is kept with an existing-alert explanation before
+acquisition, because a walking-access handoff cannot make that requirement hidden.
+Successful reconstruction uses a 30-second host cache after current policy/health/
+epoch checks, cloning the result before attaching independent one-time handles.
+The ordinary search panel's existing index-based behavior after later refetches is
+unchanged; reference lookups and reference refreshes remain bound to the same trip.
+Hosted capability metadata deliberately advertises only verified runtime support.

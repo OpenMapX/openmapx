@@ -6,6 +6,9 @@ import {
   preferredModesToMotis,
   TRANSIT_ACCESS_MOTIS_MODES,
   TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
+  type TransitPlanQuery,
+  transitItineraryKey,
+  transitPlanQueryKey,
   useDebounce,
   useDirectionsStore,
   useRouteInGermany,
@@ -14,7 +17,7 @@ import {
   useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { mergeTransitItineraryPage } from "./transitPlanPages";
 
 export type TransitDirectionsSnapshot = Pick<
@@ -62,8 +65,13 @@ export function useTransitDirectionsPlan({
   bikeHillPreference,
   deutschlandticketOnly,
 }: TransitDirectionsSnapshot) {
-  const importedTrip = useDirectionsStore((s) => s.importedTransitTrip);
-  enabled = enabled && !importedTrip;
+  const reference = useDirectionsStore((s) => s.transitReference);
+  const pending = useDirectionsStore((s) => s.pendingTransitSelection);
+  const [selectionToOpen, setSelectionToOpen] = useState<{
+    index: number;
+    itineraryKey: string;
+  } | null>(null);
+  const lastPublication = useRef<{ data: unknown; identity: string } | null>(null);
   const origin = waypoints[0]?.coords ?? null;
   const destination = waypoints.at(-1)?.coords ?? null;
   const routeWaypoints = useMemo(
@@ -218,8 +226,9 @@ export function useTransitDirectionsPlan({
   // to that query's canonical request. The serializer collapses equivalent
   // coordinates and option lists; an implicit time is a marker because the hook
   // owns the actual minute it anchors to.
-  const pagingIdentity =
-    planningActive && origin && destination
+  const pagingIdentity = reference
+    ? JSON.stringify(transitPlanQueryKey({ kind: "reference", params: reference }))
+    : planningActive && origin && destination
       ? JSON.stringify([
           buildTransitPlanParams({
             origin,
@@ -252,14 +261,50 @@ export function useTransitDirectionsPlan({
   const transitPageToken = paging.token;
   const transitPageDirection = paging.direction;
   const loadPage = (direction: "previous" | "next", token: string | undefined) => {
-    if (!planningActive || !token) return;
+    if (!planningActive || reference || !token) return;
     // Only the rendered owner may advance; callbacks from an earlier query or page no-op.
     setStoredPaging((current) =>
       current === paging ? { identity: paging.identity, token, direction } : current,
     );
   };
 
+  const queryForTime = (time: string, arriveBy: boolean): TransitPlanQuery | null =>
+    reference
+      ? { kind: "reference", params: reference }
+      : origin && destination
+        ? {
+            kind: "search",
+            params: {
+              origin,
+              destination,
+              time,
+              arriveBy,
+              ...planArgs,
+              pageToken: transitPageToken,
+            },
+          }
+        : null;
+  const currentQuery = queryForTime(
+    transitArriveByStr ?? transitDepartAtStr ?? "now",
+    Boolean(transitArriveByStr),
+  );
+  const rawTime =
+    timeMode === "arrive"
+      ? transitArrivalTime
+      : timeMode === "depart"
+        ? transitDepartureTime
+        : null;
+  const rawQuery = queryForTime(
+    rawTime instanceof Date ? rawTime.toISOString() : "now",
+    timeMode === "arrive" && rawTime instanceof Date,
+  );
+  const currentKey = currentQuery ? JSON.stringify(transitPlanQueryKey(currentQuery)) : "inactive";
+  const rawKey = rawQuery ? JSON.stringify(transitPlanQueryKey(rawQuery)) : "inactive";
+  const waitingForSelection = Boolean(pending && currentKey !== pending.requestKey);
+
   const transitPlanQuery = useTransitPlan({
+    enabled: !waitingForSelection,
+    reference,
     origin: enabled && !transitIsChained ? origin : null,
     destination: enabled && !transitIsChained ? destination : null,
     departAt: transitDepartAtStr,
@@ -270,19 +315,42 @@ export function useTransitDirectionsPlan({
   const { data: transitPlanData } = transitPlanQuery;
   const attributions = contributorsForRecords(itineraries);
   useEffect(() => {
-    if (importedTrip || !transitPlanData?.itineraries) return;
-    setTransitItineraries(
-      mergeTransitItineraryPage({
-        existing: transitPageToken ? useDirectionsStore.getState().transitItineraries : [],
-        incoming: transitPlanData.itineraries,
-        provider: transitPlanData.provider,
-        page: transitPageToken ? transitPageDirection : "initial",
-        preference: transitRoutePreference,
-      }),
-    );
+    const store = useDirectionsStore.getState();
+    if (pending && rawKey !== pending.requestKey) {
+      store.cancelTransitSelection(pending);
+      return;
+    }
+    if (waitingForSelection || !transitPlanData?.itineraries) return;
+    const identity = `${currentKey}|${transitRoutePreference}|${transitPageDirection}`;
+    if (
+      lastPublication.current?.data === transitPlanData &&
+      lastPublication.current.identity === identity
+    )
+      return;
+    const items = mergeTransitItineraryPage({
+      existing: transitPageToken ? store.transitItineraries : [],
+      incoming: transitPlanData.itineraries,
+      provider: transitPlanData.provider,
+      page: transitPageToken ? transitPageDirection : "initial",
+      preference: transitRoutePreference,
+    });
+    lastPublication.current = { data: transitPlanData, identity };
+    setTransitItineraries(items, currentKey);
+    if (pending) {
+      const index = items.findIndex(
+        (item) => transitItineraryKey(item, transitPlanData.provider) === pending.itineraryKey,
+      );
+      if (store.completeTransitSelection(pending) && index >= 0) {
+        store.setActiveItineraryIndex(index);
+        setSelectionToOpen({ index, itineraryKey: pending.itineraryKey });
+      }
+    }
   }, [
     transitPlanData,
-    importedTrip,
+    pending,
+    rawKey,
+    currentKey,
+    waitingForSelection,
     transitRoutePreference,
     setTransitItineraries,
     transitPageToken,
@@ -291,28 +359,19 @@ export function useTransitDirectionsPlan({
 
   return {
     isChained: transitIsChained,
-    planQuery: importedTrip
-      ? {
-          ...transitPlanQuery,
-          data: {
-            from: itineraries[0]?.legs[0]?.from ?? { name: "", lat: 0, lng: 0 },
-            to: itineraries[0]?.legs.at(-1)?.to ?? { name: "", lat: 0, lng: 0 },
-            itineraries,
-          },
-          isLoading: false,
-          isError: false,
-          isFetching: false,
-          freshness: undefined,
-        }
+    planQuery: waitingForSelection
+      ? { ...transitPlanQuery, data: undefined, isLoading: true, isFetching: true }
       : transitPlanQuery,
+    selectionToOpen,
     chainQuery: transitChainQuery,
     itineraries,
     replanOptions: transitReplanOptions,
     attributions,
     paging: {
       isPage: Boolean(transitPageToken),
-      previousToken: transitPlanData?.previousPageToken,
-      nextToken: transitPlanData?.nextPageToken,
+      previousToken:
+        reference || waitingForSelection ? undefined : transitPlanData?.previousPageToken,
+      nextToken: reference || waitingForSelection ? undefined : transitPlanData?.nextPageToken,
       loadPrevious: () => loadPage("previous", transitPlanData?.previousPageToken),
       loadNext: () => loadPage("next", transitPlanData?.nextPageToken),
     },

@@ -1,15 +1,20 @@
-import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type {
   Departure,
-  GeoJSONLineString,
   TransitPlace,
   TransitStop,
+  TransitTripReference,
   TripItinerary,
-  TripLeg,
+  TripPlan,
   VehicleJourney,
+  VehicleJourneyStop,
 } from "@openmapx/mobility-core/transit";
+import type { TransitPlanParams, TransitPlanQuery, TransitReferenceParams } from "../api/transit";
+import { preferredModesToMotis } from "../constants/transit";
 import { haversineDistance } from "../utils/coordinates";
 import { timeZoneAt, tzOffsetMinutes, zonedWallClockToInstant } from "../utils/timezone";
+import { transitItineraryKey } from "../utils/transitItineraryKey";
+import { itineraryMatchesTransitReference } from "../utils/transitTripReference";
 import { type SharedTravelPlan, travelStationKey } from "./types";
 export class TravelPlanResolutionError extends Error {
   constructor(readonly code: "invalid" | "unavailable" | "not-found" | "ambiguous") {
@@ -21,16 +26,22 @@ export interface TravelPlanPort {
   /** null means this source explicitly lacks anchored boards, not an empty result. */
   departures(stopId: string, time: string, signal: AbortSignal): Promise<Departure[] | null>;
   journey(tripId: string, signal: AbortSignal): Promise<VehicleJourney>;
-  geometry(
-    tripId: string,
-    from: string,
-    to: string,
+  plan(params: TransitPlanParams, signal: AbortSignal): Promise<MobilityEnvelope<TripPlan> | null>;
+  resolveTrip(
+    params: TransitReferenceParams,
     signal: AbortSignal,
-  ): Promise<GeoJSONLineString | null>;
+  ): Promise<MobilityEnvelope<TripPlan>>;
 }
 export interface ResolvedTravelPlan {
-  itinerary: TripItinerary;
-  schematic: boolean;
+  plan: MobilityEnvelope<TripPlan>;
+  query: TransitPlanQuery;
+  selectedItineraryKey: string;
+}
+export interface TravelPlanResolutionOptions {
+  wheelchairRequired?: boolean;
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+  capabilityEpoch?: string;
 }
 const fail = (code: TravelPlanResolutionError["code"]): never => {
   throw new TravelPlanResolutionError(code);
@@ -92,6 +103,7 @@ export async function resolveSharedTravelPlan(
   plan: SharedTravelPlan,
   port: TravelPlanPort,
   callerSignal: AbortSignal,
+  options: TravelPlanResolutionOptions = {},
 ): Promise<ResolvedTravelPlan> {
   const deadline = new AbortController();
   const cancel = () => deadline.abort();
@@ -142,12 +154,26 @@ export async function resolveSharedTravelPlan(
       if (!stops.length) fail("not-found");
       if (stops.some((s) => haversineDistance(coords(s), coords(stops[0])) > 1500))
         fail("ambiguous");
-      const unique = [...new Map(stops.map((s) => [s.id, s])).values()];
-      if (unique.length > 4) fail("ambiguous");
+      // Parent boards include their platforms; platform aliases must not spend
+      // the station/call budget or make an ordinary large station ambiguous.
+      const unique = [
+        ...new Map(
+          stops.map((s) => {
+            const id = s.parentStationId ?? s.id;
+            return [id, { ...s, id, parentStationId: undefined }] as const;
+          }),
+        ).values(),
+      ];
+      // Multi-feed baselines can omit platform parents (Köln has 16+ aliases).
+      // Keep the geographic check and an explicit record/call ceiling.
+      if (unique.length > 32) fail("ambiguous");
       stationCache.set(name, unique);
     }
-    const legs: TripLeg[] = [];
-    let schematic = false;
+    const verified: Array<{
+      reference: TransitTripReference["legs"][number];
+      from: VehicleJourneyStop;
+      to: VehicleJourneyStop;
+    }> = [];
     for (const [index, shared] of plan.legs.entries()) {
       check();
       const { departure, arrival } = instants[index];
@@ -234,82 +260,101 @@ export async function resolveSharedTravelPlan(
       const stops = match.journey.stops.slice(match.fromIndex, match.toIndex + 1);
       const first = stops[0],
         last = stops.at(-1) ?? fail("invalid");
-      const acquiredGeometry = await acquire(() =>
-        port.geometry(d.tripId, first.stopId, last.stopId, signal),
-      );
-      check();
-      const geometry =
-        acquiredGeometry &&
-        acquiredGeometry.coordinates.length >= 2 &&
-        acquiredGeometry.coordinates.every(([lng, lat]) => validPoint({ lng, lat }))
-          ? acquiredGeometry
-          : null;
-      if (!geometry) schematic = true;
-      if (stops.some((s) => !validPoint(s))) fail("unavailable");
-      const place = (s: typeof first): TransitPlace => ({
-        name: s.name,
-        lat: s.lat,
-        lng: s.lng,
-        stopId: s.stopId,
-        platformCode: s.platform,
-        scheduledPlatformCode: s.scheduledPlatform,
-        contributors: s.contributors,
-      });
-      const startTime =
-        first.expectedDeparture ?? d.expectedAt ?? first.scheduledDeparture ?? fail("unavailable");
-      const endTime = last.expectedArrival ?? last.scheduledArrival ?? fail("unavailable");
-      if (!Number.isFinite(Date.parse(startTime)) || !Number.isFinite(Date.parse(endTime)))
-        fail("unavailable");
-      legs.push({
-        mode: d.route.mode,
-        from: place(first),
-        to: place(last),
-        startTime,
-        endTime,
-        scheduledStartTime: first.scheduledDeparture,
-        scheduledEndTime: last.scheduledArrival,
-        route: d.route,
-        routeId: d.route.id,
-        tripId: d.tripId,
-        tripShortName: shared.trainNumber,
-        headsign: d.headsign,
-        serviceInfo: d.serviceInfo,
-        cancelled: d.canceled || stops.some((s) => s.canceled),
-        realtime:
-          d.provenance?.realtimeCompleteness === "merged" ||
-          d.provenance?.realtimeCompleteness === "changed" ||
-          !!first.expectedDeparture ||
-          !!last.expectedArrival,
-        geometry: geometry ?? {
-          type: "LineString",
-          coordinates: stops.map(coords),
-          contributors: contributorsForRecords(stops),
+      verified.push({
+        reference: {
+          tripId: d.tripId,
+          fromStopId: first.stopId,
+          toStopId: last.stopId,
+          scheduledDeparture: new Date(departure).toISOString(),
+          scheduledArrival: new Date(arrival).toISOString(),
         },
-        alerts: stops.flatMap((s) => s.alerts ?? []),
-        contributors: contributorsForRecords([
-          d,
-          match.journey,
-          ...(geometry ? [geometry] : []),
-          ...stops,
-        ]),
+        from: first,
+        to: last,
       });
     }
-    const startTime = legs[0].startTime,
-      endTime = legs.at(-1)?.endTime ?? fail("invalid");
-    check();
-    return {
-      schematic,
-      itinerary: {
-        startTime,
-        endTime,
-        duration: Math.max(0, (Date.parse(endTime) - Date.parse(startTime)) / 1000),
-        transfers: legs.length - 1,
-        walkDistance: 0,
-        legs,
-        plannedAt: new Date().toISOString(),
-        contributors: contributorsForRecords(legs),
-      },
+    const from = verified[0].from,
+      to = verified.at(-1)?.to ?? fail("invalid");
+    const prefixes = new Set(
+      verified.flatMap(({ reference: r }) =>
+        [r.tripId, r.fromStopId, r.toStopId].map((id) => /^([^:]+):/.exec(id)?.[1]),
+      ),
+    );
+    if (prefixes.size !== 1 || prefixes.has(undefined)) fail("ambiguous");
+    const requirements = {
+      wheelchairRequired: Boolean(options.wheelchairRequired),
+      requireBikeTransport: Boolean(options.requireBikeTransport),
+      bikeHillPreference: options.bikeHillPreference ?? ("default" as const),
     };
+    const request: TransitPlanParams = {
+      origin: coords(from),
+      destination: coords(to),
+      time: new Date(instants[0].departure - 120000).toISOString(),
+      numItineraries: 3,
+      transferBuffer: "standard",
+      capabilityEpoch: options.capabilityEpoch,
+      ...requirements,
+    };
+    const references = verified.map((v) => v.reference);
+    const matching = (itinerary: TripItinerary) => {
+      if (itinerary.invalidRequirements?.length) return false;
+      return (
+        itineraryMatchesTransitReference(itinerary, { legs: references }) &&
+        itinerary.legs.every(
+          (leg) =>
+            (!requirements.wheelchairRequired || leg.wheelchairAccessible !== false) &&
+            (!requirements.requireBikeTransport || !leg.route || leg.bikesAllowed !== false),
+        )
+      );
+    };
+    function result(
+      plan: MobilityEnvelope<TripPlan>,
+      query: TransitPlanQuery,
+    ): ResolvedTravelPlan | null {
+      if (plan.freshness.isPartial || plan.freshness.isStale) fail("unavailable");
+      const itinerary = plan.data.itineraries.find(matching);
+      return itinerary
+        ? { plan, query, selectedItineraryKey: transitItineraryKey(itinerary, plan.data.provider) }
+        : null;
+    }
+    let observedEpoch = options.capabilityEpoch;
+    for (const modes of [undefined, preferredModesToMotis(["train"])]) {
+      const params = { ...request, modes };
+      const normal = await acquire(() => port.plan(params, signal));
+      check();
+      if (!normal) continue;
+      observedEpoch ??= normal.data.datasetEpoch;
+      const found = result(normal, { kind: "search", params });
+      if (found) return found;
+      // A paged discovery result is never placed in the unpaged search cache.
+      if (normal.data.nextPageToken) {
+        const page = await acquire(() =>
+          port.plan({ ...params, pageToken: normal.data.nextPageToken }, signal),
+        );
+        check();
+        if (page) {
+          if (page.freshness.isPartial || page.freshness.isStale) fail("unavailable");
+          const candidate = page.data.itineraries.find(matching);
+          if (candidate) {
+            const at = new Date(candidate.startTime);
+            at.setUTCSeconds(0, 0);
+            const anchored = { ...params, time: at.toISOString() };
+            const unpaged = await acquire(() => port.plan(anchored, signal));
+            check();
+            if (unpaged) {
+              const exact = result(unpaged, { kind: "search", params: anchored });
+              if (exact) return exact;
+            }
+          }
+        }
+      }
+    }
+    const params: TransitReferenceParams = {
+      reference: { datasetEpoch: observedEpoch, legs: references },
+      ...requirements,
+    };
+    const reconstructed = await acquire(() => port.resolveTrip(params, signal));
+    check();
+    return result(reconstructed, { kind: "reference", params }) ?? fail("not-found");
   } catch (error) {
     if (error instanceof TravelPlanResolutionError) throw error;
     throw new TravelPlanResolutionError("unavailable");

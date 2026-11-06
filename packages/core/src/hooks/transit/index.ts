@@ -33,6 +33,7 @@ export { transitIsochroneKey, useTransitIsochrone } from "./useTransitIsochrone"
 export { useTransitPlan } from "./useTransitPlan";
 export {
   type TransitPlanningCapabilityProvider,
+  transitPlanningCapabilitiesQueryOptions,
   useTransitPlanningCapabilities,
 } from "./useTransitPlanningCapabilities";
 export { useTransitReachability } from "./useTransitReachability";

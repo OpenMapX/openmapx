@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
@@ -7,6 +8,7 @@ import {
   type ProviderCallOutcome,
   type ProviderHealthHandle,
   type TransitProvider,
+  TransitTripResolutionUnsupportedError,
   type TripPlanRequest,
   type TripRefreshRequest,
 } from "@openmapx/integration-framework";
@@ -23,6 +25,7 @@ import type {
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
+  TransitTripResolveRequest,
   TripItinerary,
   TripPlan,
   VehicleJourney,
@@ -40,6 +43,13 @@ import { pMapSettled } from "p-map";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
+import {
+  itineraryMatchesReference,
+  parseTripReferenceRequest,
+  TripReferenceEpochError,
+  TripReferenceUnavailableError,
+  TripReferenceUnsupportedError,
+} from "./trip-reference.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -448,8 +458,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     minutes: number,
     time?: string,
   ): Promise<MobilityResult<Departure[]>> {
-    const provider = await resolveByPrefix(stopId);
     if (time) {
+      const provider = await resolveLookup(stopId, (p) => Boolean(p.getDeparturesAt));
+      if (provider === "unavailable")
+        throw new TripReferenceUnavailableError("Transit timetable source unavailable");
       if (!provider?.getDeparturesAt) throw new AnchoredDeparturesUnsupported();
       const anchored = provider.getDeparturesAt.bind(provider);
       const result = await timed(
@@ -459,9 +471,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         "getDeparturesAt",
         () => anchored(stopId, minutes, time),
       );
-      if (!result.ok) throw new Error("Transit timetable source unavailable");
+      if (!result.ok)
+        throw new TripReferenceUnavailableError("Transit timetable source unavailable");
       return result.value;
     }
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getDepartures) throw new Error("Transit timetable source unavailable");
     const fn = provider.getDepartures.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
@@ -634,6 +648,72 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       }
     }
     return emptyResult<TripPlan | null>(null);
+  }
+
+  async function resolveTrip(
+    input: TransitTripResolveRequest,
+  ): Promise<MobilityResult<TripPlan | null>> {
+    const params = parseTripReferenceRequest(input);
+    const provider = await resolveByPrefix(params.reference.legs[0].tripId);
+    if (!provider) throw new TripReferenceUnavailableError("Exact trip source unavailable");
+    if (!provider.resolveTrip || !provider.capabilities.planning)
+      throw new TripReferenceUnsupportedError("Exact trip reconstruction unsupported");
+    const epoch = provider.planningMetadata?.datasetEpoch;
+    if (epoch && epoch !== params.reference.datasetEpoch)
+      throw new TripReferenceEpochError("Trip reference epoch changed");
+    const cacheKey = `transit:resolve:v1:${createHash("sha256")
+      .update(JSON.stringify([provider.id, params]))
+      .digest("base64url")}`;
+    const fn = provider.resolveTrip.bind(provider);
+    // Policy, health and epoch checks always run, including on cache hits.
+    const result = await ctx.cache.withCache(
+      cacheKey,
+      30,
+      async () => {
+        const outcome = await timed(
+          providerHealth,
+          metricsRecorder,
+          provider.id,
+          "resolveTrip",
+          () =>
+            fn(params).catch((error: unknown) => {
+              if (error instanceof TransitTripResolutionUnsupportedError)
+                return { unsupported: true as const };
+              throw error;
+            }),
+        );
+        if (!outcome.ok) throw new TripReferenceUnavailableError("Exact trip source unavailable");
+        if ("unsupported" in outcome.value)
+          throw new TripReferenceUnsupportedError("Exact trip reconstruction unsupported");
+        const result = outcome.value;
+        if (result.freshness.isPartial || result.freshness.isStale)
+          throw new TripReferenceUnavailableError("Exact trip evidence is incomplete");
+        const plan = result.data;
+        if (
+          plan &&
+          (plan.itineraries.length === 0 ||
+            (epoch && plan.datasetEpoch !== epoch) ||
+            plan.itineraries.some(
+              (itinerary) =>
+                !itineraryMatchesReference(itinerary, params.reference) ||
+                itinerary.invalidRequirements?.length ||
+                itinerary.legs.some(
+                  (leg) =>
+                    (params.wheelchairRequired && leg.wheelchairAccessible === false) ||
+                    (params.requireBikeTransport && leg.route && leg.bikesAllowed === false),
+                ),
+            ))
+        ) {
+          return { ...result, data: null };
+        }
+        return result;
+      },
+      undefined,
+      (value) => value.data !== null,
+    );
+    // The route attaches one-time refresh handles; callers must not mutate a
+    // cached envelope or another request's token.
+    return structuredClone(result);
   }
 
   async function refreshTrip(
@@ -1175,6 +1255,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     searchByName,
     searchByNameRaw,
     planTrip,
+    resolveTrip,
     refreshTrip,
     getVehicleRadar,
     getAlerts,

@@ -16,6 +16,7 @@ import type {
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
+  TransitTripResolveRequest,
   TripItinerary,
   TripPlan,
   VehicleJourney,
@@ -32,6 +33,9 @@ import type {
 import type { LineString } from "geojson";
 import type { HealthCheckResult } from "../context.js";
 import type { ProviderCallContext } from "../provider-execution.js";
+
+/** A provider endpoint lacks exact-reference resolution; other operations may work. */
+export class TransitTripResolutionUnsupportedError extends Error {}
 
 /**
  * Per-runtime-feed attribution map returned by `getFeedAttribution`. Keys
@@ -93,6 +97,8 @@ export interface TransitPlanningCapabilities {
   detailedTransfers: boolean;
   paging: boolean;
   refresh: boolean;
+  /** Structured exact-trip lookup is known to be supported by this runtime. */
+  resolveTrip?: boolean;
   /** Can serve one segment of a multi-stop chained plan. */
   chaining?: boolean;
   /** Per-semantic temporal support for chained planning. */
@@ -237,6 +243,8 @@ export interface TransitProvider {
   ): Promise<MobilityResult<LineString | null>>;
 
   planTrip?(opts: TripPlanRequest): Promise<MobilityResult<TripPlan[]>>;
+  /** Re-query the same provider reference; never substitute an alternative plan. */
+  resolveTrip?(opts: TransitTripResolveRequest): Promise<MobilityResult<TripPlan | null>>;
   refreshTrip?(opts: TripRefreshRequest): Promise<MobilityResult<TripItinerary | null>>;
   getVehicleJourney?(
     tripId: string,

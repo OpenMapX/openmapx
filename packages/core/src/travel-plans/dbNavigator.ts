@@ -8,7 +8,7 @@ import {
 const invalid: TravelPlanParseResult = { kind: "invalid-travel-plan", reason: "invalid" };
 const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const servicePattern =
-  /^(?:([A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöü\d -]{0,30})\s*\((\d{1,8})\)|([A-Za-zÄÖÜäöü]{1,12})\s+(\d{1,8}))$/;
+  /^(?:([A-Za-zÄÖÜäöü][A-Za-zÄÖÜäöü\d -]{0,30})\s*\((\d{1,8})\)|(ICE|IC|EC|NJ|EN|RJ|RJX|TGV|THA|ECE)\s+(\d{1,8}))$/;
 function event(line: string, prefix: string) {
   const m = new RegExp(`^${prefix} ([0-2]\\d:[0-5]\\d) (.+)$`).exec(line);
   if (!m || Number(m[1].slice(0, 2)) > 23) return null;
