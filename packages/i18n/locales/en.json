@@ -4908,5 +4908,12 @@
     "failed": "The password could not be saved. Check the password requirements or request a new link.",
     "originChanged": "The API changed. Open the original link again before setting your password.",
     "back": "Back to OpenMapX"
+  },
+  "adminDrafts": {
+    "title": "Discard unsaved administration changes?",
+    "ordinary": "Ordinary drafts will be discarded. Stay to review your work first.",
+    "reauthentication": "The reviewed reauthentication continuation will be retained.",
+    "stay": "Stay",
+    "discard": "Discard and continue"
   }
 }

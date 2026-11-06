@@ -30,6 +30,7 @@ import {
 } from "@openmapx/core";
 import { useFormatter, useTranslations } from "next-intl";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { downloadPrivacyDeviceData } from "@/lib/privacyDeviceData";
 
 const PENDING_REAUTH_KEY = "openmapx:privacy:pending-reauth";
@@ -127,8 +128,9 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
         .then(() => {
           if (cancelled) return;
           window.sessionStorage.removeItem(PENDING_REAUTH_KEY);
-          window.location.assign(
+          navigateAdminDocument(
             privacyArtifactDownloadUrl(challenge.requestId, challenge.artifactId),
+            "download",
           );
         })
         .catch(() => {

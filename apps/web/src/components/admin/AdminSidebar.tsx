@@ -28,6 +28,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -184,6 +185,7 @@ function NavLink({
   active,
   sectionActive = false,
   label = item.label,
+  onNavigate,
 }: {
   item: NavItem;
   active: boolean;
@@ -195,6 +197,7 @@ function NavLink({
    */
   sectionActive?: boolean;
   label?: string;
+  onNavigate: (event: React.MouseEvent) => void;
 }) {
   // The leaf (Mui-selected) styling and the section-active styling are
   // mutually exclusive — `selected` flips MUI's filled background, which is
@@ -205,6 +208,7 @@ function NavLink({
       <ListItemButton
         component={Link}
         href={item.href}
+        onClick={onNavigate}
         selected={showFilled}
         aria-current={showFilled ? "page" : undefined}
         sx={{
@@ -241,12 +245,21 @@ function NavLink({
 
 type SubItem = (typeof SERVICES_SUB_ITEMS)[number];
 
-function SubNavLink({ item, active }: { item: SubItem; active: boolean }) {
+function SubNavLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: SubItem;
+  active: boolean;
+  onNavigate: (event: React.MouseEvent) => void;
+}) {
   return (
     <ListItem disablePadding>
       <ListItemButton
         component={Link}
         href={item.href}
+        onClick={onNavigate}
         selected={active}
         aria-current={active ? "page" : undefined}
         sx={{
@@ -280,6 +293,19 @@ export function AdminSidebar({
   role = "admin",
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
+  const onNavigate = (event: React.MouseEvent) => {
+    if (
+      !event.defaultPrevented &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !window.matchMedia("(min-width:900px)").matches
+    )
+      onClose();
+  };
   const privacySetup = useTranslations("privacySetup");
 
   const navItems = BASE_NAV_ITEMS.filter(
@@ -359,6 +385,7 @@ export function AdminSidebar({
                   <Box key={item.href}>
                     <NavLink
                       item={item}
+                      onNavigate={onNavigate}
                       active={isActive(item)}
                       sectionActive={hasActiveChild}
                       label={
@@ -371,7 +398,12 @@ export function AdminSidebar({
                       <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
                         <List dense disablePadding>
                           {SERVICES_SUB_ITEMS.map((sub) => (
-                            <SubNavLink key={sub.href} item={sub} active={isSubActive(sub)} />
+                            <SubNavLink
+                              onNavigate={onNavigate}
+                              key={sub.href}
+                              item={sub}
+                              active={isSubActive(sub)}
+                            />
                           ))}
                         </List>
                       </Collapse>
@@ -398,7 +430,7 @@ export function AdminSidebar({
       {/* Mobile drawer */}
       <Drawer
         variant="temporary"
-        open={open}
+        open={open && !desktop}
         onClose={onClose}
         ModalProps={{ keepMounted: true }}
         sx={{
@@ -411,7 +443,7 @@ export function AdminSidebar({
       {/* Desktop permanent drawer */}
       <Drawer
         variant="persistent"
-        open={open}
+        open={open && desktop}
         sx={{
           display: { xs: "none", md: "block" },
           "& .MuiDrawer-paper": {

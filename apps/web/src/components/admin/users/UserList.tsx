@@ -38,6 +38,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Menu from "@/components/ui/Menu";
+import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
@@ -540,6 +541,7 @@ export function UserList() {
 }
 
 function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: () => void }) {
+  const requestExit = useAdminDraftExit();
   const router = useRouter(),
     showToast = useAdminToast();
   const action = useAccountAction(targetId, {
@@ -558,8 +560,11 @@ function ImpersonationAction({ targetId, onDone }: { targetId: string; onDone: (
   useEffect(() => {
     if (!started.current) {
       started.current = true;
-      action.mutate((client) => client.impersonate(targetId));
+      void requestExit("Impersonation changes the active account.").then((confirmed) => {
+        if (confirmed) action.mutate((client) => client.impersonate(targetId));
+        else onDone();
+      });
     }
-  }, [action, targetId]);
+  }, [action, targetId, requestExit, onDone]);
   return null;
 }

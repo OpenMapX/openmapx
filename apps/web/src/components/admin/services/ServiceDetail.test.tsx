@@ -58,3 +58,8 @@ describe("ServiceDetail managed Dawarich setup", () => {
     );
   });
 });
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);

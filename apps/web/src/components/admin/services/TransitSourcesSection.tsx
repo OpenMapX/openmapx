@@ -27,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { formatBytes } from "@/lib/storageFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -309,7 +310,12 @@ function TransitSourcesView({ apiUrl }: { apiUrl: string }) {
           severity="info"
           sx={{ mb: 2 }}
           action={
-            <Button component={Link} href="/admin/activity" size="small" color="inherit">
+            <Button
+              component={Link}
+              href={adminJobHref({ id: syncJob?.jobId ?? lastJobId ?? "", source: "data-manager" })}
+              size="small"
+              color="inherit"
+            >
               View job
             </Button>
           }

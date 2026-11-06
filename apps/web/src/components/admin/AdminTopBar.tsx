@@ -12,6 +12,7 @@ import Typography from "@mui/material/Typography";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AdminJobTray } from "./activity/AdminJobTray";
 import { SIDEBAR_WIDTH, TOPBAR_HEIGHT } from "./layoutConstants";
 
 const SEGMENT_LABELS: Record<string, string> = {
@@ -42,7 +43,7 @@ function labelForSegment(seg: string): string {
 }
 
 interface AdminTopBarProps {
-  user: { name: string; email: string; image?: string };
+  user: { name: string; email: string; image?: string; role?: string };
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
@@ -83,6 +84,7 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
           onClick={onToggleSidebar}
           size="small"
           aria-label="Toggle navigation"
+          aria-expanded={sidebarOpen}
         >
           <MenuIcon />
         </IconButton>
@@ -127,6 +129,7 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
           })}
         </Breadcrumbs>
 
+        {user.role === "admin" && <AdminJobTray />}
         <Tooltip title="Back to Map">
           <IconButton
             component={Link}

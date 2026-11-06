@@ -18,6 +18,7 @@ import {
 } from "@/components/admin/activity/activityQueries";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 
+import { useOptionalAdminJobRegistration } from "./adminJobEffects";
 import { integrationErrorMessage } from "./integrationErrors";
 
 export { integrationErrorMessage } from "./integrationErrors";
@@ -231,8 +232,9 @@ export function hasVaultCredential(credential: AdminIntegrationCredential): bool
 export function useIntegrationReload(id?: string) {
   const { apiUrl, client } = useActivityClient();
   const qc = useQueryClient();
+  const register = useOptionalAdminJobRegistration();
   const [accepted, setAccepted] = useState<{ client: ApiClient; id: string }[]>([]);
-  const jobs = accepted.filter((job) => job.client === client);
+  const jobs = register ? [] : accepted.filter((job) => job.client === client);
   const observations = useQueries({
     queries: jobs.map(({ id: jobId }) => {
       const options = activityJobQueryOptions(client, apiUrl, jobId, "application");
@@ -271,10 +273,22 @@ export function useIntegrationReload(id?: string) {
           ? sdk.reloadAdminIntegrations(undefined, { client })
           : sdk.reloadAdminIntegration(id, undefined, { client }),
       );
-      setAccepted((current) => [
-        ...current.filter((job) => job.client !== client || job.id !== acceptance.jobId),
-        { client, id: acceptance.jobId },
-      ]);
+      if (register)
+        register({
+          client,
+          apiUrl,
+          jobId: acceptance.jobId,
+          label: id ? `${id} · reload` : "Reload integrations",
+          returnTo: id ? `/admin/integrations/${encodeURIComponent(id)}` : "/admin/integrations",
+          onSettled: async () => {
+            await invalidateIntegrationAdmin(qc, apiUrl);
+          },
+        });
+      else
+        setAccepted((current) => [
+          ...current.filter((job) => job.client !== client || job.id !== acceptance.jobId),
+          { client, id: acceptance.jobId },
+        ]);
       return acceptance;
     },
   });

@@ -2,7 +2,10 @@
 
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useCallback, useState } from "react";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import { useBindAdminDraftOwner } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
@@ -12,6 +15,7 @@ import { AdminThemeProvider } from "./shared/AdminThemeProvider";
 import { AdminToastProvider } from "./shared/AdminToast";
 
 interface AdminUser {
+  id: string;
   name: string;
   email: string;
   image?: string;
@@ -25,23 +29,29 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutProps) {
+  const { apiUrl } = useEnv();
+  useBindAdminDraftOwner({ apiUrl, actorId: user.id, role: user.role ?? "admin" });
   const hydrated = useHydrated();
-  const [sidebarOverride, setSidebarOpen] = useState<boolean | null>(null);
-  const sidebarOpen =
-    sidebarOverride ?? (!hydrated || window.matchMedia("(min-width:900px)").matches);
-  const toggleSidebar = useCallback(() => setSidebarOpen(!sidebarOpen), [sidebarOpen]);
+  const desktop = useMediaQuery("(min-width:900px)", { defaultMatches: true });
+  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const sidebarOpen = desktop ? desktopOpen : mobileOpen;
+  const toggleSidebar = useCallback(() => {
+    if (desktop) setDesktopOpen((value) => !value);
+    else setMobileOpen((value) => !value);
+  }, [desktop]);
 
   return (
     <AdminThemeProvider>
       <AdminToastProvider>
-        <AdminJobEffectsProvider>
+        <AdminJobEffectsProvider enabled={user.role === "admin"}>
           <Box
             className="omx-admin"
             sx={{ display: "flex", height: "100dvh", bgcolor: "background.default" }}
           >
             <AdminSidebar
               open={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
+              onClose={() => setMobileOpen(false)}
               selfHosted={selfHosted}
               role={user.role}
             />

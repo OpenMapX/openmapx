@@ -34,6 +34,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { serviceAdminQueries, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationKey, useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -63,6 +64,7 @@ function BackupsView() {
   const { client, apiUrl } = useActivityClient();
   const register = useServiceJobRegistration();
   const showToast = useAdminToast();
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const createIntent = useAdminMutationKey(client),
     restoreIntent = useAdminMutationKey(client),
     deleteIntent = useAdminMutationKey(client);
@@ -105,6 +107,7 @@ function BackupsView() {
           ),
         );
         register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           showToast(`Backup create queued (${result.jobId})`);
           setCreateName("");
@@ -133,6 +136,7 @@ function BackupsView() {
           ),
         );
         register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           showToast(`Restore queued for ${payload.name} (${result.jobId})`);
           setRestoreTarget(null);
@@ -158,6 +162,7 @@ function BackupsView() {
           sdk.deleteAdminServiceBackup(name, { "idempotency-key": key }, undefined, { client }),
         );
         register({ client, apiUrl, jobId: result.jobId, effect });
+        if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           showToast(`Delete queued for ${name} (${result.jobId})`);
           setDeleteTarget(null);
@@ -227,7 +232,16 @@ function BackupsView() {
           >
             {createMutation.isPending ? "Queueing…" : "Create backup"}
           </Button>
-          <Button component={Link} href="/admin/activity" size="small" variant="outlined">
+          <Button
+            component={Link}
+            href={
+              lastAcceptedJobId
+                ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+                : "/admin/activity"
+            }
+            size="small"
+            variant="outlined"
+          >
             Open activity
           </Button>
         </Stack>

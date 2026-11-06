@@ -27,9 +27,12 @@ ARG TARGETARCH
 # git, Python and ca-certificates pull in, to their security fixes. The version
 # checks fail a stale mirror and, when raised, invalidate this layer in the
 # registry build cache.
+# apt and libapt-pkg6.0 2.6.2 fix CVE-2026-109518 (Debian DLA-4880-1).
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 libbrotli1 libssl3 openssl \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age apt libapt-pkg6.0 libpcre2-8-0 libexpat1 libbrotli1 libssl3 openssl \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 2.6.2 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" ge 2.6.2 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.0.9-2+deb12u1 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \

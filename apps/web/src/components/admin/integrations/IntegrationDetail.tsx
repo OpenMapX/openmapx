@@ -40,6 +40,8 @@ import {
   useIntegrationReload,
 } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useAdminTab } from "@/lib/admin/useAdminQueryState";
+import { AdminJobLink } from "../activity/AdminJobLink";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -1060,7 +1062,13 @@ interface IntegrationDetailProps {
 
 export function IntegrationDetail({ id }: IntegrationDetailProps) {
   const admin = useIntegrationAdmin();
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useAdminTab([
+    "overview",
+    "configuration",
+    "credentials",
+    "health",
+    "sources",
+  ]);
   const showToast = useAdminToast();
 
   const { data, isLoading, isError } = useQuery(admin.queries.detail(id));
@@ -1083,6 +1091,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   });
 
   const reloadMutation = useIntegrationReload(id);
+  const [reloadJobId, setReloadJobId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -1177,9 +1186,11 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
               onClick={() =>
                 reloadMutation.mutate(undefined, {
-                  onSuccess: () =>
-                    owner.active &&
-                    showToast("Reload job queued — check Activity for status", "info"),
+                  onSuccess: (result) => {
+                    if (!owner.active) return;
+                    setReloadJobId(result.jobId);
+                    showToast("Reload job queued — check Activity for status", "info");
+                  },
                   onError: () => {
                     if (owner.active) showToast("Failed to queue reload job", "error");
                   },
@@ -1202,6 +1213,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           </Typography>
         )}
       </Stack>
+      {reloadJobId && <AdminJobLink id={reloadJobId} source="application" />}
       <Divider />
       <Box>
         <Tabs
@@ -1211,16 +1223,27 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TABS.map((label) => (
-            <Tab key={label} label={label} />
+          {TABS.map((label, index) => (
+            <Tab
+              id={`integration-tab-${index}`}
+              aria-controls={`integration-panel-${index}`}
+              key={label}
+              label={label}
+            />
           ))}
         </Tabs>
 
-        {tab === 0 && <OverviewTab data={data} />}
-        {tab === 1 && <ConfigTab data={data} integrationId={id} />}
-        {tab === 2 && <CredentialsTab data={data} integrationId={id} />}
-        {tab === 3 && <HealthTab data={data} integrationId={id} />}
-        {tab === 4 && <DataSourcesTab data={data} />}
+        <div
+          role="tabpanel"
+          id={`integration-panel-${tab}`}
+          aria-labelledby={`integration-tab-${tab}`}
+        >
+          {tab === 0 && <OverviewTab data={data} />}
+          {tab === 1 && <ConfigTab data={data} integrationId={id} />}
+          {tab === 2 && <CredentialsTab data={data} integrationId={id} />}
+          {tab === 3 && <HealthTab data={data} integrationId={id} />}
+          {tab === 4 && <DataSourcesTab data={data} />}
+        </div>
       </Box>
     </Stack>
   );

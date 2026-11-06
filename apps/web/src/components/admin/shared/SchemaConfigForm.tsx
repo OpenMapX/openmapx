@@ -15,10 +15,12 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { ApiClientError } from "@openmapx/core";
 import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
+import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 
 // The shared, schema-driven config form used by BOTH the integration and the
@@ -85,10 +87,6 @@ function toFormValue(field: SchemaConfigField, value: unknown): unknown {
   return JSON.stringify(value, null, 2);
 }
 
-function comparable(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
-}
-
 export function buildConfigDiff(
   fields: SchemaConfigField[],
   values: Record<string, unknown>,
@@ -153,7 +151,25 @@ export function extractConfigFields(
     }));
 }
 
+export class AdminActionNotStartedError extends Error {}
+export class SavedConfigurationApplyError extends Error {
+  constructor(cause: unknown) {
+    const status =
+      cause instanceof Error && cause.cause instanceof ApiClientError ? cause.cause.status : null;
+    const notStarted =
+      cause instanceof AdminActionNotStartedError ||
+      (status !== null && status >= 400 && status < 500 && status !== 408);
+    super(
+      notStarted
+        ? `Configuration saved. Service application was not started. ${cause instanceof Error ? cause.message : "The action was rejected."}`
+        : "Configuration saved. Service application could not be confirmed. Inspect Activity before trying again.",
+      { cause },
+    );
+  }
+}
 export interface SchemaConfigFormProps {
+  /** Stable ordinary draft identity, scoped by the root administrator authority. */
+  draftId?: string;
   /** The manifest `configSchema` object. */
   schema: Record<string, unknown> | undefined;
   /** Resolved per-field values with source annotation. */
@@ -167,17 +183,20 @@ export interface SchemaConfigFormProps {
   onSave: (diff: Record<string, unknown>) => Promise<void>;
   /** Optional second action that also applies the change. */
   onSaveAndApply?: (diff: Record<string, unknown>) => Promise<void>;
+  onApplySaved?: () => Promise<void>;
+  applySavedLabel?: string;
+  applyPending?: boolean;
   /** Label for the apply button (default "Save & apply"). */
   applyLabel?: string;
   /** Feature-specific acknowledgement: an accepted job is not completed work. */
   applySuccessMessage?: string;
-  /** Preserve edited fields when a background read refreshes the saved baseline. */
-  preserveDirtyValuesOnRefresh?: boolean;
+  applySavedSuccessMessage?: string;
   /** Shown when there are no editable (non-secret) fields. */
   emptyMessage?: string;
 }
 
 export function SchemaConfigForm({
+  draftId,
   schema,
   resolvedConfig,
   excludeKeys,
@@ -185,9 +204,12 @@ export function SchemaConfigForm({
   ownership,
   onSave,
   onSaveAndApply,
+  onApplySaved,
+  applySavedLabel = "Apply saved configuration",
+  applyPending = false,
   applyLabel = "Save & apply",
   applySuccessMessage = "Configuration saved and applied.",
-  preserveDirtyValuesOnRefresh = false,
+  applySavedSuccessMessage = "Saved configuration application queued.",
   emptyMessage = "No editable configuration fields. Credentials live on the Credentials tab.",
 }: SchemaConfigFormProps) {
   const fields = useMemo(() => extractConfigFields(schema, excludeKeys), [schema, excludeKeys]);
@@ -209,65 +231,41 @@ export function SchemaConfigForm({
     return initial;
   }, [fields, resolvedConfig, ownership]);
 
-  const [values, setValues] = useState<Record<string, unknown>>(computeInitialValues);
-  const [pending, setPending] = useState<"save" | "apply" | null>(null);
+  const localId = useId();
+  const originalValues = useMemo(computeInitialValues, [computeInitialValues]);
+  const draft = useAdminDraft({
+    id: draftId ?? localId,
+    baseline: originalValues,
+    editableKeys: Object.keys(originalValues),
+    signature: "schema-config-v1",
+  });
+  const { values, setValues } = draft;
+  const [pending, setPending] = useState<"save" | "apply" | "apply-saved" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
+  const [saved, setSaved] = useState<"saved" | "applied" | "applied-saved" | null>(null);
+  const changedKeys = draft.dirtyKeys.filter((key) => Object.hasOwn(originalValues, key));
 
-  // A disposed service form's cache refresh may reach its replacement form.
-  // Update its saved baseline without overwriting newly edited fields.
-  const previousInitial = useRef(values);
-  useEffect(() => {
-    const next = computeInitialValues();
-    const previous = previousInitial.current;
-    previousInitial.current = next;
-    setValues((current) => {
-      if (!preserveDirtyValuesOnRefresh) return next;
-      const merged = { ...next };
-      for (const key of Object.keys(next)) {
-        if (comparable(current[key]) !== comparable(previous[key])) merged[key] = current[key];
-      }
-      return merged;
-    });
-  }, [computeInitialValues, preserveDirtyValuesOnRefresh]);
+  const saving = pending !== null || applyPending;
 
-  const originalValues = useMemo(() => {
-    const orig: Record<string, unknown> = {};
-    for (const field of fields) {
-      const entry = resolvedConfig[field.key];
-      if (
-        entry?.source !== "env" &&
-        entry?.source !== "config.json" &&
-        ownership?.[field.key]?.writable !== false
-      ) {
-        orig[field.key] = toFormValue(field, entry?.value ?? field.default ?? "");
-      }
-    }
-    return orig;
-  }, [fields, resolvedConfig, ownership]);
-
-  const changedKeys = useMemo(
-    () =>
-      Object.keys(values).filter(
-        (k) =>
-          !["env", "config.json"].includes(resolvedConfig[k]?.source ?? "") &&
-          ownership?.[k]?.writable !== false &&
-          comparable(values[k]) !== comparable(originalValues[k] ?? ""),
-      ),
-    [values, originalValues, resolvedConfig, ownership],
-  );
-
-  const saving = pending !== null;
-
-  async function run(kind: "save" | "apply", fn: (diff: Record<string, unknown>) => Promise<void>) {
+  async function run(
+    kind: "save" | "apply" | "apply-saved",
+    fn: (diff: Record<string, unknown>) => Promise<void>,
+  ) {
+    if (saving || draft.conflicts.length > 0) return;
     setError(null);
     setSaved(null);
     setPending(kind);
+    const submitted = Object.fromEntries(changedKeys.map((key) => [key, values[key]]));
     try {
       const diff = buildConfigDiff(fields, values, changedKeys);
       await fn(diff);
-      setSaved(kind === "apply" ? "applied" : "saved");
+      draft.acknowledge(submitted);
+      setSaved(kind === "save" ? "saved" : kind === "apply-saved" ? "applied-saved" : "applied");
     } catch (err) {
+      if (err instanceof SavedConfigurationApplyError) {
+        draft.acknowledge(submitted);
+        setSaved("saved");
+      }
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setPending(null);
@@ -284,6 +282,19 @@ export function SchemaConfigForm({
 
   return (
     <Stack sx={{ gap: 2.5 }}>
+      {draft.conflicts.length > 0 && (
+        <Alert
+          severity="warning"
+          action={
+            <Button disabled={saving} onClick={() => draft.keepEdits()}>
+              Keep my edits
+            </Button>
+          }
+        >
+          Saved values changed for {draft.conflicts.join(", ")}. Review your edits or discard them
+          before saving.
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" variant="outlined" onClose={() => setError(null)}>
           {error}
@@ -291,12 +302,17 @@ export function SchemaConfigForm({
       )}
       {saved === "saved" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved.{onSaveAndApply ? " Use Save & apply to take effect." : ""}
+          Configuration saved.
+          {onApplySaved
+            ? " Apply the saved configuration when ready."
+            : onSaveAndApply
+              ? " Runtime application is still pending."
+              : ""}
         </Alert>
       )}
-      {saved === "applied" && (
+      {(saved === "applied" || saved === "applied-saved") && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          {applySuccessMessage}
+          {saved === "applied-saved" ? applySavedSuccessMessage : applySuccessMessage}
         </Alert>
       )}
       {envPrefix && (
@@ -457,25 +473,43 @@ export function SchemaConfigForm({
         );
       })}
 
-      <Stack direction="row" sx={{ gap: 1 }}>
+      <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
+        {draft.dirty && (
+          <Button size="small" disabled={saving} onClick={() => draft.discard()}>
+            Discard
+          </Button>
+        )}
         <Button
           variant={onSaveAndApply ? "outlined" : "contained"}
           size="small"
           startIcon={pending === "save" ? <CircularProgress size={14} /> : <SaveIcon />}
           onClick={() => run("save", onSave)}
-          disabled={saving || changedKeys.length === 0}
+          disabled={saving || changedKeys.length === 0 || draft.conflicts.length > 0}
         >
           Save{changedKeys.length > 0 ? ` (${changedKeys.length} changed)` : ""}
         </Button>
-        {onSaveAndApply && (
+        {(onSaveAndApply || onApplySaved) && (
           <Button
             variant="contained"
             size="small"
-            startIcon={pending === "apply" ? <CircularProgress size={14} /> : <RestartAltIcon />}
-            onClick={() => run("apply", onSaveAndApply)}
-            disabled={saving || changedKeys.length === 0}
+            startIcon={
+              pending === "apply" || pending === "apply-saved" ? (
+                <CircularProgress size={14} />
+              ) : (
+                <RestartAltIcon />
+              )
+            }
+            onClick={() => {
+              if (changedKeys.length > 0 && onSaveAndApply) void run("apply", onSaveAndApply);
+              else if (onApplySaved) void run("apply-saved", async () => onApplySaved());
+            }}
+            disabled={
+              saving ||
+              draft.conflicts.length > 0 ||
+              (changedKeys.length > 0 ? !onSaveAndApply : !onApplySaved)
+            }
           >
-            {applyLabel}
+            {changedKeys.length > 0 ? applyLabel : applySavedLabel}
           </Button>
         )}
       </Stack>

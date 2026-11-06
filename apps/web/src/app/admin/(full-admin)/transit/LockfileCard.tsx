@@ -1,4 +1,5 @@
 "use client";
+
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -14,6 +15,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
 import { useEffect, useRef, useState } from "react";
+import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitCredentialsSection } from "@/components/admin/services/TransitCredentialsSection";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
@@ -444,6 +446,9 @@ function CatalogPinView() {
             }
           >
             <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+              {(ownedJobId ?? execution?.id) && (
+                <AdminJobLink id={(ownedJobId ?? execution?.id) as string} source="data-manager" />
+              )}
               Catalog job {ownedJobId ?? execution?.id}:{" "}
               {execution?.status ?? "connecting to retained execution"}
             </Typography>

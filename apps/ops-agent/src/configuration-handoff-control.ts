@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  ArtifactTargetAdoptionObservationBusyError,
   ArtifactTargetJournalBusyError,
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
@@ -50,23 +51,30 @@ const children = new WeakMap<
     intent: ConfigurationHandoffIntentRecord;
   }
 >();
-/** Parent terminal/copy publication can briefly own the authenticated source
- * index. Wait only around source reads, before adoption/forward writes. The
- * original deadline remains authoritative; no lock is removed or stolen. */
-async function waitForHandoffSource<T>(execution: ExecutionRef, read: () => T): Promise<T> {
+function sourceReadBusy(error: unknown): boolean {
+  const io = error as NodeJS.ErrnoException | undefined;
+  return (
+    error instanceof ArtifactTargetJournalBusyError ||
+    (io?.code === "EEXIST" &&
+      io.syscall === "mkdir" &&
+      typeof io.path === "string" &&
+      basename(io.path) === ".family-writer")
+  );
+}
+/** Retry only the caller's certified pre-write contention. The original
+ * deadline remains authoritative; no lock is removed or stolen. */
+async function waitForHandoffContention<T>(
+  execution: ExecutionRef,
+  attempt: () => T | Promise<T>,
+  canRetry: (error: unknown) => boolean,
+): Promise<T> {
   const started = performance.now();
   for (;;) {
     try {
-      return read();
+      return await attempt();
     } catch (error) {
-      const io = error as NodeJS.ErrnoException;
-      const familyBusy =
-        io.code === "EEXIST" &&
-        io.syscall === "mkdir" &&
-        !!io.path &&
-        basename(io.path) === ".family-writer";
       if (
-        (!familyBusy && !(error instanceof ArtifactTargetJournalBusyError)) ||
+        !canRetry(error) ||
         Date.now() >= execution.deadlineAt ||
         performance.now() - started >= 5000
       )
@@ -99,8 +107,10 @@ export async function openConfigurationHandoffChild(input: {
   let lease: BorrowedArtifactTargetLease | undefined;
   try {
     const intent = immutable(
-      await waitForHandoffSource(execution, () =>
-        readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+      await waitForHandoffContention(
+        execution,
+        () => readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+        sourceReadBusy,
       ),
     );
     if (
@@ -116,27 +126,39 @@ export async function openConfigurationHandoffChild(input: {
         handoffId: input.handoffId,
         intentDigest: controlDigest(intent.operation),
       },
-      { peer, parent } = await waitForHandoffSource(execution, () => ({
-        peer: verifyFixedCliControlPeer(installation, {
-          assertion: input.assertion,
-          execution,
-          kind: body.kind,
-          recipient: "configuration-helper",
+      { peer, parent } = await waitForHandoffContention(
+        execution,
+        () => ({
+          peer: verifyFixedCliControlPeer(installation, {
+            assertion: input.assertion,
+            execution,
+            kind: body.kind,
+            recipient: "configuration-helper",
+          }),
+          parent: verifiedParentForArtifactDelegation(installation, input.assertion, execution),
         }),
-        parent: verifiedParentForArtifactDelegation(installation, input.assertion, execution),
-      }));
+        sourceReadBusy,
+      );
     if (
       canonicalJson(parent.operationKey) !== canonicalJson(intent.preparer.operationKey) ||
       parent.fingerprint !== intent.preparer.fingerprint
     )
       throw Error("Original helper preparer required");
-    lease = await adoptArtifactTargetLease({
-      dataRoot: join(infraDir, "data"),
-      assertion: input.assertion,
-      peer,
+    lease = await waitForHandoffContention(
       execution,
-      serviceIds: intent.operation.serviceIds,
-    });
+      () =>
+        adoptArtifactTargetLease({
+          dataRoot: join(infraDir, "data"),
+          assertion: input.assertion,
+          peer,
+          execution,
+          serviceIds: intent.operation.serviceIds,
+        }),
+      // A raw family-writer error may follow partial adoption and is never retried.
+      (error) =>
+        error instanceof ArtifactTargetAdoptionObservationBusyError ||
+        error instanceof ArtifactTargetJournalBusyError,
+    );
     const authority = retainAdmittedControlExecution(installation, {
       execution,
       kind: body.kind,
@@ -173,8 +195,10 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
     });
   try {
-    const intent = await waitForHandoffSource(execution, () =>
-        readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+    const intent = await waitForHandoffContention(
+        execution,
+        () => readConfigurationHandoffSpawnIntent(installation, execution, input.handoffId),
+        sourceReadBusy,
       ),
       state = installationState(installation),
       file = configurationHandoffRecordName(input.handoffId, "completion");
@@ -192,13 +216,16 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       raw,
       configurationHandoffWorkerRecordSchema,
     );
-    await waitForHandoffSource(execution, () =>
-      verifyFamilyOwnedRecord(
-        state,
-        intent.origin,
-        { scope: "private", namespace: "observations", container: "", name: file },
-        canonicalJson(raw),
-      ),
+    await waitForHandoffContention(
+      execution,
+      () =>
+        verifyFamilyOwnedRecord(
+          state,
+          intent.origin,
+          { scope: "private", namespace: "observations", container: "", name: file },
+          canonicalJson(raw),
+        ),
+      sourceReadBusy,
     );
     if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
       throw Error("Unfinished original helper remains fenced");

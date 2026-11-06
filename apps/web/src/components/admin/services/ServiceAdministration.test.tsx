@@ -2,6 +2,7 @@ import { SERVICE_ACTIONS } from "@openmapx/core/ops";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
+import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, fireEvent, render, screen, waitFor } from "@/test";
 import { RequiredServicesPanel } from "../integrations/RequiredServicesPanel";
@@ -309,7 +310,7 @@ describe("service administration visible behavior with the generated SDK", () =>
     await config();
     fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
     expect(
-      await screen.findByText("Start denied; saved configuration retained"),
+      await screen.findByText(/Configuration saved.*application was not started/),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("spinbutton")).toHaveValue(2));
     expect(qc.getQueryData(["admin", "services", apiUrl, "config", "demo"])).toMatchObject({
@@ -350,7 +351,9 @@ describe("service administration visible behavior with the generated SDK", () =>
             : Response.json({ errors: ["Old config error"] }, { status: 400 }),
         ),
       );
-      expect(requests.filter((r) => r.url.pathname.endsWith("/action"))).toHaveLength(0);
+      expect(requests.filter((r) => r.url.pathname.endsWith("/action"))).toHaveLength(
+        replacement === "tab" && outcome === "success" ? 1 : 0,
+      );
       expect(screen.queryByText(/Configuration saved/)).not.toBeInTheDocument();
     },
   );
@@ -1007,3 +1010,69 @@ it.each(["file", "env"])(
     }
   },
 );
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+
+it("applies the saved service configuration without posting another save and links its exact job", async () => {
+  const requests = setup();
+  mount(<ServiceDetail id="demo" />);
+  await config();
+  fireEvent.click(screen.getByRole("button", { name: /^Save \(/ }));
+  await screen.findByText(/Configuration saved\./);
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "Start" }).length).toBe(2));
+  fireEvent.click(screen.getAllByRole("button", { name: "Start" })[1]);
+  expect(await screen.findByRole("link", { name: "View job" })).toHaveAttribute(
+    "href",
+    "/admin/activity?tab=jobs&job=job-1&source=application",
+  );
+  expect(
+    requests.filter(
+      (request) => request.url.pathname.endsWith("/config") && request.init.method === "POST",
+    ),
+  ).toHaveLength(1);
+  expect(
+    requests.filter(
+      (request) => request.url.pathname.endsWith("/action") && request.init.method === "POST",
+    ),
+  ).toHaveLength(1);
+});
+it("retains ordinary service fields through Credentials tab disposal", async () => {
+  setup();
+  mount(
+    <AdminDraftProvider>
+      <ServiceDetail id="demo" />
+    </AdminDraftProvider>,
+  );
+  await config();
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "9" } });
+  fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
+  await screen.findByText("Demo token");
+  fireEvent.click(screen.getByRole("tab", { name: "Configuration" }));
+  expect(await screen.findByRole("spinbutton")).toHaveValue(9);
+});
+
+it("starts a new apply intent after another successful configuration save", async () => {
+  let attempt = 0;
+  const keys: string[] = [];
+  setup((url, init) => {
+    if (url.pathname.endsWith("/action") && init.method === "POST") {
+      keys.push(new Headers(init.headers).get("idempotency-key") ?? "");
+      return ++attempt === 1
+        ? Response.json({ error: "Temporarily unavailable" }, { status: 503 })
+        : Response.json({ ok: true, jobId: "job-1" });
+    }
+    return undefined;
+  });
+  mount(<ServiceDetail id="demo" />);
+  await config();
+  fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
+  await screen.findByText(/application could not be confirmed/);
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save & apply" }));
+  await screen.findByText(/Service apply queued/);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).not.toBe(keys[1]);
+});

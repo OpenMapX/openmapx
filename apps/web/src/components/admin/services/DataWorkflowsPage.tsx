@@ -24,6 +24,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import {
   invalidateServiceAdministration,
   serviceAdminQueries,
@@ -117,7 +118,12 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           severity="info"
           sx={{ mb: 2 }}
           action={
-            <Button component={Link} href="/admin/activity" size="small" color="inherit">
+            <Button
+              component={Link}
+              href={adminJobHref({ id: lastJobId, source: "application" })}
+              size="small"
+              color="inherit"
+            >
               View Jobs
             </Button>
           }

@@ -696,6 +696,12 @@ it.skipIf(!enabled)(
       });
       expect(actor.statusCode).toBe(409);
       expect(f.dispatches()).toBeLessThanOrEqual(1);
+      // Finish the held synthetic job before close() requests cancellation.
+      f.release();
+      await expect
+        .poll(async () => (await f.store.inspect(admitted.id))?.status.status, { timeout: 15000 })
+        .toBe("ok");
+      expect(f.dispatches()).toBe(1);
     } finally {
       await f.close();
     }
@@ -823,9 +829,12 @@ it.skipIf(!enabled)(
       expect(f.workerError()).toMatchObject({ code: "preflight_stale" });
       expect(f.dispatches()).toBe(1);
       expect((await f.runtime.inspect(id))?.publication).toBe("not_started");
-      expect(
-        (await import("node:fs")).existsSync(join(root, "data/.admin-target-control/locks/motis")),
-      ).toBe(false);
+      // Terminal status is published before asynchronous lease settlement finishes.
+      await expect
+        .poll(() => fs.existsSync(join(root, "data/.admin-target-control/locks/motis")), {
+          timeout: 10000,
+        })
+        .toBe(false);
     } finally {
       f.release();
       await f.close();

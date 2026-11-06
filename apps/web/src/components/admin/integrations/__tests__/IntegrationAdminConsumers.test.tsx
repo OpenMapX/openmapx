@@ -965,3 +965,8 @@ describe("integration administration browser behavior", () => {
     },
   );
 });
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);

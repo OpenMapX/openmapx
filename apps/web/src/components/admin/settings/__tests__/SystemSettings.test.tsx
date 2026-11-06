@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AdminDraftProvider, useBindAdminDraftOwner } from "@/lib/admin/AdminDraftProvider";
 import {
   act,
   createQueryWrapper,
@@ -315,26 +316,29 @@ describe("SystemSettings focused sections", () => {
     await screen.findByLabelText("Privacy sources");
 
     act(() => {
-      client.setQueryData(["admin", "settings"], {
-        groups: [
-          {
-            id: "general",
-            label: "Legal",
-            settings: [
-              {
-                group: "legal",
-                key: "legalPrivacySources",
-                label: "Privacy sources",
-                type: "object",
-                secret: false,
-                value: [{ title: "Updated source" }],
-                source: "database",
-                envOverride: false,
-              },
-            ],
-          },
-        ],
-      });
+      client.setQueriesData(
+        { queryKey: ["admin", "settings"] },
+        {
+          groups: [
+            {
+              id: "general",
+              label: "Legal",
+              settings: [
+                {
+                  group: "legal",
+                  key: "legalPrivacySources",
+                  label: "Privacy sources",
+                  type: "object",
+                  secret: false,
+                  value: [{ title: "Updated source" }],
+                  source: "database",
+                  envOverride: false,
+                },
+              ],
+            },
+          ],
+        },
+      );
     });
 
     await waitFor(() =>
@@ -372,6 +376,8 @@ describe("configured secret preservation", () => {
     ]);
     render(<SystemSettings />, { wrapper: createQueryWrapper() });
     await screen.findByLabelText("MapTiler API Key");
+    fireEvent.mouseDown(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByRole("option", { name: "maptiler" }));
     fireEvent.click(screen.getByRole("button", { name: "Save Map" }));
     await waitFor(() => {
       const patch = fetchMock.mock.calls.find(
@@ -379,8 +385,139 @@ describe("configured secret preservation", () => {
       );
       expect(patch).toBeDefined();
       expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
-        hostedBasemapProvider: "openfreemap",
+        hostedBasemapProvider: "maptiler",
       });
     });
   });
 });
+
+it("keeps another administrator's clean field while saving only the dirty key", async () => {
+  const settings = [
+    {
+      group: "general",
+      key: "instanceName",
+      label: "Instance Name",
+      type: "string",
+      secret: false,
+      value: "old name",
+      source: "database" as const,
+      envOverride: false,
+    },
+    {
+      group: "general",
+      key: "instanceUrl",
+      label: "Instance URL",
+      type: "string",
+      secret: false,
+      value: "https://old.test",
+      source: "database" as const,
+      envOverride: false,
+    },
+  ];
+  mockGroup("General", settings);
+  const client = createTestQueryClient();
+  render(<SystemSettings showTransfer={false} />, { wrapper: createQueryWrapper(client) });
+  fireEvent.change(await screen.findByLabelText("Instance Name"), { target: { value: "mine" } });
+  act(() =>
+    client.setQueriesData(
+      { queryKey: ["admin", "settings"] },
+      {
+        groups: [
+          {
+            id: "general",
+            label: "General",
+            settings: [settings[0], { ...settings[1], value: "https://other.test" }],
+          },
+        ],
+      },
+    ),
+  );
+  expect(screen.getByLabelText("Instance Name")).toHaveValue("mine");
+  await waitFor(() =>
+    expect(screen.getByLabelText("Instance URL")).toHaveValue("https://other.test"),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save General" }));
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+    );
+    expect(call).toBeDefined();
+    expect(JSON.parse(String((call?.[1] as RequestInit | undefined)?.body))).toEqual({
+      instanceName: "mine",
+    });
+  });
+});
+
+it("shares legal edits with another settings destination while disposing typed secrets", async () => {
+  const settings = [
+    {
+      group: "general",
+      key: "controller",
+      label: "Controller",
+      type: "string",
+      secret: false,
+      value: "saved controller",
+      source: "database" as const,
+      envOverride: false,
+    },
+    {
+      group: "general",
+      key: "password",
+      label: "Password",
+      type: "string",
+      secret: true,
+      value: "***",
+      source: "database" as const,
+      envOverride: false,
+    },
+    {
+      group: "general",
+      key: "instanceName",
+      label: "Instance Name",
+      type: "string",
+      secret: false,
+      value: "saved name",
+      source: "database" as const,
+      envOverride: false,
+    },
+  ];
+  mockGroup("General", settings);
+  const view = (topic: string) => (
+    <AdminDraftProvider>
+      <BoundSettings topic={topic} />
+    </AdminDraftProvider>
+  );
+  const { rerender } = render(view("privacy"), { wrapper: createQueryWrapper() });
+  fireEvent.change(await screen.findByLabelText("Controller"), {
+    target: { value: "draft controller" },
+  });
+  fireEvent.change(screen.getByLabelText("Password"), {
+    target: { value: "synthetic typed secret" },
+  });
+  rerender(view("settings"));
+  await waitFor(() => expect(screen.getByLabelText("Controller")).toHaveValue("draft controller"));
+  expect(screen.getByLabelText("Password")).not.toHaveValue("synthetic typed secret");
+  expect(screen.getByLabelText("Instance Name")).toHaveValue("saved name");
+});
+function BoundSettings({ topic }: { topic: string }) {
+  useBindAdminDraftOwner({ apiUrl: "http://test.local", actorId: "admin", role: "admin" });
+  return (
+    <SystemSettings
+      key={topic}
+      showTransfer={false}
+      sections={
+        topic === "privacy"
+          ? [
+              {
+                id: "legal",
+                groupId: "general",
+                settingKeys: ["controller", "password"],
+                label: "Legal",
+                defaultExpanded: true,
+              },
+            ]
+          : undefined
+      }
+    />
+  );
+}

@@ -260,6 +260,12 @@ may adopt early but `verifyConfigurationHelperReady` refuses drain until that
 signed terminal preparation exists. Maintenance continuations remain frozen,
 one-use subsets; helper descendants have no further edge.
 
+The detached configuration helper may wait up to five seconds per source read or
+initial adoption attempt sequence, within its original deadline, for family or
+lease journal writer contention. Adoption retries cover only journal-entry and
+initial-observation contention, before any adoption record is written; later
+failures remain recovery-required. Waiting never removes locks or renews authority.
+
 ## Deferred product consumers
 
 Task02.3 owns durable data-manager HTTP/row admission and containment. The existing

@@ -34,7 +34,9 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useAdminDraftExit } from "@/lib/admin/AdminDraftProvider";
 import { useAccountAction, useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useAdminTab } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -435,7 +437,8 @@ function AccountsTab() {
 }
 
 export function UserDetail({ userId }: { userId: string }) {
-  const [tab, setTab] = useState(0);
+  const requestExit = useAdminDraftExit();
+  const [tab, setTab] = useAdminTab(["profile", "sessions", "accounts"]);
   const account = useAccountAdmin();
   const currentUserId = account.actorId;
   const router = useRouter();
@@ -512,27 +515,32 @@ export function UserDetail({ userId }: { userId: string }) {
       />
       <Box>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="User detail sections">
-          <Tab label="Profile" />
-          <Tab label="Sessions" />
-          <Tab label="Accounts" />
+          <Tab id="user-tab-0" aria-controls="user-panel-0" label="Profile" />
+          <Tab id="user-tab-1" aria-controls="user-panel-1" label="Sessions" />
+          <Tab id="user-tab-2" aria-controls="user-panel-2" label="Accounts" />
         </Tabs>
       </Box>
       <Box>
-        {tab === 0 && (
-          <ProfileTab
-            key={`${account.apiUrl}:${account.actorId}:${userData.id}`}
-            user={userData}
-            isSelf={isSelf}
-            impersonate={{
-              ...impersonate,
-              mutate: () => impersonate.mutate((client) => client.impersonate(userId)),
-            }}
-          />
-        )}
-        {tab === 1 && (
-          <SessionsTab key={`${account.apiUrl}:${account.actorId}:${userId}`} userId={userId} />
-        )}
-        {tab === 2 && <AccountsTab />}
+        <div role="tabpanel" id={`user-panel-${tab}`} aria-labelledby={`user-tab-${tab}`}>
+          {tab === 0 && (
+            <ProfileTab
+              key={`${account.apiUrl}:${account.actorId}:${userData.id}`}
+              user={userData}
+              isSelf={isSelf}
+              impersonate={{
+                ...impersonate,
+                mutate: async () => {
+                  if (await requestExit("Impersonation changes the active account."))
+                    impersonate.mutate((client) => client.impersonate(userId));
+                },
+              }}
+            />
+          )}
+          {tab === 1 && (
+            <SessionsTab key={`${account.apiUrl}:${account.actorId}:${userId}`} userId={userId} />
+          )}
+          {tab === 2 && <AccountsTab />}
+        </div>
       </Box>
     </Stack>
   );

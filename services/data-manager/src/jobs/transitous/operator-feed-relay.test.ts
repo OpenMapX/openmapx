@@ -1002,17 +1002,28 @@ describe("OperatorFeedRelayStore", () => {
     await vi.waitFor(() => {
       expect(destination && existsSync(destination)).toBe(false);
     });
-    const replacement = relay.register({
-      runId: "run-after-unread",
-      sourceId: "operator:de:after-unread",
-      remoteUrl: new URL("https://operator.example/after-unread.zip"),
-    });
+    const replacement = await vi.waitFor(
+      () =>
+        relay.register({
+          runId: "run-after-unread",
+          sourceId: "operator:de:after-unread",
+          remoteUrl: new URL("https://operator.example/after-unread.zip"),
+        }),
+      { timeout: 5_000 },
+    );
     expect(replacement.handle).toMatch(/^[a-f0-9]{64}$/);
     await relay.endRun("run-after-unread");
   });
 
   it("keeps the total deadline active after a small payload is fully buffered", async () => {
     vi.useFakeTimers();
+    const actualRm = relayFileLifecycle.actualRm;
+    if (!actualRm) throw new Error("relay filesystem fixture is unavailable");
+    const allowRemovalToSettle = deferred();
+    rmMock.mockImplementation(async (...args: Parameters<typeof actualRm>) => {
+      await actualRm(...args);
+      await allowRemovalToSettle.promise;
+    });
     let destination: string | undefined;
     const relay = new OperatorFeedRelayStore({
       maxEntries: 1,
@@ -1045,11 +1056,17 @@ describe("OperatorFeedRelayStore", () => {
     await vi.waitFor(() => {
       expect(destination && existsSync(destination)).toBe(false);
     });
-    const replacement = relay.register({
-      runId: "run-after-buffered-total",
-      sourceId: "operator:de:after-buffered-total",
-      remoteUrl: new URL("https://operator.example/after-buffered-total.zip"),
-    });
+    allowRemovalToSettle.resolve();
+    // Capacity is released after every cleanup operation settles, including rm().
+    const replacement = await vi.waitFor(
+      () =>
+        relay.register({
+          runId: "run-after-buffered-total",
+          sourceId: "operator:de:after-buffered-total",
+          remoteUrl: new URL("https://operator.example/after-buffered-total.zip"),
+        }),
+      { timeout: 5_000 },
+    );
     expect(replacement.handle).toMatch(/^[a-f0-9]{64}$/);
     await relay.endRun("run-after-buffered-total");
   });
@@ -1189,11 +1206,15 @@ describe("OperatorFeedRelayStore", () => {
     await vi.waitFor(() => {
       expect(destination && existsSync(destination)).toBe(false);
     });
-    const replacement = relay.register({
-      runId: "run-after-partial-reader",
-      sourceId: "operator:de:after-partial-reader",
-      remoteUrl: new URL("https://operator.example/after-partial-reader.zip"),
-    });
+    const replacement = await vi.waitFor(
+      () =>
+        relay.register({
+          runId: "run-after-partial-reader",
+          sourceId: "operator:de:after-partial-reader",
+          remoteUrl: new URL("https://operator.example/after-partial-reader.zip"),
+        }),
+      { timeout: 5_000 },
+    );
     expect(replacement.handle).toMatch(/^[a-f0-9]{64}$/);
     await relay.endRun("run-after-partial-reader");
   });
@@ -1227,11 +1248,15 @@ describe("OperatorFeedRelayStore", () => {
     await vi.waitFor(() => {
       expect(destination && existsSync(destination)).toBe(false);
     });
-    const replacement = relay.register({
-      runId: "run-after-disconnect",
-      sourceId: "operator:de:after-disconnect",
-      remoteUrl: new URL("https://operator.example/after-disconnect.zip"),
-    });
+    const replacement = await vi.waitFor(
+      () =>
+        relay.register({
+          runId: "run-after-disconnect",
+          sourceId: "operator:de:after-disconnect",
+          remoteUrl: new URL("https://operator.example/after-disconnect.zip"),
+        }),
+      { timeout: 5_000 },
+    );
     expect(replacement.handle).toMatch(/^[a-f0-9]{64}$/);
     await relay.endRun("run-after-disconnect");
   });

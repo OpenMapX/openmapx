@@ -33,11 +33,17 @@ import {
 } from "@/hooks/useServices";
 import { serviceActionReason } from "@/lib/admin/serviceAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useAdminTab } from "@/lib/admin/useAdminQueryState";
+import { AdminJobLink } from "../activity/AdminJobLink";
 import { useActivityClient } from "../activity/activityQueries";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
 import { CompactAlert } from "../shared/CompactAlert";
 import { MetaRow } from "../shared/MetaRow";
+import {
+  AdminActionNotStartedError,
+  SavedConfigurationApplyError,
+} from "../shared/SchemaConfigForm";
 import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ManagedDawarichSetup } from "./ManagedDawarichSetup";
 import { ServiceConfigForm } from "./ServiceConfigForm";
@@ -386,7 +392,19 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
   );
 }
 
-function ConfigTab({ data }: { data: ServiceDetailData }) {
+function ConfigTab({
+  data,
+  onApplySaved,
+  applyPending,
+  onConfigurationSaved,
+  applyOwner,
+}: {
+  data: ServiceDetailData;
+  onApplySaved: () => Promise<void>;
+  applyPending: boolean;
+  onConfigurationSaved: () => void;
+  applyOwner: ReturnType<typeof useAdminMutationOwner>;
+}) {
   const { manifest } = data;
   const startAction = data.status === "running" ? "apply" : "start";
   const reason = (action: import("@openmapx/core/ops").ServiceAction) =>
@@ -395,9 +413,7 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
   // manifest itself so the config tab doesn't refetch the full LoadedService).
   const configQuery = useServiceConfig(manifest.id);
   const saveConfig = useServiceConfigSave(manifest.id);
-  const action = useServiceAction(manifest.id);
-  const { client, apiUrl } = useActivityClient();
-  const owner = useAdminMutationOwner(client, JSON.stringify([manifest.id, manifest.configSchema]));
+  const { apiUrl } = useActivityClient();
 
   if (!manifest.configSchema) {
     return (
@@ -428,8 +444,13 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
           envPrefix={configQuery.data?.envPrefix}
           ownership={configQuery.data?.ownership}
           onSave={async (values) => {
+            const execution = applyOwner;
             await saveConfig.mutateAsync(values);
+            if (execution.active) onConfigurationSaved();
           }}
+          onApplySaved={reason(startAction) ? undefined : onApplySaved}
+          applySavedLabel={startAction === "start" ? "Start" : "Apply saved configuration"}
+          applyPending={applyPending}
           onSaveAndApply={
             reason(startAction)
               ? undefined
@@ -439,10 +460,15 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
                   // Persist first so a failed apply doesn't lose the edit.
                   if (reason(startAction))
                     throw new Error(reason(startAction) ?? "Action unavailable");
-                  const execution = owner;
+                  const execution = applyOwner;
                   await saveConfig.mutateAsync(values);
                   if (!execution.active) return;
-                  await action.mutateAsync(startAction);
+                  onConfigurationSaved();
+                  try {
+                    await onApplySaved();
+                  } catch (error) {
+                    throw new SavedConfigurationApplyError(error);
+                  }
                 }
           }
         />
@@ -500,12 +526,19 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
 function ServiceDetailView({ id }: ServiceDetailProps) {
   const { client } = useActivityClient();
-  const owner = useAdminMutationOwner(client, id);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useAdminTab([
+    "overview",
+    "configuration",
+    "credentials",
+    "logs",
+    "manifest",
+  ]);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [lastActionJobId, setLastActionJobId] = useState<string | null>(null);
   const showToast = useAdminToast();
 
   const { data, isLoading, isError, refetch } = useServiceDetail(id);
+  const owner = useAdminMutationOwner(client, JSON.stringify([id, data?.manifest.configSchema]));
   const actionMutation = useServiceAction(id);
 
   if (isLoading) {
@@ -537,16 +570,19 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
   const isBusy = actionMutation.isPending;
 
   async function runAction(action: AdminServiceAction["action"]) {
-    if (reason(action)) return;
+    if (reason(action))
+      throw new AdminActionNotStartedError(reason(action) ?? "Action unavailable");
     const execution = owner;
     try {
       const result = await actionMutation.mutateAsync(action);
       if (!execution.active) return;
+      setLastActionJobId(result.jobId);
       // Terminal observation refreshes the status; acceptance only queues work.
       showToast(`Service ${action} queued (job ${result.jobId})`);
     } catch (err) {
       if (!execution.active) return;
       showToast(err instanceof Error ? err.message : `Action "${action}" failed`, "error");
+      throw err;
     }
   }
 
@@ -636,7 +672,9 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
                   variant="contained"
                   color="success"
                   startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
-                  onClick={() => runAction(startAction)}
+                  onClick={() => {
+                    void runAction(startAction).catch(() => {});
+                  }}
                   disabled={isBusy || Boolean(reason(startAction))}
                 >
                   {data.status === "running" ? "Apply changes" : "Start"}
@@ -648,7 +686,9 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
               variant="outlined"
               color="error"
               startIcon={isBusy ? <CircularProgress size={14} /> : <StopIcon />}
-              onClick={() => runAction("stop")}
+              onClick={() => {
+                void runAction("stop").catch(() => {});
+              }}
               disabled={isBusy || Boolean(reason("stop"))}
               title={reason("stop") ?? undefined}
             >
@@ -660,7 +700,9 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
                   size="small"
                   variant="outlined"
                   startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-                  onClick={() => runAction("restart")}
+                  onClick={() => {
+                    void runAction("restart").catch(() => {});
+                  }}
                   disabled={isBusy || Boolean(reason("restart"))}
                 >
                   Restart
@@ -679,6 +721,7 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
             >
               Logs
             </Button>
+            {lastActionJobId && <AdminJobLink id={lastActionJobId} source="application" />}
           </Stack>
         </Stack>
         <Typography
@@ -739,44 +782,60 @@ function ServiceDetailView({ id }: ServiceDetailProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TABS.map((label) => (
-            <Tab key={label} label={label} disabled={label === "Logs" && Boolean(reason("logs"))} />
+          {TABS.map((label, index) => (
+            <Tab
+              id={`service-tab-${index}`}
+              aria-controls={`service-panel-${index}`}
+              key={label}
+              label={label}
+              disabled={label === "Logs" && Boolean(reason("logs"))}
+            />
           ))}
         </Tabs>
 
-        {tab === 0 && <OverviewTab data={data} />}
-        {tab === 1 && <ConfigTab data={data} />}
-        {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
-        {tab === 3 && (
-          <Box
-            sx={{
-              py: 2,
-            }}
-          >
-            <Typography
-              variant="body2"
+        <div role="tabpanel" id={`service-panel-${tab}`} aria-labelledby={`service-tab-${tab}`}>
+          {tab === 0 && <OverviewTab data={data} />}
+          {tab === 1 && (
+            <ConfigTab
+              data={data}
+              onApplySaved={() => runAction(startAction)}
+              applyPending={isBusy}
+              applyOwner={owner}
+              onConfigurationSaved={() => actionMutation.resetIntent?.()}
+            />
+          )}
+          {tab === 2 && <ServiceCredentials serviceId={data.manifest.id} />}
+          {tab === 3 && (
+            <Box
               sx={{
-                color: "text.secondary",
+                py: 2,
               }}
             >
-              Click "Logs" or switch to this tab to open the live log stream.
-            </Typography>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<ArticleIcon />}
-              onClick={() => {
-                if (!reason("logs")) setLogsOpen(true);
-              }}
-              disabled={Boolean(reason("logs"))}
-              title={reason("logs") ?? undefined}
-              sx={{ mt: 1.5 }}
-            >
-              Open Logs Drawer
-            </Button>
-          </Box>
-        )}
-        {tab === 4 && <ManifestTab data={data} />}
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                Click "Logs" or switch to this tab to open the live log stream.
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ArticleIcon />}
+                onClick={() => {
+                  if (!reason("logs")) setLogsOpen(true);
+                }}
+                disabled={Boolean(reason("logs"))}
+                title={reason("logs") ?? undefined}
+                sx={{ mt: 1.5 }}
+              >
+                Open Logs Drawer
+              </Button>
+            </Box>
+          )}
+          {tab === 4 && <ManifestTab data={data} />}
+        </div>
       </Box>
       <ServiceLogsDrawer
         open={logsOpen && !reason("logs")}

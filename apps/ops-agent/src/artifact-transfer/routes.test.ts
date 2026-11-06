@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { issueArtifactStreamCapability } from "@openmapx/core/ops";
 import Fastify from "fastify";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { registerArtifactTransferRoutes } from "./routes";
 import { ArtifactTransferStore } from "./store";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
+  vi.restoreAllMocks();
 });
 it("authenticates before streaming, preserves binary bytes, refuses purpose and attempt replay", async () => {
   const root = await mkdtemp(join(tmpdir(), "artifact-http-"));
@@ -37,6 +38,12 @@ it("authenticates before streaming, preserves binary bytes, refuses purpose and 
     declaredBytes: 4,
     operationKey: `opk1_${"a".repeat(20)}`,
   });
+  const now = Date.now();
+  vi.spyOn(Date, "now")
+    .mockImplementationOnce(() => now)
+    .mockImplementationOnce(() => now + 1)
+    .mockImplementationOnce(() => now + 2);
+  const issuedAt = Date.now();
   const input = {
     version: 1 as const,
     stageId: stage.stageId,
@@ -45,9 +52,9 @@ it("authenticates before streaming, preserves binary bytes, refuses purpose and 
     direction: "upload" as const,
     byteCap: 4,
     attemptId: randomUUID(),
-    issuedAt: Date.now(),
-    expiresAt: Date.now() + 60000,
-    deadlineAt: Date.now() + 10000,
+    issuedAt,
+    expiresAt: issuedAt + 60000,
+    deadlineAt: issuedAt + 10000,
   };
   const cap = issueArtifactStreamCapability(token, input);
   const path = `/v1/artifact-transfers/${stage.stageId}/content`;

@@ -35,13 +35,16 @@ export function activityJobQueryOptions(
     enabled: Boolean(id),
     queryFn: async ({ signal }): Promise<AdminActivityJobDetail> => {
       if (!id) throw new Error("No job selected");
-      return unwrapAdminResponse(
+      const job = unwrapAdminResponse(
         await getAdminActivityJob(
           id,
           { source },
           { client, signal, timeoutMs: ACTIVITY_READ_TIMEOUT_MS },
         ),
       );
+      if (job.id !== id || job.source !== source)
+        throw new Error("Admin job response did not match the requested identity");
+      return job;
     },
   });
 }

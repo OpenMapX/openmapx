@@ -1,4 +1,5 @@
 "use client";
+
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -17,9 +18,11 @@ import {
   type AdminPlatformPreview,
   adminPlatformPreviewRetainedSchema,
 } from "@openmapx/core/api-contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { useAccountAdmin } from "@/lib/admin/accountAdmin";
+import { useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { activityJobQueryOptions, useActivityClient } from "../activity/activityQueries";
 import { JobDetail } from "../activity/JobDetail";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
@@ -101,6 +104,8 @@ export function PlatformConfiguration() {
   );
 }
 function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }) {
+  const register = useOptionalAdminJobRegistration();
+  const queryClient = useQueryClient();
   const { client, apiUrl } = useActivityClient(),
     storageKey = `openmapx-platform-preview:${apiUrl}:${actorId}`;
   const [retained, setRetained] = useState<ReturnType<
@@ -173,7 +178,7 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
     mutationFn: async () => {
       if (!retained || Date.parse(retained.expiresAt) <= Date.now()) throw Error("Preview expired");
       applyKey.current ??= crypto.randomUUID();
-      return unwrapAdminResponse(
+      const accepted = await unwrapAdminResponse(
         await applyAdminPlatformConfiguration(
           {
             expectedCurrentRevisionId: retained.preview.expectedCurrentRevisionId,
@@ -185,6 +190,16 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
           { client },
         ),
       );
+      register?.({
+        client,
+        apiUrl,
+        jobId: accepted.jobId,
+        label: "Platform configuration",
+        kind: "platform",
+        returnTo: "/admin/settings",
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "platform", apiUrl] }),
+      });
+      return accepted;
     },
     onSuccess: (value) => {
       setAccepted(value.jobId);
@@ -359,7 +374,10 @@ function PlatformForm({ view, actorId }: { view: View["data"]; actorId: string }
       )}
       {[...new Set([...pending.map((job) => job.jobId), ...(accepted ? [accepted] : [])])].map(
         (jobId) => (
-          <JobDetail key={jobId} jobId={jobId} source="application" />
+          <div key={jobId}>
+            <AdminJobLink id={jobId} source="application" />
+            <JobDetail jobId={jobId} source="application" />
+          </div>
         ),
       )}
       <TextField

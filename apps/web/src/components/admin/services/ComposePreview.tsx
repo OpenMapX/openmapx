@@ -9,9 +9,11 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import { useComposePreview } from "@/hooks/useComposePreview";
+import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { invalidateServiceAdministration, serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { useServiceJobRegistration } from "@/lib/admin/serviceAdminJobs";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
@@ -26,6 +28,7 @@ export function ComposePreview() {
 function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityClient>) {
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
+  const [lastAcceptedJobId, setLastAcceptedJobId] = useState<string | null>(null);
   const { data, isLoading, error } = useComposePreview();
   const owner = useAdminMutationOwner(client, apiUrl);
   const composeUpIntent = useRef<string | null>(null);
@@ -48,6 +51,7 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
           ),
         );
         register({ client, apiUrl, jobId: result.jobId, effect: { kind: "compose" } });
+        if (execution.active) setLastAcceptedJobId(result.jobId);
         if (execution.active) {
           setRenderIntent(null);
           showToast(
@@ -207,7 +211,15 @@ function ComposePreviewView({ client, apiUrl }: ReturnType<typeof useActivityCli
           >
             Shutdown and recovery guidance
           </Button>
-          <Button component="a" href="/admin/activity" size="small">
+          <Button
+            component={Link}
+            href={
+              lastAcceptedJobId
+                ? adminJobHref({ id: lastAcceptedJobId, source: "application" })
+                : "/admin/activity"
+            }
+            size="small"
+          >
             Open Activity
           </Button>
         </Stack>

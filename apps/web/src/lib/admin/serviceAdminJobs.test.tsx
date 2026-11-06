@@ -2,6 +2,7 @@ import { runAdminServiceAction } from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
+import { AdminJobTray } from "@/components/admin/activity/AdminJobTray";
 import { useActivityClient } from "@/components/admin/activity/activityQueries";
 import {
   act,
@@ -13,6 +14,7 @@ import {
   screen,
   waitFor,
 } from "@/test";
+import { adminTestHistory } from "@/test/adminNavigation";
 import { AdminJobEffectsProvider } from "./adminJobEffects";
 import { serviceAdminQueries, serviceOrThrow } from "./serviceAdmin";
 import { useServiceJobRegistration } from "./serviceAdminJobs";
@@ -306,4 +308,36 @@ describe("admin-owned accepted service jobs", () => {
     await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2), { timeout: 3000 });
     expect(qc.getQueryState(["admin", "services", apiUrl, "list"])?.isInvalidated).toBe(false);
   });
+});
+
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
+it("records the committed Next tab rather than the previous browser URL", async () => {
+  window.history.replaceState(null, "", "/admin/services/demo?tab=overview");
+  adminTestHistory.reset("/admin/services/demo?tab=overview");
+  vi.stubGlobal("fetch", async (raw: string) =>
+    raw.endsWith("/action")
+      ? Response.json({ ok: true, jobId: "tab-job" })
+      : Response.json(job({ id: "tab-job", status: "running" })),
+  );
+  const qc = createTestQueryClient();
+  caches.push(qc);
+  const Wrapper = createQueryWrapper(qc);
+  render(
+    <Wrapper>
+      <AdminJobEffectsProvider>
+        <Caller />
+        <AdminJobTray />
+      </AdminJobEffectsProvider>
+    </Wrapper>,
+  );
+  act(() => adminTestHistory.push("/admin/services/demo?tab=configuration"));
+  fireEvent.click(screen.getByText("Queue"));
+  fireEvent.click(await screen.findByRole("button", { name: "Administration jobs, 1 active" }));
+  const link = await screen.findByRole("link", { name: "demo · service" });
+  expect(new URL(link.getAttribute("href") ?? "", "http://test").searchParams.get("returnTo")).toBe(
+    "/admin/services/demo?tab=configuration",
+  );
 });

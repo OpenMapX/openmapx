@@ -30,7 +30,9 @@ import { clearAdminReleaseSelection } from "@openmapx/core/api-admin-sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import Dialog from "@/components/ui/Dialog";
+import { useOptionalAdminJobRegistration } from "@/lib/admin/adminJobEffects";
 import { serviceOrThrow } from "@/lib/admin/serviceAdmin";
 import { activityJobQueryOptions, useActivityClient } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -172,6 +174,7 @@ function imageStatusChip(image: ImageStatus) {
 export function SystemMaintenance() {
   const { apiUrl, client } = useActivityClient();
   const queryClient = useQueryClient();
+  const register = useOptionalAdminJobRegistration();
   const showToast = useAdminToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [candidateToApply, setCandidateToApply] = useState<{
@@ -281,6 +284,15 @@ export function SystemMaintenance() {
           response.status === 409 && typeof result.jobId === "string",
         );
       }
+      register?.({
+        client,
+        apiUrl,
+        jobId: result.jobId,
+        label,
+        kind: "maintenance",
+        returnTo: "/admin/system",
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "system", apiUrl] }),
+      });
       return { id: result.jobId, label, path };
     },
     onMutate: ({ path }) =>
@@ -327,6 +339,15 @@ export function SystemMaintenance() {
           { client },
         ),
       );
+      register?.({
+        client,
+        apiUrl,
+        jobId: result.jobId,
+        label: "Release pin clear",
+        kind: "maintenance",
+        returnTo: "/admin/system",
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin", "system", apiUrl] }),
+      });
       return { id: result.jobId, label: "Release pin clear", path: "release/clear" };
     },
     onSuccess: (job) => {
@@ -510,6 +531,7 @@ export function SystemMaintenance() {
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 1 }}>
             <Typography variant="body2" sx={{ fontWeight: 600, flexGrow: 1 }}>
               {trackedJob.label}
+              <AdminJobLink id={trackedJob.id} source="application" />
             </Typography>
             <Chip label={jobQuery.data?.status ?? "queued"} color="primary" variant="outlined" />
           </Stack>
