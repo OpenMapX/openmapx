@@ -136,7 +136,7 @@ export {
   type MarineWeatherResponse,
   useMarineWeather,
 } from "./useMarineWeather";
-export { useMergedPlace } from "./useMergedPlace";
+export { type MergedPlace, useMergedPlace } from "./useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./useNearestAirports";
 export { useNeighborhoods } from "./useNeighborhoods";
 export { type NlpCloudAccess, type NlpParseResponse, useNlpSearch } from "./useNlpSearch";

@@ -578,3 +578,57 @@ describe("resolveMaptilerApiKey", () => {
     expect(resolveMaptilerApiKey(" ", { MAPTILER_KEY: " " })).toBeUndefined();
   });
 });
+
+describe("address primary labels", () => {
+  it.each([
+    ["Jakobstraße", "45b", "de", "Jakobstraße 45b"],
+    ["Market St", "1", "us", "1 Market St"],
+    ["Jakobstraße 45b", "45b", "de", "Jakobstraße 45b"],
+    ["Jakobstraße 45 b", "45b", "de", "Jakobstraße 45 b"],
+    ["1 Market St", "1", "us", "1 Market St"],
+    ["Route 66", "6", "us", "6 Route 66"],
+    ["Route 66", "66", "us", "66 Route 66"],
+    ["Straße 5", "5", "de", "Straße 5 5"],
+    ["Jakobstraße 45 ä", "45ä", "de", "Jakobstraße 45 ä"],
+    ["Ulica 12 а", "12а", "de", "Ulica 12 а"],
+    ["Jakobstraße", undefined, "de", "Jakobstraße"],
+  ])("formats %s / %s (%s) once", async (text, address, country, expected) => {
+    const feature = {
+      id: "address.1",
+      text,
+      address,
+      place_name: `${expected}, 52064 Aachen`,
+      place_type: ["address"],
+      relevance: 1,
+      geometry: { coordinates: [6, 50] },
+      context: [{ id: "country.1", text: "Country", country_code: country }],
+    };
+    mockFetch.mockResolvedValueOnce(mockOk({ features: [feature] }));
+    const [result] = await maptilerGeocodingService.autocomplete(text);
+    expect(result.label).toBe(expected);
+    expect(result.sublabel).toBe(feature.place_name);
+    expect(result.addressEvidence?.components).toEqual({
+      country: "Country",
+      country_code: country,
+    });
+  });
+
+  it.each(["poi", "street"])("does not add address numbers to %s names", async (type) => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          {
+            id: `${type}.1`,
+            text: "Cafe 66",
+            address: "6",
+            place_name: "Cafe 66, Road 6",
+            place_type: [type],
+            relevance: 1,
+            geometry: { coordinates: [6, 50] },
+          },
+        ],
+      }),
+    );
+    expect((await maptilerGeocodingService.autocomplete("Cafe"))[0].label).toBe("Cafe 66");
+  });
+});

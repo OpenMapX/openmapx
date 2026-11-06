@@ -8,10 +8,11 @@ import IconButton from "@mui/material/IconButton";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
-import type { Place } from "@openmapx/core";
+import type { MergedPlace, Place } from "@openmapx/core";
 import {
   brandForPlaceLogo,
   firstBrandIdentity,
+  formatAddressLocality,
   isCityOrSmaller,
   isLodging,
   useBrandDetail,
@@ -50,7 +51,7 @@ import { PlaceReviewsTab } from "./PlaceReviewsTab";
 import { PlaceVisitSummary } from "./PlaceVisitSummary";
 
 interface Props {
-  place: Place;
+  place: MergedPlace;
   isLoading: boolean;
   onClose?: () => void;
 }
@@ -202,9 +203,18 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
       : place.rating
         ? { rating: place.rating, count: place.reviewCount ?? 0 }
         : null;
+  const locality =
+    place.category?.toLowerCase() === "address"
+      ? (place.addressLocality ?? formatAddressLocality(place.addressEvidence?.components))
+      : "";
+  const repeatsLocality = place.name
+    .split(",")
+    .some((part) => part.trim().toLocaleLowerCase() === locality.toLocaleLowerCase());
+  const addressLocality = locality && !repeatsLocality ? locality : "";
   const headerAttributions = snapshotContributors(
     contributorsForRecordFields(place, [
       "name",
+      ...(addressLocality ? [place.addressLocality ? "addressLocality" : "addressEvidence"] : []),
       ...(place.category ? ["category"] : []),
       ...(place.openingHoursInfo?.status ? ["openingHoursInfo.status"] : []),
     ]),
@@ -452,6 +462,19 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
             ) : (
               <Typography {...titleProps} sx={titleSx}>
                 {place.name}
+              </Typography>
+            )}
+            {addressLocality && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  mb: 0.75,
+                  pr: onClose && !showHeaderWeather ? 4 : 0,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {addressLocality}
               </Typography>
             )}
             {/* Only the rating disappears at peek. Keep the visit summary in
