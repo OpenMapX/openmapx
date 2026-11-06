@@ -541,7 +541,7 @@ describe("the transit tools image's own script", () => {
     await expect(
       buildMotisData({ rootDir: tmp, region: "planet", source: "build", runner }),
     ).rejects.toThrow(
-      `The transit tools image ${DEFAULT_TRANSITOUS_TOOLS_IMAGE} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Select the checkout's release with pnpm openmapx compose release`,
+      `The transit tools image ${DEFAULT_TRANSITOUS_TOOLS_IMAGE} has no ${TRANSITOUS_TOOLS_SCRIPT}: it is from an earlier release than this CLI. Update through System → Updates or authenticated system update after compose release --check, then build again.`,
     );
   });
 
