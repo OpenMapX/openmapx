@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { runSystemUpdate } from "../lib/system-update";
 
@@ -21,20 +22,29 @@ export function registerSystemCommands(program: Command) {
     .option("--resume", "Resume this receipt's original requests and jobs")
     .option("--allow-loopback-http", "Allow HTTP only to a loopback origin for development")
     .action(async (options) => {
-      const result = await runSystemUpdate({
-        infraDir: repoPaths().infraDir,
-        apiOrigin: options.apiOrigin,
-        sessionFile: options.sessionFile,
-        receipt: options.receipt,
-        releaseId: options.releaseId,
-        manifestDigest: options.digest,
-        resume: options.resume,
-        allowLoopbackHttp: options.allowLoopbackHttp,
-      });
-      console.log(`Coordinated update completed: ${result.jobId}`);
-      console.log(
-        "Verify the running container image digests and service health before declaring deployment complete.",
-      );
-      console.log("The session file was preserved; remove it when you no longer need it.");
+      try {
+        const result = await runSystemUpdate({
+          infraDir: repoPaths().infraDir,
+          apiOrigin: options.apiOrigin,
+          sessionFile: options.sessionFile,
+          receipt: options.receipt,
+          releaseId: options.releaseId,
+          manifestDigest: options.digest,
+          resume: options.resume,
+          allowLoopbackHttp: options.allowLoopbackHttp,
+        });
+        console.log(`Coordinated update completed: ${result.jobId}`);
+        console.log(
+          "Verify the running container image digests and service health before declaring deployment complete.",
+        );
+        console.log("The session file was preserved; remove it when you no longer need it.");
+      } catch (error) {
+        log.err(
+          error instanceof Error
+            ? error.message
+            : "Coordinated update unavailable; preserve the receipt and inspect Activity",
+        );
+        process.exitCode = 1;
+      }
     });
 }

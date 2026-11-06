@@ -156,6 +156,8 @@ async function fixture(mode = "success") {
       );
     if (req.url === "/api/admin/platform/configuration/preview") {
       previewPosts++;
+      if (mode === "renew-session" && previewPosts === 1)
+        return send({ error: "session expired" }, 401);
       preview = {
         ...preview,
         release: checked,
@@ -310,4 +312,20 @@ it("does not claim success for a committed update with incomplete cleanup", asyn
   const f = await fixture("incomplete");
   await expect(runSystemUpdate(f.options)).rejects.toThrow(/not confirmed complete/);
   expect(f.counts().applyPosts).toBe(1);
+});
+
+it("refreshes an expired session and resumes the same preview without another backup", async () => {
+  const f = await fixture("renew-session");
+  await expect(runSystemUpdate(f.options)).rejects.toThrow(/refresh.*session.*resume/i);
+  expect(
+    new SystemUpdateReceiptStore(f.options.receipt).read().steps.preview.finalStatus,
+  ).toBeUndefined();
+  writeFileSync(f.options.sessionFile, "better-auth.session_token=synthetic.fresh", {
+    mode: 0o600,
+  });
+  await runSystemUpdate({ ...f.options, resume: true });
+  const posts = f.requests.filter((r) => r.url.endsWith("/preview"));
+  expect(posts).toHaveLength(2);
+  expect(posts[0]).toEqual(posts[1]);
+  expect(f.counts().backupPosts).toBe(1);
 });

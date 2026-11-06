@@ -195,8 +195,10 @@ The coordinated producer preserves Data Manager ownership, drains active work,
 retains its configuration decision and observes the original job across API and
 agent replacement. Keep the backup option enabled.
 
-The host CLI can drive the same public administrative producer when the panel is
-unavailable. Run as the deployment/store owner from a current checkout. First
+The host CLI can drive the same public administrative producer when only the panel is
+unavailable. If an agent/helper replacement or prerequisite actually failed, inspect
+Activity and host diagnostics and resolve it first. Running the same candidate
+through the CLI does not repair that failure and may create another backup. Run as the deployment/store owner from a current checkout. First
 check the configured candidate without changing selected or running images:
 
 ```bash

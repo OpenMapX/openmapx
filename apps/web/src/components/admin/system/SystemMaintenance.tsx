@@ -528,9 +528,51 @@ export function SystemMaintenance({
       )}
 
       {status && !status.deployment.maintenanceReady && (
-        <Alert severity="warning">
-          Host maintenance is unavailable. Docker access, a rendered Compose file, and the host
-          checkout mount are required. Read-only admin features remain available.
+        <Alert severity="warning" sx={{ minWidth: 0 }}>
+          <AlertTitle>Host maintenance is unavailable</AlertTitle>
+          <Typography variant="body2">
+            Inspect Docker access, the applied configuration and operations-agent readiness.
+            Read-only admin features remain available.
+          </Typography>
+          {!hostUpdateRequired && section !== "diagnostics" && (
+            <>
+              <Typography variant="body2">
+                If only the panel is unavailable, a current host CLI can drive the coordinated
+                update with a real administrator session. It creates a backup. Replace the
+                placeholders with the checked ID and digest, your private session file and a new
+                private receipt path.
+              </Typography>
+              <Box
+                component="pre"
+                sx={{
+                  whiteSpace: "pre",
+                  overflowX: "auto",
+                  maxWidth: "100%",
+                  fontSize: "0.8125rem",
+                  my: 1.5,
+                }}
+              >
+                {HOST_UPDATE_COMMANDS}
+              </Box>
+              <Button
+                size="small"
+                startIcon={<CopyIcon />}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(HOST_UPDATE_COMMANDS);
+                    showToast("Host update commands copied");
+                  } catch {
+                    showToast(
+                      "Could not copy commands. Select and copy the commands above.",
+                      "error",
+                    );
+                  }
+                }}
+              >
+                Copy commands
+              </Button>
+            </>
+          )}
         </Alert>
       )}
 
@@ -583,38 +625,22 @@ export function SystemMaintenance({
                 {agentReplacementFailed
                   ? "The operations agent could not be updated from the admin panel. The previous agent keeps running."
                   : "The operations agent or its backup helper could not be verified for this release. Updating from the admin panel is blocked."}{" "}
-                Use the coordinated host update from a current checkout with a real administrator
-                session. It creates a backup before applying the checked release. Replace the
-                placeholders with the checked ID and digest, your private session file and a new
-                private receipt path.
+                Inspect Activity and host diagnostics, then follow the host recovery guide. Resolve
+                the failed prerequisite before applying this candidate again; retrying it through
+                the CLI does not repair the host.
               </Typography>
-              <Box
-                component="pre"
-                sx={{
-                  whiteSpace: "pre-wrap",
-                  overflowWrap: "anywhere",
-                  fontSize: "0.8125rem",
-                  my: 1.5,
-                }}
-              >
-                {HOST_UPDATE_COMMANDS}
-              </Box>
+              <Button component={Link} href="/admin/activity" size="small">
+                Inspect Activity
+              </Button>
+              <Button component={Link} href="/admin/system/diagnostics" size="small">
+                Host diagnostics
+              </Button>
               <Button
+                component="a"
+                href="https://docs.openmapx.org/install/upgrading/"
                 size="small"
-                startIcon={<CopyIcon />}
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(HOST_UPDATE_COMMANDS);
-                    showToast("Host update commands copied");
-                  } catch {
-                    showToast(
-                      "Could not copy commands. Select and copy the commands above.",
-                      "error",
-                    );
-                  }
-                }}
               >
-                Copy commands
+                Host recovery guide
               </Button>
             </Alert>
           )}

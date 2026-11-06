@@ -59,6 +59,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 
 afterEach(() => {
   cleanup();
+  systemStatus.deployment.maintenanceReady = true;
   systemStatus.images[1].status = "up-to-date";
   systemStatus.images[1].updateAvailable = false;
   systemStatus.images[0].runningImageId = "sha256:old-image";
@@ -101,9 +102,11 @@ describe("SystemMaintenance", () => {
       render(<SystemMaintenance />);
       expect(screen.getByRole("button", { name: "Update OpenMapX" })).toBeDisabled();
       expect(screen.getByRole("alert")).toHaveTextContent("Host update required");
-      expect(screen.getByRole("alert")).toHaveTextContent("pnpm openmapx compose release --check");
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "pnpm openmapx system update --release-id RELEASE_ID --digest MANIFEST_SHA256 --session-file SESSION_FILE --receipt RECEIPT_FILE",
+      expect(screen.getByRole("alert")).toHaveTextContent("Inspect Activity and host diagnostics");
+      expect(screen.getByRole("alert")).not.toHaveTextContent("system update");
+      expect(screen.getByRole("link", { name: "Host recovery guide" })).toHaveAttribute(
+        "href",
+        "https://docs.openmapx.org/install/upgrading/",
       );
       expect(screen.getByRole("button", { name: "Check for updates" })).not.toBeDisabled();
     },
@@ -123,7 +126,7 @@ describe("SystemMaintenance", () => {
   });
 
   it("copies the host update commands", async () => {
-    systemStatus.images[1].status = "unknown";
+    systemStatus.deployment.maintenanceReady = false;
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     const { SystemMaintenance } = await import("./SystemMaintenance");

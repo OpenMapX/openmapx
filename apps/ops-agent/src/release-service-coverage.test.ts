@@ -109,7 +109,7 @@ describe("complete administrative release coverage", () => {
     );
     expect(f.context.emitLog).toHaveBeenCalledWith(
       "stderr",
-      expect.stringContaining("system update"),
+      expect.stringContaining("host diagnostics"),
     );
   });
   it("reports a safe host-update code through the agent protocol", async () => {

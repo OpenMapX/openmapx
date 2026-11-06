@@ -197,6 +197,10 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       try {
         data = await request(path, "POST", saved.body, saved.key);
       } catch (error) {
+        if (error instanceof HttpFailure && error.status === 401)
+          throw Error(
+            "Administrator session expired; refresh the session file and --resume with the same receipt",
+          );
         if (
           error instanceof HttpFailure &&
           error.status >= 400 &&
