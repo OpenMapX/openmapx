@@ -2990,3 +2990,28 @@ describe("SearchBar credit focus ownership", () => {
     },
   );
 });
+
+it("keeps an address house number in selection and both history records", async () => {
+  const row = {
+    id: "maptiler:address.1",
+    label: "Jakobstraße 45b",
+    sublabel: "Jakobstraße 45b, 52064 Aachen",
+    type: "address",
+    coordinates: [6, 50],
+    addressEvidence: {
+      source: "geocoding-maptiler",
+      method: "provider-address",
+      components: { postcode: "52064", city: "Aachen" },
+    },
+  };
+  useAutocompleteMock.mockReturnValue({ data: [row], isFetching: false });
+  renderBar();
+  const input = screen.getByLabelText("search.ariaLabel");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Jakobstraße 45b" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Jakobstraße 45b/ }));
+  expect(usePlaceStore.getState().selectedPlace?.name).toBe(row.label);
+  expect(usePlaceStore.getState().selectedPlace?.addressEvidence).toEqual(row.addressEvidence);
+  expect(useRecentSearchStore.getState().entries[0]).toBe(row.label);
+  expect(useRecentSearchStore.getState().destinations[0].label).toBe(row.label);
+});

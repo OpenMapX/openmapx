@@ -1,4 +1,4 @@
-import { formatAddress } from "@openmapx/integration-geocoding/format-address";
+import { formatAddress, formatStreetLine } from "@openmapx/integration-geocoding/format-address";
 import type {
   GeocodingBias,
   GeocodingProvider as GeocodingProviderImpl,
@@ -167,6 +167,29 @@ function formatOwnAddress(f: MaptilerFeature, evidence: AddressEvidence): string
       f.properties?.country_code ??
       f.context?.find((context) => context.id.startsWith("country."))?.country_code,
   });
+}
+
+/** Address features split the localized street and house number into separate fields. */
+function autocompleteLabel(f: MaptilerFeature): string {
+  const number = f.address?.trim();
+  if (f.place_type[0] !== "address" || !number) return f.text;
+  // Compare complete tokens, while treating a separated suffix ("45 b") as "45b".
+  const normalize = (value: string) =>
+    value.toLocaleLowerCase().replace(/(\d)\s+(?=\p{L}(?![\p{L}\p{N}]))/gu, "$1");
+  const text = normalize(f.text);
+  const houseNumber = normalize(number);
+  // The full display label disambiguates numbered streets ("Route 66", house "66").
+  const fullStreetLine = normalize(f.place_name.split(",")[0].trim());
+  if (text === fullStreetLine && ` ${text} `.includes(` ${houseNumber} `)) return f.text;
+  return (
+    formatStreetLine({
+      road: f.text,
+      house_number: number,
+      country_code:
+        f.properties?.country_code ??
+        f.context?.find((context) => context.id.startsWith("country."))?.country_code,
+    }) || f.text
+  );
 }
 
 /** OSM `importance=*`: how far a place's significance reaches. */
@@ -349,7 +372,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
         ...(addressEvidence.method === "osm-tags"
           ? { address: formatOwnAddress(f, addressEvidence) }
           : {}),
-        label: f.text,
+        label: autocompleteLabel(f),
         sublabel: f.place_name,
         coordinates: f.geometry.coordinates,
         type: mapType(f.place_type),

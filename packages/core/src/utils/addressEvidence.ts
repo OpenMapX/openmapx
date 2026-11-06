@@ -47,6 +47,12 @@ export function addressComponentsFromOsmTags(
   });
 }
 
+/** A single candidate's postal locality, without borrowing missing parts from another. */
+export function formatAddressLocality(components: PlaceAddressComponents | undefined): string {
+  const c = sanitizeAddressComponents(components);
+  return [c.postcode, c.city ?? c.town ?? c.village ?? c.municipality].filter(Boolean).join(" ");
+}
+
 /** A locality or marker label does not establish a premises address. */
 export function hasUsablePlaceAddress(
   place: Pick<Place, "address" | "name" | "addressEvidence">,

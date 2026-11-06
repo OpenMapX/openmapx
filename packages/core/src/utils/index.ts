@@ -2,6 +2,7 @@ export { dataSourceToAttribution } from "@openmapx/mobility-core/contributors";
 export {
   addressComponentsFromOsmTags,
   directPlaceDetailsId,
+  formatAddressLocality,
   sanitizeAddressComponents,
 } from "./addressEvidence";
 export { isCityOrSmaller } from "./administrativePlace";

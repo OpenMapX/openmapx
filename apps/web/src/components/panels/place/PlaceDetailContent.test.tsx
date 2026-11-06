@@ -554,3 +554,84 @@ describe("persistent header attribution", () => {
     expect(within(dialog).queryByText("Fallback rating")).toBeNull();
   });
 });
+
+describe("address header locality", () => {
+  const addressPlace: Place = {
+    ...place,
+    name: "Jakobstraße 45b",
+    category: "Address",
+    address: "Jakobstraße 45b, 52064 Aachen",
+    addressEvidence: {
+      source: "maptiler",
+      method: "provider-address",
+      components: { postcode: " 52064 ", municipality: " Aachen " },
+    },
+  };
+  it.each(["peek", "mid", "full"] as const)(
+    "shows postcode and city directly under the address at %s",
+    (detent) => {
+      renderAtDetent(detent, addressPlace);
+      const subtitle = screen.getByText("52064 Aachen");
+      expect(screen.getByText("Jakobstraße 45b").nextElementSibling).toBe(subtitle);
+      expect(subtitle.closest("[data-omx-peek]")).not.toBeNull();
+    },
+  );
+  it.each([
+    [{ town: "Town", postcode: "12345" }, "12345 Town"],
+    [{ village: "Village" }, "Village"],
+    [{ postcode: "12345" }, "12345"],
+  ] as const)("supports partial and rural locality %j", (components, expected) => {
+    renderAtDetent("peek", {
+      ...addressPlace,
+      addressEvidence: { source: "maptiler", method: "provider-address", components },
+    });
+    expect(screen.getByText(expected)).toBeVisible();
+  });
+  it("does not show address locality for POIs or empty evidence", () => {
+    const view = renderAtDetent("peek", { ...addressPlace, category: "Cafe" });
+    expect(screen.queryByText("52064 Aachen")).toBeNull();
+    view.unmount();
+    renderAtDetent("peek", { ...addressPlace, addressEvidence: undefined });
+    expect(screen.queryByText("52064 Aachen")).toBeNull();
+  });
+  it("shows the locality beneath the desktop title", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PlaceDetailContent place={addressPlace} isLoading={false} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("Jakobstraße 45b").nextElementSibling).toBe(
+      screen.getByText("52064 Aachen"),
+    );
+  });
+  it("keeps the city visible when its name is part of the street name", () => {
+    renderAtDetent("peek", {
+      ...addressPlace,
+      name: "Berliner Straße 10",
+      addressEvidence: {
+        source: "maptiler",
+        method: "provider-address",
+        components: { city: "Berlin" },
+      },
+    });
+    expect(screen.getByText("Berlin")).toBeVisible();
+  });
+  it("does not repeat a locality already in a street-level full-address title", () => {
+    renderAtDetent("peek", { ...addressPlace, name: "Jakobstraße 45b, 52064 Aachen" });
+    expect(screen.queryByText("52064 Aachen")).toBeNull();
+  });
+  it("credits a derived locality's own supplier in the header", () => {
+    renderAtDetent("peek", {
+      ...addressPlace,
+      addressLocality: "52064 Aachen",
+      fieldContributors: {
+        name: [{ sourceId: "name", name: "Name source" }],
+        addressLocality: [{ sourceId: "locality", name: "Locality source" }],
+      },
+    } as Place);
+    fireEvent.click(screen.getByRole("tab", { name: "info" }));
+    fireEvent.click(screen.getByRole("button", { name: "attributions" }));
+    expect(within(screen.getByRole("dialog")).getByText("Locality source")).toBeVisible();
+  });
+});

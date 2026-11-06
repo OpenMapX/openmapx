@@ -111,3 +111,38 @@ describe("plain Enter decision", () => {
     });
   });
 });
+
+describe("numbered address Enter selection", () => {
+  const house: AutocompleteResult = {
+    id: "house",
+    label: "Jakobstraße 45b",
+    type: "address",
+    coordinates: [6, 50],
+  };
+  const street: AutocompleteResult = {
+    id: "street",
+    label: "Jakobstraße",
+    type: "street",
+    coordinates: [6, 50],
+  };
+  it("opens the exact numbered address", () => {
+    expect(
+      decideSearchSubmission({
+        ...base,
+        query: house.label,
+        rankedSuggestions: [house, street],
+        proximity: [6, 50],
+      }),
+    ).toEqual({ kind: "open-row", row: house });
+  });
+  it("opens the street rather than a house for the bare street name", () => {
+    expect(
+      decideSearchSubmission({
+        ...base,
+        query: street.label,
+        rankedSuggestions: [street, house],
+        proximity: [6, 50],
+      }),
+    ).toEqual({ kind: "open-row", row: street });
+  });
+});
