@@ -29,6 +29,12 @@ merge to `main`. There is no merge queue. Post-merge CI checks the combined
 result and gates image publication. Repair a failing `main` before continuing
 unrelated merges.
 
+The required title check also validates current release classification using trusted
+default-branch code and candidate Git objects only. Metadata edits refresh that
+check independently of code CI after rollout; no PR code runs under the privileged
+metadata trigger. Latest-main validation may supersede obsolete jobs; atomic
+trusted publication is serialized independently and never cancelled by that policy.
+
 ## Required checks
 
 Keep these exact contexts bound to their observed producing app,

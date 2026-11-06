@@ -1,6 +1,10 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { selectFilePartition } from "./database-test-shards.mjs";
+import { deploymentFiles } from "./test-linux-user.mjs";
 
 type Step = {
   name?: string;
@@ -21,22 +25,16 @@ describe("required Linux deployment-user gate", () => {
       (value) =>
         value.name === "Run the agent, core and data-manager suites and the deployment-user test",
     );
-    expect(step?.run?.trim().split(/\s+/)).toEqual([
+    expect(step?.run?.replace("${{ matrix.part }}", "1").trim().split(/\s+/)).toEqual([
       "umask",
       "002",
       "&&",
       "corepack",
       "pnpm",
       "exec",
-      "vitest",
-      "run",
-      "--project",
       "node",
-      "--maxWorkers=1",
-      "apps/ops-agent",
-      "packages/core",
-      "services/data-manager",
-      "scripts/ops-agent-deployment-user.test.ts",
+      "scripts/test-linux-user.mjs",
+      "1/2",
     ]);
   });
 
@@ -63,9 +61,36 @@ describe("required Linux deployment-user gate", () => {
   it("requires the Linux job to succeed before the aggregate can pass", () => {
     const aggregate = workflow.jobs.ci;
     expect(aggregate.needs).toContain("test-linux-user");
-    const failure = (aggregate.steps as Step[]).find(
-      (step) => step.name === "Fail if any gate job did not succeed",
-    );
-    expect(failure?.if).toContain("needs.test-linux-user.result != 'success'");
+    expect(
+      aggregate.steps.some((step: Step) => step.run === "node scripts/ci-impact-plan.mjs verify"),
+    ).toBe(true);
+    expect(job.strategy.matrix.part).toEqual([1, 2]);
+    expect(job.strategy["fail-fast"]).toBe(false);
   });
 });
+
+it("covers the same complete deployment-user file inventory across isolated shards", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const collect = (args: string[]) => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve(root, "node_modules/vitest/vitest.mjs"), ...args],
+      { cwd: root, encoding: "utf8", timeout: 30000 },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    return JSON.parse(result.stdout);
+  };
+  const full = collect(["list", ...deploymentFiles, "--project", "node", "--filesOnly", "--json"])
+    .map((row: { file: string }) => row.file.replace(`${root}/`, ""))
+    .sort();
+  const union = [1, 2]
+    .flatMap(
+      (part) =>
+        selectFilePartition({ filters: deploymentFiles, part, total: 2, collect, cwd: root })
+          .selected,
+    )
+    .sort();
+  expect(full.length).toBeGreaterThan(0);
+  expect(union).toEqual(full);
+  expect(new Set(union).size).toBe(union.length);
+}, 90000);

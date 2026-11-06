@@ -2,7 +2,22 @@ name: Duplicate-code audit
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.jsx"
+      - "**/*.mjs"
+      - "!**/*.test.*"
+      - "!**/*.spec.*"
+      - "!**/__tests__/**"
+      - "!**/__fixtures__/**"
+      - "**/package.json"
+      - "pnpm-lock.yaml"
+      - ".jscpd.json"
+      - ".nvmrc"
+      - ".github/workflows/duplicate-code.yml"
   schedule:
     # Retain the full audit alongside the advisory PR comparisons.
     - cron: "47 6 * * 3"

@@ -1,0 +1,67 @@
+[
+  {
+    "group": "api-privacy",
+    "part": 1,
+    "total": 2
+  },
+  {
+    "group": "api-privacy",
+    "part": 2,
+    "total": 2
+  },
+  {
+    "group": "ingestion",
+    "part": 1,
+    "total": 2
+  },
+  {
+    "group": "ingestion",
+    "part": 2,
+    "total": 2
+  },
+  {
+    "group": "configuration-recovery",
+    "part": 1,
+    "total": 4
+  },
+  {
+    "group": "configuration-recovery",
+    "part": 2,
+    "total": 4
+  },
+  {
+    "group": "configuration-recovery",
+    "part": 3,
+    "total": 4
+  },
+  {
+    "group": "configuration-recovery",
+    "part": 4,
+    "total": 4
+  },
+  {
+    "group": "coordinator-recovery",
+    "part": 1,
+    "total": 4
+  },
+  {
+    "group": "coordinator-recovery",
+    "part": 2,
+    "total": 4
+  },
+  {
+    "group": "coordinator-recovery",
+    "part": 3,
+    "total": 4
+  },
+  {
+    "group": "coordinator-recovery",
+    "part": 4,
+    "total": 4
+  },
+  {
+    "group": "export-restore",
+    "part": 1,
+    "total": 1
+  }
+]

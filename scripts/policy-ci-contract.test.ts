@@ -44,15 +44,14 @@ describe("repository policy gate", () => {
     expect(workflow).toMatch(
       /- name: Check repository policy invariants\n(?:\s+#.*\n)*\s+run: pnpm check:policy/,
     );
-    expect(workflow).toMatch(
-      /- name: Probe patched image parsers\n(?:\s+#.*\n)*\s+run: pnpm check-image-size-dos/,
-    );
-    expect(workflow).toMatch(
-      /- name: Check Docker build contexts for secrets\n(?:\s+#.*\n)*\s+run: pnpm check-docker-context-secrets/,
-    );
-    expect(workflow).toMatch(
-      /- name: Check host authority confinement\n(?:\s+#.*\n)*\s+run: pnpm check-ops-authority/,
-    );
+    // Each of these policies is already part of check:policy. A separate CI
+    // execution would duplicate the same security work, not add coverage.
+    for (const name of [
+      "check-image-size-dos",
+      "check-docker-context-secrets",
+      "check-ops-authority",
+    ])
+      expect(workflow).not.toContain(`run: pnpm ${name}`);
     const docsInstall = workflow.indexOf("- run: pnpm -C docs install --frozen-lockfile");
     const policyGate = workflow.indexOf("run: pnpm check:policy");
     expect(docsInstall).toBeGreaterThan(-1);

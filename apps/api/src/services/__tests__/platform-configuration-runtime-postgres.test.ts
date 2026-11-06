@@ -37,14 +37,15 @@ import { configurationMaintenanceSettleRequestDigest } from "@openmapx/core/ops"
 import { repoPaths, services } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
 import { mockAdminSession } from "../../test/auth";
-import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+import type { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+import { createPostgresFixturePool } from "../../test/postgres-fixture-pool";
 import type { JobContext } from "../job-runner";
 
 const state = vi.hoisted(() => ({
@@ -442,10 +443,17 @@ async function nativeReleaseWorker(
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "owned platform preparation",
   () => {
+    let pool: Awaited<ReturnType<typeof createPostgresFixturePool>>;
+    beforeAll(async () => {
+      pool = await createPostgresFixturePool();
+    }, 90000);
+    afterAll(async () => {
+      await pool?.stop();
+    });
     beforeEach(async () => {
       // Each scenario is an independent deployment/session, with a fresh limiter bucket.
       (await import("../../utils/rate-limit")).systemMaintenanceLimit.reset();
-      state.fixture = await createMigratedPostgresFixture();
+      state.fixture = await pool.create();
     }, 90000);
     afterEach(async () => {
       await state.fixture?.stop();

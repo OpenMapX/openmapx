@@ -63,13 +63,12 @@ ENV NEXT_PUBLIC_API_URL=__NEXT_PUBLIC_API_URL__
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app/apps/web
-# Per-build service-worker id (CI passes the git SHA). Declared right before the
-# build so a new value busts this layer's cache and `build:sw` re-stamps sw.js,
-# letting the PWA detect the update. Defaults to empty for plain `docker build`,
-# in which case build-sw.mjs falls back to the git SHA / a timestamp.
+# Compile independently of deployment identity. Source/dependency changes still
+# invalidate Next; a new SHA alone only repeats the small SW/assets stamp.
+RUN pnpm build:app
 ARG SW_BUILD_ID=
 ENV SW_BUILD_ID=$SW_BUILD_ID
-RUN pnpm build
+RUN pnpm build:deploy
 
 # Production image
 FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner

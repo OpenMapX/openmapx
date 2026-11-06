@@ -14,6 +14,11 @@ permissions:
 
 jobs:
   cla:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       (github.event.comment.body == 'recheck' ||
+        github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'))
     name: check / record signature
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -26,10 +31,6 @@ jobs:
       statuses: write
     steps:
       - name: CLA Assistant
-        if: >
-          (github.event.comment.body == 'recheck' ||
-           github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
-          github.event_name == 'pull_request_target'
         # OpenMapX fork of the (archived) contributor-assistant/github-action,
         # bumped to the Node 24 runtime. See OpenMapX/cla-assistant-action.
         uses: OpenMapX/cla-assistant-action@3e864d0e9c7ec7a7fc4eb36e78ff857b1db7978c # v2.6.1-node24

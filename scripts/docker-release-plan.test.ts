@@ -775,3 +775,40 @@ describe("bundled image fingerprints", () => {
     );
   });
 });
+
+describe("production Docker context exclusions", () => {
+  const readDockerfile = () => "FROM scratch\nCOPY packages/ /app/packages/\n";
+  const candidate = { app: "api", context: ".", dockerfile: "apps/api/Dockerfile" };
+  it("does not build images for excluded test sources, but honors later reinclusions", () => {
+    const input = {
+      changedPaths: ["packages/core/src/example.test.ts"],
+      readDockerfile,
+      candidates: [candidate],
+      readIgnoreFile: (path: string) => (path === ".dockerignore" ? "**/*.test.ts\n" : null),
+    };
+    expect(selectChangedTargets(input)).toEqual([]);
+    expect(
+      selectChangedTargets({
+        ...input,
+        readIgnoreFile: (path: string) =>
+          path === ".dockerignore" ? "**/*.test.ts\n!packages/core/src/example.test.ts\n" : null,
+      }),
+    ).toEqual(["api"]);
+    expect(
+      selectChangedTargets({ ...input, changedPaths: ["packages/core/src/example.ts"] }),
+    ).toEqual(["api"]);
+    expect(selectChangedTargets({ ...input, changedPaths: [".dockerignore"] })).toEqual(["api"]);
+    expect(selectChangedTargets({ ...input, readIgnoreFile: () => null })).toEqual(["api"]);
+  });
+  it("uses a Dockerfile-specific ignore policy before the root one", () => {
+    expect(
+      selectChangedTargets({
+        changedPaths: ["packages/core/src/example.test.ts"],
+        readDockerfile,
+        candidates: [candidate],
+        readIgnoreFile: (path: string) =>
+          path === "apps/api/Dockerfile.dockerignore" ? "!**/*.test.ts\n" : "**/*.test.ts\n",
+      }),
+    ).toEqual(["api"]);
+  });
+});

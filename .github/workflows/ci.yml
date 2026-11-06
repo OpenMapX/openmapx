@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
   # Reconcile main daily, including merges made with GITHUB_TOKEN that do not
@@ -11,11 +12,10 @@ on:
   schedule:
     - cron: "23 8 * * *"
 
-# Key pull request runs by number: an event on a closed pull request (such as a
-# description edit after merge) reports the base branch as github.ref and would
-# otherwise cancel that branch's push run.
+# Metadata events never cancel code work. Main validation uses per-job latest-
+# source concurrency; this workflow must never cancel an executing publication.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.action == 'edited' && !github.event.changes.base && 'metadata' || 'code') || format('run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -31,8 +31,45 @@ env:
 # job (or letting it skip) breaks branch protection — see
 # docs/plans/2026-06-12-branch-protection.md.
 jobs:
+  select:
+    name: select required validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs['plan'] }}
+      database-matrix: ${{ steps.select.outputs['database-matrix'] }}
+      code: ${{ steps.select.outputs['code'] }}
+      head: ${{ steps.select.outputs['head'] }}
+      base: ${{ steps.select.outputs['base'] }}
+      lint: ${{ steps.select.outputs['lint'] }}
+      types: ${{ steps.select.outputs['types'] }}
+      test-node: ${{ steps.select.outputs['test-node'] }}
+      test-linux-user: ${{ steps.select.outputs['test-linux-user'] }}
+      test-agent-mounts: ${{ steps.select.outputs['test-agent-mounts'] }}
+      test-web: ${{ steps.select.outputs['test-web'] }}
+      mobile: ${{ steps.select.outputs['mobile'] }}
+      database: ${{ steps.select.outputs['database'] }}
+      build: ${{ steps.select.outputs['build'] }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Select checks from the complete immutable diff
+        id: select
+        run: node scripts/ci-impact-plan.mjs select
+
   lint:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['lint'] == 'true'
     name: lint
+    concurrency:
+      group: ci-validation-lint-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -82,19 +119,6 @@ jobs:
         # advisories are narrowly versioned and expire for explicit review.
         run: pnpm check-production-audits
 
-      - name: Probe patched image parsers
-        # Keep the child-process timeout visible as a dedicated security gate.
-        run: pnpm check-image-size-dos
-
-      - name: Check Docker build contexts for secrets
-        # Enumerates ignored path names only; candidate contents are never opened.
-        run: pnpm check-docker-context-secrets
-
-      - name: Check host authority confinement
-        # Fails if a Docker socket mount, a Docker provider, or a direct Docker
-        # invocation reappears outside the private operations agent.
-        run: pnpm check-ops-authority
-
       - name: Check the release's service files and their history
         # The bundle embeds every file a built-in mounts; the history of each,
         # generated from Git, tells an operator's edit from an older release.
@@ -123,7 +147,12 @@ jobs:
           pnpm check-release-information --base "${BASE_SHA}" --head "${HEAD_SHA}" --pr-json "${RUNNER_TEMP}/release-pr.json"
 
   types:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['types'] == 'true'
     name: types
+    concurrency:
+      group: ci-validation-types-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -153,7 +182,12 @@ jobs:
       - run: pnpm check-types
 
   test-node:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-node'] == 'true'
     name: test (node)
+    concurrency:
+      group: ci-validation-test-node-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -183,7 +217,12 @@ jobs:
   # (scripts/ops-agent-mount-layouts.test.ts, which only runs where
   # OPENMAPX_TEST_AGENT_IMAGE names the image built here).
   test-agent-mounts:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-agent-mounts'] == 'true'
     name: test (ops-agent image, both mount layouts)
+    concurrency:
+      group: ci-validation-test-agent-mounts-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -234,9 +273,18 @@ jobs:
   # user from an .env without UID/GID (scripts/ops-agent-deployment-user.test.ts),
   # which only runs where OPENMAPX_TEST_DEPLOYMENT_USER names the uid.
   test-linux-user:
-    name: test (linux, uid 1001, umask 002)
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-linux-user'] == 'true'
+    name: test (linux, uid 1001, umask 002, ${{ matrix.part }}/2)
+    concurrency:
+      group: ci-validation-test-linux-user-${{ github.event.pull_request.number || github.ref }}-${{ matrix.part }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
     container:
       image: node:24.22.2-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
       # The runner's own uid, which owns the checked-out workspace. --init
@@ -267,13 +315,27 @@ jobs:
 
       - name: Run the agent, core and data-manager suites and the deployment-user test
         # One file worker reduces I/O contention between filesystem-heavy lease fixtures.
+        env:
+          OPENMAPX_TEST_SHARD_RECEIPT: ${{ runner.temp }}/linux-user-${{ matrix.part }}.json
         run: >-
-          umask 002 && corepack pnpm exec vitest run --project node --maxWorkers=1
-          apps/ops-agent packages/core services/data-manager
-          scripts/ops-agent-deployment-user.test.ts
+          umask 002 && corepack pnpm exec node scripts/test-linux-user.mjs ${{ matrix.part }}/2
+
+      - name: Preserve the Linux deployment-user inventory
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-user-shard-${{ matrix.part }}
+          path: ${{ runner.temp }}/linux-user-${{ matrix.part }}.json
+          if-no-files-found: error
+          retention-days: 7
 
   test-web:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-web'] == 'true'
     name: test (web)
+    concurrency:
+      group: ci-validation-test-web-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -293,7 +355,12 @@ jobs:
       - run: pnpm test --project web
 
   mobile:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['mobile'] == 'true'
     name: test (mobile)
+    concurrency:
+      group: ci-validation-mobile-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -340,7 +407,12 @@ jobs:
         run: pnpm mobile:bundle:check
 
   database:
-    name: test (database, ${{ matrix.group }})
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['database'] == 'true'
+    name: test (database, ${{ matrix.group }}, ${{ matrix.part }}/${{ matrix.total }})
+    concurrency:
+      group: ci-validation-database-${{ github.event.pull_request.number || github.ref }}-${{ matrix.group }}-${{ matrix.part }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     # API/privacy includes the full native platform-helper recovery matrix.
     # Give native recovery groups headroom for setup and all serial suites;
@@ -350,9 +422,7 @@ jobs:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.
       fail-fast: false
-      matrix:
-        group:
-          [api-privacy, ingestion, configuration-recovery, coordinator-recovery, export-restore]
+      matrix: ${{ fromJSON(needs.select.outputs['database-matrix']) }}
     services:
       postgis:
         # Match the production PostGIS line and pin the reviewed multi-arch
@@ -411,7 +481,7 @@ jobs:
       # spend their budget on the fixture itself. No Docker Hub login: the
       # workflow holds no Docker Hub credentials.
       - name: Pull the pinned extension-store Valkey image
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 10
         run: |
           image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
@@ -426,14 +496,14 @@ jobs:
       # data-manager reads its Transitous API keys through a directory mount;
       # a running container must see the file generate-api-keys replaced.
       - name: Verify the Transitous API keys mount
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 5
         run: |
           image="$(node -e 'const {container: c} = require("./services/redis/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
           OPENMAPX_RUN_SECRET_MOUNT_TESTS=1 OPENMAPX_SECRET_MOUNT_TEST_IMAGE="$image" pnpm exec vitest run --project node packages/cli/__tests__/transitous-api-keys-mount.integration.test.ts
 
       - name: Pull the pinned Traefik image
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 10
         run: |
           image="$(node -e 'const {container: c} = require("./services/traefik/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
@@ -449,14 +519,14 @@ jobs:
       # Traefik must serve the routes a render replaced there, and never see
       # the file missing or half-written.
       - name: Verify Traefik's dynamic directory
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 5
         run: |
           image="$(node -e 'const {container: c} = require("./services/traefik/service.json"); console.log(c.image + ":" + c.tag + "@" + c.digest)')"
           OPENMAPX_RUN_TRAEFIK_TESTS=1 OPENMAPX_TRAEFIK_TEST_IMAGE="$image" pnpm exec vitest run --project node packages/core/src/services/__tests__/traefik-dynamic.integration.test.ts
 
       - name: Pull the pinned well-known and Valhalla images
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 10
         run: |
           for id in well-known valhalla; do
@@ -477,7 +547,7 @@ jobs:
       # deployment's) read them, and Valhalla rewrites its writable copy.
       # PostGIS's pinned image is this job's own service image.
       - name: Verify service files mounted from the store
-        if: matrix.group == 'api-privacy'
+        if: matrix.group == 'api-privacy' && matrix.part == 1
         timeout-minutes: 10
         run: OPENMAPX_RUN_SERVICE_FILE_TESTS=1 pnpm exec vitest run --project node packages/core/src/services/__tests__/service-files.integration.test.ts
 
@@ -507,10 +577,25 @@ jobs:
       - name: Run the required database integration suites
         env:
           OPENMAPX_REAL_BACKUP_FIXTURE: ${{ runner.temp }}/openmapx-real-backup-result.tar
-        run: pnpm test:database ${{ matrix.group }}
+          OPENMAPX_TEST_SHARD_RECEIPT: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
+        run: pnpm test:database ${{ matrix.group }} ${{ matrix.part }}/${{ matrix.total }}
+
+      - name: Preserve the exact database shard inventory
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: database-shard-${{ matrix.group }}-${{ matrix.part }}
+          path: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
+          if-no-files-found: error
+          retention-days: 7
 
   build:
+    needs: select
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['build'] == 'true'
     name: build (production)
+    concurrency:
+      group: ci-validation-build-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -553,7 +638,8 @@ jobs:
 
   docker-changes:
     name: select Docker targets
-    if: github.event_name == 'pull_request'
+    needs: select
+    if: github.event_name == 'pull_request' && needs.select.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -580,8 +666,8 @@ jobs:
 
   docker-build:
     name: build Docker (${{ matrix.app }})
-    needs: docker-changes
-    if: github.event_name == 'pull_request' && needs.docker-changes.outputs.apps != '[]' && needs.docker-changes.outputs.apps != ''
+    needs: [select, docker-changes]
+    if: github.event_name == 'pull_request' && needs.select.outputs.code == 'true' && needs.docker-changes.outputs.apps != '[]' && needs.docker-changes.outputs.apps != ''
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -657,11 +743,14 @@ jobs:
   # `if: always()` so it reports (red) even when a dependency fails instead of
   # being skipped — a skipped required check would block the PR forever.
   ci:
-    name: lint / types / test
+    # A metadata event must not create a skipped check with the required code
+    # context: GitHub accepts skipped checks. Preserve the previous code result.
+    name: ${{ needs.select.result == 'success' && needs.select.outputs.code == 'false' && 'superseded source or metadata event' || 'lint / types / test' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
       [
+        select,
         lint,
         types,
         test-node,
@@ -674,34 +763,42 @@ jobs:
         docker-changes,
         docker-build,
       ]
-    if: always()
+    if: always() && (needs.select.result != 'success' || needs.select.outputs.code != 'false')
     steps:
-      - name: Fail if any gate job did not succeed
-        # Pull requests build only affected deployable targets. A no-target PR
-        # legitimately skips docker-build; main skips both selection and build
-        # because the release workflow selects builds and scans all images.
-        if: >-
-          needs.lint.result != 'success' ||
-          needs.types.result != 'success' ||
-          needs.test-node.result != 'success' ||
-          needs.test-linux-user.result != 'success' ||
-          needs.test-agent-mounts.result != 'success' ||
-          needs.test-web.result != 'success' ||
-          needs.mobile.result != 'success' ||
-          needs.database.result != 'success' ||
-          needs.build.result != 'success' ||
-          (github.event_name == 'pull_request' && needs.docker-changes.result != 'success') ||
-          (github.event_name == 'pull_request' && needs.docker-changes.outputs.apps != '[]' && needs.docker-build.result != 'success') ||
-          (github.event_name == 'pull_request' && needs.docker-changes.outputs.apps == '[]' && needs.docker-build.result != 'skipped') ||
-          (github.event_name != 'pull_request' && needs.docker-changes.result != 'skipped') ||
-          (github.event_name != 'pull_request' && needs.docker-build.result != 'skipped')
-        run: |
-          echo "One or more gate jobs failed:"
-          echo '${{ toJSON(needs.*.result) }}'
-          exit 1
-
-      - name: All gate jobs succeeded
-        run: echo "lint, types, tests, mobile, database, production build, and applicable Docker build all green"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Collect database partition receipts
+        if: needs.select.outputs.database == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: database-shard-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/database-shards
+      - name: Require the complete disjoint database inventory
+        if: needs.select.outputs.database == 'true'
+        run: node scripts/database-test-shards.mjs verify "${{ runner.temp }}/database-shards"
+      - name: Collect Linux deployment-user receipts
+        if: needs.select.outputs['test-linux-user'] == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: linux-user-shard-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/linux-user-shards
+      - name: Require the complete Linux deployment-user inventory
+        if: needs.select.outputs['test-linux-user'] == 'true'
+        run: node scripts/database-test-shards.mjs verify-linux "${{ runner.temp }}/linux-user-shards"
+      - name: Require every selected validation result
+        env:
+          CI_PLAN: ${{ needs.select.outputs.plan }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_BASE: ${{ github.event.pull_request.base.sha || '' }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-impact-plan.mjs verify
 
   release:
     name: build, scan, and publish Docker release

@@ -112,11 +112,36 @@ affected tests or run a hidden full-suite fallback. Documentation-only changes
 normally need formatting and the affected documentation build; record any
 checks left to CI in the PR.
 
-CI runs lint, types, node/web/mobile tests, five isolated database groups, and
-production builds as parallel jobs on every push and PR. Pull requests also
-build each affected deployable Docker target without publishing it. These jobs are
-aggregated under the required `lint / types / test` check; repo-wide coverage
-runs on a weekly schedule (non-gating).
+CI proposes checks from the complete immutable PR diff. The initial affected-job
+rollout is in shadow mode: all jobs still run. After at least ten comparable
+hosted PRs and dependency/asset review, approve `docs`, then proven `web`/`mobile`
+classes in `scripts/ci-impact-rollout.json` on trusted main. PR edits to this file
+cannot enable their own skips. Shared/backend/toolchain changes run the full gate.
+Approved ordinary docs prose runs lint/policy and the docs image; approved web
+component or mobile runtime edits retain their relevant runtime, types, portable
+contracts and builds without unrelated native recovery.
+Unknown paths, incomplete diffs, symlinks and base retargets select full coverage.
+Main pushes, daily reconciliation and manual CI run the full validation union.
+
+The five logical database groups run across thirteen isolated runner partitions;
+recovery scenarios are balanced without shortening real clocks or changing native
+lifecycle assertions. Each group keeps one worker per runner. API/privacy and
+ingestion use two file shards each; configuration and coordinator recovery use
+four scenario partitions each; export/restore stays together. The final required
+`lint / types / test` gate verifies every selected job and the complete disjoint
+partition inventories. Linux deployment-user tests retain uid 1001/umask 002 with
+two isolated single-worker file shards. Required failure/cancellation cannot pass.
+Pull requests build and scan affected deployable images without publishing.
+Repo-wide coverage remains weekly/manual and non-gating.
+
+PR body/title edits refresh the already-required metadata/title check using only
+trusted default-branch validation code. Candidate commits are read as Git objects,
+never checked out or executed by that privileged workflow. Metadata events do not
+cancel code work or replace its required context with a skipped check. During the
+initial rollout, old trusted main definitions retain full edited-event validation;
+no branch-protection changes are needed. Code pushes and base retargets still run
+code validation. Main's obsolete validation jobs can be superseded independently;
+serialized trusted publication is never cancelled by a newer validation run.
 
 The duplicate-code audit reports new clone regions against each PR's base commit
 in the workflow summary, with detailed reports attached as an artifact. PR reports
@@ -153,7 +178,8 @@ pnpm test:database ingestion         # isolated ingestion fixtures + Docker requ
 pnpm test:database export-restore    # also requires retained-backup fixture below
 pnpm test:database configuration-recovery # native configuration recovery
 pnpm test:database coordinator-recovery   # native coordinator recovery
-pnpm test:database                   # all five groups, serially
+pnpm test:database                   # full union, serially
+pnpm test:database coordinator-recovery 1/4 # one complete scenario partition
 pnpm build                           # production app/service/package outputs
 pnpm check-packed-packages           # clean tarball consumer smoke test
 pnpm test:coverage                   # V8 coverage report (written to coverage/)
@@ -292,7 +318,14 @@ Check a committed candidate locally with the PR description saved to a file:
 pnpm check-release-information --base origin/main --head HEAD --body-file /path/to/pr-description.md
 ```
 
-Required CI runs this gate in the lint lane and reads the current PR body and target base, checking both immutable commit identities before evaluating the diff. This does not require rebasing the branch onto current main. Editing the PR body triggers CI again so its classification cannot remain stale; this currently reruns the full workflow. No required check name changes.
+Required CI retains this gate in the lint lane. The already-required
+`Validate conventional commit title` job also validates the current release
+classification on open, synchronization, reopen and body/title edits. It installs
+only trusted default-branch dependencies with lifecycle scripts disabled, validates
+immutable current head/base identities, and rejects metadata races. No PR code is
+executed in this privileged metadata job. After the trusted gate reaches main,
+body/title edits refresh metadata without restarting heavy CI; base retargets still
+validate code. No required check context or live branch rule changes are needed.
 
 A generated version PR uses `Package release: version`, or is recognized by an allowlisted manifest version change. It must exactly match a replay of the installed Changesets version command from its base: versions, changelogs, consumed notes and versioned schema IDs. Source/configuration/lockfile edits do not receive a release-PR exemption. A version-only batch cannot introduce important product declarations; commit those product fragments in the source contribution first. Regenerate the contracts schemas with `pnpm --filter @openmapx/extension-contracts generate:schemas` when their package version changes.
 

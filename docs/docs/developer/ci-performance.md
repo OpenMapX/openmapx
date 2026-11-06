@@ -232,50 +232,134 @@ The wider package/release baseline is handled separately.
 
 ## Linux deployment-user validation
 
-The Linux gate runs the complete agent, core, data-manager and deployment-user
-selection with one Vitest worker. Test files run one at a time to reduce contention
-between filesystem-heavy fixtures. Concurrency inside each case, test and hook
-timeouts, and runtime deadlines stay unchanged. Failures are not retried. The gate
-retains its pinned Node container, uid 1001 and umask `002`; the required CI
-aggregate still requires it to succeed.
+The complete agent, core, data-manager and deployment-user selection runs across
+two independent runners, each with one Vitest worker and an explicit file list. Keep the pinned Node image,
+uid 1001, init process, umask `002`, test deadlines, no retries, and required result.
+The union of actual installed-Vitest selections must equal the unsharded
+selection. Vitest 5 file-only listing ignores its native shard option, so the
+launcher partitions explicit files and verifies each resulting collection. More workers within one runner would reintroduce filesystem contention.
 
-## Database groups
+## Database groups and scenario partitions
 
-Database validation runs in five jobs on separate GitHub-hosted runners:
+| Logical group            | Partitions | Selection and prerequisites                                                                                                              |
+| ------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `api-privacy`            | 2          | Explicit file partitions; migrated pinned PostGIS, auth/API/privacy/migration/platform recovery; extra image/mount probes once in part 1 |
+| `ingestion`              | 2          | Explicit file partitions; owned PostGIS, pinned Transitous Python dependencies, accounting/search/catalog/native import recovery         |
+| `configuration-recovery` | 4          | Expanded native scenario partitions; owned migrated schemas and independent host/process fixtures                                        |
+| `coordinator-recovery`   | 4          | Expanded native lifecycle scenarios, including unchanged real SQL/wall-clock expiry waits                                                |
+| `export-restore`         | 1          | Exact-image Dawarich, real retained archive, controller export and restore replay together                                               |
 
-| Group                    | Coverage                                                                                      | Additional prerequisites                                |
-| ------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `api-privacy`            | Authentication, API routes, privacy lifecycle, migrations and native platform-helper recovery | Migrated PostGIS                                        |
-| `ingestion`              | Data-manager accounting, search, Overture and ambient publication                             | Test-owned PostGIS containers                           |
-| `configuration-recovery` | Native configuration-maintenance recovery                                                     | Test-owned PostGIS containers                           |
-| `coordinator-recovery`   | Native coordinator lifecycle and crash recovery                                               | Test-owned PostGIS containers                           |
-| `export-restore`         | Controller-wide export and backup restore replay                                              | Exact-image Dawarich export and retained-backup archive |
+`scripts/database-test-shards.json` is the runner inventory. Group membership stays
+in `database-test-groups.json`, validated against discovered opt-in suites. Every
+runner has its own pinned PostgreSQL 18/PostGIS 3.6 service and migrations. Its
+Testcontainers, directories and archives are owned independently; no mutable
+fixture is shared between runners. The group launcher retains one file worker
+and fail-fast within that runner; the matrix collects other runners after failure.
 
-Each runner gets the same pinned PostgreSQL 18 / PostGIS 3.6 service and applies
-all production migrations. Testcontainers, Compose fixtures and archive paths are
-owned by that runner. No database or archive is shared between jobs. Within each
-group Vitest uses one worker; increasing that can corrupt shared fixture state.
+Recovery files are not mechanically copied or split. Runtime collection via
+Vitest 5's `--no-static-parse` expands their conditional and parameterized cases;
+the default static listing omits these suites and cannot establish coverage.
+Deterministic longest-first placement uses recorded durations only as hints, with
+new cases receiving a conservative default. The installed runtime's actual filtered
+collection must equal the planned scenario set before execution. Sequential
+lifecycle cases stay whole; no product clock, lease, assertion or timeout changes.
 
-The four groups with native recovery suites have a 90-minute runner budget;
-`export-restore` has 30 minutes. These limits include setup and the serial suites.
-Individual test timeouts and runtime execution deadlines remain independent.
+Every partition uploads a source-bound receipt with the full and selected inventory.
+The aggregate requires all thirteen receipts and verifies that each group's union
+is complete, disjoint and identical across runners. Missing/duplicate cases,
+changed-source receipts, failed/cancelled jobs and unexpected skips fail the gate.
+Fixtures and individual deadlines retain their existing budgets. The 90-minute
+upper caps remain until hosted measurements justify lowering them; they are not a
+performance target.
 
-The matrix does not cancel other groups when one fails. The required
-`lint / types / test` aggregate still requires the database matrix to succeed;
-a failure, cancellation or skipped database job cannot pass it. The three privacy
-fixture steps run only in `export-restore`, where the archive is consumed directly
-by controller-wide export. Missing or empty archive input is an error, rather than
-a switch to the synthetic fixture.
+The large platform-runtime matrix now provisions a worker-owned migrated template
+once and creates a fresh database clone per scenario. The template never consumes
+an external `DATABASE_URL`; failed/unfinished clones are cleaned on worker teardown.
+Isolation and cleanup are tested against real PostGIS. Migration acceptance and
+`throughMigration` boundaries continue using genuine fresh migration histories.
+The separate configuration fixture already creates fresh owned schemas and is not
+silently changed to share state.
 
-Run `pnpm test:database <group>` locally, or omit the group to run the full union
-serially. See [Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#testing)
-for disposable-database setup and archive preparation. The checked-in inventory
-is validated against discovered opt-in tests and actual Vitest file selection.
-Dawarich's exact-image test remains a separate explicit command in the export job.
+Run `pnpm test:database <group>` for the unsharded group,
+`pnpm test:database coordinator-recovery 1/4` for an explicit partition, or omit
+the group for the full serial union. Export/all require the real retained archive;
+missing/empty inputs fail rather than selecting synthetic fallback. See
+[Contributing](https://github.com/OpenMapX/openmapx/blob/main/CONTRIBUTING.md#testing).
 
-The groups run concurrently and repeat runner setup five times. Compare normal-run gate time, queue delay and summed runner seconds before
-claiming an overall improvement. Local correctness checks do not establish CI
-latency or cost; the ten-run comparison remains required.
+## Event, applicability and main scheduling policy
+
+The selector reads the complete immutable Git diff, including old rename/deletion
+paths, rather than GitHub's truncated path-filter/API result. Unknown inputs,
+symlinks, incomplete comparisons and base retargets fail closed to full validation.
+Only ordinary docs prose and narrowly scoped web-component/mobile-runtime leaves
+are candidates for avoiding unrelated native jobs. Initially the selector records
+`proposedScope` in shadow mode while running every check. After ten comparable
+normal PRs, review dependency/asset evidence and approve `docs` first, then proven
+`web`/`mobile` scopes in `scripts/ci-impact-rollout.json`. Only trusted main's policy
+is read; missing/malformed policy and candidate policy edits cannot enable skips.
+Relevant types, portable source contracts, actual builds and image scans remain.
+Main push/schedule/manual events run the full union.
+The aggregate requires positive success for each selected job and an expected skip
+only for explicit inapplicability; malformed selection receipts cannot pass.
+
+The already-required title context also enforces current release classification.
+Its privileged workflow checks out trusted default-branch code only, disables
+install scripts, reads candidate Git objects as data and rejects head/base/body
+races. CI retains its original lint validation while old target definitions roll
+forward. A stacked PR target must have the same metadata workflow definition as
+trusted main before metadata-only skipping is allowed. Once trusted main contains
+this metadata gate, body/title events do not
+restart heavy work. Their aggregate has a different, non-required name and skips;
+it cannot replace failed code validation with a successful skipped required check.
+No new required status or live ruleset transition is needed. Base retargets and
+code updates still produce full applicable code evidence.
+
+Main runs no longer hold one workflow-wide slot through tests and publication.
+The selector first rejects a superseded main source, so rerunning an old main
+commit does not deliberately cancel current validation. Validation cancellation
+is keyed by job and partition, so a newer main revision
+can supersede obsolete work. Publication remains a non-cancelling serialized
+trusted `workflow_call`, admitted only after its exact source's successful gate.
+All existing source/provenance/scan/privacy/coherent-pointer guards remain.
+A superseded selection may finish its workflow without code work; its distinct
+non-required context and selection reason are not evidence of a successful code
+gate. Do not count such intermediate commits as individually validated.
+
+## Build identity and production context
+
+`pnpm build` caches ordinary package builds and web `build:app` separately, then
+runs the tiny uncached web `build:deploy` stamp/copy task. Only deployment stamping
+consumes `SW_BUILD_ID`; changing it does not invalidate Next compilation or
+unrelated package builds. The stamp always runs, including when local fallback
+identity comes from Git, so cache restoration cannot deliver an old service-worker
+identity. Direct web builds retain their behavior; their combined Turbo task is
+uncached. The web Dockerfile likewise compiles before declaring the changing ID.
+
+Root Docker contexts exclude `*.test.ts(x)`/`*.spec.ts(x)` sources. Fixture/assets
+are deliberately retained. The planner applies the same ordered Docker ignore
+semantics, honoring Dockerfile-specific policies and later reinclusions. Control
+inputs always count, and unknown policies/symlinks retain conservative rebuilding.
+Production bundle/image builds must prove no runtime reads a removed test source.
+Policy commands already in `check:policy` no longer execute twice in lint.
+
+Anonymous GHCR build-cache manifests were readable, but the local emulated cold
+benchmark did not establish a net saving. Additional registry imports remain
+disabled pending controlled cold/unchanged/source-edit measurements. Same-run image
+reuse also remains a measured follow-up: transfer overhead is unknown, and both
+independent image scans and native mount layouts remain required. CodeQL keeps its
+existing required producer and cancellation policy; stale manual scans must not
+cancel current main's scan. No live ruleset change is part of this rollout.
+
+## Qualification status
+
+The November 6 investigation measured successful PR p50 13.45m before the native
+recovery expansion versus 55.87m on November 5–6, and main p50 19.02m versus
+61.62m including publication. Those are calendar cohorts, not controlled trials.
+Local tests prove selection, complete inventory, isolated databases and build/hash
+behavior; they do not prove hosted cancellation, runner capacity or latency gains.
+Collect at least ten comparable normal hosted runs after rollout before claiming
+p50/p90 or cost improvement. Track added setup/peak runner demand as well as gate
+time: parallel shards can use more runner minutes even when feedback is faster.
 
 ## Docs validation
 

@@ -65,3 +65,26 @@ docs/
 
 # Role-private control signing and recovery material
 infra/docker/control-private/
+
+# Ordinary test sources are validated by CI, not loaded by production runtimes.
+# Keep fixtures/assets: some are runtime inputs and are not excluded by location.
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Scaffold payloads are runtime assets, even if a template adds test sources.
+!integrations/_template/**/*.test.ts
+!integrations/_template/**/*.test.tsx
+!integrations/_template/**/*.spec.ts
+!integrations/_template/**/*.spec.tsx
+!packages/extension-cli/templates/**/*.test.ts
+!packages/extension-cli/templates/**/*.test.tsx
+!packages/extension-cli/templates/**/*.spec.ts
+!packages/extension-cli/templates/**/*.spec.tsx
+
+# Keep secrets denied even when scaffold test payloads are re-included.
+.env*
+**/.env*
+!.env.example
+**/.generated-secrets/

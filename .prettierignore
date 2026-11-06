@@ -20,3 +20,6 @@ apps/mobile/compliance/background-location-declaration.md
 # Written by the semantic-taxonomy evaluation run; reformatting only guarantees
 # churn on the next run
 integrations/search-nlp/eval/reports/
+
+# Local agent execution ledgers and isolated benchmark contexts.
+.superpowers/
