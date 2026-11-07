@@ -170,6 +170,13 @@ it("renders captured boarding guidance while walking toward Horrem", () => {
     };
     const walk: TripLeg = {
       mode: "walking",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [6.7, 50.93],
+          [ride.from.lng, ride.from.lat],
+        ],
+      },
       startTime: "2026-11-06T20:48:00Z",
       endTime: ride.startTime,
       from: { name: "Walk to the station", lat: 50.93, lng: 6.7 },

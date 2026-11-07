@@ -251,9 +251,9 @@ export function isRefreshEligible(itinerary: TripItinerary): boolean {
   const last = itinerary.legs.at(-1);
   return Boolean(
     first &&
-    last &&
-    ((first.mode === "walking" && last.mode === "walking") ||
-      (first.from.stopId && last.to.stopId)),
+      last &&
+      ((first.mode === "walking" && last.mode === "walking") ||
+        (first.from.stopId && last.to.stopId)),
   );
 }
 

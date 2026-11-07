@@ -283,14 +283,16 @@ export async function searchByName(
     return data
       .filter((match) => (match.type === "STOP" || match.type === "PLACE") && match.id != null)
       .slice(0, limit)
-      .map((match): TransitStop => ({
-        id: `${instance.prefix}${match.id}`,
-        name: match.name ?? "Unknown",
-        lat: match.lat ?? 0,
-        lng: match.lon ?? 0,
-        modes: [],
-        provider: instance.provider,
-      }));
+      .map(
+        (match): TransitStop => ({
+          id: `${instance.prefix}${match.id}`,
+          name: match.name ?? "Unknown",
+          lat: match.lat ?? 0,
+          lng: match.lon ?? 0,
+          modes: [],
+          provider: instance.provider,
+        }),
+      );
   } catch {
     throw new Error("MOTIS stop search unavailable");
   }
