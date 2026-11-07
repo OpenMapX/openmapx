@@ -5,7 +5,7 @@
   "androidVersionCode": 1,
   "androidVersionName": "1.0.0",
   "protocol": {
-    "$comment": "Navigation overlaps protocol 3; native inbox commands require protocol 4; transit platform evidence requires protocol 5.",
+    "$comment": "Navigation overlaps protocol 3; native inbox commands and capability require protocol 4; transit platform evidence requires protocol 5.",
     "min": 3,
     "max": 5
   },

@@ -146,18 +146,20 @@ esac
     const definition = parse(ci);
     const dockerJob = definition.jobs["docker-build"];
     const context = dockerJob.steps.find((step: { id?: string }) => step.id === "context");
-    const build = dockerJob.steps.find((step: { uses?: string }) =>
+    const builds = dockerJob.steps.filter((step: { uses?: string }) =>
       step.uses?.startsWith("docker/build-push-action@"),
     );
     expect(definition.on.pull_request).toBeDefined();
     expect(definition.on.pull_request.paths).toBeUndefined();
+    expect(definition.on.pull_request["paths-ignore"]).toBeUndefined();
     expect(context.run).toContain("context=docs");
     expect(context.run).toContain("dockerfile=docs/Dockerfile");
     expect(dockerJob.permissions).toEqual({ contents: "read" });
     expect(dockerJob.secrets).toBeUndefined();
-    expect(JSON.stringify(dockerJob)).not.toMatch(/login-action|\bsecrets\s*(?:\.|\[)/);
-    expect(build.with.push).toBe(false);
-    expect(build.with.pull).toBe("$" + "{{ matrix.app == 'docs' }}");
+    expect(JSON.stringify(dockerJob)).not.toMatch(/login-action|\bsecrets\b/);
+    expect(builds).toHaveLength(1);
+    expect(builds[0].with.push).toBe(false);
+    expect(builds[0].with.pull).toBe("$" + "{{ matrix.app == 'docs' }}");
     expect(definition.jobs.ci.steps).toContainEqual(
       expect.objectContaining({ run: "node scripts/ci-impact-plan.mjs verify" }),
     );
