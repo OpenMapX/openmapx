@@ -417,8 +417,9 @@ agent checks the original candidate, frozen phases and complete ownership tree.
 An admitted receiver, changed source or unavailable evidence keeps it pending.
 
 Verified recovery preserves the original failed receipt, releases its ownership
-and finishes the application job as **failed**, with the cancellation request
-retained. It does not resume the expired update, replace containers or make a
+and discards its verified inert configuration candidate before finishing the
+application job as **failed**, with the cancellation request retained. It does
+not resume the expired update, replace containers or make a
 backup. Start a fresh checked update afterward; use `--no-backup` for CLI updates
 and their resumes when that is your selected policy, or disable the panel's
 backup option.
@@ -430,6 +431,15 @@ the new negative-admission evidence, so do not downgrade them after recovery.
 The standalone `services recover-update` command above does not recover an
 API-owned application job. Preserve the original records; do not delete locks
 or replay its preparation grant.
+
+An earlier API could finish this recovery as failed while leaving its candidate
+marked prepared, causing the next update to report `Configuration writer
+unavailable`. The corrected API automatically rejoins only the original verified
+negative recovery and completes its candidate cleanup. Its existing cancellation,
+canonical copy and recovery proof must still match; cleanup rechecks the original
+NoGuard closure and refuses a published or claimed candidate. Unavailable or
+changed evidence keeps the candidate fenced. Do not clear its database flag or
+start another copy of the old update.
 
 ## 5. Database migrations apply automatically
 

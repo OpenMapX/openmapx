@@ -38,6 +38,10 @@ vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return { ...actual, renameSync: vi.fn(actual.renameSync) };
 });
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, unlink: vi.fn(actual.unlink) };
+});
 
 const apiState = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createConfigurationPostgresFixture>>,
@@ -75,6 +79,164 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
+  it.each([false, true, "unlink"] as const)(
+    "discards the recovered original candidate before admitting a subsequent writer (already failed=%s)",
+    async (alreadyFailed) => {
+      const f = await ownedFenceFixture({
+        productionRegistration: true,
+        legacyRegistration: true,
+        immediateRecovery: true,
+      });
+      let fault: ReturnType<typeof vi.spyOn> | undefined;
+      try {
+        const fence = createDataConfigurationMaintenance(f.sql, f.dm);
+        await fence.startup();
+        await expect(
+          fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
+        ).rejects.toThrow("Unregistered execution role/targets");
+        await f.failPreparation();
+        const { cancelAdminJobOperations } = await import("../admin-job-ops"),
+          { jobRunner } = await import("../job-runner"),
+          candidate = f.ctx.checkpointResult!._configurationCandidate as {
+            sealedOperationKey: string;
+          },
+          canonicalPath = join(
+            f.root,
+            "control-private/ops-agent/observations",
+            `terminal-${f.owner.operationKey}.json`,
+          ),
+          canonical = readFileSync(canonicalPath);
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(f.owner.deadlineAt + 1);
+        if (alreadyFailed === true) {
+          await vi.waitFor(
+            async () =>
+              expect(
+                await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
+                  context: f.ctx,
+                  jobId: f.ctx.jobId,
+                  pollIntervalMs: 1,
+                }),
+              ).toBe("recovered_failure"),
+            { timeout: 15000, interval: 100 },
+          );
+          // Exact prior-version terminalization: real recovery and copy/ACK,
+          // but the original private candidate has not been discarded.
+          await f.sql`UPDATE admin_job SET status='failed', finished_at=now(),
+            error='Maintenance preparation failed; original ownership was safely released.',
+            result=result || jsonb_build_object('_cancelRequestedAt',${new Date().toISOString()}::text)
+            WHERE id=${f.ctx.jobId}`;
+          const [historical] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
+          for (const changed of ["proof", "candidate", "job"] as const) {
+            const altered = structuredClone(historical!.result),
+              entry = altered.opsProjection.operations[f.owner.operationKey];
+            if (changed === "proof") entry.receiptDelivery.maintenanceRecovery = "changed";
+            if (changed === "candidate") altered._configurationCandidate.candidateId = randomUUID();
+            if (changed === "job") entry.attempt.apiJobId = randomUUID();
+            await f.sql`UPDATE admin_job SET result=${JSON.stringify(altered)}::jsonb WHERE id=${f.ctx.jobId}`;
+            await jobRunner.reconcile({ limit: 32 });
+            const [refused] =
+              await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
+            expect(refused?.status).toBe("failed");
+            expect(refused?.result._configurationCandidate.phase).toBe("prepared");
+            expect(
+              existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
+            ).toBe(true);
+            await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb WHERE id=${f.ctx.jobId}`;
+          }
+        } else await jobRunner.cancel(f.ctx.jobId);
+        if (alreadyFailed === "unlink") {
+          const promises = await import("node:fs/promises"),
+            actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+          let faulted = false;
+          fault = vi.spyOn(promises, "unlink").mockImplementation(async (path) => {
+            await actual.unlink(path);
+            if (
+              !faulted &&
+              String(path).endsWith(`/.candidates/${candidate.sealedOperationKey}.json`)
+            ) {
+              faulted = true;
+              throw Error("Lost acknowledgement after original inert candidate unlink");
+            }
+          });
+        }
+        vi.setSystemTime(f.owner.deadlineAt + 120001);
+        await jobRunner.reconcile({ limit: 32 });
+        if (alreadyFailed === "unlink") {
+          expect(
+            existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
+          ).toBe(false);
+          const [interrupted] = await f.sql`SELECT result FROM admin_job WHERE id=${f.ctx.jobId}`;
+          expect(
+            await (await import("../admin-job-ops")).hasRecoveredMaintenanceCandidate(
+              interrupted!.result,
+              f.ctx.jobId,
+            ),
+          ).toBe(true);
+          const agentUrl = process.env.OPS_AGENT_URL;
+          vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
+          vi.setSystemTime(f.owner.deadlineAt + 240001);
+          await jobRunner.reconcile({ limit: 32 });
+          const [unavailable] =
+            await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
+          expect(unavailable?.status).toBe("running");
+          expect(unavailable?.result._configurationCandidate.phase).toBe(
+            "discarding_without_guard",
+          );
+          vi.stubEnv("OPS_AGENT_URL", agentUrl);
+          vi.setSystemTime(f.owner.deadlineAt + 360001);
+          await jobRunner.reconcile({ limit: 32 });
+        }
+        const [finished] = await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
+        expect(
+          finished?.status,
+          JSON.stringify({
+            candidate: finished?.result._configurationCandidate,
+            observation: finished?.result.observation,
+          }),
+        ).toBe("failed");
+        expect(finished?.result._configurationCandidate.phase).toBe("discarded");
+        expect(
+          existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
+        ).toBe(false);
+        expect(readFileSync(canonicalPath)).toEqual(canonical);
+        expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(f.data.preparePosts).toBe(0);
+        expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
+          false,
+        );
+        const nextId = randomUUID(),
+          execution = { owner: randomUUID(), version: 1 },
+          next = {
+            ...f.ctx,
+            jobId: nextId,
+            execution,
+            checkpointResult: { _execution: execution },
+          },
+          writer = await import("../administrative-configuration-writer");
+        await f.sql`INSERT INTO admin_job(id,type,status,payload,result)
+          VALUES(${nextId},'service.apply','running','{}',${JSON.stringify(next.checkpointResult)}::jsonb)`;
+        await expect(
+          writer.withAdministrativeConfigurationJob(next, () =>
+            writer.withAdministrativeConfigurationWriter(
+              {
+                actorId: nextId,
+                operationKey: `opk1_${nextId.replaceAll("-", "")}`,
+                integrationIds: [],
+              },
+              async () => "next-writer-admitted",
+            ),
+          ),
+        ).resolves.toBe("next-writer-admitted");
+      } finally {
+        fault?.mockRestore();
+        vi.useRealTimers();
+        await f.close();
+      }
+    },
+    90000,
+  );
+
   it("serializes receiver admission with original-root cancellation and negative settlement", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true }),
       authority = await import(
@@ -832,6 +994,7 @@ async function ownedFenceFixture(
     productionRegistration?: boolean;
     legacyRegistration?: boolean;
     loseRecoveryResponseOnce?: boolean;
+    immediateRecovery?: boolean;
   } = {},
 ) {
   const fixture = await createConfigurationPostgresFixture();
@@ -915,21 +1078,32 @@ async function ownedFenceFixture(
   await initServiceRegistry({ strict: true });
   const jobId = randomUUID(),
     execution = { owner: randomUUID(), version: 1 },
-    operationKey = `opk1_${jobId.replaceAll("-", "")}`;
+    operationKey = `opk1_${jobId.replaceAll("-", "")}`,
+    payload = options.immediateRecovery ? { operationKey } : {},
+    initialResult = {
+      _execution: execution,
+      ...(options.immediateRecovery
+        ? {
+            _immediateJobId: jobId,
+            _immediateActorId: jobId,
+            _immediateIntentDigest: "a".repeat(64),
+          }
+        : {}),
+    };
   await fixture.db.insert(apiSchema.adminJob).values({
     id: jobId,
     type: "service.apply",
-    payload: {},
+    payload,
     status: "running",
-    result: { _execution: execution },
+    result: initialResult,
   });
   const ctx: JobContext = {
     jobId,
     jobType: "service.apply",
     execution,
-    payload: {},
+    payload,
     signal: new AbortController().signal,
-    checkpointResult: { _execution: execution },
+    checkpointResult: initialResult,
     log: async () => {},
     setProgress: async () => {},
     checkpoint: async (result, progress, admissionKey, stepAddress) => {
