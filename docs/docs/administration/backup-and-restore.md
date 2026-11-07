@@ -150,8 +150,7 @@ whose directory already exists is refused rather than overwriting it. After a
 successful snapshot, the CLI prunes backups older than `BACKUP_RETENTION_DAYS`;
 the operations agent also performs that prune at startup and daily.
 
-The same actions are available without a shell, on the **Backups** page under
-[Services](./services-administration.md) in the admin panel
+The same actions are available without a shell, on **System → Backups** in the admin panel
 ([Admin panel](./admin-panel.md) maps the rest of the surface). Enter an optional
 name, click **Create Backup**, and the operation runs as a background job. The
 table lists every snapshot with its creation time, the platform version, the
@@ -159,6 +158,34 @@ service and volume counts, and total size; it refreshes on its own and links
 straight to **Activity** so you can watch the job and read its log (see
 [Monitoring](./monitoring.md)). Because the CLI and the admin UI both write to
 `infra/docker/backups/`, a snapshot made one way shows up in the other.
+
+Cancellation stops the CLI's artifact writers before removing an incomplete
+snapshot. A PostgreSQL dump is supervised inside its database container, and a
+volume archive has its own helper container with Docker init. A clean Docker
+client exit alone does not confirm a dump completed. Community `pg_dump` images
+must include Bash, and the Docker engine must provide `docker-init`. Installation
+paths containing commas, quotes or newlines are refused for volume backups
+because Docker's bind-mount option cannot represent them safely here.
+
+Cleanup has a bounded window. Services can remain stopped if the authority
+deadline expires or Docker's final SIGKILL interrupts rollback. Repeated terminal
+signals can also interrupt cleanup subprocesses. Inspect service status before
+restarting services through the normal admin or CLI workflow. If an archive
+writer's removal cannot be confirmed, its incomplete directory is retained and
+appears as an invalid backup. When the CLI can report this failure, its diagnostic
+gives the unique `openmapx.backup-writer` label. After a hard kill, inspect helpers
+with that label key and match their `/backup` mount to the partial directory. A delayed container creation can also leave an
+inactive labelled helper holding its source volume. Confirm that helper is
+inactive or removed before deleting retained partial files. Do not remove the
+source volume. PostgreSQL backend cancellation depends on the dump's cancel
+request reaching the server; a force-killed dump can leave a backend until it
+detects the closed connection.
+
+A published backup is retained if service restart fails or cancellation arrives
+after publication. In the latter case the CLI exits 130 and the operation can
+show failed or unknown even though the backup remains listed. A publication
+error after the manifest rename also preserves the directory for inspection.
+These checks do not add a crash-durability guarantee to archive data files.
 
 **Preview expired backups** shows the current policy and its host/database source,
 the eligible snapshots and their size, retained count, and unreadable expiry metadata.

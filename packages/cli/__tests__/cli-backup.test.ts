@@ -17,6 +17,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
+import { gzipSync } from "node:zlib";
 import { appendErasureRequest, initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
@@ -44,8 +45,14 @@ import {
   validateRestoreDataProtection,
   writeBackupManifestAtomically,
 } from "../src/commands/backup";
+import { pgDumpToFile, tarVolumeToFile } from "../src/commands/backup-processes";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
+vi.mock("../src/commands/backup-processes", async (original) => ({
+  ...(await original<typeof import("../src/commands/backup-processes")>()),
+  pgDumpToFile: vi.fn(),
+  tarVolumeToFile: vi.fn(),
+}));
 
 let tmp: string;
 const ERASURE_KEY = Buffer.from("0123456789abcdef0123456789abcdef");
@@ -143,6 +150,8 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.BACKUP_RETENTION_DAYS;
   vi.mocked(execa).mockReset();
+  vi.mocked(pgDumpToFile).mockReset();
+  vi.mocked(tarVolumeToFile).mockReset();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -1074,6 +1083,12 @@ describe("discoverBackupableServices", () => {
 
 describe("backup volume modes", () => {
   function mockSuccessfulDocker(): void {
+    vi.mocked(pgDumpToFile).mockImplementation(async (_ctx, _service, _user, _db, output) => {
+      writeFileSync(output, gzipSync("dump"));
+    });
+    vi.mocked(tarVolumeToFile).mockImplementation(async (_volume, directory, name) => {
+      writeFileSync(join(directory, name), "synthetic archive");
+    });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
@@ -1142,11 +1157,14 @@ describe("backup volume modes", () => {
 
     const result = await createBackup({ rootDir: tmp, name: "mixed" });
     const calls = mockedCommandCalls();
-    const pgDump = calls.findIndex(([, args]) => args.includes("pg_dump"));
-    const stop = calls.findIndex(([, args]) => args.includes(" stop timeline"));
-    const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/source:ro"));
+    const pgDump = vi.mocked(pgDumpToFile).mock.invocationCallOrder[0];
+    const stopIndex = calls.findIndex(([, args]) => args.includes(" stop timeline"));
+    const stop = vi.mocked(execa).mock.invocationCallOrder[stopIndex];
+    const tar = vi.mocked(tarVolumeToFile).mock.invocationCallOrder[0];
+    if (pgDump === undefined || stop === undefined || tar === undefined)
+      throw Error("Missing backup lifecycle call");
 
-    expect(pgDump).toBeGreaterThanOrEqual(0);
+    expect(pgDump).toBeGreaterThan(0);
     expect(stop).toBeGreaterThan(pgDump);
     expect(tar).toBeGreaterThan(stop);
     expect(result.manifest.services).toEqual([

@@ -198,6 +198,7 @@ describe("required database test gate", () => {
     expect(groups["export-restore"]).toEqual([
       "apps/api/src/privacy/controller-wide-export-postgres.test.ts",
       "packages/cli/__tests__/backup-restore-postgres.integration.test.ts",
+      "packages/cli/__tests__/backup-cancellation-postgres.integration.test.ts",
     ]);
   });
 
