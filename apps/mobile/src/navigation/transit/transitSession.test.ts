@@ -98,7 +98,7 @@ describe("createTransitPreparingSession", () => {
     expect(session.payload.refresh.status).toBe("ready");
   });
 
-  it("marks the refresh chain broken when there is no token to rotate", () => {
+  it("keeps hosted capture refreshing available without an itinerary token", () => {
     const noToken = transitStartPackageFixture({
       itinerary: { ...transitStartPackageFixture().itinerary, refreshToken: undefined },
     });
@@ -106,7 +106,7 @@ describe("createTransitPreparingSession", () => {
     const session = createTransitPreparingSession(noToken as never, IDENTITY, NOW);
 
     expect(session.payload.refreshToken).toBeNull();
-    expect(session.payload.refresh.status).toBe("broken");
+    expect(session.payload.refresh.status).toBe("ready");
   });
 
   it("keeps the captures the package was built with", () => {

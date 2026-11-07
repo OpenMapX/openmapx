@@ -65,7 +65,7 @@ export function useTransitNavigationEngine(): void {
       enabled: active,
       staleTime: 30000,
       refetchOnReconnect: "always" as const,
-      refetchInterval: awaitingRecovery ? 30000 : (false as const),
+      refetchInterval: 30000,
       retry: 1,
     })),
   });

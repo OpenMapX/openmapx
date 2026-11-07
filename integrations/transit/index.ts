@@ -17,6 +17,7 @@ import {
   parseWgs84Point,
   type SearchSuggestionProvider,
   scalarQueries,
+  type TransitProvider,
   type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -32,6 +33,7 @@ import type {
   TransitStop,
   TransitTripResolveRequest,
   TripItinerary,
+  VehicleJourney,
 } from "@openmapx/mobility-core/transit";
 import {
   parseTransitIsochroneRequest,
@@ -70,6 +72,7 @@ import {
   transitCheckCacheKey,
   transitSurfaceCacheKey,
 } from "./reachability.js";
+import { createRefreshReplay } from "./refresh-replay.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
 import { parseStopAreaQuery, resolveStopArea, stopAreaCacheKey } from "./stop-area.js";
 import {
@@ -1028,6 +1031,23 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  function refreshSourceIds(
+    providerId: string | undefined,
+    tripIds: readonly string[] = [],
+  ): string[] {
+    return ctx.getIntegrationsByDomain("transit").flatMap((integration) => {
+      const providers = (integration.providers.get("transit") ?? []) as TransitProvider[];
+      const matches = providers.some((p) =>
+        providerId ? p.id === providerId : tripIds.some((id) => id.startsWith(p.prefix)),
+      );
+      return matches
+        ? (integration.manifest.dataSources ?? []).map((source) => source.sourceId)
+        : [];
+    });
+  }
+
+  const replayRefresh = createRefreshReplay(ctx);
+
   // POST /plan/refresh — opaque, one-time, server-side-bound MOTIS refresh.
   ctx.registerRoute("POST", "/plan/refresh", async (req, reply) => {
     const body = req.body as { token?: unknown } | null;
@@ -1042,79 +1062,106 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Invalid or expired itinerary refresh token" });
       return;
     }
-    const cacheKey = `transit-refresh:${handle.id}`;
-    const state = await ctx.cache.get<RefreshState | ReferenceRefreshState>(cacheKey);
-    if (!state) {
-      reply.status(409).send({ error: "Itinerary refresh state expired" });
-      return;
-    }
-    await ctx.cache.del(cacheKey);
-
-    if (state.kind === "reference") {
-      try {
-        // A reference refresh must never fall back to the first search result.
-        const exact = await orchestrator.resolveTrip(state.request);
-        const itinerary = exact.data?.itineraries[0];
-        if (!itinerary) {
-          reply.status(409).send({ error: "The exact trip can no longer be refreshed" });
-          return;
-        }
-        itinerary.refreshToken = await issueReferenceRefreshToken(itinerary, state.request);
-        reply.send(
-          envelope({ itinerary, fallbackOccurred: false }, exact.attributions, exact.freshness),
-        );
-      } catch (error) {
-        if (
-          error instanceof TripReferenceEpochError ||
-          error instanceof TripReferenceUnavailableError ||
-          error instanceof TripReferenceUnsupportedError ||
-          error instanceof TripReferenceValidationError
-        )
-          reply.status(409).send({ error: "The exact trip can no longer be refreshed" });
-        else throw error;
-      }
-      return;
-    }
-
-    const refreshed = await orchestrator.refreshTrip(state.providerId, {
-      itineraryId: state.itineraryId,
-      datasetEpoch: state.datasetEpoch,
-      modes: state.request.modes,
-      wheelchairRequired: state.request.wheelchairRequired,
-      requireBikeTransport: state.request.requireBikeTransport,
-      detailedTransfers: true,
-    });
-    let itinerary = refreshed.data;
-    let fallbackOccurred = false;
-    let resultAttributions = refreshed.attributions;
-    let resultFreshness = refreshed.freshness;
-
-    if (!itinerary) {
-      fallbackOccurred = true;
-      const fallback = await orchestrator.planTrip({
-        ...state.request,
-        regionalAlternatives: false,
-        pageCursor: undefined,
-      });
-      itinerary = fallback.data?.itineraries[0] ?? null;
-      resultAttributions = fallback.attributions;
-      resultFreshness = fallback.freshness;
-    }
-    if (!itinerary) {
-      reply.status(409).send({ error: "Itinerary can no longer be refreshed or replanned" });
-      return;
-    }
-    if (itinerary.source === "transit-motis-local") {
-      itinerary.refreshToken = await issueRefreshToken(
-        itinerary,
-        state.providerId,
-        state.instance,
-        itinerary.datasetEpoch ?? state.datasetEpoch,
-        state.requestFingerprint,
-        state.request,
+    const result = await replayRefresh(handle.id, async () => {
+      const state = await ctx.cache.get<RefreshState | ReferenceRefreshState>(
+        `transit-refresh:${handle.id}`,
       );
-    }
-    reply.send(envelope({ itinerary, fallbackOccurred }, resultAttributions, resultFreshness));
+      if (!state) return { status: 409, body: { error: "Itinerary refresh state expired" } };
+      if (state.kind === "reference") {
+        try {
+          // Keep imported exact trips bound to their reference; never search for a replacement.
+          const sourceIds = refreshSourceIds(
+            undefined,
+            state.request.reference.legs.map((leg) => leg.tripId),
+          );
+          const exact = await orchestrator.resolveTrip(state.request);
+          const itinerary = exact.data?.itineraries[0];
+          if (!itinerary)
+            return { status: 409, body: { error: "The exact trip can no longer be refreshed" } };
+          itinerary.refreshToken = await issueReferenceRefreshToken(itinerary, state.request);
+          return {
+            status: 200,
+            sourceIds,
+            body: envelope(
+              { itinerary, fallbackOccurred: false },
+              exact.attributions,
+              exact.freshness,
+            ),
+          };
+        } catch (error) {
+          if (error instanceof TripReferenceUnavailableError)
+            return {
+              status: 503,
+              body: { error: "Exact trip source unavailable", retryable: true },
+            };
+          if (
+            error instanceof TripReferenceEpochError ||
+            error instanceof TripReferenceUnsupportedError ||
+            error instanceof TripReferenceValidationError
+          )
+            return { status: 409, body: { error: "The exact trip can no longer be refreshed" } };
+          throw error;
+        }
+      }
+      let sourceIds = refreshSourceIds(state.providerId);
+      const outcome = await orchestrator.refreshTrip(state.providerId, {
+        itineraryId: state.itineraryId,
+        datasetEpoch: state.datasetEpoch,
+        modes: state.request.modes,
+        wheelchairRequired: state.request.wheelchairRequired,
+        requireBikeTransport: state.request.requireBikeTransport,
+        detailedTransfers: true,
+      });
+      if (outcome.status === "unavailable")
+        return {
+          status: 503,
+          body: { error: "Itinerary refresh temporarily unavailable", retryable: true },
+        };
+      const refreshed = outcome.result;
+      let itinerary = refreshed.data;
+      let fallbackOccurred = false;
+      let resultAttributions = refreshed.attributions;
+      let resultFreshness = refreshed.freshness;
+      if (!itinerary) {
+        fallbackOccurred = true;
+        const fallback = await orchestrator.planTrip({
+          ...state.request,
+          regionalAlternatives: false,
+          pageCursor: undefined,
+        });
+        itinerary = fallback.data?.itineraries[0] ?? null;
+        resultAttributions = fallback.attributions;
+        resultFreshness = fallback.freshness;
+      }
+      if (!itinerary)
+        return {
+          status: 409,
+          body: { error: "Itinerary can no longer be refreshed or replanned" },
+        };
+      if (fallbackOccurred)
+        sourceIds = refreshSourceIds(
+          undefined,
+          itinerary.legs.flatMap((leg) => (leg.tripId ? [leg.tripId] : [])),
+        );
+      if (itinerary.source === "transit-motis-local") {
+        itinerary.refreshToken = await issueRefreshToken(
+          itinerary,
+          state.providerId,
+          state.instance,
+          itinerary.datasetEpoch ?? state.datasetEpoch,
+          state.requestFingerprint,
+          state.request,
+        );
+      }
+      return {
+        status: 200,
+        sourceIds,
+        body: envelope({ itinerary, fallbackOccurred }, resultAttributions, resultFreshness),
+      };
+    });
+    reply.header("Cache-Control", "no-store");
+    if (result.status === 503) reply.header("Retry-After", "2");
+    reply.status(result.status).send(result.body);
   });
 
   ctx.registerRoute("GET", "/reachability/capabilities", async (_req, reply) => {
@@ -1451,7 +1498,7 @@ export function setup(ctx: IntegrationContext): void {
     const nonEmptyFallbackIds = listQuery(req.query, "fallback_ids")?.filter((id) => id !== "");
     const fallbackIds = nonEmptyFallbackIds?.length ? nonEmptyFallbackIds : undefined;
     const cacheKey = `transit:vehicle-journey:${JSON.stringify([tripId, fallbackIds ?? []])}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
+    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<VehicleJourney | null> | null;
     if (!env) {
       const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);
       if (res.data) {
@@ -1463,7 +1510,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Vehicle journey not found" });
       return;
     }
-    reply.send(env);
+    reply.send(toEnvelope(await orchestrator.enrichJourneyPlatforms(env)));
   });
 
   // GET /departures/for-place

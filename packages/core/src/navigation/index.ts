@@ -342,6 +342,7 @@ export {
   captureTransitLegStops,
   type JourneyStopLike,
   refreshTransitCaptures,
+  selectLegPlatform,
   sliceJourneyToLeg,
 } from "./transitStops";
 export {

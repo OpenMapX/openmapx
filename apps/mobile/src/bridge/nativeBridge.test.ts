@@ -575,9 +575,9 @@ describe("NativeBridge.send", () => {
 });
 
 describe("intake protocol compatibility", () => {
-  it("offers protocol 4 while retaining protocol 3 navigation", () => {
+  it("offers platform-evidence protocol 5 while retaining protocol 3 navigation", () => {
     expect(MOBILE_PROTOCOL_MIN).toBe(3);
-    expect(MOBILE_PROTOCOL_MAX).toBe(4);
+    expect(MOBILE_PROTOCOL_MAX).toBe(5);
   });
 
   it("stamps pre-handshake navigation output with the selected older version", async () => {
@@ -635,7 +635,7 @@ describe("intake protocol gates", () => {
     expect(result).toEqual({ status: "rejected", code: "unsupported-capability" });
     expect(dispatched).toEqual([]);
   });
-  it("advertises intake for a version4 peer", async () => {
+  it.each([4, 5])("advertises intake for a version%s peer", async (version) => {
     const { bridge, registry, injected } = harness({
       describeShell: () => ({
         ...SHELL,
@@ -643,10 +643,10 @@ describe("intake protocol gates", () => {
       }),
     });
     const c = registry.beginDocumentLoad(NOW);
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce) });
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce, { min: version, max: version }) });
     expect(decodePayload(injected[0]).payload).toMatchObject({
       capabilities: { nativeIntake: true, carDestinations: true },
-      selectedProtocolVersion: 4,
+      selectedProtocolVersion: version,
     });
   });
 });

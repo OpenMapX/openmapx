@@ -1,5 +1,9 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
-import { type ApiClient, ApiRequestAbortedError } from "@openmapx/core/navigation/api";
+import {
+  type ApiClient,
+  ApiClientError,
+  ApiRequestAbortedError,
+} from "@openmapx/core/navigation/api";
 import { journeysToRefetch, TransitRefreshService } from "./TransitRefreshService";
 import { FIXTURE_TOKEN, transitSessionFixture } from "./testing/transitFixture";
 
@@ -129,15 +133,15 @@ describe("TransitRefreshService.request", () => {
     expect(calls[0].options.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("refuses to send without a token", async () => {
+  it("retains captures when a hosted journey lookup fails", async () => {
     const { client, calls } = fakeClient({ refresh: async () => refreshedItinerary() });
     const tokenless = session();
     tokenless.payload.refreshToken = null;
 
     const outcome = await service(client).request(request({ session: tokenless }));
 
-    expect(outcome).toMatchObject({ ok: false, failure: "rejected" });
-    expect(calls).toEqual([]);
+    expect(outcome).toMatchObject({ ok: false, failure: "retryable" });
+    expect(calls.every((call) => call.kind === "get")).toBe(true);
   });
 
   describe("failure classification", () => {
@@ -258,5 +262,52 @@ describe("TransitRefreshService.request", () => {
       expect(signals).toHaveLength(2);
       for (const signal of signals) expect(signal.aborted).toBe(true);
     });
+  });
+});
+
+it.each([400, 409, 503])(
+  "classifies HTTP %s without discarding a retryable handle",
+  async (status) => {
+    const { client } = fakeClient({
+      refresh: async () => {
+        throw new ApiClientError(status, null, null);
+      },
+    });
+    expect(await service(client).request(request())).toMatchObject({
+      ok: false,
+      failure: status === 503 ? "retryable" : "rejected",
+    });
+  },
+);
+it("does not apply a fallback replan returned by the server", async () => {
+  const { client } = fakeClient({
+    refresh: async () => ({ data: { ...refreshedItinerary().data, fallbackOccurred: true } }),
+  });
+  expect(await service(client).request(request())).toMatchObject({
+    ok: false,
+    failure: "rejected",
+  });
+});
+
+it("refreshes hosted journey captures without an itinerary token or a second owner", async () => {
+  const hosted = session();
+  hosted.payload.refreshToken = null;
+  const { client, calls } = fakeClient({
+    journey: async () => ({
+      data: {
+        stops: [
+          {
+            stopId: "stop-a",
+            departurePlatform: { code: "3", kind: "correction", sourceId: "siri" },
+          },
+        ],
+      },
+    }),
+  });
+  const outcome = await service(client).request(request({ session: hosted }));
+  expect(calls.some((call) => call.kind === "post")).toBe(false);
+  expect(outcome).toMatchObject({
+    ok: true,
+    journeys: { "trip-1": [{ departurePlatform: { code: "3" } }] },
   });
 });

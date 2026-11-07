@@ -1,3 +1,5 @@
+import { selectStopPlatform } from "@openmapx/mobility-core/platform";
+import type { TransitPlatformEvidence } from "@openmapx/mobility-core/transit";
 import type { TransitLegCapture } from "./mobileProtocol";
 
 /**
@@ -15,6 +17,8 @@ export interface JourneyStopLike {
   name?: string;
   lat?: number;
   lng?: number;
+  arrivalPlatform?: TransitPlatformEvidence;
+  departurePlatform?: TransitPlatformEvidence;
   platform?: string;
   scheduledPlatform?: string;
   scheduledArrival?: string;
@@ -57,33 +61,63 @@ export interface CapturableLeg {
   tripId?: string;
   scheduledStartTime?: string;
   scheduledEndTime?: string;
-  from?: { stopId?: string };
-  to?: { stopId?: string };
+  from?: { stopId?: string; platformCode?: string; scheduledPlatformCode?: string };
+  to?: { stopId?: string; platformCode?: string; scheduledPlatformCode?: string };
 }
 
 const MAX_CAPTURED_STOPS = 2_000;
 
-function copyStop(stop: JourneyStopLike) {
-  // Only the fields navigation needs. Journey formation, remarks and provider
-  // metadata are deliberately dropped.
+function bounded(value: unknown, max: number): string | undefined {
+  return typeof value === "string" && value.length <= max ? value : undefined;
+}
+
+function copyPlatform(
+  evidence: TransitPlatformEvidence | undefined,
+): TransitPlatformEvidence | undefined {
+  if (
+    !evidence ||
+    !bounded(evidence.code, 64) ||
+    !bounded(evidence.sourceId, 128) ||
+    !["schedule", "correction", "realtime"].includes(evidence.kind)
+  )
+    return undefined;
+  const result: TransitPlatformEvidence = {
+    code: evidence.code,
+    kind: evidence.kind,
+    sourceId: evidence.sourceId,
+  };
+  for (const field of ["scheduledCode", "recordedAt", "fetchedAt"] as const) {
+    const value = bounded(evidence[field], 64);
+    if (value !== undefined) result[field] = value;
+  }
+  return result;
+}
+
+function copyStop(stop: JourneyStopLike): TransitLegCapture["stops"][number] {
+  // Capture a bounded projection so newer provider fields cannot break an installed shell.
   return {
     stopId: stop.stopId,
-    name: stop.name ?? "",
+    name: typeof stop.name === "string" ? stop.name.slice(0, 512) : "",
     lat: stop.lat ?? 0,
     lng: stop.lng ?? 0,
-    ...(stop.platform !== undefined && { platform: stop.platform }),
-    ...(stop.scheduledPlatform !== undefined && { scheduledPlatform: stop.scheduledPlatform }),
-    ...(stop.scheduledArrival !== undefined && { scheduledArrival: stop.scheduledArrival }),
-    ...(stop.scheduledDeparture !== undefined && { scheduledDeparture: stop.scheduledDeparture }),
-    ...(stop.expectedArrival !== undefined && { expectedArrival: stop.expectedArrival }),
-    ...(stop.expectedDeparture !== undefined && { expectedDeparture: stop.expectedDeparture }),
-    ...(stop.canceled !== undefined && { canceled: stop.canceled }),
-    ...(stop.departed !== undefined && { departed: stop.departed }),
+    arrivalPlatform: copyPlatform(stop.arrivalPlatform),
+    departurePlatform: copyPlatform(stop.departurePlatform),
+    platform: bounded(stop.platform, 64),
+    scheduledPlatform: bounded(stop.scheduledPlatform, 64),
+    scheduledArrival: bounded(stop.scheduledArrival, 64),
+    scheduledDeparture: bounded(stop.scheduledDeparture, 64),
+    expectedArrival: bounded(stop.expectedArrival, 64),
+    expectedDeparture: bounded(stop.expectedDeparture, 64),
+    canceled: typeof stop.canceled === "boolean" ? stop.canceled : undefined,
+    departed: typeof stop.departed === "boolean" ? stop.departed : undefined,
   };
 }
 
 function hasUsableCoordinates(stop: JourneyStopLike): boolean {
   return (
+    !!stop &&
+    typeof stop.stopId === "string" &&
+    stop.stopId.length <= 128 &&
     typeof stop.lat === "number" &&
     Number.isFinite(stop.lat) &&
     Math.abs(stop.lat) <= 90 &&
@@ -189,8 +223,10 @@ export function refreshTransitCaptures(
           ...stable,
           expectedArrival: fresh.expectedArrival,
           expectedDeparture: fresh.expectedDeparture,
-          platform: fresh.platform ?? stop.scheduledPlatform,
-          scheduledPlatform: fresh.scheduledPlatform ?? stop.scheduledPlatform,
+          platform: fresh.platform,
+          scheduledPlatform: fresh.scheduledPlatform,
+          arrivalPlatform: fresh.arrivalPlatform,
+          departurePlatform: fresh.departurePlatform,
           canceled: fresh.canceled,
           departed: fresh.departed,
         };
@@ -214,4 +250,23 @@ function matchingOccurrence(
   const exact = candidates.find((i) => Date.parse(stops[i][field] ?? "") === timestamp);
   // Ambiguous occurrence identity is unavailable, rather than a different lap.
   return exact ?? -1;
+}
+
+/** Capture endpoints already identify the ridden occurrence, including loops. */
+export function selectLegPlatform(
+  leg: CapturableLeg,
+  legIndex: number,
+  captures: readonly TransitLegCapture[],
+  event: "arrival" | "departure",
+) {
+  const capture = captures.find(
+    (c) => c.legIndex === legIndex && c.tripId === leg.tripId && c.status === "captured",
+  );
+  const stop = event === "departure" ? capture?.stops[0] : capture?.stops.at(-1);
+  if (stop) return selectStopPlatform(stop, event);
+  const endpoint = event === "departure" ? leg.from : leg.to;
+  return selectStopPlatform(
+    { platform: endpoint?.platformCode, scheduledPlatform: endpoint?.scheduledPlatformCode },
+    event,
+  );
 }

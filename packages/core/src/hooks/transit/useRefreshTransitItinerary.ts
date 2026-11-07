@@ -5,8 +5,8 @@ export type { TransitRefreshResult };
 
 /**
  * Thin wrapper over `refreshTransitItinerary`. The rotating token is one-time,
- * so the mutation deliberately does not retry: a replayed token may already be
- * spent, and the caller must decide whether to replan instead.
+ * so the mutation leaves retries to the navigation owner. The server can replay
+ * a successful response for two minutes; terminal answers require rider recovery.
  */
 export function useRefreshTransitItinerary() {
   return useMutation({

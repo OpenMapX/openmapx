@@ -9,7 +9,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import type { TransitTransfer } from "@openmapx/core/navigation";
-import { changedFromPlatform, isApproachingTransitAlight } from "@openmapx/core/navigation";
+import { isApproachingTransitAlight, selectLegPlatform } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
@@ -88,8 +88,10 @@ export function TransitLegBanner({
     transitProgress?.confidence === "gps" &&
     !leg.cancelled &&
     isApproachingTransitAlight(legStops, cursor, transitProgress.position);
-  const boardingPlatform = leg.from.platformCode;
-  const alightPlatform = leg.to.platformCode;
+  const boarding = selectLegPlatform(leg, legIndex, captures, "departure");
+  const alighting = selectLegPlatform(leg, legIndex, captures, "arrival");
+  const boardingPlatform = boarding.code;
+  const alightPlatform = alighting.code;
   // Show the vehicle's destination sign when it adds information beyond the
   // alight stop already named in the title.
   const headsign = leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
@@ -249,8 +251,8 @@ export function TransitLegBanner({
                 <PlatformBadge
                   code={boardingPlatform}
                   tone="onBanner"
-                  changed={!!changedFromPlatform(leg.from)}
-                  scheduledCode={leg.from.scheduledPlatformCode}
+                  changed={boarding.changed}
+                  scheduledCode={boarding.scheduledCode}
                 />
               ) : !departed && boardingStopCode ? (
                 <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
@@ -326,7 +328,7 @@ export function TransitLegBanner({
               {alightPlatform && (
                 <PlatformBadge
                   code={alightPlatform}
-                  scheduledCode={leg.to.scheduledPlatformCode}
+                  scheduledCode={alighting.scheduledCode}
                   tone="surface"
                 />
               )}

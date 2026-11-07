@@ -1,0 +1,11 @@
+{
+  "name": "DELFI SIRI ET Rhein-Ruhr",
+  "description": "Fahrgastgleise aus einem Community-Spiegel von DELFI SIRI ET.",
+  "dataSources": {
+    "delfi-siri-et-rhein-ruhr": {
+      "purpose": "Fahrgastgleise für eindeutig zugeordnete DELFI-Züge im Rhein-Ruhr-Feed.",
+      "dataSent": "Es werden keine Nutzerdaten gesendet. Ein regionaler Feed wird serverseitig geladen und lokal zugeordnet.",
+      "dataReceived": "Gleisbezeichnungen, Betriebstage, Zugreferenzen, Haltefolgen und Quellzeitstempel."
+    }
+  }
+}

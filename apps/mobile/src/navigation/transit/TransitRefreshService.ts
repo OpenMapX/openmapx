@@ -3,6 +3,7 @@ import {
   type ApiClient,
   type ApiRequestOptions,
   createApiClient,
+  isApiClientError,
   refreshTransitItinerary,
 } from "@openmapx/core/navigation/api";
 import { fetchJourneyCaptures } from "./journeyCaptures";
@@ -11,20 +12,7 @@ import { REQUEST_TIMEOUT_MS } from "./refreshState";
 
 export { MAX_JOURNEY_CONCURRENCY } from "./journeyCaptures";
 
-/**
- * Rotating the live-data token, from outside the coordinator's queue.
- *
- * Native is the only consumer of that token, and it is one-time: the server
- * returns a replacement and invalidates what was sent. Everything unusual about
- * this service follows from that.
- *
- * The failure classification is the part that matters most. A request that was
- * *rejected* tells us the token is gone. A request that *timed out* tells us
- * nothing — the server may have consumed it and the reply may have been lost —
- * and the only safe reading of "we do not know" is that it was spent. A request
- * that never reached the network at all is the one case where the same token can
- * safely be reused.
- */
+/** Native owns the rotating handle and classifies failures for bounded replay. */
 
 export type RefreshOutcome =
   | {
@@ -34,6 +22,7 @@ export type RefreshOutcome =
       generation: number;
       itinerary: unknown;
       journeys: Record<string, readonly unknown[] | undefined>;
+      capturesOnly?: boolean;
     }
   | {
       ok: false;
@@ -112,7 +101,6 @@ export class TransitRefreshService {
     const base = { requestId, generation, sessionId: session.sessionId };
 
     const token = session.payload.refreshToken;
-    if (!token) return { ...base, ok: false, failure: "rejected" };
 
     const controller = new AbortController();
     this.inFlight.set(requestId, controller);
@@ -123,20 +111,35 @@ export class TransitRefreshService {
 
     try {
       const [envelope, journeys] = await Promise.all([
-        refreshTransitItinerary(token, this.client, options),
+        token ? refreshTransitItinerary(token, this.client, options) : Promise.resolve(null),
         fetchJourneyCaptures(journeysToRefetch(session).slice(0, 4), this.client, options),
       ]);
+      if (!token) {
+        if (!Object.values(journeys).some((stops) => stops?.length))
+          return { ...base, ok: false, failure: "retryable" };
+        return {
+          ...base,
+          ok: true,
+          itinerary: session.payload.startPackage.itinerary,
+          journeys,
+          capturesOnly: true,
+        };
+      }
       const itinerary = (envelope as { data?: { itinerary?: unknown } })?.data?.itinerary;
-      if (!itinerary) {
+      if (!itinerary || envelope?.data?.fallbackOccurred) {
         // The server answered and did not give us a replacement token. The old
         // one is spent either way.
         return { ...base, ok: false, failure: "rejected" };
       }
 
       return { ...base, ok: true, itinerary, journeys };
-    } catch {
-      // Even our own cancellation can race server-side token consumption.
-      // Once dispatched, neither an abort nor a timeout proves the token unused.
+    } catch (error) {
+      if (isApiClientError(error)) {
+        if (error.status === 400 || error.status === 409)
+          return { ...base, ok: false, failure: "rejected" };
+        if (error.status === 503) return { ...base, ok: false, failure: "retryable" };
+      }
+      // A lost response is ambiguous; the server replay window bounds retries.
       return { ...base, ok: false, failure: "ambiguous" };
     } finally {
       this.inFlight.delete(requestId);

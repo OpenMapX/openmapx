@@ -826,14 +826,30 @@ export class NavigationCoordinator {
               startPackage: parsed.data,
               navigationDataRevision: (session.payload.navigationDataRevision ?? 0) + 1,
               refreshToken:
-                typeof parsed.data.itinerary.refreshToken === "string"
-                  ? parsed.data.itinerary.refreshToken
-                  : null,
+                outcome.ok && outcome.capturesOnly
+                  ? session.payload.refreshToken
+                  : typeof parsed.data.itinerary.refreshToken === "string"
+                    ? parsed.data.itinerary.refreshToken
+                    : null,
               refresh: onRefreshSucceeded(refresh, now),
             }
-          : { ...session.payload, refresh: onRefreshFailed(refresh, "ambiguous") };
+          : {
+              ...session.payload,
+              refresh: onRefreshFailed(
+                refresh,
+                outcome.ok
+                  ? "rejected"
+                  : outcome.failure === "unreachable"
+                    ? "retryable"
+                    : outcome.failure,
+                now,
+                !!session.payload.refreshToken,
+              ),
+            };
+      // A terminal itinerary chain must not prevent the same owner polling journey evidence.
+      if (payload.refresh.status === "broken") payload.refreshToken = null;
       if (same && outcome.ok) {
-        payload.startPackage = {
+        const captured = {
           ...payload.startPackage,
           captures: refreshTransitCaptures(
             session.payload.startPackage.captures,
@@ -846,6 +862,8 @@ export class NavigationCoordinator {
             now,
           ),
         };
+        const checkedCapture = transitStartPackageSchema.safeParse(captured);
+        if (checkedCapture.success) payload.startPackage = checkedCapture.data;
       }
       if (merged?.resetWalk) {
         payload.tickState = {

@@ -2,7 +2,12 @@ import type { BBox } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { ContributingRecord } from "@openmapx/mobility-core/contributors";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
+import type {
+  JourneyPlatformUpdate,
+  LiveTransitVehicle,
+  ServiceAlert,
+  VehicleJourney,
+} from "@openmapx/mobility-core/transit";
 import type { HealthCheckResult } from "../context.js";
 
 export interface RealtimeCapabilities {
@@ -13,6 +18,7 @@ export interface RealtimeCapabilities {
     byBbox: boolean;
   };
   tripUpdates: boolean;
+  journeyPlatforms?: boolean;
 }
 
 /**
@@ -43,6 +49,8 @@ export interface RealtimeProvider {
   readonly priority: number;
   readonly capabilities: RealtimeCapabilities;
   readonly attribution: Attribution[];
+  /** Complete-journey matching; updates are indexed by scheduled stop occurrence. */
+  getJourneyPlatforms?(journey: VehicleJourney): Promise<MobilityResult<JourneyPlatformUpdate[]>>;
 
   getVehiclePositions?(bbox: BBox): Promise<MobilityResult<LiveTransitVehicle[]>>;
   getAlertsForStop?(stopId: string): Promise<MobilityResult<ServiceAlert[]>>;

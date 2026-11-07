@@ -1,0 +1,90 @@
+{
+  "id": "live-transit-delfi-siri",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "quality": "built-in",
+  "category": "Transit",
+  "documentation": "https://www.govdata.de/suche/daten/delfi-realtime-siri-et-rhein-ruhr",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
+  "domains": ["live-transit"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": false,
+        "description": "Opt in to the community mirror; availability and service-use terms are not guaranteed."
+      }
+    }
+  },
+  "dataSources": [
+    {
+      "sourceId": "delfi-siri-et-rhein-ruhr",
+      "name": "DELFI SIRI ET Rhein-Ruhr via traines.eu",
+      "url": "https://stc.traines.eu/mirror/german-delfi-siri/",
+      "attribution": "DELFI e.V. (SIRI ET Rhein-Ruhr), mirrored by traines.eu",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "licensing": {
+        "version": 1,
+        "bindings": [
+          {
+            "scope": "data",
+            "subject": "DELFI SIRI ET Rhein-Ruhr passenger platform assignments",
+            "license": {
+              "kind": "spdx",
+              "expression": "CC-BY-SA-4.0"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "licence",
+              "reviewedAt": "2026-11-06",
+              "evidenceUrls": [
+                "https://www.govdata.de/suche/daten/delfi-realtime-siri-et-rhein-ruhr",
+                "https://stc.traines.eu/mirror/german-delfi-siri/LICENSE.txt"
+              ],
+              "reason": "Official GovData catalogue identifies CC-BY-SA 4.0; retain DELFI and mirror credit with supplied assignments."
+            }
+          },
+          {
+            "scope": "service",
+            "subject": "traines.eu community mirror access",
+            "license": {
+              "kind": "unknown",
+              "url": "https://stc.traines.eu/mirror/german-delfi-siri/"
+            },
+            "attribution": {
+              "placement": "visible",
+              "surfaces": ["map", "content"],
+              "basis": "unresolved",
+              "reviewedAt": "2026-11-06",
+              "evidenceUrls": ["https://stc.traines.eu/mirror/german-delfi-siri/"],
+              "reason": "No verified mirror service-use agreement; integration disabled by default and operator opt-in required."
+            }
+          }
+        ],
+        "declarations": [
+          {
+            "text": "CC-BY-SA-4.0",
+            "url": "https://creativecommons.org/licenses/by-sa/4.0/"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -49,7 +49,7 @@ const MAX_TEXT_LENGTH = 512;
 // Versions.
 
 export const MOBILE_PROTOCOL_MIN = 3;
-export const MOBILE_PROTOCOL_MAX = 4;
+export const MOBILE_PROTOCOL_MAX = 5;
 
 export interface ProtocolRange {
   min: number;
@@ -244,6 +244,17 @@ export const groundStartPackageSchema = z
   })
   .strict();
 
+const transitPlatformEvidenceSchema = z
+  .object({
+    code: z.string().min(1).max(64),
+    scheduledCode: z.string().max(64).optional(),
+    kind: z.enum(["schedule", "correction", "realtime"]),
+    sourceId: z.string().min(1).max(128),
+    recordedAt: z.string().max(64).optional(),
+    fetchedAt: z.string().max(64).optional(),
+  })
+  .strict();
+
 export const transitLegCaptureSchema = z
   .object({
     legIndex: z.number().int().nonnegative().max(MAX_LEGS),
@@ -260,6 +271,8 @@ export const transitLegCaptureSchema = z
             lng: z.number().finite().min(-180).max(180),
             platform: z.string().max(64).optional(),
             scheduledPlatform: z.string().max(64).optional(),
+            arrivalPlatform: transitPlatformEvidenceSchema.optional(),
+            departurePlatform: transitPlatformEvidenceSchema.optional(),
             scheduledArrival: z.string().max(64).optional(),
             scheduledDeparture: z.string().max(64).optional(),
             expectedArrival: z.string().max(64).optional(),

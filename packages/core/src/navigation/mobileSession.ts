@@ -175,6 +175,8 @@ const transitPayloadSchema = z
         generation: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
         requestId: boundedId.optional(),
         nextAttemptAtMs: safeInteger.optional(),
+        firstAttemptAtMs: safeInteger.optional(),
+        ambiguousAttempts: z.number().int().nonnegative().max(3).optional(),
         attempts: z.number().int().nonnegative().max(64).default(0),
       })
       .strict(),

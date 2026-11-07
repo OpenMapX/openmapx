@@ -1,7 +1,7 @@
 "use client";
 
-import { useStopTransfers } from "@openmapx/core";
-import { changedFromPlatform } from "@openmapx/core/navigation";
+import { useNavigationStore, useStopTransfers } from "@openmapx/core";
+import { selectLegPlatform } from "@openmapx/core/navigation";
 import type { StopTransfer, TripLeg } from "@openmapx/mobility-core/transit";
 
 export interface TransferInfo {
@@ -30,6 +30,9 @@ export function useTransferInfo(
   nextLeg: TripLeg,
   walkSeconds: number,
 ): TransferInfo {
+  const captures = useNavigationStore((s) => s.transitCaptures);
+  const legs = useNavigationStore((s) => s.itinerary?.legs);
+  const platform = selectLegPlatform(nextLeg, legs?.indexOf(nextLeg) ?? -1, captures, "departure");
   const { data: transfers } = useStopTransfers(fromLeg.to.stopId ?? null);
   const stepFree = transfers?.find(
     (tr) => tr.toStopId === nextLeg.from.stopId && tr.wheelchairMinutes != null,
@@ -45,8 +48,8 @@ export function useTransferInfo(
 
   return {
     nextHeadsign,
-    boardPlatform: nextLeg.from.platformCode,
-    platformChanged: !!changedFromPlatform(nextLeg.from),
+    boardPlatform: platform.code,
+    platformChanged: platform.changed,
     levelChange,
     stepFree,
     walkMinutes: walkSeconds > 0 ? Math.max(1, Math.round(walkSeconds / 60)) : 0,

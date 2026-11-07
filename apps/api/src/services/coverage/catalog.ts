@@ -299,7 +299,8 @@ function makeProviders(integration: LoadedIntegration): CoverageProviderDescript
         ["transit.realtime"],
         () =>
           Boolean(
-            (provider.capabilities?.vehiclePositions && provider.getVehiclePositions) ||
+            (provider.capabilities?.journeyPlatforms && provider.getJourneyPlatforms) ||
+              (provider.capabilities?.vehiclePositions && provider.getVehiclePositions) ||
               (provider.capabilities?.alerts?.byBbox && provider.getAlertsForBbox) ||
               (provider.capabilities?.tripUpdates &&
                 (provider.getTripUpdate || provider.getTripUpdates)),

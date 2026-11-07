@@ -1080,3 +1080,32 @@ describe("car starts share the coordinator authority", () => {
     }
   });
 });
+
+it("updates hosted captures without resurrecting an itinerary refresh handle", async () => {
+  const context = await harness();
+  const { transitSessionFixture } = require("./transit/testing/transitFixture");
+  const s = transitSessionFixture();
+  s.payload.refreshToken = null;
+  s.payload.refresh = {
+    status: "in-flight",
+    generation: 2,
+    requestId: "captures-only",
+    attempts: 0,
+  };
+  await context.repository.createPreparing(s);
+  await context.coordinator.applyTransitRefresh({
+    ok: true,
+    sessionId: s.sessionId,
+    requestId: "captures-only",
+    generation: 2,
+    capturesOnly: true,
+    itinerary: s.payload.startPackage.itinerary,
+    journeys: {},
+  });
+  const updated = await context.repository.loadActive(NOW);
+  expect(updated?.kind).toBe("transit");
+  if (updated?.kind !== "transit") throw new Error("Missing session");
+  expect(updated.payload.refreshToken).toBeNull();
+  expect(updated.payload.refresh.status).toBe("ready");
+  await context.close();
+});

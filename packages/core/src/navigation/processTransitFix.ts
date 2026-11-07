@@ -1,4 +1,3 @@
-import { platformChanged } from "@openmapx/mobility-core/platform";
 import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import type { TransitLegCapture } from "./mobileProtocol";
 import { navOptionsForMode } from "./options";
@@ -17,6 +16,7 @@ import {
   type TransitStopAreaIndex,
 } from "./transitStopAreas";
 import { advanceTransitStopCursor, type TransitStopTracking } from "./transitStopCursor";
+import { selectLegPlatform } from "./transitStops";
 import type { FixInput } from "./types";
 
 export type { TransitPhase };
@@ -330,14 +330,9 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
           } else resetLeg(index + 1);
         }
       }
-      const board = leg.from;
-      if (
-        isTransitRide(leg) &&
-        state.phase !== "riding" &&
-        platformChanged(board?.scheduledPlatformCode, board?.platformCode) &&
-        board.platformCode
-      )
-        emit({ type: "platform-change", legIndex: index, platform: board.platformCode });
+      const board = selectLegPlatform(leg, index, input.captures, "departure");
+      if (isTransitRide(leg) && state.phase !== "riding" && board.changed && board.code)
+        emit({ type: "platform-change", legIndex: index, platform: board.code });
     }
     state.lastAcceptedFix = accepted;
     state.lastProgressAtMs = nowMs;

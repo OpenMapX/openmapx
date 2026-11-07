@@ -286,3 +286,25 @@ users should check the transport operator when service information is missing.
 - [Places](./places.md): station details.
 - [Map layers](./map-layers.md): transit line and vehicle overlays.
 - [Mobility data](./mobility-data.md): shared mobility for access and egress.
+
+## Passenger platform evidence
+
+Journey details and navigation can supplement DELFI timetable platforms with
+Rhein-Ruhr SIRI ET assignments when the instance enables **DELFI SIRI ET**.
+The community mirror integration is opt-in: its service-use terms and
+availability are not guaranteed. It works with hosted Transitous and local MOTIS;
+it does not require changing planners. Coverage is limited to matching complete
+journeys in that regional feed. Planning cards do not receive this enrichment.
+
+Assignments retain separate arrival/departure values and source record times.
+A published schedule or source correction does not trigger a platform-change
+warning. Fresh realtime assignments can do so; platform sections such as `5 A-C`
+are preserved. Missing data stays unknown. Five verified incorrect DELFI
+station/code pairs are withheld until an independent assignment is available.
+Other high platform numbers remain valid.
+
+A temporary refresh failure keeps the selected journey and retries. The server
+can replay a successful response for two minutes when its first response is
+lost. If a lost response cannot be replayed within that window, the itinerary
+refresh chain stops; captured vehicle journeys continue polling. A fallback plan
+requires rerouting; navigation never silently applies a different train.

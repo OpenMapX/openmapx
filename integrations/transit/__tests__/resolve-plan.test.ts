@@ -253,6 +253,34 @@ it("caches acquisition briefly without sharing refresh handles or bypassing curr
   expect(f.resolved).toHaveBeenCalledTimes(1);
   f.setHealthy(true);
   f.disallowed.add("test-source");
-  expect((await f.request("/plan/resolve", input)).statusCode).toBe(503);
+  expect((await f.request("/plan/resolve", input)).statusCode).toBe(501);
   expect(f.resolved).toHaveBeenCalledTimes(1);
+});
+
+it("retains and replays exact-reference refreshes across a temporary source failure", async () => {
+  const f = fixture();
+  const initial = await f.request("/plan/resolve", input);
+  const token = (initial.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  f.setHealthy(false);
+  const unavailable = await f.request("/plan/refresh", { token });
+  expect(unavailable.statusCode).toBe(503);
+  expect(unavailable.headers["Retry-After"]).toBe("2");
+  f.setHealthy(true);
+  const success = await f.request("/plan/refresh", { token });
+  expect(success.statusCode).toBe(200);
+  expect(success.body).toHaveProperty("data.fallbackOccurred", false);
+  const exact = JSON.parse(JSON.stringify(success.body));
+  expect((await f.request("/plan/refresh", { token })).body).toEqual(exact);
+  expect(f.resolved).toHaveBeenCalledTimes(2);
+  expect(f.planned).not.toHaveBeenCalled();
+});
+
+it("ends a policy-disabled exact-reference refresh without searching for another train", async () => {
+  const f = fixture();
+  const initial = await f.request("/plan/resolve", input);
+  const token = (initial.body as MobilityEnvelope<TripPlan>).data.itineraries[0].refreshToken;
+  f.disallowed.add("test-source");
+  expect((await f.request("/plan/refresh", { token })).statusCode).toBe(409);
+  expect(f.resolved).toHaveBeenCalledTimes(1);
+  expect(f.planned).not.toHaveBeenCalled();
 });

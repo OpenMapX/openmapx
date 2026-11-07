@@ -10,7 +10,12 @@ import {
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
 import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
-import { onRefreshRequested, shouldRefresh } from "./refreshState";
+import {
+  onRefreshFailed,
+  onRefreshRequested,
+  onRefreshSucceeded,
+  shouldRefresh,
+} from "./refreshState";
 import { processTransitBatch, TransitItineraryCache } from "./transitBatch";
 import { createTransitPreparingSession, validateTransitStartPackage } from "./transitSession";
 
@@ -61,19 +66,38 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     void events;
 
     const next = mutation.session as TransitMobileSession;
-    const refresh = next.payload.refresh;
+    let refresh = next.payload.refresh;
+    const hasJourneys = next.payload.startPackage.captures.some(
+      (c) => c.legIndex >= next.payload.tickState.currentLegIndex,
+    );
+    if (!next.payload.refreshToken) {
+      refresh = {
+        ...refresh,
+        ambiguousAttempts: undefined,
+        firstAttemptAtMs: undefined,
+        ...(refresh.status === "broken" && hasJourneys
+          ? { status: "ready" as const, attempts: 0 }
+          : {}),
+      };
+      next.payload.refresh = refresh;
+    }
     if (refresh.status === "in-flight" && nowMs >= (refresh.nextAttemptAtMs ?? Infinity)) {
-      next.payload.refresh = { ...refresh, status: "broken" };
-    } else if (
-      !arrived &&
-      shouldRefresh({
-        runtime: refresh,
-        hasToken: !!next.payload.refreshToken,
-        connectivity: next.connectivity,
-        status: next.status,
-        nowMs,
-      }).refresh
-    ) {
+      refresh = onRefreshFailed(refresh, "ambiguous", nowMs, !!next.payload.refreshToken);
+      next.payload.refresh = refresh;
+    }
+    const context = {
+      runtime: refresh,
+      hasToken: !!next.payload.refreshToken || hasJourneys,
+      connectivity: next.connectivity,
+      status: next.status,
+      nowMs,
+    };
+    const decision = shouldRefresh(context);
+    if (!decision.refresh && decision.reason === "broken" && next.payload.refreshToken) {
+      next.payload.refreshToken = null;
+      // Retire the exhausted handle, retaining the selected journey and its capture polling.
+      next.payload.refresh = onRefreshSucceeded(refresh, nowMs);
+    } else if (!arrived && decision.refresh) {
       const requestId = `${next.sessionId}:refresh:${refresh.generation + 1}`;
       next.payload.refresh = onRefreshRequested(refresh, requestId, nowMs);
       mutation.effects = [
@@ -171,7 +195,20 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
   ): Promise<ProcessorMutation | null> {
     const { refresh } = session.payload;
 
-    if (refresh.status !== "stale" || !session.payload.refreshToken) return null;
+    const hasJourneys = session.payload.startPackage.captures.some(
+      (c) => c.legIndex >= session.payload.tickState.currentLegIndex,
+    );
+    if (
+      refresh.status !== "stale" ||
+      !shouldRefresh({
+        runtime: refresh,
+        hasToken: !!session.payload.refreshToken || hasJourneys,
+        connectivity: "online",
+        status: session.status,
+        nowMs,
+      }).refresh
+    )
+      return null;
 
     const generation = refresh.generation + 1;
     const requestId = `${session.sessionId}:refresh:${generation}`;
@@ -219,7 +256,7 @@ export function applyTransitReplacement(
       // A new generation invalidates every request the old itinerary started,
       // so a reply that was already in flight cannot land on this session.
       refresh: {
-        status: refreshToken ? "ready" : "broken",
+        status: refreshToken || startPackage.captures.length ? "ready" : "broken",
         generation: session.payload.refresh.generation + 1,
         attempts: 0,
       },

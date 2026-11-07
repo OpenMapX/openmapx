@@ -172,6 +172,10 @@ export function embeddedBuiltInIntegrationManifests(): BuiltInManifestSource | n
       "../../../../integrations/live-transit-entur/manifest.json",
       import.meta.url,
     ),
+    "live-transit-delfi-siri": new URL(
+      "../../../../integrations/live-transit-delfi-siri/manifest.json",
+      import.meta.url,
+    ),
     "live-transit-motis": new URL(
       "../../../../integrations/live-transit-motis/manifest.json",
       import.meta.url,

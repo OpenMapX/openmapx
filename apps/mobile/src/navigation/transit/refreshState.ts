@@ -1,20 +1,4 @@
-/**
- * When to ask the server for fresh live data, and — more importantly — when not
- * to.
- *
- * The refresh token rotates: every successful call returns a new one and
- * invalidates the old. That single fact drives most of what follows.
- *
- *  - **One request per generation.** Two concurrent calls would spend the same
- *    token twice, and the second would fail with the first's replacement
- *    already committed.
- *  - **An ambiguous failure is not retried.** If the request timed out, the
- *    server may or may not have consumed the token. Retrying it blindly is a
- *    coin flip that, when it loses, silently ends live data for the trip. The
- *    chain is marked broken and recovery goes through a full replan instead.
- *  - **A generation invalidates in-flight work.** A replan or a replacement
- *    bumps it, so a reply already on the wire lands on nothing.
- */
+/** Native refresh retries ambiguous replies only within the server replay window. */
 
 /** How often live data is worth refetching while riding. */
 export const REFRESH_INTERVAL_MS = 30_000;
@@ -31,6 +15,8 @@ export interface RefreshRuntime {
   requestId?: string;
   nextAttemptAtMs?: number;
   attempts: number;
+  firstAttemptAtMs?: number;
+  ambiguousAttempts?: number;
 }
 
 export type RefreshDecision =
@@ -51,8 +37,7 @@ export interface RefreshContext {
 /**
  * Whether a refresh should be sent right now.
  *
- * `broken` is deliberately terminal for refreshing: once the chain may have been
- * consumed, no amount of waiting makes the old token valid again.
+ * A rejected handle or exhausted replay window is terminal for refreshing.
  */
 export function shouldRefresh(context: RefreshContext): RefreshDecision {
   const { runtime, hasToken, connectivity, status, nowMs } = context;
@@ -60,6 +45,12 @@ export function shouldRefresh(context: RefreshContext): RefreshDecision {
   if (status !== "active" && status !== "preparing") return { refresh: false, reason: "terminal" };
   if (!hasToken) return { refresh: false, reason: "no-token" };
   if (runtime.status === "in-flight") return { refresh: false, reason: "in-flight" };
+  if (
+    runtime.firstAttemptAtMs !== undefined &&
+    (runtime.ambiguousAttempts ?? 0) > 0 &&
+    nowMs - runtime.firstAttemptAtMs >= 120_000
+  )
+    return { refresh: false, reason: "broken" };
   if (runtime.status === "broken") return { refresh: false, reason: "broken" };
   if (connectivity === "offline") return { refresh: false, reason: "offline" };
   if (runtime.nextAttemptAtMs !== undefined && nowMs < runtime.nextAttemptAtMs) {
@@ -78,6 +69,8 @@ export function onRefreshRequested(
     generation: runtime.generation + 1,
     requestId,
     attempts: runtime.attempts,
+    firstAttemptAtMs: (runtime.ambiguousAttempts ?? 0) > 0 ? runtime.firstAttemptAtMs : nowMs,
+    ambiguousAttempts: runtime.ambiguousAttempts,
     nextAttemptAtMs: nowMs + REQUEST_TIMEOUT_MS + 5_000,
   };
 }
@@ -98,25 +91,37 @@ export type RefreshFailure =
   /** No answer arrived. The server may or may not have consumed the token. */
   | "ambiguous"
   /** The network was simply absent; nothing was sent. */
-  | "offline";
+  | "offline"
+  | "retryable";
 
-/**
- * Applies a failure.
- *
- * The distinction between `rejected` and `ambiguous` is the whole point. A
- * rejection is information — the token is gone, and the chain is broken. An
- * ambiguous timeout is the absence of information, and the safe reading of "we
- * do not know whether the token was spent" is that it was.
- */
-export function onRefreshFailed(runtime: RefreshRuntime, failure: RefreshFailure): RefreshRuntime {
-  if (failure === "offline") {
-    // Nothing left the device, so the token is certainly still valid.
-    return { status: "stale", generation: runtime.generation, attempts: runtime.attempts };
-  }
-  if (failure === "ambiguous" || failure === "rejected") {
-    return { status: "broken", generation: runtime.generation, attempts: runtime.attempts + 1 };
-  }
-  return runtime;
+/** Rejections are terminal; ambiguous replies retry the same token at most three times. */
+export function onRefreshFailed(
+  runtime: RefreshRuntime,
+  failure: RefreshFailure,
+  nowMs = Date.now(),
+  hasToken = true,
+): RefreshRuntime {
+  if (!hasToken)
+    return onRefreshUnreachable(
+      { ...runtime, ambiguousAttempts: undefined, firstAttemptAtMs: undefined },
+      nowMs,
+    );
+  if (failure === "offline") return { ...runtime, status: "stale" };
+  if (failure === "retryable") return onRefreshUnreachable(runtime, nowMs);
+  const attempts = Math.min(64, runtime.attempts + 1);
+  const firstAttemptAtMs = runtime.firstAttemptAtMs ?? nowMs;
+  const ambiguousAttempts = Math.min(3, (runtime.ambiguousAttempts ?? 0) + 1);
+  return {
+    status:
+      failure === "rejected" || ambiguousAttempts >= 3 || nowMs - firstAttemptAtMs >= 120_000
+        ? "broken"
+        : "ready",
+    generation: runtime.generation,
+    attempts,
+    firstAttemptAtMs,
+    ambiguousAttempts,
+    nextAttemptAtMs: nowMs + 30_000,
+  };
 }
 
 /**
@@ -127,13 +132,17 @@ export function onRefreshFailed(runtime: RefreshRuntime, failure: RefreshFailure
  * means the request never arrived.
  */
 export function onRefreshUnreachable(runtime: RefreshRuntime, nowMs: number): RefreshRuntime {
-  const attempts = runtime.attempts + 1;
+  const attempts = Math.min(64, runtime.attempts + 1);
   const index = Math.min(attempts, RETRY_DELAYS_MS.length) - 1;
   return {
     status: attempts >= MAX_CONSECUTIVE_FAILURES ? "stale" : "ready",
     generation: runtime.generation,
     attempts,
-    nextAttemptAtMs: nowMs + RETRY_DELAYS_MS[index],
+    ...((runtime.ambiguousAttempts ?? 0) > 0
+      ? { firstAttemptAtMs: runtime.firstAttemptAtMs, ambiguousAttempts: runtime.ambiguousAttempts }
+      : {}),
+    nextAttemptAtMs:
+      nowMs + ((runtime.ambiguousAttempts ?? 0) > 0 ? REFRESH_INTERVAL_MS : RETRY_DELAYS_MS[index]),
   };
 }
 

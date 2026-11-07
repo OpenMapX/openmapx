@@ -120,7 +120,7 @@ it("clears the warning immediately when the rider reaches the final walking leg"
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
 });
 
-it("stops recovery polling once the selected vehicle data is healthy", async () => {
+it("continues platform polling after the selected vehicle data recovers", async () => {
   vi.useFakeTimers();
   const get = vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
   useNavigationStore.getState().startTransitNavigation(selectedTrip());
@@ -131,13 +131,14 @@ it("stops recovery polling once the selected vehicle data is healthy", async () 
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
   const requests = get.mock.calls.length;
   await act(async () => vi.advanceTimersByTimeAsync(90000));
-  expect(get.mock.calls).toHaveLength(requests);
+  expect(get.mock.calls.length).toBeGreaterThan(requests);
 });
 
 it("recovers vehicle updates after a real refresh mutation fails while retaining a last-known departure", async () => {
   vi.useFakeTimers();
-  vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
-  const post = vi.spyOn(apiClient, "post").mockRejectedValue(new Error("HTTP 400: expired token"));
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
+  const { ApiClientError } = await import("@openmapx/core/navigation/api");
+  const post = vi.spyOn(apiClient, "post").mockRejectedValue(new ApiClientError(400, null, null));
   const chosen = selectedTrip();
   chosen.refreshToken = "expired";
   chosen.legs[0].realtime = true;
@@ -151,9 +152,11 @@ it("recovers vehicle updates after a real refresh mutation fails while retaining
   render(<Runtime />, { wrapper: createQueryWrapper() });
   await act(async () => vi.advanceTimersByTimeAsync(10));
   expect(screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBeNull();
+  get.mockRejectedValue(new Error("vehicle source unavailable"));
   await act(async () => vi.advanceTimersByTimeAsync(30000));
   expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(true);
   expect(screen.getByText("navigation.transitLiveUpdatesUnavailable")).toBeTruthy();
+  get.mockResolvedValue(liveJourney());
   await act(async () => vi.advanceTimersByTimeAsync(30010));
   expect(screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBeNull();
   expect(screen.getByText("navigation.departureLastKnown")).toBeTruthy();
@@ -421,4 +424,51 @@ it("recovers the offline warning after the selected vehicle's data returns", asy
   expect(useNavigationStore.getState().itinerary).toBe(chosen);
   expect(useNavigationStore.getState().transitProgress?.phase).toBe("riding");
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
+});
+
+it("refreshes upcoming captured journeys after platform evidence becomes available", async () => {
+  vi.useFakeTimers();
+  let enriched = false;
+  vi.spyOn(apiClient, "get").mockImplementation(async (path) => {
+    const future = String(path).endsWith("/future");
+    return {
+      data: {
+        stops: [
+          {
+            stopId: future ? "fa" : "a",
+            name: "Board",
+            lat: 0,
+            lng: 0,
+            ...(future && enriched
+              ? { departurePlatform: { code: "3", kind: "correction", sourceId: "siri" } }
+              : {}),
+          },
+          { stopId: future ? "fb" : "b", name: "Alight", lat: 0, lng: 0.02 },
+        ],
+      },
+    };
+  });
+  const chosen = trip();
+  chosen.legs[0].from.stopId = "a";
+  chosen.legs[0].to.stopId = "b";
+  chosen.legs.push({
+    ...chosen.legs[0],
+    tripId: "future",
+    from: { ...chosen.legs[0].from, stopId: "fa" },
+    to: { ...chosen.legs[0].to, stopId: "fb" },
+  });
+  useNavigationStore.getState().startTransitNavigation(chosen);
+  const view = renderHookWithQuery(() => useTransitNavigationEngine());
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    enriched = true;
+    await act(async () => vi.advanceTimersByTimeAsync(30_001));
+    expect(
+      useNavigationStore.getState().transitCaptures.find((c) => c.tripId === "future")?.stops[0]
+        .departurePlatform?.code,
+    ).toBe("3");
+  } finally {
+    view.unmount();
+    vi.useRealTimers();
+  }
 });
