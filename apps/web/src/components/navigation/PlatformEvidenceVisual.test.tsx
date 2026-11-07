@@ -9,6 +9,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { expect, it, vi } from "vitest";
 import wire from "../../../../../integrations/transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json";
 import messages from "../../../../../packages/i18n/locales/en.json";
+import { TransitJourneyControls } from "./TransitJourneyControls";
 import { TransitJourneySheet } from "./TransitJourneySheet";
 import { TransitLegBanner } from "./TransitLegBanner";
 
@@ -155,5 +156,63 @@ it("renders comparable RE1 platform states from the production banner and journe
       );
     }
     cleanup();
+  }
+});
+
+it("renders captured boarding guidance while walking toward Horrem", () => {
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: Optional export for direct Vitest runs, outside cached Turbo outputs.
+  const visualDirectory = process.env.PLATFORM_VISUAL_DIR;
+  for (const state of ["before", "after"] as const) {
+    const ride: TripLeg = {
+      ...leg,
+      from: { ...base[6], platformCode: "37" },
+      startTime: base[6].scheduledDeparture ?? leg.startTime,
+    };
+    const walk: TripLeg = {
+      mode: "walking",
+      startTime: "2026-11-06T20:48:00Z",
+      endTime: ride.startTime,
+      from: { name: "Walk to the station", lat: 50.93, lng: 6.7 },
+      to: ride.from,
+    };
+    const chosen = { ...itinerary, legs: [walk, ride] };
+    const stops = structuredClone(base.slice(6));
+    if (state === "after")
+      stops[0].departurePlatform = {
+        code: "3",
+        kind: "correction",
+        sourceId: "delfi-siri-et-rhein-ruhr",
+      };
+    useNavigationStore.getState().startTransitNavigation(chosen);
+    useNavigationStore
+      .getState()
+      .setTransitCaptures(
+        captureTransitLegStops(chosen.legs, { re1: stops }, Date.parse("2026-11-06T20:48:00Z")),
+      );
+    const view = render(
+      <NextIntlClientProvider locale="en" timeZone="Europe/Berlin" messages={messages}>
+        <ThemeProvider theme={createTheme({ palette: { primary: { main: "#218022" } } })}>
+          <CssBaseline />
+          <main style={{ maxWidth: 440, margin: "auto", padding: 16 }}>
+            <TransitJourneyControls onAlternatives={() => {}} />
+          </main>
+        </ThemeProvider>
+      </NextIntlClientProvider>,
+    );
+    expect(view.container.textContent).toContain(state === "before" ? "Pl. 37" : "Pl. 3");
+    if (state === "after") expect(view.container.textContent).not.toContain("(changed)");
+    if (visualDirectory) {
+      const css = Array.from(
+        document.querySelectorAll("style"),
+        (style) => style.textContent ?? "",
+      ).join("\n");
+      mkdirSync(visualDirectory, { recursive: true });
+      writeFileSync(
+        `${visualDirectory}/walking-${state}.html`,
+        `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><body>${view.container.innerHTML}</body></html>`,
+      );
+    }
+    cleanup();
+    useNavigationStore.getState().stopNavigation();
   }
 });

@@ -305,5 +305,6 @@ Other high platform numbers remain valid.
 
 A temporary refresh failure keeps the selected journey and retries. The server
 can replay a successful response for two minutes when its first response is
-lost. A fallback plan requires rerouting; navigation never silently applies a
-different train.
+lost. If a lost response cannot be replayed within that window, the itinerary
+refresh chain stops; captured vehicle journeys continue polling. A fallback plan
+requires rerouting; navigation never silently applies a different train.

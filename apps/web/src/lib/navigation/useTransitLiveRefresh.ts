@@ -69,7 +69,12 @@ export function useTransitLiveRefresh(active: boolean): void {
         } else if (next) {
           cur.updateItinerary(next);
           if (!next.refreshToken) cur.markTransitRefreshUnavailable(requestId);
-          else if (!useNavigationStore.getState().transitRefreshUnavailable)
+          else if (
+            !useNavigationStore.getState().transitRefreshUnavailable &&
+            response.freshness?.hasRealtimeData &&
+            !response.freshness.isStale &&
+            !response.freshness.isPartial
+          )
             cur.setLiveDataUnavailable(cur.connectivity === "offline");
         } else {
           cur.setLiveDataUnavailable(true);

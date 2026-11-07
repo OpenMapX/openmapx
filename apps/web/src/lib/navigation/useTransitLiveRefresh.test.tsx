@@ -113,7 +113,10 @@ describe("transit polling lifecycle", () => {
         else flight.resolve({});
       });
       expect(useNavigationStore.getState().itinerary).toBe(initial);
-      api.refresh.mockResolvedValue({ data: { itinerary: trip("recovered") } });
+      api.refresh.mockResolvedValue({
+        data: { itinerary: trip("recovered") },
+        freshness: { hasRealtimeData: true, isStale: false, isPartial: false },
+      });
       await act(async () => vi.advanceTimersByTime(30_000));
       expect(api.refresh.mock.calls.map((call) => call[0])).toEqual(["initial", "initial"]);
       expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
@@ -148,7 +151,10 @@ describe("transit polling lifecycle", () => {
     act(() => vi.advanceTimersByTime(90_000));
     expect(api.refresh).toHaveBeenCalledTimes(1);
     expect(useNavigationStore.getState().itinerary).toBe(initial);
-    api.refresh.mockResolvedValue({ data: { itinerary: trip("fresh") } });
+    api.refresh.mockResolvedValue({
+      data: { itinerary: trip("fresh") },
+      freshness: { hasRealtimeData: true, isStale: false, isPartial: false },
+    });
     view.rerender({ active: true });
     act(() => vi.advanceTimersByTime(29_999));
     expect(api.refresh).toHaveBeenCalledTimes(1);
@@ -299,3 +305,24 @@ it("keeps live data unavailable when a successful refresh has no successor", asy
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
   expect(useNavigationStore.getState().itinerary?.refreshToken).toBeUndefined();
 });
+
+it.each([
+  { freshness: undefined, recovers: false },
+  { freshness: { hasRealtimeData: false, isStale: false }, recovers: false },
+  { freshness: { hasRealtimeData: true, isStale: true }, recovers: false },
+  { freshness: { hasRealtimeData: true, isStale: false, isPartial: true }, recovers: false },
+  { freshness: { hasRealtimeData: true, isStale: false, isPartial: false }, recovers: true },
+])(
+  "only fresh complete realtime clears the warning: $freshness",
+  async ({ freshness, recovers }) => {
+    vi.useFakeTimers();
+    useNavigationStore.getState().startTransitNavigation(trip("initial"));
+    useNavigationStore.getState().setLiveDataUnavailable(true);
+    api.refresh.mockResolvedValue({ data: { itinerary: trip("successor") }, freshness });
+    renderHook(() => useTransitLiveRefresh(true));
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("successor");
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(!recovers);
+    expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(false);
+  },
+);
