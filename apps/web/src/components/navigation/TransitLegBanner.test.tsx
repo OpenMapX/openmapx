@@ -166,3 +166,30 @@ it("never sounds an alight alarm for a cancelled current service, even with ridi
   expect(playAlarmTone).not.toHaveBeenCalled();
   expect(notifyGetOff).not.toHaveBeenCalled();
 });
+
+it("qualifies a held next stop when riding without fresh GPS confidence", () => {
+  render(
+    <TransitLegBanner
+      leg={freshLeg()}
+      legIndex={0}
+      transitProgress={{ ...progressAt(0.002), confidence: "stale" }}
+    />,
+  );
+  expect(screen.getByText("lastKnownNextStopLabel")).toBeVisible();
+  expect(screen.queryByText("nextStopLabel")).not.toBeInTheDocument();
+  expect(playAlarmTone).not.toHaveBeenCalled();
+});
+
+it("keeps vehicle accessibility and bike information in the compact boarding view", () => {
+  render(
+    <TransitLegBanner
+      leg={{ ...freshLeg(), bikesAllowed: true, wheelchairAccessible: true, occupancy: "low" }}
+      legIndex={0}
+      transitProgress={{ ...progressAt(0), phase: "waiting-to-board" }}
+      presentation="sheet"
+    />,
+  );
+  expect(screen.getByLabelText("lowOccupancy")).toBeVisible();
+  expect(screen.getByLabelText("bikesAllowed")).toBeVisible();
+  expect(screen.getByLabelText("wheelchairAccessible")).toBeVisible();
+});

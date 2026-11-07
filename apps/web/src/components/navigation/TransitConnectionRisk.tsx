@@ -9,6 +9,7 @@ import type { TransitTransfer } from "@openmapx/core/navigation";
 import { connectionRisk } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { SEVERITY_CONFIG } from "@/components/panels/transit/AlertCard";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { liveArrivalDelayMs } from "./TransitNavBottomBar";
@@ -35,9 +36,11 @@ function nextViableAlternative(
 export function TransitConnectionRisk({
   leg,
   transfer,
+  inline = false,
 }: {
   leg: TripLeg;
   transfer: TransitTransfer;
+  inline?: boolean;
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
@@ -71,10 +74,19 @@ export function TransitConnectionRisk({
         gap: 1.25,
         px: 2,
         py: 1,
-        borderRadius: 2,
-        boxShadow: 2,
-        bgcolor: missed ? "error.main" : "warning.main",
-        color: missed ? "error.contrastText" : "warning.contrastText",
+        ...(inline
+          ? { borderBottom: "1px solid", borderColor: "divider" }
+          : { borderRadius: "28px", boxShadow: 2 }),
+        bgcolor: inline
+          ? SEVERITY_CONFIG[missed ? "severe" : "warning"].bg
+          : missed
+            ? "error.main"
+            : "warning.main",
+        color: inline
+          ? SEVERITY_CONFIG[missed ? "severe" : "warning"].color
+          : missed
+            ? "error.contrastText"
+            : "warning.contrastText",
       }}
     >
       {missed ? (
@@ -83,13 +95,13 @@ export function TransitConnectionRisk({
         <DirectionsRunIcon sx={{ fontSize: 24, flexShrink: 0 }} />
       )}
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
           {missed
             ? t("connectionMissed")
             : t("connectionTight", { minutes: Math.max(0, Math.round(risk.bufferSeconds / 60)) })}
         </Typography>
         {alt && (
-          <Typography variant="caption" noWrap>
+          <Typography variant="caption">
             {t("connectionAlternative", { time: fmt.time(alt.startTime) })}
             {alt.routeShortName ? ` · ${alt.routeShortName}` : ""}
           </Typography>

@@ -231,3 +231,54 @@ it.each([
   expect(screen.getByText("navigation.delayMinutes")).toBeInTheDocument();
   if (unavailable) expect(screen.queryByText("navigation.departureLive")).toBeNull();
 });
+
+it("identifies the selected route and platform at the boarding stop", () => {
+  useNavigationStore.getState().startTransitNavigation({
+    legs: [
+      {
+        mode: "bus",
+        tripId: "bus",
+        route: { shortName: "21" },
+        headsign: "Palenberg Bahnhof",
+        from: { name: "Bushof", lat: 0, lng: 0, platformCode: "H.13" },
+        to: { name: "Liebigstraße", lat: 0, lng: 0.01 },
+        startTime: new Date(Date.now() + 300000).toISOString(),
+        endTime: "",
+      },
+    ],
+    duration: 600,
+    startTime: "",
+    endTime: "",
+    transfers: 0,
+    walkDistance: 0,
+  } as TripItinerary);
+  render(<TransitJourneyControls onAlternatives={() => {}} />);
+  expect(screen.getByText("21")).toBeInTheDocument();
+  expect(screen.getByText("Palenberg Bahnhof")).toBeInTheDocument();
+  expect(screen.getByText("transit.platform H.13")).toBeInTheDocument();
+});
+
+it("keeps a boarding stop code and floor when no platform is available", () => {
+  const itinerary = {
+    legs: [
+      {
+        mode: "bus",
+        tripId: "bus",
+        route: { shortName: "21" },
+        from: { name: "Bushof", lat: 0, lng: 0, stopCode: "P", level: -1 },
+        to: { name: "End", lat: 0, lng: 0.01 },
+        startTime: new Date(Date.now() + 300000).toISOString(),
+        endTime: "",
+      },
+    ],
+    duration: 600,
+    startTime: "",
+    endTime: "",
+    transfers: 0,
+    walkDistance: 0,
+  } as TripItinerary;
+  useNavigationStore.getState().startTransitNavigation(itinerary);
+  render(<TransitJourneyControls onAlternatives={() => {}} />);
+  expect(screen.getByText("navigation.stopCode")).toBeInTheDocument();
+  expect(screen.getByText("navigation.levelShort")).toBeInTheDocument();
+});

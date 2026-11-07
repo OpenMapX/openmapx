@@ -1,15 +1,15 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useVehicleJourney } from "@openmapx/core";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import { formatDuration, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useNow } from "@/lib/useNow";
-import { NavBottomBar } from "./NavBottomBar";
 
 /** Seconds from `nowMs` until `arrivalMs`, clamped at zero (never negative). */
 export function transitRemainingSeconds(arrivalMs: number, nowMs: number): number {
@@ -50,26 +50,15 @@ export function liveArrivalDelayMs(
   return expectedMs - plannedMs;
 }
 
-/**
- * Transit follow-along bottom bar. Reuses the driving {@link NavBottomBar} with
- * transit content: a live arrival countdown (instead of a static trip duration),
- * the scheduled arrival time, keep-screen-on, and End. Distance / voice /
- * overview are omitted — they don't apply to transit.
- *
- * The arrival is delay-aware: it tracks the realtime delay of the vehicle the
- * traveller is on (via the live journey for `currentLeg.tripId`) so the
- * countdown grows as the bus runs late, with a "+N min" chip on the arrival line.
- */
+/** Compact transit summary. Navigation calculations and command authority stay shared. */
 export function TransitNavBottomBar({
   itinerary,
   currentLeg,
-  menuToggle,
 }: {
   itinerary: TripItinerary;
   currentLeg?: TripLeg;
   /** Trailing control that reveals the menu (a chevron on desktop; omitted on
    * mobile, where the sheet is dragged up instead). */
-  menuToggle?: ReactNode;
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
@@ -86,21 +75,44 @@ export function TransitNavBottomBar({
   const delayMinutes = delayMs >= 60_000 ? Math.round(delayMs / 60_000) : 0;
 
   return (
-    <NavBottomBar
-      durationRemaining={durationRemaining}
-      etaEpochMs={arrivalMs}
-      onEnd={() => void endNavigation()}
-      menuToggle={menuToggle}
-      secondary={
-        <>
-          {t("arriveAt", { time: fmt.time(arrivalMs) })}
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        px: 2,
+        py: 1.25,
+        borderTop: "1px solid",
+        borderColor: "divider",
+      }}
+    >
+      <Button
+        color="error"
+        variant="contained"
+        disableElevation
+        onClick={() => void endNavigation()}
+        sx={{ minHeight: 44, flexShrink: 0, px: 2.5, borderRadius: "999px" }}
+      >
+        {t("end")}
+      </Button>
+      <Box sx={{ flex: 1, minWidth: 0, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
+          {formatDuration(durationRemaining)}
+        </Typography>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          component="div"
+          sx={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", columnGap: 0.75 }}
+        >
+          <span>{t("arriveAt", { time: fmt.time(arrivalMs) })}</span>
           {delayMinutes >= 1 && (
-            <Box component="span" sx={{ ml: 1, color: "error.main", fontWeight: 700 }}>
+            <Box component="span" sx={{ color: "error.main", fontWeight: 700 }}>
               {t("delayMinutes", { minutes: delayMinutes })}
             </Box>
           )}
-        </>
-      }
-    />
+        </Typography>
+      </Box>
+    </Box>
   );
 }

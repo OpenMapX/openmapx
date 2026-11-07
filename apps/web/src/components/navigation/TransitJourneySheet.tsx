@@ -1,13 +1,10 @@
 "use client";
 
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { type TransitProgress, useNavigationStore, useVehicleJourney } from "@openmapx/core";
 import { selectLegPlatform } from "@openmapx/core/navigation";
-import { selectStopPlatform } from "@openmapx/mobility-core/platform";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
@@ -18,130 +15,10 @@ import {
   TransitQueryNotice,
 } from "@/components/panels/transit/TransitDataStatus";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
-import { legTransitTime, stopTransitTime } from "@/lib/transitTime";
+import { legTransitTime } from "@/lib/transitTime";
 import { useNow } from "@/lib/useNow";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
-
-function StopTimeline({
-  stops,
-  nextIdx,
-  leg,
-}: {
-  stops: VehicleJourneyStop[];
-  nextIdx: number;
-  leg: TripLeg;
-}) {
-  const t = useTranslations("navigation");
-  return (
-    <Box sx={{ px: 2, py: 0.5 }}>
-      {stops.map((stop, i) => {
-        const isFirst = i === 0;
-        const isLast = i === stops.length - 1;
-        const platform = selectStopPlatform(stop, isLast ? "arrival" : "departure");
-        const isNext = i === nextIdx;
-        const passed = i < nextIdx;
-        const emphasized = isFirst || isLast || isNext;
-        const time = isFirst
-          ? legTransitTime(leg, "departure", stop)
-          : isLast
-            ? legTransitTime(leg, "arrival", stop)
-            : stopTransitTime(stop);
-        const dotColor = isNext ? "primary.main" : passed ? "text.disabled" : "text.secondary";
-        return (
-          <Box
-            // biome-ignore lint/suspicious/noArrayIndexKey: stops are ordered by sequence
-            key={i}
-            sx={{ display: "flex", gap: 1, alignItems: "stretch" }}
-          >
-            <Box
-              sx={{
-                width: "5.5em",
-                fontSize: ".75rem",
-                textAlign: "right",
-                flexShrink: 0,
-                pt: "1px",
-              }}
-            >
-              <DepartureTime
-                {...time}
-                canceled={stop.canceled}
-                variant="caption"
-                fontWeight={emphasized ? 700 : 400}
-                muted={passed}
-              />
-            </Box>
-            <Box
-              sx={{
-                position: "relative",
-                width: 16,
-                flexShrink: 0,
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
-              <Box
-                sx={{
-                  position: "absolute",
-                  width: 2,
-                  bgcolor: "divider",
-                  top: isFirst ? "9px" : 0,
-                  bottom: isLast ? "calc(100% - 9px)" : 0,
-                }}
-              />
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: "4px",
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  border: "2px solid",
-                  borderColor: dotColor,
-                  bgcolor: emphasized ? dotColor : "background.paper",
-                }}
-              />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0, py: 0.35 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    overflowWrap: "anywhere",
-                    lineHeight: 1.5,
-                    fontWeight: emphasized ? 600 : 400,
-                    textDecoration: stop.canceled ? "line-through" : "none",
-                    color: stop.canceled
-                      ? "error.main"
-                      : passed
-                        ? "text.secondary"
-                        : "text.primary",
-                  }}
-                >
-                  {stop.name}
-                </Typography>
-                {stop.alerts && stop.alerts.length > 0 && (
-                  <Tooltip title={stop.alerts[0].title} placement="top" arrow>
-                    <WarningAmberIcon sx={{ fontSize: 15, color: "warning.main", flexShrink: 0 }} />
-                  </Tooltip>
-                )}
-              </Box>
-              {stop.canceled && (
-                <Typography variant="caption" sx={{ color: "error.main", fontWeight: 600 }}>
-                  {t("stopSkipped")}
-                </Typography>
-              )}
-              {platform.code && !stop.canceled && (
-                <Box sx={{ mt: 0.25 }}>
-                  <PlatformBadge code={platform.code} scheduledCode={platform.scheduledCode} />
-                </Box>
-              )}
-            </Box>
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
+import { TransitStopTimeline } from "./TransitStopTimeline";
 
 /** One compact row per upcoming leg, shown under the current-ride timeline. */
 function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; now: number }) {
@@ -152,7 +29,7 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
   const platform = selectLegPlatform(leg, legs?.indexOf(leg) ?? -1, captures, "departure");
   const isWalk = leg.mode === "walking" || !leg.route;
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 0.75 }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, py: 1.5 }}>
       <Box sx={{ width: "5.5em", fontSize: ".75rem", textAlign: "right", flexShrink: 0 }}>
         <DepartureTime {...legTransitTime(leg)} variant="caption" canceled={leg.cancelled} />
       </Box>
@@ -171,7 +48,10 @@ function UpcomingLegRow({ leg, source, now }: { leg: TripLeg; source?: string; n
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
           variant="body2"
-          sx={{ textDecoration: leg.cancelled ? "line-through" : undefined }}
+          sx={{
+            textDecoration: leg.cancelled ? "line-through" : undefined,
+            overflowWrap: "anywhere",
+          }}
         >
           {isWalk ? t("walkTo", { place: leg.to.name }) : leg.to.name}
         </Typography>
@@ -201,18 +81,20 @@ export function TransitJourneySheet({
   transitProgress,
   scroll = true,
   showQueryNotice = true,
+  showDataStatus = true,
 }: {
   itinerary: TripItinerary;
   currentLegIndex: number;
   transitProgress: TransitProgress | null;
   /**
-   * Cap the content at 56vh and scroll internally (mobile swipe-sheet default).
-   * Desktop passes `false` so the parent panel owns a single scroll region and
+   * Cap standalone content at 56vh and scroll internally. Navigation passes
+   * `false` so its mobile sheet or desktop panel owns a single scroll region and
    * the menu below stays reachable instead of adding a nested scrollbar.
    */
   scroll?: boolean;
-  /** Navigation already displays the same query warning above the map. */
+  /** Navigation already displays the same query warning in its summary. */
   showQueryNotice?: boolean;
+  showDataStatus?: boolean;
 }) {
   const t = useTranslations("navigation");
   const now = useNow(30_000);
@@ -230,9 +112,16 @@ export function TransitJourneySheet({
       c.legIndex === currentLegIndex && c.tripId === currentLeg?.tripId && c.status === "captured",
   );
   const legStops = (capture?.stops ?? []) as VehicleJourneyStop[];
-  const nextIdx = transitProgress?.phase === "riding" ? (transitProgress.stopCursor ?? 1) : 0;
 
   const upcomingLegs = legs.slice(currentLegIndex + 1);
+  const identity = currentLeg
+    ? [
+        [currentLeg.category, currentLeg.tripShortName].filter(Boolean).join(" ").trim(),
+        currentLeg.operatorName,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
 
   // While walking to (or waiting at) the next boarding point, show its live
   // departure board so the rider knows if their service is next.
@@ -251,6 +140,42 @@ export function TransitJourneySheet({
         />
       )}
       {isTransitLeg && (
+        <Box
+          sx={{
+            px: 2,
+            pt: 1.5,
+            pb: 1.5,
+            display: "flex",
+            gap: 1.25,
+            borderTop: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Box sx={{ pt: 0.25 }}>
+            <RouteBadge
+              shortName={currentLeg.route?.shortName ?? ""}
+              color={currentLeg.route?.color}
+              textColor={currentLeg.route?.textColor}
+              mode={currentLeg.mode}
+            />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+              {currentLeg.headsign ?? currentLeg.to.name}
+            </Typography>
+            {identity && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", overflowWrap: "anywhere", mt: 0.25 }}
+              >
+                {identity}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      )}
+      {isTransitLeg && showDataStatus && (
         <Box sx={{ px: 2, py: 0.5, "&:empty": { display: "none" } }}>
           <TransitDataStatus
             now={now}
@@ -280,12 +205,27 @@ export function TransitJourneySheet({
           {t("stopCountUnavailable")}
         </Typography>
       )}
-      {legStops.length > 0 && <StopTimeline stops={legStops} nextIdx={nextIdx} leg={currentLeg} />}
+      {legStops.length > 0 && (
+        <TransitStopTimeline
+          key={`${currentLegIndex}:${currentLeg.tripId}`}
+          stops={legStops}
+          leg={currentLeg}
+          progress={transitProgress}
+        />
+      )}
       {upcomingLegs.length > 0 && (
         <>
           <Typography
-            variant="overline"
-            sx={{ display: "block", px: 2, pt: 1, color: "text.secondary" }}
+            variant="subtitle2"
+            sx={{
+              display: "block",
+              px: 2,
+              pt: 1.5,
+              pb: 0.5,
+              color: "text.secondary",
+              borderTop: "1px solid",
+              borderColor: "divider",
+            }}
           >
             {t("restOfJourney")}
           </Typography>

@@ -4,7 +4,7 @@ import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { useNavigationStore } from "@openmapx/core";
 import { captureTransitLegStops } from "@openmapx/core/navigation";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { expect, it, vi } from "vitest";
 import wire from "../../../../../integrations/transit-motis/__tests__/fixtures/re1-26839-transitous-trip.json";
@@ -137,6 +137,8 @@ it("renders comparable RE1 platform states from the production banner and journe
         </ThemeProvider>
       </NextIntlClientProvider>,
     );
+    const stopToggle = view.queryByRole("button", { name: /Show \d+ stops/ });
+    if (stopToggle) fireEvent.click(stopToggle);
     if (state === "before") expect(view.container.textContent).toContain("Pl. 37");
     else if (state === "after") {
       expect(view.container.textContent).not.toContain("Pl. 37");
