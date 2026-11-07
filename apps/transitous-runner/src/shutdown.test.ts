@@ -121,9 +121,15 @@ it("settles shutdown after a retained execution rejected before spawning", async
   const invalid = request({ script: "fetch", feedPath: "feeds/missing.json" });
   try {
     await expect(runner.run(invalid)).rejects.toBeInstanceOf(TransitousRunnerError);
-    expect(runner.inspect(invalid)).toMatchObject({ state: "running" });
+    expect(runner.inspect(invalid)).toMatchObject({
+      state: "terminal",
+      result: { ok: false, exitCode: 1 },
+    });
     await runner.shutdown();
-    expect(runner.inspect(invalid)).toEqual({ version: 1, state: "cancel_pending" });
+    expect(runner.inspect(invalid)).toMatchObject({
+      state: "terminal",
+      result: { ok: false, exitCode: 1 },
+    });
     expect(children.groups).toHaveLength(0);
   } finally {
     children.dispose();

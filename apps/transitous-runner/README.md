@@ -11,6 +11,17 @@ An interrupted run returns the existing contained failure result (`ok: false`,
 A disconnected caller keeps the existing outcome-unknown behavior. Disconnecting
 a request reader alone still does not cancel a run.
 
+Failures during fixed argument or catalog-path preparation retain a terminal
+failure with no output and zero process runtime, while the original POST keeps
+its error status. A durable caller can inspect, journal and acknowledge that
+definitive failure instead of polling an unfinished row and reporting an unknown
+outcome. Acknowledgement does not permit replay of the consumed capability.
+
+Unclassified exceptions during execution, including a throwing spawn
+implementation, remain unresolved: they do not prove that no process exists.
+Those rows cannot be acknowledged and occupy capacity until the runner restarts. Preparation-only failure handling does not claim containment
+for them.
+
 Run portable lifecycle tests with:
 
 ```sh
