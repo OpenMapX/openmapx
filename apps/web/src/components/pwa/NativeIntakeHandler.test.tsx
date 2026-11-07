@@ -286,7 +286,7 @@ it("reports an item gone from the empty inbox as expired rather than an active t
 });
 
 it.each([4, MOBILE_PROTOCOL_MAX])(
-  "opens the normal provider trip on protocol %s without displaying DB text or an import summary",
+  "automatically opens the provider trip on protocol %s without showing a confirmation dialog",
   async (version) => {
     f.protocolVersion = version;
     const { dbNavigatorExamples } = await import(
@@ -300,9 +300,7 @@ it.each([4, MOBILE_PROTOCOL_MAX])(
     });
     f.text.mockResolvedValue(dbNavigatorExamples[3]);
     render(<NativeIntakeHandler />);
-    await screen.findByText("sharedTrip");
-    expect(travel.resolve).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("open"));
+    expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
     expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
@@ -311,6 +309,7 @@ it.each([4, MOBILE_PROTOCOL_MAX])(
     expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(
       travelResult.plan,
     );
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByText("DB Navigator")).toBeNull();
     expect(screen.queryByLabelText("tripText")).toBeNull();
   },
@@ -320,6 +319,155 @@ it.each([3, null])("does not read the inbox on protocol %s", (version) => {
   render(<NativeIntakeHandler />);
   expect(f.list).not.toHaveBeenCalled();
 });
+it("keeps automatic resolution invisible and does not repeat it after inbox refreshes", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const tripItem = { ...item, kind: "text", byteLength: 500 };
+  f.list.mockImplementation(async () => ({
+    items: [{ ...tripItem }],
+    canApply: true,
+    scheme: "openmapx",
+  }));
+  f.text.mockResolvedValue(dbNavigatorExamples[3]);
+  let finish!: (result: typeof travelResult) => void;
+  travel.resolve.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<NativeIntakeHandler />);
+  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByText("pending")).toBeNull();
+  await act(async () => {
+    for (const listener of listeners) listener({ type: "intake.changed" } as never);
+  });
+  expect(travel.resolve).toHaveBeenCalledTimes(1);
+  await act(async () => finish(travelResult));
+  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+it.each([false, true])(
+  "opens a newly shared trip ahead of an older file (file already visible: %s)",
+  async (visibleFile) => {
+    const { dbNavigatorExamples } = await import(
+      "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+    );
+    const tripItem = {
+      ...item,
+      id: "d386e706-b728-40a3-9554-881d0ff0958a",
+      kind: "text",
+      byteLength: 500,
+      createdAtMs: 2,
+    };
+    f.text.mockImplementation(async (entry) =>
+      (entry as { kind: string }).kind === "text"
+        ? dbNavigatorExamples[3]
+        : '{"type":"Point","coordinates":[8,50]}',
+    );
+    let inbox = visibleFile ? [item] : [item, tripItem];
+    f.list.mockImplementation(async () => ({
+      items: [...inbox],
+      canApply: true,
+      scheme: "openmapx",
+    }));
+    f.complete.mockImplementation(async (id) => {
+      inbox = inbox.filter((entry) => entry.id !== id);
+    });
+    render(<NativeIntakeHandler />);
+    if (visibleFile) {
+      await screen.findByText("features");
+      inbox.push(tripItem);
+      await act(async () => {
+        for (const listener of listeners) listener({ type: "intake.changed" } as never);
+      });
+    }
+    await waitFor(() => expect(f.complete).toHaveBeenCalledWith(tripItem.id, "opened"));
+    expect(f.complete).toHaveBeenCalledTimes(1);
+    expect(useImportedGeometryStore.getState().imported).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByText("pending"));
+    await screen.findByText("features");
+    expect(inbox).toEqual([item]);
+    expect(f.complete).toHaveBeenCalledTimes(1);
+  },
+);
+it("opens a deferred shared trip automatically once native navigation permits it", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const tripItem = { ...item, kind: "text", byteLength: 500 };
+  f.list.mockResolvedValue({ items: [tripItem], canApply: false, scheme: "openmapx" });
+  f.text.mockResolvedValue(dbNavigatorExamples[3]);
+  render(<NativeIntakeHandler />);
+  await screen.findByText("pending");
+  expect(travel.resolve).not.toHaveBeenCalled();
+  f.list.mockResolvedValue({ items: [tripItem], canApply: true, scheme: "openmapx" });
+  await act(async () => {
+    for (const listener of listeners) listener({ type: "session.stopped" } as never);
+  });
+  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+  expect(travel.resolve).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+it.each([false, true])(
+  "never reopens an older trip after the newest share (older lookup in flight: %s)",
+  async (inFlight) => {
+    const { dbNavigatorExamples } = await import(
+      "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+    );
+    const oldTrip = { ...item, kind: "text", byteLength: 500 };
+    const newTrip = { ...oldTrip, id: "d386e706-b728-40a3-9554-881d0ff0958a", createdAtMs: 2 };
+    let inbox = inFlight ? [oldTrip] : [oldTrip, newTrip];
+    f.list.mockImplementation(async () => ({
+      items: [...inbox],
+      canApply: true,
+      scheme: "openmapx",
+    }));
+    f.complete.mockImplementation(async (id) => {
+      inbox = inbox.filter((entry) => entry.id !== id);
+    });
+    f.text.mockImplementation(async (entry) =>
+      (entry as { id: string }).id === oldTrip.id ? dbNavigatorExamples[0] : dbNavigatorExamples[3],
+    );
+    let finishOld: ((value: typeof travelResult) => void) | undefined;
+    let oldSignal: AbortSignal | undefined;
+    if (inFlight)
+      travel.resolve.mockImplementationOnce((_plan, _port, signal) => {
+        oldSignal = signal as AbortSignal;
+        return new Promise((resolve) => {
+          finishOld = resolve;
+        });
+      });
+    render(<NativeIntakeHandler />);
+    if (inFlight) {
+      await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+      inbox.push(newTrip);
+      await act(async () => {
+        for (const listener of listeners) listener({ type: "intake.changed" } as never);
+      });
+    }
+    await waitFor(() => expect(f.complete).toHaveBeenCalledWith(newTrip.id, "opened"));
+    if (inFlight) {
+      expect(oldSignal?.aborted).toBe(true);
+      await act(async () => finishOld?.(travelResult));
+    }
+    await act(async () => {
+      for (const listener of listeners) listener({ type: "intake.changed" } as never);
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await screen.findByText("pending");
+    expect(travel.resolve).toHaveBeenCalledTimes(inFlight ? 2 : 1);
+    expect(f.complete).toHaveBeenCalledTimes(1);
+    expect(inbox).toEqual([oldTrip]);
+    fireEvent.click(screen.getByText("pending"));
+    await screen.findByText("sharedTrip");
+    expect(screen.getByText("open")).not.toBeDisabled();
+    expect(travel.resolve).toHaveBeenCalledTimes(inFlight ? 2 : 1);
+  },
+);
 it("does not read the inbox when native intake is unavailable", () => {
   f.nativeIntake = false;
   render(<NativeIntakeHandler />);
@@ -338,8 +486,6 @@ it("keeps a mandatory bike-carriage session visible and retains the share before
   });
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  fireEvent.click(screen.getByText("open"));
   await screen.findByText("tripBikeRequirement");
   expect(travel.resolve).not.toHaveBeenCalled();
   expect(f.complete).not.toHaveBeenCalled();
@@ -364,13 +510,11 @@ it("rechecks native authority after resolving and retains the share on a navigat
     return travelResult;
   });
   render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  fireEvent.click(screen.getByText("open"));
   await screen.findByText("deferred");
   expect(f.complete).not.toHaveBeenCalled();
   expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
 });
-it("Later cancels a pending travel-plan lookup without consuming content", async () => {
+it("leaving the map cancels an automatic lookup without consuming content", async () => {
   const { dbNavigatorExamples } = await import(
     "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
   );
@@ -385,11 +529,11 @@ it("Later cancels a pending travel-plan lookup without consuming content", async
     signal = s as AbortSignal;
     return new Promise(() => {});
   });
-  render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  fireEvent.click(screen.getByText("open"));
-  await screen.findByText("loading");
-  fireEvent.click(screen.getByText("later"));
+  const view = render(<NativeIntakeHandler />);
+  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  f.pathname = "/settings";
+  view.rerender(<NativeIntakeHandler />);
   expect(signal?.aborted).toBe(true);
   expect(f.complete).not.toHaveBeenCalled();
 });
@@ -407,13 +551,60 @@ it("an unavailable exact trip retains the input and can be retried", async () =>
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   travel.resolve.mockRejectedValueOnce(new TravelPlanResolutionError("not-found"));
   render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  fireEvent.click(screen.getByText("open"));
   await screen.findByText("tripUnavailable");
   expect(f.complete).not.toHaveBeenCalled();
   expect(screen.queryByLabelText("tripText")).toBeNull();
   fireEvent.click(screen.getByText("open"));
   await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+});
+it("does not describe a transport failure as missing timetable coverage", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { TravelPlanResolutionError } = await import("@openmapx/core/navigation/api");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[3]);
+  travel.resolve.mockRejectedValueOnce(new TravelPlanResolutionError("unavailable"));
+  render(<NativeIntakeHandler />);
+  await screen.findByText("failed");
+  expect(screen.queryByText("tripUnavailable")).toBeNull();
+  expect(f.complete).not.toHaveBeenCalled();
+});
+it("keeps a failed automatic share reachable after Later and foregrounding", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { TravelPlanResolutionError } = await import("@openmapx/core/navigation/api");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[3]);
+  travel.resolve.mockRejectedValueOnce(new TravelPlanResolutionError("not-found"));
+  render(<NativeIntakeHandler />);
+  await screen.findByText("tripUnavailable");
+  fireEvent.click(screen.getByText("later"));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  const previous = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  try {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(f.text).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("open")).not.toBeDisabled());
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(travel.resolve).toHaveBeenCalledTimes(1);
+    expect(f.complete).not.toHaveBeenCalled();
+  } finally {
+    if (previous) Object.defineProperty(document, "visibilityState", previous);
+    else Reflect.deleteProperty(document, "visibilityState");
+  }
 });
 it("unmount aborts a lookup and prevents later publication or acknowledgement", async () => {
   const { dbNavigatorExamples } = await import(
@@ -434,9 +625,8 @@ it("unmount aborts a lookup and prevents later publication or acknowledgement", 
     });
   });
   const view = render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  fireEvent.click(screen.getByText("open"));
-  await screen.findByText("loading");
+  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(signal).toBeDefined();
   expect(signal?.aborted).toBe(false);
   view.unmount();

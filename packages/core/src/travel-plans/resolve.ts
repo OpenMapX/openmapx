@@ -144,31 +144,40 @@ export async function resolveSharedTravelPlan(
         fail("invalid");
     }
     const stationCache = new Map<string, TransitStop[]>();
-    for (const name of new Set(plan.legs.flatMap((l) => [l.from, l.to]))) {
-      check();
-      const raw = await acquire(() => port.searchStops(name, signal));
-      check();
-      const stops = raw.filter(
-        (s) => s.id && validPoint(s) && travelStationKey(s.name) === travelStationKey(name),
-      );
-      if (!stops.length) fail("not-found");
-      if (stops.some((s) => haversineDistance(coords(s), coords(stops[0])) > 1500))
-        fail("ambiguous");
-      // Parent boards include their platforms; platform aliases must not spend
-      // the station/call budget or make an ordinary large station ambiguous.
-      const unique = [
-        ...new Map(
-          stops.map((s) => {
-            const id = s.parentStationId ?? s.id;
-            return [id, { ...s, id, parentStationId: undefined }] as const;
-          }),
-        ).values(),
-      ];
-      // Multi-feed baselines can omit platform parents (Köln has 16+ aliases).
-      // Keep the geographic check and an explicit record/call ceiling.
-      if (unique.length > 32) fail("ambiguous");
-      stationCache.set(name, unique);
-    }
+    const stationNames = [...new Set(plan.legs.flatMap((l) => [l.from, l.to]))];
+    let nextStation = 0;
+    // Independent discovery must not spend the whole deadline waiting serially
+    // on unrelated providers. Keep acquisition bounded to three stations at once.
+    await Promise.all(
+      Array.from({ length: Math.min(3, stationNames.length) }, async () => {
+        while (nextStation < stationNames.length) {
+          const name = stationNames[nextStation++];
+          check();
+          const raw = await acquire(() => port.searchStops(name, signal));
+          check();
+          const stops = raw.filter(
+            (s) => s.id && validPoint(s) && travelStationKey(s.name) === travelStationKey(name),
+          );
+          if (!stops.length) fail("not-found");
+          if (stops.some((s) => haversineDistance(coords(s), coords(stops[0])) > 1500))
+            fail("ambiguous");
+          // Parent boards include their platforms; platform aliases must not spend
+          // the station/call budget or make an ordinary large station ambiguous.
+          const unique = [
+            ...new Map(
+              stops.map((s) => {
+                const id = s.parentStationId ?? s.id;
+                return [id, { ...s, id, parentStationId: undefined }] as const;
+              }),
+            ).values(),
+          ];
+          // Multi-feed baselines can omit platform parents (Köln has 16+ aliases).
+          // Keep the geographic check and an explicit record/call ceiling.
+          if (unique.length > 32) fail("ambiguous");
+          stationCache.set(name, unique);
+        }
+      }),
+    );
     const verified: Array<{
       reference: TransitTripReference["legs"][number];
       from: VehicleJourneyStop;
@@ -356,6 +365,7 @@ export async function resolveSharedTravelPlan(
     check();
     return result(reconstructed, { kind: "reference", params }) ?? fail("not-found");
   } catch (error) {
+    cancel();
     if (error instanceof TravelPlanResolutionError) throw error;
     throw new TravelPlanResolutionError("unavailable");
   } finally {
