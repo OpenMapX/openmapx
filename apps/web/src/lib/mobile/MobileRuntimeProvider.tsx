@@ -25,6 +25,7 @@ import {
 } from "./nativeSnapshotReducer";
 import { applyNativeSurfaceStop } from "./nativeSurfaceStop";
 import { NativeNavigationCommands } from "./navigationCommands";
+import { lockShellViewport } from "./shellViewport";
 
 /**
  * Which of the two runtimes this page is.
@@ -106,6 +107,11 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
   if (inShell && useNavigationStore.getState().navigationAuthority !== "native") {
     setNavigationAuthority("native");
   }
+
+  useEffect(() => {
+    if (!inShell || typeof document === "undefined") return;
+    return lockShellViewport(document);
+  }, [inShell]);
 
   useEffect(() => {
     if (!inShell) return;

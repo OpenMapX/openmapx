@@ -117,6 +117,17 @@ describe("MobileRuntimeProvider in an ordinary browser", () => {
     expect(text("ground")).toBe("true");
     expect(text("transit")).toBe("true");
   });
+
+  it("leaves page zoom alone", () => {
+    document.head.innerHTML =
+      '<meta name="viewport" content="width=device-width, maximum-scale=5">';
+    mount({});
+
+    expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
+      "width=device-width, maximum-scale=5",
+    );
+    document.head.innerHTML = "";
+  });
 });
 
 describe("MobileRuntimeProvider inside the shell", () => {
@@ -134,6 +145,17 @@ describe("MobileRuntimeProvider inside the shell", () => {
 
     expect(text("in-shell")).toBe("true");
     expect(text("microphone")).toBe("false");
+  });
+
+  it("stops the interface from zooming", () => {
+    document.head.innerHTML =
+      '<meta name="viewport" content="width=device-width, maximum-scale=5">';
+    mount(shellScope().scope);
+
+    expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
+      "width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no",
+    );
+    document.head.innerHTML = "";
   });
 
   it("becomes compatible once the shell answers", async () => {

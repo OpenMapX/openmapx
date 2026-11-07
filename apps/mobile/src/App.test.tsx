@@ -7,7 +7,6 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 import { Alert, AppState, BackHandler, Linking, Platform } from "react-native";
 import { z } from "zod";
 import { App } from "./App";
-import { VIEWPORT_LOCK_SCRIPT } from "./bridge/viewportScript";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { IntakeController } from "./intake/IntakeController";
 import * as intakeModule from "./intake/nativeIntakeModule";
@@ -182,15 +181,13 @@ describe("App WebView policy", () => {
   it("injects no generic native object into the page", async () => {
     await renderApp();
     expect(mockWebViewProps.injectedJavaScriptObject).toBeUndefined();
-    // The only document-end script is the fixed viewport lock, which defines nothing.
-    expect(mockWebViewProps.injectedJavaScript).toBe(VIEWPORT_LOCK_SCRIPT);
+    expect(mockWebViewProps.injectedJavaScript).toBeUndefined();
   });
 
   it("lets only the map zoom, never the interface", async () => {
     await renderApp();
     expect(mockWebViewProps.setBuiltInZoomControls).toBe(false);
     expect(mockWebViewProps.setDisplayZoomControls).toBe(false);
-    expect(mockWebViewProps.injectedJavaScript).toBe(VIEWPORT_LOCK_SCRIPT);
   });
 });
 

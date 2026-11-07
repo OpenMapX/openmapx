@@ -22,7 +22,6 @@ import { WebView } from "react-native-webview";
 import { getNavigationAudio } from "./audio/navigationAudioModule";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
-import { VIEWPORT_LOCK_SCRIPT } from "./bridge/viewportScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { IntakeController } from "./intake/IntakeController";
@@ -582,11 +581,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         // frame — an iframe never receives it, so it cannot address the channel.
         injectedJavaScriptBeforeContentLoaded={buildChannelBootstrapScript(publishedNonce)}
         injectedJavaScriptBeforeContentLoadedForMainFrameOnly
-        // Only the map zooms. The interface itself never scales under a pinch
-        // or double tap: Android's WebView zoom is switched off here, and the
-        // viewport lock covers WKWebView, which has no such setting.
-        injectedJavaScript={VIEWPORT_LOCK_SCRIPT}
         injectedJavaScriptForMainFrameOnly
+        // Only the map zooms; the interface never scales under a pinch or double
+        // tap. WKWebView has no such switch, so the page narrows its own viewport
+        // when it finds the shell descriptor.
         setBuiltInZoomControls={false}
         setDisplayZoomControls={false}
         onMessage={handleMessage}
