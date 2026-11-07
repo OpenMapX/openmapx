@@ -254,6 +254,12 @@ Private effect bodies remain outside shared journals. Known committed evidence
 cannot be erased by a later response/journal failure. Startup restores original
 admissions/adoptions and performs settlement from retained evidence, never dispatch.
 
+The fixed maintenance inspector checks every mount's source, access mode and
+mounted configuration/secret contents before it returns evidence. The signed
+inspection retains a keyed digest and count of that complete canonical mount set;
+it does not repeat each mount record inside the owner. Older canonical inspection
+details remain readable. Record-size caps and all verification checks are unchanged.
+
 Terminal maintenance and handoff preparation retain ownership. The preparer can
 certify preparation only by reading its exact succeeded journal entry. The helper
 may adopt early but `verifyConfigurationHelperReady` refuses drain until that

@@ -208,15 +208,10 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       },
       {
         containerId: hash,
-        mounts: Array.from({ length: mountCount }, () => ({
-          targetDigest: hash,
-          type: "volume",
-          sourceDigest: hash,
-          nameDigest: hash,
-          readOnly: false,
-          expectedDigest: hash,
-          actualDigest: hash,
-        })),
+        // Reserve the count width for all 512 supported mounts, including
+        // Compose configs not counted by the service snippet above.
+        mountCount: Math.max(mountCount, 512),
+        mountsDigest: hash,
       },
       { containerId: hash, state: "running", running: false, health: "healthy" },
     );
