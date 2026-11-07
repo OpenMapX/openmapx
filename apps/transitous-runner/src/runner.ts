@@ -311,12 +311,15 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
       consumeCapability(request.capability, request.run);
       // Nonrejecting completion exists before execute can spawn or reject.
       // Shutdown owns containment, while the request still owns its result.
-      const completion = Promise.withResolvers<void>();
+      let complete!: () => void;
+      const completion = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
       const row: OwnedRun = {
         requestDigest: requestDigest(request),
         controller: new AbortController(),
         state: "running",
-        completion: completion.promise,
+        completion,
       };
       retained.set(address(request), row);
       // The retained identity precedes the actual spawn. Disconnecting the
@@ -328,7 +331,7 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
         row.finishedAt = now();
         return result;
       } finally {
-        completion.resolve();
+        complete();
       }
     },
   };
