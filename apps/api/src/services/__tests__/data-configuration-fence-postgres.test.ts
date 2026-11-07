@@ -44,6 +44,7 @@ vi.mock("../../../../../apps/api/src/db", () => ({
 
 import { registerApi } from "../../../../../services/data-manager/src/api.js";
 import { registerAuth } from "../../../../../services/data-manager/src/auth.js";
+import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "../../../../../services/data-manager/src/control-targets.js";
 import { setupCron } from "../../../../../services/data-manager/src/cron.js";
 import { installDataMutationAdmission } from "../../../../../services/data-manager/src/jobs/execution/admission.js";
 import { createDataConfigurationMaintenance } from "../../../../../services/data-manager/src/jobs/execution/configuration-maintenance.js";
@@ -63,6 +64,25 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
+  it("prepares a full application closure with the production Data Manager target registration", async () => {
+    const f = await ownedFenceFixture({ productionRegistration: true });
+    try {
+      expect(f.input.serviceIds).toContain("app-api");
+      expect(f.input.serviceIds).toContain("ops-agent");
+      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
+      await fence.startup();
+      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      expect(receipt.state).toBe("prepared");
+      expect(
+        control.preparedDataConfigurationFenceState(
+          control.verifyPublishedDataConfigurationFencePrepared(f.lease, f.child),
+        ).preparedReceipt,
+      ).toEqual(receipt);
+    } finally {
+      await f.close();
+    }
+  }, 60000);
+
   it("prepares a terminal logical guard, blocks concurrent admissions, and restores it before new mutation", async () => {
     const f = await ownedFenceFixture(),
       { sql, root, dm, child, input, assertion, lease } = f;
@@ -314,13 +334,15 @@ describe.skipIf(
 import { existsSync, readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 
-async function ownedFenceFixture() {
+async function ownedFenceFixture(options: { productionRegistration?: boolean } = {}) {
   const fixture = await createConfigurationPostgresFixture();
   apiState.fixture = fixture;
   const host = await ownedServiceHost({
     withCoordinator: true,
-    selectedRoots: ["data-manager", "motis"],
-    extraServiceIds: ["foreign-consumer"],
+    selectedRoots: options.productionRegistration
+      ? ["app-api", "data-manager", "motis", "ops-agent"]
+      : ["data-manager", "motis"],
+    extraServiceIds: options.productionRegistration ? [] : ["foreign-consumer"],
     schemas: {
       "data-manager": {
         type: "object",
@@ -336,12 +358,30 @@ async function ownedFenceFixture() {
       ConfigImage: "example/data-manager:1",
       Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
     },
+    ...(options.productionRegistration
+      ? ["app-api", "ops-agent"].map((id, index) => ({
+          ...host.row,
+          Id: (index === 0 ? "d" : "e").repeat(64),
+          ConfigImage: `example/${id}:1`,
+          Labels: { ...host.row.Labels, "com.docker.compose.service": id },
+        }))
+      : []),
   ]);
   const serviceIds = host.loaded.map((s) => s.manifest.id),
     root = host.infraDir,
     agent = control.openControlInstallation({ infraDir: root, role: "ops-agent", serviceIds }),
-    data = await ownedDataManager({ sql: fixture.sql, infraDir: root, serviceIds }),
-    dm = control.openControlInstallation({ infraDir: root, role: "data-manager", serviceIds }),
+    data = await ownedDataManager({
+      sql: fixture.sql,
+      infraDir: root,
+      serviceIds: options.productionRegistration
+        ? [...DATA_MANAGER_CONTROL_SERVICE_IDS]
+        : serviceIds,
+    }),
+    dm = control.openControlInstallation({
+      infraDir: root,
+      role: "data-manager",
+      serviceIds: options.productionRegistration ? DATA_MANAGER_CONTROL_SERVICE_IDS : serviceIds,
+    }),
     app = buildOpsAgentServer({
       runtime: host.runtime,
       resourceClaimer: host.claimer,

@@ -10,6 +10,7 @@ import { createFatalProcessHandler } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { registerApi } from "./api.js";
 import { registerAuth, resolveAuthToken } from "./auth.js";
+import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
 import { rawSql, sql } from "./db/index.js";
 import { installDataMutationAdmission } from "./jobs/execution/admission.js";
@@ -61,7 +62,7 @@ const controlStartup = loadControlStartup({
   infraDir: "/data",
   role: "data-manager",
   container: true,
-  serviceIds: ["data-manager", "motis", "motis-feed-proxy", "motis-staging"],
+  serviceIds: DATA_MANAGER_CONTROL_SERVICE_IDS,
 });
 if (controlStartup.reason) app.log.warn(controlStartup.reason);
 
