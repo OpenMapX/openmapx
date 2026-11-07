@@ -87,7 +87,7 @@ describe("photo credit presentation", () => {
       }),
     );
     expect(container.textContent).toContain("Credit: Museum collection");
-    expect(screen.getByRole("link", { name: "Museum collection" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Credit: Museum collection" })).toHaveAttribute(
       "href",
       "https://creator.example/custom",
     );
@@ -277,7 +277,7 @@ it("updates same-file captured notices, links and licence when a photo snapshot 
     url: photo.url,
   };
   view.rerender(tree(replacement));
-  expect(screen.getByRole("link", { name: "New author" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Credit: New author" })).toHaveAttribute(
     "href",
     "https://new.example/author",
   );
@@ -353,7 +353,15 @@ it("applies a changed captured image policy even when the image URL stays the sa
   expect(view.container.textContent).toContain("New required image notice");
 });
 
-it.each(["Public domain", "CC0 1.0", "CC BY 4.0", "CC BY-SA 4.0", "CC BY-SA 3.0", "CC BY-SA 2.0"])(
+it.each([
+  "Public domain",
+  "CC0 1.0",
+  "CC BY 4.0",
+  "CC BY-SA 4.0",
+  "CC BY-SA 3.0",
+  "CC BY-SA 2.0",
+  "CC BY-SA 3.0 de",
+])(
   "offers complete %s thumbnail credits without printing a caption over the preview",
   (license) => {
     const photo = commons(license, { Attribution: { value: "Museum collection credit" } });
@@ -382,3 +390,76 @@ it("keeps unreviewed licence captions visible even for a thumbnail", () => {
   );
   expect(view.container.textContent).toContain("Required notice");
 });
+
+it("keeps German CC BY-SA 3.0 author/licence visible and its long reuse instructions in details", () => {
+  const instructions =
+    "Reuse instructions: retain the photographer credit and linked licence; a directly associated credits list is allowed.";
+  const photo = commons("CC BY-SA 3.0 de", {
+    Artist: { value: 'Thomas Wolf, <a href="https://www.foto-tw.de/">www.foto-tw.de</a>' },
+    Attribution: { value: 'Thomas Wolf, <a href="https://www.foto-tw.de/">www.foto-tw.de</a>' },
+    LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/3.0/de/" },
+    Permission: {
+      value: `${instructions} <a href="https://www.foto-tw.de/contact">Contact the photographer</a> <a href="https://commons.wikimedia.org/wiki/User:Photographer"><img src="icon.svg" /></a>`,
+    },
+    Credit: { value: "Own work" },
+    UsageTerms: {
+      value:
+        '<a href="https://creativecommons.org/licenses/by-sa/3.0/de/">Creative Commons Attribution-Share Alike 3.0 Germany</a>',
+    },
+  });
+  const before = structuredClone(photo);
+  const view = caption(photo);
+  for (const link of view.container.querySelectorAll("a"))
+    expect(link.textContent?.trim()).not.toBe("");
+  expect(view.container.textContent).not.toContain("Reuse instructions");
+  expect(view.container.textContent).not.toContain("Contact the photographer");
+  expect(view.container.textContent?.match(/CC-BY-SA-3.0-DE/g)).toHaveLength(1);
+  expect(screen.getByRole("link", { name: "CC-BY-SA-3.0-DE" })).toHaveAttribute(
+    "href",
+    "https://creativecommons.org/licenses/by-sa/3.0/de/",
+  );
+  expect(screen.getByRole("link", { name: "Thomas Wolf, www.foto-tw.de" })).toHaveAttribute(
+    "href",
+    "https://www.foto-tw.de/",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain(instructions);
+  expect(dialog.querySelector('a[href="https://www.foto-tw.de/contact"]')).not.toBeNull();
+  expect(photo).toEqual(before);
+});
+
+it.each(["photo", "receipt"] as const)(
+  "keeps a German-port %s placement override visible",
+  (owner) => {
+    const photo = commons("CC BY-SA 3.0 de", {
+      LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/3.0/de/" },
+    });
+    const strict: Licensing = {
+      version: 1,
+      bindings: [
+        {
+          scope: "imagery",
+          subject: "Photo",
+          license: { kind: "spdx", expression: "CC-BY-SA-3.0-DE" },
+          attribution: {
+            placement: "visible",
+            surfaces: ["image"],
+            basis: "provider-terms",
+            reviewedAt: "2026-11-07",
+            reason: "Required adjacent notice",
+            evidenceUrls: ["https://provider.example/terms"],
+            compactText: "Required German-port notice",
+          },
+        },
+      ],
+    };
+    if (owner === "photo") photo.licensing = strict;
+    else {
+      if (!photo.contributors?.[0]) throw new Error("Expected captured file receipt");
+      photo.contributors[0].licensing = strict;
+    }
+    const view = caption(photo, true);
+    expect(view.container.textContent).toContain("Required German-port notice");
+  },
+);
