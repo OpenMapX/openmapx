@@ -252,6 +252,33 @@ it("backs up then reviews and applies the exact checked release without local-ad
   ]);
   expect(f.requests.find((r) => r.url.endsWith("/preview"))?.body.changes).toEqual({ version: 1 });
 });
+it("skips all backup requests only when explicitly requested", async () => {
+  const f = await fixture();
+  await runSystemUpdate({ ...f.options, createBackup: false });
+  expect(f.counts()).toEqual({ backupPosts: 0, previewPosts: 1, applyPosts: 1 });
+  const receipt = new SystemUpdateReceiptStore(f.options.receipt).read();
+  expect(receipt.createBackup).toBe(false);
+  expect(receipt.steps.backup.body).toBeNull();
+});
+it.each([true, false])(
+  "keeps the original backup choice on resume (backup=%s)",
+  async (createBackup) => {
+    const f = await fixture();
+    await runSystemUpdate({ ...f.options, createBackup });
+    const before = f.counts();
+    await expect(
+      runSystemUpdate({ ...f.options, resume: true, createBackup: !createBackup }),
+    ).rejects.toThrow(/backup choice/);
+    expect(f.counts()).toEqual(before);
+    await runSystemUpdate({ ...f.options, resume: true, createBackup });
+    expect(f.counts()).toEqual(before);
+  },
+);
+it("still refuses active maintenance when the backup is skipped", async () => {
+  const f = await fixture("active");
+  await expect(runSystemUpdate({ ...f.options, createBackup: false })).rejects.toThrow();
+  expect(f.counts()).toEqual({ backupPosts: 0, previewPosts: 0, applyPosts: 0 });
+});
 it.each(["active", "nonadmin", "forbidden", "wrong-backup", "changed", "wrong-origin", "expired"])(
   "stops safely on %s before apply",
   async (mode) => {

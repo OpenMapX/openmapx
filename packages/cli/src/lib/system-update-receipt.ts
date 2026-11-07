@@ -31,6 +31,7 @@ const identitySchema = z.strictObject({
   }),
   configuredSelector: z.string().min(1),
   configurationIdentity: z.string().regex(/^[a-f0-9]{64}$/),
+  createBackup: z.boolean().default(true),
 });
 const schema = identitySchema.extend({
   version: z.literal(1),
@@ -82,7 +83,7 @@ export class SystemUpdateReceiptStore {
       lock.release();
     }
   }
-  async create(identity: z.infer<typeof identitySchema>): Promise<SystemUpdateReceipt> {
+  async create(identity: z.input<typeof identitySchema>): Promise<SystemUpdateReceipt> {
     return this.locked(() => {
       const step = () => ({ key: `update:${randomUUID()}`, body: null });
       const value = schema.parse({

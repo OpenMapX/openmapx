@@ -10,6 +10,9 @@ backup based on a Docker client exit alone. Published backups survive restart
 failure or cancellation during restart. Backup format and restore data are
 unchanged.
 
+CLI updates also accept an explicit `--no-backup`, matching the admin panel.
+The receipt retains that choice across resumption; backups remain the default.
+
 ## Who is affected
 
 Operators creating backups, especially installations with community PostgreSQL
